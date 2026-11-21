@@ -137,6 +137,18 @@ public sealed class WorldBakedColors {
             _ => null,
         }));
     }
+    /// <summary>Returns the surface text slot a text paint's glyphs are supplied under: its position among the
+    /// document's text paints (<see cref="WorldPresentationManifest.SurfaceTextSlot"/>), read from the manifest of the
+    /// document the mirror holds, so the program a build emits and the glyphs supplied each frame name one slot.</summary>
+    /// <param name="paint">The paint.</param>
+    /// <returns>The slot, or <see cref="Puck.SignedDistance.SdfPaint.NoText"/> for a paint that authors no text or
+    /// that the document does not hold.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="paint"/> is <see langword="null"/>.</exception>
+    public int SurfaceTextSlot(Puck.World.Authoring.PalettePaintDocument paint) {
+        ArgumentNullException.ThrowIfNull(argument: paint);
+
+        return ((paint.Text is null) ? Puck.SignedDistance.SdfPaint.NoText : Mirror().Manifest.SurfaceTextSlot(paint: paint));
+    }
     /// <summary>Resolves one authored text screen line for the build under way, replacing any
     /// <c>{state.&lt;row&gt;[.&lt;key&gt;]}</c> placeholders (<see cref="HudTemplate"/>) from the state mirror and
     /// remembering each bound cell.</summary>

@@ -137,6 +137,7 @@ from what you want the surface to *do*:
 | Repetition: ribs, teeth, plates, spokes, fins | a `domain` fold | repeat, polar, symmetry, wallpaper; one fold, not N shapes. Refuses a `panel` on the same shape |
 | Cellular or faceted relief: scales, chitin, hammered metal | `cells` | needs its own scope; see the scope rules |
 | A stripe, ring, panel outline or mouth line | a palette `paints` entry | colour drawn at the hit, never sculpted relief; see "Surface and look" |
+| Words on a part that change while the world runs | a paint with `text` | glyphs laid out in the paint's box from a template of state cells, no rebake; [surface](references/surface.md#text-paints) |
 
 Exact scale conventions per primitive (a torus is not what you would guess), the
 facet-admission matrix, every ceiling, and every refusal message are in
@@ -229,7 +230,8 @@ fill, `weathering` for chips and scratches over a revealed `under` substrate,
 `inset` for a refracted layer beneath the surface (how an eye is authored: a
 radial paint ramp of pupil, iris, limbus and sclera stops under a cornea, not a
 dark sphere), and `paints` for detail that is colour rather than form: stripes,
-trims, panel outlines, a mouth line. A paint is drawn crisp at the hit; relief
+trims, panel outlines, a mouth line, and lettering bound to state (a text
+paint). A paint is drawn crisp at the hit; relief
 finer than the bake's cell (15 mm on flat faces, refined toward each shape's own
 round sections, roundings and thickness, down to 2 mm) frays into
 jagged steps, so never sculpt a millimetre-proud stripe. Painted metal and

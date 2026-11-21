@@ -84,8 +84,8 @@ public sealed class WorldHapticDirectorTests {
             Director = new WorldHapticDirector(
                 outputResolver: id => Outputs.GetValueOrDefault(key: id),
                 roster: Roster,
+                bodies: new WorldSeatBodies(seatBindings: SeatBindings, seatRouter: SeatRouter),
                 seatBindings: SeatBindings,
-                seatRouter: SeatRouter,
                 timestamp: () => m_now
             );
         }

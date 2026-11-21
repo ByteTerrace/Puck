@@ -18,7 +18,7 @@ public sealed class SdfAppearance {
     public const int MaterialVectorsPerEntry = 36;
     /// <summary>The paint table's float4 stride, read by the views pass's paint layer (<c>SDF_PAINT_VECTORS_PER_ENTRY</c>):
     /// the frame origin and shape, the rotation, the residual scale, the shape's two data vectors, the color and stroke,
-    /// the slot and bound center, the bound half-extents, the primitive rotation, with variable side tables stored after the fixed paint entries.</summary>
+    /// the slot and bound center, the bound half-extents and surface text slot, the primitive rotation, with variable side tables stored after the fixed paint entries.</summary>
     public const int PaintVectorsPerEntry = 9;
     /// <summary>The most paints one material carries (<c>SDF_MAX_PAINTS_PER_MATERIAL</c>).</summary>
     public const int MaxPaintsPerMaterial = 8;
@@ -484,7 +484,8 @@ public sealed class SdfAppearance {
     // PaintVectorsPerEntry float4 rows. KEEP IN SYNC with sdfApplyPaints in shade/shade-layers.hlsli.
     // 0 frame origin, shape type (uint bits); 1 frame rotation; 2 residual scale, its smallest component;
     // 3..4 the shape's data vectors, a side-table shape's absolute offset; 5 color, stroke;
-    // 6 (dynamic slot as uint bits, bound center); 7 (bound half-extents, infinite when unbounded, 0);
+    // 6 (dynamic slot as uint bits, bound center); 7 (bound half-extents, infinite when unbounded, the surface text
+    // slot plus one as uint bits, zero for a paint that covers its whole shape);
     // 8 primitive rotation. Side tables follow all fixed paint entries.
     private static void PackPaint(SdfPaint paint, int paintVector, int tableVector, uint[] words) {
         var shape = paint.Shape;
@@ -512,7 +513,7 @@ public sealed class SdfAppearance {
             z: shape.Bound.Center.Y,
             w: shape.Bound.Center.Z
         ));
-        Row(row: 7, value: new(value: (shape.Bound.IsUnbounded ? new Vector3(value: float.PositiveInfinity) : shape.Bound.HalfExtents), w: 0f));
+        Row(row: 7, value: new(value: (shape.Bound.IsUnbounded ? new Vector3(value: float.PositiveInfinity) : shape.Bound.HalfExtents), w: BitConverter.UInt32BitsToSingle(value: ((uint)(paint.Text + 1)))));
         Row(row: 8, value: new(shape.Rotation.X, shape.Rotation.Y, shape.Rotation.Z, shape.Rotation.W));
         for (var index = 0; (index < shape.Table.Count); index++) {
             words[((tableVector * WordsPerVector) + index)] = BitConverter.SingleToUInt32Bits(value: shape.Table[index]);

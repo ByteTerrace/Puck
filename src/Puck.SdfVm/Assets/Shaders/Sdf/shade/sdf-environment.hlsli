@@ -3,6 +3,7 @@
 #ifndef SHADE_SDF_ENVIRONMENT_HLSLI
 #define SHADE_SDF_ENVIRONMENT_HLSLI
 #include "../frame/sdf-environment.hlsli"
+#include "sdf-glyph-ink.hlsli"
 #include "Shared/transfer.hlsli"
 
 #ifdef SDF_SCREEN_SOURCES
@@ -85,21 +86,15 @@ float2 sdfOpeningRipple(ScreenRippleData ripple, float2 uv, float2 extent, out f
 // is the ONE tier where 2D coverage reconstruction is legitimate (its designed job): the atlas ALPHA is a
 // single-channel coverage-SDF, sampled with a coverage threshold + a screen-projected AA half-width derived
 // ANALYTICALLY from the hit's pixel footprint (NO fwidth — deterministic, from the same pixelFootprint*traveled the
-// coverage-AA epilogue uses). KEEP IN SYNC with SdfWorldTables's decal-buffer packing (SetDecalDescriptor/SetDecals)
-// and SdfProgram. LAYOUT (sdfDecalCells, one uint4 per entry): the first SdfDecalDescriptorCount (== SDF_MAX_SCREEN_SURFACES)
-// entries are the PER-SCREEN descriptors, then the shared CELL region.
+// coverage-AA epilogue uses). KEEP IN SYNC with SdfWorldTables's decal-buffer packing (SetScreenDecal)
+// and SdfProgram. LAYOUT (sdfDecalCells, one uint4 per entry): the first SDF_MAX_SCREEN_SURFACES entries are the
+// PER-SCREEN descriptors, the surface texts' descriptors follow them (sdf-glyph-ink.hlsli), then the shared CELL region.
 //   descriptor[screenIndex] = (gridCols, gridRows, cellBase, asuint(distanceRange)); gridCols == 0 => that screen has
 //                             NO decal this frame (the image or unbound-glass path applies) — an all-zero buffer is inert, so
 //                             a program that declares no decal renders byte-identically.
 //   cell[i]                 = (packedUvTopLeft, packedUvBottomRight [unorm2x16, sdfGlyphUnpackUv], fgRgba8, bgRgba8);
 //                             a BLANK cell packs uvTopLeft == uvBottomRight (a real glyph never has zero UV extent).
 #if defined(SDF_GLYPH_ATLAS)
-static const uint SdfDecalDescriptorCount = SDF_MAX_SCREEN_SURFACES; // the per-screen descriptor band
-// Minimum AA half-width in encoded-coverage units. This keeps a 1:1 glyph edge from collapsing to a hard one-bit step.
-static const float DecalMinAa = 0.03125;
-float3 sdfDecalUnpackRgb(uint packed) {
-    return (float3(float(packed & 0xFFu), float((packed >> 8u) & 0xFFu), float((packed >> 16u) & 0xFFu)) * (1.0 / 255.0));
-}
 // Samples the glyph-cell grid a decal-mode screen carries at the surface UV (v = 0 at top, matching sampleScreenSurface).
 // footprintDiameter = the hit pixel's world diameter (pixelFootprint * traveled) — the analytic AA source. Returns the
 // composed fg-over-bg colour; the caller treats it emissive exactly like a sampled screen image.
@@ -109,7 +104,7 @@ float3 sdfSampleGlyphDecal(uint4 descriptor, float2 uv, float halfWidth, float f
     int2 cell = clamp(int2(floor(cellF)), int2(0, 0), (int2(descriptor.xy) - int2(1, 1)));
     uint cellIndex = ((descriptor.z + ((uint)cell.y * descriptor.x)) + (uint)cell.x);
     uint4 c = sdfDecalCells[cellIndex];
-    float3 background = sdfDecalUnpackRgb(c.w);
+    float3 background = sdfGlyphInkUnpackRgba(c.w).rgb;
 
     if (c.x == c.y) {
         return background; // a blank cell (zero UV extent) — just the cell background.
@@ -118,26 +113,13 @@ float3 sdfSampleGlyphDecal(uint4 descriptor, float2 uv, float halfWidth, float f
     float2 uvTopLeft = sdfGlyphUnpackUv(asfloat(c.x));
     float2 uvBottomRight = sdfGlyphUnpackUv(asfloat(c.y));
     float2 atlasUv = lerp(uvTopLeft, uvBottomRight, frac(cellF));
-    // MEDIAN-OF-3 reconstruction — legitimate HERE because a decal is a shade-time coverage threshold, not marched
-    // geometry (the C2 ruling bans median only from the march). A replicated single-channel atlas medians to exactly
-    // its alpha; a true MTSDF atlas medians to sharp corners. 0.5 = edge, > 0.5 inside.
-    float encoded = sdfGlyphSampleFieldMedian(atlasUv);
-
-    // Analytic AA: the hit's world footprint projected into atlas texels, then into encoded-coverage units. A wider
-    // footprint (far / grazing) ramps softer; a 1:1 walk-up ramps over ~one texel. distanceRange 0 (a raw coverage
-    // atlas) treats one texel as the full 0..1 ramp; an SDF atlas ramps 1/distanceRange per texel.
     uint2 udims;
     sdfGlyphAtlas.GetDimensions(udims.x, udims.y);
 
     float cellWorldWidth = ((2.0 * halfWidth) / max(grid.x, 1.0));
     float texelsPerWorld = (((uvBottomRight.x - uvTopLeft.x) * float(udims.x)) / max(cellWorldWidth, 1.0e-6));
-    float footprintTexels = (footprintDiameter * texelsPerWorld);
-    float distanceRange = asfloat(descriptor.w);
-    float encodedPerTexel = ((distanceRange > 0.0) ? (1.0 / distanceRange) : 1.0);
-    float aaHalf = clamp((0.5 * footprintTexels * encodedPerTexel), DecalMinAa, 0.5);
-    float coverage = smoothstep((0.5 - aaHalf), (0.5 + aaHalf), encoded);
 
-    return lerp(background, sdfDecalUnpackRgb(c.z), coverage);
+    return lerp(background, sdfGlyphInkUnpackRgba(c.z).rgb, sdfGlyphInkCoverage(atlasUv, texelsPerWorld, footprintDiameter, asfloat(descriptor.w)));
 }
 #endif
 

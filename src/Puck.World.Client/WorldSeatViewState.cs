@@ -27,6 +27,10 @@ public sealed class WorldSeatViewState {
     private Vector3 m_alignedUp = Vector3.UnitY;
     private readonly WorldCameraRigCompiler.Cache m_rigCache = new();
 
+    /// <summary>Gets the seat's authored framings (<c>views.framings</c>): the row it holds and how far its camera has
+    /// eased onto it. Read and advanced on the thread that presents frames.</summary>
+    public WorldSeatFramings Framings { get; } = new();
+
     // Within this much of the antipode the world-derived alignment carries no usable twist and is not taken at all:
     // cos(10 degrees) from straight down.
     private const float AntipodeGuard = -0.985f;

@@ -280,7 +280,14 @@ its own.
   replay-compatible: the trio rides the tape, CAS-pinned, and applies while a
   `replay.record` is armed — see [replay.md](replay.md).
 - **Undo and redo** (`WorldPersistence.ApplyUndo`, the `world.undo [count]`
-  and `world.redo [count]` paths): operator, and Mutate over every section.
+  and `world.redo [count]` paths): bindable, and any principal's. The step
+  changes only the rows its own entries change, so its authority is theirs: each
+  mutation it toggles passes the one admission door again
+  (`WorldDocument.TryAdmitCompleteMutation`, metered once), and a source edit,
+  which can rebuild any section, needs the operator and Mutate over every
+  section as its reload did. A principal who is not the operator is told nothing
+  of another's edits: a conflict names the row and no author, and an empty
+  history reads the same whoever else has edited.
   The journal is the whole document history over its base, but an undo is the
   acting principal's: it marks that principal's last `count` edits `Undone`
   (`WorldJournalEntry.Authored` and `Author`: a source edit whose reload it

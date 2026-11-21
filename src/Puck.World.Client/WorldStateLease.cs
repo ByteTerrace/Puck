@@ -334,6 +334,32 @@ public sealed class WorldStateLease {
                 value: out value
             ));
     }
+    /// <summary>Resolves a bindable scalar for this lease's holder: a binding whose key is <c>$body</c>
+    /// (<see cref="StateBinding.BodyKey"/>) reads the cell of the body the lease is bound to, and every other form (a
+    /// literal, a binding naming its own key, keys on a clock) reads as the mirror resolves it
+    /// (<see cref="WorldStateMirror.Scalar"/>).</summary>
+    /// <param name="scalar">The authored scalar.</param>
+    /// <param name="fallback">The value when the lease is unbound, it is bound to no body a <c>$body</c> key could
+    /// name, or the scalar's form reads no number.</param>
+    /// <param name="delivered">Whether to read at the delivered tick rather than the presented fraction.</param>
+    /// <returns>The resolved scalar.</returns>
+    public float Scalar(in BindableScalar scalar, float fallback, bool delivered = false) {
+        if (Current() is not { } mirror) {
+            return fallback;
+        }
+
+        if (scalar.State is not { Key: StateBinding.BodyKey } binding) {
+            return mirror.Scalar(delivered: delivered, fallback: fallback, scalar: in scalar);
+        }
+
+        return (TrySlotNumber(
+            delivered: delivered,
+            slot: Slot(reference: scalar.Binding!, truth: binding.Target),
+            value: out var value
+        )
+            ? value
+            : fallback);
+    }
     /// <summary>Returns a slot's current sample through this lease's mirror.</summary>
     /// <param name="slot">The slot, from one of the <c>Slot</c> overloads; -1 reads nothing.</param>
     /// <returns>The sample; its value holds no case when the slot is -1 or the cell does not resolve.</returns>

@@ -39,7 +39,8 @@ namespace Puck.SdfVm;
 //   - m_frameSampledRevision : the heights the height fields' draws are displaced by, a geometry value.
 //   - m_screenSurfaceRegion, m_screenMappingRegion : the screen-surface sampling table and the mapping and bound flag
 //                          each screen is drawn from.
-//   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
+//   - m_decalRevision    : the glyph-decal buffer (the screens' cells and the surface texts' glyphs), revision-tracked
+//                          rather than hashed each frame.
 //   - m_meshIrradianceRevision : each publication of the irradiance volume, which the device copies into one table
 //                          behind the same binding; a lighting value too, so only the shading passes gather it again.
 // Not covered by any packed span: a screen's image, which its source updates in place behind the same handle. A pass

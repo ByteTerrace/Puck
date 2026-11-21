@@ -311,6 +311,8 @@ public static class WorldValueFields {
     public static WorldValueField BlendWeight { get; } = new(typeof(WorldCameraProgramOp.Blend), nameof(WorldCameraProgramOp.Blend.Weight), WorldValueDomain.Unit);
     /// <summary>A select op's key.</summary>
     public static WorldValueField SelectKey { get; } = new(typeof(WorldCameraProgramOp.SelectProgram), nameof(WorldCameraProgramOp.SelectProgram.Key), WorldValueDomain.Finite);
+    /// <summary>A seat framing row's condition.</summary>
+    public static WorldValueField SeatFramingWhen { get; } = new(typeof(WorldSeatFraming), nameof(WorldSeatFraming.When), WorldValueDomain.Finite);
     /// <summary>A haptic row's low-frequency motor intensity.</summary>
     public static WorldValueField HapticLow { get; } = new(typeof(WorldHapticRow), nameof(WorldHapticRow.Low), WorldValueDomain.Unit);
     /// <summary>A haptic row's high-frequency motor intensity.</summary>
@@ -440,6 +442,7 @@ public static class WorldValueFields {
         FieldOfView,
         BlendWeight,
         SelectKey,
+        SeatFramingWhen,
         HapticLow,
         HapticHigh,
         HapticSignal,

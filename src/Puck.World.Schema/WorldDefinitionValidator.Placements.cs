@@ -661,6 +661,20 @@ public static partial class WorldDefinitionValidator {
             for (var index = 0; (index < creations.Count); index++) {
                 ValidateCreationRow(creation: creations[index], definition: definition, errors: errors, fontNames: fontNames, hasTextCatalog: (text is not null), path: $"prototypes[{index}]", seen: ids);
             }
+
+            // Every distinct text paint takes one of the renderer's surface text slots (WorldPresentationManifest).
+            var textPaints = new HashSet<Puck.World.Authoring.PalettePaintDocument>();
+
+            foreach (var creation in creations) {
+                foreach (var entry in (creation?.Document?.Palette ?? [])) {
+                    foreach (var paint in (entry?.Paints ?? [])) {
+                        if (paint?.Text is not null) { _ = textPaints.Add(item: paint); }
+                    }
+                }
+            }
+            if (textPaints.Count > Puck.SignedDistance.SdfSurfaceTextLayout.MaxTexts) {
+                errors.Add(item: $"prototypes author {textPaints.Count} distinct text paints, exceeding the {Puck.SignedDistance.SdfSurfaceTextLayout.MaxTexts} surface texts one world draws.");
+            }
             return;
         }
 
@@ -772,6 +786,28 @@ public static partial class WorldDefinitionValidator {
                     !fontNames.Contains(item: font)
                 ) {
                     errors.Add(item: $"{path}.doc.textRuns font '{font}' names no text.fonts row.");
+                }
+            }
+
+            // A text paint draws through this world's fonts and reads this world's state.
+            for (var slot = 0; (slot < palette.Count); slot++) {
+                var paints = (palette[slot].Paints ?? []);
+
+                for (var paint = 0; (paint < paints.Count); paint++) {
+                    if (paints[paint]?.Text is not { } paintText) {
+                        continue;
+                    }
+
+                    var textPath = $"{path}.doc.palette[{slot}].paints[{paint}].text";
+
+                    if (!hasTextCatalog) {
+                        errors.Add(item: $"{textPath} requires the world to declare a text font catalog.");
+                    } else if ((paintText.Font is { } paintFont) && !fontNames.Contains(item: paintFont)) {
+                        errors.Add(item: $"{textPath} font '{paintFont}' names no text.fonts row.");
+                    }
+                    if (paintText.Template is { } template) {
+                        _ = TryValidateTextTemplate(definition: definition, errors: errors, line: template, literalRunes: out _, path: $"{textPath}.template");
+                    }
                 }
             }
 

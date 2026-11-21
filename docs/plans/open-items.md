@@ -4376,9 +4376,15 @@ the model.
   the keyboard's press animation, the tutor, program switching, then lighting
   a real RGB keyboard's keys on the device-output path.
 - The press ([design](../game/press.md), `worlds/debug/press.puck`) is the first
-  typing place, and what it does not do yet is listed there: a seated camera
-  framing, words on the slugs themselves, and a second seat. The lamp loop (`LampLegendDriver`) has not been run against
-  a lamp array.
+  typing place, and what it does not do yet is listed there: the stick does
+  not fill with set words, and one seat plays. The lamp loop
+  (`LampLegendDriver`) has not been run against a lamp array.
+- Text paints ([surface text](../rendering/sdf/reference/text-and-glyphs.md#surface-text))
+  are the world's, not a body's: a template takes no `$body` placeholder, so a
+  nameplate over each body cannot be one paint. A world shown through a screen
+  or a portal draws none of its text paints (`WorldSessionSceneEmitter`
+  supplies no `SurfaceTexts`, as it emits no creation text run). The slots are
+  a fixed band of the decal buffer (`SdfSurfaceTextLayout.MaxTexts`).
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
   submits through `chat.whisper` and `chat.log` (`ChatCommandModule`).
 - Cross-check the Triton's reports against several independent sources (SDL

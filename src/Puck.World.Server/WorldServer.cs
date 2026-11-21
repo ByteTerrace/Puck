@@ -349,6 +349,12 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <summary>Gets the journal length — the number of applied mutations over the base (the <c>world.status</c> dirty
     /// count).</summary>
     public int JournalLength => m_document.JournalLength;
+    /// <summary>Returns how many of a principal's own edits the journal holds that <c>world.undo</c> can still take
+    /// back, and how many of its undone edits <c>world.redo</c> can still restore. Another principal's edits and the
+    /// World's own entries count toward neither.</summary>
+    /// <param name="principal">The principal whose edits are counted.</param>
+    /// <returns>The principal's undo and redo depths.</returns>
+    public (int Undoable, int Redoable) JournalDepths(Principal principal) => m_document.JournalDepths(principal: principal);
     /// <summary>Gets the width of the latest authoritative step, or zero before the first step.</summary>
     public ulong LastStepTicks => m_tick.LastStepTicks;
     /// <summary>Gets the authoritative screen-machine host — owns every booted <c>IMachineRuntime</c>, its memory-peek

@@ -2,7 +2,8 @@ using Puck.SignedDistance;
 
 namespace Puck.World;
 
-/// <summary>The text-screen template grammar and bounded grid policy, shared by loading and baking.</summary>
+/// <summary>The template grammar of text a world draws from state (a text screen's lines, a text paint's template)
+/// and a text screen's bounded grid policy, shared by loading and baking.</summary>
 public static class WorldScreenText {
     /// <summary>Parses brace escapes and state-cell placeholders. Screens have no per-body binding context.</summary>
     /// <param name="line">The authored line.</param>
@@ -40,21 +41,30 @@ public static class WorldScreenText {
 
         static IEnumerable<(int Line, string Token, StateBinding Binding)> Enumerate(IReadOnlyList<string> lines) {
             for (var index = 0; (index < lines.Count); index++) {
-                if (
-                    (lines[index] is not { Length: > 0 } line) ||
-                    !TryParse(error: out _, line: line, segments: out var segments)
-                ) {
-                    continue;
+                foreach (var (token, binding) in Placeholders(line: lines[index])) {
+                    yield return (index, token, binding);
                 }
+            }
+        }
+    }
+    /// <summary>Returns the state cells one templated line reads: every placeholder of a line that follows the
+    /// grammar (<see cref="TryParse"/>), in order; a null, empty or malformed line reads nothing.</summary>
+    /// <param name="line">The authored line.</param>
+    /// <returns>Each placeholder's token as authored and the binding it names.</returns>
+    public static IEnumerable<(string Token, StateBinding Binding)> Placeholders(string? line) {
+        if (
+            (line is not { Length: > 0 }) ||
+            !TryParse(error: out _, line: line, segments: out var segments)
+        ) {
+            yield break;
+        }
 
-                foreach (var segment in segments) {
-                    if (
-                        segment.IsPlaceholder &&
-                        StateBinding.TryParse(binding: out var binding, token: segment.Text)
-                    ) {
-                        yield return (index, segment.Text, binding);
-                    }
-                }
+        foreach (var segment in segments) {
+            if (
+                segment.IsPlaceholder &&
+                StateBinding.TryParse(binding: out var binding, token: segment.Text)
+            ) {
+                yield return (segment.Text, binding);
             }
         }
     }

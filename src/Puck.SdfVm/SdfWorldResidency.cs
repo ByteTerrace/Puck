@@ -631,6 +631,17 @@ public sealed partial class SdfWorldResidency : IDisposable {
             }
         }
 
+        // Surface texts (text paints): every slot is asked each frame, so a slot whose text went away clears.
+        if (m_frameSource.SurfaceTexts is { } surfaceTexts) {
+            for (var slot = 0; (slot < SdfSurfaceTextLayout.MaxTexts); slot++) {
+                if (surfaceTexts(arg: slot) is { } text) {
+                    tables.SetSurfaceText(distanceRange: text.DistanceRange, glyphWords: text.Glyphs.Span, slot: slot);
+                } else {
+                    tables.ClearSurfaceText(slot: slot);
+                }
+            }
+        }
+
         // A frame the tables packed already, as when the frame source filmed nothing this frame, stands as it was.
         if (!ReferenceEquals(
             objA: frame,

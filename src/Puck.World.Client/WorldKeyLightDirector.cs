@@ -14,7 +14,9 @@ namespace Puck.World.Client;
 /// Presentation-side keyboard lamp director: each fixed step it builds every local seat's legend from its routed
 /// world's <c>keyLights</c> section (the keys the rows name, the keys the seat's active binding page binds, and the keys
 /// that type the characters state holds), paints it through <see cref="LightLegendComposer"/>, and writes the frame to
-/// the platform's keyboard lamp arrays. It reads delivered state only and never feeds simulation.
+/// the platform's keyboard lamp arrays. A row's scalars read through the seat's own <see cref="WorldStateLease"/>, so
+/// one keyed on <c>$body</c> reads the cell of the seat's body (<see cref="WorldSeatBodies"/>), as a haptic row's does.
+/// It reads delivered state only and never feeds simulation.
 /// </summary>
 /// <remarks>
 /// A seat's legend is always painted onto a reference board holding one lamp per key
@@ -25,6 +27,7 @@ namespace Puck.World.Client;
 /// world authors one.
 /// </remarks>
 public sealed class WorldKeyLightDirector {
+    private readonly WorldSeatBodies m_bodies;
     private readonly LampLegendDriver? m_driver;
     private readonly ReferenceBoard m_board = new();
     private readonly PlayerRoster m_roster;
@@ -39,18 +42,21 @@ public sealed class WorldKeyLightDirector {
     /// <summary>Initializes a new instance of the <see cref="WorldKeyLightDirector"/> class.</summary>
     /// <param name="roster">The local seat roster, which names the seat that holds the keyboard.</param>
     /// <param name="seatBindings">The routed definition, state mirror and active binding page of each seat.</param>
+    /// <param name="bodies">The body each seat's <c>$body</c> key names.</param>
     /// <param name="driver">The loop that writes the platform's lamp arrays, or <see langword="null"/> on a host that
     /// opens no physical device; the director does not own it.</param>
     /// <param name="timestamp">The monotonic timestamp source, in <see cref="Stopwatch.Frequency"/> ticks, or
     /// <see langword="null"/> for <see cref="Stopwatch.GetTimestamp"/>.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="roster"/> or <paramref name="seatBindings"/> is
-    /// <see langword="null"/>.</exception>
-    public WorldKeyLightDirector(PlayerRoster roster, WorldSeatBindings seatBindings, LampLegendDriver? driver = null, Func<long>? timestamp = null) {
+    /// <exception cref="ArgumentNullException"><paramref name="roster"/>, <paramref name="seatBindings"/> or
+    /// <paramref name="bodies"/> is <see langword="null"/>.</exception>
+    public WorldKeyLightDirector(PlayerRoster roster, WorldSeatBindings seatBindings, WorldSeatBodies bodies, LampLegendDriver? driver = null, Func<long>? timestamp = null) {
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: seatBindings);
+        ArgumentNullException.ThrowIfNull(argument: bodies);
 
         m_roster = roster;
         m_seatBindings = seatBindings;
+        m_bodies = bodies;
         m_driver = driver;
         m_timestamp = (timestamp ?? Stopwatch.GetTimestamp);
         m_seats = new SeatSlot[PlayerRoster.MaxSlots];
@@ -164,10 +170,12 @@ public sealed class WorldKeyLightDirector {
         ) {
             seat.Authored = false;
             seat.Edges.Clear();
+            seat.Lease.Release();
 
             return;
         }
 
+        seat.Lease.Bind(bodyIndex: m_bodies.Of(slot: slot), mirror: mirror);
         seat.Edges.Bind(mirror: mirror);
 
         var idle = ToLamp(color: mirror.Color(color: section.Idle, delivered: true, fallback: Vector4.Zero));
@@ -232,10 +240,10 @@ public sealed class WorldKeyLightDirector {
 
             var flashes = (
                 (row.FlashSignal is { } signalScalar) &&
-                seat.Edges.Observe(mirror: mirror, id: row.Id, signal: in signalScalar).HasFlag(flag: SignalEdge.Changed)
+                seat.Edges.Observe(lease: seat.Lease, id: row.Id, signal: in signalScalar).HasFlag(flag: SignalEdge.Changed)
             );
 
-            var paints = ((row.Lit is not { } litScalar) || (mirror.Scalar(delivered: true, fallback: 0f, scalar: in litScalar) > 0f));
+            var paints = ((row.Lit is not { } litScalar) || (seat.Lease.Scalar(delivered: true, fallback: 0f, scalar: in litScalar) > 0f));
 
             if (!paints && !flashes) {
                 continue;
@@ -260,7 +268,7 @@ public sealed class WorldKeyLightDirector {
             if (
                 (row.Character is { } characterScalar) &&
                 KeyboardUsageMap.TryGetSource(
-                    scalar: ((int)mirror.Scalar(delivered: true, fallback: 0f, scalar: in characterScalar)),
+                    scalar: ((int)seat.Lease.Scalar(delivered: true, fallback: 0f, scalar: in characterScalar)),
                     source: out var typed
                 )
             ) {
@@ -269,7 +277,7 @@ public sealed class WorldKeyLightDirector {
 
             if (paints) {
                 var color = ToLamp(color: mirror.Color(color: row.Color, delivered: true, fallback: Vector4.One));
-                var available = ((row.Available is not { } availableScalar) || (mirror.Scalar(delivered: true, fallback: 0f, scalar: in availableScalar) > 0f));
+                var available = ((row.Available is not { } availableScalar) || (seat.Lease.Scalar(delivered: true, fallback: 0f, scalar: in availableScalar) > 0f));
 
                 foreach (var source in m_sourceScratch) {
                     seat.Legend.Bind(color: color, isAvailable: available, source: source);
@@ -313,6 +321,7 @@ public sealed class WorldKeyLightDirector {
     private sealed class SeatSlot {
         public readonly LightLegendState Legend = new();
         public readonly WorldSignalEdges Edges = new();
+        public readonly WorldStateLease Lease = new();
         public readonly LampColor[] BoardColors = new LampColor[ReferenceBoard.Usages.Length];
         public bool Authored;
         public LightLegendComposer? Composer;

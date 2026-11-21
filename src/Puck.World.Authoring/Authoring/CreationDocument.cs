@@ -464,6 +464,17 @@ public sealed record TextRunDocument(
     /// <summary>The relief a run without a <see cref="Depth"/> takes, in the creation's own units.</summary>
     public const float DefaultDepth = 0.02f;
 
+    /// <summary>Returns the alignment an authored name selects: <see cref="AlignCenter"/>, <see cref="AlignRight"/>
+    /// or <see cref="AlignLeft"/>.</summary>
+    /// <param name="align">The authored name, or <see langword="null"/>.</param>
+    /// <param name="fallback">The alignment of a null or unrecognized name.</param>
+    /// <returns>The alignment.</returns>
+    public static Puck.Text.TextAlignment AlignmentOf(string? align, Puck.Text.TextAlignment fallback = Puck.Text.TextAlignment.Left) => align switch {
+        AlignCenter => Puck.Text.TextAlignment.Center,
+        AlignRight => Puck.Text.TextAlignment.Right,
+        AlignLeft => Puck.Text.TextAlignment.Left,
+        _ => fallback,
+    };
     /// <summary>Gets the run's relief, the half depth its glyph slab straddles its surface by, in the creation's own
     /// units.</summary>
     [System.Text.Json.Serialization.JsonIgnore]

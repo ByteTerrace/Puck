@@ -16,29 +16,16 @@ public sealed partial class WorldPersistence {
     // intermediate replay document is installed, so none is validated. The step is ALL-OR-NOTHING: a compose that fails,
     // a later edit by another principal on a row the step would change, or the install door's refusal leaves the journal
     // and the live document as they stood.
+    //
+    // Authority is the edits' own. The step changes only the rows its toggled entries change (every other entry replays
+    // to the document it already made, and a later edit on one of those rows refuses the step), so the principal needs
+    // what submitting each toggled edit again would need: a mutation passes the one admission door every mutation
+    // passes (WorldDocument.TryAdmitCompleteMutation), and a source edit, which can rebuild any section, needs the
+    // operator and Mutate over every section, as the reload that made it did. A seat therefore undoes the edits it may
+    // still make and no others, and what a principal who is not the operator is told names nothing of another's edits.
     internal bool ApplyUndo(int count, Principal principal, int connectionId, long correlationId, bool redo = false) {
         var verb = (redo ? "redo" : "undo");
-
-        if (!Host.Grants.IsOperator(principal: principal)) {
-            return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: $"world.{verb} requires the operator");
-        }
-        // Journal control is Mutate territory over every section (a replay can rebuild any).
-        if (!Host.GrantTable.AllowsAllSections(
-            capability: WorldCapability.Mutate,
-            denial: out var undoVerdict,
-            deniedSection: out var undoSection,
-            principal: principal
-        )) {
-            Host.Document.DenyGrantTable(
-                denial: $"{principal.Describe()} cannot mutate every section (section:{undoSection.ToString().ToLowerInvariant()} — {undoVerdict.DescribeDenial()}) — world.{verb} dropped",
-                connectionId: connectionId,
-                correlationId: correlationId,
-                echoKind: WorldEditEchoKind.Mutation
-            );
-
-            return false;
-        }
-
+        var isOperator = Host.Grants.IsOperator(principal: principal);
         var journal = Host.Document.Journal;
         // The principal's edits the step can reach, oldest first: the ones not undone for an undo, the undone ones for a
         // redo. A principal's undone edits are always the last of its edits (its next edit discards them,
@@ -54,7 +41,7 @@ public sealed partial class WorldPersistence {
             return RefuseUndo(
                 connectionId: connectionId,
                 correlationId: correlationId,
-                refusal: ((foreign == 0)
+                refusal: (((foreign == 0) || !isOperator)
                     ? $"{verb} refused: nothing to {verb}"
                     : $"{verb} refused: nothing to {verb} — the journal's other {foreign} entries are the World's own or other principals' edits, which are not {principal.Describe()}'s to {verb}")
             );
@@ -82,6 +69,44 @@ public sealed partial class WorldPersistence {
             max: reachable.Count
         );
         var toggled = (redo ? reachable[..take] : reachable[^take..]);
+
+        for (var position = 0; (position < toggled.Count); position++) {
+            var entry = journal[toggled[position]];
+
+            if (entry.ReloadPatch is null) {
+                if (!Host.Document.TryAdmitCompleteMutation(mutation: entry.Mutation, preMetered: (position > 0), admission: out var admission)) {
+                    Host.Document.DenyGrantTable(
+                        denial: $"{principal.Describe()} {admission.Describe()} — world.{verb} of {entry.Description} dropped",
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        echoKind: WorldEditEchoKind.Mutation
+                    );
+
+                    return false;
+                }
+
+                continue;
+            }
+            if (!isOperator) {
+                return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: $"world.{verb} of a source edit requires the operator");
+            }
+            if (!Host.GrantTable.AllowsAllSections(
+                capability: WorldCapability.Mutate,
+                denial: out var undoVerdict,
+                deniedSection: out var undoSection,
+                principal: principal
+            )) {
+                Host.Document.DenyGrantTable(
+                    denial: $"{principal.Describe()} cannot mutate every section (section:{undoSection.ToString().ToLowerInvariant()} — {undoVerdict.DescribeDenial()}) — world.{verb} of a source edit dropped",
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    echoKind: WorldEditEchoKind.Mutation
+                );
+
+                return false;
+            }
+        }
+
         var next = journal;
 
         foreach (var index in toggled) { next = next.SetItem(index: index, value: (journal[index] with { Undone = !redo })); }
@@ -100,7 +125,9 @@ public sealed partial class WorldPersistence {
                 return RefuseUndo(
                     connectionId: connectionId,
                     correlationId: correlationId,
-                    refusal: $"{verb} refused: replay failed at journal entry {index} ({entry.Description}) — {composeReason}"
+                    refusal: ((isOperator || (entry.Authored && (entry.Author == principal)))
+                        ? $"{verb} refused: replay failed at journal entry {index} ({entry.Description}) — {composeReason}"
+                        : $"{verb} refused: a later edit no longer applies without it; nothing was {(redo ? "redone" : "undone")}")
                 );
             }
 
@@ -137,7 +164,9 @@ public sealed partial class WorldPersistence {
                     return RefuseUndo(
                         connectionId: connectionId,
                         correlationId: correlationId,
-                        refusal: $"{verb} refused: {row} was changed later by {next[index].Author.Describe()} (journal entry {index}, {next[index].Description}); nothing was {(redo ? "redone" : "undone")}"
+                        refusal: (isOperator
+                            ? $"{verb} refused: {row} was changed later by {next[index].Author.Describe()} (journal entry {index}, {next[index].Description}); nothing was {(redo ? "redone" : "undone")}"
+                            : $"{verb} refused: {row} was changed later by another principal; nothing was {(redo ? "redone" : "undone")}")
                     );
                 }
             }
@@ -287,13 +316,8 @@ public sealed partial class WorldPersistence {
         Host.Document.SetJournal(journal: journal);
         if (stage is not null) { Host.Document.FinishInstall(stage: stage); }
 
-        var undoable = 0;
-        var redoable = 0;
+        var (undoable, redoable) = Host.Document.JournalDepths(principal: principal);
 
-        foreach (var entry in journal) {
-            if (!entry.Authored || (entry.Author != principal)) { continue; }
-            if (entry.Undone) { redoable++; } else { undoable++; }
-        }
         Host.EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: $"{named}, {undoable} left to undo, {redoable} to redo{detail}",
             Rejected: false,

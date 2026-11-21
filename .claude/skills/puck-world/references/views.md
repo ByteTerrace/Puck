@@ -480,6 +480,38 @@ Easing changes placement without rebuilding a node, and a transition allocates a
 most once. The `rendering` skill owns the graph document, the scheduler
 and the host (`WorldViewGraphHost`).
 
+## Seat framings
+
+`views.framings` rows (`WorldSeatFraming`: `id`, `program`, `when`, `near`) are
+the framings a seat's camera eases to while a condition holds: a seat at a
+bench, an instrument or a desk, with no board topology and no engagement.
+
+- **Which row.** Each frame a seat holds the first row, in document order,
+  whose `when` reads positive for it. `when` is a bindable scalar read through
+  the seat's own lease (`WorldStateLease.Scalar`), so a binding keyed `$body`
+  reads the seat's body (`WorldSeatBodies`) and the row frames only the seats
+  that satisfy it; a binding with its own key frames every seat at once.
+- **Where the eye stands.** `program` names any program of the document's table
+  (a `views.programs` row, a `cameras[].rig`). It resolves against the seat's
+  body pose as its `reference`; a station usually anchors it at a `worldPoint`
+  or a `placement`. Its field of view eases in with its eye and target.
+- **The ease.** The camera eases onto the framing and back
+  (`WorldSeatFramings`, `WorldEasedFraming`) on the program's own `dynamics` op,
+  or the chase rig's when it authors none. It runs after the chase eye's boom,
+  clearance and door carry, so none of those reads the framing, and look input
+  does not turn it.
+- **`near`** is the framed camera's near plane, in world units from its eye: it
+  keeps the seated body out of the picture.
+
+The rules that seat a player stay the document's; a row only reads the state
+they write. The board view (`WorldTabletopFraming`) eases through the same step
+and still fits its board from the topology, since a camera program has no op
+that fits a footprint. A seat in its camera application and a seat presented in
+another world hold no row. `world.view.camera <player> full` reports
+`framing=<id>` and `framingWeight` for a seat that held a row at its last
+presented frame. The debug world's press (`worlds/debug/press.puck`) is the
+live example.
+
 ## Pointer, cursor, Free Cam
 
 `WorldWindowInputFilters` is the one window input filter capability

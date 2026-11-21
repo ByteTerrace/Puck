@@ -233,6 +233,33 @@ public enum WorldSeatYawReference : byte {
     World,
     Body,
 }
+/// <summary>
+/// One row of <c>views.framings</c>: a framing a seat's camera eases to, in place of its chase framing, while a
+/// condition holds, such as a seat at a bench, an instrument or a desk. Each frame a seat holds the first row, in
+/// document order, whose <paramref name="When"/> reads positive for it; its camera eases onto
+/// <paramref name="Program"/>, resolved against the seat's own body pose, and back once no row holds. The ease is timed
+/// by the program's own <c>dynamics</c> op, or by the seat rig's where it authors none. Presentation only: the rules
+/// that seat a player and the state they write stay the document's.
+/// </summary>
+/// <param name="Id">The row's stable id, unique within the section; the camera read-back names the held row by it.</param>
+/// <param name="Program">The camera program the seat's camera eases to: a name in the document's program table
+/// (<c>views.programs</c>, a <c>cameras[].rig</c>). Its <c>anchor</c>'s <c>reference</c> subject is the seat's body.</param>
+/// <param name="When">The row holds while this is positive. A binding keyed <c>$body</c> reads the cell of the seat's
+/// own body, so the row frames only the seats that satisfy it.</param>
+/// <param name="Near">The framing's near-plane distance from its eye, in world units, so nothing nearer draws (a
+/// seated avatar between the eye and what it frames); zero keeps the camera's own. Non-negative.</param>
+[System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldSeatFraming(
+    [property: DocumentText("a seat framing id")] string Id,
+    [property: DocumentText("a camera program name")] string Program,
+    BindableScalar When,
+    float Near = 0f
+);
+/// <summary>The <see cref="WorldSeatFraming"/> bounds <c>WorldDefinitionValidator</c> enforces.</summary>
+public static class WorldSeatFramingCapacity {
+    /// <summary>The most rows <c>views.framings</c> holds: every seat reads each row's condition every frame.</summary>
+    public const int MaxRows = 32;
+}
 /// <param name="Layouts">The authored named layouts (empty = the built-in ladder).</param>
 /// <param name="SeatRigRaw">The authored chase framing, or <see langword="null"/> for a document that seats no
 /// body; <see cref="SeatRig"/> is what a reader resolves through.</param>
@@ -266,6 +293,8 @@ public enum WorldSeatYawReference : byte {
 /// <param name="BuiltinTransition">The ease into or out of the built-in seat ladder (the composition no authored
 /// layout selects), or <see langword="null"/> for the neutral <see cref="WorldViewTransition"/> defaults (a cut). An authored layout
 /// brings its own envelope.</param>
+/// <param name="Framings">The framings a seat's camera eases to while their conditions hold
+/// (<see cref="WorldSeatFraming"/>), or <see langword="null"/> for none.</param>
 public sealed record WorldViewDefaults(
     IReadOnlyList<WorldViewLayout>? Layouts = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatRig"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraProgram? SeatRigRaw = null,
@@ -281,7 +310,8 @@ public sealed record WorldViewDefaults(
     [property: System.Text.Json.Serialization.JsonPropertyName("nestingDepth"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? NestingDepthRaw = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewQuality>? Quality = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("programs"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCameraProgram>? ProgramsRaw = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewTransition? BuiltinTransition = null
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewTransition? BuiltinTransition = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatFraming>? Framings = null
 ) {
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
 

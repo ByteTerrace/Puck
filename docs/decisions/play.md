@@ -429,6 +429,18 @@ reads them back as the frame resolved them.
 | `obstructedTargetSkin` | `clearance` op | 0 (never skips) | 1.1 m | Where the sweep starts when the target is inside geometry (a portal frame round the pivot). |
 | `dynamics` | each case's `dynamics` op (`camera-boom` row) | `f: 4, zeta: 1, r: 0` | same | Critically damped ease on boom fraction, rise angle and target blend; wall contact clamps at once. |
 
+**A seat's view of a station is a camera program a state cell selects.** A
+bench, an instrument or a desk needs the camera to lean in while a seat works
+it, and the board view already did that for a tabletop, in engine code that
+fits a board's footprint. Giving every station a board topology, or adding an
+engine framing per kind of station, was rejected: where the eye stands is a
+look, and the rules that seat a player are the document's. So a `views.framings`
+row names an authored camera program and a condition read from state, keyed by
+the seat's body when it should frame one seat alone, and the seat's camera
+eases onto it through the step the board view eases through. The engine keeps
+the ease and the selection; the document keeps the framing and when it holds.
+The board view stays engine-fitted until a camera program can fit a footprint.
+
 ## Tabletop
 
 **Both document ceilings are structural, so a collision widens them.** The

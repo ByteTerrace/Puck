@@ -665,6 +665,38 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.operations authors both 'anchor' and 'path' — each establishes its own subject; author only one.");
         }
     }
+    // views.framings: unique ids, a declared camera program each, an admissible condition and a non-negative near plane.
+    private static void ValidateSeatFramings(WorldDefinition definition, IReadOnlyDictionary<string, WorldCameraProgram> programs, List<string> errors) {
+        if (definition.ViewsRaw?.Framings is not { } rows) {
+            return;
+        }
+
+        if (rows.Count > WorldSeatFramingCapacity.MaxRows) {
+            errors.Add(item: $"views.framings declares {rows.Count} rows, exceeding the {WorldSeatFramingCapacity.MaxRows}-row ceiling.");
+        }
+
+        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+            var path = $"views.framings[{index}]";
+
+            if (row is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            RequireUniqueName(value: row.Id, seen: ids, path: path, field: "id", errors: errors);
+            if (string.IsNullOrWhiteSpace(value: row.Program) || !programs.ContainsKey(key: row.Program)) {
+                errors.Add(item: $"{path}.program names undeclared camera program '{row.Program}'.");
+            }
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.SeatFramingWhen, path: $"{path}.when", scalar: row.When);
+            if (!float.IsFinite(f: row.Near) || (row.Near < 0f)) {
+                errors.Add(item: $"{path}.near {row.Near} must be finite and non-negative.");
+            }
+        }
+    }
     // Cross-program blend and select references: every program WorldCameraPrograms.Declared lists shares one name
     // namespace, so dangling names and cycles can only be checked once the whole table is assembled — never inside one
     // program's own validation.
@@ -1284,6 +1316,37 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
+    // One templated line of text drawn from state (WorldScreenText's grammar): it parses, and every placeholder names a
+    // declared row whose cells display. Reports the scalars its literals span; false when the line does not parse.
+    private static bool TryValidateTextTemplate(WorldDefinition definition, string line, string path, List<string> errors, out int literalRunes) {
+        literalRunes = 0;
+
+        if (!WorldScreenText.TryParse(error: out var error, line: line, segments: out var segments)) {
+            errors.Add(item: $"{path} {error}.");
+
+            return false;
+        }
+
+        foreach (var segment in segments) {
+            if (!segment.IsPlaceholder) {
+                foreach (var _ in segment.Text.EnumerateRunes()) {
+                    literalRunes++;
+                }
+                continue;
+            }
+
+            var binding = StateBinding.Parse(token: segment.Text)!.Value;
+            var row = definition.State.FirstOrDefault(predicate: row => (row.Name.Value == binding.Row));
+
+            if (row is null) {
+                errors.Add(item: $"{path} placeholder '{{{segment.Text}}}' names no state row '{binding.Row}'.");
+            } else if (row.Kind is not (CellKind.Int or CellKind.Fixed or CellKind.Bool or CellKind.Text)) {
+                errors.Add(item: $"{path} placeholder '{{{segment.Text}}}' requires an Int, Fixed, Bool or Text row, not {row.Kind}.");
+            }
+        }
+
+        return true;
+    }
     // The decal-text source gate: the grid must fit the engine's per-screen decal cell budget, every authored line
     // must fit after unescaping its literals; dynamic state expansions clip to the bounded grid, even after growth.
     // Every placeholder names a declared displayable row. The font and colors resolve through their catalogs.
@@ -1312,29 +1375,8 @@ public static partial class WorldDefinitionValidator {
                 return;
             }
 
-            if (!WorldScreenText.TryParse(error: out var error, line: line, segments: out var segments)) {
-                errors.Add(item: $"{path}.text.lines[{index}] {error}.");
+            if (!TryValidateTextTemplate(definition: definition, errors: errors, line: line, literalRunes: out var runeCount, path: $"{path}.text.lines[{index}]")) {
                 continue;
-            }
-
-            var runeCount = 0;
-
-            foreach (var segment in segments) {
-                if (!segment.IsPlaceholder) {
-                    foreach (var _ in segment.Text.EnumerateRunes()) {
-                        runeCount++;
-                    }
-                    continue;
-                }
-
-                var binding = StateBinding.Parse(token: segment.Text)!.Value;
-                var row = definition.State.FirstOrDefault(predicate: row => (row.Name.Value == binding.Row));
-
-                if (row is null) {
-                    errors.Add(item: $"{path}.text.lines[{index}] placeholder '{{{segment.Text}}}' names no state row '{binding.Row}'.");
-                } else if (row.Kind is not (CellKind.Int or CellKind.Fixed or CellKind.Bool or CellKind.Text)) {
-                    errors.Add(item: $"{path}.text.lines[{index}] placeholder '{{{segment.Text}}}' requires an Int, Fixed, Bool or Text row, not {row.Kind}.");
-                }
             }
 
             widestLine = Math.Max(

@@ -120,9 +120,15 @@ public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Dat
 /// <param name="Color">The paint's linear-RGB albedo.</param>
 /// <param name="Slot">The dynamic transform slot whose frame the paint rides, or <see cref="WinningFrame"/> for the
 /// frame of the slot that owns the hit (world space for static geometry), as an inset's.</param>
-public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Rotation, float Stroke, Vector3 Color, int Slot = SdfPaint.WinningFrame) {
+/// <param name="Text">The surface text slot whose glyphs cover the paint (<see cref="SdfSurfaceTextLayout"/>), or
+/// <see cref="NoText"/> for a paint that covers its whole shape. A text paint colours the surface only inside both its
+/// shape and a glyph, the glyphs laid out in the shape's bound box on its local XY plane and projected along local Z;
+/// a slot the host supplies no glyphs for draws nothing. Its shape must be bounded.</param>
+public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Rotation, float Stroke, Vector3 Color, int Slot = SdfPaint.WinningFrame, int Text = SdfPaint.NoText) {
     /// <summary>The <see cref="Slot"/> of a paint in the frame of the slot that owns the hit.</summary>
     public const int WinningFrame = -1;
+    /// <summary>The <see cref="Text"/> of a paint that covers its whole shape.</summary>
+    public const int NoText = -1;
 
     /// <summary>Returns whether a paint can cover a packed shape: every primitive the shape dispatch evaluates from its
     /// data and a variable side table. A path, a glyph, a sampled
@@ -148,6 +154,8 @@ public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Ro
         float.IsFinite(f: paint.Stroke) && (paint.Stroke >= 0f) &&
         VectorFunctions.IsFinite(vector: paint.Color) &&
         (paint.Color.X >= 0f) && (paint.Color.Y >= 0f) && (paint.Color.Z >= 0f) &&
-        (paint.Slot >= WinningFrame)
+        (paint.Slot >= WinningFrame) &&
+        (paint.Text >= NoText) && (paint.Text < SdfSurfaceTextLayout.MaxTexts) &&
+        ((paint.Text == NoText) || !shape.Bound.IsUnbounded)
     );
 }

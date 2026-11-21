@@ -11,18 +11,15 @@ namespace Puck.World.Client;
 /// camera's field of view. The side and footprint come from <see cref="WorldTabletopFrame"/>, the same fixed-point
 /// frame the simulation reads the seat's side and pointed cell from, so the view and the rules agree on which way is
 /// up the board. One instance per seat eases between the seat's ordinary camera and that view on the seat rig's own
-/// reported dynamics, and back when the seat leaves; while framed, the near plane stands just short of the board, so
-/// the seated avatar draws nothing over it. Presentation only: nothing here feeds the simulation.
+/// reported dynamics, and back when the seat leaves (<see cref="WorldEasedFraming"/>); while framed, the near plane
+/// stands just short of the board, so the seated avatar draws nothing over it. Presentation only: nothing here feeds
+/// the simulation.
 /// </summary>
 public sealed class WorldTabletopFraming {
     // A view straight down has no side to look from, so the elevation stops just short of vertical.
     private const float MaximumPitchRadians = (MathF.PI * 0.4972f);
 
-    private readonly WorldFramingEase m_ease = new();
-    private Vector3 m_frameEye;
-    private float m_frameNear;
-    private Vector3 m_frameTarget;
-    private bool m_hasFrame;
+    private readonly WorldEasedFraming m_ease = new();
 
     /// <summary>Gets how far the seat's camera stands toward the board view: 0 is the seat's ordinary camera, 1 the
     /// board view.</summary>
@@ -120,7 +117,7 @@ public sealed class WorldTabletopFraming {
     public float Apply(WorldDefinition definition, string? placementId, Vector3 seatPosition, in SdfCameraDynamics dynamics, float fieldOfViewRadians, float aspectRatio, float deltaSeconds, ref Vector3 eye, ref Vector3 target) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        var goal = 0f;
+        (Vector3 Eye, Vector3 Target, float Near, float FieldOfView)? framing = null;
 
         if (
             (placementId is not null) &&
@@ -141,40 +138,16 @@ public sealed class WorldTabletopFraming {
             topology: topology
         )
         ) {
-            m_frameEye = frameEye;
-            m_frameTarget = frameTarget;
-            m_frameNear = frameNear;
-            m_hasFrame = true;
-            goal = 1f;
+            framing = (frameEye, frameTarget, frameNear, 0f);
         }
 
-        if (!m_hasFrame) {
-            return 0f;
-        }
-
-        var weight = m_ease.Step(
+        return m_ease.Apply(
             deltaSeconds: deltaSeconds,
             dynamics: in dynamics,
-            goal: goal
+            eye: ref eye,
+            fieldOfView: ref fieldOfViewRadians,
+            framing: framing,
+            target: ref target
         );
-
-        if (weight <= 0f) {
-            m_hasFrame = false;
-
-            return 0f;
-        }
-
-        eye = Vector3.Lerp(
-            value1: eye,
-            value2: m_frameEye,
-            amount: weight
-        );
-        target = Vector3.Lerp(
-            value1: target,
-            value2: m_frameTarget,
-            amount: weight
-        );
-
-        return (weight * m_frameNear);
     }
 }

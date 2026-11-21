@@ -2040,6 +2040,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.programs[].operations[][clearance].obstructedTargetSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.ObstructedTargetSkin` |
 | `views.programs[].operations[][clearance].obstructedTargetSkin.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.programs[].operations[][clearance].closeTargetOffset` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetOffset` |
+| `views.framings[].when` | State | Binding | Binding | `WorldSeatFraming.When` |
+| `views.framings[].when.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `views.layouts[].slots[].camera` | Camera | Names | Read | `WorldViewSlot.Camera` |
 | `looks.rows[].name` | State | Binding | Binding | `WorldLook.Name` |
 | `looks.rows[].source[creation].prototypeId` | Prototype | Names | Read | `WorldLookSource.Creation.PrototypeId` |
@@ -2114,6 +2116,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].field.material.paints[].curve.a` | State | Binding | Binding | `ShapeCurveDocument.A` |
 | `state.world[].field.material.paints[].curve.b` | State | Binding | Binding | `ShapeCurveDocument.B` |
 | `state.world[].field.material.paints[].curve.c` | State | Binding | Binding | `ShapeCurveDocument.C` |
+| `state.world[].field.material.paints[].text.template` | State | Template | Binding | `PalettePaintTextDocument.Template` |
 | `state.world[].field.paint[][draw].source` | Generator | Names | Read | `WorldLatticeFill.Draw.Source` |
 | `state.world[].witness` | State | Names | Read | `WorldStateRow.Witness` |
 | `state.world[].draw.source` | Generator | Names | Read | `Draw.Source` |
@@ -4921,6 +4924,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.programs[].operations[][blend].b` | `WorldCameraProgramOp.Blend.B` | a camera program name |
 | `views.programs[].operations[][selectProgram].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
 | `views.programs[].operations[][selectProgram].default` | `WorldCameraProgramOp.SelectProgram.Default` | a camera program name |
+| `views.framings[].id` | `WorldSeatFraming.Id` | a seat framing id |
+| `views.framings[].program` | `WorldSeatFraming.Program` | a camera program name |
 | `views.layouts[].name` | `WorldViewLayout.Name` | a view layout name |
 | `views.layouts[].slots[].instance` | `WorldViewSlot.Instance` | a view instance name |
 | `looks.rows[].motion.cues[].frame` | `WorldLookCue.Frame` | a creation frame |
@@ -4980,6 +4985,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].field.material.flow.surface.color` | `PaletteSurfaceDocument.Color` | a color literal |
 | `state.world[].field.material.paints[].color` | `PalettePaintDocument.Color` | a color literal |
 | `state.world[].field.material.paints[].parent` | `PalettePaintDocument.Parent` | a shape of the creation the paint's palette slot belongs to, local to that creation |
+| `state.world[].field.material.paints[].text.font` | `PalettePaintTextDocument.Font` | a font name |
+| `state.world[].field.material.paints[].text.align` | `PalettePaintTextDocument.Align` | a text alignment |
 | `state.world[].field.paint[].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].field.paint[][rect].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].field.paint[][noise].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |

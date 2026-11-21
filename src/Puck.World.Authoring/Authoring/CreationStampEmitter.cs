@@ -305,19 +305,7 @@ public static partial class CreationStampEmitter {
 
         return new TextLayoutOptions(
             MaxLineWidth: (run.MaxWidth * scale),
-            Alignment: (string.Equals(
-                a: run.Align,
-                b: TextRunDocument.AlignCenter,
-                comparisonType: StringComparison.Ordinal
-            )
-            ? TextAlignment.Center
-            : (string.Equals(
-                    a: run.Align,
-                    b: TextRunDocument.AlignRight,
-                    comparisonType: StringComparison.Ordinal
-                )
-                ? TextAlignment.Right
-                : TextAlignment.Left)),
+            Alignment: TextRunDocument.AlignmentOf(align: run.Align),
             Tracking: (run.Tracking ?? 0f),
             LineHeightScale: (run.LineSpacing ?? 1f)
         );

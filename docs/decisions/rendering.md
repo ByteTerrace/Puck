@@ -1730,6 +1730,21 @@ capture and no capture waits on it.
 A see-through shell, a window pane and a screen's front glass are drawn as
 transparent surfaces over the opaque image, not painted fakes.
 
+**Words on a part that follow state are a paint, not a screen and not
+relief.** A slug's word, a score on a sheet or a label that tracks a cell is
+lettering on a surface, so it is drawn as colour at the hit: a text paint,
+whose glyph quads the host supplies each frame from the world's fonts and
+state. Three options were weighed. A screen face with a text source already
+drew state-bound text, but a screen is a display: it emits, it takes one of the
+renderer's screen slots, and its frame did not ride a part's motion. A text run
+is relief, so every changed word would bake. A paint is lit, shadowed and worn
+as its surface is, rides its parent shape's motion as every parented paint
+does, and changes by uploading a few hundred bytes. At the scale of a world in
+which every sign, crate and counter may carry live words, the cost that matters
+is that a change touches no program and no mesh. What it does not yet reach is
+recorded with the open items: a text is the world's, not a body's, and the
+slots are a fixed band.
+
 ## What the state-of-the-art audit found ahead, and what stays rejected
 
 An audit of the renderer's algorithms against published and shipped practice

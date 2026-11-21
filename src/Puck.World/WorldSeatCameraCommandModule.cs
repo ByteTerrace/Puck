@@ -165,6 +165,10 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         if (seatBindings.IsCameraModeActive(slot: slot)) {
             Add(key: "cameraApplication", value: $"true");
         }
+        if (state?.Framings is { Active: { } framing } framings) {
+            Add(key: "framing", value: $"{framing}");
+            Add(key: "framingWeight", value: $"{framings.Weight:0.###}");
+        }
 
         return fields;
     }

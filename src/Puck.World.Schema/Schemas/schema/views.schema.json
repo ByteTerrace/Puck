@@ -534,6 +534,47 @@
       "description": "The ease into or out of the built-in seat ladder (the composition no authored layout selects), or null for the neutral WorldViewTransition defaults (a cut). An authored layout brings its own envelope.",
       "default": null
     },
+    "framings": {
+      "description": "The framings a seat\u0027s camera eases to while their conditions hold (WorldSeatFraming), or null for none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One row of views.framings: a framing a seat\u0027s camera eases to, in place of its chase framing, while a condition holds, such as a seat at a bench, an instrument or a desk. Each frame a seat holds the first row, in document order, whose When reads positive for it; its camera eases onto Program, resolved against the seat\u0027s own body pose, and back once no row holds. The ease is timed by the program\u0027s own dynamics op, or by the seat rig\u0027s where it authors none. Presentation only: the rules that seat a player and the state they write stay the document\u0027s.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "description": "The row\u0027s stable id, unique within the section; the camera read-back names the held row by it.",
+            "type": "string"
+          },
+          "program": {
+            "description": "The camera program the seat\u0027s camera eases to: a name in the document\u0027s program table (views.programs, a cameras[].rig). Its anchor\u0027s reference subject is the seat\u0027s body.",
+            "type": "string"
+          },
+          "when": {
+            "$ref": "./common.schema.json#/$defs/BindableScalar",
+            "description": "The row holds while this is positive. A binding keyed $body reads the cell of the seat\u0027s own body, so the row frames only the seats that satisfy it."
+          },
+          "near": {
+            "description": "The framing\u0027s near-plane distance from its eye, in world units, so nothing nearer draws (a seated avatar between the eye and what it frames); zero keeps the camera\u0027s own. Non-negative.",
+            "type": "number",
+            "default": 0
+          }
+        },
+        "required": [
+          "id",
+          "program",
+          "when"
+        ],
+        "additionalProperties": false,
+        "title": "WorldSeatFraming"
+      },
+      "default": null
+    },
     "layouts": {
       "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
       "type": [
