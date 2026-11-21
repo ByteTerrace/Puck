@@ -117,8 +117,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var avatarBodyMaterials = bodyMaterials.Span;
         var avatarAccentMaterials = accentMaterials.Span;
 
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (m_catalog.Slots[index] < 0) { continue; }
+        foreach (var index in m_catalog.Bodies) {
             var (rig, look, color) = CatalogAppearance(index);
             WorldMirroredAvatarBand.EmitPalette(
                 builder: builder, look: look, bodyColor: new DisplayColor(rgb: color), catalogRig: rig,
@@ -374,8 +373,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (m_catalog.Slots[index] < 0) { continue; }
+        // The catalog's bodies alone, in body order; a body's rows are owed only when its pose wakes it (Wake).
+        foreach (var index in m_catalog.Bodies) {
             if (!TryPresentedPose(
                 address: out var address,
                 index: index,

@@ -655,8 +655,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
         var alpha = m_mirror.InterpolationAlpha;
 
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (m_catalog.Slots[index] < 0) { continue; }
+        foreach (var index in m_catalog.Bodies) {
             if (!HoldsAvatar(index: index)) {
                 WorldMirroredAvatarBand.Park(
                     m_avatarOwners, index, ref m_avatarGaits[index], moved, slots,

@@ -529,6 +529,8 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         uint4 c = sdfSelectionRow(record, 2u);
         uint4 d = sdfSelectionRow(record, 3u);
         bool unboxed = (a.w & 1u) != 0u;
+        float3 boxCenter, boxX, boxY, boxZ;
+        sdfSelectionBox(record, a, b, c, d, boxCenter, boxX, boxY, boxZ);
         uint4 state = sdfMeshOcclusionVisibleRW[draw];
         // Visibility and detail belong to this observed surface incarnation, including a rejected occupant.
         if (state.z != c.w) { state = uint4(0u, 0u, c.w, 0u); }
@@ -538,13 +540,13 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         uint level = min(state.y, d.w);
         if (step == SDF_OCCLUSION_EARLY_STEP) {
             kept = ((draw % slices) == slice) &&
-                (splitExit || (((a.w >> 1u) & 1u) == (header.w & 1u))) && (unboxed || sdfSelectionKeeps(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz)));
+                (splitExit || (((a.w >> 1u) & 1u) == (header.w & 1u))) && (unboxed || sdfSelectionKeeps(boxCenter, boxX, boxY, boxZ));
             if (kept && splitExit && occlude && !unboxed) {
-                kept = sdfReceiverMayShadow(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz));
+                kept = sdfReceiverMayShadow(boxCenter, boxX, boxY, boxZ);
                 receiverRejected = !kept && (a.w & 2u) == 0u ? 1u : 0u;
             }
             if (kept) {
-                level = sdfSelectionLevel(record, state, unboxed);
+                level = sdfSelectionLevel(record, state, unboxed, boxCenter, boxX, boxY, boxZ, asfloat(b.w), c.w, d.w);
                 state.y = level;
             }
             state.w = kept ? 1u : 0u;
@@ -552,7 +554,7 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         bool was = unboxed || state.x != 0u;
         bool emit = kept && (!occlude || was);
         if (step == SDF_OCCLUSION_LATE_STEP) {
-            bool visible = kept && (unboxed || sdfOcclusionMaySee(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz), header.y));
+            bool visible = kept && (unboxed || sdfOcclusionMaySee(boxCenter, boxX, boxY, boxZ, header.y));
             entryRejected = splitExit && kept && !was && !visible && (a.w & 2u) == 0u ? 1u : 0u;
             emit = visible && !was;
             state.x = visible ? 1u : 0u;
@@ -576,8 +578,8 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
             if (sdfViewPoseSlot(pose) == pose) {
                 ViewportData light = worldView();
                 float3 forward = light.forward.xyz;
-                float3 relative = asfloat(a.xyz) - light.position.xyz;
-                float radius = sdfSelectionRadius(forward, asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz));
+                float3 relative = boxCenter - light.position.xyz;
+                float radius = sdfSelectionRadius(forward, boxX, boxY, boxZ);
                 float depth = dot(relative, forward);
                 // A near-plane cut can expose a solid's back faces. Leave those draws in the two-sided list.
                 float margin = 1.0e-5 * (length(relative) + radius + abs(worldNearDistance(light)) + 1.0);

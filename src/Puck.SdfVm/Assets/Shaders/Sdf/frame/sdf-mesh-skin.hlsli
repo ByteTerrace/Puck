@@ -39,8 +39,8 @@ SdfMeshSkinSlots sdfMeshSkinSlotsOf(uint record, uint vertex) {
     slots.root = asuint(asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD)));
     slots.s0 = slots.first == 0u ? slots.root : sdfMeshMemberSlot(record, slots.first);
     slots.s1 = slots.second == 0u ? slots.root : sdfMeshMemberSlot(record, slots.second);
-    // Each frame's rows are read through the view's overlay, so a member moves relative to the overlay's root and the
-    // caller's carry (sdfViewPoseCarry) places that root.
+    // Each frame's rows are read through the view's overlay, so a member moves relative to the overlay's root, and the
+    // caller's pose (sdfMeshPoseOf, sdfMeshPreviousPoseOf), read through the same overlay, places that root.
     slots.root = sdfViewPoseSlot(slots.root);
     slots.s0 = sdfViewPoseSlot(slots.s0);
     slots.s1 = sdfViewPoseSlot(slots.s1);
@@ -72,10 +72,12 @@ float3 sdfMeshSkinPose(SdfMeshSkinSlots slots, float3 p, inout float3 n, float s
     n = rotatePointByQuaternion(n - v * (dot(u, n) / (1.0 + dot(u, v))), real);
     return rotatePointByQuaternion(p, real) + translation;
 }
-float3 sdfMeshSkinCurrent(uint record, uint k, float3 p, inout float3 normal) {
+// A skinned vertex under this frame's transforms; `scale` is the draw's pose's (sdfMeshPoseScale), which a member's
+// offset from the root is divided by as the rest of the mesh takes it from the pose.
+float3 sdfMeshSkinCurrent(uint record, uint k, float3 p, inout float3 normal, float scale) {
     if ((sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_SKIN_FLAG) == 0u) { return p; }
     SdfMeshSkinSlots slots = sdfMeshSkinSlotsOf(record, sdfMeshIndexAt(record, k));
-    return sdfMeshSkinPose(slots, p, normal, sdfMeshDrawScale(record),
+    return sdfMeshSkinPose(slots, p, normal, scale,
         sdfDynamicTransforms[3u * slots.root].xyz, sdfDynamicTransforms[3u * slots.root + 1u],
         sdfDynamicTransforms[3u * slots.s0].xyz, sdfDynamicTransforms[3u * slots.s0 + 1u],
         sdfDynamicTransforms[3u * slots.s1].xyz, sdfDynamicTransforms[3u * slots.s1 + 1u]);
