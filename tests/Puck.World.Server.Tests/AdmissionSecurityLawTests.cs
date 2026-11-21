@@ -9,6 +9,7 @@ using Xunit;
 
 using Puck.Attestation;
 using Puck.Networking;
+using Puck.Networking.Peers;
 using Puck.World.Protocol;
 
 using static Puck.World.Testing.AdmissionWireFixture;
@@ -41,14 +42,18 @@ public sealed class AdmissionSecurityLawTests {
             Subject = null,
             Disclosure = WorldDisclosureTier.Replica,
         };
+        const string ClientKeyHash = "1111111111111111111111111111111111111111111111111111111111111111";
+        const string ServerKeyHash = "2222222222222222222222222222222222222222222222222222222222222222";
         var challenge = WorldAdmissionDoor.NewChallenge();
+        var bound = WorldAdmissionDoor.BindChallenge(challenge: challenge, clientKeyHash: ClientKeyHash, serverKeyHash: ServerKeyHash);
         var now = ClaimInstant.ToUnixTimeSeconds();
         var claim = AttestationSigner.SignClaim(codec: new CborAttestationCodec(), domain: root.Domain,
             subject: signer.Subject, signerKey: signer.Key, signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
             purpose: WorldAdmissionDoor.Purpose, notBefore: (now - 1), notAfter: (now + 1),
-            audience: WorldAdmissionDoor.Audience, sequence: null, claimBytes: challenge);
+            audience: WorldAdmissionDoor.Audience, sequence: null, claimBytes: bound);
         var outcome = WorldAdmissionDoor.TryAdmit(chain: [],
-            challenge: challenge, claim: claim, entries: (directFirst ? [direct, vouching] : [vouching, direct]), now: ClaimInstant);
+            challenge: challenge, clientKeyHash: ClientKeyHash, serverKeyHash: ServerKeyHash,
+            claim: claim, entries: (directFirst ? [direct, vouching] : [vouching, direct]), now: ClaimInstant);
 
         Assert.True(condition: outcome.Admitted, userMessage: outcome.Detail);
         Assert.Equal(expected: WorldDisclosureTier.Frames, actual: outcome.Tier);
@@ -64,7 +69,7 @@ public sealed class AdmissionSecurityLawTests {
 
     private static CancellationToken TestToken => TestContext.Current.CancellationToken;
 
-    private static async Task<(Stream Stream, ReadOnlyMemory<byte> Challenge)> ConnectPastChallengeAsync(WorldPeerHost host, PeerTestClient client, CancellationToken ct) {
+    private static async Task<(PeerStream Stream, ReadOnlyMemory<byte> Challenge)> ConnectPastChallengeAsync(WorldPeerHost host, PeerTestClient client, CancellationToken ct) {
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
 
         await client.ConnectAsync(
@@ -906,6 +911,7 @@ public sealed class AdmissionSecurityLawTests {
             );
             await WriteIdentityResponseAsync(
                 challenge: challenge,
+                clientKeyHash: client.KeyHash,
                 ct: testCt,
                 identity: identity,
                 stream: stream
@@ -932,6 +938,84 @@ public sealed class AdmissionSecurityLawTests {
                 userMessage: "the expired queue item admitted an orphaned remote body when draining resumed"
             );
             Assert.Empty(collection: host.Connections);
+        } finally {
+            identity.Key.Dispose();
+        }
+    }
+    /// <summary>An interactive peer's signed admission claim elicited on another peer link cannot be relayed onto
+    /// this connection, even with this connection's exact live challenge nonce; the channel-bound claim admits.</summary>
+    [Theory]
+    [InlineData("valid")]
+    [InlineData("client-key")]
+    [InlineData("server-key")]
+    [InlineData("challenge")]
+    public async Task InteractiveDoor_RefusesRelayedProofFromAnotherPeerTransport(string changed) {
+        var identity = GenerateIdentity(subject: "bound-interactive-peer");
+
+        try {
+            var document = BuildAdmissionDocument(entry: BuildEntry(
+                grants: [],
+                identity: identity
+            ));
+            using var fixture = Fixtures.FreshServer(definition: document);
+            using var host = StartHost(
+                clock: out var clock,
+                server: fixture.Server
+            );
+            var testCt = TestToken;
+
+            await using (StartPump(
+                fixture: fixture,
+                host: host
+            )) {
+                using var client = new PeerTestClient();
+                var (stream, challenge) = await ConnectPastChallengeAsync(
+                    client: client,
+                    ct: testCt,
+                    host: host
+                );
+
+                await WriteIdentityResponseAsync(
+                    challenge: ((changed == "challenge") ? WorldAdmissionDoor.NewChallenge() : challenge),
+                    clientKeyHash: ((changed == "client-key") ? new string(c: '0', count: 64) : client.KeyHash),
+                    ct: testCt,
+                    identity: identity,
+                    serverKeyHash: ((changed == "server-key") ? new string(c: '0', count: 64) : stream.Link.RemoteId.KeyHash),
+                    stream: stream
+                );
+
+                var reply = ((await WorldPeerWireFormat.TryReadDownstreamAsync(
+                    ct: testCt,
+                    stream: stream
+                ))
+                    ?? throw new InvalidOperationException(message: "connection closed before the admission verdict arrived"));
+
+                if (changed == "valid") {
+                    Assert.Equal(
+                        actual: reply.Kind,
+                        expected: WorldPeerWireFormat.DownstreamKind.HelloAccepted
+                    );
+                } else {
+                    var text = WorldPeerWireFormat.DecodeText(body: reply.Body.Span);
+
+                    Assert.Equal(
+                        actual: reply.Kind,
+                        expected: WorldPeerWireFormat.DownstreamKind.HelloRefused
+                    );
+                    Assert.Contains(
+                        actualString: text,
+                        comparisonType: StringComparison.Ordinal,
+                        expectedSubstring: $"identity-refused: {WorldAdmissionRefusal.ChallengeMismatch}:"
+                    );
+                    Assert.True(condition: await ExpireUntilClosedAsync(
+                        clock: clock,
+                        ct: testCt,
+                        handshakeDeadline: false,
+                        stream: stream
+                    ));
+                    Assert.Empty(collection: host.Connections);
+                }
+            }
         } finally {
             identity.Key.Dispose();
         }
