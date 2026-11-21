@@ -39,6 +39,23 @@ public sealed partial class WorldMachineHost {
             MountedContent(lease: lease)
         );
     }
+    /// <inheritdoc/>
+    public WorldMachinePace? Pace(string name) {
+        if (!m_instances.TryGetValue(
+            key: name,
+            value: out var instance
+        )) {
+            return null;
+        }
+        var runtime = instance.Lease.Runtime;
+        var queued = (runtime as IQueuedMachineRuntime);
+
+        return new(
+            NativeFrames: ((runtime as IMachineFrameProgress)?.NativeFrameIndex ?? -1L),
+            BackpressureEvents: (queued?.BackpressureEvents ?? 0L),
+            StepBusyTime: (queued?.StepBusyTime ?? TimeSpan.Zero)
+        );
+    }
 
     // The content path a lease mounted: the prepared asset of its configuration's content field, which a boot whose
     // authored content file is absent leaves out.

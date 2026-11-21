@@ -774,21 +774,21 @@ public static partial class WorldDecompiler {
                 );
                 break;
             case "claim":
-                if (CarriesOnly(obj, "$type", "pool", "binding", "effects")) {
+                if (CarriesOnly(obj, "$type", "pool", "binding", "effects") && NamesPool(obj: obj)) {
                     AppendPoolBodyStatement(indentLevel: indentLevel, keyword: "claim", obj: obj, sb: sb);
                 } else {
                     sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}{FormatCallForm(indentLevel: indentLevel, obj: obj)}");
                 }
                 break;
             case "claimPair":
-                if (CarriesOnly(obj, "$type", "pool", "left", "right", "binding", "effects")) {
+                if (CarriesOnly(obj, "$type", "pool", "left", "right", "binding", "effects") && NamesPool(obj: obj)) {
                     AppendPairPoolClaimStatement(indentLevel: indentLevel, obj: obj, sb: sb);
                 } else {
                     sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}{FormatCallForm(indentLevel: indentLevel, obj: obj)}");
                 }
                 break;
             case "forEachPool":
-                if (CarriesOnly(obj, "$type", "pool", "binding", "effects")) {
+                if (CarriesOnly(obj, "$type", "pool", "binding", "effects") && NamesPool(obj: obj)) {
                     AppendPoolBodyStatement(indentLevel: indentLevel, keyword: "forEach", obj: obj, sb: sb);
                 } else {
                     sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}{FormatCallForm(indentLevel: indentLevel, obj: obj)}");
@@ -838,6 +838,23 @@ public static partial class WorldDecompiler {
             }
         }
         sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");
+    }
+    // A `claim` or a `for each` reads its pool as a bare name, so a pool the bare form cannot carry (a module
+    // instance's `alias$name`) prints in call form.
+    private static bool NamesPool(JsonObject obj) => IdentifierSpelling.IsName(text: (obj["pool"]?.ToString() ?? string.Empty));
+    // The spelling a whole-row effect (`push`, `draw`, `deal`, `shuffle`) reads `node`'s row back from, or null when
+    // it has none. Such a statement opens with its keyword, so it reads a backquoted name where an assignment
+    // cannot.
+    private static string? FormatEffectRow(JsonNode? node) {
+        if (node is null) {
+            return null;
+        }
+        if (IsPoolFieldReference(node: node)) {
+            return FormatStateReference(node: node);
+        }
+        var name = FormatStateReference(node: node);
+
+        return (RowRefRoundTrips(key: null, name: name) ? FormatRowRef(key: null, name: name) : null);
     }
     // Row+key target text shared by every effect arm — `state` or `state[key]`, matching `RowRef`'s own spelling.
     private static string FormatRowRefTarget(JsonObject obj) => (IsPoolFieldReference(node: obj["state"])
@@ -1032,17 +1049,15 @@ public static partial class WorldDecompiler {
             "$type",
             "state",
             entry.Key
-        )
+        ) ||
+            (FormatEffectRow(node: obj["state"]) is not { } row)
         ) {
             return FormatCallForm(
                 indentLevel: 0,
                 obj: obj
             );
         }
-        return $"push {FormatRowRef(
-            FormatStateReference(node: obj["state"]),
-            null
-        )} = {entry.Text}";
+        return $"push {row} = {entry.Text}";
     }
     private static string FormatRowOnlyEffect(string keyword, JsonObject obj) =>
         ((IsEffectTargetSafe(obj: obj) && CarriesOnly(
@@ -1088,27 +1103,28 @@ public static partial class WorldDecompiler {
         }
         var type = inner["$type"]?.ToString();
 
-        if (string.Equals(a: type, b: "transfer", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            var from = inner["from"]?.ToString();
-            var to = inner["to"]?.ToString();
-            var selector = inner["selector"]?.ToString();
-            var count = (((inner["count"] is JsonNode c) && int.TryParse(c.ToString(), out var cv)) ? cv : 1);
-            var key = inner["key"]?.ToString();
-            var insertFirst = ((inner["insertFirst"] is JsonNode inf) && bool.TryParse(inf.ToString(), out var ib) && ib);
-
-            if (string.Equals(a: selector, b: "First", comparisonType: StringComparison.OrdinalIgnoreCase) && (key is null) && !insertFirst) {
-                if (inner.ContainsKey(propertyName: "count")) {
-                    return $"deal {count} from {from} to {to}";
-                }
+        // The sugar reprints only the rows, the First selector and a whole count; a transform carrying anything else
+        // keeps it in call form.
+        if (
+            string.Equals(a: type, b: "transfer", comparisonType: StringComparison.OrdinalIgnoreCase) &&
+            CarriesOnly(inner, "$type", "from", "to", "selector", "count") &&
+            string.Equals(a: inner["selector"]?.ToString(), b: "First", comparisonType: StringComparison.OrdinalIgnoreCase) &&
+            (FormatEffectRow(node: inner["from"]) is { } from) &&
+            (FormatEffectRow(node: inner["to"]) is { } to)
+        ) {
+            if (!inner.ContainsKey(propertyName: "count")) {
                 return $"draw {from} to {to}";
             }
-        } else if (string.Equals(a: type, b: "shuffle", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            var row = inner["row"]?.ToString();
-            var draw = inner["draw"]?.ToString();
-
-            if (!string.IsNullOrEmpty(value: row) && !string.IsNullOrEmpty(value: draw)) {
-                return $"shuffle {row} with {draw}";
+            if (int.TryParse(inner["count"]?.ToString(), NumberStyles.None, CultureInfo.InvariantCulture, out var count)) {
+                return $"deal {count.ToString(provider: CultureInfo.InvariantCulture)} from {from} to {to}";
             }
+        } else if (
+            string.Equals(a: type, b: "shuffle", comparisonType: StringComparison.OrdinalIgnoreCase) &&
+            CarriesOnly(inner, "$type", "row", "draw") &&
+            (FormatEffectRow(node: inner["row"]) is { } row) &&
+            (FormatEffectRow(node: inner["draw"]) is { } draw)
+        ) {
+            return $"shuffle {row} with {draw}";
         }
         return $"transform {FormatCallForm(
             indentLevel: 0,

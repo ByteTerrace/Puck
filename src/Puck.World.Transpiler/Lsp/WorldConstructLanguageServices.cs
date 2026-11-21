@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.Transpiler.Editing;
+using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Lsp;
@@ -67,43 +68,8 @@ public static class WorldConstructLanguageServices {
 
                 continue;
             }
-            if (
-                (character == '/') &&
-                ((index + 1) < text.Length) &&
-                (text[(index + 1)] is '/' or '*')
-            ) {
-                var close = ((text[(index + 1)] == '/')
-                    ? text.IndexOf(startIndex: index, value: '\n')
-                    : text.IndexOf(
-                        comparisonType: StringComparison.Ordinal,
-                        startIndex: index,
-                        value: "*/"
-                    )
-                );
-
-                index = ((close < 0)
-                    ? text.Length
-                    : ((text[(index + 1)] == '/')
-                        ? close
-                        : (close + 2))
-                );
-
-                continue;
-            }
-            if (character == '"') {
-                index++;
-                while (index < text.Length) {
-                    if (text[index] == '\\') {
-                        index += 2;
-
-                        continue;
-                    }
-                    if (text[index] is '"' or '\n') {
-                        break;
-                    }
-                    index++;
-                }
-                index++;
+            if (SourceLexemes.End(offset: index, source: text) is var lexeme && (lexeme > index)) {
+                index = lexeme;
 
                 continue;
             }

@@ -5,12 +5,23 @@ namespace Puck.HumbleGamingDeck;
 /// battery-backed PRG and CHR RAM, and a four-screen board's own 2 KiB of nametable RAM. A board computes offsets (its
 /// bank registers); this owns the bytes behind them, the battery save's layout, and their snapshot order.
 /// <para>
+/// A board maps banks into windows, four 8 KiB PRG windows from $8000 and eight 1 KiB pattern windows, whenever a register
+/// changes, so a read is one table lookup and an array index and never recomputes bank arithmetic. The windows are derived
+/// from the board's registers, never serialized: a board maps them again after it loads state.
+/// </para>
+/// <para>
 /// PRG-RAM is one window, volatile bytes first and then PRG NVRAM; CHR-RAM likewise, volatile bytes first and then CHR
 /// NVRAM. The battery save is PRG NVRAM followed by CHR NVRAM.
 /// </para>
 /// </summary>
 public sealed class HgdBoardMemory {
-    private readonly HgdCartridge m_cartridge;
+    private readonly byte[] m_image;
+    private readonly int m_prgBase;
+    private readonly int m_chrBase;
+    private readonly bool m_chrIsRom;
+    private readonly int m_prgNvRamSize;
+    private readonly int[] m_prgWindows = new int[4];
+    private readonly int[] m_chrWindows = new int[8];
     private readonly byte[] m_prgRam;
     private readonly byte[] m_chrRam;
     private readonly byte[] m_batteryRam;
@@ -22,10 +33,15 @@ public sealed class HgdBoardMemory {
     /// <exception cref="ArgumentNullException"><paramref name="cartridge"/> is <see langword="null"/>.</exception>
     public HgdBoardMemory(HgdCartridge cartridge) {
         ArgumentNullException.ThrowIfNull(argument: cartridge);
-        m_cartridge = cartridge;
+        m_image = cartridge.ImageBytes;
+        m_prgBase = cartridge.PrgRomOffset;
+        m_chrBase = cartridge.ChrRomOffset;
+        m_chrIsRom = !cartridge.ChrRom.IsEmpty;
+        PrgLength = cartridge.PrgRom.Length;
 
         var header = cartridge.Header;
 
+        m_prgNvRamSize = header.PrgNvRamSize;
         m_prgRam = new byte[header.PrgRamSize];
         m_chrRam = new byte[header.ChrRamSize];
         m_batteryRam = new byte[(header.PrgNvRamSize + header.ChrNvRamSize)];
@@ -37,8 +53,10 @@ public sealed class HgdBoardMemory {
         }
     }
 
-    /// <summary>Gets the immutable PRG-ROM.</summary>
-    public ReadOnlySpan<byte> PrgRom => m_cartridge.PrgRom;
+    /// <summary>Gets the PRG-ROM's length in bytes.</summary>
+    public int PrgLength {
+        get;
+    }
     /// <summary>Gets the PRG-RAM window's length: volatile and nonvolatile bytes together.</summary>
     public int PrgRamLength {
         get;
@@ -65,52 +83,93 @@ public sealed class HgdBoardMemory {
             m_batteryRam[(offset - m_prgRam.Length)] = value;
         }
     }
-    /// <summary>Reads pattern memory.</summary>
-    /// <param name="offset">The offset within pattern memory, below <see cref="ChrLength"/>.</param>
+    /// <summary>Maps consecutive 8 KiB PRG windows onto consecutive PRG-ROM bytes.</summary>
+    /// <param name="firstWindow">The first window, from 0 for $8000 through 3 for $E000.</param>
+    /// <param name="count">The number of windows to map.</param>
+    /// <param name="offset">The PRG-ROM offset the first window starts at; every window lies inside the ROM.</param>
+    public void MapPrg(int firstWindow, int count, int offset) {
+        for (var index = 0; (index < count); ++index) {
+            m_prgWindows[(firstWindow + index)] = (m_prgBase + offset + (index << 13));
+        }
+    }
+    /// <summary>Maps consecutive 1 KiB pattern windows onto consecutive pattern memory, wrapping at its end.</summary>
+    /// <param name="firstWindow">The first window, from 0 for PPU $0000 through 7 for $1C00.</param>
+    /// <param name="count">The number of windows to map.</param>
+    /// <param name="offset">The offset within pattern memory the first window starts at.</param>
+    public void MapChr(int firstWindow, int count, int offset) {
+        for (var index = 0; (index < count); ++index) {
+            m_chrWindows[(firstWindow + index)] = ((offset + (index << 10)) % ChrLength);
+        }
+    }
+    /// <summary>Reads PRG-ROM through the mapped windows.</summary>
+    /// <param name="address">The CPU address, from $8000.</param>
+    /// <returns>The ROM byte.</returns>
+    public byte ReadPrg(ushort address) =>
+        m_image[(m_prgWindows[((address >> 13) & 3)] + (address & 0x1FFF))];
+    /// <summary>Reads pattern memory through the mapped windows.</summary>
+    /// <param name="address">The PPU address, below $2000.</param>
     /// <returns>The stored byte.</returns>
-    public byte ReadChr(int offset) {
-        if (!m_cartridge.ChrRom.IsEmpty) {
-            return m_cartridge.ChrRom[offset];
+    public byte ReadChr(ushort address) {
+        var offset = (m_chrWindows[(address >> 10)] + (address & 0x3FF));
+
+        if (m_chrIsRom) {
+            return m_image[(m_chrBase + offset)];
         }
 
-        return ((offset < m_chrRam.Length) ? m_chrRam[offset] : m_batteryRam[((m_cartridge.Header.PrgNvRamSize + offset) - m_chrRam.Length)]);
+        return ((offset < m_chrRam.Length) ? m_chrRam[offset] : m_batteryRam[((m_prgNvRamSize + offset) - m_chrRam.Length)]);
     }
-    /// <summary>Writes pattern memory; a write to CHR-ROM changes nothing.</summary>
-    /// <param name="offset">The offset within pattern memory, below <see cref="ChrLength"/>.</param>
+    /// <summary>Writes pattern memory through the mapped windows; a write to CHR-ROM changes nothing.</summary>
+    /// <param name="address">The PPU address, below $2000.</param>
     /// <param name="value">The byte to store.</param>
-    public void WriteChr(int offset, byte value) {
-        if (!m_cartridge.ChrRom.IsEmpty) {
+    public void WriteChr(ushort address, byte value) {
+        if (m_chrIsRom) {
             return;
         }
+
+        var offset = (m_chrWindows[(address >> 10)] + (address & 0x3FF));
+
         if (offset < m_chrRam.Length) {
             m_chrRam[offset] = value;
         } else {
-            m_batteryRam[((m_cartridge.Header.PrgNvRamSize + offset) - m_chrRam.Length)] = value;
+            m_batteryRam[((m_prgNvRamSize + offset) - m_chrRam.Length)] = value;
         }
     }
-    /// <summary>Reads a nametable byte: the console's page the board selects, or a four-screen board's own RAM for the
-    /// upper two nametables.</summary>
-    /// <param name="address">The PPU address, from $2000.</param>
-    /// <param name="page">The CIRAM page the board drives through CIRAM A10 for this address.</param>
+    /// <summary>Reads the PPU window below $3F00: pattern memory below $2000, and above it the console's page the wiring
+    /// selects or, for the upper two nametables of a four-screen board, the board's own RAM.</summary>
+    /// <param name="address">The PPU address, below $3F00.</param>
     /// <param name="nametables">The console's nametable RAM.</param>
+    /// <param name="wiring">How the board drives CIRAM A10 now.</param>
     /// <returns>The stored byte.</returns>
-    public byte ReadNametable(ushort address, int page, HgdNametableRam nametables) {
+    public byte ReadPpu(ushort address, HgdNametableRam nametables, HgdNametableWiring wiring) {
+        if (address < 0x2000) {
+            return ReadChr(address: address);
+        }
+
         var quadrant = (address >> 10) & 3;
 
         return (((m_fourScreenRam.Length != 0) && (quadrant >= 2))
             ? m_fourScreenRam[((quadrant & 1) << 10) | (address & 0x3FF)]
             : nametables.Read(
                 offset: address,
-                page: page
+                page: PageOf(address: address, wiring: wiring)
             )
         );
     }
-    /// <summary>Writes a nametable byte to the page the board selects, or to a four-screen board's own RAM.</summary>
-    /// <param name="address">The PPU address, from $2000.</param>
-    /// <param name="page">The CIRAM page the board drives through CIRAM A10 for this address.</param>
+    /// <summary>Writes the PPU window below $3F00; a write to CHR-ROM changes nothing.</summary>
+    /// <param name="address">The PPU address, below $3F00.</param>
     /// <param name="value">The byte to store.</param>
     /// <param name="nametables">The console's nametable RAM.</param>
-    public void WriteNametable(ushort address, int page, byte value, HgdNametableRam nametables) {
+    /// <param name="wiring">How the board drives CIRAM A10 now.</param>
+    public void WritePpu(ushort address, byte value, HgdNametableRam nametables, HgdNametableWiring wiring) {
+        if (address < 0x2000) {
+            WriteChr(
+                address: address,
+                value: value
+            );
+
+            return;
+        }
+
         var quadrant = (address >> 10) & 3;
 
         if ((m_fourScreenRam.Length != 0) && (quadrant >= 2)) {
@@ -118,7 +177,7 @@ public sealed class HgdBoardMemory {
         } else {
             nametables.Write(
                 offset: address,
-                page: page,
+                page: PageOf(address: address, wiring: wiring),
                 value: value
             );
         }
@@ -132,11 +191,31 @@ public sealed class HgdBoardMemory {
         transfer.Block(values: m_batteryRam.AsSpan());
         transfer.Block(values: m_fourScreenRam.AsSpan());
     }
-    /// <summary>Returns the CIRAM page a fixed header layout drives: CIRAM A10 follows PPU A11 on a horizontally mirrored
-    /// board and PPU A10 otherwise; a four-screen board wires its lower two nametables as vertical mirroring does.</summary>
+    /// <summary>Returns the wiring a fixed header layout drives: horizontal mirroring, and vertical for every other layout,
+    /// since a four-screen board wires its lower two nametables as vertical mirroring does.</summary>
     /// <param name="mirroring">The header's layout.</param>
-    /// <param name="address">The PPU address, from $2000.</param>
-    /// <returns>The page, zero or one.</returns>
-    public static int HeaderPage(HgdMirroring mirroring, ushort address) =>
-        ((mirroring == HgdMirroring.Horizontal) ? ((address >> 11) & 1) : ((address >> 10) & 1));
+    /// <returns>The wiring.</returns>
+    public static HgdNametableWiring HeaderWiring(HgdMirroring mirroring) =>
+        ((mirroring == HgdMirroring.Horizontal) ? HgdNametableWiring.Horizontal : HgdNametableWiring.Vertical);
+
+    // The CIRAM page the wiring drives for a nametable address.
+    private static int PageOf(HgdNametableWiring wiring, ushort address) =>
+        wiring switch {
+            HgdNametableWiring.OneScreenLow => 0,
+            HgdNametableWiring.OneScreenHigh => 1,
+            HgdNametableWiring.Vertical => ((address >> 10) & 1),
+            _ => ((address >> 11) & 1),
+        };
+}
+/// <summary>How a board drives the console's CIRAM A10 line, which picks one of its two nametable pages. The values are
+/// the MMC1 control register's mirroring bits.</summary>
+public enum HgdNametableWiring : byte {
+    /// <summary>Every nametable reads the first page.</summary>
+    OneScreenLow = 0,
+    /// <summary>Every nametable reads the second page.</summary>
+    OneScreenHigh = 1,
+    /// <summary>CIRAM A10 follows PPU A10: the left and right nametables differ, and each repeats below itself.</summary>
+    Vertical = 2,
+    /// <summary>CIRAM A10 follows PPU A11: the top and bottom nametables differ, and each repeats beside itself.</summary>
+    Horizontal = 3,
 }

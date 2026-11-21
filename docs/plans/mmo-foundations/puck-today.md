@@ -884,8 +884,8 @@ The document seed is `generation.worldSeed`
 ### Storage and advance
 
 The position lives on the site as `StateRow.DrawCursor`, advanced by the raw
-words each draw consumed (`src/Puck.State/Draw.cs:39-43`,
-`src/Puck.World.Server/WorldDocument.Compose.Generate.cs:66`, `:182`)
+words each draw consumed (`WorldDrawBootResolver.TryGenerate` and
+`WorldDrawBootResolver.TryAdvanceLatticePass`)
 **[opened]**. A `Boot` site draws once; `TickPeriod` and `Event` sites redraw
 through the `generate` effect or mutation (`src/Puck.State/Draw.cs:7-28`)
 **[opened]**. The cursor persists wherever the document does: in a silo

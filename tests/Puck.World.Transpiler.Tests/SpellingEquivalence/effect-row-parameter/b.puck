@@ -1,0 +1,54 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  record Player {
+    score: Int
+  }
+  pool players of Player capacity(2)
+  world {
+    row {
+      name: "cards"
+      kind: "Int"
+      capacity: 4
+      cells: map(range(0, 4), i => { key: $"{i}", value: i })
+    }
+    pile deck0 of cards capacity(4) {
+      "0"
+      "1"
+      "2"
+      "3"
+    }
+    pile hand of cards capacity(4)
+    row {
+      name: "history"
+      kind: "Int"
+      domain: ring(capacity: 4, empty: 0)
+    }
+    row {
+      name: "stream"
+      kind: "Int"
+      draw {
+        generator {
+          source: "StreamDraw"
+        }
+        timing: "Event"
+      }
+    }
+    slot go = 0
+  }
+}
+
+rule "moves" {
+  when go == 1
+  draw deck0 to hand
+  deal 2 from deck0 to hand
+  shuffle hand with stream
+  push history = 1
+  claim players as seated {
+    seated.score = 1
+  }
+  for each member in players {
+    member.score = 0
+  }
+}

@@ -66,7 +66,7 @@ public sealed class SourceAcknowledgements {
                 m_ranges.Add(item: new Range(Code: allow.Code, End: (statement.Offset + statement.Length), Path: path, Start: statement.Offset));
             }
         }
-        foreach (var child in SyntaxWalk.Children(node: node)) {
+        foreach (var child in node.Children()) {
             Walk(node: child, path: path);
         }
     }

@@ -15,3 +15,11 @@ namespace Puck.World.Server;
 /// <see langword="null"/> when it runs with no cartridge.</param>
 public readonly record struct WorldMachineInstanceState(string Name, ulong Generation, string Engine, bool Running,
     MachineRuntimeStatus Status, long FramesStepped, long PendingSteps, string? Fault, string? Content = null);
+/// <summary>A named instance's host-side pace, which no checkpoint or replay carries: what a machine's worker did on this
+/// host, read to judge whether and by how much it keeps up with real time.</summary>
+/// <param name="NativeFrames">The machine's last completed native video frame, or -1 when it reports none.</param>
+/// <param name="BackpressureEvents">The submissions that waited for a full pending-segment window since the content was
+/// loaded; zero for a synchronous machine.</param>
+/// <param name="StepBusyTime">The host time the worker spent running segments since the content was loaded; zero for a
+/// synchronous machine.</param>
+public readonly record struct WorldMachinePace(long NativeFrames, long BackpressureEvents, TimeSpan StepBusyTime);

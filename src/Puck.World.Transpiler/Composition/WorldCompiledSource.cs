@@ -1,4 +1,3 @@
-using System.Text;
 using Puck.Assets;
 using Puck.World.Transpiler.Lowering;
 
@@ -44,19 +43,19 @@ public sealed record WorldCompiledSource(byte[]? Document, bool EmitsDocument, I
         }
 
         return new WorldCompiledSource(
-            Document: ((compilation.Json is { } document) ? Encoding.UTF8.GetBytes(s: document.ToJsonString()) : null),
+            Document: ((compilation.Json is { } document) ? WorldDefinitionFileSource.Compact(node: document) : null),
             EmitsDocument: compilation.EmitsDocument,
             Inputs: compilation.Inputs,
             Schema: compilation.Document?.Schema,
             Tests: [
                 .. compilation.TestWorlds.Select(selector: static test => new WorldCompiledTest(
                     Foreign: test.Foreign,
-                    Json: Encoding.UTF8.GetBytes(s: test.Json.ToJsonString()),
+                    Json: WorldDefinitionFileSource.Compact(node: test.Json),
                     Name: test.Name,
                     Siblings: [
                         .. test.Siblings.Select(selector: static sibling => new WorldCompiledWorld(
                             Entry: false,
-                            Json: Encoding.UTF8.GetBytes(s: sibling.Json.ToJsonString()),
+                            Json: WorldDefinitionFileSource.Compact(node: sibling.Json),
                             Name: sibling.Name
                         )),
                     ],
@@ -67,7 +66,7 @@ public sealed record WorldCompiledSource(byte[]? Document, bool EmitsDocument, I
             Worlds: [
                 .. compilation.Worlds.Select(selector: static world => new WorldCompiledWorld(
                     Entry: world.Entry,
-                    Json: Encoding.UTF8.GetBytes(s: world.Json.ToJsonString()),
+                    Json: WorldDefinitionFileSource.Compact(node: world.Json),
                     Name: world.Name
                 )),
             ]

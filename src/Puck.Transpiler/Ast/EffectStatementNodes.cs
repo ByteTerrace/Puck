@@ -17,7 +17,7 @@ namespace Puck.Transpiler.Ast;
 /// to the one key it spells, as it does the same atom in a read; <paramref name="Key"/> then holds the atom as
 /// written.</param>
 /// <param name="Operand">The authored indexed target, retained until lexical binding resolves its key.</param>
-public sealed record RowRefNode(
+public sealed partial record RowRefNode(
     string Name,
     string? Key,
     int Offset = 0,
@@ -32,7 +32,31 @@ public sealed record RowRefNode(
     Length,
     Line,
     Column
-);
+) {
+    /// <inheritdoc/>
+    public override IReadOnlyList<SyntaxNode> Children() => ((KeyAtom, Operand) switch {
+        (null, null) => [],
+        ({ } atom, null) => [atom],
+        (null, { } operand) => [operand],
+        ({ } atom, { } operand) => [atom, operand],
+    });
+    /// <inheritdoc/>
+    /// <remarks>A target that is a row and a key atom alone keeps its key text spelling the atom it holds.</remarks>
+    public override SyntaxNode MapChildren(ISyntaxMap map) {
+        ArgumentNullException.ThrowIfNull(map);
+        var atom = map.Optional(parent: this, child: KeyAtom);
+        var operand = map.Optional(parent: this, child: Operand);
+
+        if (ReferenceEquals(objA: atom, objB: KeyAtom) && ReferenceEquals(objA: operand, objB: Operand)) {
+            return this;
+        }
+        return (this with {
+            Key = (((Operand is null) && (atom is not null)) ? Formatting.PuckPrinter.PrintExpression(expression: atom) : Key),
+            KeyAtom = atom,
+            Operand = operand,
+        });
+    }
+}
 /// <summary>Base class for a <c>setState</c>/<c>addState</c>/<c>push</c> right-hand side. Only the syntactic shape
 /// is decided here (a string literal, a number carrying the <c>s</c> unit, or a parsed operand tree); classifying <see cref="RhsOperandNode"/> into
 /// <c>Value</c>/<c>FromState</c>+<c>FromKey</c>/<c>Expression</c> per the spec's own table is lowering-stage work.</summary>
@@ -49,7 +73,7 @@ public abstract record RhsNode(int Offset = 0, int Length = 0, int Line = 1, int
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record RhsTextNode(
+public sealed partial record RhsTextNode(
     string Text,
     int Offset = 0,
     int Length = 0,
@@ -67,7 +91,7 @@ public sealed record RhsTextNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record RhsSecondsNode(
+public sealed partial record RhsSecondsNode(
     decimal Seconds,
     int Offset = 0,
     int Length = 0,
@@ -87,7 +111,7 @@ public sealed record RhsSecondsNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record RhsOperandNode(
+public sealed partial record RhsOperandNode(
     OperandExpressionNode Expression,
     int Offset = 0,
     int Length = 0,
@@ -110,7 +134,7 @@ public abstract record EffectStatementNode(int Offset = 0, int Length = 0, int L
     Column
 );
 /// <summary><c>row[key] = rhs</c> — a <c>setState</c> effect.</summary>
-public sealed record SetCellStatementNode(
+public sealed partial record SetCellStatementNode(
     RowRefNode Target,
     RhsNode Rhs,
     int Offset = 0,
@@ -124,7 +148,7 @@ public sealed record SetCellStatementNode(
     Column
 );
 /// <summary><c>row[key] += rhs</c> — an <c>addState</c> effect.</summary>
-public sealed record AddCellStatementNode(
+public sealed partial record AddCellStatementNode(
     RowRefNode Target,
     RhsNode Rhs,
     int Offset = 0,
@@ -148,7 +172,7 @@ public sealed record AddCellStatementNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record CompoundAssignStatementNode(
+public sealed partial record CompoundAssignStatementNode(
     RowRefNode Target,
     string Operator,
     RhsNode Rhs,
@@ -163,8 +187,8 @@ public sealed record CompoundAssignStatementNode(
     Column
 );
 /// <summary><c>push row = rhs</c> — a <c>pushState</c> effect. <c>PushState</c> carries no key, unlike set/add.</summary>
-public sealed record PushStatementNode(
-    string RowName,
+public sealed partial record PushStatementNode(
+    RowRefNode Target,
     RhsNode Rhs,
     int Offset = 0,
     int Length = 0,
@@ -177,7 +201,7 @@ public sealed record PushStatementNode(
     Column
 );
 /// <summary><c>remove row</c> / <c>remove row[key]</c> — a <c>removeStateCell</c> effect.</summary>
-public sealed record RemoveCellStatementNode(
+public sealed partial record RemoveCellStatementNode(
     RowRefNode Target,
     int Offset = 0,
     int Length = 0,
@@ -194,7 +218,7 @@ public sealed record RemoveCellStatementNode(
 /// arithmetic over them), lowered against the same field, so <c>schedule row in 0.4s</c> and
 /// <c>scheduleState(state: row, delaySeconds: 0.4s)</c> are one effect. It is a plain decimal on the wire, never an
 /// <c>ExpressionProgram</c>.</summary>
-public sealed record ScheduleStatementNode(
+public sealed partial record ScheduleStatementNode(
     RowRefNode Target,
     ExpressionNode Delay,
     int Offset = 0,
@@ -210,7 +234,7 @@ public sealed record ScheduleStatementNode(
 /// <summary><c>transform call(...)</c> — wraps <c>ActionEffect.TransformState</c> around whatever
 /// <c>StateTransform</c> call-form value follows. The destination is the call's own argument, so the statement
 /// carries no result name of its own.</summary>
-public sealed record TransformStatementNode(
+public sealed partial record TransformStatementNode(
     CallExpressionNode Transform,
     int Offset = 0,
     int Length = 0,
@@ -230,7 +254,7 @@ public sealed record TransformStatementNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TransactionStatementNode(
+public sealed partial record TransactionStatementNode(
     IReadOnlyList<StatementNode> MainEffects,
     IReadOnlyList<StatementNode>? OnFailureEffects,
     int Offset = 0,
@@ -259,7 +283,7 @@ public sealed record TransactionStatementNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record IfStatementNode(
+public sealed partial record IfStatementNode(
     PredicateNode Condition,
     IReadOnlyList<StatementNode> Then,
     IReadOnlyList<StatementNode>? Else,
@@ -284,7 +308,7 @@ public sealed record IfStatementNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record RepeatStatementNode(
+public sealed partial record RepeatStatementNode(
     ExpressionNode Count,
     string Index,
     IReadOnlyList<StatementNode> Body,
@@ -305,7 +329,7 @@ public sealed record RepeatStatementNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record BreakStatementNode(
+public sealed partial record BreakStatementNode(
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -317,7 +341,7 @@ public sealed record BreakStatementNode(
     Column
 );
 /// <summary>Claims an available pool slot and binds its record fields under an alias for the nested effects.</summary>
-public sealed record ClaimStatementNode(
+public sealed partial record ClaimStatementNode(
     string Pool,
     string Alias,
     IReadOnlyList<StatementNode> Body,
@@ -327,7 +351,7 @@ public sealed record ClaimStatementNode(
     int Column = 1
 ) : EffectStatementNode(Offset, Length, Line, Column);
 /// <summary>Claims an available pair-pool slot for two already-bound record instances.</summary>
-public sealed record ClaimPairStatementNode(
+public sealed partial record ClaimPairStatementNode(
     string Pool,
     string Left,
     string Right,
@@ -339,7 +363,7 @@ public sealed record ClaimPairStatementNode(
     int Column = 1
 ) : EffectStatementNode(Offset, Length, Line, Column);
 /// <summary>Releases the slot currently bound to a pool alias.</summary>
-public sealed record ReleaseStatementNode(
+public sealed partial record ReleaseStatementNode(
     string Alias,
     int Offset = 0,
     int Length = 0,
@@ -347,7 +371,7 @@ public sealed record ReleaseStatementNode(
     int Column = 1
 ) : EffectStatementNode(Offset, Length, Line, Column);
 /// <summary>Iterates a named pool and binds each slot under an alias for the nested effects.</summary>
-public sealed record PoolForEachStatementNode(
+public sealed partial record PoolForEachStatementNode(
     string Pool,
     string Alias,
     IReadOnlyList<StatementNode> Body,
@@ -357,9 +381,15 @@ public sealed record PoolForEachStatementNode(
     int Column = 1
 ) : EffectStatementNode(Offset, Length, Line, Column);
 /// <summary><c>draw from [to] to</c> — syntactic sugar lowering to <c>StateTransform.Transfer</c> with <c>Selector = First</c> and count 1.</summary>
-public sealed record DrawStatementNode(
-    string From,
-    string To,
+/// <param name="From">The pile a token leaves, named as any effect names a row.</param>
+/// <param name="To">The pile the token joins.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed partial record DrawStatementNode(
+    RowRefNode From,
+    RowRefNode To,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -371,10 +401,18 @@ public sealed record DrawStatementNode(
     Column
 );
 /// <summary><c>deal Count [from] from [to] to</c> — syntactic sugar lowering to <c>StateTransform.Transfer</c> with <c>Selector = First</c> and count <paramref name="Count"/>.</summary>
-public sealed record DealStatementNode(
-    int Count,
-    string From,
-    string To,
+/// <param name="Count">The number of tokens moved: the value a transfer's <c>count</c> takes, so a literal, a name
+/// or arithmetic known at compile time.</param>
+/// <param name="From">The pile the tokens leave, named as any effect names a row.</param>
+/// <param name="To">The pile the tokens join.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed partial record DealStatementNode(
+    ExpressionNode Count,
+    RowRefNode From,
+    RowRefNode To,
     int Offset = 0,
     int Length = 0,
     int Line = 1,
@@ -386,9 +424,15 @@ public sealed record DealStatementNode(
     Column
 );
 /// <summary><c>shuffle pile [with] draw</c> — syntactic sugar lowering to <c>StateTransform.Shuffle</c>.</summary>
-public sealed record ShuffleStatementNode(
-    string Row,
-    string Draw,
+/// <param name="Row">The pile shuffled, named as any effect names a row.</param>
+/// <param name="Draw">The draw stream that orders it.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed partial record ShuffleStatementNode(
+    RowRefNode Row,
+    RowRefNode Draw,
     int Offset = 0,
     int Length = 0,
     int Line = 1,

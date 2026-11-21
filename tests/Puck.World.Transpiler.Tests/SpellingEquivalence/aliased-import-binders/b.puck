@@ -1,0 +1,15 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+import "lib"
+
+state {
+  world {
+    slot scaled = scaled(10)
+    slot looped = doubled[1]
+    slot mapped = mapped[0]
+    slot nested = nested[1]
+    slot based = based()
+    slot plain = size
+  }
+}

@@ -395,62 +395,19 @@ public sealed partial class PuckLanguageServer {
         ).Json?["state"] as JsonObject);
     }
     // The closing `}`/`]`/`)` sequence, innermost first, that balances every delimiter `source` opened and never
-    // closed — skipping string/backquote contents and comments, exactly like the formatter's own nesting scan.
+    // closed, outside its strings, backquoted names and comments (SourceLexemes.End, the formatter's own scan).
     private static string ComputeClosingSuffix(string source) {
         var stack = new Stack<char>();
         var i = 0;
 
         while (i < source.Length) {
+            var lexeme = SourceLexemes.End(offset: i, source: source);
+
+            if (lexeme > i) {
+                i = lexeme;
+                continue;
+            }
             var c = source[i];
-
-            if (c is '"' or '`') {
-                var quote = c;
-
-                i++;
-                while (
-                    (i < source.Length) &&
-                    (source[i] != quote)
-                ) {
-                    if (
-                        (quote == '"') &&
-                        (source[i] == '\\') &&
-                        ((i + 1) < source.Length)
-                    ) {
-                        i++;
-                    }
-                    i++;
-                }
-                i++;
-                continue;
-            }
-            if (
-                (c == '/') &&
-                ((i + 1) < source.Length) &&
-                (source[(i + 1)] == '/')
-            ) {
-                while (
-                    (i < source.Length) &&
-                    (source[i] != '\n')
-                ) {
-                    i++;
-                }
-                continue;
-            }
-            if (
-                (c == '/') &&
-                ((i + 1) < source.Length) &&
-                (source[(i + 1)] == '*')
-            ) {
-                i += 2;
-                while (
-                    ((i + 1) < source.Length) &&
-                    !((source[i] == '*') && (source[(i + 1)] == '/'))
-                ) {
-                    i++;
-                }
-                i += 2;
-                continue;
-            }
 
             switch (c) {
                 case '{':
@@ -730,7 +687,7 @@ public sealed partial class PuckLanguageServer {
             table: WorldConstructs.Table,
             text: completionText
         );
-        var inRule = (enclosing is "rule" or "option" or "if" or "else" or "transaction" or "onFailure");
+        var inRule = ((enclosing is not null) && WorldConstructs.Table.TryGet(construct: out var holder, keyword: enclosing) && (holder?.HoldsEffects == true));
         var parsedDocument = ((completionText.Length > 0) ? TryParseDocumentBestEffort(cursorOffset: cursorOffset, text: completionText) : null);
         var vocabulary = m_vocabularyResolver.Resolve(source: completionText);
         var completionSourcePath = (TryGetLocalPath(path: out var localCompPath, uri: uri) ? localCompPath : null);

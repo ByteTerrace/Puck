@@ -10,6 +10,12 @@ public interface IHgdMapper : ISnapshotable {
     bool Irq {
         get;
     }
+    /// <summary>Gets whether the board times on bus edges. A machine calls <see cref="ObserveM2"/> and
+    /// <see cref="ObservePpuAddress"/> and samples <see cref="Irq"/> only for a board that does, so one that times
+    /// nothing pays for none of them; the value never changes.</summary>
+    bool TimesOnEdges {
+        get;
+    }
     /// <summary>Gets the battery-backed RAM a save file persists, empty when the board keeps none.</summary>
     Span<byte> BatteryRam {
         get;
@@ -45,11 +51,12 @@ public interface IHgdMapper : ISnapshotable {
     /// <param name="nametables">The console's nametable RAM, whose page the board selects.</param>
     /// <returns>The byte the board would drive.</returns>
     byte PpuPeek(ushort address, HgdNametableRam nametables);
-    /// <summary>Observes each PPU address-line transition independently of a memory read.</summary>
+    /// <summary>Observes each PPU address-line transition independently of a memory read, for a board with
+    /// <see cref="TimesOnEdges"/>.</summary>
     /// <param name="address">The new PPU address.</param>
     /// <param name="masterTick">The transition's master tick.</param>
     void ObservePpuAddress(ushort address, ulong masterTick);
-    /// <summary>Observes each CPU M2 edge for board timing.</summary>
+    /// <summary>Observes each CPU M2 edge for board timing, for a board with <see cref="TimesOnEdges"/>.</summary>
     /// <param name="high">The new M2 level.</param>
     /// <param name="masterHalfTick">The edge's elapsed time in half master ticks.</param>
     void ObserveM2(bool high, ulong masterHalfTick);

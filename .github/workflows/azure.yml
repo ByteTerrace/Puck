@@ -521,7 +521,7 @@ jobs:
           artifact: nuget-packages
           azure: "true"
       - if: matrix.image == 'world-silo'
-        name: Verify primary Puck activation, QUIC, and checkpoint recovery
+        name: Verify primary Puck activation, QUIC, checkpoint recovery, and the MCP entry point
         run: puck azure test-world-container --image "puck/world-silo:$GITHUB_SHA"
         shell: bash
     strategy:
