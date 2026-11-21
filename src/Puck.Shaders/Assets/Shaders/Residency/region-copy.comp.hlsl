@@ -5,15 +5,15 @@
 // as uints, whatever the block stores in them.
 //
 // Request layout: seven uints (count, runCount, sourceBase, destinationBase, rowWords, sourceStride, destinationStride),
-// then runCount (logical word, first thread) pairs. With rowWords zero, the request buffer also holds packed source data
-// at sourceBase. With rowWords nonzero, logical word / rowWords selects a row and % rowWords selects its column, mapped
-// through sourceStride and destinationStride. Source data is a separate binding, aliased to the request for packed data.
+// then runCount (logical word, first thread) pairs. With rowWords zero, the source holds packed data from sourceBase (a
+// region's block of its staging ring). With rowWords nonzero, logical word / rowWords selects a row and % rowWords selects
+// its column, mapped through sourceStride and destinationStride. Source data is a separate binding.
 // Thread t is its
 // dispatch row times RegionCopyRowThreads plus its column (a copy past one row of 65,535 groups dispatches further rows,
 // at most RegionCopyMaxRows of them, since Direct3D 12's GPU-based validation refuses more than 4,194,303 groups). It
 // copies every block word i below count from t in steps of the dispatch's threads: it binary-searches the last run whose
 // first thread is at most i, and in packed mode copies destination[destinationBase + word] = source[sourceBase + i], word being that
-// run's region word plus i minus its first thread. No push constants: the staging buffer states its copy, and the
+// run's region word plus i minus its first thread. No push constants: the request states its copy, and the
 // dispatch's threads follow from its count as GpuRegion.CopyThreads computes them.
 // KEEP IN SYNC with GpuRegion (its Copy* constants, CopyGroups, CopyThreads, and StageOwed's header and run table). Each
 // register number equals its binding (GpuRegisterNumbering.Binding).

@@ -59,6 +59,8 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
 
     // The most family rows a reading prints; the rest are summed on one line.
     private const int FamilyRows = 16;
+    // The most takers of a pool's over-limit grants a reading names, most bytes first; the rest are counted.
+    private const int OverLimitTakerRows = 8;
 
     // One pool and its physical rows: each row's bytes, the part its owners name and its residual.
     private static void AppendPool(StringBuilder text, MemoryPoolReading pool, string note) {
@@ -67,6 +69,15 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
         text.Append(CultureInfo.InvariantCulture, $" | pool {PoolName(pool: pool.Pool)} physical={pool.Physical} complete={(pool.Complete ? "yes" : "no")} budget={Bytes(bytes: pool.Budget)} spend-limit={Bytes(bytes: pool.SpendLimit)} held={admission.Held} peak={admission.Peak} retired={admission.Retired} promised={admission.Promised} room={Bytes(bytes: admission.Room)} over-limit={admission.OverLimit} forced={admission.Forced} forced-jobs={admission.ForcedJobs} over-limit-grants={admission.OverLimitGrants} over-limit-granted-bytes={admission.OverLimitBytes} refusals={admission.Refusals} device-refusals={admission.DeviceRefusals} pressure-trims={admission.PressureTrims} floors={admission.Floor} admitted={pool.Admitted} reserved={pool.Reserved}{note}");
         if (pool.Pool == PhysicalMemory.Host) { text.Append(CultureInfo.InvariantCulture, $" private-beyond-held={admission.PrivateBeyondHeld} play-beyond-held={admission.PlayBeyondHeld} machine-limit={Bytes(bytes: admission.MachineLimit)} authoring={(admission.AuthoringOnPlayBar ? "on-play-bar" : "apart")} authoring-held={admission.AuthoringHeld} authoring-promised={admission.AuthoringPromised} authoring-room={Bytes(bytes: admission.AuthoringRoom)}"); }
         if (admission.LastRefusedOwner is { } owner) { text.Append(CultureInfo.InvariantCulture, $" last-refused-owner={owner}"); }
+        if (admission.OverLimitTakers.Count > 0) {
+            text.Append(value: " over-limit-by=");
+            for (var index = 0; (index < Math.Min(val1: admission.OverLimitTakers.Count, val2: OverLimitTakerRows)); index++) {
+                var taker = admission.OverLimitTakers[index];
+
+                text.Append(CultureInfo.InvariantCulture, $"{((index == 0) ? string.Empty : ",")}{taker.Taker}:{taker.Grants}/{taker.Bytes}");
+            }
+            if (admission.OverLimitTakers.Count > OverLimitTakerRows) { text.Append(CultureInfo.InvariantCulture, $",+{admission.OverLimitTakers.Count - OverLimitTakerRows}"); }
+        }
         text.Append(CultureInfo.InvariantCulture, $" | classes {PoolName(pool: pool.Pool)}");
         for (var index = 0; (index < MemoryClasses.Count); index++) {
             text.Append(CultureInfo.InvariantCulture, $" {MemoryClasses.NameOf(memoryClass: ((MemoryClass)index))}={admission.ClassHeld[index]}+{admission.ClassPromised[index]}");
