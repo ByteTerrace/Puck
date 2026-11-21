@@ -1020,9 +1020,9 @@ Remaining detailed findings and smaller cuts in this area:
   MB/s against zlib's 390 (a summary, not run here). The fixes, in order of
   cost: fewer normal bits, or normals derived from the field where the bake
   can; topology-aware index coding, written independently and not ported from
-  any library; and zstd, a native dependency the
-  [vendor register](../decisions/runtime-and-delivery.md#vendor-binaries)
-  governs. Fold it with the refactoring packet's zlib one-shot item, which
+  any library; and zstd, which .NET 11 carries inbox in `System.IO.Compression`,
+  so it needs no vendor binary
+  ([replication, how the reports were weighed](replication.md#how-the-reports-were-weighed)). Fold it with the refactoring packet's zlib one-shot item, which
   already replaces the stream adapters on this path. Check: stored bytes per
   triangle and decode time on the debug world's stored meshes, with the
   decoded meshes inside the codec's error budget (identical wherever a change
@@ -2354,6 +2354,10 @@ Federation and transfers:
   and a correction means a real divergence, not rounding. Check: a predicted
   body replays the authority's ticks bit for bit at a fixed latency, and a
   corrected one differs only where an input arrived late.
+  [Replication's decision 7](replication.md#decision-7-the-seats-own-body)
+  holds the continuation's design and the two preconditions it found: the
+  client project cannot reach `WorldBody.Advance`, and the step's read set is
+  not yet stated.
 - Signed remote write-back is
   [remote home adoption](records-and-pools.md#remote-home-adoption); it needs
   the hub plan's write door and award commit and
@@ -2381,7 +2385,8 @@ grow:
   image machinery, serialize once per audience, and send audio as content pins
   the client fetches. The replica's single-message transport
   ([the benchmark](#the-benchmark)'s `WireLimits.MaxDocumentBytes` item) is the
-  same cause.
+  same cause. [Replication's step 4](replication.md#the-build-order) sends
+  the rows as generated records.
 - [medium] Interest has no priority under a byte budget.
   `WorldInterestFrame.Project` is a grid query and a plain distance test, and
   [disclosure's I1](disclosure.md#open-items) still owes hysteresis and
@@ -2393,6 +2398,8 @@ grow:
   piece of the recipient view that every transport shares. Check: at a fixed
   byte budget a body oscillating at the radius does not flap in and out, and a
   far body's update age is bounded.
+  [Replication's decision 6](replication.md#decision-6-interest-and-priority-under-a-byte-budget)
+  and its step 5 hold the design.
 - [medium] Entities are written whole and uncompressed. The federation codec
   skips an entity only when it is wholly equal and otherwise rewrites it, with
   raw floats and strings (`WorldFederationCodec.WriteEntity`). The shipped
@@ -2403,6 +2410,10 @@ grow:
   so a delta hashes and verifies against the baseline `WorldBodyHistory`
   holds. Check: bytes per entity per tick before and after on a crowd scene,
   and the reconstructed state hashes equal.
+  [Replication](replication.md#the-build-order) holds the design and the build
+  order (its steps 1 and 3). It also argues from `WorldBodyHistory` that a
+  recipient whose acknowledgements lag more than eight samples is sent a full
+  table on every send; its step 3 measures that before removing the ring.
 - [medium] A world's tick rate could follow its load. One deterministic world
   per authority makes EVE-style tick dilation per world possible: a world over
   its work allowance (`RuleCapacity.MaxWorkUnitsPerTick`) steps slower in wall
@@ -2432,9 +2443,9 @@ grow:
   gives the incremental form: the population section already folds per-slot
   digests into segment digests, so store each segment as a content-addressed
   blob and a checkpoint becomes the list of its segments' hashes, with zstd on
-  the blobs (a native dependency, so the
-  [vendor register](../decisions/runtime-and-delivery.md#vendor-binaries) is
-  read first). Check: a cadence checkpoint of a mostly unchanged silo writes a
+  the blobs (inbox in .NET 11, so no vendor binary).
+  [Replication's decision 9](replication.md#decision-9-documents-and-checkpoints-as-records)
+  and its step 9 hold the design. Check: a cadence checkpoint of a mostly unchanged silo writes a
   small fraction of the full image and restores to the same state hash. The
   document a checkpoint carries twice is
   [delivery's item](#delivery-launcher-and-ci).
