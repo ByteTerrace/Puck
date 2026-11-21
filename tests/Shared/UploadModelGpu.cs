@@ -321,7 +321,7 @@ internal sealed class UploadModelGpu :
     // The model rasterizes nothing, so a counted indirect draw records nothing, as Draw does.
     void IGpuRecorder.DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) { }
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) { }
-    void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
+    void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, ulong offsetBytes) {
         if (m_buffers.TryGetValue(key: bufferHandle, value: out var buffer)) {
             buffer.Memory.AsSpan(length: checked((int)sizeBytes), start: 0).Clear();
         }
