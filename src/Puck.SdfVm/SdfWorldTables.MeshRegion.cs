@@ -583,11 +583,14 @@ public sealed partial class SdfWorldTables {
 
                 comparedRecords++;
 
-                if (!ReferenceEquals(objA: m_meshSource, objB: draws.Roster) || (draws.Occupancy(row: index) != m_stagedOccupancies[index]) || !draw.SameStagedContent(other: in m_stagedDraws[index]) ||
+                var sameRoster = (ReferenceEquals(objA: m_meshSource, objB: draws.Roster) && (draws.Occupancy(row: index) == m_stagedOccupancies[index]));
+                var difference = draw.StagedDifference(other: in m_stagedDraws[index]);
+
+                if (!sameRoster || (difference != SdfMeshDrawDifference.None) ||
                     ((draw.Mesh is not null) && (m_absentRows.Contains(item: index) == MeshStands(mesh: draw.Mesh))) || m_meshArena.Relocated || ((draw.Mesh is not null) && m_meshArena.Moved.Contains(item: draw.Mesh)) ||
                     (m_reseatedDraws.Contains(value: index) && MeshTransformWasReseated(draw: in draw))) {
                     var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
-                    var previous = m_stagedDraws[index];
+                    ref readonly var previous = ref m_stagedDraws[index];
 
                     // What the static scene casts changed: a static row's caster (SdfMeshDraw.SameCaster: its placement,
                     // material and clip, its mesh up to the tier of one bake group) appeared or changed, or it lands
@@ -610,9 +613,14 @@ public sealed partial class SdfWorldTables {
                     }
 
                     var wasLive = ReadStagedSelection(row: index, record: record, box: out var before, glass: out var wasGlass);
-                    var mask = StageMeshDraw(draw: in draw, incremental: true, index: index, old: old, record: record, tally: ref tally);
+                    var posed = (sameRoster && (difference == SdfMeshDrawDifference.Matrix) && (index < m_stagedCount));
+                    var mask = StageMeshDraw(draw: in draw, incremental: true, index: index, old: old, posed: ref posed, record: record, tally: ref tally);
 
-                    NoteStagedRow(row: index, wasLive: wasLive, before: in before, wasGlass: wasGlass, draw: in draw, record: record);
+                    if (posed) {
+                        NotePosedRow(row: index, wasLive: wasLive, before: in before, wasGlass: wasGlass, draw: in draw, record: record);
+                    } else {
+                        NoteStagedRow(row: index, wasLive: wasLive, before: in before, wasGlass: wasGlass, draw: in draw, record: record);
+                    }
                     // The grown reserve may occupy old mesh words. Its newly shadowed zeros are not evidence of
                     // device zeros: initialize every word of a newly exposed record, including zero placement words.
                     if (index >= m_stagedCount) { mask = (ulong.MaxValue >> (64 - SdfMeshRecord.DrawWords)); }

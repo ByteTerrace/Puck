@@ -399,8 +399,28 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// <param name="other">The draw to compare.</param>
     /// <returns>Whether either draw places the same caster.</returns>
     public bool SameCaster(in SdfMeshDraw other) => Same(other: in other, groupMesh: true);
+    /// <summary>Returns how a draw's staged content differs from another's: not at all, in its
+    /// <see cref="ObjectToWorld"/> alone, or elsewhere, comparing exact bits as <see cref="SameStagedContent"/> does.</summary>
+    /// <param name="other">The draw to compare, usually the one staged before.</param>
+    /// <returns>The difference.</returns>
+    public SdfMeshDrawDifference StagedDifference(in SdfMeshDraw other) {
+        if (!SameExceptMatrix(other: in other, groupMesh: false)) {
+            return SdfMeshDrawDifference.Content;
+        }
+
+        var leftMatrix = this.ObjectToWorld;
+        var rightMatrix = other.ObjectToWorld;
+
+        return (Bitwise.Equal(left: in leftMatrix, right: in rightMatrix) ? SdfMeshDrawDifference.None : SdfMeshDrawDifference.Matrix);
+    }
 
     private bool Same(in SdfMeshDraw other, bool groupMesh) {
+        var leftMatrix = this.ObjectToWorld;
+        var rightMatrix = other.ObjectToWorld;
+
+        return (SameExceptMatrix(other: in other, groupMesh: groupMesh) && Bitwise.Equal(left: in leftMatrix, right: in rightMatrix));
+    }
+    private bool SameExceptMatrix(in SdfMeshDraw other, bool groupMesh) {
         if (
             (!ReferenceEquals(objA: this.Mesh, objB: other.Mesh) && !(groupMesh && (this.Trace is { } trace) && ReferenceEquals(objA: trace, objB: other.Trace))) ||
             (this.Material != other.Material) ||
@@ -416,8 +436,6 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
             return false;
         }
 
-        var leftMatrix = this.ObjectToWorld;
-        var rightMatrix = other.ObjectToWorld;
         var leftRotation = this.CarryRotation;
         var rightRotation = other.CarryRotation;
         var leftShift = this.CarryTranslation;
@@ -426,7 +444,6 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
         var rightClip = other.ClipPlane;
 
         return (
-            Bitwise.Equal(left: in leftMatrix, right: in rightMatrix) &&
             Bitwise.Equal(left: in leftRotation, right: in rightRotation) &&
             Bitwise.Equal(left: in leftShift, right: in rightShift) &&
             Bitwise.Equal(left: in leftClip, right: in rightClip)
@@ -441,6 +458,15 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
         ((((ObjectToWorld.M11 * ((ObjectToWorld.M22 * ObjectToWorld.M33) - (ObjectToWorld.M23 * ObjectToWorld.M32))) -
           (ObjectToWorld.M12 * ((ObjectToWorld.M21 * ObjectToWorld.M33) - (ObjectToWorld.M23 * ObjectToWorld.M31)))) +
           (ObjectToWorld.M13 * ((ObjectToWorld.M21 * ObjectToWorld.M32) - (ObjectToWorld.M22 * ObjectToWorld.M31)))) > 0f));
+}
+/// <summary>How a draw's staged content differs from the draw staged before it (<see cref="SdfMeshDraw.StagedDifference"/>).</summary>
+public enum SdfMeshDrawDifference : byte {
+    /// <summary>The draws stage the same content.</summary>
+    None,
+    /// <summary>The draws differ in their object-to-world matrix alone: the same mesh, identities, flags, carry and clip.</summary>
+    Matrix,
+    /// <summary>The draws differ in something besides their matrix.</summary>
+    Content,
 }
 /// <summary>The CPU work needed to update one retained packed draw, independently of device upload deltas.</summary>
 /// <param name="PackedWords">The record words assigned; retained equal words are not assigned.</param>
@@ -777,34 +803,38 @@ public static class SdfMeshRegion {
     /// <returns>The CPU words assigned and the expensive field derivations performed, independently of upload deltas.</returns>
     public static SdfMeshDrawPacking WriteDrawIncremental(in SdfMeshDraw draw, in SdfMeshDraw previous, SdfMeshRegionMesh placement, uint generation, Span<uint> record) =>
         WriteDrawCore(draw: in draw, generation: generation, placement: placement, previous: in previous, record: record, retained: true);
+    /// <summary>Updates a retained packed draw whose draw differs from the one it holds in its matrix alone
+    /// (<see cref="SdfMeshDrawDifference.Matrix"/>): the matrix, the normal matrix, the selection box and the selection
+    /// flags, the only words such a draw changes. The record must still contain the full packing of
+    /// <paramref name="previous"/>, so it ends as <see cref="WriteDrawIncremental"/> would leave it.</summary>
+    /// <param name="draw">The current draw.</param>
+    /// <param name="previous">The draw whose complete record is retained; it differs from <paramref name="draw"/> only
+    /// in <see cref="SdfMeshDraw.ObjectToWorld"/>.</param>
+    /// <param name="record">The retained record, updated in place.</param>
+    /// <returns>The CPU words assigned and the expensive field derivations performed.</returns>
+    public static SdfMeshDrawPacking WriteDrawPose(in SdfMeshDraw draw, in SdfMeshDraw previous, Span<uint> record) {
+        var writer = new DrawRecordWriter(record[..SdfMeshRecord.DrawWords], true);
+        var (normalChanged, boxChanged) = WritePose(draw: in draw, meshChanged: false, previous: in previous, record: record, retained: true, writer: ref writer);
+
+        return new(ChangedWords: writer.ChangedWords, NormalComputed: normalChanged, PackedWords: writer.PackedWords, SelectionComputed: boxChanged);
+    }
 
     // Full and retained packing share every field writer. Exact input bits are the dependency key: numeric equality
     // would forget signed zero and NaN payload changes that the packed record preserves.
     private static SdfMeshDrawPacking WriteDrawCore(in SdfMeshDraw draw, in SdfMeshDraw previous, SdfMeshRegionMesh placement, uint generation, Span<uint> record, bool retained) {
-        var (mesh, matrix, material, _) = draw;
+        var (mesh, _, material, _) = draw;
 
         if (generation == 0) { throw new ArgumentOutOfRangeException(paramName: nameof(generation), message: "A staged instance generation is nonzero."); }
         if (mesh.Levels.Count >= (1 << (32 - SdfKernelInterfaces.MeshLevelShift))) {
             throw new ArgumentException(message: "The mesh's levels exceed the indirect draw identity's level field.", paramName: nameof(draw));
         }
 
-        var previousMatrix = previous.ObjectToWorld;
         var carry = draw.CarryRotation;
-        var previousCarry = previous.CarryRotation;
         var shift = draw.CarryTranslation;
-        var previousShift = previous.CarryTranslation;
         var clip = draw.ClipPlane;
-        var previousClip = previous.ClipPlane;
-        var meshChanged = (!retained || !ReferenceEquals(objA: mesh, objB: previous.Mesh));
-        var matrixChanged = (!retained || !Bitwise.Equal(left: in matrix, right: in previousMatrix));
-        var normalChanged = (!retained || !SameNormalBasis(left: in matrix, right: in previousMatrix));
-        var boxChanged = (meshChanged || normalChanged || (draw.Displacement != previous.Displacement) || !SameDrawTranslation(left: in matrix, right: in previousMatrix) || !Bitwise.Equal(left: in carry, right: in previousCarry) ||
-            !Bitwise.Equal(left: in shift, right: in previousShift) ||
-            (BitConverter.SingleToUInt32Bits(value: draw.CarryScale) != BitConverter.SingleToUInt32Bits(value: previous.CarryScale)));
         var writer = new DrawRecordWriter(record[..SdfMeshRecord.DrawWords], retained);
-
-        if (matrixChanged) { WriteDrawMatrix(matrix: in matrix, record: ref writer); }
-        if (normalChanged) { WriteNormalMatrix(matrix: matrix, record: ref writer); }
+        var (normalChanged, boxChanged) = WritePose(draw: in draw, meshChanged: (!retained || !ReferenceEquals(objA: mesh, objB: previous.Mesh)), previous: in previous,
+            record: record, retained: retained, writer: ref writer);
 
         writer[SdfMeshRecord.MaterialWord] = unchecked((uint)material);
         writer[SdfMeshRecord.IndexWord] = ((uint)placement.IndexWord);
@@ -830,6 +860,31 @@ public static class SdfMeshRegion {
         writer[SdfMeshRecord.LevelTableWord] = ((uint)(placement.IndexWord + (3 * mesh.LevelledTriangleCount)));
         writer[(SdfMeshRecord.LevelTableWord + 1)] = ((uint)mesh.Levels.Count);
         writer[SdfMeshRecord.DisplacementWord] = ((draw.Displacement is { } displacement) ? ((uint)displacement.Handle) : SdfFrameSampled.None);
+        writer[(SdfMeshRecord.SelectionWord + 11)] = generation;
+        writer[(SdfMeshRecord.SelectionWord + 15)] = ((uint)mesh.Levels.Count);
+
+        return new(ChangedWords: writer.ChangedWords, NormalComputed: normalChanged, PackedWords: writer.PackedWords, SelectionComputed: boxChanged);
+    }
+    // The words a draw's placement derives: its matrix, its normal matrix, its world selection box and the selection
+    // flags (bounded, glass, enclosing, dynamic), each written only where its inputs' bits moved in a retained record.
+    // Returns whether the normal matrix and the box were derived.
+    private static (bool NormalChanged, bool BoxChanged) WritePose(in SdfMeshDraw draw, in SdfMeshDraw previous, Span<uint> record, bool retained, bool meshChanged, ref DrawRecordWriter writer) {
+        var matrix = draw.ObjectToWorld;
+        var previousMatrix = previous.ObjectToWorld;
+        var carry = draw.CarryRotation;
+        var previousCarry = previous.CarryRotation;
+        var shift = draw.CarryTranslation;
+        var previousShift = previous.CarryTranslation;
+        var clip = draw.ClipPlane;
+        var previousClip = previous.ClipPlane;
+        var matrixChanged = (!retained || !Bitwise.Equal(left: in matrix, right: in previousMatrix));
+        var normalChanged = (!retained || !SameNormalBasis(left: in matrix, right: in previousMatrix));
+        var boxChanged = (meshChanged || normalChanged || (draw.Displacement != previous.Displacement) || !SameDrawTranslation(left: in matrix, right: in previousMatrix) || !Bitwise.Equal(left: in carry, right: in previousCarry) ||
+            !Bitwise.Equal(left: in shift, right: in previousShift) ||
+            (BitConverter.SingleToUInt32Bits(value: draw.CarryScale) != BitConverter.SingleToUInt32Bits(value: previous.CarryScale)));
+
+        if (matrixChanged) { WriteDrawMatrix(matrix: in matrix, record: ref writer); }
+        if (normalChanged) { WriteNormalMatrix(matrix: matrix, record: ref writer); }
 
         var selection = record.Slice(length: 16, start: SdfMeshRecord.SelectionWord);
         var boxed = (retained && ((selection[3] & 1u) == 0u));
@@ -849,10 +904,8 @@ public static class SdfMeshRegion {
 
         writer[(SdfMeshRecord.SelectionWord + 3)] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (enclosed ? 4u : 0u) |
             (draw.IsStatic ? 0u : SdfMeshRecord.DynamicFlag);
-        writer[(SdfMeshRecord.SelectionWord + 11)] = generation;
-        writer[(SdfMeshRecord.SelectionWord + 15)] = ((uint)mesh.Levels.Count);
 
-        return new(ChangedWords: writer.ChangedWords, NormalComputed: normalChanged, PackedWords: writer.PackedWords, SelectionComputed: boxChanged);
+        return (normalChanged, boxChanged);
     }
 
     // Every packed write passes this door: a changed-word mask cannot miss an assigned field.

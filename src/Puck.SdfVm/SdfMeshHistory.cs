@@ -56,6 +56,9 @@ public sealed class SdfMeshHistory {
     public static WorkKind RecordsCompared { get; } = Registry.Declare(name: "sdf.instances.records.compared", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts incremental draws whose pose, host metadata or history cut required packing.</summary>
     public static WorkKind RecordsChanged { get; } = Registry.Declare(name: "sdf.instances.records.changed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts changed records packed as poses: a draw whose matrix alone moved, written without an
+    /// observation or a placement lookup (a share of <see cref="RecordsChanged"/>).</summary>
+    public static WorkKind RecordsPosed { get; } = Registry.Declare(name: "sdf.instances.records.posed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts incremental packed words that differ, before upload-run merging and coarsening.</summary>
     public static WorkKind PackedWordsChanged { get; } = Registry.Declare(name: "sdf.instances.packed-words.changed", unit: "words", workClass: WorkClass.Pacing);
     /// <summary>Counts changes to the geometry/copy correspondence used to dress a frame.</summary>

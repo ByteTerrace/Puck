@@ -366,6 +366,17 @@ public sealed partial class SdfWorldTables {
             m_rowsByFrameSlot.Remove(row: row);
         }
     }
+    // A posed row's record was staged (StagePose): its mesh, frame slot and liveness stand, so its place in the slot index
+    // and the skinned rows stands too, and only its box is judged; a skinned row's bound is NoteSkinnedRows'.
+    private void NotePosedRow(int row, bool wasLive, in SdfMeshBox? before, bool wasGlass, in SdfMeshDraw draw, ReadOnlySpan<uint> record) {
+        if (m_rowStagings.Length <= row) { Array.Resize(array: ref m_rowStagings, newSize: m_stagedDraws.Length); }
+        m_rowStagings[row] = m_motionStaging;
+        if (draw.Mesh is { Members.IsEmpty: false }) { return; }
+
+        var isLive = SdfMeshRegion.ReadSelection(record: record, box: out var after, glass: out var isGlass);
+
+        NoteMotion(cause: SdfMotionCause.Draw, row: row, wasLive: wasLive, before: in before, wasGlass: wasGlass, isLive: isLive, after: in after, isGlass: isGlass);
+    }
     // A row left the staged list: judges the draw it held.
     private void NoteUnnamedRow(int row) {
         var wasLive = ReadStagedSelection(row: row, record: m_meshDrawWords.AsSpan(length: SdfMeshRecord.DrawWords, start: (row * SdfMeshRecord.DrawWords)), box: out var before, glass: out var wasGlass);
