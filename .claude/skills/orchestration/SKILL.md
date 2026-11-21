@@ -1152,6 +1152,8 @@ not "religious"):
 
 **Word a review brief for what it is.** Codex's safety filter refused a brief titled an "adversarial security review" that asked it to "attack" a disclosure change, and the lane burned its tokens and stalled. A review of Puck's own access-control or disclosure code is a correctness review: say what the code intends, ask whether it does it, and keep "attack" and "exploit" out of the brief.
 
+**A pushed commit is never amended.** Force-pushing is an owner-only action on every branch, the integration branch included. A fix to a commit already pushed goes in a new commit. The lead amended and force-pushed `lead/rendering` once to fold in regenerated schemas; no one had fetched the replaced commit, so nothing was lost, but it broke the rule.
+
 **A hotfix onto `main` builds the whole solution before it is pushed.** A fix cherry-picked from the integration branch onto the shipped candidate can name a helper only the integration branch has, in a test as easily as in product code. CI's payload build compiles every project, tests included, and a missing member costs a whole release run. Build `Puck.slnx` in Release in the hotfix worktree, not only the projects the fix touched.
 
 **Lanes don't queue behind one another's long runs.** The heavy lease serializes suites across the machine. Before a wave of more than about six lanes, check `puck lease list`; if lanes wait 20 minutes or more for heavy, the wave is too wide for the lease, not too slow. Brief lanes to run focused test classes (`--filter-class`) and the scenarios their change reaches, not whole suites or every `--reproduce` world. Give a whole-suite run to the lead's batched pass.
