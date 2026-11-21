@@ -1508,7 +1508,6 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 m_renderPoseRevision++;
             }
             WorldPoseWork.Process.Add(kind: WorldPoseWork.Resolved, amount: m_movingCount);
-            PublishBodyChanges();
 
             return;
         }
@@ -1539,34 +1538,54 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_movingCount = moving;
         m_posesDelivered = false;
         WorldPoseWork.Process.Add(kind: WorldPoseWork.Resolved, amount: resolved);
-        PublishBodyChanges();
     }
 
-    // The bodies whose presented inputs moved since the last frame resolved its poses (a delivery's entries and the
-    // poses this frame resolved), and whether the set cannot be named body by body.
+    // The bodies whose presented inputs moved since the journal's last frame (a delivery's entries and the poses a
+    // frame resolved), and whether the set cannot be named body by body.
     private readonly Puck.Abstractions.Collections.MarkedIndexSet m_changedBodies = new();
     private bool m_bodyChangesWhole = true;
     private readonly Puck.Abstractions.Gpu.GpuChangedRows m_bodyChanges = new(stableRows: true);
 
     /// <inheritdoc/>
-    /// <remarks>One journal frame for each <see cref="UpdateRenderPoses"/>: the bodies whose render pose that frame
-    /// resolved to another value, and those a delivery since the frame before moved the pose epoch, generation, carries,
-    /// facts or active flag of. A frame that changed which bodies are active, or another authority's first snapshot, owes
-    /// every body.</remarks>
+    /// <remarks>A journal frame names the bodies whose render pose <see cref="UpdateRenderPoses"/> resolved to another
+    /// value, and those a delivery moved the pose, pose epoch, generation, carries, facts or active flag of. A frame
+    /// that changed which bodies are active, or another authority's first snapshot, owes every body.</remarks>
     public Puck.Abstractions.Gpu.GpuRowChanges BodyChanges => m_bodyChanges.Reader;
     /// <inheritdoc/>
-    public long BodyChangesSerial => m_bodyChanges.Serial;
+    /// <remarks>Reading it closes a journal frame over whatever moved since the last read, so the first consumer of a
+    /// frame publishes the changes and the rest read the same serial, whether or not a presentation frame resolved
+    /// poses in between (a composition with no presentation delivers and packs without one).</remarks>
+    public long BodyChangesSerial {
+        get {
+            if (m_bodyChangesWhole || (m_changedBodies.Count > 0)) {
+                m_bodyChanges.Begin(everything: m_bodyChangesWhole, rows: EntityCapacity);
+                if (!m_bodyChangesWhole) {
+                    foreach (var index in m_changedBodies.Members) {
+                        m_bodyChanges.Owe(count: 1, start: index);
+                    }
+                }
 
-    private void PublishBodyChanges() {
-        m_bodyChanges.Begin(everything: m_bodyChangesWhole, rows: EntityCapacity);
-        if (!m_bodyChangesWhole) {
-            foreach (var index in m_changedBodies.Members) {
-                m_bodyChanges.Owe(count: 1, start: index);
+                m_changedBodies.Clear();
+                m_bodyChangesWhole = false;
+            }
+
+            return m_bodyChanges.Serial;
+        }
+    }
+    /// <inheritdoc/>
+    /// <remarks>Reads the pose table's live set (<see cref="WorldPoseTable.Live"/>), never the capacity.</remarks>
+    public void CopyActiveBodies(List<int> bodies) {
+        ArgumentNullException.ThrowIfNull(argument: bodies);
+
+        var first = bodies.Count;
+
+        foreach (var index in m_poses.Live) {
+            if (m_poses.IsActive(index: index)) {
+                bodies.Add(item: index);
             }
         }
 
-        m_changedBodies.Clear();
-        m_bodyChangesWhole = false;
+        bodies.Sort(comparer: null, count: (bodies.Count - first), index: first);
     }
 
     // The live bodies whose two tick poses differ in the latest delivery (the only ones a frame between two deliveries

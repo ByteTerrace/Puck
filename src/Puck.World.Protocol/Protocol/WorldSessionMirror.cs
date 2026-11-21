@@ -1065,6 +1065,25 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>Whether the entity at <paramref name="index"/> was active (drawn) in the latest snapshot.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public bool IsActive(int index) => m_poses.IsActive(index: index);
+    /// <summary>Appends the index of every entity the latest snapshot left active, in ascending order: the pose table's
+    /// live set (<see cref="WorldPoseTable.Live"/>), read between two deliveries, never the capacity.</summary>
+    /// <param name="bodies">The list the indices are appended to.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="bodies"/> is <see langword="null"/>.</exception>
+    public void CopyActiveBodies(List<int> bodies) {
+        ArgumentNullException.ThrowIfNull(argument: bodies);
+
+        var first = bodies.Count;
+
+        lock (m_snapshotWriteGate) {
+            foreach (var index in m_poses.Live) {
+                if (m_poses.IsActive(index: index)) {
+                    bodies.Add(item: index);
+                }
+            }
+        }
+
+        bodies.Sort(comparer: null, count: (bodies.Count - first), index: first);
+    }
     /// <summary>Gets the placement an entity inhabits (<see cref="EntitySnapshot.PlacementId"/>).</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The placement id, or <see langword="null"/> when the entity inhabits none.</returns>

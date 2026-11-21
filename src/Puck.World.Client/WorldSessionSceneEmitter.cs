@@ -152,12 +152,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     private readonly WorldSessionMirror.DeliveredStateObservation m_shadowObservation;
 
-    // Per-avatar movement-driven gait state over this emitter's own interpolated positions (WorldAvatarGait).
-    private readonly WorldAvatarGait[] m_avatarGaits = new WorldAvatarGait[WorldBodiesLimits.CapacityCeiling];
-    private readonly WorldTransformOwners m_avatarOwners = new(capacity: WorldBodiesLimits.CapacityCeiling);
-    private readonly int[] m_emittedRigs = new int[WorldBodiesLimits.CapacityCeiling];
-    private readonly float[] m_emittedScales = new float[WorldBodiesLimits.CapacityCeiling];
-    private readonly float[] m_emittedGaitAmplitudes = new float[WorldBodiesLimits.CapacityCeiling];
+    // The catalog avatars: the band, the look identity the live program was compiled for, and each body's gait and root
+    // follower (WorldCatalogAvatars, the pack every scene shares), and the seconds the next pack advances the followers by.
+    private readonly WorldCatalogAvatars m_avatars;
+    private float m_avatarSeconds;
 
     /// <summary>Initializes the emitter over a resolved session mirror and a bind-time-resolved camera choice.</summary>
     /// <param name="mirror">The destination's client-side mirror this emitter reads static geometry from.</param>
@@ -191,7 +189,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_fieldOfViewRadians = fieldOfViewRadians;
         m_meshDraws = new WorldSceneMeshDraws(pool: m_pool);
         m_source = new WorldSessionStampSource(mirror: mirror);
-        m_catalog = new WorldCatalogBand(HoldsAvatar, index => (mirror.CatalogRig(index), m_source.Look(index), m_bodyColor(index)));
+        m_catalog = new WorldCatalogBand(m_source.CopyActiveBodies, HoldsAvatar, index => (mirror.CatalogRig(index), m_source.Look(index), m_bodyColor(index)));
+        m_avatars = new WorldCatalogAvatars(band: m_catalog);
         m_deliveredShadows.SetSettings(settings: (shadowSettings?.Invoke() ?? WorldShadowSettings.From(render: mirror.Definition.Render)));
         m_shadowObservation = mirror.ObserveDeliveredState(observer: (definition, revision, state) => {
             if (m_shadowSettings is null) { m_deliveredShadows.SetSettings(settings: WorldShadowSettings.From(render: definition.Render)); }
@@ -290,34 +289,38 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private void EmitAvatars(SdfProgramBuilder builder, int slotBase) {
         var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
         var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
-        var noseFactor = m_mirror.Definition.PlayerDefaults.NoseFactor;
+        var definition = m_mirror.Definition;
 
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (!HoldsAvatar(index)) { continue; }
+        // The bodies the band holds, as the boot scene emits its own: the program draws exactly the avatars the pack
+        // poses.
+        foreach (var index in m_catalog.Bodies) {
+            var look = m_mirror.Look(index: index);
+
             WorldMirroredAvatarBand.EmitPalette(
                 accentMaterials: accentMaterials,
                 bodyColor: new DisplayColor(rgb: m_bodyColor(arg: index)),
                 bodyMaterials: bodyMaterials,
                 builder: builder,
                 catalogRig: m_mirror.CatalogRig(index: index),
-                emittedGaitAmplitudes: m_emittedGaitAmplitudes,
-                emittedRigs: m_emittedRigs,
-                emittedScales: m_emittedScales,
+                emittedGaitAmplitudes: m_avatars.GaitAmplitudes,
+                emittedRigs: m_avatars.Rigs,
+                emittedScales: m_avatars.Scales,
                 identityIndex: index,
-                look: m_mirror.Look(index: index),
+                look: look,
                 materialIndex: index,
-                noseFactor: noseFactor
+                noseFactor: definition.PlayerDefaults.NoseFactor
             );
+            m_avatars.Follow(body: index, dynamics: definition.Dynamics, look: look);
         }
 
         WorldRigCatalog.Emit(
             builder: builder,
-            isActive: HoldsAvatar,
+            isActive: index => (m_catalog.Slots[index] >= 0),
             slotFor: index => m_catalog.Slots[index],
             bodyMaterials: bodyMaterials,
             accentMaterials: accentMaterials,
             slotBase: slotBase,
-            rigFor: index => m_emittedRigs[index],
+            rigFor: index => m_avatars.Rigs[index],
             picks: m_picks
         );
     }
@@ -448,6 +451,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         }
         // The pool's replay cursors advance on this view's own produced-frame interval, latched for the next pack.
         m_pool.Tick(deltaSeconds: deltaSeconds);
+        m_avatarSeconds += deltaSeconds;
 
         var fitted = m_windowFit?.Invoke();
         var camera = (fitted ?? ResolveCamera(
@@ -654,64 +658,14 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     ).Cost;
     /// <inheritdoc/>
     /// <remarks>Packs every mirrored-active avatar's interpolated pose into its frozen catalog leaf slots (see
-    /// <see cref="WorldSessionMirror.InterpolationAlpha"/> for the timebase) plus a distance-driven gait phase, repacking
-    /// an avatar only while that pose moves; an avatar that stops being mirrored parks its range once.</remarks>
+    /// <see cref="WorldSessionMirror.InterpolationAlpha"/> for the timebase) plus a distance-driven gait phase, through
+    /// the pack the boot scene shares (<see cref="WorldCatalogAvatars.Pack"/>): an avatar repacks only while that pose
+    /// moves, and one that stops being mirrored parks its range once.</remarks>
     public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) {
-        var alpha = m_mirror.InterpolationAlpha;
+        var deltaSeconds = m_avatarSeconds;
 
-        foreach (var index in m_catalog.Bodies) {
-            if (!HoldsAvatar(index: index)) {
-                WorldMirroredAvatarBand.Park(
-                    m_avatarOwners, index, ref m_avatarGaits[index], moved, slots,
-                    (context.SlotBase + m_catalog.Slots[index]), context.ParkPosition
-                );
-
-                continue;
-            }
-
-            var position = WorldPoseInterpolation.Position(
-                previous: m_mirror.PreviousPosition(index: index),
-                current: m_mirror.CurrentPosition(index: index),
-                alpha: alpha
-            );
-            // Quaternion.Lerp is the nlerp: shortest-path dot-sign flip and renormalize — the SAME formula
-            // Client.WorldClient.UpdateRenderPoses uses.
-            var orientation = WorldPoseInterpolation.Orientation(
-                previous: m_mirror.PreviousOrientation(index: index),
-                current: m_mirror.CurrentOrientation(index: index),
-                alpha: alpha
-            );
-            if (!WorldMirroredAvatarBand.Wake(
-                address: m_mirror.Address(index: index),
-                epoch: m_mirror.PoseEpoch(index: index),
-                gait: ref m_avatarGaits[index],
-                moved: moved,
-                orientation: orientation,
-                owner: index,
-                owners: m_avatarOwners,
-                position: position
-            )) {
-                continue;
-            }
-
-            WorldMirroredAvatarBand.Pack(
-                avatar: index,
-                catalogBase: context.SlotBase,
-                firstSlot: m_catalog.Slots[index],
-                gait: in m_avatarGaits[index],
-                gaitAmplitude: m_emittedGaitAmplitudes[index],
-                moved: moved,
-                owner: index,
-                owners: m_avatarOwners,
-                rig: m_emittedRigs[index],
-                rootOrientation: orientation,
-                rootPosition: (m_pool.HasBodyRegistration(bodyIndex: index)
-                ? context.ParkPosition
-                : position),
-                scale: m_emittedScales[index],
-                table: slots
-            );
-        }
+        m_avatarSeconds = 0f;
+        m_avatars.Pack(context: in context, deltaSeconds: deltaSeconds, moved: moved, pool: m_pool, slots: slots, source: m_source);
 
         // The pool packs after the avatar catalog, whose reserved slots it sits past: animated placements ride their
         // static pose, attached and body-rooted stamps the destination's interpolated body pose.
@@ -846,7 +800,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_catalog.ObserveArticulation(stamps);
         m_pool.Rigid.ReconcileStatic(definition, definition.Placements);
         m_pool.Reconcile(definition.PlacementFrames, definition.Placements, definition.Creations, definition.Dynamics, stamps, definition.Looks);
-        m_catalog.Prepare();
+        m_avatars.Prepare();
     }
 
     public IReadOnlyList<int> MeshAssetSlots => m_pool.Rigid.Slots;

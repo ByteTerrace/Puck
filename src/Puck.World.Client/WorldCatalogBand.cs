@@ -5,14 +5,19 @@ namespace Puck.World.Client;
 
 // Each slot map and its rebuild revision come from the same admitted avatars. Articulation follows the stamps
 // the scene actually hands to its pool, including during the boot capacity probe.
-internal sealed class WorldCatalogBand(Func<int, bool> presents, Func<int, (byte Rig, WorldLook Look, Vector3 Color)> appearance) {
+//
+// `candidates` appends, in ascending order and each once, every body `presents` may answer true for (a scene's active
+// bodies, and the seats it may draw while they travel); Prepare asks those alone, never every index of Slots.
+internal sealed class WorldCatalogBand(Action<List<int>> candidates, Func<int, bool> presents, Func<int, (byte Rig, WorldLook Look, Vector3 Color)> appearance) {
     private List<(int Body, byte Rig, WorldLook Look, Vector3 Color)> m_image = [];
     private List<(int Body, byte Rig, WorldLook Look, Vector3 Color)> m_scratch = [];
     private (int Body, string Hash, float Scale, WorldLook Look)[] m_articulated = [];
 
     private readonly List<int> m_bodies = [];
+    private readonly List<int> m_candidates = [];
 
-    public int[] Slots { get; } = new int[WorldBodiesLimits.CapacityCeiling];
+    // A body's first slot in the band, or -1 for a body that holds none.
+    public int[] Slots { get; } = Unheld();
     // The bodies holding a slot, in body order, as of the latest Prepare: what a per-frame walk visits instead of every
     // index of Slots. A span, so the walk allocates no enumerator.
     public ReadOnlySpan<int> Bodies => CollectionsMarshal.AsSpan(m_bodies);
@@ -20,13 +25,26 @@ internal sealed class WorldCatalogBand(Func<int, bool> presents, Func<int, (byte
     public int Revision { get; private set; }
     public int ArticulatedRevision { get; private set; }
 
+    private static int[] Unheld() {
+        var slots = new int[WorldBodiesLimits.CapacityCeiling];
+
+        Array.Fill(array: slots, value: -1);
+
+        return slots;
+    }
+
     public void Prepare() {
         m_scratch.Clear();
+        foreach (var body in m_bodies) {
+            Slots[body] = -1;
+        }
+
         m_bodies.Clear();
+        m_candidates.Clear();
+        candidates(m_candidates);
         var slot = 0;
-        for (var body = 0; body < Slots.Length; body++) {
+        foreach (var body in m_candidates) {
             if (!presents(body)) {
-                Slots[body] = -1;
                 continue;
             }
 

@@ -39,6 +39,20 @@ public interface IWorldStampSource {
     /// through; zero for a source that keeps no journal.</summary>
     long BodyChangesSerial => 0L;
 
+    /// <summary>Appends the index of every active entity, in ascending order, so a consumer that visits each active
+    /// entity never asks every index of the capacity. The default, for a source that keeps no list of them, asks every
+    /// index.</summary>
+    /// <param name="bodies">The list the indices are appended to.</param>
+    void CopyActiveBodies(List<int> bodies) {
+        ArgumentNullException.ThrowIfNull(argument: bodies);
+
+        for (var index = 0; (index < WorldClient.EntityCapacity); index++) {
+            if (IsActive(index: index)) {
+                bodies.Add(item: index);
+            }
+        }
+    }
+
     /// <summary>Gets an entity's entity-and-generation address, which a follower reseeds on when it changes.</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The address.</returns>
