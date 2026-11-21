@@ -156,10 +156,10 @@ public sealed class VoiceSynth {
         }
     }
 
-    /// <summary>Frees every emitter-bound voice whose emitter is absent from <paramref name="emitters"/> — a row
+    /// <summary>Frees every emitter-bound voice whose emitter is absent from <paramref name="snapshot"/> — a row
     /// that left the table takes its voices with it (they would otherwise sound from nowhere forever).</summary>
-    /// <param name="emitters">The current snapshot's emitter table.</param>
-    internal void ReleaseUnbound(ReadOnlySpan<AudioEmitter> emitters) {
+    /// <param name="snapshot">The current snapshot.</param>
+    internal void ReleaseUnbound(AudioSnapshot snapshot) {
         for (var i = 0; (i < VoiceCount); i++) {
             ref var voice = ref m_voices[i];
 
@@ -170,7 +170,7 @@ public sealed class VoiceSynth {
                 continue;
             }
 
-            if (!AudioSnapshot.ContainsEmitter(emitters, voice.EmitterId)) {
+            if (!snapshot.ContainsEmitter(id: voice.EmitterId)) {
                 voice.Active = false;
             }
         }

@@ -153,6 +153,8 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
     public int Lifetime => m_lifetime;
     /// <summary>Gets the number of live slots: registered, or acquired and not yet retired.</summary>
     public int SlotCount => (m_slotCount - m_freeCount);
+    /// <summary>Gets whether any live slot interpolates between the previous and current ticks on <see cref="Apply"/>.</summary>
+    public bool HasMovingSlots => (m_movingCount > 0);
     /// <summary>Gets the tick the slots were last read as of.</summary>
     public ulong Tick => m_tick;
     /// <summary>Gets the engine tick the slots were last read as of: the delivered engine tick a frame presents.</summary>

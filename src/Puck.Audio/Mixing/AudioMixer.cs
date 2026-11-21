@@ -647,7 +647,7 @@ public sealed class AudioMixer {
             other: MaxBlockFrames
         );
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: frames);
-        m_synth.ReleaseUnbound(emitters: snapshot.Emitters);
+        m_synth.ReleaseUnbound(snapshot: snapshot);
         ConsumeTriggers(snapshot: snapshot);
 
         var emitters = snapshot.Emitters;
