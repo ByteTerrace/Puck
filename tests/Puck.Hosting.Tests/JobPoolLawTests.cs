@@ -139,6 +139,42 @@ public sealed class JobPoolLawTests {
         Assert.Equal(WaitOutcome.Completed, pool.Fork(JobClass.Tick, 2, tick, ref fork, WaitDeadline.In(TimeSpan.FromSeconds(10))));
     }
     [Fact]
+    public void TwoForksStartedTogetherFromTwoThreadsBothGetWorkers() {
+        // Four workers: the tick fork holds its own thread and at most one worker until the frame fork completes, and the
+        // frame fork completes only once four threads run its partitions at once, so it needs the other three workers
+        // woken while the tick fork's wake may still be pending.
+        using var pool = new JobPool(workers: new JobWorkers(requested: 5));
+
+        for (var round = 0; (round < 50); round++) {
+            using var frameDone = new ManualResetEventSlim();
+            using var allEntered = new ManualResetEventSlim();
+            using var start = new Barrier(participantCount: 2);
+            var entered = 0;
+            Exception? tickFailure = null;
+            var tick = new Partitions(run: _ => Assert.True(frameDone.Wait(TimeSpan.FromSeconds(10))));
+            var frame = new Partitions(run: _ => {
+                if (Interlocked.Increment(ref entered) == 4) {
+                    allEntered.Set();
+                }
+                Assert.True(allEntered.Wait(TimeSpan.FromSeconds(10)));
+            });
+            var tickThread = new Thread(start: () => tickFailure = Record.Exception(testCode: () => {
+                start.SignalAndWait(TestContext.Current.CancellationToken);
+                pool.Fork(jobClass: JobClass.Tick, partitions: 2, body: tick);
+            }));
+
+            tickThread.Start();
+            try {
+                start.SignalAndWait(TestContext.Current.CancellationToken);
+                pool.Fork(jobClass: JobClass.Frame, partitions: 4, body: frame);
+            } finally {
+                frameDone.Set();
+                tickThread.Join();
+            }
+            Assert.Null(tickFailure);
+        }
+    }
+    [Fact]
     public void PendingWakesNeverExceedTheWorkerCount() {
         using var pool = new JobPool(workers: new JobWorkers(requested: 3));
         var body = new Partitions(run: static _ => { });
