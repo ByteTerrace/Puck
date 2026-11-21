@@ -114,20 +114,20 @@ prototypes {
       name: "press"
       schema: "puck.creation.v1"
       palette [
-        // The cabinet: dark walnut, its front two drawers' seams and brass pulls painted on under the name rail.
+        // The cabinet: dark walnut, its front two drawers' seams and brass pulls painted on, the name raised on the upper one.
         {
           color: "#4E3120"
           roughness: 0.6
           specular: 0.12
           paints: concat(
-            map([0.165, -0.12], y => {
+            map([0.18, -0.12], y => {
               parent: "cabinet"
               type: "Box"
               position [0, y, 0.5]
               scale [0.6, 0.005, 0.02]
               color: "#23150D"
             }),
-            map([0.025, -0.26], y => {
+            map([-0.03, -0.26], y => {
               parent: "cabinet"
               type: "Box"
               position [0, y, 0.5]
@@ -290,7 +290,7 @@ prototypes {
         [
           {
             text: "PRESS"
-            position [0, 0.635, 0.455]
+            position [0, 0.485, 0.455]
             rotation [0, 0, 0, 1]
             emHeight: 0.11
             depth: 0.008
