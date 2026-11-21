@@ -28,30 +28,16 @@ public static partial class PuckParser {
         var depth = 0;
 
         for (var index = offset; (index < buffer.Length); index++) {
+            var lexeme = SourceLexemes.End(offset: index, source: buffer);
+
+            if (lexeme > index) {
+                index = (lexeme - 1);
+
+                continue;
+            }
             var character = buffer[index];
 
-            if (character == '"') {
-                for (index++; ((index < buffer.Length) && (buffer[index] != '"')); index++) {
-                    if (buffer[index] == '\\') {
-                        index++;
-                    }
-                }
-            } else if ((character == '/') && ((index + 1) < buffer.Length) && (buffer[(index + 1)] == '/')) {
-                while ((index < buffer.Length) && (buffer[index] != '\n')) {
-                    index++;
-                }
-            } else if ((character == '/') && ((index + 1) < buffer.Length) && (buffer[(index + 1)] == '*')) {
-                var close = buffer.IndexOf(
-                    comparisonType: StringComparison.Ordinal,
-                    startIndex: (index + 2),
-                    value: "*/"
-                );
-
-                index = ((close < 0)
-                    ? buffer.Length
-                    : (close + 1)
-                );
-            } else if (character == '{') {
+            if (character == '{') {
                 depth++;
             } else if (character == '}') {
                 if (--depth <= 0) {
@@ -1063,13 +1049,8 @@ public static partial class PuckParser {
             context: context,
             keyword: "push"
         )) {
-            SkipWhiteSpace(context: context);
-            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var rowName)) {
-                throw CreateException(
-                    context: context,
-                    message: "Expected a row name after 'push'"
-                );
-            }
+            var target = RequireEffectRow(context: context, diagnostics: diagnostics, message: "Expected a row name after 'push'");
+
             SkipWhiteSpace(context: context);
             if (!TryConsume(
                 c: '=',
@@ -1077,7 +1058,7 @@ public static partial class PuckParser {
             )) {
                 throw CreateException(
                     context: context,
-                    message: $"Expected '=' after 'push {rowName}'"
+                    message: $"Expected '=' after 'push {context.Scanner.Buffer.Substring(length: target.Length, startIndex: target.Offset)}'"
                 );
             }
             var rhs = ParseRhs(
@@ -1095,7 +1076,7 @@ public static partial class PuckParser {
                 Line: line,
                 Offset: startOffset,
                 Rhs: rhs,
-                RowName: rowName
+                Target: target
             );
         }
 
@@ -1280,8 +1261,8 @@ public static partial class PuckParser {
         }
 
         if (TryMatchKeyword(context: context, keyword: "draw")) {
-            var from = RequirePileOperand(context: context, message: "Expected a source pile name after 'draw'");
-            var to = RequireKeywordPileOperand(context: context, keyword: "to", message: "Expected a destination pile name after 'draw'");
+            var from = RequireEffectRow(context: context, diagnostics: diagnostics, message: "Expected a source pile name after 'draw'");
+            var to = RequireEffectRow(context: context, diagnostics: diagnostics, keyword: "to", message: "Expected a destination pile name after 'draw'");
 
             return new DrawStatementNode(
                 Column: col,
@@ -1294,11 +1275,11 @@ public static partial class PuckParser {
         }
 
         if (TryMatchKeyword(context: context, keyword: "deal")) {
+            // The count is the value `transfer(count: ...)` takes: a literal, a name or arithmetic.
             SkipWhiteSpace(context: context);
-            var numLiteral = ParseNumberWithOptionalUnit(context: context);
-            var count = Convert.ToInt32(value: numLiteral.Value);
-            var from = RequireKeywordPileOperand(context: context, keyword: "from", message: "Expected a source pile name after 'deal'");
-            var to = RequireKeywordPileOperand(context: context, keyword: "to", message: "Expected a destination pile name after 'deal'");
+            var count = ParseExpression(context: context);
+            var from = RequireEffectRow(context: context, diagnostics: diagnostics, keyword: "from", message: "Expected a source pile name after 'deal'");
+            var to = RequireEffectRow(context: context, diagnostics: diagnostics, keyword: "to", message: "Expected a destination pile name after 'deal'");
 
             return new DealStatementNode(
                 Column: col,
@@ -1312,8 +1293,8 @@ public static partial class PuckParser {
         }
 
         if (TryMatchKeyword(context: context, keyword: "shuffle")) {
-            var pile = RequirePileOperand(context: context, message: "Expected a pile name after 'shuffle'");
-            var draw = RequireKeywordPileOperand(context: context, keyword: "with", message: "Expected a draw stream name after 'shuffle'");
+            var pile = RequireEffectRow(context: context, diagnostics: diagnostics, message: "Expected a pile name after 'shuffle'");
+            var draw = RequireEffectRow(context: context, diagnostics: diagnostics, keyword: "with", message: "Expected a draw stream name after 'shuffle'");
 
             return new ShuffleStatementNode(
                 Column: col,
@@ -2008,25 +1989,36 @@ public static partial class PuckParser {
             Value: value
         );
     }
-    private static bool TryReadPileOperand(ParseContext context, out string text) {
+    // The row a whole-row effect names (`push`, `draw`, `deal`, `shuffle`), after the optional keyword that
+    // introduces it: read as an assignment's target is and resolved by the same reader, so a binding, an
+    // interpolated name and a module instance's row mean here what they mean there. A name the bare form cannot
+    // carry, backquoted or quoted, is the operand grammar's backquoted name.
+    private static RowRefNode RequireEffectRow(ParseContext context, DiagnosticBag? diagnostics, string message, string? keyword = null) {
+        var cursor = context.Scanner.Cursor;
+
         SkipWhiteSpace(context: context);
-        if (TryReadRowRefSpanRaw(context: context, span: out _, text: out text)) {
-            return true;
+        if (keyword is not null) {
+            _ = TryMatchKeyword(context: context, keyword: keyword);
+            SkipWhiteSpace(context: context);
         }
-        if (TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out text)) {
-            return true;
+        var start = cursor.Offset;
+        var (line, column) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: start);
+
+        if (TryReadRowRefSpanRaw(context: context, span: out var span, text: out var text)) {
+            return ResolveRowRef(diagnostics: diagnostics, span: span, text: text);
         }
-        return TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out text);
-    }
-    private static string RequirePileOperand(ParseContext context, string message) {
-        if (!TryReadPileOperand(context: context, text: out var text)) {
+        if (!TryReadBackquotedName(context: context, name: out var name) && !TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out name)) {
             throw CreateException(context: context, message: message);
         }
-        return text;
-    }
-    private static string RequireKeywordPileOperand(ParseContext context, string keyword, string message) {
-        SkipWhiteSpace(context: context);
-        _ = TryMatchKeyword(context: context, keyword: keyword);
-        return RequirePileOperand(context: context, message: message);
+
+        return new RowRefNode(
+            name,
+            null,
+            start,
+            (cursor.Offset - start),
+            line,
+            column,
+            Operand: CreateOperand(column: column, form: DocumentValueForm.Expression, length: (cursor.Offset - start), line: line, offset: start, text: ExpressionSpelling.PrintName(name: name, quoted: true))
+        );
     }
 }

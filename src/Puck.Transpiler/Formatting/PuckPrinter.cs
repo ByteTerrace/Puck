@@ -1278,7 +1278,9 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case PushStatementNode push: {
-                        m_builder.Append(value: "push ").Append(value: push.RowName).Append(value: " = ");
+                        m_builder.Append(value: "push ");
+                        Row(row: push.Target);
+                        m_builder.Append(value: " = ");
                         Rhs(
                             level: level,
                             rhs: push.Rhs
@@ -1412,20 +1414,28 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case DrawStatementNode draw: {
-                        m_builder.Append(value: "draw ").Append(value: draw.From).Append(value: " to ").Append(value: draw.To);
+                        m_builder.Append(value: "draw ");
+                        Row(row: draw.From);
+                        m_builder.Append(value: " to ");
+                        Row(row: draw.To);
 
                         break;
                     }
                 case DealStatementNode deal: {
-                        m_builder
-                            .Append(value: "deal ").Append(value: deal.Count.ToString(provider: CultureInfo.InvariantCulture))
-                            .Append(value: " from ").Append(value: deal.From)
-                            .Append(value: " to ").Append(value: deal.To);
+                        m_builder.Append(value: "deal ");
+                        Expression(expression: deal.Count, level: level);
+                        m_builder.Append(value: " from ");
+                        Row(row: deal.From);
+                        m_builder.Append(value: " to ");
+                        Row(row: deal.To);
 
                         break;
                     }
                 case ShuffleStatementNode shuffle: {
-                        m_builder.Append(value: "shuffle ").Append(value: shuffle.Row).Append(value: " with ").Append(value: shuffle.Draw);
+                        m_builder.Append(value: "shuffle ");
+                        Row(row: shuffle.Row);
+                        m_builder.Append(value: " with ");
+                        Row(row: shuffle.Draw);
 
                         break;
                     }

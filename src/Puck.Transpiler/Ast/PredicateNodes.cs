@@ -18,7 +18,7 @@ public abstract record PredicateNode(int Offset = 0, int Length = 0, int Line = 
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record ComparisonPredicateNode(
+public sealed partial record ComparisonPredicateNode(
     OperandExpressionNode Left,
     string Comparator,
     OperandExpressionNode Right,
@@ -39,7 +39,7 @@ public sealed record ComparisonPredicateNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record AndPredicateNode(
+public sealed partial record AndPredicateNode(
     IReadOnlyList<PredicateNode> Operands,
     int Offset = 0,
     int Length = 0,
@@ -58,7 +58,7 @@ public sealed record AndPredicateNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record OrPredicateNode(
+public sealed partial record OrPredicateNode(
     IReadOnlyList<PredicateNode> Operands,
     int Offset = 0,
     int Length = 0,
@@ -76,7 +76,7 @@ public sealed record OrPredicateNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record NotPredicateNode(
+public sealed partial record NotPredicateNode(
     PredicateNode Operand,
     int Offset = 0,
     int Length = 0,
@@ -94,7 +94,7 @@ public sealed record NotPredicateNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record WhenStatementNode(
+public sealed partial record WhenStatementNode(
     PredicateNode Predicate,
     int Offset = 0,
     int Length = 0,
@@ -115,7 +115,7 @@ public sealed record WhenStatementNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record CallPredicateNode(
+public sealed partial record CallPredicateNode(
     CallExpressionNode Call,
     int Offset = 0,
     int Length = 0,

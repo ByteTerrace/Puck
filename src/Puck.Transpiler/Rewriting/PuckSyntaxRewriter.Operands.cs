@@ -1,4 +1,3 @@
-using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
 using Operand = Puck.State.ExpressionSpelling;
 
@@ -48,31 +47,5 @@ public abstract partial class PuckSyntaxRewriter {
             }
         }
         return (rewritten ?? arguments);
-    }
-    // A target's key atom is rewritten like an operand's, and the key text it carries is the rewritten atom as printed.
-    private RowRefNode RewrittenKeyAtom(RowRefNode row, InterpolatedStringNode atom) {
-        var rewritten = Rewritten(node: atom);
-
-        return (ReferenceEquals(objA: rewritten, objB: atom)
-            ? row
-            : (row with {
-                Key = Formatting.PuckPrinter.PrintExpression(expression: rewritten),
-                KeyAtom = rewritten,
-            })
-        );
-    }
-    private OperandExpressionNode RewrittenOperand(OperandExpressionNode operand) {
-        var syntax = ((operand.Syntax is { } original) ? RewriteOperandSyntax(original, operand.Form) : null);
-        var atoms = ((operand.Atoms.Count == 0) ? Array.Empty<InterpolatedStringNode>() : new InterpolatedStringNode[operand.Atoms.Count]);
-        var changed = !Equals(objA: syntax, objB: operand.Syntax);
-
-        for (var index = 0; (index < atoms.Length); index++) {
-            atoms[index] = Rewritten(node: operand.Atoms[index].Value);
-            var printed = Formatting.PuckPrinter.PrintExpression(expression: atoms[index]);
-
-            changed |= !string.Equals(a: printed, b: Formatting.PuckPrinter.PrintExpression(expression: operand.Atoms[index].Value), comparisonType: StringComparison.Ordinal);
-        }
-        if (!changed || (syntax is null)) { return operand; }
-        return Parsing.PuckParser.RebuildOperand(atoms: atoms, original: operand, syntax: syntax);
     }
 }

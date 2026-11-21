@@ -19,7 +19,9 @@ public static class PuckSyntaxTrivia {
         return new Walk(source: source).Document(document: document);
     }
 
-    private sealed class Walk {
+    // A construct with a delimited body has an arm that reads the trivia around its items; every other node is
+    // rebuilt from its children (SyntaxNode.MapChildren), so each child a node declares is reached.
+    private sealed class Walk : ISyntaxMap {
         private readonly string m_source;
 
         // What the most recent `List` found on its container's opening-delimiter line, read right after that call.
@@ -29,6 +31,17 @@ public static class PuckSyntaxTrivia {
             m_source = source;
         }
 
+        TNode ISyntaxMap.One<TNode>(SyntaxNode parent, TNode child) => ((TNode)Visit(node: child));
+        TNode? ISyntaxMap.Optional<TNode>(SyntaxNode parent, TNode? child) where TNode : class => ((child is null) ? null : ((TNode)Visit(node: child)));
+        IReadOnlyList<TNode> ISyntaxMap.Many<TNode>(SyntaxNode parent, IReadOnlyList<TNode> children) =>
+            ((children.Count == 0) ? children : [.. children.Select(selector: child => ((TNode)Visit(node: child)))]);
+
+        private SyntaxNode Visit(SyntaxNode node) => (node switch {
+            StatementNode statement => VisitStatement(statement: statement),
+            ExpressionNode expression => VisitExpression(expression: expression),
+            StateModifierNode modifier => VisitModifier(modifier: modifier),
+            _ => node.MapChildren(map: this),
+        });
         private int ContentEnd(SyntaxNode node) {
             var start = Math.Clamp(
                 max: m_source.Length,
@@ -467,12 +480,6 @@ public static class PuckSyntaxTrivia {
         }
         public StatementNode VisitStatement(StatementNode statement) {
             switch (statement) {
-                case WorldDeclarationNode world: {
-                        return (world with {
-                            Module = ((CallExpressionNode)VisitExpression(expression: world.Module)),
-                            Name = VisitExpression(expression: world.Name),
-                        });
-                    }
                 case WorldLinkNode link when (link.Kind == "border"): {
                         var (properties, inner, header) = Braced(
                             headerFrom: link.Offset,
@@ -489,12 +496,6 @@ public static class PuckSyntaxTrivia {
                             Trivia = (link.Trivia with { Header = header, Inner = inner, Opening = m_opening }),
                         });
                     }
-                case WorldLinkNode link: {
-                        return (link with {
-                            Left = VisitExpression(expression: link.Left),
-                            Right = VisitExpression(expression: link.Right),
-                        });
-                    }
                 case BlockNode block: {
                         var (statements, inner, header) = Braced(
                             headerFrom: block.Offset,
@@ -505,12 +506,6 @@ public static class PuckSyntaxTrivia {
                         );
 
                         return (block with { Statements = statements, Trivia = (block.Trivia with { Header = header, Inner = inner, Opening = m_opening }) });
-                    }
-                case TemplateNode template: {
-                        return (template with {
-                            Body = ((BlockNode)VisitStatement(statement: template.Body)),
-                            Parameters = [.. template.Parameters.Select(selector: parameter => (parameter with { DefaultValue = VisitOptional(expression: parameter.DefaultValue) }))],
-                        });
                     }
                 case ForStatementNode loop: {
                         var (statements, inner, header) = Braced(
@@ -757,21 +752,6 @@ public static class PuckSyntaxTrivia {
                         var (statements, inner, header) = Braced(headerFrom: each.Offset, limit: ContentEnd(node: each), openFrom: each.Offset, opener: '{', statements: each.Body);
                         return (each with { Body = statements, Trivia = (each.Trivia with { Header = header, Inner = inner, Opening = m_opening }) });
                     }
-                case PropertyNode property: {
-                        return (property with { Value = VisitExpression(expression: property.Value) });
-                    }
-                case LetNode declaration: {
-                        return (declaration with { Value = VisitExpression(expression: declaration.Value) });
-                    }
-                case DerivedStateNode derived: {
-                        return (derived with { Expression = ((OperandExpressionNode)VisitExpression(expression: derived.Expression)) });
-                    }
-                case ExpressionStatementNode expression: {
-                        return (expression with { Expression = VisitExpression(expression: expression.Expression) });
-                    }
-                case TransformStatementNode transform: {
-                        return (transform with { Transform = ((CallExpressionNode)VisitExpression(expression: transform.Transform)) });
-                    }
                 case EnumDeclarationNode declaration: {
                         var open = FindNext(
                             from: declaration.Offset,
@@ -878,13 +858,6 @@ public static class PuckSyntaxTrivia {
 
                         return (declaration with { Fields = fields, Trivia = (declaration.Trivia with { Inner = inner, Opening = m_opening }) });
                     }
-                case StatePoolDeclarationNode pool:
-                    return (pool with {
-                        Capacity = VisitOptional(expression: pool.Capacity),
-                        Initializer = VisitOptional(expression: pool.Initializer),
-                    });
-                case StatePairPoolDeclarationNode pool:
-                    return pool;
                 case StateTableDeclarationNode table: {
                         var (cells, inner, header) = Cells(
                             cells: table.Cells,
@@ -916,22 +889,8 @@ public static class PuckSyntaxTrivia {
                             Trivia = (grid.Trivia with { Header = header, Inner = inner, Opening = m_opening }),
                         });
                     }
-                case StateSlotDeclarationNode slot: {
-                        return (slot with {
-                            FamilySize = VisitOptional(expression: slot.FamilySize),
-                            Modifiers = VisitModifiers(modifiers: slot.Modifiers),
-                            Value = VisitOptional(expression: slot.Value),
-                        });
-                    }
-                case StatePileDeclarationNode pile: {
-                        return (pile with {
-                            FamilySize = VisitOptional(expression: pile.FamilySize),
-                            Initializer = VisitOptional(expression: pile.Initializer),
-                            Modifiers = VisitModifiers(modifiers: pile.Modifiers),
-                        });
-                    }
                 default: {
-                        return statement;
+                        return ((StatementNode)statement.MapChildren(map: this));
                     }
             }
         }
@@ -963,8 +922,9 @@ public static class PuckSyntaxTrivia {
                 open: open
             ));
         }
-        private IReadOnlyList<StateModifierNode> VisitModifiers(IReadOnlyList<StateModifierNode> modifiers) =>
-            [.. modifiers.Select(selector: modifier => (modifier with { Arguments = VisitArguments(arguments: modifier.Arguments, limit: ContentEnd(node: modifier), openFrom: modifier.Offset) }))];
+        private StateModifierNode VisitModifier(StateModifierNode modifier) =>
+            (modifier with { Arguments = VisitArguments(arguments: modifier.Arguments, limit: ContentEnd(node: modifier), openFrom: modifier.Offset) });
+        private IReadOnlyList<StateModifierNode> VisitModifiers(IReadOnlyList<StateModifierNode> modifiers) => [.. modifiers.Select(selector: VisitModifier)];
         private IReadOnlyList<ArgumentNode> VisitArguments(IReadOnlyList<ArgumentNode> arguments, int openFrom, int limit) {
             var open = FindNext(
                 from: openFrom,
@@ -1067,49 +1027,6 @@ public static class PuckSyntaxTrivia {
                             Trivia = (call.Trivia with { MultiLine = SpansLines(node: call) }),
                         });
                     }
-                case BinaryExpressionNode binary: {
-                        return (binary with {
-                            Left = VisitExpression(expression: binary.Left),
-                            Right = VisitExpression(expression: binary.Right),
-                        });
-                    }
-                case ConditionalExpressionNode conditional: {
-                        return (conditional with {
-                            Condition = VisitExpression(expression: conditional.Condition),
-                            WhenFalse = VisitExpression(expression: conditional.WhenFalse),
-                            WhenTrue = VisitExpression(expression: conditional.WhenTrue),
-                        });
-                    }
-                case UnaryExpressionNode unary: {
-                        return (unary with { Operand = VisitExpression(expression: unary.Operand) });
-                    }
-                case IndexExpressionNode index: {
-                        return (index with {
-                            Index = VisitExpression(expression: index.Index),
-                            Target = VisitExpression(expression: index.Target),
-                        });
-                    }
-                case RangeExpressionNode range: {
-                        return (range with {
-                            End = ((range.End is { } end) ? VisitExpression(expression: end) : null),
-                            Start = ((range.Start is { } start) ? VisitExpression(expression: start) : null),
-                        });
-                    }
-                case MemberAccessExpressionNode member: {
-                        return (member with { Target = VisitExpression(expression: member.Target) });
-                    }
-                case LambdaExpressionNode lambda: {
-                        return (lambda with { Body = VisitExpression(expression: lambda.Body) });
-                    }
-                case FunctionExpressionNode function: {
-                        return (function with { Body = VisitExpression(expression: function.Body) });
-                    }
-                case WithExpressionNode derived: {
-                        return (derived with {
-                            Base = VisitExpression(expression: derived.Base),
-                            Overrides = VisitExpression(expression: derived.Overrides),
-                        });
-                    }
                 case ForExpressionNode loop: {
                         var sequence = VisitExpression(expression: loop.Sequence);
                         var open = FindNext(
@@ -1147,8 +1064,13 @@ public static class PuckSyntaxTrivia {
                             Trivia = (loop.Trivia with { Inner = inner, MultiLine = SpansLines(node: loop), Opening = m_opening }),
                         });
                     }
-                default: {
+                // An operand and an interpolated string are read from their own text, so nothing inside one is placed
+                // in this source.
+                case OperandExpressionNode or InterpolatedStringNode: {
                         return expression;
+                    }
+                default: {
+                        return ((ExpressionNode)expression.MapChildren(map: this));
                     }
             }
         }

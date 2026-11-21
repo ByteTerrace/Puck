@@ -1,7 +1,7 @@
 namespace Puck.Transpiler.Ast;
 
 /// <summary>An asset path retained for package-aware lowering.</summary>
-public sealed record AssetExpressionNode(string Path, int Offset = 0, int Length = 0, int Line = 1, int Column = 1)
+public sealed partial record AssetExpressionNode(string Path, int Offset = 0, int Length = 0, int Line = 1, int Column = 1)
     : ExpressionNode(Offset, Length, Line, Column);
 /// <summary>Instantiates a named world from a module call.</summary>
 /// <param name="Name">The world's name.</param>
@@ -11,7 +11,7 @@ public sealed record AssetExpressionNode(string Path, int Offset = 0, int Length
 /// <param name="Length">The declaration's length in characters.</param>
 /// <param name="Line">The declaration's 1-based line.</param>
 /// <param name="Column">The declaration's 1-based column.</param>
-public sealed record WorldDeclarationNode(
+public sealed partial record WorldDeclarationNode(
     ExpressionNode Name,
     CallExpressionNode Module,
     bool Entry = false,
@@ -21,7 +21,7 @@ public sealed record WorldDeclarationNode(
     int Column = 1
 ) : StatementNode(Offset, Length, Line, Column);
 /// <summary>Connects two world endpoints with a border or door.</summary>
-public sealed record WorldLinkNode(
+public sealed partial record WorldLinkNode(
     string Kind,
     ExpressionNode Left,
     ExpressionNode Right,

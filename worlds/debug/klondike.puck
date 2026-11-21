@@ -271,7 +271,7 @@ template klondikeGather(step, pile) {
       solitaireKlondike.stage == 1 and
       solitaireKlondike.gatherStep == step and
       count(pile) > 0)
-    transform transfer(from: pile, to: solitaireKlondikePile0, selector: First)
+    draw pile to solitaireKlondikePile0
   }
 }
 
@@ -327,7 +327,7 @@ rule "solitaireKlondike-shuffle" {
 template klondikeDeal(step, pile) {
   rule $"solitaireKlondike-deal-{step}" {
     when solitaire.table == 1 and solitaireKlondike.stage == 3 and solitaireKlondike.dealStep == step
-    transform transfer(from: solitaireKlondikePile0, to: pile, selector: First)
+    draw solitaireKlondikePile0 to pile
   }
 }
 

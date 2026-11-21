@@ -22,6 +22,18 @@ public abstract record SyntaxNode(int Offset = 0, int Length = 0, int Line = 1, 
     /// <param name="trivia">The trivia to attach.</param>
     /// <returns>A copy of this node, of this node's own type, carrying <paramref name="trivia"/>.</returns>
     public SyntaxNode WithTrivia(SyntaxTrivia trivia) => (this with { Trivia = trivia });
+    /// <summary>Returns every syntax node this node holds directly, in the order the node declares them.</summary>
+    /// <returns>The node's children; empty for a leaf.</returns>
+    /// <remarks>An operand's atoms and a cell key's atom are children, since a reference walk has to reach their
+    /// holes, but they were parsed from their own text and carry offsets into it, so
+    /// <see cref="SyntaxWalk.PathAt"/> never stands in one. A member carrying a sub-grammar as text or as another
+    /// tree (a pattern's match, an operand's parsed expression) holds no children.</remarks>
+    public abstract IReadOnlyList<SyntaxNode> Children();
+    /// <summary>Returns this node with each child replaced by what <paramref name="map"/> answers for it.</summary>
+    /// <param name="map">The answer for each child position.</param>
+    /// <returns>The rebuilt node, of this node's own type, carrying this node's span and trivia; this node itself
+    /// when <paramref name="map"/> changed no child.</returns>
+    public abstract SyntaxNode MapChildren(ISyntaxMap map);
 }
 /// <summary>Represents a top-level authoring document.</summary>
 /// <param name="Schema">The schema identifier (e.g., 'puck.world.definition.v1').</param>
@@ -31,7 +43,7 @@ public abstract record SyntaxNode(int Offset = 0, int Length = 0, int Line = 1, 
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record DocumentNode(
+public sealed partial record DocumentNode(
     string? Schema,
     string? Basis,
     IReadOnlyList<StatementNode> Statements,
@@ -68,6 +80,7 @@ public abstract record StatementNode(int Offset = 0, int Length = 0, int Line = 
     /// diagnostic the author means to keep. They cover this statement's span and nothing else, never reach the
     /// lowered document, and change nothing a source means; only the diagnostics a compile reports read them
     /// (<see cref="Diagnostics.SourceAcknowledgements"/>).</summary>
+    [SyntaxAnnotation]
     public IReadOnlyList<AllowNode> Allows { get; init; } = [];
 }
 /// <summary>One acknowledged diagnostic: <c>allow PUCK122 "why"</c>, written on the line before the row, <c>let</c>
@@ -78,7 +91,7 @@ public abstract record StatementNode(int Offset = 0, int Length = 0, int Line = 
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record AllowNode(
+public sealed partial record AllowNode(
     string Code,
     string Reason,
     int Offset = 0,
@@ -97,7 +110,7 @@ public sealed record AllowNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record ExpressionStatementNode(
+public sealed partial record ExpressionStatementNode(
     ExpressionNode Expression,
     int Offset = 0,
     int Length = 0,
@@ -123,7 +136,7 @@ public sealed record ExpressionStatementNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record ImportNode(
+public sealed partial record ImportNode(
     string Path,
     string? Alias,
     int Offset = 0,
@@ -159,7 +172,7 @@ public sealed record ImportNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record ExportNode(
+public sealed partial record ExportNode(
     string Facet,
     IReadOnlyList<string> Names,
     int Offset = 0,
@@ -182,7 +195,7 @@ public sealed record ExportNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record LetNode(
+public sealed partial record LetNode(
     string Name,
     ExpressionNode Value,
     int Offset = 0,
@@ -206,7 +219,7 @@ public sealed record LetNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TemplateNode(
+public sealed partial record TemplateNode(
     string Name,
     IReadOnlyList<TemplateParameterNode> Parameters,
     BlockNode Body,
@@ -237,7 +250,7 @@ public sealed record TemplateNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record TemplateParameterNode(
+public sealed partial record TemplateParameterNode(
     string Name,
     ExpressionNode? DefaultValue,
     int Offset = 0,
@@ -268,7 +281,7 @@ public sealed record TemplateParameterNode(
 /// <param name="Column">The 1-based column number in source text.</param>
 /// <param name="NameExpression">An interpolated name, when the header wrote one instead of a literal; only a
 /// lowering scope can resolve it, so <see cref="Name"/> stays null until then.</param>
-public sealed record BlockNode(
+public sealed partial record BlockNode(
     string Identifier,
     string? Name,
     string? Target,
@@ -299,7 +312,7 @@ public sealed record BlockNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record PropertyNode(
+public sealed partial record PropertyNode(
     string Name,
     ExpressionNode Value,
     int Offset = 0,
@@ -342,7 +355,7 @@ public abstract record ExpressionNode(int Offset = 0, int Length = 0, int Line =
 /// for every other literal, including a plain decimal integer, a bool, a string, or a value produced by folding an
 /// expression rather than by parsing source text directly.
 /// </param>
-public sealed record LiteralExpressionNode(
+public sealed partial record LiteralExpressionNode(
     object? Value,
     string? Unit = null,
     int Offset = 0,
@@ -366,7 +379,7 @@ public sealed record LiteralExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record ColorExpressionNode(
+public sealed partial record ColorExpressionNode(
     string Hex,
     int Offset = 0,
     int Length = 0,
@@ -384,7 +397,7 @@ public sealed record ColorExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record IdentifierExpressionNode(
+public sealed partial record IdentifierExpressionNode(
     string Name,
     int Offset = 0,
     int Length = 0,
@@ -403,7 +416,7 @@ public sealed record IdentifierExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record MemberAccessExpressionNode(
+public sealed partial record MemberAccessExpressionNode(
     ExpressionNode Target,
     string Member,
     int Offset = 0,
@@ -423,7 +436,7 @@ public sealed record MemberAccessExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record CallExpressionNode(
+public sealed partial record CallExpressionNode(
     string Name,
     IReadOnlyList<ArgumentNode> Arguments,
     int Offset = 0,
@@ -443,7 +456,7 @@ public sealed record CallExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record ArgumentNode(
+public sealed partial record ArgumentNode(
     string? Name,
     ExpressionNode Value,
     int Offset = 0,
@@ -464,7 +477,7 @@ public sealed record ArgumentNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record BinaryExpressionNode(
+public sealed partial record BinaryExpressionNode(
     ExpressionNode Left,
     string Operator,
     ExpressionNode Right,
@@ -488,7 +501,7 @@ public sealed record BinaryExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record ConditionalExpressionNode(
+public sealed partial record ConditionalExpressionNode(
     ExpressionNode Condition,
     ExpressionNode WhenTrue,
     ExpressionNode WhenFalse,
@@ -512,7 +525,7 @@ public sealed record ConditionalExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record FunctionExpressionNode(
+public sealed partial record FunctionExpressionNode(
     IReadOnlyList<TemplateParameterNode> Parameters,
     ExpressionNode Body,
     int Offset = 0,
@@ -535,7 +548,7 @@ public sealed record FunctionExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record WithExpressionNode(
+public sealed partial record WithExpressionNode(
     ExpressionNode Base,
     ExpressionNode Overrides,
     int Offset = 0,
@@ -560,7 +573,7 @@ public sealed record WithExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record ForExpressionNode(
+public sealed partial record ForExpressionNode(
     string Item,
     string? Index,
     ExpressionNode Sequence,
@@ -588,7 +601,7 @@ public sealed record ForExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record UnaryExpressionNode(
+public sealed partial record UnaryExpressionNode(
     string Operator,
     ExpressionNode Operand,
     int Offset = 0,
@@ -612,7 +625,7 @@ public sealed record UnaryExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record ForStatementNode(
+public sealed partial record ForStatementNode(
     string Item,
     string? Index,
     ExpressionNode Sequence,
@@ -635,7 +648,7 @@ public sealed record ForStatementNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record IndexExpressionNode(
+public sealed partial record IndexExpressionNode(
     ExpressionNode Target,
     ExpressionNode Index,
     int Offset = 0,
@@ -657,7 +670,7 @@ public sealed record IndexExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record LambdaExpressionNode(
+public sealed partial record LambdaExpressionNode(
     IReadOnlyList<string> Parameters,
     ExpressionNode Body,
     int Offset = 0,
@@ -676,7 +689,7 @@ public sealed record LambdaExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record ArrayExpressionNode(
+public sealed partial record ArrayExpressionNode(
     IReadOnlyList<ExpressionNode> Elements,
     int Offset = 0,
     int Length = 0,
@@ -695,7 +708,7 @@ public sealed record ArrayExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record RangeExpressionNode(
+public sealed partial record RangeExpressionNode(
     ExpressionNode? Start,
     ExpressionNode? End,
     int Offset = 0,
@@ -714,7 +727,7 @@ public sealed record RangeExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record ObjectExpressionNode(
+public sealed partial record ObjectExpressionNode(
     IReadOnlyList<PropertyNode> Properties,
     int Offset = 0,
     int Length = 0,
@@ -733,7 +746,7 @@ public sealed record ObjectExpressionNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record AddonRequestNode(
+public sealed partial record AddonRequestNode(
     string Capability,
     string Subject,
     int Offset = 0,
@@ -754,7 +767,7 @@ public sealed record AddonRequestNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record AddonMemoryWatchNode(
+public sealed partial record AddonMemoryWatchNode(
     int Screen,
     long Address,
     int WatchLength,
@@ -774,7 +787,7 @@ public sealed record AddonMemoryWatchNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record ErrorStatementNode(
+public sealed partial record ErrorStatementNode(
     string Message,
     int Offset = 0,
     int Length = 0,
@@ -811,7 +824,7 @@ public abstract record InterpolationSegment {
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record OperandExpressionNode(
+public sealed partial record OperandExpressionNode(
     string Text,
     Lowering.DocumentValueForm Form,
     IReadOnlyList<OperandAtom> Atoms,
@@ -833,6 +846,35 @@ public sealed record OperandExpressionNode(
     /// operand, so lowering, which reports the refusal of an operand the parser did not check, does not report it a
     /// second time.</summary>
     public bool SyntaxErrorReported { get; init; }
+
+    /// <inheritdoc/>
+    public override IReadOnlyList<SyntaxNode> Children() => ((Atoms.Count == 0) ? [] : [.. Atoms.Select(selector: static atom => atom.Value)]);
+    /// <inheritdoc/>
+    /// <remarks>The operand's text and atom spans are rebuilt around the answers, so the text never spells
+    /// anything but what the node holds.</remarks>
+    public override SyntaxNode MapChildren(ISyntaxMap map) => Rebuilt(map: map, syntax: Syntax);
+    /// <summary>Returns this operand around <paramref name="syntax"/> and the atoms <paramref name="map"/> answers,
+    /// with its text and atom spans spelling them.</summary>
+    /// <param name="map">The answer for each atom.</param>
+    /// <param name="syntax">The operand tree to carry; its atom indices index this operand's atoms.</param>
+    /// <returns>The rebuilt operand; this operand itself when neither the tree nor the printed atoms changed, or
+    /// when it holds no tree to print.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="map"/> is <see langword="null"/>.</exception>
+    public OperandExpressionNode Rebuilt(ISyntaxMap map, Puck.State.ExpressionSpelling.SyntaxNode? syntax) {
+        ArgumentNullException.ThrowIfNull(map);
+        var atoms = ((Atoms.Count == 0) ? [] : new InterpolatedStringNode[Atoms.Count]);
+        var changed = !Equals(objA: syntax, objB: Syntax);
+
+        for (var index = 0; (index < atoms.Length); index++) {
+            atoms[index] = map.One(parent: this, child: Atoms[index].Value);
+            changed |= (!ReferenceEquals(objA: atoms[index], objB: Atoms[index].Value) && !string.Equals(
+                a: Formatting.PuckPrinter.PrintExpression(expression: atoms[index]),
+                b: Formatting.PuckPrinter.PrintExpression(expression: Atoms[index].Value),
+                comparisonType: StringComparison.Ordinal
+            ));
+        }
+        return ((!changed || (syntax is null)) ? this : Parsing.PuckParser.RebuildOperand(atoms: atoms, original: this, syntax: syntax));
+    }
 }
 /// <summary>One interpolated string inside an operand's text.</summary>
 /// <param name="Start">The atom's first character within the operand's text.</param>
@@ -845,7 +887,7 @@ public sealed record OperandAtom(int Start, int Length, InterpolatedStringNode V
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
-public sealed record InterpolatedStringNode(
+public sealed partial record InterpolatedStringNode(
     IReadOnlyList<InterpolationSegment> Segments,
     int Offset = 0,
     int Length = 0,
@@ -860,4 +902,20 @@ public sealed record InterpolatedStringNode(
     /// <summary>Gets a value indicating whether the string was written inside a <c>$"""</c> fence, which carries no
     /// escapes. Only a printer reads this; both spellings decode to the same segments.</summary>
     public bool RawFenced { get; init; }
+
+    /// <inheritdoc/>
+    public override IReadOnlyList<SyntaxNode> Children() => [.. Segments.OfType<InterpolationSegment.Hole>().Select(selector: static hole => hole.Expression)];
+    /// <inheritdoc/>
+    public override SyntaxNode MapChildren(ISyntaxMap map) {
+        ArgumentNullException.ThrowIfNull(map);
+        InterpolationSegment[]? rebuilt = null;
+
+        for (var index = 0; (index < Segments.Count); index++) {
+            if ((Segments[index] is InterpolationSegment.Hole hole) && (map.One(parent: this, child: hole.Expression) is var expression) && !ReferenceEquals(objA: expression, objB: hole.Expression)) {
+                rebuilt ??= [.. Segments];
+                rebuilt[index] = new InterpolationSegment.Hole(Expression: expression);
+            }
+        }
+        return ((rebuilt is null) ? this : (this with { Segments = rebuilt }));
+    }
 }

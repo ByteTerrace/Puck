@@ -891,8 +891,8 @@ public static partial class WorldDocumentEmitter {
             ["$type"] = "transformState",
             ["transform"] = new JsonObject {
                 ["$type"] = "transfer",
-                ["from"] = BindRowReference(scope: scope, span: draw.Span, text: draw.From),
-                ["to"] = BindRowReference(scope: scope, span: draw.Span, text: draw.To),
+                ["from"] = ResolveEffectRow(effect: "draw", scope: scope, target: draw.From),
+                ["to"] = ResolveEffectRow(effect: "draw", scope: scope, target: draw.To),
                 ["selector"] = "First",
             },
         },
@@ -900,18 +900,18 @@ public static partial class WorldDocumentEmitter {
             ["$type"] = "transformState",
             ["transform"] = new JsonObject {
                 ["$type"] = "transfer",
-                ["from"] = BindRowReference(scope: scope, span: deal.Span, text: deal.From),
-                ["to"] = BindRowReference(scope: scope, span: deal.Span, text: deal.To),
+                ["from"] = ResolveEffectRow(effect: "deal", scope: scope, target: deal.From),
+                ["to"] = ResolveEffectRow(effect: "deal", scope: scope, target: deal.To),
                 ["selector"] = "First",
-                ["count"] = deal.Count,
+                ["count"] = LowerExpression(expr: deal.Count, fieldKey: "count", scope: scope),
             },
         },
         ShuffleStatementNode shuffle => new JsonObject {
             ["$type"] = "transformState",
             ["transform"] = new JsonObject {
                 ["$type"] = "shuffle",
-                ["row"] = BindRowReference(scope: scope, span: shuffle.Span, text: shuffle.Row),
-                ["draw"] = ((shuffle.Draw is not null) ? BindRowReference(scope: scope, span: shuffle.Span, text: shuffle.Draw) : null),
+                ["row"] = ResolveEffectRow(effect: "shuffle", scope: scope, target: shuffle.Row),
+                ["draw"] = ResolveEffectRow(effect: "shuffle", scope: scope, target: shuffle.Draw),
             },
         },
         TransactionStatementNode transaction => LowerTransaction(
@@ -948,10 +948,10 @@ public static partial class WorldDocumentEmitter {
             scope: scope,
             stmt: stmt
         ),
-        ClaimStatementNode claim => LowerPoolClaim(claim: claim, pointer: pointer, ruleObj: ruleObj, scope: scope),
+        ClaimStatementNode claim => LowerPoolBlock(alias: claim.Alias, body: claim.Body, discriminator: "claim", pointer: pointer, pool: claim.Pool, ruleObj: ruleObj, scope: scope, span: claim.Span),
         ClaimPairStatementNode claim => LowerPairPoolClaim(claim: claim, pointer: pointer, ruleObj: ruleObj, scope: scope),
         ReleaseStatementNode release => new JsonObject { ["$type"] = "release", ["binding"] = release.Alias },
-        PoolForEachStatementNode each => LowerPoolForEach(each: each, pointer: pointer, ruleObj: ruleObj, scope: scope),
+        PoolForEachStatementNode each => LowerPoolBlock(alias: each.Alias, body: each.Body, discriminator: "forEachPool", pointer: pointer, pool: each.Pool, ruleObj: ruleObj, scope: scope, span: each.Span),
         _ => throw new InvalidOperationException(message: $"unrecognized effect statement '{stmt.GetType()}'"),
     };
     private static JsonArray LowerPoolScope(
@@ -994,37 +994,20 @@ public static partial class WorldDocumentEmitter {
 
         return effects;
     }
-    private static JsonObject LowerPoolClaim(ClaimStatementNode claim, DocumentScope scope, string pointer, JsonObject? ruleObj) => new() {
-        ["$type"] = "claim",
-        ["pool"] = claim.Pool,
-        ["binding"] = claim.Alias,
-        ["effects"] = LowerPoolScope(
-            alias: claim.Alias,
-            body: claim.Body,
-            pointer: pointer,
-            pool: claim.Pool,
-            ruleObj: ruleObj,
-            scope: scope,
-            span: claim.Span
-        ),
-    };
-    private static JsonObject LowerPoolForEach(PoolForEachStatementNode each, DocumentScope scope, string pointer, JsonObject? ruleObj) => new() {
-        ["$type"] = "forEachPool",
-        ["pool"] = each.Pool,
-        ["binding"] = each.Alias,
-        ["effects"] = LowerPoolScope(
-            alias: each.Alias,
-            body: each.Body,
-            pointer: pointer,
-            pool: each.Pool,
-            ruleObj: ruleObj,
-            scope: scope,
-            span: each.Span
-        ),
-    };
+    // A `claim` or a `for each`: the pool it names, and its body lowered with the alias bound to an instance of it.
+    private static JsonObject LowerPoolBlock(string discriminator, string pool, string alias, IReadOnlyList<StatementNode> body, SourceSpan span, DocumentScope scope, string pointer, JsonObject? ruleObj) {
+        var resolved = ResolvePoolName(name: pool, scope: scope, span: span);
+
+        return new() {
+            ["$type"] = discriminator,
+            ["pool"] = resolved,
+            ["binding"] = alias,
+            ["effects"] = LowerPoolScope(alias: alias, body: body, pointer: pointer, pool: resolved, ruleObj: ruleObj, scope: scope, span: span),
+        };
+    }
     private static JsonObject LowerPairPoolClaim(ClaimPairStatementNode claim, DocumentScope scope, string pointer, JsonObject? ruleObj) => new() {
         ["$type"] = "claimPair",
-        ["pool"] = claim.Pool,
+        ["pool"] = ResolvePoolName(name: claim.Pool, scope: scope, span: claim.Span),
         ["left"] = claim.Left,
         ["right"] = claim.Right,
         ["binding"] = claim.Alias,
@@ -1478,8 +1461,7 @@ public static partial class WorldDocumentEmitter {
         _ => text,
     };
     private static JsonObject LowerPush(PushStatementNode push, DocumentScope scope, JsonObject? ruleObj = null) {
-        var resolvedName = BindRowReference(scope: scope, span: push.Span, text: push.RowName);
-        var obj = new JsonObject { ["$type"] = "pushState", ["state"] = resolvedName };
+        var obj = new JsonObject { ["$type"] = "pushState", ["state"] = ResolveEffectRow(effect: "push", scope: scope, target: push.Target) };
         // PushState carries no Text/Key/ValueSeconds field; ApplyRhs's text/seconds arms would shape JSON it
         // cannot carry, so only the classified-operand arm applies here (the parser already refuses the others).
         if (push.Rhs is RhsOperandNode operand) {
@@ -1614,6 +1596,27 @@ public static partial class WorldDocumentEmitter {
             State: JsonValue.Create(value: row)
         );
     }
+    // The row a whole-row effect names (`push`, `draw`, `deal`, `shuffle`): resolved as every effect target is, and
+    // refused when it addresses one cell, which such an effect has no use for.
+    private static JsonNode ResolveEffectRow(RowRefNode target, DocumentScope scope, string effect) {
+        var resolved = ResolveEffectTarget(scope: scope, target: target);
+
+        if (resolved.Key is not null) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.RowReferenceExpected,
+                message: $"'{effect}' names a whole row, and '{resolved.Row}[{resolved.Key}]' names one cell of '{resolved.Row}'",
+                span: target.Span
+            );
+        }
+        return resolved.State;
+    }
+    // The pool a `claim` or a `for each` names: a binding that holds a name (a template parameter, a loop variable)
+    // is that pool, as the same name is the row it holds in every other effect.
+    private static string ResolvePoolName(string name, DocumentScope scope, SourceSpan span) => ((
+        !GetPoolBindings(scope: scope).Contains(item: name) &&
+        scope.TryLowerBinding(name, out var bound) && (bound is JsonValue value) && value.TryGetValue<string>(value: out var named) &&
+        !scope.TryRefuseRead(name: name, span: span)
+    ) ? named : name);
     private static JsonObject LowerTransaction(TransactionStatementNode transaction, DocumentScope scope, string pointer, JsonObject? ruleObj = null) {
         var obj = new JsonObject {
             ["$type"] = "transaction",
