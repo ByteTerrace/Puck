@@ -207,12 +207,7 @@ public static class OperatorMcpServer {
                 deadline.Token
             );
             // A host can ignore cancellation. Bound the caller and observe a late failure without replaying work.
-            _ = operation.ContinueWith(
-                static task => { _ = task.Exception; },
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default
-            );
+            operation.Observe();
             // An in-process session's long output is cut to the transport limit as the control server cuts it, its
             // status kept.
             var result = (await operation.WaitAsync(cancellationToken: deadline.Token).ConfigureAwait(continueOnCapturedContext: false))?.Bounded();

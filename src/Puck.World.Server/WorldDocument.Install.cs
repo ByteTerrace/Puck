@@ -99,6 +99,24 @@ public sealed partial class WorldDocument {
         }
     }
 
+    /// <summary>Commits an addon host's prepared plan and finishes it at once: the pair a boot or a restore runs when
+    /// no document or journal publication of its own sits between them, as <see cref="DocumentStage"/> does for an
+    /// install.</summary>
+    /// <param name="host">The addon host that prepared <paramref name="plan"/>.</param>
+    /// <param name="plan">A plan the host prepared and no one has committed or disposed.</param>
+    internal static void CommitAndFinish(IWorldAddonHost host, IWorldAddonPreparedPlan plan) {
+        host.Commit(plan: plan);
+        host.Finish(plan: plan);
+    }
+    /// <summary>Commits a machine host's prepared plan and finishes it at once (see
+    /// <see cref="CommitAndFinish(IWorldAddonHost, IWorldAddonPreparedPlan)"/>).</summary>
+    /// <param name="host">The machine host that prepared <paramref name="plan"/>.</param>
+    /// <param name="plan">A plan the host prepared and no one has committed or disposed.</param>
+    internal static void CommitAndFinish(IWorldMachineHost host, IWorldMachinePreparedPlan plan) {
+        host.Commit(plan: plan);
+        host.Finish(plan: plan);
+    }
+
     /// <summary>Stages a candidate's install: the one door a mutation, a whole-document rebuild and a full undo run
     /// every refusal of an install through, in one order, before anything live changes.</summary>
     /// <remarks>The order is the cheap capacity checks (the boot-reserved face screens, the render envelope's fit, the

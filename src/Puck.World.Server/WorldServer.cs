@@ -339,6 +339,13 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <summary>Gets the job pool the tick's partitioned phases fork onto, or <see langword="null"/> when every phase
     /// runs serially.</summary>
     public Puck.Hosting.Jobs.JobPool? Jobs { get; }
+    /// <summary>Gets or sets whether a live load or reload is prepared on the thread pool and taken at a tick boundary
+    /// (<see langword="true"/>), or prepared on the thread that submits it (<see langword="false"/>, what a scenario, a
+    /// replay and a test rely on to install at a predictable tick). A server given a job pool with workers starts
+    /// <see langword="true"/>, as the desktop runs; a host with no pool whose own pump is not the submitter (the
+    /// silo's row) sets it, since a preparation reads only what its submission captured and so needs no worker of
+    /// the pool.</summary>
+    public bool PreparesRebuildsOffTick { get; set; }
     /// <summary>Gets the journal length — the number of applied mutations over the base (the <c>world.status</c> dirty
     /// count).</summary>
     public int JournalLength => m_document.JournalLength;
@@ -661,6 +668,7 @@ public sealed partial class WorldServer : IWorldServerHost {
 
         Extensions = new WorldExtensions(server: this);
         Jobs = jobs;
+        PreparesRebuildsOffTick = jobs is { Serial: false };
         InstanceIdentity = instanceIdentity;
         AuthorityIdentity = ((definition.Host.AuthorityNamespace is { Length: > 0 } authority)
             ? authority
@@ -696,8 +704,7 @@ public sealed partial class WorldServer : IWorldServerHost {
             );
         }
         using (machinePlan) {
-            machines.Commit(plan: machinePlan!);
-            machines.Finish(plan: machinePlan!);
+            WorldDocument.CommitAndFinish(host: machines, plan: machinePlan!);
         }
         // Assigned before the arena is built: the build binds the population's action-state slot lanes.
         m_population = population;
