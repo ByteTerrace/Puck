@@ -6,8 +6,11 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick : IFieldLatticeHost {
-    private FieldLattice? m_steppingRegion;
     private FixedQ4816[] m_regionResistance = [];
+    // The distinct expose rows of the installed field regions, and the bodies one clear pass found holding a nonzero
+    // cell of one, gathered before any write so the cell cursor never runs across a write.
+    private readonly List<StateHandle> m_exposeRows = [];
+    private readonly List<int> m_exposedBodies = [];
 
     /// <summary>Describes the field lattice for a console read-back.</summary>
     /// <returns>One line, or a none line when the world declares no <c>fields</c> section.</returns>
@@ -28,24 +31,49 @@ public sealed partial class WorldTick : IFieldLatticeHost {
 
         // A shared exposure row belongs to the regions containing the body. Clear it only after the body leaves
         // every contributing region, including on a tick when their reaction cadences are idle. No retained
-        // contribution cache is needed, so checkpoints keep the same authoritative inputs.
+        // contribution cache is needed, so checkpoints keep the same authoritative inputs. Only a body holding a
+        // nonzero cell has anything to clear, so the pass walks each distinct expose row's held cells, never every slot.
+        CollectExposeRows(regions: regions);
+        foreach (var row in m_exposeRows) {
+            CollectExposedBodies(row: row, tick: tick);
+            foreach (var body in m_exposedBodies) {
+                if ((Host.Body(index: body) is not { } active) || HasExposureRegion(regions, row, active.FixedPosition)) { continue; }
+                WriteTagCell(catalog: Host.Document.Definition.StateCatalog, row: row, body: body, value: 0L, tick: tick);
+            }
+        }
+        for (var index = 0; (index < regions.Count); index++) {
+            regions[index].Lattice.Step(bodyCount: Host.Population.Capacity, host: this, tick: tick);
+        }
+    }
+
+    private void CollectExposeRows(IReadOnlyList<WorldFieldRegion> regions) {
+        m_exposeRows.Clear();
         for (var index = 0; (index < regions.Count); index++) {
             var reactions = regions[index].Lattice.Input.Reactions;
 
             for (var reaction = 0; (reaction < reactions.Count); reaction++) {
-                if (reactions[reaction] is not FieldReactionInput.Expose expose) { continue; }
-                for (var body = 0; (body < Host.Population.Capacity); body++) {
-                    if ((Host.Body(index: body) is not { } active) || HasExposureRegion(regions, expose.Row, active.FixedPosition)) { continue; }
-                    WriteTagCell(catalog: Host.Document.Definition.StateCatalog, row: expose.Row, body: body, value: 0L, tick: tick);
-                }
+                if ((reactions[reaction] is FieldReactionInput.Expose expose) && !m_exposeRows.Contains(item: expose.Row)) { m_exposeRows.Add(item: expose.Row); }
             }
         }
-        try {
-            for (var index = 0; (index < regions.Count); index++) {
-                m_steppingRegion = regions[index].Lattice;
-                m_steppingRegion.Step(bodyCount: Host.Population.Capacity, host: this, tick: tick);
+    }
+    // The bodies whose cell in an expose row is held and nonzero: a key that spells no body index in canonical decimal is
+    // not a cell WriteTagCell addresses, so it is skipped.
+    private void CollectExposedBodies(StateHandle row, ulong tick) {
+        var arena = Host.Arena;
+        var cursor = 0;
+
+        m_exposedBodies.Clear();
+        while (arena.TryNextCell(rowOrdinal: row.Ordinal, cursor: ref cursor, key: out var key)) {
+            if (
+                arena.Keys.TryCandidateIndex(key: key, index: out var body) &&
+                arena.Keys.TryResolveIndex(index: body, key: out var canonical) && (canonical == key) &&
+                (ReadTagCell(catalog: Host.Document.Definition.StateCatalog, row: row, body: body, tick: tick) != 0L)
+            ) {
+                m_exposedBodies.Add(item: body);
             }
-        } finally { m_steppingRegion = null; }
+        }
+        // Storage order is not body order: the clears write in ascending body order, as one pass over the slots did.
+        m_exposedBodies.Sort();
     }
 
     private static bool HasExposureRegion(IReadOnlyList<WorldFieldRegion> regions, StateHandle row, in FixedVector3 position) {
@@ -77,12 +105,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
         Host.Population.SampleFieldInputs(regionResistance: m_regionResistance);
     }
 
-    FixedVector3? IFieldLatticeHost.BodyPosition(int body) {
-        if (Host.Body(index: body) is not { } active) { return null; }
-        var position = active.FixedPosition;
-
-        return (((m_steppingRegion is null) || m_steppingRegion.TryBodyCellOf(cell: out _, position: in position)) ? position : null);
-    }
+    FixedVector3? IFieldLatticeHost.BodyPosition(int body) => Host.Body(index: body)?.FixedPosition;
     long IFieldLatticeHost.ReadTag(StateHandle row, int body, ulong tick) => ReadTagCell(
         body: body,
         catalog: Host.Document.Definition.StateCatalog,

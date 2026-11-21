@@ -808,13 +808,14 @@ public sealed partial class WorldDocument {
     // The non-consuming primer for one sink. It PEEKS every body's continuity hint instead of consuming it, so a
     // primer never steals the hint an attached sink is still due in the next EmitSnapshot broadcast (see
     // docs/architecture/worlds.md's "Observation and display" section). It is built into the primer carrier, never the
-    // tick's, because a delivery can prime a sink (a session observer whose frame a deal moved is primed by the state
-    // delivery that precedes the tick's snapshot) after the tick's snapshot is built and before it is fanned out.
-    // Stamped with Host.CompletedTick/Host.LastStepTicks, which are 0/0 before the first Step has run.
-    internal WorldSnapshot BuildPrimerSnapshot() {
+    // tick's, because a delivery can prime a sink (a session observer whose stream the tick's state delivery cut) after
+    // the tick's snapshot is built and before it is fanned out. Without cells it carries the body table alone, for a
+    // sink whose observer holds every cell but owes rows the sink adds itself. Stamped with
+    // Host.CompletedTick/Host.LastStepTicks, which are 0/0 before the first Step has run.
+    internal WorldSnapshot BuildPrimerSnapshot(bool cells = true) {
         using (Host.EnterAtTickBoundary()) {
             Host.ThrowIfTickPending();
-            return BuildSnapshotCore(Host.CompletedTick, Host.LastStepTicks, m_primerCarrier);
+            return BuildSnapshotCore(Host.CompletedTick, Host.LastStepTicks, m_primerCarrier, cells);
         }
     }
     // Every live body's authoritative sim pose, color, archetype, and this tick's continuity hint, written into the
@@ -828,10 +829,10 @@ public sealed partial class WorldDocument {
         tick: tick
     );
 
-    private WorldSnapshot BuildSnapshotCore(ulong tick, ulong stepTicks, SnapshotCarrier carrier) {
+    private WorldSnapshot BuildSnapshotCore(ulong tick, ulong stepTicks, SnapshotCarrier carrier, bool cells = true) {
         var capacity = Host.Population.Capacity;
         carrier.Reserve(capacity: capacity, stateSlots: Host.Population.ActionStateLane.Definitions.Count);
-        return FinishSnapshot(tick, stepTicks, carrier, WriteSnapshotRows(Host.Population, carrier, end: capacity, first: 0, offset: 0));
+        return FinishSnapshot(tick, stepTicks, carrier, WriteSnapshotRows(Host.Population, carrier, end: capacity, first: 0, offset: 0), cells);
     }
 
     internal struct SnapshotOperation {
@@ -864,15 +865,15 @@ public sealed partial class WorldDocument {
         return WaitOutcome.Completed;
     }
 
-    private WorldSnapshot FinishSnapshot(ulong tick, ulong stepTicks, SnapshotCarrier carrier, int count) {
+    private WorldSnapshot FinishSnapshot(ulong tick, ulong stepTicks, SnapshotCarrier carrier, int count, bool cells = true) {
         var consumeContinuity = carrier.ConsumesContinuity;
-        var fieldsFull = !consumeContinuity;
+        var fieldsFull = (cells && !consumeContinuity);
         var latticeDeltas = m_latticeSnapshotDeltas;
 
         latticeDeltas.Clear();
         var regions = Host.Population.FieldRegions;
 
-        for (var regionIndex = 0; (regionIndex < regions.Count); regionIndex++) {
+        for (var regionIndex = 0; (cells && (regionIndex < regions.Count)); regionIndex++) {
             var region = regions[regionIndex];
             var deltas = region.Lattice.TakeDeltas(full: !consumeContinuity, isFull: out var regionFull);
 
@@ -897,7 +898,7 @@ public sealed partial class WorldDocument {
         }
         // The kernel's own delta shape carries no Puck.World.Protocol reference; the wire shape is minted here,
         // the one caller that needs both.
-        var stateCells = Host.PublishedCellCount(full: !consumeContinuity);
+        var stateCells = (cells ? Host.PublishedCellCount(full: !consumeContinuity) : 0);
         var cellCount = (latticeDeltas.Count + stateCells);
 
         var fieldCells = carrier.ReserveCells(count: cellCount);
@@ -906,7 +907,7 @@ public sealed partial class WorldDocument {
             fieldCells.Span[index] = latticeDeltas[index];
         }
 
-        Host.CopyPublishedCells(fieldCells.Span[latticeDeltas.Count..], full: !consumeContinuity);
+        if (cells) { Host.CopyPublishedCells(fieldCells.Span[latticeDeltas.Count..], full: !consumeContinuity); }
 
         return new WorldSnapshot(
             Tick: tick,

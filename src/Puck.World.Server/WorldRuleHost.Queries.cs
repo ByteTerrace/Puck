@@ -195,44 +195,34 @@ public sealed partial class WorldRuleHost {
         )
         : FixedQ4816.One
     );
-    // The nearest active body to the origin (itself excluded) whose cell in the keyed tag row reads nonzero, or -1.
+    // The nearest active body to the origin (itself excluded) whose cell in the keyed tag row reads nonzero, or -1: a
+    // walk of the row's held cells, so its cost follows the tagged bodies, never the population's capacity. Distances
+    // compare exactly (FixedVector3.CompareLengthTo), and equal ones resolve to the lowest body.
     private int ResolveNearestBody(int origin, int tagRowOrdinal) {
         if (Host.Body(index: origin) is not { } from) {
             return -1;
         }
 
         var best = -1;
-        var bestDistance = FixedQ4816.Zero;
+        var bestOffset = FixedVector3.Zero;
+        var cursor = 0;
+        var walked = 0L;
 
-        for (var index = 0; (index < Host.Population.Capacity); index++) {
-            if (
-                (index == origin) ||
-                (Host.Body(index: index) is not { } candidate) ||
-                !RuleReads.TryIndexKey(
-                keys: Host.Arena.Keys,
-                index: index,
-                key: out var key
-            ) ||
-                !Host.ReadArenaCell(
-                key: key,
-                rowOrdinal: tagRowOrdinal
-            ).TryFinite(raw: out var value) ||
-                (value == 0L)
-            ) {
+        while (Host.Arena.TryNextCell(rowOrdinal: tagRowOrdinal, cursor: ref cursor, key: out var key)) {
+            walked++;
+            if (!TryTaggedBody(rowOrdinal: tagRowOrdinal, key: key, index: out var index, body: out var candidate) || (index == origin)) {
                 continue;
             }
 
-            var distance = (candidate.FixedPosition - from.FixedPosition).Length;
+            var offset = (candidate.FixedPosition - from.FixedPosition);
+            var order = ((best < 0) ? -1 : offset.CompareLengthTo(other: bestOffset));
 
-            if (
-                (best < 0) ||
-                (distance < bestDistance)
-            ) {
+            if ((order < 0) || ((order == 0) && (index < best))) {
                 best = index;
-                bestDistance = distance;
+                bestOffset = offset;
             }
         }
-
+        WorldTickWork.Process.Add(amount: walked, kind: WorldTickWork.NearestCells);
         return best;
     }
     private FixedQ4816 ReadBodyDistance(int bodyA, int bodyB) => (

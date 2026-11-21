@@ -8,7 +8,7 @@ public sealed partial class WorldRuleHost {
 
     private void InteractionCarriers(string name, bool trackPositions, StatePoolDescriptor? pool, CompiledPoolBodyCarrier? carrier, List<int> into, ref StateInstanceHandle[] snapshots, ref int[] bodies) {
         if (pool is null) {
-            var row = CarrierRowOrdinal(name: name);
+            var row = DocumentRowOrdinal(name: name);
             Carriers(rowOrdinal: row, into: into);
             if (trackPositions && row >= 0) {
                 // The same enumeration supplies the pairs and their position subscriptions. Multiple keys may spell one body.

@@ -79,6 +79,17 @@ public abstract record LatticeTopology([property: DocumentName(WorldNameKind.Top
     [JsonIgnore]
     public abstract TopologyKind Kind { get; }
 
+    /// <summary>Returns the footprint every case shares, the one every reader of any lattice (a read-back, the state
+    /// hash) takes: its cells along X, Z and Y, its wrapped axes and its hex radius. A discrete case reads it from
+    /// <see cref="TopologyCompilation.Normalize"/>; a host's dense case, which no discrete normalization covers,
+    /// overrides it.</summary>
+    /// <returns>The footprint.</returns>
+    public virtual (int Width, int Depth, int Layers, TopologyWrap Wrap, int Radius) Footprint() {
+        var normalized = TopologyCompilation.Normalize(topology: this);
+
+        return (normalized.Width, normalized.Depth, normalized.Layers, normalized.Wrap, normalized.Radius);
+    }
+
     /// <summary>A rectangular board, indexed by y times width plus x.</summary>
     /// <param name="Name">The topology's name.</param>
     /// <param name="Origin">The minimum corner, world units.</param>
