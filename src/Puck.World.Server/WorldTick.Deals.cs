@@ -1,9 +1,10 @@
 using System.Globalization;
+using Puck.Abstractions.Memory;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
-    // What the last deal read, beside the placement projection below: its template, region, arena and input rows.
+    // What the last deal read: its template, region, arena and input rows, and the children it left.
     private sealed class DealMemo {
         public WorldDistribution? Distribution;
         public int Slots;
@@ -16,38 +17,74 @@ public sealed partial class WorldTick {
         // The dealt and variant rows' ordinals in the catalog IndexDealTemplates resolved them against, -1 when absent.
         public int RowOrdinal;
         public int VariantOrdinal;
+        // The first row carrying this template's id in the indexed list, -1 when none carries a deal there.
+        public int Row = -1;
+        // The rows of its dealt children in the indexed list, in placement order.
+        public readonly List<int> Children = [];
+        // Its children as the last sweep left them, by reference in placement order.
+        public readonly List<WorldPlacement> Left = [];
     }
     // The dealt templates of the placement list the sweep last indexed, in placement order, each with its memo, and
-    // the list and catalog their indices and ordinals were resolved against.
+    // the list and catalog their indices, children and ordinals were resolved against.
     private readonly List<(int Index, DealMemo Memo)> m_dealTemplates = [];
     private IReadOnlyList<WorldPlacement>? m_dealTemplatesOf;
     private StateCatalog? m_dealTemplatesCatalog;
 
-    private void IndexDealTemplates(IReadOnlyList<WorldPlacement> placements, StateCatalog catalog) {
-        if (ReferenceEquals(objA: m_dealTemplatesOf, objB: placements) && ReferenceEquals(objA: m_dealTemplatesCatalog, objB: catalog)) { return; }
+    // Indexes a placement list's templates and their dealt children from the list's placement index, once per list and
+    // catalog, and drops the memo of a template the list no longer deals from. Returns whether it indexed.
+    private bool IndexDealTemplates(IReadOnlyList<WorldPlacement> placements, StateCatalog catalog) {
+        if (ReferenceEquals(objA: m_dealTemplatesOf, objB: placements) && ReferenceEquals(objA: m_dealTemplatesCatalog, objB: catalog)) { return false; }
         m_dealTemplatesOf = placements;
         m_dealTemplatesCatalog = catalog;
         m_dealTemplates.Clear();
-        foreach (var index in WorldPlacementIndex.Of(placements: placements).Dealers) {
-            var template = placements[index];
+        foreach (var memo in m_dealMemos.Values) {
+            memo.Row = -1;
+            memo.Children.Clear();
+        }
+
+        var index = WorldPlacementIndex.Of(placements: placements);
+
+        foreach (var row in index.Dealers) {
+            var template = placements[row];
             var deal = template.Deal!;
             if (!m_dealMemos.TryGetValue(key: template.Id, value: out var memo)) {
                 memo = new DealMemo();
                 m_dealMemos[template.Id] = memo;
             }
+            if (memo.Row < 0) { memo.Row = row; }
             memo.RowOrdinal = (catalog.TryResolve(StateLane.Document, deal.Row, out var rowHandle) ? rowHandle.Ordinal : -1);
             memo.VariantOrdinal = (((deal.Variants is { } variants) && catalog.TryResolve(StateLane.Document, variants.Row, out var variantHandle)) ? variantHandle.Ordinal : -1);
-            m_dealTemplates.Add(item: (index, memo));
+            m_dealTemplates.Add(item: (row, memo));
+        }
+        foreach (var (templateId, memo) in m_dealMemos) {
+            if (memo.Row < 0) { _ = m_dealMemos.Remove(key: templateId); }
+        }
+        foreach (var (templateId, memo) in m_dealMemos) {
+            foreach (var child in index.ChildrenOf(parentId: templateId)) {
+                if (WorldPlacementDeal.IsChild(placement: placements[child], parent: placements[memo.Row])) { memo.Children.Add(item: child); }
+            }
+        }
+        return true;
+    }
+    // Whether a template's children in the indexed list are the rows the last sweep left, in the same order.
+    private static bool ChildrenStand(IReadOnlyList<WorldPlacement> placements, DealMemo memo) {
+        if (memo.Children.Count != memo.Left.Count) { return false; }
+        for (var child = 0; (child < memo.Children.Count); child++) {
+            if (!ReferenceEquals(objA: placements[memo.Children[child]], objB: memo.Left[child])) { return false; }
+        }
+        return true;
+    }
+    // Records every template's children in the indexed list as the ones this sweep leaves.
+    private void LeaveDealChildren(IReadOnlyList<WorldPlacement> placements) {
+        foreach (var memo in m_dealMemos.Values) {
+            memo.Left.Clear();
+            foreach (var row in memo.Children) { memo.Left.Add(item: placements[row]); }
         }
     }
     // What one template projection moved this tick, narrated after installation.
     private readonly record struct DealReport(string Template, string Row, int Cells, int Offsets, int Added, int Removed, int Replaced, int Overflow, string? Refused = null);
 
     private readonly Dictionary<string, DealMemo> m_dealMemos = new(comparer: StringComparer.Ordinal);
-
-    // Membership belongs to the source cells. A child-only edit invalidates every skip, independently of whether a
-    // hidden row later moves. Hold the projection our own install leaves, so a sweep does not invalidate itself.
-    private IReadOnlyList<WorldPlacement>? m_dealProjection;
 
     private readonly List<WorldPlacement> m_dealChildren = [];
     private readonly List<int> m_dealChildSlots = [];
@@ -58,6 +95,9 @@ public sealed partial class WorldTick {
     private readonly List<DealReport> m_dealReports = [];
     private readonly List<WorldPlacement> m_dealInstalled = [];
     private bool[] m_dealSlotTaken = [];
+    // One deal's cells by key, and the first child dealt for each cell (by its index in m_dealChildren, -1 for none).
+    private readonly Dictionary<string, int> m_dealCellOf = new(comparer: StringComparer.Ordinal);
+    private int[] m_dealChildOfCell = [];
 
 
 
@@ -221,27 +261,27 @@ public sealed partial class WorldTick {
         return count;
     }
     // Runs once per tick right after SweepPlacementResponses: the rule frame has folded, so a cell a rule wrote
-    // this tick deals on this tick's sweep. Nothing here runs, and nothing allocates, on a tick where the installed
-    // placement projection is the one the last sweep left and the template's dealt row, variant row and own row are
-    // unchanged. Every template's children are dealt against the document
+    // this tick deals on this tick's sweep. A template deals again only when something it deals from moved: its own
+    // row, its dealt or variant row, the world seed, or its children. Membership belongs to the source cells, so an
+    // edit to a dealt child (a hand edit, a response) re-deals that child's template and no other; the children are
+    // compared by reference against those the last sweep left, which is sound because a placement row is replaced,
+    // never changed in place, so any change to a child is a new reference (WorldPlacementIndex holds the same
+    // invariant). Nothing here runs, and nothing allocates, on a tick where the placement list is the one the last
+    // sweep left and every template's rows are unchanged. Every template's children are dealt against the document
     // the sweep opened on (no two templates share a child). Each template's changed children validate as a unit;
     // the tick installs one derived projection without journalling declaration edits.
     private void SweepPlacementDeals(ulong tick) {
         var placements = Host.Document.Definition.Placements;
-        var projectionMoved = !ReferenceEquals(objA: m_dealProjection, objB: placements);
         var worldSeed = (Host.Document.Definition.Generation?.WorldSeed ?? 0UL);
-        var templates = 0;
+        var indexed = IndexDealTemplates(placements: placements, catalog: Host.Arena.Catalog);
+        var redeals = 0;
 
         m_dealChanges.Clear();
         m_dealReports.Clear();
-        IndexDealTemplates(placements: placements, catalog: Host.Arena.Catalog);
 
         foreach (var (index, memo) in m_dealTemplates) {
             var template = placements[index];
             var deal = template.Deal!;
-
-            templates++;
-
             var arena = Host.Arena;
             var rowOrdinal = memo.RowOrdinal;
             var variantOrdinal = memo.VariantOrdinal;
@@ -249,7 +289,7 @@ public sealed partial class WorldTick {
             var variantVersion = ((variantOrdinal < 0) ? 0UL : arena.RowVersion(rowOrdinal: variantOrdinal));
 
             if (
-                !projectionMoved && memo.Swept &&
+                memo.Swept && (!indexed || ChildrenStand(placements: placements, memo: memo)) &&
                 (memo.WorldSeed == worldSeed) &&
                 (ReferenceEquals(
                 objA: memo.Template,
@@ -263,8 +303,9 @@ public sealed partial class WorldTick {
             var firstChange = m_dealChanges.Count;
             var firstReport = m_dealReports.Count;
 
+            redeals++;
             Deal(
-                definition: Host.Document.Definition, arena: arena,
+                placements: placements, arena: arena,
                 deal: deal,
                 memo: memo,
                 rowOrdinal: rowOrdinal,
@@ -280,20 +321,15 @@ public sealed partial class WorldTick {
             );
             memo.Arena = arena; memo.RowVersion = rowVersion; memo.VariantVersion = variantVersion;
         }
-
-        if (m_dealMemos.Count > templates) {
-            foreach (var templateId in m_dealMemos.Keys) {
-                if (WorldDefinitionRows.FindPlacement(
-                    id: templateId,
-                    placements: Host.Document.Definition.Placements
-                ) is not { Deal: not null }) {
-                    _ = m_dealMemos.Remove(key: templateId);
-                }
-            }
-        }
+        WorldTickWork.Process.Add(amount: redeals, kind: WorldTickWork.DealRedeals);
 
         Host.Document.InstallPlacementProjection(changes: m_dealChanges);
-        m_dealProjection = Host.Document.Definition.Placements;
+        // The children this sweep leaves: those of the list it installed, else those of the list it read.
+        if (m_dealChanges.Count > 0) {
+            placements = Host.Document.Definition.Placements;
+            indexed |= IndexDealTemplates(placements: placements, catalog: Host.Arena.Catalog);
+        }
+        if (indexed) { LeaveDealChildren(placements: placements); }
 
         if (Host.Output.HasNarrationSink) {
             foreach (var report in m_dealReports) {
@@ -339,7 +375,7 @@ public sealed partial class WorldTick {
         // Deal reports every template that changed a row, so the report for these changes is the one at firstReport.
         m_dealReports[firstReport] = (m_dealReports[firstReport] with { Refused = reason });
     }
-    private void Deal(WorldDefinition definition, StateArena arena, WorldPlacement template, WorldPlacementDeal deal, int rowOrdinal, int variantOrdinal, DealMemo memo, ulong worldSeed) {
+    private void Deal(IReadOnlyList<WorldPlacement> placements, StateArena arena, WorldPlacement template, WorldPlacementDeal deal, int rowOrdinal, int variantOrdinal, DealMemo memo, ulong worldSeed) {
         if (
             !memo.Swept ||
             (memo.WorldSeed != worldSeed) ||
@@ -374,18 +410,8 @@ public sealed partial class WorldTick {
 
         var firstMutation = m_dealChanges.Count;
 
-        var placements = definition.Placements;
-
-        foreach (var ordinal in WorldPlacementIndex.Of(placements: placements).ChildrenOf(parentId: template.Id)) {
-            var candidate = placements[ordinal];
-
-            if (!WorldPlacementDeal.IsChild(
-                parent: template,
-                placement: candidate
-            )) {
-                continue;
-            }
-
+        foreach (var row in memo.Children) {
+            var candidate = placements[row];
             var slot = (candidate.DealSlot ?? -1);
 
             if (((uint)slot) >= ((uint)slots)) { slot = -1; }
@@ -412,12 +438,10 @@ public sealed partial class WorldTick {
         var cells = m_dealtKeys;
         var replaced = 0;
 
+        MatchChildrenToCells(template: template, cells: cells);
         for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
             var key = cells[cellIndex].Value;
-            var childIndex = FindChild(
-                template: template.Id,
-                key: key
-            );
+            var childIndex = m_dealChildOfCell[cellIndex];
 
             if (childIndex < 0) {
                 m_dealPendingCells.Add(item: cellIndex);
@@ -483,10 +507,7 @@ public sealed partial class WorldTick {
 
             m_dealSlotTaken[slot] = true;
 
-            var existing = FindChild(
-                template: template.Id,
-                key: key
-            );
+            var existing = m_dealChildOfCell[m_dealPendingCells[pending]];
 
             if (existing >= 0) {
                 replaced++;
@@ -533,18 +554,23 @@ public sealed partial class WorldTick {
         memo.Template = template;
         memo.Swept = true;
     }
-    private int FindChild(string template, string key) {
-        for (var index = 0; (index < m_dealChildren.Count); index++) {
-            if (WorldPlacementDeal.IsChildOf(
-                id: m_dealChildren[index].Id,
-                template: template,
-                key: key.AsSpan()
-            )) {
-                return index;
+    // Pairs each dealt cell with the first child whose id names it under the template (WorldPlacementDeal.ChildId), by
+    // one lookup per child into the cells' keys, so the deal costs its cells and children, never their product.
+    private void MatchChildrenToCells(WorldPlacement template, List<CellName> cells) {
+        m_dealCellOf.Clear();
+        for (var cell = 0; (cell < cells.Count); cell++) { _ = m_dealCellOf.TryAdd(key: cells[cell].Value, value: cell); }
+        ArrayCapacity.EnsureScratch(ref m_dealChildOfCell, cells.Count);
+        m_dealChildOfCell.AsSpan(start: 0, length: cells.Count).Fill(value: -1);
+
+        var cellOf = m_dealCellOf.GetAlternateLookup<ReadOnlySpan<char>>();
+        // Every child's id is its template's id, the separator and its key (WorldPlacementDeal.IsChild).
+        var keyStart = (template.Id.Length + 1);
+
+        for (var child = 0; (child < m_dealChildren.Count); child++) {
+            if (cellOf.TryGetValue(key: m_dealChildren[child].Id.AsSpan(start: keyStart), value: out var cell) && (m_dealChildOfCell[cell] < 0)) {
+                m_dealChildOfCell[cell] = child;
             }
         }
-
-        return -1;
     }
     private int FirstFreeSlot(int count) {
         for (var slot = 0; (slot < count); slot++) {

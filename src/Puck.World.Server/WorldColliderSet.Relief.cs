@@ -112,8 +112,10 @@ public sealed partial class WorldColliderSet {
             return FixedFieldReach.Unbounded();
         }
 
-        var gain = FixedVector3.FromVector3(value: SdfSolidGeometry.DilationGain(scale: copy.Shape.Scale, type: copy.Shape.Type));
-        var dilationReach = (gain * FixedQ4816.Max(x: dilation, y: FixedQ4816.Zero));
+        var exponent = (copy.Shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent);
+        var grow = FixedQ4816.Max(x: dilation, y: FixedQ4816.Zero);
+        var gain = FixedVector3.FromVector3(value: SdfSolidGeometry.DilationGain(exponent: exponent, scale: copy.Shape.Scale, type: copy.Shape.Type));
+        var dilationReach = (gain * grow);
 
         if (ShapePointOps.DeformsContact(shape: copy.Shape)) {
             // The visitor carries the rotation-invariant enclosing cube. Dilation in any local direction
@@ -130,11 +132,16 @@ public sealed partial class WorldColliderSet {
         }
 
         // A gauge-lowered shape's grown zero set is the Lp ball of the grown radii (exponent two for a sphere or an
-        // ellipsoid), whose support along each world axis is its exact world box, far tighter than its turned box's.
+        // ellipsoid). A spheroid's field is its true distance, so its grown zero set is the undilated ellipsoid swept by
+        // a ball of the dilation, whose support along an axis is the ellipsoid's plus the dilation (the ellipsoid of the
+        // grown radii falls short of it off the principal axes). Either support along each world axis is its exact
+        // world box, far tighter than its turned box's.
+        var spheroid = SdfSolidGeometry.IsSpheroid(exponent: exponent, scale: copy.Shape.Scale, type: copy.Shape.Type);
         var ball = FixedStaticCollider.Superellipsoid(center: copy.Center, exponent: FixedQ4816.FromDouble(value: ((copy.Shape.Type == SdfSolidPrimitive.Superellipsoid)
-            ? (copy.Shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent)
-            : SdfProgramBuilder.MinSuperellipsoidExponent)), radii: half, rotation: copy.Rotation);
-        var padding = new FixedVector3(X: FixedFieldReach.Padding, Y: FixedFieldReach.Padding, Z: FixedFieldReach.Padding);
+            ? exponent
+            : SdfProgramBuilder.MinSuperellipsoidExponent)), radii: (spheroid ? FixedVector3.Abs(value: copy.LocalHalfExtents) : half), rotation: copy.Rotation);
+        var swept = (spheroid ? grow : FixedQ4816.Zero);
+        var padding = new FixedVector3(X: (FixedFieldReach.Padding + swept), Y: (FixedFieldReach.Padding + swept), Z: (FixedFieldReach.Padding + swept));
         var world = (new FixedVector3(
             X: (ball.SupportPoint(direction: FixedVector3.UnitX).X - ball.Center.X),
             Y: (ball.SupportPoint(direction: FixedVector3.UnitY).Y - ball.Center.Y),

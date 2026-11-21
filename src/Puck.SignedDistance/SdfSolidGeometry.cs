@@ -622,13 +622,7 @@ public static class SdfSolidGeometry {
     // The revolution axis carries the odd radius. The ellipse answers it in every reader through one projection
     // (FixedEllipsoidProjection and sdfEllipse2D), the contact compile included.
     private static bool AppendSpheroid(SdfProgramBuilder chain, SdfSolidPrimitive type, Vector3 scale, float exponent, int material, SdfBlendOp blend, float smooth, bool detail) {
-        if (type != SdfSolidPrimitive.Sphere && type != SdfSolidPrimitive.Ellipsoid &&
-            (type != SdfSolidPrimitive.Superellipsoid || exponent != SdfProgramBuilder.MinSuperellipsoidExponent)) {
-            return false;
-        }
-
-        var radii = (((type == SdfSolidPrimitive.Sphere) ? new Vector3(SphereRadius) : EllipsoidRadii) * scale);
-        if (IsUniform(scale: radii)) {
+        if (!IsSpheroid(effectiveScale: scale, exponent: exponent, radii: out var radii, type: type)) {
             return false;
         }
 
@@ -648,6 +642,24 @@ public static class SdfSolidGeometry {
 
         _ = chain.Ellipse(semiX: radial, semiY: axial, lift: SdfLift.Revolve, liftAmount: 0f, material: material, blend: blend, smooth: smooth, detail: detail);
         return true;
+    }
+    /// <summary>Returns whether <see cref="AppendScaledPrimitive"/> emits a primitive as a spheroid's revolved ellipse, a
+    /// true distance: a Sphere, Ellipsoid or exponent-2 Superellipsoid whose radii are unequal with two of them tied.
+    /// Every other ellipsoid-family shape off a uniform radius emits the scaled gauge, which reads under its
+    /// distance.</summary>
+    /// <param name="type">The primitive.</param>
+    /// <param name="scale">The authored per-axis scale.</param>
+    /// <param name="exponent">The superellipsoid exponent the primitive emits with; only a Superellipsoid reads it.</param>
+    /// <returns><see langword="true"/> when the primitive emits the revolved ellipse.</returns>
+    public static bool IsSpheroid(SdfSolidPrimitive type, Vector3 scale, float exponent) =>
+        IsSpheroid(effectiveScale: EffectiveScale(scale: scale), exponent: exponent, radii: out _, type: type);
+    private static bool IsSpheroid(SdfSolidPrimitive type, Vector3 effectiveScale, float exponent, out Vector3 radii) {
+        radii = (((type == SdfSolidPrimitive.Sphere) ? new Vector3(value: SphereRadius) : EllipsoidRadii) * effectiveScale);
+
+        return ((type is SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid ||
+                ((type == SdfSolidPrimitive.Superellipsoid) && (exponent == SdfProgramBuilder.MinSuperellipsoidExponent))) &&
+            !IsUniform(scale: radii) &&
+            ((radii.X == radii.Z) || (radii.Y == radii.Z) || (radii.X == radii.Y)));
     }
 
     /// <summary>Appends a primitive with its scale spelled into its own dimensions, never riding a
@@ -1075,22 +1087,21 @@ public static class SdfSolidGeometry {
     /// <summary>A primitive's dilation gain per local axis: how far, per unit of <c>d</c>, the zero set of its emitted field
     /// less <c>d</c> (a contact margin's <c>Dilate</c>, a blend's or relief's sag) reaches past its
     /// <see cref="Support"/> along each principal axis. One where the field <see cref="AppendScaledPrimitive"/> emits is a
-    /// true distance outside the solid; past one where it reads under the distance: the exponent-2 or authored
-    /// superellipsoid gauge (a Sphere, Ellipsoid or Superellipsoid; <c>(gauge − 1)·min r</c>) reaches <c>rᵢ / min r</c>,
-    /// and the generic Scale arm (<c>f(S⁻¹p)·min s</c>, a Capsule, Torus or Cone scaled unlike in X and Z, a non-uniform
-    /// RoundCone) reaches <c>sᵢ / min s</c>.</summary>
+    /// true distance outside the solid, a spheroid's revolved ellipse included; past one where it reads under the
+    /// distance: the exponent-2 or authored superellipsoid gauge (a Sphere, Ellipsoid or Superellipsoid that is not a
+    /// spheroid; <c>(gauge − 1)·min r</c>) reaches <c>rᵢ / min r</c>, and the generic Scale arm (<c>f(S⁻¹p)·min s</c>, a
+    /// Capsule, Torus or Cone scaled unlike in X and Z, a non-uniform RoundCone) reaches <c>sᵢ / min s</c>.</summary>
     /// <param name="type">The primitive.</param>
     /// <param name="scale">The authored per-axis scale.</param>
+    /// <param name="exponent">The superellipsoid exponent the primitive emits with; only a Superellipsoid reads it.</param>
     /// <returns>The gain along local X, Y and Z, each at least one.</returns>
     /// <remarks>KEEP IN SYNC with <see cref="AppendScaledPrimitive"/>'s arms. A primitive whose own unit field reads
     /// under its distance (the cone family) is charged nothing more here.</remarks>
-    public static Vector3 DilationGain(SdfSolidPrimitive type, Vector3 scale) {
+    public static Vector3 DilationGain(SdfSolidPrimitive type, Vector3 scale, float exponent) {
         var effectiveScale = EffectiveScale(scale: scale);
 
         if (type is SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid or SdfSolidPrimitive.Superellipsoid) {
-            var radii = (((type == SdfSolidPrimitive.Sphere) ? new Vector3(value: SphereRadius) : EllipsoidRadii) * effectiveScale);
-
-            return Gain(extents: radii);
+            return (IsSpheroid(effectiveScale: effectiveScale, exponent: exponent, radii: out var radii, type: type) ? Vector3.One : Gain(extents: radii));
         }
 
         var stretched = (!IsUniform(scale: effectiveScale) && (type switch {

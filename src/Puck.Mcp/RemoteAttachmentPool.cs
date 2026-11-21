@@ -1,4 +1,5 @@
 using ModelContextProtocol.Protocol;
+using Puck.Abstractions;
 using Puck.Hosting;
 
 namespace Puck.Mcp;
@@ -218,12 +219,7 @@ internal sealed class RemoteAttachmentPool : IAsyncDisposable {
 
         internal void Close() {
             // Run cancellation callbacks outside the pool lock.
-            _ = m_closed.CancelAsync().ContinueWith(
-                static task => { _ = task.Exception; },
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default
-            );
+            m_closed.CancelAsync().Observe();
             Client.Dispose();
         }
 

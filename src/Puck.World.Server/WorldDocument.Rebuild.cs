@@ -37,10 +37,11 @@ public sealed partial class WorldDocument {
         ).Prepare());
     }
     // A live submission. A Load or Reload carries a candidate whose reconstruction and validation read only the
-    // capture, so a host with workers prepares it on the thread pool and the tick takes it when it is ready; the tick
-    // never waits for it. A Reset's candidate is the base as it stands at apply, so it has nothing to prepare.
+    // capture, so a host that prepares off the tick (WorldServer.PreparesRebuildsOffTick) runs it on the thread pool and
+    // the tick takes it when it is ready; the tick never waits for it. A Reset's candidate is the base as it stands at
+    // apply, so it has nothing to prepare.
     private void SubmitRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId) {
-        if ((request.Kind == WorldRebuildKind.Reset) || (Host.Jobs is not { Serial: false })) {
+        if ((request.Kind == WorldRebuildKind.Reset) || !Host.PreparesRebuildsOffTick) {
             EnqueueRebuild(
                 connectionId: connectionId,
                 correlationId: correlationId,

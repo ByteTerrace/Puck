@@ -304,6 +304,10 @@ partial stick deflection already commands a proportional speed. `FacingSnap`
 and `MoveFrame` predate the ruling: a change that needs them to behave
 differently moves the behaviour into an op rather than adding a sibling
 switch. `body.motion [body]` echoes the program and its `planarTarget`.
+A `sensed` target, flocked or not, perceives through one spatial query of the
+step's frozen perception image (`WorldPerceptionImage`), so a body's advance
+earlier in the step never moves what a later body senses; an unflocked target
+queries exhaustively at its range and steers at its pick's live position.
 
 A seated player's live profile overrides the kit's `Speed.Value`
 (feel stays real-time under `identity.motion`);

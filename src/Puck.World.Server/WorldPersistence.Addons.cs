@@ -17,8 +17,7 @@ public sealed partial class WorldPersistence {
         if (m_pendingAddonCheckpoint is not { } image) { return; }
         using var plan = host.PrepareCheckpoint(Host.Configuration, image);
 
-        host.Commit(plan: plan);
-        host.Finish(plan: plan);
+        WorldDocument.CommitAndFinish(host: host, plan: plan);
         m_pendingAddonCheckpoint = null;
     }
 }

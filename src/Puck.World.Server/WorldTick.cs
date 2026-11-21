@@ -283,7 +283,6 @@ public sealed partial class WorldTick {
     internal void ResetPlacementDeals() {
         m_dealMemos.Clear();
         m_dealTemplatesOf = null;
-        m_dealProjection = null;
     }
     /// <summary>Adopts a widened contention-tracking trio in one step, so the three arrays can never disagree on
     /// length.</summary>

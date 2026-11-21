@@ -383,13 +383,13 @@ public sealed partial class WorldDocument {
     // (WorldDefinitionAdmission.AppliesTo); a reload's preparation is taken only while the revision and the live document
     // it was merged against are still the authority's, and is merged again here otherwise.
     internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null, WorldDefinitionAdmission? admission = null, WorldReloadPreparation? reload = null,
-        double reconstructMilliseconds = 0, double admitMilliseconds = 0) {
+        double reconstructMilliseconds = 0, double admitMilliseconds = 0, int requestBytes = 0) {
         var reads = Host.DrawKeys.Reads;
         var accepted = false;
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
         try {
-            accepted = ApplyRebuildCore(request, principal, connectionId, correlationId, expectedContentHash, preparationFailure, admission, reload);
+            accepted = ApplyRebuildCore(request, principal, connectionId, correlationId, expectedContentHash, preparationFailure, admission, reload, requestBytes);
             // Where an installed rebuild's time went off the tick (the delta's reconstruction, the candidate's
             // admission) and on it (the install), beside the console's own line for the source's compile.
             if (accepted && Host.Output.HasNarrationSink) {
@@ -402,7 +402,7 @@ public sealed partial class WorldDocument {
         }
     }
 
-    private bool ApplyRebuildCore(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash, string? preparationFailure, WorldDefinitionAdmission? admission, WorldReloadPreparation? reload) {
+    private bool ApplyRebuildCore(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash, string? preparationFailure, WorldDefinitionAdmission? admission, WorldReloadPreparation? reload, int requestBytes) {
         var verb = RebuildVerb(kind: request.Kind);
 
         if (!Host.Grants.IsOperator(principal: principal)) {
@@ -609,6 +609,7 @@ public sealed partial class WorldDocument {
                     prepared: prepared,
                     principal: principal,
                     request: request,
+                    requestBytes: requestBytes,
                     verb: verb
                 );
             }
@@ -786,12 +787,7 @@ public sealed partial class WorldDocument {
         // under the candidate.
         FinishInstall(stage: stage);
 
-        var message = $"{verb} applied — {history}{stateKept}{changedMembers}{DescribeConflicts(conflicts: conflicts)}";
-
-        if ((request.Delta is { } appliedDelta) &&
-            WorldSubmissionCodec.TryEncodeRebuild(request with { Definition = null }, out var payload, out _)) {
-            message += $", delta={appliedDelta.Patch.Length} bytes payload={payload.Length} bytes";
-        }
+        var message = $"{verb} applied — {history}{stateKept}{changedMembers}{DescribeConflicts(conflicts: conflicts)}{DescribeDelta(request: request, requestBytes: requestBytes)}";
 
         if (Host.Output.HasNarrationSink) {
             Host.Output.Narrate(channel: "world.definition", text: $"[world.definition: {message}]");
