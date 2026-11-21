@@ -139,7 +139,9 @@ onboarding endpoint and ARM delegation still require user consent.
 The existing load balancer maps public TCP 443 to Caddy on 8443 (the image
 `src/Puck.World.Silo/Dockerfile` pins by digest). Caddy uses
 ACME TLS-ALPN-01 to issue, renew and hot-swap the certificate, forwarding only to
-the loopback MCP listener. No DNS plugin, stored Azure credential, PFX secret,
+the loopback MCP listener. That rule has its own TCP probe of 8443, not the world's
+`/healthz` probe: a fresh worker must obtain its certificate through the rule
+before its release commits, and `/healthz` answers 503 until then. No DNS plugin, stored Azure credential, PFX secret,
 port 80 listener or renewal restart is needed. Certificate/account state persists
 in `/var/lib/puck-tls` across releases, under a separate container UID, outside
 the World container's mounts. Keep that directory across ordinary upgrades.
