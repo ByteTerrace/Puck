@@ -1,0 +1,15 @@
+template sized(size) {
+  prototypes {
+    prototype $"box{size}" {
+      document {
+        shape Box "body" {
+          scale [size, size, size]
+        }
+      }
+    }
+  }
+}
+
+rule template bump(row) {
+  row = row + 1
+}

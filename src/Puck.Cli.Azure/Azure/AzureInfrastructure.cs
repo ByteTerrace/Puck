@@ -467,7 +467,11 @@ public static partial class AzureCommand {
             value: new JsonObject { ["parameters"] = parameters }
         );
     }
-    private static async Task PublishTemplateSpecsAsync() {
+    // Compiles every pattern in template-specs.json and requires a version already published to hold exactly what its
+    // source compiles to: deployments consume the published version, never the source, so a source edit kept under an
+    // old version deploys the old content without a word. With publish, a version not yet published is created; without
+    // it, the build refuses, since nothing that consumes the pin could restore it.
+    private static async Task PublishTemplateSpecsAsync(bool publish) {
         const string Sources = "src/Puck.Azure.Resources";
         const string Destination = "artifacts/template-specs";
         // bicepconfig.json is JSON with comments.
@@ -479,18 +483,6 @@ public static partial class AzureCommand {
         var group = Text(value: alias["resourceGroup"]);
 
         Directory.CreateDirectory(path: Destination);
-        var location = await AzAsync(
-            "group",
-            "show",
-            "--name",
-            group,
-            "--subscription",
-            subscription,
-            "--query",
-            "location",
-            "-o",
-            "tsv"
-        );
         var existing = await AzJsonAsync(
             "ts",
             "list",
@@ -568,13 +560,30 @@ public static partial class AzureCommand {
 
                 NormalizeTemplate(node: published);
                 NormalizeTemplate(node: compiled);
-                if (!JsonNode.DeepEquals(
+                if (JsonNode.DeepEquals(
                     node1: published,
                     node2: compiled
-                )) { throw new InvalidDataException(message: $"Template Spec {name}:{version} differs from source. Author a new version; published versions are immutable."); }
-                Console.WriteLine(value: $"Already published: {name}:{version}");
-                continue;
-            }
+                )) {
+                    Console.WriteLine(value: $"Already published: {name}:{version}");
+                    continue;
+                }
+                // A published version is greenfield like any other artifact: its only clients are this repository's
+                // own deployments, so a changed source republishes the version in place rather than demanding a new one.
+                if (!publish) { throw new InvalidDataException(message: $"Template Spec {name}:{version} differs from source. Run `puck azure publish-template-specs` before CI builds against it."); }
+            } else if (!publish) { throw new InvalidOperationException(message: $"Template Spec {name}:{version} is not published. Run `puck azure publish-template-specs` before CI builds against it."); }
+            var location = await AzAsync(
+                "group",
+                "show",
+                "--name",
+                group,
+                "--subscription",
+                subscription,
+                "--query",
+                "location",
+                "-o",
+                "tsv"
+            );
+
             await AzAsync(
                 "ts",
                 "create",
@@ -592,6 +601,7 @@ public static partial class AzureCommand {
                 template,
                 "--tags",
                 "ManagedBy=Bicep",
+                "--yes",
                 "-o",
                 "none"
             );

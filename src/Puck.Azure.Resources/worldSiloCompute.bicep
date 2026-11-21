@@ -1,7 +1,7 @@
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Imports
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-import { worldSiloConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.6'
+import { worldSiloConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.7'
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Parameters
@@ -144,8 +144,9 @@ resource balancer 'Microsoft.Network/loadBalancers@2025-01-01' = {
           numberOfProbes: 2
         }
       }
-      // The MCP rule judges only that Caddy listens, never /healthz. Caddy's certificate comes from ACME TLS-ALPN-01,
-      // whose validation reaches Caddy through this rule before any certificate exists, and the VM extension waits
+      // The MCP rule judges only that Caddy listens, never /healthz. Caddy's certificate is restored from the owner's
+      // store or, when none is stored, comes from ACME TLS-ALPN-01, whose validation reaches Caddy through this rule
+      // before any certificate exists, and the VM extension waits
       // for that TLS front before the release commits, while /healthz answers 503 until the commit opens admission.
       // The silo registers no MCP world session before admission opens, so the rule exposes nothing early.
       ...(mcpEnabled

@@ -283,8 +283,7 @@ public sealed partial class OverlayPackageLawTests {
             };
 
             Gpu = gpu;
-            var package = new OverlayPackage(
-                capacity: new OverlayCapacity(
+            var capacity = new OverlayCapacity(
                     BindingBarMaxBanks: 0,
                     BindingBarMaxModifiers: 0,
                     BindingBarMaxSlotsPerBank: 0,
@@ -296,17 +295,20 @@ public sealed partial class OverlayPackageLawTests {
                     Seats: 1,
                     WheelMaxRings: 0,
                     WheelMaxSectorsPerRing: 0
-                ),
-                fragmentBytecode: new byte[] { 1 },
-                frameSources: (frameSources ?? new LeasingFrameSources(retire: static () => { })),
-                glyphs: CreateGlyphs(
+            );
+            var glyphs = CreateGlyphs(
                     advance: 1f,
                     atlasCellHeight: 1,
                     atlasCellWidth: 1,
                     distanceRange: 1f,
                     glyphCount: 1,
                     words: [0u, 0u, 0x3F800000u]
-                ),
+            );
+            var package = new OverlayPackage(
+                capacity: capacity,
+                fragmentBytecode: new byte[] { 1 },
+                frameSources: (frameSources ?? new LeasingFrameSources(retire: static () => { })),
+                glyphs: glyphs,
                 sources: new UnifiedOverlaySources(
                     BindingBar: null,
                     Console: null,
@@ -328,7 +330,7 @@ public sealed partial class OverlayPackageLawTests {
                 vertexBytecode: new byte[] { 1 }
             );
 
-            OverlayBytes = package.Regions(context: null!)[0].ByteCount;
+            OverlayBytes = OverlayFrameBuilder.WordCountOf(glyphs, new OverlayChannelLeases(capacity), Extent, Extent) * sizeof(uint);
             var packages = new RenderGraphPackageRecorders(regionCopy: new GpuRegionCopyPass(kernel: new byte[] { 1 }, pipelines: new GpuPassPipelineCache()));
 
             Observed = new ObservedPackageFactory(

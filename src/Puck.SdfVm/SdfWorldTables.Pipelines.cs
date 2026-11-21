@@ -13,6 +13,7 @@ public sealed partial class SdfWorldTables {
     // occlusion kernel, which binds the mesh pass's set.
     private readonly SdfPassPipelineSlot m_meshRaster;
     private readonly SdfPassPipelineSlot m_shadowRaster;
+    private readonly SdfPassPipelineSlot m_shadowEntryRaster;
     private readonly SdfPassPipelineSlot m_shadowExitRaster;
     private readonly SdfPassPipelineSlot m_shadowGlassRaster;
     private readonly SdfPassPipelineSlot m_glassRaster;
@@ -31,6 +32,7 @@ public sealed partial class SdfWorldTables {
     internal IGpuRenderPass MeshRenderPass => RenderPassOf(slot: m_meshRaster);
     // The shadow cascades' pipeline: the mesh pass's layout and vertex stage, writing depth alone.
     internal IGpuPipeline ShadowPipeline => GraphicsOf(slot: m_shadowRaster);
+    internal IGpuPipeline ShadowEntryPipeline => GraphicsOf(slot: m_shadowEntryRaster);
     // The shadow cascades' exit-layer pipeline: the shadow pipeline with the faces toward the light culled.
     internal IGpuPipeline ShadowExitPipeline => GraphicsOf(slot: m_shadowExitRaster);
     internal IGpuPipeline ShadowGlassPipeline => GraphicsOf(slot: m_shadowGlassRaster);
@@ -45,7 +47,7 @@ public sealed partial class SdfWorldTables {
     // their order and then the pass pipelines. Takes each build that has just finished.
     internal SdfPipelineWait? FrameWaiting() {
         if (m_pipelines.FirstUnbuilt() is { } kernel) { return new SdfPipelineWait(Name: SdfKernelSet.StemOf(kernel: kernel), Refusal: m_pipelines.RefusalOf(kernel: kernel)); }
-        foreach (var slot in (ReadOnlySpan<SdfPassPipelineSlot>)[m_meshRaster, m_shadowRaster, m_shadowExitRaster, m_shadowGlassRaster, m_glassRaster, m_occlusion]) {
+        foreach (var slot in (ReadOnlySpan<SdfPassPipelineSlot>)[m_meshRaster, m_shadowRaster, m_shadowEntryRaster, m_shadowExitRaster, m_shadowGlassRaster, m_glassRaster, m_occlusion]) {
             if (!slot.PollRefusing()) { return new SdfPipelineWait(Name: slot.Name, Refusal: slot.Refusal); }
         }
         return null;
@@ -75,6 +77,7 @@ public sealed partial class SdfWorldTables {
                 Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles.SequenceEqual(second: other.Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles) &&
                 MeshPipeline.GroupLayoutHandles.SequenceEqual(second: other.MeshPipeline.GroupLayoutHandles) &&
                 ShadowPipeline.GroupLayoutHandles.SequenceEqual(second: other.ShadowPipeline.GroupLayoutHandles) &&
+                ShadowEntryPipeline.GroupLayoutHandles.SequenceEqual(second: other.ShadowEntryPipeline.GroupLayoutHandles) &&
                 ShadowExitPipeline.GroupLayoutHandles.SequenceEqual(second: other.ShadowExitPipeline.GroupLayoutHandles) &&
                 ShadowGlassPipeline.GroupLayoutHandles.SequenceEqual(second: other.ShadowGlassPipeline.GroupLayoutHandles) &&
                 GlassPipeline.GroupLayoutHandles.SequenceEqual(second: other.GlassPipeline.GroupLayoutHandles) &&

@@ -183,6 +183,14 @@ public static partial class WorldDocumentEmitter {
                 // A read through a compile-time object or array (a loop's record, a let's table) is the number it reads.
                 case Syntax.SourceAccess or Syntax.SourceIndex when (HasBoundRoot(node: node) && (Number(value: DocumentLowering.LowerValue(ToCompileTime(node: node, operand: operand), scope)) is { } read)):
                     return new Syntax.Literal(Value: read);
+                // A key constants decide is the literal key they decide (`slot[k + 1]` with `k = 1` is `slot[2]`), so it
+                // is interned, priced and refused as the literal is. A grouped key keeps its spelling for WriteIndex's
+                // refusal of `row[(expression)]`.
+                case Syntax.SourceIndex { Index: not Syntax.SourceGroup } index: {
+                        var key = Fold(node: index.Index, operand: operand);
+
+                        return (ReferenceEquals(objA: key, objB: index.Index) ? index : index with { Index = key });
+                    }
                 case Syntax.Unary unary: {
                         var value = Fold(node: unary.Operand, operand: operand);
 
@@ -228,7 +236,7 @@ public static partial class WorldDocumentEmitter {
         // The number a bare name stands for at compile time, resolved in WriteName's order: a runtime binder, a
         // pool binding or derived state is never a constant, and a let or loop binding is one when it holds a number.
         private decimal? Constant(Syntax.SourceName name, OperandExpressionNode operand) {
-            if (name.Quoted || name.Name.StartsWith(value: '$') || (name.Name == m_binder) || GetPoolBindings(scope: scope).Contains(item: name.Name) ||
+            if (name.Quoted || name.Name.StartsWith(value: '$') || IsRuntimeName(name: name.Name) ||
                 GetOrCreateDerivedState(scope: scope).ContainsKey(key: name.Name)) {
                 return null;
             }
@@ -374,7 +382,7 @@ public static partial class WorldDocumentEmitter {
                 m_text.Append(value: Syntax.PrintName(name: name));
                 return;
             }
-            if ((form == DocumentValueForm.Key) || (name.Name == m_binder) || GetPoolBindings(scope: scope).Contains(item: name.Name) || name.Name.StartsWith(value: '$')) {
+            if ((form == DocumentValueForm.Key) || IsRuntimeName(name: name.Name) || name.Name.StartsWith(value: '$')) {
                 m_text.Append(value: name.Name);
                 return;
             }
@@ -475,7 +483,7 @@ public static partial class WorldDocumentEmitter {
             m_keyDepth++;
             // Brackets evaluate their contents. Literal and reserved keys already have a document spelling;
             // all other values go through the expression binder, including bare lexical names.
-            if ((key is Syntax.SourceName { Quoted: false } boundName) && scope.TryLowerBinding(boundName.Name, out var boundKey)) {
+            if ((key is Syntax.SourceName { Quoted: false } boundName) && !IsRuntimeName(name: boundName.Name) && scope.TryLowerBinding(boundName.Name, out var boundKey)) {
                 WriteValue(boundKey, DocumentValueForm.Key, operand.Span);
             } else if (key is Syntax.SourceAccess or Syntax.SourceIndex or Syntax.SourceCall) {
                 Write(form: DocumentValueForm.Expression, node: key, operand: operand);
@@ -560,6 +568,13 @@ public static partial class WorldDocumentEmitter {
         // (DocumentScope.TryQualify), unless a runtime binding or lambda binder owns its head.
         private string? InstanceName(Syntax.SyntaxNode node) => (((node is Syntax.SourceAccess) && !HasRuntimeRoot(node: node) &&
             (QualifiedName.From(syntax: node)?.ToString() is { } dotted) && scope.TryQualify(qualified: out var name, reference: dotted)) ? name : null);
+        // A name a runtime binding owns where it is read (the lambda binder in flight, a pool binding, the rule's
+        // locals) hides a compile-time binding of the same name: the innermost binding wins, as SyntaxScopes.Resolve
+        // answers for hover, go-to-definition and the import rewriter. Inside a rule body, a spliced rule template's
+        // parameters and a compile-time loop's variables (DocumentScope.RuleBinders) are inner to the rule's
+        // locals, so they win over a local of the same name.
+        private bool IsRuntimeName(string name) => ((name == m_binder) || GetPoolBindings(scope: scope).Contains(item: name) ||
+            ((Syntax.CurrentLocals?.Contains(item: name) == true) && !scope.RuleBinders.Contains(item: name)));
         private bool HasRuntimeRoot(Syntax.SyntaxNode node) {
             while (true) {
                 switch (node) {
@@ -567,7 +582,7 @@ public static partial class WorldDocumentEmitter {
                     case Syntax.SourceIndex index: node = index.Target; break;
                     default:
                         return ((node is Syntax.SourceName { Quoted: false } name) &&
-                        ((name.Name == m_binder) || GetPoolBindings(scope: scope).Contains(item: name.Name)));
+                        IsRuntimeName(name: name.Name));
                 }
             }
         }

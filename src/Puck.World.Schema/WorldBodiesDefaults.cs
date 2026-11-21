@@ -60,7 +60,7 @@ public readonly record struct WorldBodiesDefaults(
     [property: JsonPropertyName("seatActivation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<SeatActivationPolicy>? SeatActivationRaw = null,
     int NetworkPlayers = 0,
     [property: JsonPropertyName("defaultPeerSource"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IntentSource? DefaultPeerSourceRaw = null,
-    [property: DocumentText("a spawn point id")]
+    [property: DocumentName(WorldNameKind.SpawnPoint, WorldNameRole.Names)]
     [property: JsonPropertyName("seatSpawns"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? SeatSpawnsRaw = null,
     [property: JsonPropertyName("distribution"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDistribution? DistributionRaw = null,
     [property: JsonPropertyName("peerVariation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPopulationVariation? PeerVariationRaw = null,

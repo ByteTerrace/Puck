@@ -84,7 +84,7 @@ public abstract record WorldScreenSource {
     }
     /// <summary>A named view from the presentation view stack, such as a monitor showing another camera's output.</summary>
     /// <param name="CameraName">The registered view name this slot samples.</param>
-    public sealed record View([property: DocumentText("a camera name")] string CameraName) : WorldFrameSource;
+    public sealed record View([property: DocumentName(WorldNameKind.Camera, WorldNameRole.Names)] string CameraName) : WorldFrameSource;
     /// <summary>A declared probe's texture output — the frame a kind that declares an <c>output</c> writes each cycle
     /// (a relit camera frame, a mask), published like a camera feed. The probe must be a <c>probes</c> row of this
     /// document; whether its kind writes a texture is checked at boot against the kind's manifest.</summary>
@@ -462,7 +462,7 @@ public sealed record WorldScreenCarry(
     [property: DocumentText("a look in the composed world")] string Look,
     [property: DocumentText("a creation frame")] string Pose,
     [property: DocumentText("a creation shape")] string Shape,
-    [property: DocumentText("a camera name")]
+    [property: DocumentName(WorldNameKind.Camera, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Camera = null
 );
 /// <summary>One diegetic screen in the world — a screen slab emitted by

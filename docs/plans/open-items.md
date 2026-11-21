@@ -2874,7 +2874,7 @@ lane's.
 ### Language and authoring
 
 Owner: language lane (transpiler) · medium · Next: the cost corpus, then the
-unreproduced language findings.
+`roles` module re-check.
 
 - [medium] The cost pairs two documents cannot share (static placements
   against one creation, `wall - opening` against its box tiling, a mirrored
@@ -2885,35 +2885,17 @@ unreproduced language findings.
   has no implementation: no code puts or gets a creation document outside a
   projection. Build it when a creation-library step needs it, or delete the
   remark.
-- Decide (the language lane's call): whether a rule's effect list merges by
-  `key` when a template is re-expanded over a basis. A rule whose effects
-  write one key twice (`claim-expire` in `worlds/debug/pond.puck`) refuses
-  today, so the garden's crowd fixture re-expands only `pondFlocks`; effects
-  are ordered actions, not a keyed set.
-- Refuse a `garden { … }` expectation naming a document the world does not
-  reference at authoring time (`puck lint`, the language server,
-  `puck compile`); today `puck test` refuses it when it stages the world. It
-  needs the composed document's references from the composer.
 - [low] The work sheet prices a few shapes above what one tick runs:
   `companion-interest-*` is about 170 running-minimum rules a nearest-point
   reduction would replace; a write whose key is not literal counts against
   every pinned cell of its row in `CountWriters`; a transfer between piles a
   live zone table picks prices its disclosure term by the square of the piles.
-- [low] A module library's lets and templates are never reported unused
-  (`elementFamilyGlyphs`, `continuousStyle`); a directory lint could report a
-  library declaration no linted source reads.
 - [low] An imported module named `roles` changed how its importer lints
   (PUCK031, the fragment validated as a root). Re-run it on the current head,
   then find why a module's name changes import resolution.
 - [low] A `Capsule` scaled `[0.05, 0.18, 0.05]` stopped about 9 cm short of
   where an author expected (`motion-nod`'s first neck); check what a Capsule's
   half-length means under scale and say so in the shapes reference.
-- [unreproduced] A string literal on the left of a relational gate is not
-  flipped (`WorldDocumentEmitter.Rules`); a header `when` gate makes a body's
-  `local` report PUCK012; `not` loses its source span and recursion depth
-  (`PuckParser.Expressions`); unary `-` or `~` before `not` parses at the
-  wrong precedence and fails the format round trip; `PuckPrinter` drops `!= 0`
-  from a grouped comparison gate.
 
 ### Maths
 
@@ -3005,22 +2987,19 @@ is pushed to `main` ([the player channel](../development/ci.md#the-player-channe
   and a verbose GC trace. The machine's only readings came from a source
   build before the device table applied and before the far and distant
   shadow work landed, so they describe nothing current.
-- [medium] The hosted MCP front's certificate and ACME account live on the
-  worker's own disk (`/var/lib/puck-tls`, `build/Start-WorldSilo.sh`), so every
-  fresh scale set (a bootstrap, a priority change) issues a new certificate for
-  the same hostname, and Let's Encrypt allows only five per exact name in a
-  week. Keep Caddy's storage where a fresh worker finds it (the private store,
-  behind Puck's own store abstraction), so recreating compute reuses the
-  certificate. Whether Caddy's TLS front logs the load balancer's TCP probe of
+- [low] Whether Caddy's MCP TLS front logs the load balancer's TCP probe of
   8443 as handshake noise is unverified.
-- [low] `worldSiloConfigType`'s `compute.spot.restoreTimeout`
-  (`avm/ptn/platform/world-silo/main.bicep`) is read by nothing, since Flexible
-  scale sets refuse Spot Try & Restore and `worldSiloCompute.bicep` holds the
-  worker count with an autoscale setting instead. The type comes from the
-  published `ptn_platform_world-silo` Template Spec, so dropping the field
-  needs a new spec version in `template-specs.json`, every `ts/bvm` import
-  moved to it, and `puck azure publish-template-specs` run before CI builds
-  against it.
+- [low] Workers sharing one MCP hostname keep their own copy of Caddy's TLS
+  state, which `build/Keep-WorldTls.py` reconciles through the owner's store
+  every ten minutes, so workers whose Caddy reaches the same ARI renewal time
+  before either has stored its renewal each renew (ARI renewals are exempt from
+  Let's Encrypt's rate limits; startup issuance is already one per hostname).
+  The release lane runs one authoritative worker today. If many workers come
+  to share a hostname, weigh a Caddy storage module that makes the store
+  Caddy's live storage, so certmagic's own storage locks serialize renewals:
+  `lnr0626/certmagic-azureblob` (MIT, managed identity, blob-lease locks) is
+  the candidate found, young and from one author, and it needs a custom
+  `xcaddy` build in place of the pinned official image.
 - [medium] Composite ReadyToRun puts the framework and Puck in one image of
   about 291 MB (`Puck.World.r2r.dll`), so every engine change re-downloads it
   whole through a channel built to ship only the files that changed. Read
@@ -3826,6 +3805,12 @@ their lane order; this packet keeps the single duplicates and leads.
   record goes (an `IClientSink` or a wire frame). One stream type writing
   to a record target would hold each rule once; the withdrawal chokepoint's
   step 4 (the mirror per span) is the natural place to make it.
+- Four copies of the world worker's managed-identity token fetch and storage
+  read in Python: `build/Boot-WorldSilo.py` (`fetch`), `build/Guard-WorldRelease.py`
+  (`guard`), `build/Keep-WorldTls.py` (`token`, `call`) and the registry login
+  `build/Start-WorldSilo.sh` writes inline. Each is a standalone input the
+  release pins, so sharing one needs the launcher to install a guest module the
+  others import (the launcher already runs first and verifies its inputs).
 - The bake's landing stages still allocate each mesh's workspace afresh, which
   is most of what a cold debug-world bake still allocates and collects
   ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials),

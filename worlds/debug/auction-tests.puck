@@ -10,7 +10,7 @@ import "auction"
 bodies {
   localSeats: 4
   seatActivation [Eager, Eager, Eager, Eager]
-  seatSpawns ["stage", "stage", "stage", "stage"]
+  seatSpawns [stage, stage, stage, stage]
 }
 
 test "the highest sealed bid takes the lot at its price" {

@@ -276,7 +276,7 @@ internal sealed class UploadModelGpu :
     }
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => throw new NotSupportedException();
     IGpuReadbackBuffer IGpuBufferFactory.CreateReadback(ulong sizeBytes, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
-    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) =>
+    IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule? fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) =>
         PipelineOf(layout: description.Layout);
 
     /// <summary>Gets or sets the modeled device's constant-buffer view limit.</summary>

@@ -122,7 +122,7 @@ public static class ModuleResolver {
         }
 
         protected override PuckSyntaxRewriter Within(SyntaxNode parent, SyntaxNode child) =>
-            Without(names: SyntaxScopes.Binds(child: child, node: parent).Where(predicate: static binder => binder.Shadows).Select(selector: static binder => binder.Name));
+            Without(names: SyntaxScopes.Binds(child: child, node: parent).Select(selector: static binder => binder.Name));
         protected override Puck.State.ExpressionSpelling.SyntaxNode RewriteOperandSyntax(Puck.State.ExpressionSpelling.SyntaxNode node, DocumentValueForm form) {
             if (node is Puck.State.ExpressionSpelling.SourceLambda lambda) {
                 return lambda with { Body = Without(names: [lambda.Binder]).RewriteOperandSyntax(lambda.Body, DocumentValueForm.Expression) };

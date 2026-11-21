@@ -23,12 +23,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part switch {
         SdfWorldPackage.Parts.Views => m_view.Residency.SkyDetails.Labels,
         SdfWorldPackage.Parts.ViewsProbes => RateDetails,
-        SdfWorldPackage.Parts.ShadowFar => CasterDetails,
+        SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowFar or SdfWorldPackage.Parts.ShadowSecond or SdfWorldPackage.Parts.ShadowDistant => CasterDetails,
         SdfWorldPackage.Parts.ViewsBins => BinDetails,
         _ => [],
     };
 
-    private static readonly string[] CasterDetails = ["receiver-rejected", "entry-rejected"];
+    private static readonly string[] CasterDetails = ["receiver-rejected", "entry-rejected", "optical-tiles-cleared", "entry-back-face-culled"];
     private static readonly string[] RateDetails = ["tiles-1x1", "tiles-2x1", "tiles-1x2", "tiles-2x2"];
     private static readonly string[] BinDetails = ["no-program", "program"];
     // The world interface's scratch buffer members, each bound to the dummy unless a port binds it.
@@ -189,6 +189,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // above, and the node calls Submitted only once the recording's submission reached the queue, so a recording whose
     // submission never ran marks no layer written or clear.
     private (int Index, bool? Depth, bool? Exit)? m_recordedLayers;
+    private readonly HashSet<IGpuBuffer> m_opticalInitialized = new(ReferenceEqualityComparer.Instance);
+    private IGpuBuffer? m_recordedOpticalInitialization;
     private bool m_disposed;
     // What made the latest views render read external content, or null when nothing did.
     private string? m_sourceTaint;
@@ -441,10 +443,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     );
                 }
             }
-            m_occlusion = new SdfMeshOcclusion(buffers: context.Services.BufferFactory, owner: context.Instance, part: context.Pass, slots: slots, argumentPhases: (IsShadowCascade ? (HasShadowOptical ? 5u : 4u) : 2u),
+            m_occlusion = new SdfMeshOcclusion(buffers: context.Services.BufferFactory, owner: context.Instance, part: context.Pass, slots: slots, cascade: IsShadowCascade, optical: HasShadowOptical,
                 sight: ((m_part == SdfWorldPackage.Parts.Mesh) ? owner.PortalSightOf(instance: context.Instance) : null));
             m_staticOcclusion = (HasFarStatic
-                ? new SdfMeshOcclusion(buffers: context.Services.BufferFactory, owner: context.Instance, part: $"{context.Pass} static", slots: slots, argumentPhases: (HasShadowOptical ? 5u : 4u))
+                ? new SdfMeshOcclusion(buffers: context.Services.BufferFactory, owner: context.Instance, part: $"{context.Pass} static", slots: slots, cascade: true, optical: HasShadowOptical)
                 : null);
         } catch {
             foreach (var framebuffer in m_framebuffers) {
@@ -627,6 +629,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
     public void Submitted() {
         m_notedMeshRows = false;
+        if (m_recordedOpticalInitialization is { } optical) {
+            m_opticalInitialized.Add(optical);
+            m_recordedOpticalInitialization = null;
+        }
         if (m_recordedLayers is { } recorded) {
             if (recorded.Depth is { } depth) { m_targetsWritten[recorded.Index] = true; m_targetsClear[recorded.Index] = depth; }
             if (recorded.Exit is { } exit) { m_exitsWritten[recorded.Index] = true; m_exitsClear[recorded.Index] = exit; }
@@ -655,6 +661,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         m_recordedLayers = null;
+        m_recordedOpticalInitialization = null;
         Follow();
 
         var residency = m_view.Residency;
@@ -1158,19 +1165,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             lateFramebuffer = m_exitLoadFramebuffers[targetIndex];
         }
 
-        if (HasShadowOptical && drawsDepth) {
-            var optical = recording.Outputs[2].Buffer!;
-
-            recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: optical.BufferHandle,
-                sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.FragmentShader,
-                destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
-            recorder.ClearStorageBuffer(commandBuffer, optical.BufferHandle, optical.SizeBytes);
-            recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: optical.BufferHandle,
-                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
-                destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.FragmentShader);
-        }
+        var optical = HasShadowOptical && drawsDepth ? recording.Outputs[2].Buffer! : null;
         SelectDraws(cascadeTexels: cascadeTexels, cull: in cull, detail: in detail, drawsDepth: drawsDepth, drawsExit: drawsExit, jitter: jitter, meshSet: meshSet, motion: motion,
-            occlusion: occlusion, recording: in recording, share: share, tables: tables, target: target, twoPhase: twoPhase);
+            occlusion: occlusion, recording: in recording, share: share, tables: tables, target: target, twoPhase: twoPhase, optical: optical);
+        if (optical is not null) {
+            ClearShadowOptical(recording, tables, occlusion, meshSet, target.Width, optical);
+        }
         DrawLayers(area: area, drawsDepth: drawsDepth, drawsExit: drawsExit, entryFramebuffer: framebuffer, entryLateFramebuffer: entryLateFramebuffer, exitFramebuffer: lateFramebuffer,
             meshSet: meshSet, occlusion: occlusion, pipeline: pipeline, recording: in recording, tables: tables, target: target, twoPhase: twoPhase);
         if (HasShadowOptical && drawsDepth && (occlusion is not null)) {
@@ -1203,11 +1203,33 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             CopyDepth(recorder: recorder, commandBuffer: commandBuffer, source: m_backExits[targetIndex], destination: recording.Outputs[1].Owned!);
         }
     }
+    private void ClearShadowOptical(in RenderGraphPackageRecording recording, SdfWorldTables tables, SdfMeshOcclusion? selection,
+        int meshSet, uint side, IGpuBuffer optical) {
+        var recorder = recording.Recorder;
+        var command = recording.CommandBuffer;
+        var initializes = !m_opticalInitialized.Contains(optical);
+        var full = initializes || (selection is null);
+        var clearStage = full ? GpuStage.Transfer : GpuStage.ComputeShader;
+        var clearWrite = full ? GpuAccess.TransferWrite : GpuAccess.ShaderWrite;
+        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: optical.BufferHandle,
+            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader | GpuStage.FragmentShader,
+            destinationAccessMask: full ? clearWrite : GpuAccess.ShaderRead | clearWrite, destinationStageMask: clearStage);
+        if (full) {
+            recorder.ClearStorageBuffer(command, optical.BufferHandle, optical.SizeBytes);
+            if (initializes) { m_recordedOpticalInitialization = optical; }
+        } else {
+            selection!.RecordOpticalClear(recorder, command, tables.OcclusionPipeline, m_occlusionSets[meshSet * OcclusionSetsPerMesh], side);
+        }
+        // Surface shading can read an empty cascade even when no glass fragment executes after this clear.
+        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: optical.BufferHandle,
+            sourceAccessMask: clearWrite, sourceStageMask: clearStage,
+            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.FragmentShader | GpuStage.ComputeShader);
+    }
     // Writes a mesh set's tables and counters, stages the selection's draws into it and records the selection's first
     // step: the set and its two selection sets are one group's (meshSet), and `target` is the depth the selection's second
     // phase samples.
     private void SelectDraws(in RenderGraphPackageRecording recording, SdfWorldTables tables, SdfMeshOcclusion? occlusion, int meshSet, IGpuImage target, int cascadeTexels, in SdfMeshCull cull,
-        in SdfMeshDetail detail, bool twoPhase, bool drawsDepth, bool drawsExit, System.Numerics.Vector2 jitter, SdfMeshMotion motion, SdfDistantDraw? share) {
+        in SdfMeshDetail detail, bool twoPhase, bool drawsDepth, bool drawsExit, System.Numerics.Vector2 jitter, SdfMeshMotion motion, SdfDistantDraw? share, IGpuBuffer? optical = null) {
         if (tables.MeshDrawCount == 0) {
             return;
         }
@@ -1264,7 +1286,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             tables.WriteMeshTables(bound: bound, set: occlusionSet, slot: tables.CurrentSlot);
             tables.WriteMeshWorkCounters(bound: ref bound[MeshSetCounters], counters: WorkCountersOf(recording: in recording).Buffer, set: occlusionSet);
             tables.WriteMeshBuffer(bound: ref bound[MeshSetVisibility], buffer: tables.DummyBuffer, member: SdfWorldPackage.VisibilityRecords, set: occlusionSet);
-            tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: tables.DummyBuffer, member: SdfWorldPackage.GlassSumsWritten, set: occlusionSet);
+            tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: (phase == 0 ? optical : null) ?? tables.DummyBuffer, member: SdfWorldPackage.GlassSumsWritten, set: occlusionSet);
             occlusion.Bind(bound: bound, boundTarget: ref m_occlusionSetTargets[index], first: MeshSetBuffers, set: occlusionSet, tables: tables,
                 target: (!twoPhase ? tables.SampledFiller.ImageViewHandle : ((phase != 0) ? target.ImageViewHandle :
                     (IsShadowCascade ? recording.Inputs[0].Image.ImageViewHandle : tables.SampledFiller.ImageViewHandle))));
@@ -1288,7 +1310,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             );
             if (occlusion is not null) {
                 // The first phase: what the previous frame found visible, and every draw no host box bounds.
-                RecordMeshPhase(commandBuffer: commandBuffer, phase: 0, pipeline: pipeline, recorder: recorder, selection: occlusion, set: set);
+                RecordEntry(phase: 0);
             }
             recorder.EndRenderPass(commandBufferHandle: commandBuffer);
         }
@@ -1297,7 +1319,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             // Finish entry depth before any exit/peel or glass consumer. Both camera and light use this one path.
             occlusion.RecordLate(commandBuffer: commandBuffer, pipeline: tables.OcclusionPipeline, recorder: recorder, set: m_occlusionSets[((meshSet * OcclusionSetsPerMesh) + 1)], target: target.ImageHandle);
             recorder.BeginRenderPass(area: area, commandBufferHandle: commandBuffer, framebuffer: entryLateFramebuffer!);
-            RecordMeshPhase(commandBuffer: commandBuffer, phase: 1, pipeline: pipeline, recorder: recorder, selection: occlusion, set: set);
+            RecordEntry(phase: 1);
             recorder.EndRenderPass(commandBufferHandle: commandBuffer);
         }
         if (IsShadowCascade && drawsExit) {
@@ -1308,6 +1330,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 RecordMeshPhase(commandBuffer: commandBuffer, pipeline: tables.ShadowPipeline, recorder: recorder, set: set, selection: occlusion, phase: 3);
             }
             recorder.EndRenderPass(commandBufferHandle: commandBuffer);
+        }
+
+        void RecordEntry(int phase) {
+            RecordMeshPhase(commandBuffer: commandBuffer, phase: phase, pipeline: pipeline, recorder: recorder, selection: occlusion!, set: set);
+            if (IsShadowCascade) {
+                RecordMeshPhase(commandBuffer: commandBuffer, phase: SdfKernelInterfaces.MeshShadowCulledEntryPhase + phase,
+                    pipeline: tables.ShadowEntryPipeline, recorder: recorder, selection: occlusion!, set: set);
+            }
         }
     }
     // Copies one whole depth attachment into another of its format and extent, each left in its attachment layout as the

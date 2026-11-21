@@ -167,7 +167,7 @@ public static partial class AzureCommand {
             return Task.CompletedTask;
         });
         Bind(command: publishStatic, work: (parseResult, _) => PublishStaticAsync(bundle: parseResult.GetRequiredValue<string>(name: "--bundle-directory")));
-        Bind(command: publishTemplateSpecs, work: (_, _) => PublishTemplateSpecsAsync());
+        Bind(command: publishTemplateSpecs, work: (_, _) => PublishTemplateSpecsAsync(publish: true));
         Bind(command: functionsAccess, work: (parseResult, _) => FunctionsAccessAsync(
             group: parseResult.GetRequiredValue(option: resourceGroupOption),
             name: parseResult.GetValue<string?>(name: "--name"),
@@ -525,6 +525,9 @@ public static partial class AzureCommand {
     private static async Task BuildInfrastructureAsync(string output) {
         if (Directory.Exists(path: output)) { throw new IOException(message: $"Use a fresh output directory: {output}"); }
         Directory.CreateDirectory(path: output);
+        // Patterns first, in their dependency order: a source that imports an unpublished pin fails to restore, and this
+        // names the pin instead.
+        await PublishTemplateSpecsAsync(publish: false);
         await VerifyBicepAsync();
         await AzAsync(
             "bicep",

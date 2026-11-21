@@ -1,0 +1,19 @@
+// A template or rule template imported under an alias is called as a statement by its qualified name, exactly as the
+// unaliased import calls it by its bare name.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+import "lib" as m
+
+state {
+  world {
+    slot count = 0
+  }
+}
+
+m.sized(size: 7)
+
+rule "tick" {
+  when count < 3
+  m.bump(row: count)
+}

@@ -47,9 +47,10 @@ public static partial class AzureCommand {
                 (status?.Release != deployment.Manifest.Identity) ||
                 (status.Group != scaleSet)
             ) { throw new InvalidDataException(message: $"the worker on {worker} does not match the retained release {deployment.Manifest.Identity} in {scaleSet}: {response.ToJsonString()}"); }
-            await WorldGuestAsync(
+            await WorldHealthAsync(
                 group: resourceGroup,
-                script: $"curl --fail-with-body --silent --show-error --max-time 30 http://127.0.0.1:{deployment.HealthPort}/private-healthz",
+                port: deployment.HealthPort,
+                route: "/private-healthz",
                 worker: worker
             ).ConfigureAwait(continueOnCapturedContext: false);
         }

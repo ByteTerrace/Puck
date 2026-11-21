@@ -10,6 +10,12 @@ namespace Puck.World.Tests;
 /// <summary>Real compiler inputs drive one ordinary reload request per quiet burst, with no unrelated-file trigger.</summary>
 public sealed class WorldWatchLawTests {
     private static long At(int milliseconds) => ((Stopwatch.Frequency * milliseconds) / 1000);
+    // A poll whose stamp read, which runs on a pool thread, is adopted at the same timestamp.
+    private static void Poll(WorldSourceWatch watch, long now) {
+        watch.Poll(now: now);
+        watch.WaitForRead();
+        watch.Poll(now: now);
+    }
 
     private const string Module = "let initial = 7\nmodule counter() { state { world { slot score = initial } } }";
 
@@ -28,11 +34,11 @@ public sealed class WorldWatchLawTests {
         var watch = new WorldSourceWatch(() => root);
 
         watch.Start(submitReload: () => count++);
-        watch.Poll(now: At(milliseconds: 1000));
+        Poll(watch, now: At(milliseconds: 1000));
         Assert.Equal(actual: count, expected: 0);
         File.WriteAllText(contents: "{\"state\":{\"world\":{\"score\":2}}}", path: child);
-        watch.Poll(now: At(milliseconds: 1100));
-        watch.Poll(now: At(milliseconds: 1250));
+        Poll(watch, now: At(milliseconds: 1100));
+        Poll(watch, now: At(milliseconds: 1250));
         Assert.Equal(actual: count, expected: 1);
     }
     [Fact]
@@ -46,13 +52,13 @@ public sealed class WorldWatchLawTests {
 
         watch.Start(submitReload: () => count++);
         unrelated.WriteText(name: "other.puck", text: Module);
-        watch.Poll(now: At(milliseconds: 1000));
+        Poll(watch, now: At(milliseconds: 1000));
         Assert.Equal(actual: count, expected: 0);
         File.WriteAllText(module, Module.Replace(comparisonType: StringComparison.Ordinal, newValue: "8", oldValue: "7"));
-        watch.Poll(now: At(milliseconds: 1050));
-        watch.Poll(now: At(milliseconds: 1199));
+        Poll(watch, now: At(milliseconds: 1050));
+        Poll(watch, now: At(milliseconds: 1199));
         Assert.Equal(actual: count, expected: 0);
-        watch.Poll(now: At(milliseconds: 1200));
+        Poll(watch, now: At(milliseconds: 1200));
         Assert.Equal(actual: count, expected: 1);
         var rootReads = watch.RecordReads(path: root)!;
         using (Puck.Assets.CompileInputs.Record(log: rootReads.Log)) {
@@ -60,18 +66,18 @@ public sealed class WorldWatchLawTests {
         }
         watch.AdoptReads(reads: rootReads);
         File.WriteAllText(module, Module.Replace(comparisonType: StringComparison.Ordinal, newValue: "9", oldValue: "7"));
-        watch.Poll(now: At(milliseconds: 2000));
-        watch.Poll(now: At(milliseconds: 2300));
+        Poll(watch, now: At(milliseconds: 2000));
+        Poll(watch, now: At(milliseconds: 2300));
         Assert.Equal(actual: count, expected: 1);
         watch.Complete(result: CommandResult.None);
-        watch.Poll(now: At(milliseconds: 2400));
-        watch.Poll(now: At(milliseconds: 2550));
+        Poll(watch, now: At(milliseconds: 2400));
+        Poll(watch, now: At(milliseconds: 2550));
         Assert.Equal(actual: count, expected: 2);
         watch.Complete(result: CommandResult.Error(output: "source.puck:2: invalid row"));
         Assert.Contains("source.puck:2", watch.LastError!);
         watch.Stop();
         File.WriteAllText(contents: Module, path: module);
-        watch.Poll(now: At(milliseconds: 3000));
+        Poll(watch, now: At(milliseconds: 3000));
         Assert.Equal(actual: count, expected: 2);
     }
     // A poll stats every input and reads contents only where a stamp moved: an unchanged tree hashes nothing per poll, a
@@ -91,13 +97,13 @@ public sealed class WorldWatchLawTests {
 
         watch.Start(submitReload: () => count++);
         Directory.SetLastWriteTimeUtc(lastWriteTimeUtc: old, path: files.RootPath);
-        watch.Poll(now: At(milliseconds: 1000));
+        Poll(watch, now: At(milliseconds: 1000));
         var stamps = watch.StampReads;
         var contents = watch.ContentReads;
 
         Assert.True(condition: (stamps > 0));
         for (var poll = 1; (poll <= 10); poll++) {
-            watch.Poll(now: At(milliseconds: (1000 + (poll * 60))));
+            Poll(watch, now: At(milliseconds: (1000 + (poll * 60))));
         }
         Assert.Equal(expected: contents, actual: watch.ContentReads);
         Assert.Equal(expected: (stamps * 11), actual: watch.StampReads);
@@ -105,16 +111,16 @@ public sealed class WorldWatchLawTests {
 
         File.WriteAllText(module, Module.Replace(comparisonType: StringComparison.Ordinal, newValue: "8", oldValue: "7"));
         File.SetLastWriteTimeUtc(lastWriteTimeUtc: old.AddMinutes(value: 1), path: module);
-        watch.Poll(now: At(milliseconds: 2000));
+        Poll(watch, now: At(milliseconds: 2000));
         Assert.Equal(expected: (contents + 1), actual: watch.ContentReads);
-        watch.Poll(now: At(milliseconds: 2200));
+        Poll(watch, now: At(milliseconds: 2200));
         Assert.Equal(expected: (contents + 1), actual: watch.ContentReads);
         Assert.Equal(actual: count, expected: 1);
         watch.Complete(result: CommandResult.None);
 
         File.SetLastWriteTimeUtc(lastWriteTimeUtc: old.AddMinutes(value: 2), path: module);
-        watch.Poll(now: At(milliseconds: 3000));
-        watch.Poll(now: At(milliseconds: 3200));
+        Poll(watch, now: At(milliseconds: 3000));
+        Poll(watch, now: At(milliseconds: 3200));
         Assert.Equal(expected: (contents + 2), actual: watch.ContentReads);
         Assert.Equal(actual: count, expected: 1);
     }
@@ -128,8 +134,8 @@ public sealed class WorldWatchLawTests {
 
         watch.Start(submitReload: () => count++);
         File.WriteAllText(contents: "import \"counter\"\nuse counter as root()", path: first);
-        watch.Poll(now: At(milliseconds: 1000));
-        watch.Poll(now: At(milliseconds: 1150));
+        Poll(watch, now: At(milliseconds: 1000));
+        Poll(watch, now: At(milliseconds: 1150));
         Assert.Equal(actual: count, expected: 1);
         var firstReads = watch.RecordReads(path: first)!;
         using (Puck.Assets.CompileInputs.Record(log: firstReads.Log)) {
@@ -138,24 +144,24 @@ public sealed class WorldWatchLawTests {
         watch.AdoptReads(reads: firstReads);
         watch.Complete(result: CommandResult.Error(output: "missing counter.puck"));
         files.WriteText(name: "counter.puck", text: Module);
-        watch.Poll(now: At(milliseconds: 1200));
-        watch.Poll(now: At(milliseconds: 1350));
+        Poll(watch, now: At(milliseconds: 1200));
+        Poll(watch, now: At(milliseconds: 1350));
         Assert.Equal(actual: count, expected: 2);
         watch.Complete(result: CommandResult.None);
         current = files.WriteText(name: "second.puck", text: "state { world { slot value = 2 } }");
         // The load accepted value=2; the source changed before the watch adopted that origin.
         File.WriteAllText(contents: "state { world { slot value = 20 } }", path: current);
-        watch.Poll(now: At(milliseconds: 2000));
-        watch.Poll(now: At(milliseconds: 2150));
+        Poll(watch, now: At(milliseconds: 2000));
+        Poll(watch, now: At(milliseconds: 2150));
         Assert.Equal(actual: count, expected: 3);
         watch.Complete(result: CommandResult.None);
         File.WriteAllText(contents: "state { world { slot value = 3 } }", path: first);
-        watch.Poll(now: At(milliseconds: 2200));
-        watch.Poll(now: At(milliseconds: 2400));
+        Poll(watch, now: At(milliseconds: 2200));
+        Poll(watch, now: At(milliseconds: 2400));
         Assert.Equal(actual: count, expected: 3);
         File.WriteAllText(contents: "state { world { slot value = 4 } }", path: current);
-        watch.Poll(now: At(milliseconds: 2500));
-        watch.Poll(now: At(milliseconds: 2650));
+        Poll(watch, now: At(milliseconds: 2500));
+        Poll(watch, now: At(milliseconds: 2650));
         Assert.Equal(actual: count, expected: 4);
     }
 }

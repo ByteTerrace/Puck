@@ -177,10 +177,6 @@ public static partial class PuckParser {
         }
 
         var statements = new List<StatementNode>();
-
-        if (headerWhen is not null) {
-            statements.Add(item: headerWhen);
-        }
         var sawEffect = false;
 
         SkipWhiteSpace(context: context);
@@ -229,6 +225,17 @@ public static partial class PuckParser {
             );
         }
 
+        // A rule's locals evaluate before its gate wherever they are written, so a header `when` stands after the
+        // body's leading declarations: the body reads `local`, then `when`, as the printer writes it back.
+        if (headerWhen is not null) {
+            var at = 0;
+
+            while ((at < statements.Count) && DeclaresOnly(statement: statements[at])) {
+                at++;
+            }
+            statements.Insert(index: at, item: headerWhen);
+        }
+
         if (!sawEffect) {
             diagnostics?.ReportError(
                 code: PuckDiagnosticCodes.RuleWithoutEffects,
@@ -261,6 +268,12 @@ public static partial class PuckParser {
     private static bool CarriesEffect(StatementNode statement) => statement switch {
         EffectStatementNode or ExpressionStatementNode or DecisionBlockNode => true,
         ForStatementNode loop => loop.Body.Any(predicate: CarriesEffect),
+        _ => false,
+    };
+    // Whether a rule-body statement only declares: a local, a compile-time `let`, or a compile-time `for` of them.
+    private static bool DeclaresOnly(StatementNode statement) => statement switch {
+        LocalStatementNode or LetNode => true,
+        ForStatementNode loop => loop.Body.All(predicate: DeclaresOnly),
         _ => false,
     };
 
@@ -1393,7 +1406,10 @@ public static partial class PuckParser {
             cursor.ResetPosition(position: savedPosition);
         }
 
-        if (TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out _, text: out var callId)) {
+        if (TryReadName(admitted: NameForms.Identifier | NameForms.String, context: context, spelling: out var callSpelling, text: out var callId)) {
+            if (!callSpelling.Quoted && TryReadQualifiedCallee(callee: out var qualified, context: context, initialName: callId)) {
+                callId = qualified;
+            }
             SkipWhiteSpace(context: context);
             if (cursor.Current == '(') {
                 var call = ParseCallExpression(

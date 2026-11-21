@@ -267,7 +267,8 @@ public static class PuckDiagnosticCodes {
     /// <summary>PUCK105: a line inside a <c>test</c> block the generated test world cannot carry — a
     /// <c>given</c> line that is not a cell assignment to a literal, a <c>when</c> step that is neither
     /// <c>ticks &lt;n&gt;</c> nor <c>seat&lt;n&gt;: &lt;command line&gt;</c>, a step acting as something other than a
-    /// seat, or a command outside the scheduled step vocabulary.</summary>
+    /// seat, a command outside the scheduled step vocabulary, or an <c>expect</c> line addressed to a document no
+    /// reference of the test's world reaches.</summary>
     public const string TestStepInadmissible = "PUCK105";
     /// <summary>PUCK113: a name the author wrote, bare or quoted, in a spelling Puck reserves for the names it
     /// generates (<c>Puck.State.GeneratedName</c>): a <c>$</c> inside or a <c>~</c> anywhere in a document name, such as

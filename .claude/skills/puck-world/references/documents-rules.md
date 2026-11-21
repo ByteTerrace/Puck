@@ -39,7 +39,7 @@ A body that falls out of the world comes back the same way: the debug world's
 index, `each`/`$each` bound to it; `RuleFacts.ForEachBodies`, served by
 `WorldRuleHost` as `ILiveBodies`), gates on `bodyPosition(each, y)`
 (`$bodyPosition:<bodyRef>:x|y|z`, the live position in fixed-point metres) and
-fires `pose(key: $each, spawnPoint: "hero")`.
+fires `pose(key: $each, spawnPoint: hero)`.
 `setState` with `text` writes a `kind=Text` cell (exactly one of `value`/
 `valueSeconds`/`fromState`/`text`); because `lookAssignment.rows` and creation
 palettes bind to text cells, and a state write re-resolves every bound value

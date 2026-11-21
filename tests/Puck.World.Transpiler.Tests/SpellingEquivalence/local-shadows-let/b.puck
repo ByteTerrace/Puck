@@ -1,0 +1,22 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    row {
+      name: "cards"
+      kind: "Int"
+      capacity: 3
+      cells: map(range(0, 3), k => { key: $"{k}", value: 0 })
+    }
+    slot count = 0
+    slot limit = 9
+  }
+}
+
+rule "tick" {
+  local step = count + 1
+  when count < 2
+  count = step * 2
+  cards[step] = step
+}

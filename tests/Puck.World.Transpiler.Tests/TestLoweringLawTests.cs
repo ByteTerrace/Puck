@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
+using Puck.Testing;
 using Puck.Transpiler.Diagnostics;
 using Xunit;
 
@@ -304,6 +305,24 @@ public class TestLoweringLawTests {
             actual: rule["effects"]!.AsArray().OfType<JsonObject>().Select(selector: static effect => effect["state"]!.GetValue<string>()),
             expected: ["expect$3", "expect$3$fixed"]
         );
+    }
+    // A line addressed to a document no reference of the world reaches has nothing to carry its verdict, so the compile
+    // every door runs refuses it at the line; a document reached through another document's basis is reached.
+    [Fact]
+    public void ALineAddressedToADocumentNoReferenceReachesIsRefusedWhereItIsWritten() {
+        using var files = new TemporaryDirectory();
+        const string Probe = "state {\n  world {\n    table probe { \"0\" = 1 }\n  }\n}\n";
+
+        _ = files.WriteText(name: "away-base.puck", text: $"schema: \"puck.world.definition.v1\"\ndocumentId: \"away-base\"\n\nreferences [\n  {{ document: \"beyond\", name: \"beyond\" }}\n]\n\n{Probe}");
+        _ = files.WriteText(name: "away.puck", text: "schema: \"puck.world.definition.v1\"\nbasis: \"away-base\"\ndocumentId: \"away\"\n");
+        _ = files.WriteText(name: "beyond.puck", text: $"schema: \"puck.world.definition.v1\"\ndocumentId: \"beyond\"\n\n{Probe}");
+        var home = files.WriteText(name: "home.puck", text: $"schema: \"puck.world.definition.v1\"\ndocumentId: \"home\"\n\nreferences [\n  {{ document: \"away\", name: \"away\" }}\n]\n\n{Probe}\ntest \"t\" {{\n  expect {{\n    beyond {{\n      probe[0] == 1\n    }}\n    nowhere {{\n      probe[0] == 1\n    }}\n  }}\n}}\n");
+        var compilation = WorldCompileSession.Shared.CompileFile(cancellationToken: TestContext.Current.CancellationToken, path: home);
+        var refusal = Assert.Single(collection: compilation.Diagnostics, predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
+
+        Assert.Equal(expected: PuckDiagnosticCodes.TestStepInadmissible, actual: refusal.Code);
+        Assert.Contains(expectedSubstring: "'nowhere'", actualString: refusal.Message, comparisonType: StringComparison.Ordinal);
+        Assert.Equal(expected: 20, actual: refusal.Span.Line);
     }
     [Fact]
     public void ATestLowersToASchedulePlusOneVerdictRowAndRulePerExpectation() {

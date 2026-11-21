@@ -390,4 +390,49 @@ public sealed partial class WorldCompileSession {
             return false;
         }
     }
+    /// <summary>Walks the documents the references of <paramref name="roots"/> reach, as crossings would load them:
+    /// every name a reached document's <c>references</c> name, resolved beside that document (<see cref="TryRead"/>)
+    /// and composed (<see cref="TryCompose"/>) for the references it adds in turn. A name nothing answers as one
+    /// document is passed over, as the crossing reaching for it is refused by name at run time. A test's
+    /// expectations about a sibling document are checked against this walk when its source compiles, and
+    /// <c>puck test</c> stages the documents it yields.</summary>
+    /// <param name="roots">The composed worlds the walk starts from, each with the path it stands at.</param>
+    /// <param name="known">The names already standing beside the roots, which the walk neither reads nor yields.</param>
+    /// <returns>Each reached document once, in reach order: its name, its resolved path and the tree as read, which
+    /// the caller owns.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="roots"/> or <paramref name="known"/> is
+    /// <see langword="null"/>.</exception>
+    public IEnumerable<(string Name, string Path, JsonObject Document)> ReachDocuments(IEnumerable<(JsonObject World, string Path)> roots, IEnumerable<string> known) {
+        ArgumentNullException.ThrowIfNull(argument: roots);
+        ArgumentNullException.ThrowIfNull(argument: known);
+
+        var reached = new HashSet<string>(collection: known, comparer: Puck.Assets.Documents.DocumentName.Comparer);
+        var pending = new Queue<(JsonObject World, string Path)>(collection: roots);
+
+        while (pending.TryDequeue(result: out var next)) {
+            foreach (var reference in ((next.World["references"] as JsonArray) ?? []).OfType<JsonObject>()) {
+                if ((reference["document"]?.GetValue<string>() is not { } name) || !WorldDocumentName.TryValidate(name: name, reason: out _) ||
+                    !reached.Add(item: name) || !TryRead(content: out var content, name: name, reason: out _, referrerName: next.Path, resolvedName: out var resolved) ||
+                    (ParseObject(bytes: content!) is not { } found)) {
+                    continue;
+                }
+                var composed = (((found["basis"] is not null) || (found["imports"] is not null)) &&
+                    TryCompose(composed: out var layered, reason: out _, rootBytes: content!, rootResolvedPath: resolved) && (layered is not null))
+                    ? layered
+                    : found;
+
+                pending.Enqueue(item: (composed, resolved));
+
+                yield return (name, resolved, ((JsonObject)found.DeepClone()));
+            }
+        }
+
+        static JsonObject? ParseObject(byte[] bytes) {
+            try {
+                return (JsonNode.Parse(utf8Json: bytes) as JsonObject);
+            } catch (System.Text.Json.JsonException) {
+                return null;
+            }
+        }
+    }
 }

@@ -35,6 +35,10 @@ namespace Puck.World;
 /// new key appends in authored order, and a tombstone row <c>{"&lt;key&gt;": …, "$drop": true}</c> removes the named
 /// basis row. A tombstone naming no basis row refuses by name. A row's <c>$before</c> positions it before the named
 /// surviving identity after merging; missing targets and cycles refuse.</description></item>
+/// <item><description>An effect list (any list holding a row whose <c>$type</c> is one of the effect arms the model
+/// declares for <see cref="Puck.State.ActionEffect"/>) is an ordered program, never a keyed set: an effect's
+/// <c>key</c> names the cell it writes, and two effects may write one cell. It never keys, so it replaces
+/// wholesale as the next rule says.</description></item>
 /// <item><description>A list that cannot key (scalar elements, mixed shapes, or duplicate keys on either side)
 /// replaces wholesale, and a keyed list can opt into the same with a leading marker row
 /// <c>{"$replace": true}</c>. A creation's <c>shapes</c> list is the exception: two non-empty lists that cannot key
@@ -972,6 +976,10 @@ public static class WorldDocumentBasis {
         key = string.Empty;
         ambiguity = string.Empty;
 
+        if (HoldsEffect(list: basis) || HoldsEffect(list: overlay)) {
+            return false;
+        }
+
         foreach (var candidate in RowKeyPrecedence) {
             if (
                 !ListCarriesKey(
@@ -1014,6 +1022,23 @@ public static class WorldDocumentBasis {
         return false;
     }
 
+    // The effect arms the model declares, read when a list first holds a discriminated row.
+    private static readonly Lazy<System.Collections.Frozen.FrozenSet<string>> EffectDiscriminators = new(valueFactory: static () =>
+        System.Collections.Frozen.FrozenSet.ToFrozenSet(
+            comparer: StringComparer.Ordinal,
+            source: (WorldModelShape.Of(type: typeof(Puck.State.ActionEffect))?.Arms ?? []).Select(selector: static arm => arm.Discriminator).OfType<string>()
+        ));
+    // Whether a list holds an effect row, which makes it an ordered program rather than a keyed set.
+    private static bool HoldsEffect(IList<JsonNode?> list) {
+        foreach (var row in list) {
+            if ((row is JsonObject rowObject) && (TryGetString(obj: rowObject, propertyName: "$type") is { } discriminator) &&
+                EffectDiscriminators.Value.Contains(item: discriminator)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     private static bool TypeDiscriminatorsDiffer(JsonObject basis, JsonObject overlay) {
         return (
             (basis[propertyName: "$type"] is { } basisType) &&

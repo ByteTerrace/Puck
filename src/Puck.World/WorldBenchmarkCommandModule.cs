@@ -741,12 +741,12 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         var chapter = m_chapters[index];
 
         foreach (var timing in gpuTiming.Readings()) {
-            if (timing.Samples <= 0) {
+            if (timing.LastSubmission == 0) {
                 continue;
             }
 
             chapter.Gpu.TryGetValue(key: timing.Pass, value: out var held);
-            chapter.Gpu[timing.Pass] = ((held.Sum + timing.Milliseconds), Math.Max(val1: held.Max, val2: timing.Milliseconds), (held.Count + 1));
+            chapter.Gpu[timing.Pass] = ((held.Sum + timing.PerFrameMs), Math.Max(val1: held.Max, val2: timing.PerFrameMs), (held.Count + 1));
         }
 
         return new CommandResult(Output: string.Empty);

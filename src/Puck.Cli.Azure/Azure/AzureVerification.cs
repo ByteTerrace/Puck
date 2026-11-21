@@ -325,6 +325,17 @@ public static partial class AzureCommand {
                     image: null,
                     scaleSet: null
                 );
+                // The load balancer forwards QUIC only to a worker whose /healthz answers 200, so the worker's own answer
+                // goes first: a withheld readiness then names its reason instead of the probe timing out.
+                await WorldHealthAsync(
+                    group: group,
+                    port: configuration["lifecycle"]!["healthPort"]!.GetValue<int>(),
+                    route: "/healthz",
+                    worker: Text(value: (await WorkersAsync(
+                        group: group,
+                        scaleSet: Text(value: configuration["name"])
+                    ))[0]!["name"])
+                );
                 await PuckAsync(
                     "world",
                     "probe",

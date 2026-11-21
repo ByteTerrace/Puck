@@ -26,7 +26,7 @@ public sealed record WorldCameraAnchorCandidate(WorldAnchor Anchor, [property: J
 /// speaking character while they speak and the seat's own avatar otherwise. Refused beside <paramref name="Anchor"/>;
 /// a single unconditional anchor is <paramref name="Anchor"/>.</param>
 public sealed record WorldCamera(
-    [property: DocumentText("a camera name")] string Name,
+    [property: DocumentName(WorldNameKind.Camera, WorldNameRole.Declares)] string Name,
     WorldCameraProgram Rig,
     uint RenderWidth,
     uint RenderHeight,

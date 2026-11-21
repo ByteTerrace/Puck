@@ -1976,7 +1976,7 @@ bodies {
   networkPlayers: 0
   reconnectGraceSeconds: 0
   seatSpawns [
-    "stage"
+    stage
   ]
   // The standard's idle floor (../../standard/kits.puck).
   sleepAfterSeconds: idleSleepAfter

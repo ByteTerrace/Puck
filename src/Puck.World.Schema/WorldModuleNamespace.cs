@@ -16,7 +16,7 @@ namespace Puck.World;
 /// match: a bare name position, the name positions of a reserved <c>$</c> channel's colon segments (read by the
 /// channel's grammar, <see cref="DescribesChannel"/>), a cell key's <c>$cell:</c>/<c>cell:</c> spelling, an infix
 /// expression's state reads and topology arguments, a postfix token's row, and a <c>state.&lt;row&gt;</c> binding.
-/// A placement, a prototype, a clock and a screen material each live in their own namespace, apart from every
+/// A placement, a prototype, a clock, a screen material, a camera and a spawn point each live in their own namespace, apart from every
 /// state-side name. The engine's own words are never renamed: a function an expression calls, and a channel's
 /// operation, facet, or body-reference kind.
 /// A name the fragment does not declare is left as written, so a fragment may still address its host's rows by
@@ -24,6 +24,13 @@ namespace Puck.World;
 /// <c>basis</c>/<c>imports</c>.
 /// </summary>
 public static class WorldModuleNamespace {
+    /// <summary>Returns whether a name of a kind belongs to the fragment that declares it: renamed under an alias,
+    /// and named by another layer only through the fragment's exports. A camera and a spawn point are anchors of the
+    /// whole composition instead, which every layer names as declared, the way a route names a place's spawn.</summary>
+    /// <param name="kind">The name's kind.</param>
+    /// <returns><see langword="false"/> for <see cref="WorldNameKind.Camera"/> and
+    /// <see cref="WorldNameKind.SpawnPoint"/>; otherwise <see langword="true"/>.</returns>
+    internal static bool IsModuleScoped(WorldNameKind kind) => (kind is not (WorldNameKind.Camera or WorldNameKind.SpawnPoint));
     private static DeclaredNames CollectDeclaredNames(JsonObject module, string alias) {
         var declared = new DeclaredNames();
 
@@ -32,7 +39,7 @@ public static class WorldModuleNamespace {
             type: typeof(WorldDefinition),
             visitor: (parent, name, value, field, _) => {
                 if (
-                    (field.Role == WorldNameRole.Declares) &&
+                    (field.Role == WorldNameRole.Declares) && IsModuleScoped(kind: field.Kind) &&
                     (value is JsonValue leaf) &&
                     leaf.TryGetValue<string>(value: out var textValue) &&
                     (textValue.Length > 0)
@@ -800,22 +807,28 @@ public static class WorldModuleNamespace {
         }
     }
 
-    // Where a declared name lives: a placement, a prototype, a clock and a screen material each keep their own
-    // namespace, and every other kind shares the document's, so a module's placement 'gate' never renames a host row
-    // 'gate' the module reads.
+    // Where a declared name lives: a placement, a prototype, a clock, a screen material, a camera and a spawn point each
+    // keep their own namespace, and every other kind shares the document's, so a module's placement 'gate' never
+    // renames a host row 'gate' the module reads.
     internal enum NameSpace : byte {
         Document,
         Placement,
         Prototype,
         Clock,
         ScreenMaterial,
+        Camera,
+        SpawnPoint,
     }
+
+    private static readonly NameSpace[] Spaces = Enum.GetValues<NameSpace>();
 
     internal static NameSpace SpaceOf(WorldNameKind kind) => kind switch {
         WorldNameKind.Placement => NameSpace.Placement,
         WorldNameKind.Prototype => NameSpace.Prototype,
         WorldNameKind.Clock => NameSpace.Clock,
         WorldNameKind.ScreenMaterial => NameSpace.ScreenMaterial,
+        WorldNameKind.Camera => NameSpace.Camera,
+        WorldNameKind.SpawnPoint => NameSpace.SpawnPoint,
         _ => NameSpace.Document,
     };
 
@@ -869,7 +882,7 @@ public static class WorldModuleNamespace {
                 );
             }
 
-            foreach (var space in ((ReadOnlySpan<NameSpace>)[NameSpace.Document, NameSpace.Placement, NameSpace.Prototype, NameSpace.Clock, NameSpace.ScreenMaterial])) {
+            foreach (var space in Spaces) {
                 if (m_spaced.TryGetValue(
                     key: (space, name),
                     value: out mapped

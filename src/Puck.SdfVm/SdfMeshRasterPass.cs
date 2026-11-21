@@ -25,8 +25,7 @@ namespace Puck.SdfVm;
 public sealed class SdfMeshRasterPass {
     /// <summary>The file stem of the pass's two stages: <c>sdf-mesh.vert</c> and <c>sdf-mesh.frag</c>.</summary>
     public const string ShaderStem = "sdf-mesh";
-    /// <summary>The file stem of the shadow pipeline's two stages: <c>sdf-mesh-shadow.vert</c>, the light's orthographic
-    /// projection, and <c>sdf-mesh-shadow.frag</c>, which writes no colour and counts its fragments.</summary>
+    /// <summary>The stem of the depth-only shadow pipeline's vertex stage, which projects from the light.</summary>
     public const string ShadowShaderStem = "sdf-mesh-shadow";
     /// <summary>The cascade's glass extinction fragment stage.</summary>
     public const string ShadowGlassShaderStem = "sdf-mesh-shadow-glass";
@@ -62,12 +61,6 @@ public sealed class SdfMeshRasterPass {
         pipelines: pipelines,
         shadowGlassVertex: Load(target: target, directory: SdfKernelSet.DefaultDirectory, stage: "vert", stem: ShadowGlassShaderStem),
         shadowGlassFragment: Load(target: target, directory: SdfKernelSet.DefaultDirectory, stage: "frag", stem: ShadowGlassShaderStem),
-        shadowFragment: Load(
-            target: target,
-            directory: SdfKernelSet.DefaultDirectory,
-            stage: "frag",
-            stem: ShadowShaderStem
-        ),
         shadowVertex: Load(
             target: target,
             directory: SdfKernelSet.DefaultDirectory,
@@ -87,13 +80,12 @@ public sealed class SdfMeshRasterPass {
     /// <param name="fragment">The fragment stage's bytecode.</param>
 
     /// <param name="shadowVertex">The shadow pipeline's vertex stage's bytecode.</param>
-    /// <param name="shadowFragment">The shadow pipeline's fragment stage's bytecode.</param>
     /// <param name="glassFragment">The glass pipeline's fragment stage's bytecode, drawn with <paramref name="vertex"/>.</param>
     /// <param name="occlusion">The mesh pass occlusion kernel's bytecode (<see cref="OcclusionShaderStem"/>).</param>
     /// <param name="shadowGlassVertex">The cascade vertex stage with glass attributes.</param>
     /// <param name="shadowGlassFragment">The cascade's glass extinction stage.</param>
     /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> is <see langword="null"/>.</exception>
-    public SdfMeshRasterPass(GpuPassPipelineCache pipelines, ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment, ReadOnlyMemory<byte> shadowVertex, ReadOnlyMemory<byte> shadowFragment, ReadOnlyMemory<byte> glassFragment, ReadOnlyMemory<byte> occlusion, ReadOnlyMemory<byte> shadowGlassFragment, ReadOnlyMemory<byte> shadowGlassVertex) {
+    public SdfMeshRasterPass(GpuPassPipelineCache pipelines, ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment, ReadOnlyMemory<byte> shadowVertex, ReadOnlyMemory<byte> glassFragment, ReadOnlyMemory<byte> occlusion, ReadOnlyMemory<byte> shadowGlassFragment, ReadOnlyMemory<byte> shadowGlassVertex) {
         ArgumentNullException.ThrowIfNull(argument: pipelines);
 
         Pipelines = pipelines;
@@ -103,14 +95,13 @@ public sealed class SdfMeshRasterPass {
         );
 
         ShadowKey = ShadowKeyOf(
-            fragment: shadowFragment,
             vertex: shadowVertex
         );
         ShadowExitKey = ShadowKeyOf(
-            exit: true,
-            fragment: shadowFragment,
+            cull: GpuCullMode.Front,
             vertex: shadowVertex
         );
+        ShadowEntryKey = ShadowKeyOf(vertex: shadowVertex, cull: GpuCullMode.Back);
         OcclusionKey = OcclusionKeyOf(occlusion: occlusion);
         ShadowGlassKey = GpuPassPipelineKey.OfGraphics(description: ShadowDescription with { Name = ShadowGlassShaderStem }, fragment: shadowGlassFragment, vertex: shadowGlassVertex, renderPass: ShadowRenderPass);
         GlassKey = GlassKeyOf(
@@ -136,10 +127,6 @@ public sealed class SdfMeshRasterPass {
 
     /// <summary>Gets the shadow pipeline's description: the mesh pass's without culling, named for the shadow stages.</summary>
     public static GpuGraphicsPipelineDescription ShadowDescription { get; } = Description with { Cull = GpuCullMode.None, Name = ShadowShaderStem };
-    /// <summary>Gets the shadow exit pipeline's description: the shadow pipeline's with the faces toward the light culled,
-    /// so a cascade's exit layer holds where the light leaves the first solid it crosses. The cascade's light camera keeps
-    /// the view cameras' handedness, so a face's winding seen from the light says whether it faces the light.</summary>
-    public static GpuGraphicsPipelineDescription ShadowExitDescription { get; } = ShadowDescription with { Cull = GpuCullMode.Front };
     /// <summary>Gets the glass pipeline's description: the mesh pass's without culling, named for the glass stage. It draws in the mesh
     /// pass's render pass (<see cref="RenderPass"/>), into the glass target and the glass pass's own depth.</summary>
     public static GpuGraphicsPipelineDescription GlassDescription { get; } = Description with { Cull = GpuCullMode.None, Name = GlassShaderStem };
@@ -187,6 +174,8 @@ public sealed class SdfMeshRasterPass {
     public GpuPassPipelineKey ShadowKey { get; }
     /// <summary>Gets the shadow exit pipeline's key in <see cref="Pipelines"/>.</summary>
     public GpuPassPipelineKey ShadowExitKey { get; }
+    /// <summary>Gets the cascade's back-face-culled entry pipeline key.</summary>
+    public GpuPassPipelineKey ShadowEntryKey { get; }
     /// <summary>Gets the cascade's glass extinction pipeline key.</summary>
     public GpuPassPipelineKey ShadowGlassKey { get; }
     /// <summary>Gets the glass pipeline's key in <see cref="Pipelines"/>.</summary>
@@ -210,14 +199,12 @@ public sealed class SdfMeshRasterPass {
 
     /// <summary>Returns the key of the shadow pipeline built from given stages.</summary>
     /// <param name="vertex">The shadow vertex stage's bytecode.</param>
-    /// <param name="fragment">The shadow fragment stage's bytecode.</param>
-    /// <param name="exit">Whether the key is the exit pipeline's (<see cref="ShadowExitDescription"/>) rather than the
-    /// depth's (<see cref="ShadowDescription"/>).</param>
+    /// <param name="cull">Which triangle faces are culled.</param>
     /// <returns>The key.</returns>
-    public static GpuPassPipelineKey ShadowKeyOf(ReadOnlyMemory<byte> vertex, ReadOnlyMemory<byte> fragment, bool exit = false) =>
+    public static GpuPassPipelineKey ShadowKeyOf(ReadOnlyMemory<byte> vertex, GpuCullMode cull = GpuCullMode.None) =>
         GpuPassPipelineKey.OfGraphics(
-            description: (exit ? ShadowExitDescription : ShadowDescription),
-            fragment: fragment,
+            description: ShadowDescription with { Cull = cull },
+            fragment: default,
             renderPass: ShadowRenderPass,
             vertex: vertex
         );
@@ -280,15 +267,19 @@ public sealed class SdfMeshRasterPass {
     /// <summary>Takes a lease on the shadow pipeline for a device, joining its build or starting it on the thread
     /// pool.</summary>
     /// <param name="device">The device.</param>
-    /// <param name="exit">Whether to lease the exit pipeline (<see cref="ShadowExitKey"/>) rather than the depth's
-    /// (<see cref="ShadowKey"/>).</param>
+    /// <param name="cull">Which triangle faces are culled.</param>
     /// <returns>The lease; its <see cref="GpuPassPipeline"/> carries the pipeline and the shadow render pass.</returns>
-    public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> AcquireShadow(IGpuDeviceContext device, bool exit = false) {
+    public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> AcquireShadow(IGpuDeviceContext device, GpuCullMode cull = GpuCullMode.None) {
         ArgumentNullException.ThrowIfNull(argument: device);
 
         return Pipelines.Acquire(
             device: device,
-            key: (exit ? ShadowExitKey : ShadowKey)
+            key: cull switch {
+                GpuCullMode.Back => ShadowEntryKey,
+                GpuCullMode.Front => ShadowExitKey,
+                GpuCullMode.None => ShadowKey,
+                _ => throw new ArgumentOutOfRangeException(nameof(cull)),
+            }
         );
     }
     /// <summary>Takes a lease on the glass pipeline for a device, joining its build or starting it on the thread

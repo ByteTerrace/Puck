@@ -13,7 +13,7 @@ import "../standard/cards"
 bodies {
   localSeats: 4
   seatActivation [Eager, Eager, Eager, Eager]
-  seatSpawns ["stage", "stage", "stage", "stage"]
+  seatSpawns [stage, stage, stage, stage]
 }
 
 prototypes {

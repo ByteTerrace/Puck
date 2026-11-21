@@ -532,7 +532,7 @@ file sealed class CountingPipelineFactory(IGpuPipelineFactory inner, GpuWorkLedg
             ),
             lifetimeIndex: GpuWork.PipelinesCreatedIndex
         );
-    public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) =>
+    public IGpuPipeline Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule? fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) =>
         Created(
             created: inner.Create(
                 description: description,

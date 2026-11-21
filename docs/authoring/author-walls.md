@@ -32,6 +32,17 @@ and spelling-equivalence pair land.
 | A member spelling a rule-body keyword could not be written or was broken by the formatter (`` `release`: 2 `` printed `release: 2`, which read back as the statement) | Rule, scope, decision and option bodies (`PuckParser.Rules`, `PuckPrinter`) | A construct body opens a statement with a keyword only from `PuckParser.ConstructBodyKeywords`, the one list the printer quotes from; `name:` is a member whatever it spells; and the printer writes the backquoted escape those bodies read. |
 | `hash: auto` was refused on tune, patch, music and table rows (`PUCK030`: `'auto'` does not match the canonical sha256) | `worlds/debug/score.puck` (every pin pasted from an error) | `WorldDocumentMembers` resolves `hash: auto` on those rows through `WorldAssetRowLoader.TryCanonicalHash`, the load-and-canonicalize step the validator, the embedder and the official packaging share. |
 | `PUCK_LINT_005` read a binding context's `state: "1"` as a state row name | `worlds/standard/typing.puck` (an `allow` acknowledged it) | The lint's generic `state` walk skips a binding overlay's `document`, a binding profile whose context `state` is a family state value. |
+| An aliased library's template or rule template could not be called as a statement (`m.sized(size: 7)` answered `PUCK001: Unexpected token sequence after 'm'`), though its functions worked in an expression | Any aliased library (`PuckParser`, `PuckParser.Rules`) | A statement, at document level or in a rule body, reads a touching dotted callee ending at `(` as one qualified call, the callee the expression parser builds; pair `aliased-template-statement`. |
+| A rule `local` named like a document constant read the constant (`let step = 9` beside `local step = count + 1` wrote 9), while hover and go-to-definition named the local only when no constant existed | Rules in any document or library (`WorldDocumentEmitter.OperandBinding`, `SyntaxScopes`) | The innermost binding wins everywhere: the operand binder treats the rule's locals as runtime names, as it does a lambda binder or a pool binding, in a value, a key and a fold; `SyntaxScopes.Resolve` returns the nearest binder and the import rewriter shields every binder. Inside a rule body, a spliced rule template's parameters and a compile-time loop's variables are inner to the rule's locals (`DocumentScope.RuleBinders`), so a template body resolves its parameters, then the calling rule's locals, then document constants; pairs `local-shadows-let` and `rule-template-parameter-shadows-local`, and an LSP hover case. |
+| A rule whose effects write one cell key twice (`claim-expire` in `worlds/debug/pond.puck`) was refused when a layer restated it over a basis: the merge read each effect's `key` as a row identity | Rule templates re-expanded over a basis (`WorldDocumentBasis`) | An effect list is an ordered program, never a keyed set: a list holding a row whose `$type` is one of the effect arms the model declares never keys, so a layer's list replaces the basis's whole; law `An_effect_list_is_an_ordered_program_the_layer_replaces_whole`. |
+| A key compile-time constants decide (`slot[k + 1]` with `let k = 1`) stayed an `$expr:` program while `slot[2]` was an interned literal key, so the ergonomic spelling cost more and escaped the undeclared-cell refusal | Rules reading or writing a keyed row (`WorldDocumentEmitter.OperandBinding`) | The operand fold folds an index by the same kind-free folder as every constant, so the key lowers to the literal it decides and is refused like the literal when it names no declared cell (a constant key that names no cell reads 0 forever, the same defect); pair `constant-key`. |
+| A rule's header `when` made a body `local` refuse as declared after a gate (`PUCK048`, recorded as `PUCK012`) | `rule "x" when … { local … }` (`PuckParser.Rules`) | Locals evaluate before the gate wherever they are written, so the parser places a header `when` after the body's leading declarations, as the printer writes it back; pair `header-when`. |
+| A string literal written before the row it compares with kept its comparator (`"a" < label[0]` lowered as `label[0] < "a"`) | Text gates (`WorldDocumentEmitter.Rules`) | The literal-first text comparison flips its comparator as a literal-first number does; a relational text comparison is still refused at validation, now for the comparison written; pair `literal-first-gate`. |
+| A long `not` chain nested one document level per `not` and passed the parser's 256-deep limit only to fail the document reader's 64-deep limit, with the reader's message | Gates (`WorldDocumentEmitter.Rules`) | A gate is two-valued, so the gate fold cancels double negation and a chain of `not` nests one level at most; the parser's own depth limit still reports at the gate's span; pair `not-chain`. |
+| Unary `-`/`~` before `not` and a grouped `!= 0` gate, reported as precedence and printer losses | Gates (`PuckParser`, `PuckPrinter`) | Reproduced and correct: `-not count == 0` parses as `-(not (count == 0))` because `not` binds below comparisons, and the printer writes the explicit `-(not count == 0)`, which compiles to the same document; the printer writes a gate `(x != 0)` as `x`, the same gate, and both forms compile to the same document. |
+| A `test` expectation addressed to a document the world does not reference was refused only when `puck test` staged the world | Scenario tests (`WorldCompiler`, `TestCommand.Sources`) | The compile every door runs (`puck compile`, `puck lint`, the language server) refuses it at the line (`PUCK105`), walking the references with `WorldCompileSession.ReachDocuments`, the walk `puck test` stages the documents by; law `ALineAddressedToADocumentNoReferenceReachesIsRefusedWhereItIsWritten`. |
+| `puck lint` never reported a library `let` or template no source read, and its reference lint checked a camera or spawn point only in fields literally named `camera` or `spawnPoint` (a seat's spawns, a route's pose, a distribution's points and a screen's view went unread, and a portal session's destination camera was checked against the wrong document) | Directory lints, the reference lint (`PuckLibraryUse`, `PuckLinter.References`, `WorldNameKind`) | A directory lint reports a library declaration no linted source reads (a dotted read and a function a gate calls count as reads); cameras and spawn points are `WorldNameKind.Camera` and `WorldNameKind.SpawnPoint` sites the registry lists, each a namespace of its own shared by every layer of a composition (never renamed under an alias, never export-gated), and the reference lint resolves every registered kind against the names the composed document declares, in the one registry walk; laws `ALibraryDeclarationNoSourceReadsIsReportedAgainstTheLibrary` and `UnresolvedSpawnPointReferenceIsFlagged`. |
+| A `Morph` shape on a solid placement passed `--validate` and failed when the contact field was built (`Blend operation 'Morph' is supported only as a PopField composition`); only `puck creation stats` caught it | Solid creations with a pop-only blend (`CreationStampEmitter.EmitFixed`) | The contact emission opens a pop-only blend's scope with `ShapeScope.Open`, the opener the render emission uses, so Morph and the stairs blends compose in contact as they render; law `PopOnlyContactBlendLawTests`. |
 | Early S11 walls: `function`, `with { }`, `rule template`, `let` record values at typed positions, `flatMap`, `range`/`map`, compile-time `for` in rule bodies, compound assignment (`-=`), shade CSE/DCE/structural folding | Shipped games, debug world, standard package | Closed in [S11](../plans/state-and-language.md#s11--ergonomic-is-optimal) with pairs in `tests/Puck.World.Transpiler.Tests/SpellingEquivalence/`. |
 
 ## Open
@@ -44,33 +55,16 @@ and the [`sdf-authoring` evals](../../.claude/skills/sdf-authoring/SKILL.md):
   tiling, mirrored pair vs `symmetry` fold, union shape order, `x += 3` vs
   `x = x + 3`) need a cost corpus over bake groups and the work sheet beside the
   document corpus.
-- **Re-expanding a rule template over a basis**: a rule whose effects write one
-  key twice (`claim-expire` in `worlds/debug/pond.puck`) refuses when merged by
-  `key` across a basis; decide whether effect lists stay ordered actions rather
-  than a keyed set.
-- **Authoring-time refusal for unreferenced `test` world blocks**: a
-  `garden { ... }` expectation naming a document the world does not reference is
-  only refused when `puck test` stages the world, not in `puck compile`,
-  `puck lint` or the language server.
 - **Work-sheet over-pricing**: `companion-interest-*` (~170 running-minimum
   rules lacking a nearest-point reduction), dynamic-key writes charged against
   every pinned cell in `CountWriters`, and live-zone-table transfers pricing
   disclosure by the square of the piles.
-- **Unused declarations in module libraries**: `puck lint` does not report library
-  `let`s or templates that no source in a directory reads.
 - **Imported module named `roles`**: re-verify whether a module named `roles`
   still triggers `PUCK031` on its importer.
 - **Sculpting and validation walls surfaced by `sdf-authoring` evals**:
-  - `Morph` shape-level blend (`s10-morph-blend`): `puck compile --validate`
-    admits a `Morph` that fails at SDF emission; only `puck creation stats`
-    catches it.
   - `Capsule` half-length under scale (`motion-nod`): scaled `Capsule` ended
     short of author expectation; document exact `Capsule` scale semantics in the
     shapes reference.
   - `Creation`-scope subtraction across unrelated parts (`s08-subtraction-trap`)
     and `detail` flags not reducing shape budget (`s07-over-budget`): clear
     authoring diagnostics and remedies remain guarded by the evals.
-- **Unreproduced parser/printer edge cases**: string literal on the left of a
-  relational gate; header `when` gate making a body's `local` report `PUCK012`;
-  `not` losing span/recursion depth; unary `-`/`~` before `not` precedence;
-  `PuckPrinter` dropping `!= 0` from a grouped comparison gate.

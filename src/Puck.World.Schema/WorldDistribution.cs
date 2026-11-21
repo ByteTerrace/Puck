@@ -22,7 +22,7 @@ public abstract record WorldDistributionRegion {
     /// <summary>A cycle of authored spawn poses, each expanded by a planar square.</summary>
     /// <param name="Names">The spawn-point names.</param>
     /// <param name="HalfExtent">The square half-extent on X and Z.</param>
-    public sealed record Points([property: DocumentText("spawn point ids")] IReadOnlyList<string> Names, float HalfExtent) : WorldDistributionRegion;
+    public sealed record Points([property: DocumentName(WorldNameKind.SpawnPoint, WorldNameRole.Names)] IReadOnlyList<string> Names, float HalfExtent) : WorldDistributionRegion;
     /// <summary>A finite two-axis lattice local to a placement.</summary>
     /// <param name="StepA">The first per-copy step.</param>
     /// <param name="CountA">The copy count along <paramref name="StepA"/>.</param>

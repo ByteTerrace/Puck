@@ -17,14 +17,14 @@ public interface IGpuPipelineFactory {
     /// <param name="renderPass">The render pass the pipeline draws in; its attachment formats fix the pipeline's
     /// outputs, and the pipeline draws in any framebuffer made for it.</param>
     /// <param name="vertexShaderModule">The vertex shader module.</param>
-    /// <param name="fragmentShaderModule">The fragment shader module.</param>
+    /// <param name="fragmentShaderModule">The fragment shader module, or null for depth-only drawing.</param>
     /// <param name="description">The pipeline's vertex input, sampler, storage-buffer, and push-constant shape.</param>
     /// <param name="name">The object's debug name, from its creator's identity (<see cref="GpuObjectName"/>); the default value names nothing.</param>
     /// <returns>A new, owning <see cref="IGpuPipeline"/>.</returns>
     IGpuPipeline Create(
         IGpuRenderPass renderPass,
         IGpuShaderModule vertexShaderModule,
-        IGpuShaderModule fragmentShaderModule,
+        IGpuShaderModule? fragmentShaderModule,
         GpuGraphicsPipelineDescription description,
         in GpuObjectName name
     );
