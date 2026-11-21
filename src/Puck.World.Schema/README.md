@@ -1859,7 +1859,8 @@ delivers its own bound projection, so a client never keeps it: each sink that
 receives documents (`WorldClient`, `WorldSessionMirror`) adopts every one
 through its state view (`WorldDocumentStateView.Adopt`), which binds the same
 document again to a `WorldLiveValues` of the sink's own, over the arena its
-snapshots' cells fill and the tick it was last delivered. A value delivered
+snapshots' cells fill and the tick it was last delivered; a document holding no
+value bound elsewhere and bound to no arena is kept as it is. A value delivered
 unchanged comes back as the copy adopted before, so comparing two delivered
 documents by reference still sees only what changed. A sink's document is never
 registered with `WorldStateReader.Bind`; only the server binds its own.

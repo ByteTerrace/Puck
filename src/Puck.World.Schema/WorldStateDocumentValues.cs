@@ -22,6 +22,16 @@ public sealed class WorldLiveValues(Func<ArenaTime> clock, Lock? gate = null) {
     /// <summary>Gets the lock a read of a bound value takes, or <see langword="null"/> for none.</summary>
     public Lock? Gate => gate;
 
+    /// <summary>Finds the projection the last bind made of <paramref name="definition"/>.</summary>
+    /// <param name="definition">The definition bound before.</param>
+    /// <param name="projection">The projection it became, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the last bind met <paramref name="definition"/>.</returns>
+    public bool TryProjection(WorldDefinition definition, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? projection) {
+        projection = (Bound.TryGetValue(key: definition, value: out var bound) ? (bound as WorldDefinition) : null);
+
+        return (projection is not null);
+    }
+
     // What the last bind turned each value it met into: itself for a value that holds no reference it did not bind,
     // and the bound copy for any other. A later bind answers each from here without entering it, so binding a definition
     // composed over the last projection, or delivered again with most of its rows unchanged, walks only what changed and
@@ -67,15 +77,36 @@ public static class WorldStateDocumentValues {
     /// and a definition delivered again keeps the copies it was handed before. The state section is never rewritten,
     /// so the state catalog the arena was built over carries across. The projection is a definition object this owner
     /// alone holds, so a definition another owner or a cache holds is never the one this owner's arena is bound to
-    /// (<see cref="WorldStateReader.Bind"/>).</remarks>
+    /// (<see cref="WorldStateReader.Bind"/>), unless <paramref name="shareUnchanged"/> lets a definition that needed no
+    /// new binding and is bound to no arena come back as itself.</remarks>
     /// <param name="definition">The definition to project.</param>
     /// <param name="live">The owner's store.</param>
+    /// <param name="shareUnchanged">Whether a definition holding no value bound to another store, and bound to no
+    /// arena, is answered as itself: right for an owner that never binds its projection to an arena (a client), wrong
+    /// for one that does (a server).</param>
     /// <returns>The projection.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">A reference names no row of the live arena.</exception>
-    public static WorldDefinition BindLive(WorldDefinition definition, WorldLiveValues live) {
+    public static WorldDefinition BindLive(WorldDefinition definition, WorldLiveValues live, bool shareUnchanged = false) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: live);
+
+        if (live.Bound.TryGetValue(key: definition, value: out var earlier)) {
+            // A definition bound before (one delivered again) answers with the projection it became, allocating nothing.
+            if (!ReferenceEquals(objA: earlier, objB: definition) || (shareUnchanged && !WorldStateReader.TryBoundArena(definition: definition, arena: out _))) {
+                return (WorldDefinition)earlier;
+            }
+
+            // This owner's own projection, bound again: every value in it is already bound, so it needs only a new
+            // object, which replaces it in the memo so the memo keeps its size.
+            var again = (definition with { });
+
+            CarryReferencedRows(source: definition, target: again);
+            _ = live.Bound.Remove(key: definition);
+            live.Bound[again] = again;
+
+            return again;
+        }
 
         var bound = definition;
 
@@ -93,13 +124,20 @@ public static class WorldStateDocumentValues {
             }
 
             live.Bound = binder.Kept;
+        } else {
+            // A definition that names no reference has nothing else worth remembering.
+            live.Bound = new(comparer: ReferenceEqualityComparer.Instance);
         }
 
         var owned = (ReferenceEquals(objA: bound, objB: definition)
-            ? (definition with { })
+            ? ((shareUnchanged && !WorldStateReader.TryBoundArena(definition: definition, arena: out _)) ? definition : (definition with { }))
             : bound);
 
-        CarryReferencedRows(source: definition, target: owned);
+        if (!ReferenceEquals(objA: owned, objB: definition)) {
+            CarryReferencedRows(source: definition, target: owned);
+        }
+        live.Bound[definition] = owned;
+        live.Bound[owned] = owned;
 
         return owned;
     }

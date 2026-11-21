@@ -87,13 +87,17 @@ public sealed class WorldDocumentStateView : IWorldStateView {
 
         var values = (m_values ?? throw new InvalidOperationException(message: "Only a view built as a sink's door adopts delivered documents."));
 
+        // The document adopted last, delivered again, is already shaped for and bound.
+        if (values.TryProjection(definition: delivered, projection: out var earlier) && ReferenceEquals(objA: earlier, objB: m_delivered)) {
+            return earlier;
+        }
         if (!valuesFollow || (m_shaped is not { } shaped) || !ReferenceEquals(objA: shaped.StateCatalog, objB: delivered.StateCatalog)) {
             _ = Shape(document: delivered);
         }
 
         values.Arena = m_arena;
 
-        var adopted = WorldStateDocumentValues.BindLive(definition: delivered, live: values);
+        var adopted = WorldStateDocumentValues.BindLive(definition: delivered, live: values, shareUnchanged: true);
 
         // The projection shares the delivered state section and catalog, so the shape just taken stands for it.
         m_shaped = adopted;
