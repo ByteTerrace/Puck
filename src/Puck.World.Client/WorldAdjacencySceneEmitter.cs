@@ -553,7 +553,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     /// <inheritdoc/>
     /// <remarks>An entity repacks only while its mapped pose moves. The emitted set changes only with a rebuild, which
     /// owes the whole table, so an unemitted entity's range stays parked.</remarks>
-    public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
+    public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) {
         var bandIndex = 0;
 
         foreach (var projection in m_emittedProjections) {

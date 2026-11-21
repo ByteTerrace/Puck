@@ -19,7 +19,8 @@ public sealed partial class WorldScreenBinder {
         var emitter = new WorldSessionSceneEmitter(
             domains: m_domains,
             mirror: feed.Mirror,
-            effectiveCameraName: feed.EffectiveCamera
+            effectiveCameraName: feed.EffectiveCamera,
+            jobs: m_stamps.Jobs
         ) { SkyLayers = SkyLayers, Session = Settings, ViewName = feed.RegistrationName };
         var frameSource = new SdfCompositionFrameSource(
             dresser: emitter,

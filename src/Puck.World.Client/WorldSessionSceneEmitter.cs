@@ -116,7 +116,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <inheritdoc/>
     public ISdfPickMap? PickMap => m_picks.Snapshot(pool: m_pool.PickMeshTargets);
 
-    private readonly WorldCreationInstances m_pool = new();
+    private readonly WorldCreationInstances m_pool;
 
     /// <summary>The scene's body presentation registrations, shared by routed rig reads and animation reseeding.</summary>
     public WorldCreationInstances BodyStamps => m_pool;
@@ -172,7 +172,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <param name="onlyPrototypes">The prototypes the scene holds, or <see langword="null"/> for the whole world: far
     /// geometry (<c>Puck.SdfVm.Views.InfinityViewKind.Far</c>) emits the placements of these prototypes alone, with no
     /// screen, no avatar and no body stamp, so its cost scales with what it shows.</param>
-    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, WorldValueDomainGuard domains, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, Func<WorldShadowSettings>? shadowSettings = null, IReadOnlySet<string>? onlyPrototypes = null) {
+    /// <param name="jobs">The pool the scene's stamp pool forks its poses across, or <see langword="null"/> to pose them on
+    /// the calling thread.</param>
+    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, WorldValueDomainGuard domains, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, Func<WorldShadowSettings>? shadowSettings = null, IReadOnlySet<string>? onlyPrototypes = null, Puck.Hosting.Jobs.JobPool? jobs = null) {
+        m_pool = new WorldCreationInstances(jobs: jobs);
         ArgumentNullException.ThrowIfNull(argument: mirror);
         ArgumentNullException.ThrowIfNull(argument: domains);
 
@@ -652,7 +655,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <remarks>Packs every mirrored-active avatar's interpolated pose into its frozen catalog leaf slots (see
     /// <see cref="WorldSessionMirror.InterpolationAlpha"/> for the timebase) plus a distance-driven gait phase, repacking
     /// an avatar only while that pose moves; an avatar that stops being mirrored parks its range once.</remarks>
-    public void PackDynamicTransforms(Span<DynamicTransform> slots, in SdfEmitContext context, SdfMovedTransforms moved) {
+    public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) {
         var alpha = m_mirror.InterpolationAlpha;
 
         foreach (var index in m_catalog.Bodies) {
