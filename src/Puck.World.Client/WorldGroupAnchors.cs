@@ -36,8 +36,9 @@ public sealed class WorldGroupAnchors {
                 }
             }
         } else {
-            for (var index = 0; (index < maxPopulation); index++) {
-                if (client.IsActive(index: index)) {
+            // Every active body: the client's live bodies, in the ascending order a walk of the capacity read them in.
+            foreach (var index in client.LiveBodies) {
+                if ((index < maxPopulation) && client.IsActive(index: index)) {
                     sum += client.Position(index: index);
                     count++;
                 }
@@ -64,8 +65,8 @@ public sealed class WorldGroupAnchors {
                 }
             }
         } else {
-            for (var index = 0; (index < maxPopulation); index++) {
-                if (client.IsActive(index: index)) {
+            foreach (var index in client.LiveBodies) {
+                if ((index < maxPopulation) && client.IsActive(index: index)) {
                     spread += Vector3.Distance(
                         value1: client.Position(index: index),
                         value2: centroid

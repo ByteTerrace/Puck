@@ -134,6 +134,8 @@ public sealed class WorldSceneMovedTransformsLawTests {
         Assert.Equal(actual: packed, expected: 0L);
         Assert.Equal(actual: compared, expected: 0L);
         Assert.Equal(actual: owed, expected: 0L);
+        // The pack read no avatar at all: none moved, and none is still settling.
+        Assert.Equal(actual: scene.Emitter.AvatarVisitCount, expected: 0);
     }
     [Fact]
     public void PausedFramesDoNotRepackUnchangedOwnersAndResumeKeepsTheirSettlingWork() {
@@ -169,6 +171,8 @@ public sealed class WorldSceneMovedTransformsLawTests {
         Assert.Equal(actual: packed, expected: rows);
         Assert.Equal(actual: owed, expected: rows);
         Assert.Equal(actual: compared, expected: (rows * 48L));
+        // The pack read the moved avatars alone, of the sixteen the band holds.
+        Assert.Equal(actual: scene.Emitter.AvatarVisitCount, expected: k);
 
         // The moved bodies repack once more to find they have come to rest, owing nothing; then the scene is still.
         var (settling, _, settlingOwed) = Frame(scene: scene);

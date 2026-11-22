@@ -49,6 +49,8 @@ public sealed class WorldSessionStampSource : IWorldStampSource {
     /// <inheritdoc/>
     public bool IsActive(int index) => m_mirror.IsActive(index: index);
     /// <inheritdoc/>
+    public void CopyActiveBodies(List<int> bodies) => m_mirror.CopyActiveBodies(bodies: bodies);
+    /// <inheritdoc/>
     public WorldLook Look(int index) => m_mirror.Look(index: index);
     /// <inheritdoc/>
     public Quaternion Orientation(int index) => WorldPoseInterpolation.Orientation(

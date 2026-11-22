@@ -1,7 +1,5 @@
 using System.Numerics;
-using Puck.Maths;
 using Puck.SdfVm;
-using Puck.SdfVm.Views;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
 
@@ -54,7 +52,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The bounded volumes the latest live build's static placements baked (WorldPlacementStamper.EmitStatic);
     // WorldFramePresenter.Dress composes them with the pool's per-frame volumes onto SdfFrame.Volumes.
     private readonly List<SdfVolume> m_staticVolumes = new(capacity: SdfProgramBuilder.MaxVolumes);
-    private readonly Puck.State.ArenaScratch m_emissionScratch = new();
 
     // MeshDraws: the static draws each static rebuild replaces, then the pool's.
     private readonly WorldSceneMeshDraws m_meshDraws;
@@ -64,14 +61,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <inheritdoc/>
     public ISdfPickMap? PickMap => m_picks.Snapshot(pool: m_animator.PickMeshTargets);
 
-    // Per-frame scratch reused to keep packing allocation-free: movement-driven gait state per avatar.
-    private readonly WorldAvatarGait[] m_avatarGaits = new WorldAvatarGait[WorldBodiesLimits.CapacityCeiling];
-    private readonly WorldTransformOwners m_avatarOwners = new(capacity: WorldBodiesLimits.CapacityCeiling);
-    // The live program's avatar geometry and its transform pack share this rebuild-latched appearance image. This
-    // closes the delivery-thread gap where a reused slot could otherwise pack a new rig into old compiled geometry.
-    private readonly int[] m_emittedAvatarRigs = new int[WorldBodiesLimits.CapacityCeiling];
-    private readonly float[] m_emittedAvatarScales = new float[WorldBodiesLimits.CapacityCeiling];
-    private readonly float[] m_emittedAvatarGaitAmplitudes = new float[WorldBodiesLimits.CapacityCeiling];
+    // The catalog avatars: the band, the look identity the live program was compiled for, and each body's gait and root
+    // follower (WorldCatalogAvatars, the pack every scene shares).
+    private readonly WorldCatalogAvatars m_avatars;
     // The creation-stamp census, refreshed at each rebuild: the body-rooted stamps handed to the pool. A body the pool
     // registered renders its creation there, so the pack/emit path parks its catalog avatar.
     private readonly WorldBodyStampCensus m_census = new();
@@ -94,17 +86,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private WorldScreen[] m_carryableScreens = [];
     private long m_staticVolumesRevision;
 
-    // The catalog-look root follower: a NON-stamp-rendered avatar (a Catalog-sourced look, or a Creation look the
-    // stamp pool had no free slot for) whose look names a root Motion.Dynamics row lags the whole avatar toward its
-    // raw interpolated pose instead of drawing it directly — resolved once per rebuild (Compose, beside the rig/scale/
-    // gait arrays above), stepped once per produced frame (PackDynamicTransforms) from the Tick-latched delta.
-    private readonly bool[] m_avatarFollows = new bool[WorldBodiesLimits.CapacityCeiling];
-    private readonly SecondOrderResponse[] m_avatarResponse = new SecondOrderResponse[WorldBodiesLimits.CapacityCeiling];
-    private readonly SecondOrderFollower3[] m_avatarPositionFollower = new SecondOrderFollower3[WorldBodiesLimits.CapacityCeiling];
-    private readonly SecondOrderFollower4[] m_avatarOrientationFollower = new SecondOrderFollower4[WorldBodiesLimits.CapacityCeiling];
-    // The client's Carries count each avatar's latched world-space state was last carried to.
-    private readonly int[] m_avatarCarryEpoch = new int[WorldBodiesLimits.CapacityCeiling];
-
     // The screens, static placement stamps + the creation-stamp pool, then the view's active avatars as leaf-level dynamic
     // instances riding frozen catalog slots. Active-only, never declared-but-parked: the per-tile instance mask width
     // derives from the program's total declared instance count (SdfProgram.InstanceMaskWordCount), so parked avatar
@@ -115,26 +96,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var client = m_client;
 
         m_picks.Clear();
-        // The per-avatar body + accent materials, allocated up front so the catalog emitter is a straight builder chain.
+        // The per-avatar body + accent materials, registered up front so the catalog emitter is a straight builder chain.
         // A local seat's colors come from its seated profile (a pending seat renders a desaturated candidate); a stand-in's
         // from its snapshot palette. A color change bumps the revision and rebuilds; a settings-only edit does not.
-        using var bodyMaterials = m_emissionScratch.Rent<int>(length: WorldBodiesLimits.CapacityCeiling);
-        using var accentMaterials = m_emissionScratch.Rent<int>(length: WorldBodiesLimits.CapacityCeiling);
-        var avatarBodyMaterials = bodyMaterials.Span;
-        var avatarAccentMaterials = accentMaterials.Span;
-
-        foreach (var index in m_catalog.Bodies) {
-            var (rig, look, color) = CatalogAppearance(index);
-            WorldMirroredAvatarBand.EmitPalette(
-                builder: builder, look: look, bodyColor: new DisplayColor(rgb: color), catalogRig: rig,
-                noseFactor: m_noseFactor, identityIndex: index, emittedRigs: m_emittedAvatarRigs,
-                emittedScales: m_emittedAvatarScales, emittedGaitAmplitudes: m_emittedAvatarGaitAmplitudes,
-                materialIndex: index, bodyMaterials: avatarBodyMaterials, accentMaterials: avatarAccentMaterials
-            );
-            m_avatarFollows[index] = WorldDynamicsResponse.TryResolveResponse(
-                name: look.Motion.Dynamics, response: out m_avatarResponse[index], rows: client.Definition.Dynamics
-            );
-        }
+        m_avatars.EmitPalette(builder: builder, dynamics: client.Definition.Dynamics, noseFactor: m_noseFactor);
 
         // The diegetic screens: each a sampled ScreenSlab whose lit face samples its bound source (or shades as dark
         // glass when unbound). STATIC data — emitted every build (probe and live), so the
@@ -174,16 +139,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             screens: screens
         );
 
-        WorldRigCatalog.Emit(
-            builder: builder,
-            isActive: index => (m_catalog.Slots[index] >= 0),
-            slotFor: index => m_catalog.Slots[index],
-            bodyMaterials: avatarBodyMaterials,
-            accentMaterials: avatarAccentMaterials,
-            slotBase: slotBase,
-            rigFor: index => m_emittedAvatarRigs[index],
-            picks: m_picks
-        );
+        m_avatars.EmitBodies(builder: builder, picks: m_picks, slotBase: slotBase);
     }
     // A locally followed traveler has exactly one primary avatar for its entire route. While it is in the boot
     // authority this reads the ordinary client slot; after handoff the same frozen local-seat catalog range follows
@@ -210,6 +166,23 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             orientation: out _,
             position: out _
         );
+    }
+    // The bodies IsAvatarPresented may answer for, ascending and each once: every local seat, which keeps its catalog
+    // range while it travels and is active in no snapshot, then the active bodies past the seats.
+    private void CatalogCandidates(List<int> bodies) {
+        for (var seat = 0; (seat < WorldBodiesLimits.LocalSeatCount); seat++) {
+            bodies.Add(item: seat);
+        }
+
+        var first = bodies.Count;
+        var seats = 0;
+
+        m_client.CopyActiveBodies(bodies: bodies);
+        while (((first + seats) < bodies.Count) && (bodies[(first + seats)] < WorldBodiesLimits.LocalSeatCount)) {
+            seats++;
+        }
+
+        bodies.RemoveRange(count: seats, index: first);
     }
     private (byte Rig, WorldLook Look, Vector3 Color) CatalogAppearance(int index) {
         // A traveling seat keeps its roster color. Its look and rig come from the authority presenting it.
@@ -302,6 +275,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     }
 
     private readonly WorldCatalogBand m_catalog;
+    // The delegates the avatar pack is handed each frame, made once.
+    private readonly WorldCatalogAvatarPose m_presentedPose;
+    private readonly Action<Vector3> m_footstep;
 
     private readonly int[] m_preparedRevision = new int[WorldClient.RevisionComponentCount];
 
@@ -346,11 +322,15 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             dynamics: definition.Dynamics,
             bodyStamps: m_presentedStamps
         );
-        m_catalog.Prepare();
+        m_avatars.Prepare();
     }
 
     public IReadOnlyList<int> MeshAssetSlots => m_animator.Rigid.Slots;
     public IReadOnlyList<SdfMeshInstance> MeshInstances => m_animator.Rigid.Copies;
+    /// <inheritdoc/>
+    public IReadOnlyList<int> MeshInstanceChanges => m_animator.Rigid.ChangedCopies;
+    /// <inheritdoc/>
+    public long MeshInstancesRevision => m_animator.Rigid.CopiesRevision;
 
     /// <summary>Re-points this emitter's derived-face screen rows at the same set <see cref="WorldFramePresenter"/>
     /// just derived and handed the screen binder — never re-derived here (see <see cref="WorldPrototypeFacets.Derive"/>'s
@@ -372,96 +352,24 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <inheritdoc/>
     /// <remarks>Every active avatar's leaves ride its interpolated snapshot pose plus a distance-driven gait phase (an
     /// idle avatar holds its pose; a teleport is clamped so it cannot spin the limbs through dozens of cycles), and the
-    /// animated/body-rooted stamps follow in the replay pool's range. An avatar repacks only while its presented pose,
-    /// or pose epoch moves, or its root follower is still settling; a body that stops drawing
-    /// parks its range once. Local seats fire one footstep cue per gait half-cycle.</remarks>
+    /// animated/body-rooted stamps follow in the replay pool's range (<see cref="WorldCatalogAvatars.Pack"/>). A local
+    /// seat traveling another authority's route follows the route's pose in its own range, and local seats fire one
+    /// footstep cue per gait half-cycle.</remarks>
     public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) {
         m_animator.SetCatalogSlots(m_catalog.Slots, context.SlotBase);
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
-        // The catalog's bodies alone, in body order; a body's rows are owed only when its pose wakes it (Wake).
-        foreach (var index in m_catalog.Bodies) {
-            if (!TryPresentedPose(
-                address: out var address,
-                index: index,
-                orientation: out var orientation,
-                position: out var position
-            )) {
-                WorldMirroredAvatarBand.Park(
-                    m_avatarOwners, index, ref m_avatarGaits[index], moved, slots,
-                    (context.SlotBase + m_catalog.Slots[index]), context.ParkPosition
-                );
-
-                continue;
-            }
-
-            // An in-place crossing moved the avatar continuously: its last position and followers ride the crossing's
-            // rigid motion, so the gait and the eased pose carry on; a history too short to carry them is a cut.
-            var crossings = m_client.Carries.Epoch(index: index);
-            ref var gait = ref m_avatarGaits[index];
-
-            if (m_avatarCarryEpoch[index] != crossings) {
-                if (
-                    gait.Seeded &&
-                    m_client.Carries.TrySince(
-                    carry: out var carry,
-                    index: index,
-                    since: m_avatarCarryEpoch[index]
-                )
-                ) {
-                    gait.Position = carry.Point(point: gait.Position);
-                    m_avatarPositionFollower[index].Carry(
-                        rotation: carry.Rotation,
-                        translation: carry.Translation
-                    );
-                    m_avatarOrientationFollower[index].Carry(rotation: carry.Rotation);
-                } else {
-                    gait.Seeded = false;
-                }
-
-                m_avatarCarryEpoch[index] = crossings;
-            }
-
-            var poseEpoch = m_client.PoseEpoch(index: index);
-
-            if (!WorldMirroredAvatarBand.Wake(
-                m_avatarOwners, index, ref gait, moved, address, poseEpoch, position, orientation,
-                out var continued, out var footfall, deltaSeconds
-            )) { continue; }
-
-            if (!continued) {
-                m_avatarPositionFollower[index].Reseed();
-                m_avatarOrientationFollower[index].Reseed();
-            } else if (footfall && (index < WorldBodiesLimits.LocalSeatCount)) {
-                // Only local seats sound their own steps, at the walking body's site.
-                m_audio.SubmitCue(eventToken: WorldAudioCue.PlayerFootstep, site: position);
-            }
-
-            var followedPosition = position;
-            var followedOrientation = orientation;
-
-            if (m_avatarFollows[index]) {
-                (followedPosition, followedOrientation) = SecondOrderPoseFollower.StepPose(
-                    position: ref m_avatarPositionFollower[index],
-                    orientation: ref m_avatarOrientationFollower[index],
-                    response: in m_avatarResponse[index],
-                    deltaSeconds: deltaSeconds,
-                    targetPosition: position,
-                    targetOrientation: orientation
-                );
-            } else {
-                m_avatarPositionFollower[index].Reseed();
-                m_avatarOrientationFollower[index].Reseed();
-            }
-
-            WorldMirroredAvatarBand.Pack(
-                m_avatarOwners, index, in gait, moved, slots, m_catalog.Slots[index], index, context.SlotBase,
-                m_emittedAvatarRigs[index], m_emittedAvatarScales[index], m_emittedAvatarGaitAmplitudes[index],
-                (m_animator.HasBodyRegistration(bodyIndex: index) ? context.ParkPosition : followedPosition),
-                followedOrientation, (m_avatarFollows[index] ? deltaSeconds : 1f)
-            );
-        }
+        m_avatars.Pack(
+            context: in context,
+            deltaSeconds: deltaSeconds,
+            footstep: m_footstep,
+            moved: moved,
+            pool: m_animator,
+            pose: m_presentedPose,
+            slots: slots,
+            source: m_client
+        );
 
         // The stamp pool packs after the avatar catalog (its reserved slots sit past the frozen avatar capacity):
         // animated placements ride their static pose, attached and body-rooted stamps ride the client's live body pose; hidden slots
@@ -630,7 +538,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_meshDraws = new WorldSceneMeshDraws(pool: animator);
         m_text = text;
         m_audio = audio;
-        m_catalog = new WorldCatalogBand(IsAvatarPresented, CatalogAppearance);
+        m_catalog = new WorldCatalogBand(CatalogCandidates, IsAvatarPresented, CatalogAppearance);
+        m_avatars = new WorldCatalogAvatars(band: m_catalog);
+        m_presentedPose = TryPresentedPose;
+        m_footstep = site => m_audio.SubmitCue(eventToken: WorldAudioCue.PlayerFootstep, site: site);
 
         var definition = client.Definition;
 
@@ -655,6 +566,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// <summary>The frozen transform-slot count this emitter declares: maximum-sized rigs for the detailed body band,
     /// one root slot per remaining crowd body, then the reserved creation-stamp pool.</summary>
     public int DynamicSlotCount => (m_catalog.SlotCount + m_animator.DynamicSlotCount);
+    /// <summary>Gets the number of catalog avatars the latest <see cref="PackDynamicTransforms"/> read: every avatar on a
+    /// frame that owes the whole table or follows a prepare, otherwise only those whose body moved or whose slots have
+    /// not come to rest.</summary>
+    public int AvatarVisitCount => m_avatars.VisitCount;
     /// <summary>Always <see langword="true"/>: this emitter's material palette is its own. Sole tenancy makes this
     /// true; the scope makes it structural, so a positional stride this
     /// scene grows later (a wallpaper fold or polar repeat over a sculpted creation) can only ever recolor materials

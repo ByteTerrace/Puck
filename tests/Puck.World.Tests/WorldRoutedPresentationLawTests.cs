@@ -124,16 +124,17 @@ public sealed partial class WorldRoutedPresentationLawTests {
         using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
         var color = Vector3.UnitX;
         var scene = new WorldRoutedScene(domains: new WorldValueDomainGuard(), bodyColor: _ => color, endpoint: north, hostFrame: static () => null);
-        var first = Capture(source: scene.FrameSource);
+        // A source writes one frame object again for each capture, so each capture's program is taken as it is captured.
+        var first = Capture(source: scene.FrameSource).Program;
 
         color = Vector3.UnitY;
-        var second = Capture(source: scene.FrameSource);
+        var second = Capture(source: scene.FrameSource).Program;
 
-        Assert.NotSame(actual: second.Program, expected: first.Program);
-        Assert.False(condition: first.Program.CopyWords().AsSpan().SequenceEqual(other: second.Program.CopyWords()));
-        var steady = Capture(source: scene.FrameSource);
+        Assert.NotSame(actual: second, expected: first);
+        Assert.False(condition: first.CopyWords().AsSpan().SequenceEqual(other: second.CopyWords()));
+        var steady = Capture(source: scene.FrameSource).Program;
 
-        Assert.Same(actual: steady.Program, expected: second.Program);
+        Assert.Same(actual: steady, expected: second);
     }
 
     private sealed class Neighbour(WorldDefinition definition) : IWorldAdjacencyNeighbour {

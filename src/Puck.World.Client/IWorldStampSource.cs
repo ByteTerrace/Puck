@@ -28,6 +28,30 @@ public interface IWorldStampSource {
     /// (<see cref="WorldClient.SeatGuessAt"/>). A stamp pool reads it into its guess layer alone
     /// (<see cref="WorldCreationInstances.GuessOverlay"/>).</summary>
     IWorldSeatGuess? SeatGuess => null;
+    /// <summary>Gets the journal of the entities whose presented inputs moved, a frame at a time, its rows the entity
+    /// indices: an entity's <see cref="Position"/>, <see cref="Orientation"/>, <see cref="PoseEpoch"/>,
+    /// <see cref="EntityAddress"/>, <see cref="Carries"/>, <see cref="Facts"/> or <see cref="IsActive"/> answers
+    /// differently only on a frame that names it, so a consumer holding a cursor visits only the entities that changed
+    /// since it last looked. <see langword="null"/>, the default, for a source that keeps none: its consumer asks every
+    /// entity it draws each frame.</summary>
+    Puck.Abstractions.Gpu.GpuRowChanges? BodyChanges => null;
+    /// <summary>Gets the serial of the latest frame <see cref="BodyChanges"/> holds, which a consumer collects
+    /// through; zero for a source that keeps no journal.</summary>
+    long BodyChangesSerial => 0L;
+
+    /// <summary>Appends the index of every active entity, in ascending order, so a consumer that visits each active
+    /// entity never asks every index of the capacity. The default, for a source that keeps no list of them, asks every
+    /// index.</summary>
+    /// <param name="bodies">The list the indices are appended to.</param>
+    void CopyActiveBodies(List<int> bodies) {
+        ArgumentNullException.ThrowIfNull(argument: bodies);
+
+        for (var index = 0; (index < WorldClient.EntityCapacity); index++) {
+            if (IsActive(index: index)) {
+                bodies.Add(item: index);
+            }
+        }
+    }
 
     /// <summary>Gets an entity's entity-and-generation address, which a follower reseeds on when it changes.</summary>
     /// <param name="index">The 0-based entity index.</param>
