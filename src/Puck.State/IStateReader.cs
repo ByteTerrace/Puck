@@ -61,6 +61,13 @@ public interface IStateReader {
     /// <param name="facts">The host sources the read depends on, appended.</param>
     /// <returns><see langword="true"/> when the host names every dependency the read can have.</returns>
     bool TryScheduleFact(ICompiledFact fact, List<int> rows, List<FactRead> facts) => false;
+    /// <summary>Names the versioned host source a host-owned row's storage answers from, when the host versions that
+    /// storage. A host-owned row the host cannot version keeps every schedule that reads it volatile, which is the
+    /// default.</summary>
+    /// <param name="rowOrdinal">The host-owned row's catalog ordinal.</param>
+    /// <param name="facts">The host sources the row's values depend on, appended.</param>
+    /// <returns><see langword="true"/> when the host versions the row's storage.</returns>
+    bool TryScheduleHostOwnedRow(int rowOrdinal, List<FactRead> facts) => false;
     /// <summary>Names the versioned source a sweep over the live bodies depends on: the roster, whose version moves
     /// when a body joins or leaves.</summary>
     /// <param name="facts">The host sources the roster depends on, appended.</param>
@@ -134,6 +141,25 @@ public interface IStateReader {
         }
 
         version = arena.RowVersion(rowOrdinal: rowOrdinal);
+
+        return true;
+    }
+    /// <summary>Returns the number that names a row's content (<see cref="StateArena.RowContent"/>): equal numbers
+    /// prove equal content, and a row whose numbers return to what they recently were answers the number it answered
+    /// then, so a scheduler's captured verdict stands across a change that was undone.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <param name="content">The content's number, when the ordinal names a row.</param>
+    /// <returns><see langword="true"/> when the ordinal names a row.</returns>
+    bool TryRowContent(int rowOrdinal, out ulong content) {
+        var arena = Arena;
+
+        if (((uint)rowOrdinal) >= ((uint)arena.Layout.RowCount)) {
+            content = 0UL;
+
+            return false;
+        }
+
+        content = arena.RowContent(rowOrdinal: rowOrdinal);
 
         return true;
     }

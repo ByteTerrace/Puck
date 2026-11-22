@@ -47,6 +47,7 @@ public sealed partial class RuleEvaluator {
         var list = m_dueLists[slot];
 
         if ((list is null) || !list.Covers(epoch: m_host.FactScheduleEpoch, latch: latch, rules: rules)) {
+            list?.SettleElided();
             m_dueLists[slot] = list = new RuleDueList(evaluator: this, latch: latch, rules: rules);
         }
 
@@ -128,6 +129,8 @@ public sealed partial class RuleEvaluator {
 
             m_host.BoundEachKey = key;
 
+            var firingsRun = m_firingsRun;
+
             var outcome = EvaluateOnce(
                 applied: out var moved,
                 binding: binding,
@@ -145,7 +148,7 @@ public sealed partial class RuleEvaluator {
                 // A binding that could not evaluate is closed exactly as a full sweep's end closes it.
                 latch.Forget(binding: binding, journal: m_host.Arena.Journal, state: state);
             }
-            if (outcome == RuleOutcome.Fired) {
+            if ((outcome == RuleOutcome.Fired) && (m_firingsRun != firingsRun)) {
                 list.Drain();
             }
         }
@@ -160,4 +163,13 @@ public sealed partial class RuleEvaluator {
     }
 
     internal RuleSchedule ScheduleOf(CompiledRule rule, RuleLatch.RuleState state) => Schedule(rule: rule, state: state);
+
+    /// <summary>Brings every rule's elided count (<see cref="RuleLatch.RuleSpent.Elided"/>) up to date. A due list
+    /// counts a rule's elided ticks when the rule is next visited, so a reader of the spent counts calls this
+    /// first.</summary>
+    public void SettleSpent() {
+        foreach (var list in m_dueLists) {
+            list?.SettleElided();
+        }
+    }
 }

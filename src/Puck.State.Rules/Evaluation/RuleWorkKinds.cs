@@ -19,8 +19,14 @@ public static class RuleWorkKinds {
     /// <summary>Gets the kind counting the evaluations the schedule answered without running bindings or gate, because
     /// nothing the rule reads had changed since its gate last closed.</summary>
     public static WorkKind Skips { get; } = Registry.Declare(name: "state.rules.skips", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting the firings that committed and moved the arena.</summary>
+    /// <summary>Gets the kind counting the skips that stood for a Level firing: its last firing changed nothing and
+    /// nothing it reads or writes had moved since, so it was not run again.</summary>
+    public static WorkKind Settled { get; } = Registry.Declare(name: "state.rules.settled", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the firings that ran and committed.</summary>
     public static WorkKind Firings { get; } = Registry.Declare(name: "state.rules.firings", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the firings that queued an arm that leaves the arena: each is followed by the
+    /// host deriving its fact versions again.</summary>
+    public static WorkKind Armed { get; } = Registry.Declare(name: "state.rules.armed", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the rules a due list visited: each rule once per tick it was due.</summary>
     public static WorkKind Due { get; } = Registry.Declare(name: "state.rules.due", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the rules a due list left unvisited: each rule once per tick nothing it reads

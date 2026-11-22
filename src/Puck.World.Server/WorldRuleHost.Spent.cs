@@ -3,10 +3,32 @@ using System.Globalization;
 namespace Puck.World.Server;
 
 public sealed partial class WorldRuleHost {
-    private readonly record struct SpentLine(string Name, bool IsInteraction, RuleLatch.RuleSpent Spent, long Work, RuleSchedule Schedule);
+    private readonly record struct SpentLine(string Name, bool IsInteraction, RuleLatch.RuleSpent Spent, long Work, string Schedule);
+
+    // A rule's read schedule, and beside it the schedule its Level firing stands on once it has changed nothing.
+    private string DescribeSchedule(CompiledRule rule, RuleLatch latch) {
+        var judged = m_evaluator.ScheduleOf(rule: rule, latch: latch).Describe(reader: this);
+
+        return ((m_evaluator.FiringScheduleOf(rule: rule, latch: latch) is { } firing)
+            ? $"{judged}; a firing stands on {firing.Describe(reader: this)}"
+            : judged);
+    }
+
+    /// <summary>Gets or sets whether every Level firing a schedule would answer for is fired anyway and held to
+    /// changing nothing (<see cref="RuleEvaluator.QuiescenceChecked"/>).</summary>
+    internal bool QuiescenceChecked {
+        get => m_evaluator.QuiescenceChecked;
+        set {
+            m_staleFactDerivation = null;
+            m_evaluator.QuiescenceChecked = value;
+        }
+    }
+    /// <summary>Gets the first Level firing or derived-fact skip the check found that did not settle again
+    /// (<see cref="RuleEvaluator.StaleQuiescence"/>), or <see langword="null"/>.</summary>
+    internal string? StaleQuiescence => (m_evaluator.StaleQuiescence ?? m_staleFactDerivation);
 
     /// <summary>Spells the measured rule sheet: per rule and interaction, what the evaluator ran since the latches
-    /// began (visits, evaluations, skips, firings) and the work units that spent at the worst-case sheet's own
+    /// began (visits, evaluations, skips, the skips that stood for a settled Level firing, firings) and the work units that spent at the worst-case sheet's own
     /// prices — a sweep's setup per visit, the check per evaluation that ran, the effects per firing — costliest
     /// first, each with the schedule that decides whether it may be skipped. Every count is deterministic, so two
     /// runs of one document and input print the same sheet.</summary>
@@ -20,6 +42,8 @@ public sealed partial class WorldRuleHost {
         }
 
         var lines = new List<SpentLine>(capacity: (m_rules.Length + m_interactions.Length));
+
+        m_evaluator.SettleSpent();
 
         Collect(compiled: m_rules, isInteraction: false, latch: m_ruleGateHeld);
         Collect(compiled: m_interactions, isInteraction: true, latch: m_interactionGateHeld);
@@ -35,25 +59,26 @@ public sealed partial class WorldRuleHost {
 
         var ticks = m_ruleGateHeld.SpentTicks;
         var shown = Math.Min(val1: top, val2: lines.Count);
-        long visits = 0L, elided = 0L, evaluations = 0L, skips = 0L, firings = 0L, work = 0L;
+        long visits = 0L, elided = 0L, evaluations = 0L, skips = 0L, settled = 0L, firings = 0L, work = 0L;
 
         foreach (var line in lines) {
             visits += line.Spent.Visits;
             evaluations += line.Spent.Evaluations;
             skips += line.Spent.Skips;
+            settled += line.Spent.Settled;
             firings += line.Spent.Firings;
             elided += line.Spent.Elided;
             work += line.Work;
         }
 
         var output = new List<string>(capacity: (shown + 1)) {
-            $"[world.budget.rules --spent: {ticks} tick(s), {lines.Count} line(s), showing {shown}; visits={visits} elided={elided} evaluations={evaluations} skips={skips} firings={firings} work={work} work/tick={PerTick(total: work, ticks: ticks)}]",
+            $"[world.budget.rules --spent: {ticks} tick(s), {lines.Count} line(s), showing {shown}; visits={visits} elided={elided} evaluations={evaluations} skips={skips} settled={settled} firings={firings} work={work} work/tick={PerTick(total: work, ticks: ticks)}]",
         };
 
         for (var index = 0; (index < shown); index++) {
             var line = lines[index];
 
-            output.Add(item: $"[world.budget.rules --spent {line.Name}{(line.IsInteraction ? " interaction" : string.Empty)} visits={line.Spent.Visits} elided={line.Spent.Elided} evaluations={line.Spent.Evaluations} skips={line.Spent.Skips} firings={line.Spent.Firings} work={line.Work} work/tick={PerTick(total: line.Work, ticks: ticks)}; {line.Schedule.Describe(reader: this)}]");
+            output.Add(item: $"[world.budget.rules --spent {line.Name}{(line.IsInteraction ? " interaction" : string.Empty)} visits={line.Spent.Visits} elided={line.Spent.Elided} evaluations={line.Spent.Evaluations} skips={line.Spent.Skips} settled={line.Spent.Settled} firings={line.Spent.Firings} armed={line.Spent.Armed} work={line.Work} work/tick={PerTick(total: line.Work, ticks: ticks)}; {line.Schedule}]");
         }
 
         return output;
@@ -71,7 +96,7 @@ public sealed partial class WorldRuleHost {
                 lines.Add(item: new SpentLine(
                     IsInteraction: isInteraction,
                     Name: rule.Name,
-                    Schedule: m_evaluator.ScheduleOf(rule: rule, latch: latch),
+                    Schedule: DescribeSchedule(latch: latch, rule: rule),
                     Spent: spent,
                     Work: (((spent.Visits * Price(work: cost.Setup)) + (ran * Price(work: cost.Check))) + (spent.Firings * Price(work: cost.Effects)))
                 ));
@@ -96,7 +121,7 @@ public sealed partial class WorldRuleHost {
         void Describe(CompiledRule[] compiled, bool isInteraction, RuleLatch latch) {
             foreach (var rule in compiled) {
                 if (string.Equals(a: rule.Name, b: name, comparisonType: StringComparison.Ordinal)) {
-                    output.Add(item: $"[world.budget.rules --why {rule.Name}{(isInteraction ? " interaction" : string.Empty)} schedule: {m_evaluator.ScheduleOf(rule: rule, latch: latch).Describe(reader: this)}]");
+                    output.Add(item: $"[world.budget.rules --why {rule.Name}{(isInteraction ? " interaction" : string.Empty)} schedule: {DescribeSchedule(latch: latch, rule: rule)}]");
                 }
             }
         }

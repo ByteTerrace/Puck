@@ -247,7 +247,7 @@ public static partial class RuleCompiler {
                 name: name,
                 ruleName: ruleName
             );
-            context.Needs.MarkReadsTick();
+            context.Needs.CountTickRead();
 
             return new ResolvedOperand(
                 describe: describe,

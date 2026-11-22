@@ -29,6 +29,9 @@ public sealed partial class WorldInputRuntime {
         public WorldInputAnswer Answer;
         public WorldInputControllerOrigin? Controller;
         public WorldInputProducer? Producer;
+        public WorldChannelTable? SnapshotChannels;
+        public WorldInputCatalog? SnapshotCatalog;
+        public int[] SnapshotAddresses = [];
 
         public readonly Dictionary<string, string> SeatStates = new(comparer: StringComparer.Ordinal);
     }
@@ -336,7 +339,13 @@ public sealed partial class WorldInputRuntime {
         if (!m_owners.TryGetValue(key: principal, value: out var owner)) { reason = "input.owner: no admitted source profile"; return false; }
         if ((bodyIndex is { } body) && (body != owner.Body)) { reason = "input.owner: the submitted target differs from the admitted route"; return false; }
         if (!TrySynchronize(activation: 0, owner: owner, reason: out reason)) { return false; }
-        if (!Permitted(owner: owner, reach: out var reach)) { reason = "input.permission: the owner no longer holds Drive over its route"; return false; }
+        return TryAdmitSynchronized(batch: in batch, owner: owner, reason: out reason, retime: retime);
+    }
+
+    private bool TryAdmitSynchronized(Owner owner, in WorldInputBatch batch, out string reason, bool retime = false, bool alreadyPermitted = false) {
+        WorldChannelSelection? reach = null;
+
+        if (!alreadyPermitted && !Permitted(owner: owner, reach: out reach)) { reason = "input.permission: the owner no longer holds Drive over its route"; return false; }
         if (reach is { } selected) {
             var channels = m_host.Population.InputCatalog.Channels;
 

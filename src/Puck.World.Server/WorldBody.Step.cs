@@ -70,6 +70,8 @@ public sealed partial class WorldBody {
         var inputRuntime = m_stateLane?.Input;
 
         if (InputImages.HasProducer && SourceNamesProducer(source: InputImages.Source) && (inputRuntime is not null)) {
+            using var admission = Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickAdmission);
+
             InputImagesEdit.Producer = inputRuntime.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
         }
 
@@ -155,34 +157,6 @@ public sealed partial class WorldBody {
             }
         }
 
-        // A firing may have installed a different bank. Never write old-slot bits over its continuing baseline.
-        if (InputEpoch != inputEpoch) { intent = InputReadbacks.EngagedIntent; }
-        // The previous-bit image is written once after action evaluation; timed presses drain even under capture.
-        for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-            ActionEdit.PreviousBit[ordinal] = (intent[ordinal] >= m_channelThresholds[ordinal]);
-        }
-
-        for (var lane = 0; (lane < ActionLaneCount); lane++) {
-            ActionEdit.TimerTicks[lane] = SubtractSaturating(
-                value: Action.TimerTicks[lane],
-                amount: stepTicks
-            );
-        }
-
-        // The held-channel image is a one-tick publish, like the submitted intent: the client republishes it every
-        // submission, so a missed tick reads no channels rather than a stale hold.
-        InputImagesEdit.Held = default;
-        m_affectingSubject = -1;
-
-        UpdateSleepEligibility(
-            contactFieldVersion: contactFieldVersion,
-            hadIncomingIntent: hadIncomingIntentForSleep,
-            moved: ((m_position != m_previousPosition) || (m_orientation != previousOrientationForSleep)),
-            sleepAfterTicks: sleepAfterTicks,
-            stepTicks: stepTicks,
-            tick: tick
-        );
-
         if (refused) {
             RestoreMotion(scratch: scratch);
             inputRuntime?.CompleteKitStep(accepted: false);
@@ -199,6 +173,33 @@ public sealed partial class WorldBody {
             designationOutputs?.RemoveRange(index: designationOutputCount, count: (designationOutputs.Count - designationOutputCount));
             generatorInvocations?.RemoveRange(index: generatorInvocationCount, count: (generatorInvocations.Count - generatorInvocationCount));
         } else {
+            // A firing may have installed a different bank. Never write old-slot bits over its continuing baseline.
+            if (InputEpoch != inputEpoch) { intent = InputReadbacks.EngagedIntent; }
+            // The previous-bit image is written once after action evaluation; timed presses drain even under capture.
+            for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
+                ActionEdit.PreviousBit[ordinal] = (intent[ordinal] >= m_channelThresholds[ordinal]);
+            }
+
+            for (var lane = 0; (lane < ActionLaneCount); lane++) {
+                ActionEdit.TimerTicks[lane] = SubtractSaturating(
+                    value: Action.TimerTicks[lane],
+                    amount: stepTicks
+                );
+            }
+
+            // The held-channel image is a one-tick publish, like the submitted intent: the client republishes it every
+            // submission, so a missed tick reads no channels rather than a stale hold.
+            InputImagesEdit.Held = default;
+            m_affectingSubject = -1;
+
+            UpdateSleepEligibility(
+                contactFieldVersion: contactFieldVersion,
+                hadIncomingIntent: hadIncomingIntentForSleep,
+                moved: ((m_position != m_previousPosition) || (m_orientation != previousOrientationForSleep)),
+                sleepAfterTicks: sleepAfterTicks,
+                stepTicks: stepTicks,
+                tick: tick
+            );
             inputRuntime?.CompleteKitStep(accepted: true);
         }
 
@@ -270,29 +271,22 @@ public sealed partial class WorldBody {
         }
         return applied;
     }
+    [System.Runtime.CompilerServices.SkipLocalsInit]
     internal void ExecuteProducer(CompiledBodyProducer producer, ref BodyProducerState state, in BodyProducerSensors sensors, ulong stepTicks) {
-        var scratch = new BodyMotionScratch {
-            GoverningShapingRow = -1,
-            Producer = producer,
-            ProducerSensors = sensors,
-            ProducerState = state,
-            SensorTarget = BodySensorTarget.None,
-            StepTicks = stepTicks,
-            TurnSpeed = ResolveTurnRate(),
-        };
+        System.Runtime.CompilerServices.Unsafe.SkipInit(value: out BodyMotionScratch scratch);
+        scratch.Intent = default;
+        scratch.Producer = producer;
+        scratch.ProducerState = state;
+        scratch.ProducerSensors = sensors;
+        scratch.SensorTarget = BodySensorTarget.None;
+        scratch.TurnSpeed = ResolveTurnRate();
+        scratch.StepTicks = stepTicks;
+        scratch.GoverningShapingRow = -1;
 
         for (var phase = 0; (phase < producer.Program.Phases.Length); phase++) {
             foreach (var op in producer.Program.Phases[phase]) {
-                var instruction = new CompiledBodyInstruction(
-                    Operation: op,
-                    Value: default,
-                    Direction: default,
-                    DurationTicks: 0UL,
-                    StateSlot: -1
-                );
-
-                ExecuteOperation(
-                    instruction: in instruction,
+                ExecutePhaseOperation(
+                    op: op,
                     scratch: ref scratch
                 );
             }
@@ -586,6 +580,76 @@ public sealed partial class WorldBody {
     // body.where, never a value that re-enters state.
     private (float Yaw, float Pitch, float Roll) EulerRadians() =>
         VectorFunctions.EulerOf(attitude: m_orientation.ToQuaternion());
+    private void ExecutePhaseOperation(BodyMotionOp op, ref BodyMotionScratch scratch) {
+        switch (op) {
+            case BodyMotionOp.SenseNearestInCone:
+                SenseTarget(candidate: scratch.ProducerSensors.Candidate, scratch: ref scratch);
+                break;
+            case BodyMotionOp.ProduceSteeringIntent:
+                ProduceSteeringIntent(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ProduceFlockIntent:
+                ProduceFlockIntent(scratch: ref scratch);
+                break;
+            case BodyMotionOp.FaceSensorTarget:
+                FaceSensorTarget(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ResolveYawAttitudeAndPlanarFrame:
+                ResolveYawAttitudeAndPlanarFrame(scratch: ref scratch);
+                break;
+            case BodyMotionOp.IntegrateLocalAttitude:
+                IntegrateLocalAttitude(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ComputePlanarTargetVelocity:
+                ComputePlanarTargetVelocity(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ComputeLocalTargetVelocity:
+                ComputeLocalTargetVelocity(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ShapeVelocity:
+                ShapeVelocity(scratch: ref scratch);
+                break;
+            case BodyMotionOp.SnapYawToPlanarIntent:
+                SnapYawToPlanarIntent(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ResolveDriveFrame:
+                ResolveDriveFrame(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ResolveHold:
+                ResolveHold(scratch: ref scratch);
+                break;
+            case BodyMotionOp.RunActionTriggers:
+                ProcessLaneActions(scratch: ref scratch);
+                break;
+            case BodyMotionOp.ApplyHold:
+                ApplyHold(scratch: ref scratch);
+                break;
+            case BodyMotionOp.IntegratePlanarAndVerticalVelocity:
+                IntegratePlanarAndVerticalVelocity(scratch: ref scratch);
+                break;
+            case BodyMotionOp.IntegrateScratchVelocity:
+                IntegrateScratchVelocity(scratch: ref scratch);
+                break;
+            case BodyMotionOp.CommitPose:
+                ConstrainFlockLocomotion(scratch: ref scratch);
+                m_position = scratch.NextPosition;
+                m_orientation = scratch.Orientation;
+                break;
+            default: {
+                var instruction = new CompiledBodyInstruction(
+                    Operation: op,
+                    Value: default,
+                    Direction: default,
+                    DurationTicks: 0UL,
+                    StateSlot: -1
+                );
+
+                ExecuteOperation(instruction: in instruction, scratch: ref scratch);
+                break;
+            }
+        }
+    }
+
     private void ExecuteOperation(in CompiledBodyInstruction instruction, ref BodyMotionScratch scratch) {
         switch (instruction.Operation) {
             case BodyMotionOp.SenseNearestInCone:
@@ -752,16 +816,8 @@ public sealed partial class WorldBody {
 
         for (var phase = 0; (phase < m_bodyMotionProgram.Phases.Length); phase++) {
             foreach (var op in m_bodyMotionProgram.Phases[phase]) {
-                var instruction = new CompiledBodyInstruction(
-                    Operation: op,
-                    Value: default,
-                    Direction: default,
-                    DurationTicks: 0UL,
-                    StateSlot: -1
-                );
-
-                ExecuteOperation(
-                    instruction: in instruction,
+                ExecutePhaseOperation(
+                    op: op,
                     scratch: ref scratch
                 );
                 if (m_sweepRefusal != ContactRefusal.None) { return; }
@@ -1022,7 +1078,7 @@ public sealed partial class WorldBody {
         );
         // Its own gain, distinct from the roam shape's AltitudeGain (ProduceRoamIntent) — the two shapes are
         // independently authorable, so zeroing one's altitude term never zeroes the other's.
-        var up = ((followsVolume || m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude))
+        var up = ((followsVolume || m_usesLocalAttitude)
             ? FixedQ4816.Clamp(
                 value: ((preferredAltitude - AlongUp(point: m_position)) * producer.Scalar(parameter: BodyProducerParameter.ApproachAltitudeGain)),
                 minimum: NegativeOne,
@@ -1100,7 +1156,7 @@ public sealed partial class WorldBody {
             maximum: FixedQ4816.One
         );
 
-        if (m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)) {
+        if (m_usesLocalAttitude) {
             scratch.Intent = m_roleOrdinals.Intent(
                 moveAdvance: producer.Scalar(parameter: BodyProducerParameter.Forward),
                 moveStrafe: (wave * producer.Scalar(parameter: BodyProducerParameter.StrafeWave)),

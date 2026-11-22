@@ -33,7 +33,7 @@ corrected in the same change.
 | A value that refills, eases, cycles, caps or stays hidden from some readers | row traits on `StateRow` (`StateDynamics`, `StateCycle`, `StateVisibility`) | [traits](../../../docs/reference/state/traits.md) |
 | Bounded sets of typed instances, claims, generations, pair pools | `StatePool` and the arena's pool storage (`StateArena.Pools.cs`) | [records and pools](../../../docs/reference/state/records-and-pools.md) |
 | Store, read and write cells; nest savepoints; take a change back | `StateArena` with `ArenaJournal`: `StateArena.Commit`, `StateArena.Rewind` | [arena](../../../docs/reference/state/arena.md#journal-scopes) |
-| Prove a row unchanged, or invalidate a cache derived from it | `StateArena.RowVersion` (content) versus `RowGeneration` (any mutation); `RowStructureVersion` proves the same cells in the same order whatever their values | [row versions](../../../docs/reference/state/arena.md#row-versions-and-generations) |
+| Prove a row unchanged, or invalidate a cache derived from it | `StateArena.RowVersion` (content) versus `RowGeneration` (any mutation); `RowStructureVersion` proves the same cells in the same order whatever their values; `StateArena.RowContent` when a row changed and changed back must read as unmoved | [row versions](../../../docs/reference/state/arena.md#row-versions-and-generations) |
 | The canonical bytes of one stored cell, to digest or compare what a reader is shown without exporting the row | `StateArena.WriteCell` over `TryNextCellSlot`; `WriteBehavior` for a trait | [the bytes of one cell](../../../docs/reference/state/arena.md#the-bytes-of-one-cell) |
 | State kept outside the arena behind a write door: a version that moves on write, a digest cached by version and content, the slots that were written | `Versioned<T>`, `VersionedArray<T>`, `VersionedRecord<T>` (a section implements `IVersionedSection`); `SlotBinding` and `SlotNotes`, whose publish is the one writer of the shared `IndexVersions`; `Derived<TResult>` for an answer computed from holders | [the body state door](../../../docs/plans/body-state-door.md#the-design) |
 | Hash the state; compose the world's hash | `StateArena.ComputeHash` (row digests cached by version; `RecomputeHash`, `CheckDigests`), composed by `WorldStateHashComposition` | [state hashing](../../../docs/reference/state/arena.md#state-hashing) |
@@ -50,6 +50,7 @@ corrected in the same change.
 | Legal moves, a computer opponent's best move, chance nodes | `ArenaSearch` over journal scopes, judged by `IArenaSearchJudge.Judge` (`RuleArenaSearchJudge`); world jobs are `search` rows (`WorldSearchSection`) | [search](../../../docs/reference/state/search.md) |
 | Schedule a distance or region interaction | `WorldRuleHost` supplies carrier rows, positions and sampled occupancy to `RuleDueList`. `RuleEvaluator.DrainFactMoves` delivers moves to both rule families. | [analysis](../../../docs/reference/state/analysis.md) |
 | Read and write sets, order-sensitive pairs, price a tick's worst case, skip rules whose inputs did not move | `RuleDataflow`, `RuleHazards`, `RuleWorkBudget`, `RuleSchedule` against `RuleCapacity.MaxWorkUnitsPerTick` | [analysis](../../../docs/reference/state/analysis.md) |
+| Stop a Level rule firing again when its firing changed nothing | the firing schedule (`RuleDataflow.CollectFiring`), settled by `RuleEvaluator.FireProposal`; an unversioned host fact or host-owned row keeps it firing, so version them in the host (`IStateReader.TryScheduleFact`, `IStateReader.TryScheduleHostOwnedRow`) | [keep a Level firing](../../../docs/reference/state/analysis.md#keep-a-level-firing-that-changed-nothing) |
 | A host fact, effect or row family only your host understands | facets and families registered on the compile context; `ArenaEffectHost` as the base host | [hosting](../../../docs/reference/state/hosting.md) |
 | Decide what a recipient may read or write | `WorldRecipientView` over `WorldStateDisclosure`; mutation/guard admission in `WorldRecipientMutations`; audience enclosure in `StateArena.ReadAudienceEncloses` | [disclosure plan](../../../docs/plans/disclosure.md) |
 | Every ceiling (cells, journal bytes, body slots, work units) | `StateCapacity`, `ArenaCapacity`, `RuleCapacity` | [limits](../../../docs/reference/state/limits.md) |
@@ -160,6 +161,26 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   write that changes bytes without moving the version leaves a stale digest,
   which `StateArena.RecomputeHash` against `ComputeHash` (every tick under
   `puck test --reproduce`) and `CheckDigests` sampling catch.
+- **A skipped firing must be invisible.** A Level firing is skipped only after
+  it proved, by running, that it moved no row version, wrote no row its firing
+  schedule does not name, queued no arm, reported no refusal, and left the host
+  alone (`IEffectHost.CommitStateTransaction` answered that the commit was the
+  arena's alone); and only while every row and host fact that schedule names
+  stands (`RuleEvaluator.VersionsMatch`, comparing arena rows by
+  `StateArena.RowContent` where tracked and `RowVersion` elsewhere). The
+  schedule rests on each effect's `CollectReads` and `CollectWrites`, on the
+  compiler recording every facet-bearing fact and host-owned row where it
+  creates it (`RuleNeeds.FacetFacts`, `RuleNeeds.HostOwnedRows`), and on the
+  host versioning its facts and host-owned rows (`IStateReader.TryScheduleFact`,
+  `IStateReader.TryScheduleHostOwnedRow`). `WorldRuleHost.DeriveFacts` derives
+  body versions over awake non-sleeping and candidate-dirty slots
+  (`WorldPopulation.CollectFactCandidateSlots`) and lattice field revisions
+  (`FieldLattice.ValueRevision`). An effect that reads a row it does not
+  declare, or a host source whose value moves without its version moving, is a
+  wrong skip caught when `puck test --reproduce` replays the tick with
+  `RuleEvaluator.QuiescenceChecked` on. A new effect kind declares what it reads
+  and writes; a new host fact or host-owned row stays unversioned, and so
+  volatile, until the host can say when it moved.
 - **Bounded before it runs.** Every row, pool, pattern and search has a
   ceiling checked at compile or load, and a world whose rules could exceed
   `RuleCapacity.MaxWorkUnitsPerTick` is refused at load. When merged content
@@ -238,6 +259,8 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 | A recipient's write answers alike whether a row it spells is withheld or absent | `WorldRecipientMutations.Admits`, the one door, over a footprint read from the name registry; `WriteDoorFootprintLawTests` probes every registered state position of every submitted model type, every kind's classification (`WorldRecipientMutations.JudgedElsewhere`) and every replaced section; `WriteDoorNoninterferenceLawTests` runs every vocabulary entry end to end and refuses an uncovered mutation member |
 | A recipient's state write is validated only as far as its written rows reach | `WorldServer.TryValidateWrittenBindings` uses `StateReadAccess` to admit each unit `WorldDefinitionValidator.TryValidateBoundUnits` reaches. An identity-bound row and a binding outside the registered units still validate whole. See the [bound-write checkpoint](../../../docs/plans/disclosure.md#bound-write-validation-checkpoint) and `BoundWriteValidationNoninterferenceLawTests`. |
 | A host fact declares what a derived transient discloses | the compiler, through the abstract `CollectDisclosure` on `WorldFactOperand` and `WorldFactEffect`; `WorldRuleDisclosure.Classify` withholds an undeclared facet fact from every recipient but the authority; `CueDisclosureLawTests` |
+| A skipped Level firing changes nothing | the firing's own proof in `RuleEvaluator.FireProposal` (the arena's `MoveSequence`, the journal's written rows against the firing schedule, the arm queue, the refusal serial, the host's answer from `IEffectHost.CommitStateTransaction`) and the one version door `RuleEvaluator.VersionsMatch`; `puck test --reproduce` replays with `RuleEvaluator.QuiescenceChecked` on, which fires each settled Level binding, verifies skipped `DeriveFacts` slots against the full population, and compares hashes. Nothing but that replay catches an effect whose `CollectReads` omits a row it reads |
+| A row's content number names one content | `StateArena.SettleContent`, called by the one door every version moves through (`BumpRowVersion`): numbers are compared only for a settled commit that changed the row's number cells alone, and every other move empties the row's memory |
 | Same input, same state | row digests in `StateArena.ComputeHash`; `puck test --reproduce` compares two runs and recomputes every tick |
 
 ## Open gaps

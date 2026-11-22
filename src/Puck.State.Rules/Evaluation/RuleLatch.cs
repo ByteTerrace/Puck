@@ -53,8 +53,13 @@ public sealed class RuleLatch : IJournalParticipant {
         public long Evaluations { get; internal set; }
         /// <summary>Gets how many of <see cref="Evaluations"/> the schedule answered without running bindings or gate.</summary>
         public long Skips { get; internal set; }
-        /// <summary>Gets how many firings committed and moved the arena.</summary>
+        /// <summary>Gets how many of <see cref="Skips"/> stood for a Level firing proven to change nothing.</summary>
+        public long Settled { get; internal set; }
+        /// <summary>Gets how many firings ran and committed.</summary>
         public long Firings { get; internal set; }
+        /// <summary>Gets how many of <see cref="Firings"/> queued an arm that leaves the arena (a cue, a pose, a
+        /// spawn): the firings after which the host's fact versions are derived again.</summary>
+        public long Armed { get; internal set; }
         /// <summary>Gets how many ticks a due list left the rule unvisited, because nothing it reads had moved and its
         /// last verdict asked for nothing.</summary>
         public long Elided { get; internal set; }
@@ -81,6 +86,9 @@ public sealed class RuleLatch : IJournalParticipant {
         internal object? ScheduleEvaluator;
         internal object? ScheduleRule;
         internal RuleSchedule? Schedule;
+        // Everything one firing of the rule observes or writes, or null for a rule whose firing is never taken as
+        // settled (an Edge, a group rewind).
+        internal RuleSchedule? FiringSchedule;
 
         internal RuleSchedule[] LocalSchedules = [];
 
@@ -98,15 +106,19 @@ public sealed class RuleLatch : IJournalParticipant {
         public readonly BindingSchedule Schedule = new();
     }
 
-    // The scheduler's caches for one binding: the sweep that last touched it, the row versions its gate observed when
-    // it last closed under GateOwner's schedule, and its memoized local values.
+    // The scheduler's caches for one binding: the sweep that last touched it, the versions its standing verdict was
+    // captured at, and its memoized local values.
     internal sealed class BindingSchedule {
         public ulong Touched;
-        public object? GateOwner;
+        // The schedule the captured verdict stands on: the rule's judgement schedule for a closed gate or a held Edge,
+        // its firing schedule for a Level firing that changed nothing, and null when no verdict is captured.
+        public object? Owner;
 
-        public ulong[] GateVersions = [];
+        public ulong[] Versions = [];
         // The first tick the captured verdict no longer holds by itself: its schedule's deadline, or never.
         public ulong WakeTick = ulong.MaxValue;
+        // The engine ticks the step spanned when a Level firing's verdict was captured, which a firing may read.
+        public ulong StepTicks;
 
         public BindingMemo?[]? Memos;
     }
@@ -299,7 +311,7 @@ public sealed class RuleLatch : IJournalParticipant {
         entry.Held = words[5] switch { WasAbsent => null, WasOpen => true, _ => false };
         // A verdict cached against the bit the rewind just replaced is stale.
         SchedulerEpoch++;
-        entry.Schedule.GateOwner = null;
+        entry.Schedule.Owner = null;
     }
 
     // The lifecycle writers that cannot be undone refuse to run inside a scope: only a firing's write is recorded, so one
@@ -353,7 +365,7 @@ public sealed class RuleLatch : IJournalParticipant {
                 return;
             }
             schedule.Touched = 0UL;
-            schedule.GateOwner = null;
+            schedule.Owner = null;
             if (schedule.Memos is { } memos) {
                 Array.Clear(array: memos);
             }
@@ -383,7 +395,7 @@ public sealed class RuleLatch : IJournalParticipant {
 
         foreach (var entry in Rule(name: name).Bindings.Values) {
             entry.Held = null;
-            entry.Schedule.GateOwner = null;
+            entry.Schedule.Owner = null;
         }
         SchedulerEpoch++;
     }
@@ -433,7 +445,7 @@ public sealed class RuleLatch : IJournalParticipant {
             if (schedule is null) {
                 return;
             }
-            schedule.GateOwner = null;
+            schedule.Owner = null;
             foreach (var memo in (schedule.Memos ?? [])) {
                 if (memo is not null) {
                     memo.Owner = null;

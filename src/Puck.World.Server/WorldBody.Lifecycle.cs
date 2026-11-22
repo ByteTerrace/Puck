@@ -108,6 +108,10 @@ public sealed partial class WorldBody {
             m_tape[index] = new TapeSegment { Actor = segments[index].Actor, Intent = segments[index].Intent, RemainingTicks = segments[index].RemainingTicks };
         }
     }
+    private void CacheProgramTraits(CompiledBodyMotionProgram program) {
+        m_usesLocalAttitude = program.Contains(operation: BodyMotionOp.IntegrateLocalAttitude);
+        m_usesLocalTargetVelocity = program.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity);
+    }
     private void SetBodyMotionProgram(CompiledBodyMotionProgram program) {
         if (string.Equals(
             a: program.Name,
@@ -115,10 +119,12 @@ public sealed partial class WorldBody {
             comparisonType: StringComparison.Ordinal
         )) {
             m_bodyMotionProgram = program;
+            CacheProgramTraits(program: program);
             return;
         }
 
         m_bodyMotionProgram = program;
+        CacheProgramTraits(program: program);
         // A yaw-scalar program (the ordinary frame, or the drive frame — which levels its pitch scalar too) re-pins
         // the attitude from the extracted heading; the free 6DOF program keeps the attitude and re-seeds the scalar.
         var resolvesYawAttitude = (program.Contains(operation: BodyMotionOp.ResolveYawAttitudeAndPlanarFrame)
@@ -1037,7 +1043,7 @@ public sealed partial class WorldBody {
     /// where a teleport-into-the-volume must still be detected as a point test.</summary>
     public FixedVector3 FixedPreviousPosition => m_previousPosition;
     /// <summary>Gets the authoritative deterministic heading.</summary>
-    public FixedQ4816 FixedYaw => (m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
+    public FixedQ4816 FixedYaw => (m_usesLocalAttitude
         ? m_orientation.Yaw()
         : m_yaw
     );

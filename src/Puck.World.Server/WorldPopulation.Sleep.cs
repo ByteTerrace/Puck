@@ -40,6 +40,42 @@ public sealed partial class WorldPopulation {
 
     private readonly List<int> m_fieldWakes = [];
     private readonly List<int> m_idleFieldWakes = [];
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_factDirtySlots = new();
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_factCandidateSet = new();
+    private bool m_factAllSlotsDirty = true;
+
+    internal void NoteBodyFactChanged(int index) {
+        if (((uint)index) < ((uint)m_entries.Length)) {
+            m_factDirtySlots.Add(index: index);
+        }
+    }
+    internal void ResetFactCandidateTracking() {
+        m_factDirtySlots.Clear();
+        m_factAllSlotsDirty = false;
+    }
+    internal void CollectFactCandidateSlots(List<int> into, out bool fullScan) {
+        into.Clear();
+        if (m_factAllSlotsDirty) {
+            m_factAllSlotsDirty = false;
+            m_factDirtySlots.Clear();
+            fullScan = true;
+            return;
+        }
+        fullScan = false;
+        m_factCandidateSet.Clear();
+        foreach (var index in m_awakeBodies) {
+            if (m_entries[index].Body is { Asleep: false }) {
+                m_factCandidateSet.Add(index: index);
+            }
+        }
+        foreach (var index in m_factDirtySlots.Members) {
+            m_factCandidateSet.Add(index: index);
+        }
+        m_factDirtySlots.Clear();
+        foreach (var index in m_factCandidateSet.Members) {
+            into.Add(item: index);
+        }
+    }
 
     /// <summary>Number of rigid bodies parked outside the tick's integration and contact work sets.</summary>
     public int SleepingRigidBodies => m_sleepingBodies.Count;
@@ -49,6 +85,7 @@ public sealed partial class WorldPopulation {
     // An entry's slot changed (it took or lost its body, or became active or inactive): the work sets follow. A slot
     // that lets its body go has already passed DisturbBody (Entry's setters), while it still held the body.
     private void BodyEntryChanged(int index) {
+        m_factDirtySlots.Add(index: index);
         m_eventBodies.Add(item: index);
         if (m_entries[index] is { Active: true, Body: not null }) { m_awakeBodies.Add(item: index); } else { m_awakeBodies.Remove(item: index); }
     }
@@ -57,6 +94,7 @@ public sealed partial class WorldPopulation {
     /// glide, a rest-latch break) means whatever rests on it or holds it must solve again.</summary>
     /// <param name="index">The body's population index.</param>
     internal void BodyWoke(int index) {
+        m_factDirtySlots.Add(index: index);
         WakeBodyIsland(index: index);
         m_eventBodies.Add(item: index);
         if (m_entries[index] is { Active: true, Body: not null }) { m_awakeBodies.Add(item: index); }
@@ -71,6 +109,7 @@ public sealed partial class WorldPopulation {
     /// slot releases its body.</summary>
     /// <param name="index">The slot's population index.</param>
     internal void DisturbBody(int index) {
+        m_factDirtySlots.Add(index: index);
         WakeBodyIsland(index: index);
         ForgetRigidContacts(index: index, keepReferred: false);
     }
@@ -106,6 +145,7 @@ public sealed partial class WorldPopulation {
             m_sleepGravity.Remove(key: member);
             if (m_entries[member].Body is { } body) {
                 body.WakeRigidIsland();
+                m_factDirtySlots.Add(index: member);
                 if (m_entries[member].Active) {
                     m_awakeBodies.Add(item: member);
                     m_eventBodies.Add(item: member);
@@ -119,6 +159,7 @@ public sealed partial class WorldPopulation {
     // Parks one body under a root: its Parked(root) state, the sleeping work set and the root index, together. The
     // caller records the sleeper's solved gravity.
     private void ParkIslandMember(int index, int rootPlusOne, ulong contactFieldVersion) {
+        m_factDirtySlots.Add(index: index);
         m_entries[index].Body!.ParkRigidIsland(contactFieldVersion: contactFieldVersion, rootPlusOne: rootPlusOne);
         m_awakeBodies.Remove(item: index);
         m_sleepingBodies.Add(item: index);

@@ -21,12 +21,20 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     internal WorldDisclosureImages Images => images;
     internal ArenaTime Time => time();
     internal bool Unrestricted => operates?.Invoke() == true;
-    internal WorldStateDisclosure.Observer Observer => new(Arena, recipient, Unrestricted, m_recipientName ??= recipient?.Describe());
+    internal WorldStateDisclosure.Observer Observer => ObserverAs(unrestricted: Unrestricted);
+    // The observer for an answer of Unrestricted the caller already read: one that asks about many rows at one instant
+    // asks the grant table once instead of once a row.
+    internal WorldStateDisclosure.Observer ObserverAs(bool unrestricted) => new(Arena, recipient, unrestricted, m_recipientName ??= recipient?.Describe());
     private static readonly WorldWithheldRow WithheldWhole = new(0, HiddenCells.Omit, WholeRow: true);
     // The recipient's canonical token, formatted once for every policy check this view makes.
     private string? m_recipientName;
     // The last audience key Images composed for this view, reused while the policies it reads answer the same.
     internal string? AudienceKey { get; set; }
+    internal StateArena? AudienceArena { get; set; }
+    internal long AudiencePolicyGeneration { get; set; } = -1L;
+    internal ulong AudienceReaderVersions { get; set; }
+    internal char AudienceCeilingKey { get; set; }
+    internal bool AudienceUnrestricted { get; set; }
 
     /// <summary>The admission tier; no operation can raise it.</summary>
     public WorldDisclosureTier Ceiling => ceiling;

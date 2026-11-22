@@ -2,14 +2,16 @@ using System.Security.Cryptography;
 using Puck.Abstractions.Memory;
 using Puck.Assets;
 using Puck.World.Authoring;
+using Puck.World.Protocol;
 
 namespace Puck.World;
 
 public sealed partial class WorldDisclosureImages {
     // One audience's scene identity (SceneIdentity) and the parts it digests. While nothing it was computed from can
-    // have moved (the same source document, arena, policy revision and move sequence, and the same frame identity) it
-    // is answered without reading a row; after that the parts are read again and the pin is spelled again only when
-    // they differ, so a tick that moved no scene input spells none.
+    // have moved (the same source document, arena and policy revision, the same frame identity, and either the same move
+    // sequence or every row the scene reads standing at the version and dependency versions it was computed at) it is
+    // answered without reading a row; after that the parts are read again and the pin is spelled again only when they
+    // differ, so a tick that moved no scene input spells none.
     private sealed class SceneEntry {
         public WorldDefinition? Source;
         public StateArena? Arena;
@@ -20,7 +22,19 @@ public sealed partial class WorldDisclosureImages {
         public byte[] Parts = [];
         public int PartsLength = -1;
         public int[] Rows = [];
+        public ulong[] Versions = [];
+        public ulong[] Dependencies = [];
         public object? RowsOf;
+    }
+    // Whether every row the entry's scene reads stands at the version it was computed at, with its dependencies.
+    private bool SceneRowsStand(SceneEntry entry, StateArena arena) {
+        var rows = entry.Rows;
+
+        if (entry.Versions.Length != rows.Length) { return false; }
+        for (var index = 0; index < rows.Length; index++) {
+            if ((arena.RowVersion(rows[index]) != entry.Versions[index]) || (DependencyVersions(arena, rows[index]) != entry.Dependencies[index])) { return false; }
+        }
+        return true;
     }
     private readonly Dictionary<string, SceneEntry> m_scenes = new(comparer: StringComparer.Ordinal);
     // The rows a source document's scene reads by name (SceneInputRows), resolved once per source.
@@ -39,16 +53,24 @@ public sealed partial class WorldDisclosureImages {
     // per audience while nothing it reads has moved, so the sessions of one audience share it.
     internal ContentPin SceneIdentity(WorldRecipientView view) {
         var audience = Audience(view);
-        var definition = Framed(audience);
-        var frame = definition.Frame;
         var arena = view.Arena;
         var source = view.Source;
         // Inside an open scope the identity is read from the store as it stands and no entry is read or kept.
         var settled = Settled(arena);
         var held = (settled ? m_scenes.GetValueOrDefault(audience.Text) : null);
 
+        if ((held is not null) && (held.RowsOf is not null) && ReferenceEquals(held.Source, source) && ReferenceEquals(held.Arena, arena) &&
+            (held.Revision == arena.DisclosureRevision) && (held.Moves == arena.MoveSequence)) {
+            return held.Identity;
+        }
+        var definition = Framed(audience);
+        var frame = definition.Frame;
+
+        // A row elsewhere in the arena moves the sequence on most ticks, so an entry also stands while its own rows do.
         if ((held is not null) && ReferenceEquals(held.Source, source) && ReferenceEquals(held.Arena, arena) &&
-            (held.Revision == arena.DisclosureRevision) && (held.Moves == arena.MoveSequence) && (held.Frame == frame)) {
+            (held.Revision == arena.DisclosureRevision) && (held.Frame == frame) &&
+            ((held.Moves == arena.MoveSequence) || (ReferenceEquals(held.RowsOf, definition) && SceneRowsStand(held, arena)))) {
+            held.Moves = arena.MoveSequence;
             return held.Identity;
         }
         var entry = (held ?? new SceneEntry());
@@ -63,8 +85,16 @@ public sealed partial class WorldDisclosureImages {
         parts.Clear();
         var at = 0;
         definition.Digests.AsSpan(0, SHA256.HashSizeInBytes).CopyTo(parts[at..]); at += SHA256.HashSizeInBytes;
-        foreach (var row in entry.Rows) {
-            if (view.ReadsWhole(row)) { parts[at] = WholeMarker; at += 1 + SHA256.HashSizeInBytes; continue; }
+        // The view's admissions are read once for the whole walk, at this one instant, never once a row.
+        var replica = (view.Observes && (view.Ceiling == WorldDisclosureTier.Replica));
+        var observer = view.Observer;
+        if (entry.Versions.Length != entry.Rows.Length) { entry.Versions = new ulong[entry.Rows.Length]; entry.Dependencies = new ulong[entry.Rows.Length]; }
+        for (var index = 0; index < entry.Rows.Length; index++) {
+            var row = entry.Rows[index];
+            entry.Versions[index] = arena.RowVersion(row);
+            entry.Dependencies[index] = DependencyVersions(arena, row);
+            // At a replica a row is included whenever the view observes, so ReadsWhole is the observer's answer.
+            if (replica ? observer.ReadsWhole(row) : view.ReadsWhole(row)) { parts[at] = WholeMarker; at += 1 + SHA256.HashSizeInBytes; continue; }
             at += 1;
             RowDigest(audience, row).CopyTo(parts[at..]); at += SHA256.HashSizeInBytes;
         }

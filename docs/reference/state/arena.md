@@ -436,6 +436,22 @@ value any row held before. `IStateReader.TryRowVersion` exposes the version to a
 rule evaluator; how the scheduler uses it is in
 [Rule analysis, scheduling, and work budgets](analysis.md).
 
+A version never returns to a value it held, so a row that is changed and
+changed back reads as moved twice. `StateArena.RowContent` answers a number
+that names the row's content instead: it is the row's version, except that a
+commit which changed nothing about the row but its numbers, and left them
+exactly as they stood at one of the row's last few versions, answers that
+version again. The arena remembers a row's numbers only for a row of at most
+`StateArena.MaxRememberedCells` numeric cells with no value-over-time trait,
+and only while nothing else about the row changes: a membership, clock, text
+or policy change, a write outside a scope and a restore each empty the row's
+memory, so a remembered content is always one the row held with nothing but its
+numbers changed since. Equal numbers prove equal content, as equal versions do;
+the number is not ordered, so compare it for equality and never sum or order
+it. A rule schedule reads it through `IStateReader.TryRowContent`, so a row one
+rule clears and the next rebuilds every tick keeps its readers' verdicts.
+Nothing hashes, exports or checkpoints it.
+
 ## State hashing
 
 `ComputeHash` folds the whole arena into one 64-bit FNV-1a value. It's how two

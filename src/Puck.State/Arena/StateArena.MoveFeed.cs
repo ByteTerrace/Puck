@@ -32,15 +32,17 @@ public sealed partial class StateArena {
 
         return false;
     }
-    // Moves one row's version.
+    // Moves one row's version, and names the content the row now holds (RowContent).
     private void BumpRowVersion(int rowOrdinal, bool changesRecorded = false) {
         if (!changesRecorded) { MarkDisclosureRow(rowOrdinal); }
         m_rowVersions.Bump(index: rowOrdinal);
+        SettleContent(row: rowOrdinal);
     }
     // Every version restarts at once (adoption of a rebuilt store): every reader must take every row as moved.
     private void ResetRowVersions(ulong version) {
         ChangedKeys.Clear();
         for (var row = 0; row < m_layout.RowCount; row++) { MarkDisclosureRow(row); }
         m_rowVersions.ResetAll(count: m_layout.RowCount, version: version);
+        ForgetContents();
     }
 }

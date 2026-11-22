@@ -93,6 +93,12 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
         var unversioned = new List<string>();
 
         foreach (var row in needs.HostOwnedRows) {
+            var factsBefore = factReads.Count;
+
+            if (reader.TryScheduleHostOwnedRow(facts: factReads, rowOrdinal: row)) {
+                continue;
+            }
+            CollectionsTrim(count: factsBefore, list: factReads);
             volatility |= RuleVolatility.HostOwnedRow;
             _ = unproven.Add(item: row);
         }
@@ -133,8 +139,13 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
                 _ = unproven.Add(item: ordinal);
             }
             if ((((uint)ordinal) < ((uint)descriptors.Count)) && descriptors[ordinal].HostOwned) {
-                volatility |= RuleVolatility.HostOwnedRow;
-                _ = unproven.Add(item: ordinal);
+                var factsBefore = factReads.Count;
+
+                if (!reader.TryScheduleHostOwnedRow(facts: factReads, rowOrdinal: ordinal)) {
+                    CollectionsTrim(count: factsBefore, list: factReads);
+                    volatility |= RuleVolatility.HostOwnedRow;
+                    _ = unproven.Add(item: ordinal);
+                }
             }
             _ = seen.Add(item: ordinal);
         }

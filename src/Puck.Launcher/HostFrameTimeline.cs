@@ -424,6 +424,7 @@ public sealed class HostFrameTimeline {
         AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce", second: null);
         AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce-work", second: null, lessBlocked: true);
         AppendProduceParts(builder: builder, indices: indices);
+        AppendTickParts(builder: builder, indices: indices);
         AppendSeries(builder: builder, indices: indices, label: "produce-fence", values: m_produceBlocked);
         // The longest time between two control phases ending in each iteration: the control plane's latency bound.
         AppendSeries(builder: builder, indices: indices, label: "control-gap", values: m_controlGaps);
@@ -481,20 +482,52 @@ public sealed class HostFrameTimeline {
     // none when stepped says which, less produce's fence waits when lessBlocked; nothing when no iteration qualifies.
     private void AppendProduceParts(StringBuilder builder, long[] indices) {
         var total = 0.0;
-        HostFrameWorkTimes parts = default;
         foreach (var index in indices) {
             var slot = (int)(index % Capacity);
             total += Milliseconds(m_phases[slot * PhaseCount + (int)HostFramePhase.Produce] - m_produceBlocked[slot]);
-            for (var part = 0; part < (int)HostFrameWorkPart.TickIngress; part++) { parts[part] += m_workParts[slot][part]; }
         }
-        var named = 0.0;
         builder.Append("\n  produce-work parts mean [ms]");
-        for (var part = 0; part < (int)HostFrameWorkPart.TickIngress; part++) {
-            var milliseconds = HostFrameRecording.WorkMilliseconds(parts[part]);
-            named += milliseconds;
-            builder.Append(CultureInfo.InvariantCulture, $" {((HostFrameWorkPart)part).ToString().ToLowerInvariant()} {milliseconds / indices.Length:0.###}");
+        var named = AppendParts(builder: builder, end: HostFrameWorkPart.TickIngress, first: HostFrameWorkPart.Pump, indices: indices, prefix: string.Empty, steppedOnly: false, taken: out var taken);
+        builder.Append(CultureInfo.InvariantCulture, $" other {(total - named) / taken:0.###}");
+    }
+    // Appends the mean of each named part from first up to end over the iterations (those that ran a step alone when
+    // steppedOnly), each under its name less prefix, and answers the parts' summed milliseconds and how many
+    // iterations were taken. Nothing is appended when none was.
+    private double AppendParts(StringBuilder builder, long[] indices, HostFrameWorkPart first, HostFrameWorkPart end, string prefix, bool steppedOnly, out int taken) {
+        HostFrameWorkTimes parts = default;
+
+        taken = 0;
+        foreach (var index in indices) {
+            var slot = (int)(index % Capacity);
+
+            if (steppedOnly && (m_steps[slot] == 0)) { continue; }
+            taken++;
+            for (var part = (int)first; part < (int)end; part++) { parts[part] += m_workParts[slot][part]; }
         }
-        builder.Append(CultureInfo.InvariantCulture, $" other {(total - named) / indices.Length:0.###}");
+
+        var named = 0.0;
+
+        if (taken == 0) { return named; }
+        for (var part = (int)first; part < (int)end; part++) {
+            var milliseconds = HostFrameRecording.WorkMilliseconds(parts[part]);
+
+            named += milliseconds;
+            builder.Append(CultureInfo.InvariantCulture, $" {((HostFrameWorkPart)part).ToString()[prefix.Length..].ToLowerInvariant()} {milliseconds / taken:0.###}");
+        }
+
+        return named;
+    }
+
+    // The simulation's named parts, as the mean over the iterations that ran a step: where a tick's time went. The
+    // parts are summed rather than taken from the simulate phase, which is only the hand-off when a step thread runs
+    // the tick; the ticks line below gives the whole tick to read the sum against.
+    private void AppendTickParts(StringBuilder builder, long[] indices) {
+        var means = new StringBuilder();
+        var named = AppendParts(builder: means, end: HostFrameWorkPart.Count, first: HostFrameWorkPart.TickIngress, indices: indices, prefix: "Tick", steppedOnly: true, taken: out var stepped);
+
+        if (stepped == 0) { return; }
+        builder.Append(CultureInfo.InvariantCulture, $"\n  tick parts mean [ms] over {stepped} stepped iterations").Append(means);
+        builder.Append(CultureInfo.InvariantCulture, $" sum {named / stepped:0.###}");
     }
 
     private void AppendPhases(StringBuilder builder, long[] indices, string label, HostFramePhase first, HostFramePhase? second, bool? stepped = null, bool lessBlocked = false) {

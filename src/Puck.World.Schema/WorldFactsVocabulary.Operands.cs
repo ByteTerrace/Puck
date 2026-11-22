@@ -1546,6 +1546,7 @@ public static partial class WorldFactsVocabulary {
                 bodyB: default,
                 cost: 1L,
                 describe: name,
+                payload: operand,
                 reach: WorldDisclosureReach.Bodies,
                 read: reader => reader.Read(operand: operand),
                 rowOrdinal: -1,

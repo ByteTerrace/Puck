@@ -9,19 +9,33 @@ namespace Puck.State;
 /// facet <see cref="Admit"/> names first is the same on every run.</remarks>
 public sealed class RuleNeeds {
     private readonly FacetRef[] m_facets;
+    private readonly ICompiledFact[] m_facetFacts;
     private readonly int[] m_hostOwnedRows;
 
-    internal RuleNeeds(FacetRef[] facets, int[] hostOwnedRows, bool irreversible, bool readsTick, bool readsSearchPly, bool isVolatile) {
+    internal RuleNeeds(FacetRef[] facets, ICompiledFact[] facetFacts, int[] hostOwnedRows, bool irreversible, bool readsTick, bool readsSearchPly, bool isVolatile, int tickReads, bool effectReadsTick) {
         Irreversible = irreversible;
         ReadsTick = readsTick;
         ReadsSearchPly = readsSearchPly;
         Volatile = isVolatile;
+        TickReads = tickReads;
+        EffectReadsTick = effectReadsTick;
         m_facets = facets;
+        m_facetFacts = facetFacts;
         m_hostOwnedRows = hostOwnedRows;
     }
 
     /// <summary>Gets the facets the rule's facts declare, in walk order, each once.</summary>
     public IReadOnlyList<FacetRef> Facets => m_facets;
+    /// <summary>Gets every fact of the rule whose type names a facet, each instance once, in the order the builder
+    /// met them. A builder a compiler feeds where it creates each fact holds every one the rule can read, wherever in
+    /// the rule it sits, which is what lets a read schedule ask the host to version all of them.</summary>
+    public IReadOnlyList<ICompiledFact> FacetFacts => m_facetFacts;
+    /// <summary>Gets how many reads of the tick pair the compiler created for the rule, wherever in the rule they
+    /// sit; zero when the needs were folded from a walk that does not count them.</summary>
+    public int TickReads { get; }
+    /// <summary>Gets a value indicating whether one of the rule's effect kinds reads the tick pair
+    /// (<see cref="EffectNeeds.ReadsTick"/>).</summary>
+    public bool EffectReadsTick { get; }
     /// <summary>Gets the catalog ordinals of the host-owned rows the rule reads, ascending, each once.</summary>
     public IReadOnlyList<int> HostOwnedRows => m_hostOwnedRows;
     /// <summary>Gets a value indicating whether any of the rule's effects cannot be rewound, so its arm is queued
@@ -29,12 +43,15 @@ public sealed class RuleNeeds {
     public bool Irreversible { get; }
     /// <summary>Gets the needs of a rule that reads state and nothing else.</summary>
     public static RuleNeeds None { get; } = new(
+        effectReadsTick: false,
+        facetFacts: [],
         facets: [],
         hostOwnedRows: [],
         irreversible: false,
         isVolatile: false,
         readsSearchPly: false,
-        readsTick: false
+        readsTick: false,
+        tickReads: 0
     );
     /// <summary>Gets a value indicating whether the rule reads the tick pair, which changes every tick with no
     /// state write.</summary>
@@ -80,9 +97,11 @@ public sealed class RuleNeedsBuilder {
     /// schedule asks its host to version (<see cref="IStateReader.TryScheduleFact"/>).</summary>
     public IReadOnlyList<ICompiledFact> FacetFacts => m_facetFacts;
 
+    private bool m_effectReadsTick;
     private bool m_irreversible;
     private bool m_readsSearchPly;
     private bool m_readsTick;
+    private int m_tickReads;
 
     /// <summary>Records a facet the rule needs.</summary>
     /// <param name="facet">The facet.</param>
@@ -98,6 +117,7 @@ public sealed class RuleNeedsBuilder {
     public void AddEffectNeeds(EffectNeeds needs) {
         m_irreversible |= needs.HasFlag(flag: EffectNeeds.Irreversible);
         m_readsTick |= needs.HasFlag(flag: EffectNeeds.ReadsTick);
+        m_effectReadsTick |= needs.HasFlag(flag: EffectNeeds.ReadsTick);
     }
     /// <summary>Records a fact of the rule: its facet when its type names one, and nothing when it does not.</summary>
     /// <param name="fact">The compiled fact.</param>
@@ -132,12 +152,15 @@ public sealed class RuleNeedsBuilder {
         // A facet read and a host-owned row both answer from storage no row version covers, so either one makes the
         // rule's verdict unprovable from versions alone.
         return new RuleNeeds(
+            effectReadsTick: m_effectReadsTick,
+            facetFacts: [.. m_facetFacts],
             facets: [.. m_facets],
             hostOwnedRows: hostOwnedRows,
             irreversible: m_irreversible,
             isVolatile: (m_readsSearchPly || m_readsTick || (m_facets.Count > 0) || (hostOwnedRows.Length > 0)),
             readsSearchPly: m_readsSearchPly,
-            readsTick: m_readsTick
+            readsTick: m_readsTick,
+            tickReads: m_tickReads
         );
     }
     /// <summary>Resets the builder for the next rule.</summary>
@@ -146,12 +169,20 @@ public sealed class RuleNeedsBuilder {
         m_facetFacts.Clear();
         m_hostOwnedRows.Clear();
 
+        m_effectReadsTick = false;
         m_irreversible = false;
         m_readsSearchPly = false;
         m_readsTick = false;
+        m_tickReads = 0;
     }
     /// <summary>Records that the rule reads the tick pair.</summary>
     public void MarkReadsTick() => m_readsTick = true;
+    /// <summary>Records one read of the tick pair where the compiler creates it, so <see cref="RuleNeeds.TickReads"/>
+    /// counts every one the rule holds.</summary>
+    public void CountTickRead() {
+        m_readsTick = true;
+        m_tickReads++;
+    }
     /// <summary>Records that the rule reads the search ply.</summary>
     public void MarkReadsSearchPly() => m_readsSearchPly = true;
 }

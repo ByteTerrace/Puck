@@ -149,7 +149,9 @@ public sealed class SlotNotes {
     }
     /// <summary>Clears the stale-digest report, for a reader that has narrated it.</summary>
     public void ClearStaleDigest() => StaleDigest = null;
+    /// <summary>Records the first stale cached digest a checked read encountered.</summary>
+    /// <param name="fault">The diagnostic naming the slot, section and digests.</param>
+    public void ReportStale(string fault) => StaleDigest ??= fault;
 
     internal void Append(SlotBinding binding, int slot) => m_partitions[PartitionOf(slot: slot)].Add(item: (binding, slot));
-    internal void ReportStale(string fault) => StaleDigest ??= fault;
 }

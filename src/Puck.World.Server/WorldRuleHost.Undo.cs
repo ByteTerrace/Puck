@@ -24,6 +24,8 @@ public sealed partial class WorldRuleHost {
         }
         Host.DrawKeys.AdvanceGeneration();
         InvalidateArenaScheduling();
+        m_factsStale = true;
+        m_inputsStale = true;
         return true;
     }
     /// <inheritdoc />

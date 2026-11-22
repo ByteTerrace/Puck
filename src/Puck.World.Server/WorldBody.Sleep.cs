@@ -157,6 +157,7 @@ public sealed partial class WorldBody {
         if (m_sleepIdleTicks >= sleepAfterTicks) {
             m_asleepSinceTick = tick;
             IdleSleepGravity = SolvedGravity;
+            m_population?.NoteBodyFactChanged(index: m_populationIndex);
         }
     }
 }

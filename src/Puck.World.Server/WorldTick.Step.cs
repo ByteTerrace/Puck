@@ -517,11 +517,12 @@ public sealed partial class WorldTick {
         // Collect this tick's world-scoped events AFTER the population settles (so positions/occupancy are this
         // tick's) and BEFORE the addon read pump, so ResolveReads can stage them into the SAME batch as this tick's
         // disclosures/answers.
-        work.Next(HostFrameWorkPart.TickRules);
+        work.Next(HostFrameWorkPart.TickEvents);
         Host.Events.Collect(
             definition: Host.Document.Definition,
             population: Host.Population
         );
+        work.Next(HostFrameWorkPart.TickRules);
 
         // The music clock advances before the rules, so a clock(...) read sees this tick's position. The boundary it
         // crossed, with any engaged diegetic instrument's beat folded in (InstrumentClockBoundary's remarks say why
@@ -546,6 +547,7 @@ public sealed partial class WorldTick {
         );
         // A kit action this tick's advance fired and a rule's setBodyState have both written by now, so a body whose
         // size or selecting register moved takes its scale, kit and look before the snapshot and its next advance.
+        work.Next(HostFrameWorkPart.TickFields);
         Host.Population.SyncBodyCells(definition: Host.Document.Definition);
         Host.GrantTable.SettleSessionPresses();
         StepBoardEnforcement(tick: tick);
@@ -1117,7 +1119,9 @@ public sealed partial class WorldTick {
                 if (m_pendingTick.Stall.HasPassed) { FreezeStalledTick(reason); }
                 return pending;
             }
-            foreach (var scope in Host.ScopedReplaySpan) { scope.AfterTick(); }
+            using (HostFrameWork.Measure(HostFrameWorkPart.TickReplay)) {
+                foreach (var scope in Host.ScopedReplaySpan) { scope.AfterTick(); }
+            }
             return null;
         } finally {
             Host.Output.EndExecute();

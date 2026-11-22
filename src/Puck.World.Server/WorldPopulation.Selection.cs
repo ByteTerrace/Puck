@@ -59,19 +59,24 @@ public sealed partial class WorldPopulation {
     /// selectors (<see cref="SyncBodySelections"/>). Called from the same <c>WorldServer.Install</c> choke points
     /// <c>WorldGrants.SyncState</c> is, once a tick after the world rules, and when a crossing lands a body.</summary>
     /// <param name="definition">The live document.</param>
-    public void SyncBodyCells(WorldDefinition definition) {
+    /// <returns><see langword="true"/> when a register was written (even to the value it held), the document or the
+    /// population's revision moved since the last call, so the resync ran; <see langword="false"/> when nothing it
+    /// reads could have moved and it did nothing.</returns>
+    public bool SyncBodyCells(WorldDefinition definition) {
         var plan = WorldBodyStateReads.PlanFor(definition: definition);
         var generations = (RegisterGeneration(slot: plan.Scale),
             RegisterGeneration(slot: plan.KitSelect),
             RegisterGeneration(slot: plan.LookSelect));
 
         if (ReferenceEquals(objA: m_bodyCellDefinition, objB: definition) && (m_bodyCellRevision == m_revision) &&
-            (m_bodyCellGenerations == generations)) { return; }
+            (m_bodyCellGenerations == generations)) { return false; }
         SyncBodyScale(definition: definition);
         SyncBodySelections(definition: definition);
         m_bodyCellDefinition = definition;
         m_bodyCellRevision = m_revision;
         m_bodyCellGenerations = generations;
+
+        return true;
     }
 
     /// <summary>Reconciles a refused kit step after its body registers have rewound, including the publication revision.</summary>
