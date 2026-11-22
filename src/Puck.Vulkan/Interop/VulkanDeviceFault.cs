@@ -92,7 +92,9 @@ public sealed unsafe class VulkanDeviceFault {
                 };
 
                 report.Append(handler: $"\n  address[{index}]: {kind} (type {entry.AddressType}), address=0x{entry.ReportedAddress:x16}, precision=0x{entry.AddressPrecision:x}");
-                if ((m_addressBindings is not null) && (entry.AddressType is >= 1 and <= 3)) {
+                // Every data address is named, the untyped one included: NVIDIA reports an instruction pointer fault's
+                // data page as type 0 (none) at page precision, and that page is what names the resource the shader read.
+                if ((m_addressBindings is not null) && (entry.AddressType is <= 3)) {
                     report.Append(value: m_addressBindings.Describe(address: entry.ReportedAddress, precision: entry.AddressPrecision));
                 }
             }

@@ -13,8 +13,11 @@ namespace Puck.Shaders;
 /// returning ahead of it), and <c>puckCountFragmentWork(steps, texels)</c>, which sums a fragment stage's counts over the
 /// wave's lanes that are not helper lanes, since a helper lane's atomics have no effect, and adds them from the first.
 /// A pass whose row is <see cref="GpuKernelCounters.DisabledRow"/> branches out of each of them, and of
-/// <c>puckCountShapes</c> and <c>puckCountRejectedHit</c>, before any wave, groupshared or atomic work: the pass block's
-/// row is uniform across the dispatch, so the branch is too. <c>puckCountDetail</c> adds to a
+/// <c>puckCountShapes</c>, <c>puckCountRejectedHit</c> and <c>puckCountSky</c>, before any wave, groupshared or atomic
+/// work: the pass block's row is uniform across the dispatch, so the branch is too. A lane's add to the pass row goes
+/// through <c>puckAddRowWork</c>, which tests the row before scaling it, since the disabled row's words wrap to indices
+/// just below the buffer; a kernel counts through these functions and never scales the row itself.
+/// <c>puckCountSky(evaluations, loads)</c> adds a lane's sky lookups to the pass row. <c>puckCountDetail</c> adds to a
 /// named row per active invocation, including divergent layer branches, and is gated by its own detail row alone, which
 /// consumers that decide from named counts rely on; <c>puckCountShapes</c> adds a group's primitive
 /// evaluations to the pass row, and <c>puckCountRejectedHit()</c> adds one hit the mesh hit door rejected
@@ -90,6 +93,8 @@ public static class ShaderWorkCounters {
                 }
                 void puckCountRejectedHit() {
                 }
+                void puckCountSky(uint evaluations, uint loads) {
+                }
 
                 """);
 
@@ -128,6 +133,15 @@ public static class ShaderWorkCounters {
                 if (before > (0xFFFFFFFFu - amount)) {
                     InterlockedAdd({{Buffer}}[word + 1u], 1u);
                 }
+            }
+            // Adds to one count of the pass's own row, or nothing while the pass counts nothing. The disabled row's scaled
+            // words wrap to indices just below the buffer, an out-of-bounds write a Vulkan device without robust buffer
+            // access faults on, so every lane's add to the pass row passes this door, which tests the row before scaling.
+            void puckAddRowWork(uint word, uint amount) {
+                if (passGroup.{{Row}} == PuckWorkDisabledRow) {
+                    return;
+                }
+                puckAddWork(((passGroup.{{Row}} * PuckWorkRowWords) + word), amount);
             }
             #if !defined(__SHADER_TARGET_STAGE) || (__SHADER_TARGET_STAGE == __SHADER_STAGE_COMPUTE)
             groupshared uint puckWorkGroupALo;
@@ -262,19 +276,20 @@ public static class ShaderWorkCounters {
                 uint waveTexels = WaveActiveSum(counting ? texels : 0u);
 
                 if (counting && (WavePrefixCountBits(counting) == 0u)) {
-                    uint row = (passGroup.{{Row}} * PuckWorkRowWords);
-
-                    puckAddWork((row + PuckWorkStepsWord), waveSteps);
-                    puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+                    puckAddRowWork(PuckWorkStepsWord, waveSteps);
+                    puckAddRowWork(PuckWorkTexelsWord, waveTexels);
                 }
             }
             // Adds one hit the mesh hit door rejected to its pass's row, from the rejecting lane alone: a rejection is rare
             // and may sit in divergent control flow, so it takes no wave operation.
             void puckCountRejectedHit() {
-                if (passGroup.{{Row}} == PuckWorkDisabledRow) {
-                    return;
-                }
-                puckAddWork(((passGroup.{{Row}} * PuckWorkRowWords) + PuckWorkRejectedHitsWord), 1u);
+                puckAddRowWork(PuckWorkRejectedHitsWord, 1u);
+            }
+            // Adds a lane's sky evaluations and sky texture loads to its pass's row, from the lane alone, since a sky lookup
+            // sits in divergent shading.
+            void puckCountSky(uint evaluations, uint loads) {
+                puckAddRowWork(PuckWorkSkyWord, evaluations);
+                puckAddRowWork(PuckWorkSkyTextureLoadsWord, loads);
             }
 
             """);

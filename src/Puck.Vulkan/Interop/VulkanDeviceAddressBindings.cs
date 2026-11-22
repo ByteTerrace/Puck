@@ -32,6 +32,11 @@ public sealed unsafe class VulkanDeviceAddressBindings : IDisposable {
     private const int HistoryCapacity = 16384;
     // The bound ranges a report names on either side of an address no range holds.
     private const int Neighbours = 2;
+    private const uint MemoryObjectType = 8u;
+    // A 32-bit element offset wraps at 4 GiB; a negative one reaches at most this far below its buffer's base before a
+    // report stops attributing it.
+    private const ulong WrappedOffset = (1UL << 32);
+    private const ulong WrappedReach = (1UL << 20);
 
     private readonly Lock m_lock = new();
     private readonly Dictionary<BindingKey, Binding> m_bound = [];
@@ -163,8 +168,18 @@ public sealed unsafe class VulkanDeviceAddressBindings : IDisposable {
                 }
             }
             if (report.Length == 0) {
-                report.Append(handler: $"\n    no range reported ({m_bound.Count} bound, {m_unboundCount} unbound kept, {m_sequence} reports)");
+                report.Append(value: "\n    no range reported");
             }
+            // A shader's element offset is formed in 32 bits, so a negative index into a descriptor's buffer faults
+            // 4 GiB above the buffer's base: name the buffers that start just above the address less 4 GiB.
+            if ((bound.Count == 0) && (low >= WrappedOffset)) {
+                var wrappedLow = (low - WrappedOffset);
+
+                foreach (var binding in m_bound.Values.Where(predicate: binding => (!binding.IsEmpty && (binding.ObjectType != MemoryObjectType) && (binding.Base > wrappedLow) && ((binding.Base - wrappedLow) <= WrappedReach))).OrderBy(keySelector: static binding => binding.Base).Take(count: (2 * Neighbours))) {
+                    report.Append(handler: $"\n    a negative 32-bit offset of up to 0x{(binding.Base - wrappedLow):x} bytes from: {Describe(binding: binding, name: m_objects.GetValueOrDefault(key: new ObjectKey(ObjectType: binding.ObjectType, Handle: binding.Handle)).Name)}");
+                }
+            }
+            report.Append(handler: $"\n    ({m_bound.Count} ranges bound, {m_unboundCount} unbound kept, {m_sequence} reports)");
         }
 
         return report.ToString();

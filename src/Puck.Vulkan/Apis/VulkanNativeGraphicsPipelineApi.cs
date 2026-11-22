@@ -148,12 +148,14 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                 SType = StructureTypePipelineColorBlendStateCreateInfo,
             };
             // Creation feedback (core in Vulkan 1.3) says whether the pipeline cache answered.
+            // A depth-only pipeline has no fragment stage; the stage feedback count must equal the stage count.
+            var stageCount = ((request.FragmentShaderModuleHandle == 0) ? 1u : 2u);
             var feedback = default(VkPipelineCreationFeedback);
             var stageFeedback = stackalloc VkPipelineCreationFeedback[2];
             var feedbackInfo = new VkPipelineCreationFeedbackCreateInfo {
                 PPipelineCreationFeedback = ((nint)(&feedback)),
                 PPipelineStageCreationFeedbacks = ((nint)stageFeedback),
-                PipelineStageCreationFeedbackCount = 2,
+                PipelineStageCreationFeedbackCount = stageCount,
                 SType = VkPipelineCreationFeedbackCreateInfo.StructureType,
             };
             var pipelineCreateInfo = new VkGraphicsPipelineCreateInfo {
@@ -174,7 +176,7 @@ public unsafe sealed class VulkanNativeGraphicsPipelineApi : IVulkanGraphicsPipe
                 PViewportState = ((nint)(&viewportState)),
                 RenderPass = request.RenderPassHandle,
                 SType = StructureTypeGraphicsPipelineCreateInfo,
-                StageCount = (request.FragmentShaderModuleHandle == 0 ? 1u : 2u),
+                StageCount = stageCount,
                 Subpass = 0,
             };
 

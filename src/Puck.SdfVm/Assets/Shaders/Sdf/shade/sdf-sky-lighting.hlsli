@@ -6,14 +6,14 @@
 #include "sdf-sky-environment.hlsli"
 
 float3 sdfSkyPhysicalIrradiance(float3 normal) {
-    puckAddWork(passGroup.workCounterRow * PuckWorkRowWords + PuckWorkSkyWord, 1u);
+    puckCountSky(1u, 0u);
     float3 coefficients[9];
     [unroll] for (uint k = 0u; k < 9u; k++) { coefficients[k] = sdfSkyCoefficients[k].rgb; }
     return sdfSkyEnvironmentIrradiance(normal, coefficients);
 }
 // Plane zero holds every lighting-visible layer; plane one omits panels for the artistic rough-reflection path.
 float3 sdfSkyMapRadiance(float3 direction, uint plane) {
-    puckAddWork(passGroup.workCounterRow * PuckWorkRowWords + PuckWorkSkyTextureLoadsWord, 4u);
+    puckCountSky(0u, 4u);
     uint taps[4];
     float weights[4];
     sdfSkyEnvironmentTaps(direction, taps, weights);
