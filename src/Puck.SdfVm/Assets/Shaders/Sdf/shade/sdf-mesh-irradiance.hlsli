@@ -8,6 +8,7 @@
 #define SHADE_SDF_MESH_IRRADIANCE_HLSLI
 #include "../isa/sdf-render.hlsli"
 #include "../field/sdf-octahedral.hlsli"
+#include "../field/sdf-component.hlsli"
 
 bool sdfMeshIrradianceHolds(uint address, uint flags, int3 cell) {
     uint at = address + SDF_MESH_IRRADIANCE_CELL_WORD;
@@ -333,10 +334,21 @@ SdfMeshProbeStages sdfMeshProbeStagesOf(SdfMeshProbes probes) {
     stages.remainder = sdfMeshProbeStageOf(probes.remainderCage);
     return stages;
 }
+// A gathered corner's weight at a runtime index, chosen by comparison (field/sdf-component.hlsli): indexing the weights
+// with a loop counter would copy all sixteen into local memory on every gather that reads them.
+float sdfMeshProbeWeight(SdfMeshProbes probes, uint corner) {
+    float4 quarter = ((corner < 8u)
+        ? ((corner < 4u) ? float4(probes.weight[0], probes.weight[1], probes.weight[2], probes.weight[3])
+            : float4(probes.weight[4], probes.weight[5], probes.weight[6], probes.weight[7]))
+        : ((corner < 12u) ? float4(probes.weight[8], probes.weight[9], probes.weight[10], probes.weight[11])
+            : float4(probes.weight[12], probes.weight[13], probes.weight[14], probes.weight[15])));
+
+    return sdfComponent(quarter, (corner & 3u));
+}
 // Whether a gathered corner answers, and its probe's first word where it does.
 bool sdfMeshProbeAt(SdfMeshProbes probes, SdfMeshProbeStages stages, uint corner, out uint address) {
     address = ((corner < 8u) ? sdfMeshProbeStageAddress(stages.chosen, corner) : sdfMeshProbeStageAddress(stages.remainder, corner));
-    return (probes.weight[corner] > 0.0);
+    return (sdfMeshProbeWeight(probes, corner) > 0.0);
 }
 // One level's eight probes about the pushed receiver, its lookup clamped to the level's boundary probes: each corner's
 // weight is its trilinear share times the facing fade (at least `behind`, so a receiver whose every visible probe lies
@@ -616,7 +628,7 @@ void sdfMeshProbeCube(SdfMeshProbes probes, out float sky[6], out float3 radianc
             continue;
         }
 
-        float weight = probes.weight[corner];
+        float weight = sdfMeshProbeWeight(probes, corner);
 
         [unroll] for (uint face = 0u; (face < 6u); face++) {
             sky[face] += (weight * sdfMeshIrradianceHalf(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_SKY_WORD + (face >> 1)], (face & 1u)));

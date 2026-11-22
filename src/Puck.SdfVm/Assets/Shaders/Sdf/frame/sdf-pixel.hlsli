@@ -18,6 +18,15 @@ struct SdfPixel {
     bool active;
 };
 
+// The point a pixel's ray reaches at ray distance `t`, `precise` so every pass that forms a hit's surface point from the
+// record gets the same bits: views shades at it, the binned filter averages about it, and the probe lookup gathers at it
+// for views to read.
+float3 sdfPixelSurfacePoint(SdfPixel p, float t) {
+    precise float3 rayTravel = (p.rayDirection * t);
+    precise float3 surfacePoint = (p.rayOrigin + rayTravel);
+
+    return surfacePoint;
+}
 // Gathers the pixel at `pixel` of the view the set renders, whose index is `viewIndex`.
 SdfPixel sdfPixelAt(ViewportData view, uint2 pixel, uint viewIndex) {
     uint2 rectDims = worldViewDims(view);
