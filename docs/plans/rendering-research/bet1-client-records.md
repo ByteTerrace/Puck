@@ -136,9 +136,10 @@ again, and answers that same frame when it does.
 
 **The answer.** A view stands when no refusal holds and its signature
 equals the one it last rendered at (`SdfWorldTables.ViewSignature`). The
-refusals are meshes pending, lighting settling, a source waiting, and a
-frame that forces a render (`SdfWorldTables.ForcesRender`). The package
-adds its own: a pending pick, a changed binding, render scale or
+refusals are meshes pending, lighting settling, a source waiting, and the
+cadence gate turned off. The package adds its own: an image of another
+instance the view samples that moved (`SdfWorldPasses.ReadsStand`), a
+pending pick, a changed binding, render scale or
 sharpness, and the image history (`SdfWorldPasses.IsUnchanged`).
 
 ## Skip the capture, and leave the answer alone
@@ -377,7 +378,7 @@ covered by the signature or by a refusal.
 
 | Input | How it is covered today |
 |---|---|
-| What each screen shows, its face, mapping, treatment, luminance and ripple (`ISdfScreenSources`); a screen carried by a body; text decals (`WorldScreenDecals`) | Bound on every frame. The mapping and surface tables are hashed, the decal buffer carries a revision, a pass that samples a screen's image folds the image's publication into its signature (`SdfWorldPasses.ReadSignatureOf`), and a screen that shows a source forces the whole view to render (`SdfWorldTables.ForcesRender`) |
+| What each screen shows, its face, mapping, treatment, luminance and ripple (`ISdfScreenSources`); a screen carried by a body; text decals (`WorldScreenDecals`) | Bound on every frame. The mapping and surface tables are hashed, the decal buffer carries a revision, a pass that samples a screen's image folds the image's publication into its signature (`SdfWorldPasses.ReadSignatureOf`), and the whole view stands only while every image it samples keeps the publication its latest render observed (`SdfWorldPasses.ReadsStand`) |
 | The glyph atlas (`ISdfFrameSource.GlyphAtlas`) | Compared by identity on every frame |
 | A shader reload (`SdfWorldResidency.RequestShaderReload`), the debug view (`SdfWorldResidency.DebugMode`) and the hit-door diagnostic (`SdfWorldTables.ForceHitBound`) | The program revision moves at a reload, and the pass block carries the other two |
 | Indirect light (`SdfMeshIrradiance.Stage`) | Each publication moves the tables' irradiance revision, which the tables' signature and the lighting group fold (`SdfWorldTables.UpdateTablesSignature`) |

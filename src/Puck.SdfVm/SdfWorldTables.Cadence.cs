@@ -7,7 +7,7 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 // The cadence: whether a view's latest render stands for the frame the tables hold now. A view stands only when its
-// signature equals the one it last rendered at and nothing unhashed forces a render (ForcesRender).
+// signature equals the one it last rendered at and the cadence gate is on (SdfWorldResidency.IsUnchanged).
 //
 // The whole-view signature folds every packed table and the frame block. PassSignature partitions the same inputs:
 // geometry owns the field and camera; shadow owns directions and the fitted cascades; lighting owns the screens' tables,
@@ -44,8 +44,8 @@ namespace Puck.SdfVm;
 //   - m_meshIrradianceRevision : each publication of the irradiance volume, which the device copies into one table
 //                          behind the same binding; a lighting value too, so only the shading passes gather it again.
 // Not covered by any packed span: a screen's image, which its source updates in place behind the same handle. A pass
-// that samples one folds the image's publication into its signature (SdfWorldPasses.ReadSignatureOf); the whole view,
-// which sees no publication, renders while any screen shows a source (ForcesRender).
+// that samples one folds the image's publication into its signature (SdfWorldPasses.ReadSignatureOf); the whole view
+// stands only while each image it samples stands with the publication its latest render sampled (SdfWorldPasses.ReadsStand).
 // The pass block's temporal values (jitter, previous view) and the previous transform tables belong to each instance's
 // history, not the tables: SdfWorldPasses.IsUnchanged holds them through SdfTemporalHistory.Stands, by the poses of the
 // instance's own scope (SdfMotionScope.Poses).

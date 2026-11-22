@@ -898,8 +898,8 @@ public sealed partial class SdfMeshPathBake {
             int landed = 0, resident = 0, near = 0, nearLanded = 0, nearResident = 0;
             long lastLanded = 0, lastResident = 0, nearLastLanded = 0, nearLastResident = 0;
             var vertexBytes = 0L;
-            Span<long> levelBytes = stackalloc long[3];
-            Span<long> levelTriangles = stackalloc long[3];
+            Span<long> levelBytes = stackalloc long[(1 + SdfMeshCollapse.CellShares.Length)];
+            Span<long> levelTriangles = stackalloc long[(1 + SdfMeshCollapse.CellShares.Length)];
             Span<long> tierTriangles = stackalloc long[(SdfMeshTier.Last + 1)];
             var nearStamps = new List<long>();
             Group? lastNear = null;
@@ -936,7 +936,7 @@ public sealed partial class SdfMeshPathBake {
                     vertexBytes += ((((long)piece.Positions.Length) * SdfMeshRecord.VertexWords) * sizeof(uint));
                     levelTriangles[0] += piece.TriangleCount;
                     levelBytes[0] += (((long)piece.TriangleCount) * perTriangle);
-                    for (var level = 0; ((level < piece.Levels.Count) && (level < 2)); level++) {
+                    for (var level = 0; ((level < piece.Levels.Count) && (level < SdfMeshCollapse.CellShares.Length)); level++) {
                         levelTriangles[(level + 1)] += piece.Levels[level].TriangleCount;
                         levelBytes[(level + 1)] += (((long)piece.Levels[level].TriangleCount) * perTriangle);
                     }
@@ -964,7 +964,10 @@ public sealed partial class SdfMeshPathBake {
             }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" bake-age={((start == 0) ? 0d : Stopwatch.GetElapsedTime(startingTimestamp: start).TotalSeconds):0.000}s loads={m_loadsDone}/{m_loadsQueued} load-span={loadSpan:0.000}s plan-ms={m_planMilliseconds:0.0} restart-ms={m_restartMilliseconds:0.0}");
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" frames={m_preparedFrames} restarts={m_restarts} restart-groups={m_restartGroups} resamples={m_resamples} resample-groups={m_resampleGroups} input-readers={m_inputReaders.Count} operand-readers={m_operandReaders} operand-replans={m_operandReplans} coalesced={m_coalesced} promoted={m_promoted} successors={m_successors} ahead={m_ahead.Count} handed={m_handed} handed-refused={m_handedRefused}");
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" vertex-bytes={vertexBytes} level0={levelTriangles[0]}tri/{levelBytes[0]}B level1={levelTriangles[1]}tri/{levelBytes[1]}B level2={levelTriangles[2]}tri/{levelBytes[2]}B");
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" vertex-bytes={vertexBytes}");
+            for (var level = 0; (level < levelTriangles.Length); level++) {
+                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" level{level}={levelTriangles[level]}tri/{levelBytes[level]}B");
+            }
             // The detail budget's debt (SdfMeshTier): the groups drawing a coarser tier than their demand asks, the worst
             // such group's cell in display pixels and the longest wait, now and since the bake started, the finer tiers
             // landed, and the resident triangles by the tier they were baked at.

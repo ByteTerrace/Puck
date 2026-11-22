@@ -90,19 +90,14 @@ public sealed partial class SdfMeshPathBake {
         Func<SdfMeshBakeGroup, int> demanded = (copies
             ? (group => TierOf(pixel: PlannedPixel(group: group, transforms: transforms)))
             : (group => TierOf(pixel: Demand.PixelAt(group: group, transforms: transforms))));
-        Func<SdfMeshBakeGroup, bool> seen = (copies
-            ? (group => PlannedSees(group: group, transforms: transforms))
-            : (group => Demand.Sees(group: group, transforms: transforms)));
-
         if (arrives is null) { return demanded; }
-        // A group arriving in view with nothing of its own to draw plans its floor: the last tier, which the plan holds
-        // to the coarsest rung that changes its mesh. It owes its demanded tier, which Retier starts once the floor
-        // stands. One arriving out of view plans its demanded tier at once: no view waits on a whole coarse place there,
-        // so its floor would be a quarter more work before its detail, and the take orders it behind the groups in view
-        // (RankOf). It keeps no floor, as a group taken whole from the library keeps none, so a detail the region refuses
-        // falls back through the budget's coarser tiers (Retier) rather than an eviction (Evict).
+        // A group arriving with nothing of its own to draw plans its floor: the last tier, which the plan holds to the
+        // coarsest rung that changes its mesh. It owes its demanded tier, which Retier starts once the floor stands, and
+        // keeps the floor beside it (Group.KeepFloorOf), which every view far smaller than the one the tier was demanded
+        // for draws in its place (SdfMeshBand). A group arriving out of view does the same, ordered behind those in view
+        // (RankOf), since a view of it that turns up later small (a screen, a portal, a distant shadow) draws the floor.
         return group => {
-            if (!arrives(arg: group) || !seen(arg: group)) { return demanded(arg: group); }
+            if (!arrives(arg: group)) { return demanded(arg: group); }
             ((Group)group).FirstDetailOwed = true;
             return SdfMeshTier.Last;
         };
@@ -137,11 +132,6 @@ public sealed partial class SdfMeshPathBake {
     private float PlannedPixel(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) => ((CopiesOf(group: group) is { } copies)
         ? CopiesPixel(center: ((group.Low + group.High) * 0.5f), copies: copies, half: Vector3.Abs(value: ((group.High - group.Low) * 0.5f)), point: out _, units: out _)
         : Demand.PixelAt(group: group, transforms: transforms));
-    // Whether a view may see a group while a plan is choosing its tier: a shared geometry where one of the frame's copies
-    // of it stands, any other group at its planned box (SdfMeshDemand.Sees). On the frame's thread, as PlannedPixel.
-    private bool PlannedSees(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) => ((CopiesOf(group: group) is { } copies)
-        ? CopiesSeen(center: ((group.Low + group.High) * 0.5f), copies: copies, half: Vector3.Abs(value: ((group.High - group.Low) * 0.5f)))
-        : Demand.Sees(group: group, transforms: transforms));
     // Whether a view may see one of a shared geometry's copies, its box given in the geometry's own frame.
     private bool CopiesSeen(IReadOnlyList<int> copies, Vector3 center, Vector3 half) {
         foreach (var index in copies) {
