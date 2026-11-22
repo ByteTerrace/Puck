@@ -10,9 +10,12 @@ namespace Puck.Cli;
 /// <para>
 /// Each build is keyed by <see cref="WorldArtifactKey"/> and kept in a <see cref="WorldArtifactStore"/> under the
 /// user's local application data. A run whose key the store already holds builds nothing. A run that finds another
-/// run building the same key waits for it and takes its build. A build never goes into the checkout: with
-/// <c>--output</c>, every project in the World's closure writes into the store instead, while compilation stays
-/// incremental through the checkout's <c>obj</c> directories.
+/// run building the same key waits for it and takes its build. A build publishes the World into the store
+/// (<see cref="Command"/>): the closure builds into the checkout's own outputs, exactly as an ordinary
+/// <c>dotnet build</c> of <c>Puck.World</c> does, so a build of sources an earlier build or a developer already compiled
+/// compiles nothing, and only the published files go into the store, where the Worlds run from. The publish is
+/// ReadyToRun-precompiled for this machine's runtime, one image per assembly, and each image is made again only when its
+/// assembly changed.
 /// </para>
 /// <para>
 /// Every build restores. NuGet's no-op check compares each closure project's restore inputs with the hash its last
@@ -32,6 +35,24 @@ public static class WorldArtifactBuild {
     /// <summary>How long the build of one source state may run, when its caller names no other. It measures the build
     /// alone: time spent waiting for other runs (see <see cref="CliLease.DefaultWait"/>) is never part of it.</summary>
     public static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(minutes: 30);
+
+    /// <summary>The MSBuild switches every World build passes beside <see cref="CliProjectBuild.Arguments"/>, which
+    /// the source-state key covers with them. <c>AppendRuntimeIdentifierToOutputPath=false</c> keeps the runtime-specific
+    /// publish on the portable build's outputs, so it compiles nothing an ordinary build did not (the recipe CI publishes
+    /// with); <c>PuckPrewarmPlayerProducts=false</c> leaves the player prewarm to the World's own boot.</summary>
+    /// <param name="spirv">Whether the build carries Vulkan SPIR-V (<c>-p:PuckShaderSpirvEnabled=true</c>).</param>
+    /// <returns>The switches, in the order the build passes them.</returns>
+    public static string[] BuildProperties(bool spirv) =>
+        [AppendRuntimeIdentifier, NoPrewarm, .. (spirv ? (string[])["-p:PuckShaderSpirvEnabled=true"] : [])];
+
+    /// <summary>The whole World build command before its publish directory, which the source-state key covers.</summary>
+    /// <param name="spirv">Whether the build carries Vulkan SPIR-V.</param>
+    /// <returns>The arguments.</returns>
+    public static string[] Command(bool spirv) =>
+        [.. CliProjectBuild.Arguments(project: WorldArtifactClosure.WorldProject, publish: true), .. BuildProperties(spirv: spirv)];
+
+    private const string AppendRuntimeIdentifier = "-p:AppendRuntimeIdentifierToOutputPath=false";
+    private const string NoPrewarm = "-p:PuckPrewarmPlayerProducts=false";
 
     /// <summary>Resolves the World build for the checkout's current sources, building it only when the store holds
     /// none.</summary>
@@ -178,14 +199,14 @@ public static class WorldArtifactBuild {
         cancellationToken.ThrowIfCancellationRequested();
         var queue = Stopwatch.StartNew();
         var limit = (wait ?? CliLease.DefaultWait);
-        IReadOnlyList<string> properties = (spirv ? ["-p:PuckShaderSpirvEnabled=true"] : []);
+        IReadOnlyList<string> properties = BuildProperties(spirv: spirv);
 
         artifact = null;
 
         var (roots, _) = WorldArtifactClosure.Walk(repositoryRoot: repositoryRoot);
 
         var keyed = WorldArtifactKey.TryCompute(
-            buildArguments: [.. CliProjectBuild.Arguments(project: WorldArtifactClosure.WorldProject), .. properties],
+            buildArguments: Command(spirv: spirv),
             key: out var key,
             reason: out var unkeyed,
             repositoryRoot: repositoryRoot,
@@ -270,7 +291,7 @@ public static class WorldArtifactBuild {
             var staging = store.CreateStaging(claim: claim);
 
             try {
-                Console.Error.WriteLine(value: $"{verb}: building Puck.World once (Release) for source state {key}.");
+                Console.Error.WriteLine(value: $"{verb}: building and publishing Puck.World once (Release, ReadyToRun) for source state {key}.");
 
                 var built = CliProjectBuild.TryBuild(
                     artifactName: ArtifactName,
@@ -281,6 +302,7 @@ public static class WorldArtifactBuild {
                     outputDirectory: staging,
                     project: WorldArtifactClosure.WorldProject,
                     properties: properties,
+                    publish: true,
                     repositoryRoot: repositoryRoot,
                     runner: builder,
                     timeout: timeout
@@ -339,7 +361,7 @@ public static class WorldArtifactBuild {
             if (!keyed) { return false; }
             var (currentRoots, _) = WorldArtifactClosure.Walk(repositoryRoot: repositoryRoot);
             return (!WorldArtifactKey.TryCompute(
-                buildArguments: [.. CliProjectBuild.Arguments(project: WorldArtifactClosure.WorldProject), .. properties],
+                buildArguments: Command(spirv: spirv),
                 key: out var currentKey, reason: out _, repositoryRoot: repositoryRoot, roots: currentRoots
             ) || (currentKey != key));
         }
