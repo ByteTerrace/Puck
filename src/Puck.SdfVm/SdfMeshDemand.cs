@@ -107,14 +107,6 @@ public sealed class SdfMeshDemand {
     /// turned or its field of view or aspect moved. A box within a distance <c>r</c> of the eye has its distance to a plane
     /// moved by no more than <c>r</c> times the turn.</summary>
     public double Turn { get; private set; }
-    /// <summary>Gets the fewest pixels a metre any demand point covers one metre in front of it, infinity with none: a
-    /// box that moves a distance moves a <see cref="PixelAt(Vector3, Vector3)"/> answer by at most that distance over
-    /// this, as the points' own travel does.</summary>
-    public float LeastPixelsPerMetre { get; private set; } = float.PositiveInfinity;
-    /// <summary>Gets whether some demand point demands only inside its view (<see cref="SdfViewSnapshot.DemandWithinView"/>):
-    /// a box that moves across its frustum moves its answer by any amount, so its distance to the frustum bounds it
-    /// (<see cref="FrustumBounds"/>).</summary>
-    public bool AnyWithinView { get; private set; }
     /// <summary>Gets the changes no odometer bounds since the bake last took them (<see cref="TakeChanges"/>).</summary>
     public IReadOnlyList<Change> Changes => m_changes;
 
@@ -207,7 +199,6 @@ public sealed class SdfMeshDemand {
         Shift += shift;
         Turn += turn;
         Count = count;
-        Measured();
     }
     // Keeps the points the latest observation held, for the next one to match its views against.
     private void Hold() {
@@ -251,18 +242,6 @@ public sealed class SdfMeshDemand {
     /// <param name="index">The point, below <see cref="Count"/>.</param>
     /// <returns>The point.</returns>
     public Viewpoint PointAt(int index) => new(Camera: m_cameras[index], Eye: m_points[index], Focal: m_focal[index], Framed: m_framed[index], Within: m_within[index]);
-    // Reads the figures a moved box's bound takes from the points (LeastPixelsPerMetre, AnyWithinView).
-    private void Measured() {
-        var least = float.PositiveInfinity;
-        var within = false;
-
-        for (var index = 0; (index < Count); index++) {
-            least = MathF.Min(x: least, y: m_focal[index]);
-            within |= m_within[index];
-        }
-        LeastPixelsPerMetre = least;
-        AnyWithinView = within;
-    }
     private void EnsureCapacity(int required) {
         if (required <= m_points.Length) { return; }
         var capacity = ArrayCapacity.Grown(m_points.Length, required);
@@ -292,7 +271,6 @@ public sealed class SdfMeshDemand {
         m_cuts[Count] = 0L;
         Changed(before: default, hadBefore: false, after: PointAt(index: Count), hasAfter: true);
         Count++;
-        Measured();
     }
     /// <summary>Returns the metres one display pixel covers at a box from the demand point that sees it finest: the
     /// distance from the eye to the box, no nearer than <see cref="NearDistance"/>, over the point's pixels a metre; what
@@ -452,31 +430,56 @@ public sealed class SdfMeshDemand {
         return boxed;
     }
 
-    /// <summary>Returns how a world-axis box stands toward the frustums of the points bounded to their views that could
-    /// move its pixel under a threshold: those whose distance alone puts the box's pixel at or under it (the rest, however
-    /// they turn, read the box no finer). Over those points, the least distance the box may move before one of their
-    /// widened frustums answers otherwise whether it may hold it (<see cref="CameraSnapshot.FrustumSlack"/>) and the
-    /// most the box reaches from their eyes (the distance to its center plus its half extents' sum, which a frustum's
-    /// <see cref="Turn"/> multiplies into the most its distance to a plane moves); and the least pixel the others' distance
-    /// puts it at.</summary>
+    /// <summary>How a box stands toward the demand points that could move its tier past a pixel, its band's top: the
+    /// points whose distance alone puts the box's pixel at or under the top count (the rest read it no finer however they
+    /// turn, and cannot become its finest while it moves less than <paramref name="Clearance"/>).</summary>
+    /// <param name="Focal">The fewest pixels a metre among the counted points: a box that moves a distance moves its
+    /// pixel by at most that distance over this; infinity with none counted.</param>
+    /// <param name="Clearance">The least distance, in metres, the box may move before a point not counted could put its
+    /// pixel under the top; infinity with none uncounted.</param>
+    /// <param name="FrustumSlack">The least distance, in metres, the box may move before a counted point bounded to its
+    /// view answers otherwise whether its widened frustum may hold it (<see cref="CameraSnapshot.FrustumSlack"/>);
+    /// infinity with none.</param>
+    /// <param name="FrustumReach">The most the box reaches from a counted point bounded to its view, in metres: the
+    /// distance to its center plus its half extents' sum, which that frustum's <see cref="Turn"/> multiplies into the most
+    /// the box's distance to a plane moves; zero with none.</param>
+    /// <param name="Beyond">The least pixel an uncounted point's distance puts the box at; infinity with none.</param>
+    public readonly record struct Bounds(float Focal, float Clearance, float FrustumSlack, float FrustumReach, float Beyond) {
+        /// <summary>Gets the bounds of no box: nothing counted and nothing uncounted.</summary>
+        public static Bounds None { get; } = new(Beyond: float.PositiveInfinity, Clearance: float.PositiveInfinity, Focal: float.PositiveInfinity, FrustumReach: 0f, FrustumSlack: float.PositiveInfinity);
+
+        /// <summary>Returns the bounds of two boxes read as one: the tighter of each.</summary>
+        /// <param name="other">The other box's bounds.</param>
+        /// <returns>The joined bounds.</returns>
+        public Bounds Join(Bounds other) => new(
+            Beyond: MathF.Min(x: Beyond, y: other.Beyond),
+            Clearance: MathF.Min(x: Clearance, y: other.Clearance),
+            Focal: MathF.Min(x: Focal, y: other.Focal),
+            FrustumReach: MathF.Max(x: FrustumReach, y: other.FrustumReach),
+            FrustumSlack: MathF.Min(x: FrustumSlack, y: other.FrustumSlack)
+        );
+    }
+    /// <summary>Returns how a world-axis box stands toward the demand points that could move its tier past a pixel
+    /// (<see cref="Bounds"/>).</summary>
     /// <param name="center">The box's center, in world space.</param>
     /// <param name="half">The box's half extents along the world axes, none negative.</param>
     /// <param name="units">The units the box's pixels are read in; positive.</param>
-    /// <param name="threshold">The pixel, in those units, a point must reach to count.</param>
-    /// <returns>The slack in metres (infinity with no point counted), the reach in metres (zero with none), and the least
-    /// pixel of the points not counted (infinity with none).</returns>
-    public (float Slack, float Reach, float Beyond) FrustumBounds(Vector3 center, Vector3 half, float units, float threshold) {
-        var (slack, reach, beyond) = (float.PositiveInfinity, 0f, float.PositiveInfinity);
+    /// <param name="top">The pixel, in those units, a point must reach to count.</param>
+    /// <returns>The bounds.</returns>
+    public Bounds BoundsOf(Vector3 center, Vector3 half, float units, float top) {
+        var bounds = Bounds.None;
+        var (focal, clearance, slack, reach, beyond) = (bounds.Focal, bounds.Clearance, bounds.FrustumSlack, bounds.FrustumReach, bounds.Beyond);
 
         for (var index = 0; (index < Count); index++) {
-            if (!m_within[index]) { continue; }
-
             var pixel = (MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])) / (m_focal[index] * units));
 
-            if (pixel > threshold) {
+            if (pixel > top) {
                 beyond = MathF.Min(x: beyond, y: pixel);
+                clearance = MathF.Min(x: clearance, y: ((pixel - top) * m_focal[index] * units));
                 continue;
             }
+            focal = MathF.Min(x: focal, y: m_focal[index]);
+            if (!m_within[index]) { continue; }
             slack = MathF.Min(x: slack, y: m_cameras[index].FrustumSlack(
                 center: center,
                 halfX: new Vector3(x: half.X, y: 0f, z: 0f),
@@ -487,7 +490,7 @@ public sealed class SdfMeshDemand {
             reach = MathF.Max(x: reach, y: (Vector3.Distance(value1: center, value2: m_points[index]) + ((half.X + half.Y) + half.Z)));
         }
 
-        return (slack, reach, beyond);
+        return new Bounds(Beyond: beyond, Clearance: clearance, Focal: focal, FrustumReach: reach, FrustumSlack: slack);
     }
 
     // Whether a point demands a world-axis box at all: always for a point that demands by distance alone, and only a
