@@ -51,6 +51,7 @@
         <Compile Include="../Shared/UploadModelGpu.cs" Link="UploadModelGpu.cs" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="../Shared/World/AudioAssetFixtures.cs" Link="World/AudioAssetFixtures.cs" />
         <Compile Include="../Shared/World/AllocationCollection.cs" Link="World/AllocationCollection.cs" />
         <Compile Include="../Shared/World/AuthoredGameFixtures.Load.cs" Link="World/AuthoredGameFixtures.Load.cs" />
         <Compile Include="../Shared/World/AuthoredGameFixtures.cs" Link="World/AuthoredGameFixtures.cs" />

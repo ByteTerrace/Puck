@@ -9,7 +9,7 @@ namespace Puck.World;
 /// The fixed step every boot shape runs: seat route changes, boot scheduling, authority and instance steps,
 /// the composition's post-step, then seat intent completion. The host-work clock a world.wait counts lives here.
 /// </summary>
-internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTestRun scheduleRunner, WorldTickScript tickScript, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, WorldReload reload, HostPacing pacing) {
+internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTestRun scheduleRunner, WorldTickScript tickScript, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, PlayerRoster roster, WorldSourceWatch sourceWatch, WorldReload reload, HostPacing pacing) {
     private readonly WorldCaptureScheduler m_captureScheduler = captureScheduler;
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
@@ -42,8 +42,26 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     /// (<see cref="WorldCaptureScheduler.Drain"/>).</summary>
     public void SettleOwedFrames() => m_captureScheduler.Drain();
 
-    /// <summary>The authored simulation rate the fixed-step pump paces this world at.</summary>
-    public uint RatePerSecond => ((uint)m_server.Configuration.SimulationRateHz);
+    // What the host loop reads of the boot authority, published so the loop never reads the authority beside a tick
+    // the step thread is executing: refreshed at each read and before each hand-off while no slice is in flight, and
+    // left as last published while one is.
+    private uint m_publishedRate;
+    private bool m_publishedInterrupted;
+
+    private void Publish() {
+        if (m_instances.StepInFlight) { return; }
+        m_publishedRate = ((uint)m_server.Configuration.SimulationRateHz);
+        m_publishedInterrupted = ((m_phase == StepPhase.Boot) && m_server.Tick.ExecutionInterrupted);
+    }
+
+    /// <summary>The authored simulation rate the fixed-step pump paces this world at: the boot authority's own while no
+    /// tick slice is in flight on the step thread, and the rate last published while one is.</summary>
+    public uint RatePerSecond {
+        get {
+            Publish();
+            return m_publishedRate;
+        }
+    }
     /// <summary>The number of fixed ticks completed on the current authority timeline.</summary>
     public ulong Tick => (m_server.NextInputTick - 1UL);
 
@@ -53,7 +71,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     // boot runs immediately after its own step, reading boot's own just-settled state — never when boot did not
     // step at all, so a paused/stopped boot's latched "inside" occupancy neither fires nor is re-evaluated until a
     // genuine resume produces a new edge.
-    private bool StepBoot(in FixedStepContext context, bool stepsBoot, WaitDeadline deadline) {
+    private bool StepBoot(in FixedStepContext context, bool stepsBoot, WaitDeadline deadline, WaitDeadline? collectBy) {
         if (stepsBoot) {
             // Host work advances only when this authority steps. The server independently advances from its
             // checkpointed clock; restoring a replay timeline rewinds that clock without rewinding console waits.
@@ -63,13 +81,14 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
                 Tick: m_completedHostSteps
             );
 
-            var stepTick = WorldServerStepShell.TryStep(
+            var stepTick = m_instances.TryStepAuthority(
                 context: in bootContext,
                 pacing: pacing,
                 publishTick: m_publishStep,
                 server: m_server,
                 tape: m_replayTape,
                 deadline: deadline,
+                collectBy: collectBy,
                 pending: out var pending
             );
 
@@ -100,25 +119,45 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     private bool m_stepsBoot;
 
     /// <summary>Gets whether the step in progress can no longer finish: the boot authority froze at a stall while its
-    /// tick was held. A row that freezes is skipped, so only the boot phase can hold the step for good.</summary>
-    public bool StepInterrupted => (m_phase == StepPhase.Boot) && m_server.Tick.ExecutionInterrupted;
+    /// tick was held. A row that freezes is skipped, so only the boot phase can hold the step for good. While a tick
+    /// slice is in flight on the step thread the answer is the one last published: a slice still executing has not
+    /// frozen its authority.</summary>
+    public bool StepInterrupted {
+        get {
+            Publish();
+            return m_publishedInterrupted;
+        }
+    }
 
-    /// <summary>Runs one fixed step, resuming after the next control phase if a dependency exceeds the slice.</summary>
+    /// <summary>Registers the host loop's wake with the step thread, which calls it each time a tick slice it executes
+    /// finishes.</summary>
+    /// <param name="wake">The wake, or <see langword="null"/> to register none.</param>
+    public void WakeOnStepProgress(Action? wake) => m_instances.StepProgressed = wake;
+
+    /// <summary>Runs one fixed step, resuming on a later call if a dependency exceeds the slice or the caller stops
+    /// waiting for the step thread. A call that resumes prepares nothing again: it collects the tick in flight and
+    /// goes on from there, so the step's order of events is the same however many calls it takes.</summary>
     /// <param name="context">The pump's tick context; only its step width reaches the server.</param>
     /// <param name="afterInstances">The shell's own post-step, run after every instance has stepped and before the
     /// seat intents finish: every shape syncs seat bindings and publishes seat context here, and a headless or
     /// offscreen shell then publishes logical wheel state.</param>
-    public bool TryStep(in FixedStepContext context, Action? afterInstances) {
+    /// <param name="collectBy">How long the caller waits for a tick the step thread executes before it answers
+    /// <see langword="false"/> and leaves the tick in flight; <see langword="null"/> waits for each tick.</param>
+    /// <returns><see langword="false"/> while the step is pending.</returns>
+    public bool TryStep(in FixedStepContext context, Action? afterInstances, WaitDeadline? collectBy) {
         var deadline = WaitDeadline.In(HostWaits.PumpAllowance ?? TimeSpan.FromSeconds(30));
         if (m_phase == StepPhase.Prepare) {
             PrepareStep(in context);
             m_phase = StepPhase.Boot;
         }
         if (m_phase == StepPhase.Boot) {
-            if (!StepBoot(in context, m_stepsBoot, deadline)) { return false; }
+            Publish();
+            if (!StepBoot(in context, m_stepsBoot, deadline, collectBy)) { return false; }
             m_phase = StepPhase.Rows;
         }
-        if (m_instances.TryStepInstances(context.StepTicks, deadline) is not null) { return false; }
+        Publish();
+        if (m_instances.TryStepInstances(context.StepTicks, deadline, collectBy) is not null) { return false; }
+        roster.PublishProfiles(m_server.CaptureRosterProfiles());
         _ = m_seatRouter.DeliverRouteChanges();
         afterInstances?.Invoke();
         m_instances.FinishSeatIntents();

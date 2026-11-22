@@ -140,13 +140,13 @@ public sealed class NamedMachineLifetimeLawTests {
             840,
             ReadOnlyMemory<ScreenPadSnapshot>.Empty
         );
-        var video = host.VideoOutput(instance: "clock", output: "video");
+        var video = host.CapturePresentation().VideoOutput(instance: "clock", output: "video");
 
         Assert.NotNull(@object: video);
         using var upload = new MachineVideoSourceUpload(
             name: "clock",
             producer: "machine",
-            output: () => host.VideoOutput(instance: "clock", output: "video")
+            output: () => host.CapturePresentation().VideoOutput(instance: "clock", output: "video")
         );
 
         Assert.NotNull(@object: upload.Descriptor);
@@ -162,7 +162,7 @@ public sealed class NamedMachineLifetimeLawTests {
             ReadOnlyMemory<ScreenPadSnapshot>.Empty
         );
         Assert.False(condition: host.InstanceState(name: "clock")!.Value.Running);
-        Assert.Null(@object: host.VideoOutput(instance: "clock", output: "video"));
+        Assert.Null(@object: host.CapturePresentation().VideoOutput(instance: "clock", output: "video"));
         Assert.Null(@object: upload.Descriptor);
         Assert.Equal(expected: "machine output 'clock' is not running", actual: upload.Fault);
         var runtime = Assert.Single(collection: engine.Created);
@@ -180,7 +180,7 @@ public sealed class NamedMachineLifetimeLawTests {
             420,
             ReadOnlyMemory<ScreenPadSnapshot>.Empty
         );
-        Assert.Same(expected: video, actual: host.VideoOutput(instance: "clock", output: "video"));
+        Assert.Same(expected: video, actual: host.CapturePresentation().VideoOutput(instance: "clock", output: "video"));
         Assert.NotNull(@object: upload.Descriptor);
         Assert.Null(@object: upload.Fault);
         Assert.Single(collection: engine.Created);
@@ -579,7 +579,7 @@ public sealed class NamedMachineLifetimeLawTests {
         );
 
         Assert.Same(
-            host.VideoOutput(
+            host.CapturePresentation().VideoOutput(
                 instance: "clock",
                 output: "wide"
             ),
@@ -670,7 +670,7 @@ public sealed class NamedMachineLifetimeLawTests {
         Assert.False(condition: engine.Created[0].Disposed);
         Assert.False(condition: engine.Created[1].Disposed);
         Assert.Same(
-            host.VideoOutput(
+            host.CapturePresentation().VideoOutput(
                 instance: "right",
                 output: "video"
             ),
@@ -999,11 +999,11 @@ public sealed class NamedMachineLifetimeLawTests {
             next: document
         );
 
-        var first = host.VideoOutput(
+        var first = host.CapturePresentation().VideoOutput(
             instance: "clock",
             output: "video"
         );
-        var second = host.VideoOutput(
+        var second = host.CapturePresentation().VideoOutput(
             instance: "clock",
             output: "video"
         );
@@ -1080,7 +1080,7 @@ public sealed class NamedMachineLifetimeLawTests {
             2,
             fixture.Server.Machines.InstanceState(name: "clock")!.Value.FramesStepped
         );
-        Assert.Null(@object: fixture.Server.Machines.VideoOutput(
+        Assert.Null(@object: fixture.Server.Machines.CapturePresentation().VideoOutput(
             instance: "clock",
             output: "video"
         ));

@@ -53,6 +53,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
     private static PlayerRoster BuildRoster(WorldFixture fixture) => new(
         definition: fixture.Server.Definition,
         link: new LoopbackTransport(server: fixture.Server),
+        profiles: fixture.Server.CaptureRosterProfiles(),
         seatBindings: new WorldSeatBindings(definition: fixture.Server.Definition)
     );
     private static WorldDefinition SingleActiveSeatDocument() => EagerSeatsDocument(eager: 1);

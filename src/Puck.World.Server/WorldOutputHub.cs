@@ -3,8 +3,10 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 /// <summary>
-/// The server's multi-subscriber output publication point. It fans a
-/// tick's output out to every attached <see cref="IClientSink"/> synchronously on the tick thread: each subscriber
+/// The server's multi-subscriber output publication point. It composes a
+/// tick's output for every attached <see cref="IClientSink"/> on the tick thread and hands it over through each
+/// subscriber's <see cref="WorldSinkRoute"/>: an <see cref="IWorldInlineSink"/> receives at once, and any other sink
+/// receives at once only while the hub's outbox does not record, otherwise when the hub collects. Each subscriber
 /// receives the borrowed <see cref="WorldSnapshot"/> (its <see cref="WorldSnapshot.Entries"/> memory wraps a reused
 /// server-owned array — see <see cref="WorldServer"/>'s own remarks) and must fully consume or copy it before its
 /// <see cref="IClientSink.DeliverSnapshot"/> call returns, because the next tick's snapshot overwrites the same
@@ -46,14 +48,20 @@ public sealed partial class WorldOutputHub {
     // during delivery, or by the sink's own detach reason; every route is equivalent from the subscriber's point of
     // view (detached, compacted out, never delivered to again). Kept as a class (not a struct) because the lease Subscribe returns IS
     // this object; Dispose closes over it directly rather than needing a separate handle/index to invalidate.
-    private sealed class Subscription(WorldOutputHub hub, IClientSink sink, WorldSinkDisclosure disclosure) : IDisposable {
-        public readonly IClientSink Sink = sink;
-        public readonly IWorldDetachableSink? Detachable = (sink as IWorldDetachableSink);
-        public WorldSinkDisclosure Disclosure = disclosure;
+    private sealed class Subscription : IDisposable {
+        private readonly WorldOutputHub m_hub;
+        // The hub's only hold on the sink: a delivery the outbox recorded that throws on replay detaches the
+        // subscription just as one that throws inside the fan-out does.
+        public readonly WorldSinkRoute Route;
+        public WorldSinkDisclosure Disclosure;
         public Func<WorldSnapshot, WorldSnapshot>? Present;
         public bool Active = true;
 
-
+        public Subscription(WorldOutputHub hub, IClientSink sink, WorldSinkDisclosure disclosure) {
+            m_hub = hub;
+            Disclosure = disclosure;
+            Route = hub.RouteTo(sink: sink, fault: exception => hub.Detach(subscription: this, callSite: "the outbox's collect", exception: exception));
+        }
 
         public void Dispose() {
             if (!Active) {
@@ -61,7 +69,7 @@ public sealed partial class WorldOutputHub {
             }
 
             Active = false;
-            hub.m_activeCount--;
+            m_hub.m_activeCount--;
         }
     }
 
@@ -120,13 +128,13 @@ public sealed partial class WorldOutputHub {
         Deactivate(subscription: subscription);
         Narrate(
             channel: "world.output",
-            text: $"[world.output: {subscription.Sink.GetType().Name} threw in {callSite} — detached] {exception}"
+            text: $"[world.output: {subscription.Route.SinkName} threw in {callSite} — detached] {exception}"
         );
     }
     // Detaches a sink that ended its own subscription during the delivery just made, narrating its named reason as an
     // ordinary detach, never as a fault.
     private bool EndedBySink(Subscription subscription) {
-        if (subscription.Detachable?.DetachReason is not { } reason) {
+        if (subscription.Route.DetachReason is not { } reason) {
             return false;
         }
 
@@ -135,7 +143,7 @@ public sealed partial class WorldOutputHub {
         if (HasNarrationSink) {
             Narrate(
                 channel: "world.output",
-                text: $"[world.output: {subscription.Sink.GetType().Name} detached: {reason}]"
+                text: $"[world.output: {subscription.Route.SinkName} detached: {reason}]"
             );
         }
 
@@ -151,7 +159,7 @@ public sealed partial class WorldOutputHub {
 
         Deliver(
             callSite: nameof(DeliverComposition),
-            deliver: static (sink, payload) => sink.DeliverComposition(composition: payload),
+            deliver: static (route, payload) => route.DeliverComposition(composition: payload),
             payload: composition
         );
     }
@@ -166,7 +174,7 @@ public sealed partial class WorldOutputHub {
 
         Deliver(
             callSite: nameof(DeliverDefinition),
-            deliver: static (sink, payload) => sink.DeliverDefinition(
+            deliver: static (route, payload) => route.DeliverDefinition(
                 definition: payload.Definition,
                 version: payload.Version, stream: WorldStreamStamp.Unspanned
             ),
@@ -179,9 +187,9 @@ public sealed partial class WorldOutputHub {
         var rows = WorldPresentationRows.Between(before, after);
         Deliver(
             callSite: nameof(DeliverPresentation),
-            deliver: static (sink, payload) => {
-                sink.DeliverPresentation(payload.Definition, payload.Rows, payload.Version, WorldStreamStamp.Unspanned);
-                if (sink is not IWorldDetachableSink) { CountPresentationRows(payload.Rows); }
+            deliver: static (route, payload) => {
+                route.DeliverPresentation(payload.Definition, payload.Rows, payload.Version, WorldStreamStamp.Unspanned);
+                if (!route.Detachable) { CountPresentationRows(payload.Rows); }
             },
             payload: (Definition: after, Rows: rows, Version: version)
         );
@@ -204,7 +212,7 @@ public sealed partial class WorldOutputHub {
 
         Deliver(
             callSite: nameof(DeliverState),
-            deliver: static (sink, payload) => sink.DeliverState(
+            deliver: static (route, payload) => route.DeliverState(
                 definition: payload.Definition,
                 stamp: payload.Stamp,
                 version: payload.Version, stream: WorldStreamStamp.Unspanned
@@ -218,14 +226,14 @@ public sealed partial class WorldOutputHub {
     public void DeliverSessionLever(WorldSessionLever lever) =>
         Deliver(
             callSite: nameof(DeliverSessionLever),
-            deliver: static (sink, payload) => sink.DeliverSessionLever(lever: payload),
+            deliver: static (route, payload) => route.DeliverSessionLever(lever: payload),
             payload: lever
         );
 
     // The fan-out every by-value typed Deliver* shares: call `deliver` on each active subscriber's sink, isolating
     // and detaching one that faults, then compact the live list in place. DeliverSnapshot/DeliverAnswer take their
     // payload `in` (a large struct) and DeliverSnapshot also redacts per subscriber, so neither fits this shape.
-    private void Deliver<TPayload>(TPayload payload, Action<IClientSink, TPayload> deliver, string callSite) {
+    private void Deliver<TPayload>(TPayload payload, Action<WorldSinkRoute, TPayload> deliver, string callSite) {
         m_deliveryDepth++;
 
         try {
@@ -240,7 +248,7 @@ public sealed partial class WorldOutputHub {
 
                 try {
                     deliver(
-                        subscription.Sink,
+                        subscription.Route,
                         payload
                     );
                 } catch (Exception exception) {
@@ -292,10 +300,10 @@ public sealed partial class WorldOutputHub {
                         Entries = m_interest.Project(subscription.Disclosure), Inputs = default, InputAnswers = default,
                     };
                     if (subscription.Present is { } present) { delivered = present(delivered); }
-                    if (subscription.Sink is IWorldInterestSink observer && subscription.Disclosure.IsFull && subscription.Present is null) {
-                        observer.DeliverSnapshot(delivered, m_interest);
+                    if (subscription.Route.ObservesInterest && subscription.Disclosure.IsFull && subscription.Present is null) {
+                        subscription.Route.DeliverSnapshot(delivered, m_interest);
                     } else {
-                        subscription.Sink.DeliverSnapshot(delivered, WorldStreamStamp.Unspanned);
+                        subscription.Route.DeliverSnapshot(delivered, WorldStreamStamp.Unspanned);
                     }
                 } catch (Exception exception) {
                     Detach(
@@ -345,7 +353,12 @@ public sealed partial class WorldOutputHub {
     /// <exception cref="InvalidOperationException">Called from within a <c>Deliver*</c> callback.</exception>
     public IDisposable Subscribe(IClientSink sink, in WorldSinkDisclosure disclosure) => Subscribe(sink, disclosure, null);
 
-    internal IDisposable Subscribe(IClientSink sink, in WorldSinkDisclosure disclosure, Func<WorldSnapshot, WorldSnapshot>? present) {
+    internal IDisposable Subscribe(IClientSink sink, in WorldSinkDisclosure disclosure, Func<WorldSnapshot, WorldSnapshot>? present) =>
+        Subscribe(sink, disclosure, present, out _);
+
+    /// <summary>Adds a typed-lane subscriber and hands back the route its attach primer is delivered through, the
+    /// same route every later delivery to it takes.</summary>
+    internal IDisposable Subscribe(IClientSink sink, in WorldSinkDisclosure disclosure, Func<WorldSnapshot, WorldSnapshot>? present, out WorldSinkRoute route) {
         ArgumentNullException.ThrowIfNull(argument: sink);
 
         if (m_deliveryDepth != 0) {
@@ -358,6 +371,7 @@ public sealed partial class WorldOutputHub {
             sink: sink
         ) { Present = present };
 
+        route = subscription.Route;
         m_typed.Add(item: subscription);
         m_activeCount++;
 

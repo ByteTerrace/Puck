@@ -13,12 +13,13 @@ namespace Puck.World.Server;
 /// feed holds. The answers, compositions and levers this world's hub fans out belong to its own clients and never
 /// reach a session. An observer that throws, or that ends its own subscription as an
 /// <see cref="IWorldDetachableSink"/>, ends its observation; the hub detaches it.</summary>
-internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservation observation, IClientSink inner) : IWorldDetachableSink, IWorldInterestSink {
-    private readonly IWorldDetachableSink? m_detachable = (inner as IWorldDetachableSink);
-    private readonly WorldProjectionFeed m_feed = new(
-        recipient: observation.Session,
-        seeds: server.ClockSeeds
-    );
+internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSink {
+    private readonly WorldServer m_server;
+    private readonly WorldSessionObservation m_observation;
+    // The observer is reached only through its route: an observer that copies into a wire queue receives inline, and
+    // any other (a colocated mirror) receives when the server's outbox collects.
+    private readonly WorldSinkRoute m_inner;
+    private readonly WorldProjectionFeed m_feed;
 
     private WorldDefinition? m_hydrated;
     private bool m_withheld;
@@ -29,9 +30,21 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     private readonly WorldDeliveryRows m_rows = new();
     private readonly WorldSolidScaleDisclosure m_scales = new();
     private readonly WorldDeclaredRoster m_roster = new();
-    private readonly WorldRecipientView m_view = observation.View;
+    private readonly WorldRecipientView m_view;
 
-    private WorldDocumentVersion Version => server.DocumentVersion with { Sequence = m_cursor.Sequence };
+    /// <summary>Initializes a new instance of the <see cref="WorldSessionSink"/> class.</summary>
+    /// <param name="server">The observed world.</param>
+    /// <param name="observation">The session's observation.</param>
+    /// <param name="observer">The sink the observer is delivered through.</param>
+    public WorldSessionSink(WorldServer server, WorldSessionObservation observation, IClientSink observer) {
+        m_server = server;
+        m_observation = observation;
+        m_inner = server.Output.RouteTo(sink: observer, fault: EndAfterDeferredFault);
+        m_feed = new(recipient: observation.Session, seeds: server.ClockSeeds);
+        m_view = observation.View;
+    }
+
+    private WorldDocumentVersion Version => m_server.DocumentVersion with { Sequence = m_cursor.Sequence };
 
     /// <summary>Gets the reason the observer ended its own subscription with, or <see langword="null"/> while it still
     /// takes deliveries; the session ends with it.</summary>
@@ -39,8 +52,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     /// <summary>Gets what the observer threw, once it has.</summary>
     public Exception? Fault { get; private set; }
 
-    private bool CanObserve => observation.CanObserve;
-    private WorldDisclosureTier Tier => observation.Tier;
+    private bool CanObserve => m_observation.CanObserve;
+    private WorldDisclosureTier Tier => m_observation.Tier;
 
     // Queries are read doors into the same disclosed view as deliveries. Only state observations have their own
     // recipient-filtered projection; the remaining readbacks describe authoritative state that a Presentation or
@@ -50,7 +63,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         ((query is WorldQuery.StateObservations) || DisclosesFullReplica)
     );
 
-    private bool DisclosesFullReplica => ((Tier == WorldDisclosureTier.Replica) && WorldSessionObservation.RedactsNoBody(server: server));
+    private bool DisclosesFullReplica => ((Tier == WorldDisclosureTier.Replica) && WorldSessionObservation.RedactsNoBody(server: m_server));
 
     // Nothing reaches an observer once it has ended its own subscription.
     private bool Discloses() {
@@ -79,9 +92,9 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     // Ends the observation once its observer takes no more deliveries, by a fault or by its own detach reason: from
     // this moment the session acts no more, and the next step ends it.
     private void EndObservation() {
-        observation.MarkEnded(reason: (DetachReason ?? $"world.session.observer-faulted: {Fault?.Message}"));
-        server.GrantTable.MarkObserverEnded(session: observation.Session);
-        server.NoteObserverEnded(session: observation.Session);
+        m_observation.MarkEnded(reason: (DetachReason ?? $"world.session.observer-faulted: {Fault?.Message}"));
+        m_server.GrantTable.MarkObserverEnded(session: m_observation.Session);
+        m_server.NoteObserverEnded(session: m_observation.Session);
     }
     // Records a delivery fault before it reaches the hub's detach handler. Delivery uses direct calls so a steady
     // snapshot or value-only update does not allocate a capturing delegate.
@@ -89,12 +102,23 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         Fault = exception;
         EndObservation();
     }
+    // An observer the outbox deferred threw on the collect's replay of a delivery: the session ends as if it had thrown
+    // inline, and the hub detaches this sink by its reason at its next delivery.
+    private void EndAfterDeferredFault(Exception exception) {
+        if (m_server.AuthorityRetiring) { return; }
+        m_server.ExecuteAuthorityOperation(operation: () => {
+            if ((Fault is not null) || (DetachReason is not null)) { return; }
+            Fault = exception;
+            DetachReason = $"world.session.observer-faulted: {exception.Message}";
+            EndObservation();
+        });
+    }
     // Adopts the reason an observer ended its own subscription with during the delivery just made, so the hub detaches
     // this sink after the same delivery.
     private void FollowObserverDetach() {
         if (
             (DetachReason is null) &&
-            (m_detachable?.DetachReason is { } reason)
+            (m_inner.DetachReason is { } reason)
         ) {
             DetachReason = reason;
             EndObservation();
@@ -111,7 +135,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         if (delivery.Appearance is { } rows && m_hydrated is { } previous && rows.TryApply(previous, out var appearance)) {
             m_hydrated = appearance;
-            inner.DeliverPresentation(appearance, rows, version, m_cursor.Stamp());
+            m_inner.DeliverPresentation(appearance, rows, version, m_cursor.Stamp());
             return;
         }
 
@@ -121,7 +145,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             (m_hydrated is { } held)
         ) {
             m_hydrated = (held with { TimelineRaw = projection.Timeline });
-            inner.DeliverState(
+            m_inner.DeliverState(
                 definition: m_hydrated,
                 stamp: new WorldStateStamp(
                     EngineTick: engineTick,
@@ -141,14 +165,14 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             projection: projection,
             reason: out var reason
         )) {
-            throw new InvalidOperationException(message: $"the projection composed for {observation.Session.Describe()} does not hydrate: {reason}");
+            throw new InvalidOperationException(message: $"the projection composed for {m_observation.Session.Describe()} does not hydrate: {reason}");
         }
 
         m_hydrated = hydrated;
 
         if ((delivery.Kind == WorldProjectionDeliveryKind.Delta) && delivery.ValuesOnly) {
             // A projection renumbers the rows it keeps, so the authority's moved ordinals name nothing here.
-            inner.DeliverState(
+            m_inner.DeliverState(
                 definition: hydrated,
                 stamp: new WorldStateStamp(
                     EngineTick: engineTick,
@@ -163,7 +187,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             return;
         }
 
-        inner.DeliverDefinition(
+        m_inner.DeliverDefinition(
             definition: hydrated,
             stream: m_cursor.Stamp(),
             version: version
@@ -172,7 +196,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     // Composes the observer's projection of a delivered document at the tick the world stands at, and presents what it
     // is owed.
     private void Project(WorldDefinition definition, WorldDocumentVersion version) {
-        var time = server.DeliveryTime;
+        var time = m_server.DeliveryTime;
 
         Present(
             delivery: ComposeProjection(cut: out var cut),
@@ -210,7 +234,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         if (!m_cursor.TakeCut()) {
             return false;
         }
-        inner.DeliverCut(stream: m_cursor.Stamp(), terminal: false);
+        m_inner.DeliverCut(stream: m_cursor.Stamp(), terminal: false);
 
         return true;
     }
@@ -221,7 +245,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             return false;
         }
         if (Tier != WorldDisclosureTier.Replica) {
-            var time = server.DeliveryTime;
+            var time = m_server.DeliveryTime;
 
             m_feed.Release();
             m_hydrated = null;
@@ -236,7 +260,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         }
         m_cursor.ForgetDocument();
         if (m_cursor.DeliverDefinition(view: m_view) is { } whole) {
-            inner.DeliverDefinition(definition: whole, stream: m_cursor.Stamp(), version: Version);
+            m_inner.DeliverDefinition(definition: whole, stream: m_cursor.Stamp(), version: Version);
         }
         return true;
     }
@@ -252,7 +276,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         _ = m_cursor.TakeCut();
 
         try {
-            inner.DeliverCut(stream: m_cursor.Stamp(), terminal: true);
+            m_inner.DeliverCut(stream: m_cursor.Stamp(), terminal: true);
         } catch (Exception exception) {
             Fault ??= exception;
         }
@@ -265,7 +289,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         m_withheld = false;
 
-        DeliverDefinition(definition: server.Definition, stream: WorldStreamStamp.Unspanned, version: server.DocumentVersion);
+        DeliverDefinition(definition: m_server.Definition, stream: WorldStreamStamp.Unspanned, version: m_server.DocumentVersion);
 
         FollowObserverDetach();
     }
@@ -273,12 +297,12 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     /// <summary>Releases what the observer's feed holds, its anchor rows included: the observation ended, or its
     /// disclosure is withheld.</summary>
     public void Release() {
-        observation.CloseSceneProof(end: server.DeliveryTime.Tick);
+        m_observation.CloseSceneProof(end: m_server.DeliveryTime.Tick);
         m_feed.Release();
         m_hydrated = null;
         m_cursor.Release();
         m_roster.Forget();
-        server.DetachCursor(observation.Session, m_cursor);
+        m_server.DetachCursor(m_observation.Session, m_cursor);
     }
 
     private WorldDefinition? DiscloseToReplica(WorldDefinition definition) => m_cursor.DeliverDefinition(view: m_view);
@@ -287,7 +311,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     private void DeliverReplicaDocument(WorldDefinition? delivered) {
         if (delivered is not null) {
             var cut = AnnounceCut();
-            inner.DeliverDefinition(definition: delivered, stream: m_cursor.Stamp(), version: Version);
+            m_inner.DeliverDefinition(definition: delivered, stream: m_cursor.Stamp(), version: Version);
             CompleteReplica(cut: cut, replaced: true);
         } else if (m_cursor.TakeCut()) {
             Reprime();
@@ -295,17 +319,17 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
     // Sends a cut the cursor already took, then the whole disclosed document and a primer under its generation.
     private void Reprime() {
-        inner.DeliverCut(stream: m_cursor.Stamp(), terminal: false);
+        m_inner.DeliverCut(stream: m_cursor.Stamp(), terminal: false);
         m_cursor.ForgetDocument();
         if (m_cursor.DeliverDefinition(view: m_view) is { } whole) {
-            inner.DeliverDefinition(definition: whole, stream: m_cursor.Stamp(), version: Version);
+            m_inner.DeliverDefinition(definition: whole, stream: m_cursor.Stamp(), version: Version);
             CompleteReplica(cut: true, replaced: true);
         }
     }
     // Completes a replica document just handed to the observer with what the cursor decides it owes now
     // (WorldDeliveryCursor.Completion), rather than leaving policy-dependent work for a later quiet tick.
     private void CompleteReplica(bool cut, bool replaced) {
-        var completion = m_cursor.Completion(cut: cut, replaced: replaced, snapshotFollows: server.SnapshotFollows);
+        var completion = m_cursor.Completion(cut: cut, replaced: replaced, snapshotFollows: m_server.SnapshotFollows);
         if (completion != WorldReplicaCompletion.None) { PrimeSnapshot(cells: (completion == WorldReplicaCompletion.Whole)); }
     }
     // Completes a document with the primer snapshot it owes: a generation a cut opened is primed alone, whatever the
@@ -318,7 +342,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         if (m_deliveringSnapshot) { return; }
         FollowObserverDetach();
         if (DetachReason is null) {
-            var primer = server.Document.BuildPrimerSnapshot(cells: cells);
+            var primer = m_server.Document.BuildPrimerSnapshot(cells: cells);
             if (cells) {
                 WorldBootWork.Count(WorldBootWork.SessionPrimers);
                 WorldBootWork.Count(WorldBootWork.SessionPrimerCells, primer.FieldCells.Length);
@@ -350,13 +374,13 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             return WorldStateDisclosure.Disclose(arena: arena, definition: definition, recipient: recipient, unrestricted: unrestricted).Definition;
         }
 
-        var time = server.DeliveryTime;
+        var time = m_server.DeliveryTime;
         var projection = WorldProjection.Compose(
             arena: arena,
-            authority: server.AuthorityIdentity,
+            authority: m_server.AuthorityIdentity,
             definition: definition,
             recipient: recipient,
-            revision: server.Population.Revision,
+            revision: m_server.Population.Revision,
             tier: tier,
             time: in time,
             unrestricted: unrestricted
@@ -368,7 +392,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             reason: out var reason
         )
             ? disclosed
-            : throw new InvalidOperationException(message: $"the projection composed for {observation.Session.Describe()} does not hydrate: {reason}"));
+            : throw new InvalidOperationException(message: $"the projection composed for {m_observation.Session.Describe()} does not hydrate: {reason}"));
     }
     public void DeliverAnswer(in QueryAnswer answer) {
     }
@@ -385,12 +409,12 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         try {
             m_withheld = false;
-            server.AttachCursor(observation.Session, m_cursor);
+            m_server.AttachCursor(m_observation.Session, m_cursor);
             _ = ObserveBodies();
 
             if (Tier == WorldDisclosureTier.Replica) {
                 DeliverReplicaDocument(delivered: DiscloseToReplica(definition: definition));
-                observation.SettleSceneProof(tick: server.DeliveryTime.Tick);
+                m_observation.SettleSceneProof(tick: m_server.DeliveryTime.Tick);
             } else {
                 Project(
                     definition: definition,
@@ -417,19 +441,19 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         try {
             // The rows travel through the same cursor and body policy as a whole document: a policy that moved with
             // the edit owes a cut, which the row path refuses so the document door primes it.
-            server.AttachCursor(observation.Session, m_cursor);
+            m_server.AttachCursor(m_observation.Session, m_cursor);
             _ = ObserveBodies();
             if (Tier != WorldDisclosureTier.Replica) {
-                var time = server.DeliveryTime;
+                var time = m_server.DeliveryTime;
                 Present(ComposeProjection(out var cut, rows), Version, time.Tick, time.EngineTick);
                 if (cut) { PrimeSnapshot(); }
                 FollowObserverDetach();
             } else if (!m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
                 DeliverDefinition(definition, version, in stream);
             } else if (moved) {
-                inner.DeliverPresentation(m_view.Definition, rows, Version, m_cursor.Stamp());
+                m_inner.DeliverPresentation(m_view.Definition, rows, Version, m_cursor.Stamp());
                 WorldOutputHub.CountPresentationRows(rows);
-                observation.SettleSceneProof(server.DeliveryTime.Tick);
+                m_observation.SettleSceneProof(m_server.DeliveryTime.Tick);
                 FollowObserverDetach();
             }
         } catch (Exception exception) {
@@ -483,8 +507,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             redacted = redacted with {
                 FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica),
                 SolidScales = m_scales.Filter(m_view, redacted.SolidScales),
-                Inputs = WorldOwnedRecords.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
-                InputAnswers = WorldOwnedRecords.ForOwner(redacted.InputAnswers, observation.Session, ref m_answerDisclosure),
+                Inputs = WorldOwnedRecords.ForOwner(redacted.Inputs, m_observation.Session, ref m_inputDisclosure),
+                InputAnswers = WorldOwnedRecords.ForOwner(redacted.InputAnswers, m_observation.Session, ref m_answerDisclosure),
             };
             // A cut the rows or the body policy decided primes the observer alone, and this snapshot completes it: its
             // rows are advanced again against the generation's whole document, so every observation the document owes
@@ -495,12 +519,12 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             // The authority's declared-set revision moves for bodies the stream may never be shown, so the stream carries
             // its own, moved only by the roster it is delivered.
             redacted = redacted with { Revision = m_roster.Observe(frame.Roster(bodies, redacted.Entries.Span)) };
-            redacted = server.PresentCues(redacted, m_view,
+            redacted = m_server.PresentCues(redacted, m_view,
                 fullBodies: bodies.IsFull);
             WorldBootWork.Count(WorldBootWork.SessionCellsDelivered, redacted.FieldCells.Length);
             WorldBootWork.Count(WorldBootWork.SessionEntriesDelivered, redacted.Entries.Length);
-            inner.DeliverSnapshot(snapshot: in redacted, stream: m_cursor.Stamp());
-            observation.SettleSceneProof(tick: tick);
+            m_inner.DeliverSnapshot(snapshot: in redacted, stream: m_cursor.Stamp());
+            m_observation.SettleSceneProof(tick: tick);
             FollowObserverDetach();
         } catch (Exception exception) {
             EndAfterFault(exception: exception);
@@ -519,7 +543,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         }
 
         try {
-            server.AttachCursor(observation.Session, m_cursor);
+            m_server.AttachCursor(m_observation.Session, m_cursor);
             _ = ObserveBodies();
             if (Tier != WorldDisclosureTier.Replica) {
                 m_withheld = false;
@@ -552,12 +576,12 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             if (stamp.ArenaValues && !m_cursor.FrameMoved(view: m_view)) { return; }
             if (DiscloseToReplica(definition: definition) is { } delivered) {
                 var cut = AnnounceCut();
-                inner.DeliverState(delivered, Version, stamp with { Everything = true, MovedRows = default, ArenaValues = false }, m_cursor.Stamp());
+                m_inner.DeliverState(delivered, Version, stamp with { Everything = true, MovedRows = default, ArenaValues = false }, m_cursor.Stamp());
                 CompleteReplica(cut: cut, replaced: false);
             } else if (m_cursor.TakeCut()) {
                 Reprime();
             }
-            observation.SettleSceneProof(tick: stamp.Tick);
+            m_observation.SettleSceneProof(tick: stamp.Tick);
             FollowObserverDetach();
         } catch (Exception exception) {
             EndAfterFault(exception: exception);

@@ -188,7 +188,8 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
     // The catalog snapshot, fetched once at construction (WorldQuery.ProfileCatalog) and rebuilt client-side via
     // WorldIdentity.FromProjection — the same rehydration a federation arrival already uses. A catalog identity
     // created after this snapshot (identity.create) is not visible to this roster until the next boot.
-    private WorldIdentity[] m_catalog;
+    private WorldIdentity[] m_catalog = [];
+    private WorldRosterProfiles? m_profiles;
 
     private readonly float m_noseFactor;
     private readonly float m_pickerNeutralBlend;
@@ -258,52 +259,35 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
     /// <param name="number">The display number (1-based).</param>
     public static int SlotFromDisplay(int number) => (number - 1);
 
-    // Fetches the whole owned-world identity catalog over the link (WorldQuery.ProfileCatalog) and rehydrates it as
-    // WorldIdentity via WorldIdentity.FromProjection — the same rehydration a federation arrival already uses.
-    // Called at construction and again on a FindProfile miss. Fires inline over loopback (see IServerLink.Query's
-    // own remarks). The roster's own bookkeeping queries (this catalog, preferences, grant and handle lookups) ask as
-    // the console: the roster is the host's local presentation, the operator's. A reply composed for a caller asks as
-    // that caller (Describe).
-    private WorldIdentity[] QueryCatalog() {
-        IReadOnlyList<WorldIdentityProjection>? projections = null;
+    /// <summary>Installs the authority's profile publication on the roster's pump thread.</summary>
+    public void PublishProfiles(WorldRosterProfiles profiles) {
+        if (ReferenceEquals(m_profiles, profiles)) { return; }
 
-        m_link.Query(
-            principal: Principal.Console,
-            query: new WorldQuery.ProfileCatalog(),
-            completion: answer => projections = (answer.Payload as IReadOnlyList<WorldIdentityProjection>)
-        );
-
-        if (projections is not { Count: > 0 }) {
-            return [];
-        }
-
-        var catalog = new WorldIdentity[projections.Count];
-
-        for (var index = 0; (index < projections.Count); index++) {
-            catalog[index] = WorldIdentity.FromProjection(
-                projection: projections[index],
-                defaults: m_playerDefaults
-            );
-        }
-
-        return catalog;
+        m_catalog = RehydrateProfiles(profiles);
+        m_profiles = profiles;
     }
-    // Whether a device holds a name-stable identity-preselection match against the catalog — the query form of
-    // Server.WorldOwnedWorlds.PreferredProfile, resolved against THIS roster's own m_catalog by name so the returned
-    // identity is the SAME object CycleCandidate/IsProfileActiveElsewhere compare against.
-    private WorldIdentity? QueryPreferredProfile(InputDeviceId device) {
-        string? name = null;
 
-        m_link.Query(
-            principal: Principal.Console,
-            query: new WorldQuery.PreferredControllerProfile(Device: device),
-            completion: answer => name = (answer.Payload as WorldIdentityProjection?)?.Name
-        );
+    private WorldIdentity[] RehydrateProfiles(WorldRosterProfiles? profiles) {
+        if (profiles is { Catalog.IsEmpty: false }) {
+            var catalog = new WorldIdentity[profiles.Catalog.Length];
+            for (var index = 0; index < catalog.Length; index++) {
+                catalog[index] = WorldIdentity.FromProjection(profiles.Catalog[index], m_playerDefaults);
+            }
+            return catalog;
+        }
+        // A world with seats and no owned identities still needs a neutral boot profile.
+        return m_localSeats > 0 ? [WorldIdentity.FromProjection(
+            new WorldIdentityProjection("seat1", "seat1", m_playerDefaults.NeutralColor, MoveSpeed: null, TurnSpeed: null),
+            m_playerDefaults
+        )] : [];
+    }
 
-        return ((name is { } found)
-            ? FindProfile(name: found)
-            : null
-        );
+    private WorldIdentity? PreferredProfile(InputDeviceId device) {
+        if (m_profiles is null || !m_profiles.PreferredIds.TryGetValue(device.Value, out var id)) { return null; }
+        foreach (var profile in m_catalog) {
+            if (string.Equals(profile.Id, id, StringComparison.Ordinal)) { return profile; }
+        }
+        return null;
     }
     // The query form of Server.WorldGrants.Allows.
     private GrantVerdict QueryGrantAllows(Principal principal, WorldCapability capability, GrantSubject subject) {
@@ -457,7 +441,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
             );
         }
 
-        if (QueryPreferredProfile(device: device) is not { } preferred) {
+        if (PreferredProfile(device: device) is not { } preferred) {
             return new DevicePreselection(
                 Kind: DevicePreselectionKind.NoLocalPreference,
                 Profile: null,
@@ -1482,15 +1466,9 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
 
         return (m_slotDrivenBody[slot] ?? NoBody);
     }
-    /// <summary>Finds a profile by name (case-insensitive), or <see langword="null"/>. A miss re-fetches the
-    /// catalog over the link once and retries, so an identity minted after construction (<c>identity.create</c>,
-    /// a storage sync) is assignable in the session that created it.</summary>
+    /// <summary>Finds a published profile by name (case-insensitive), or <see langword="null"/>.</summary>
     /// <param name="name">The profile name to look up.</param>
     public WorldIdentity? FindProfile(string name) {
-        return (FindInCatalog(name: name) ?? RefreshAndFindProfile(name: name));
-    }
-
-    private WorldIdentity? FindInCatalog(string name) {
         foreach (var candidate in m_catalog) {
             if (string.Equals(
                 a: candidate.Name,
@@ -1503,21 +1481,6 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
 
         return null;
     }
-    // An empty re-fetch keeps the current catalog: the constructor's empty-catalog fallback identity stays the
-    // catalog until the server actually answers identities, and seated participants are unaffected either way
-    // (identity comparisons are Id-based, never ReferenceEquals — see SameProfile).
-    private WorldIdentity? RefreshAndFindProfile(string name) {
-        var refreshed = QueryCatalog();
-
-        if (refreshed.Length == 0) {
-            return null;
-        }
-
-        m_catalog = refreshed;
-
-        return FindInCatalog(name: name);
-    }
-
     /// <summary>Whether the slot is under an exclusive <see cref="TryClaimSlot"/> hold. A claimed slot's own protocol
     /// (its claimant's explicit commands) is its only legitimate driver — the guard a pushed/context-routed roster
     /// gesture (confirm, seat, cycle) checks before treating a claimed slot as an ordinary human target.</summary>
@@ -2146,10 +2109,11 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
     /// same door called once per eager seat before the first tick. An eager seat takes a distinct unused profile in
     /// catalog order and begins deviceless so a connected pad can still claim it.</summary>
     /// <param name="definition">The world definition supplying the local census.</param>
-    /// <param name="link">The client→server link session requests, and every pose/grant/catalog read, ride.</param>
+    /// <param name="link">The client→server link for session requests and live authority queries.</param>
+    /// <param name="profiles">The initial published catalog and controller preferences.</param>
     /// <param name="seatBindings">The per-seat input resolver the roster pushes profile binding layers into.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public PlayerRoster(WorldDefinition definition, IServerLink link, WorldSeatBindings seatBindings) {
+    public PlayerRoster(WorldDefinition definition, IServerLink link, WorldSeatBindings seatBindings, WorldRosterProfiles? profiles = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: link);
         ArgumentNullException.ThrowIfNull(argument: seatBindings);
@@ -2165,28 +2129,8 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
         );
         m_pickerNeutralBlend = definition.PlayerDefaults.PickerNeutralBlend;
         m_noseFactor = definition.PlayerDefaults.NoseFactor;
-        m_catalog = QueryCatalog();
-
-        // A world declaring local seats but no playerDefaults.identities and no owned-world catalog on disk has
-        // nothing to seat seat 0 with — the smallest honest fallback is one inert identity (the neutral color,
-        // no claimed rates, so the kit's own rates drive), never a spectator boot for a world that declared a seat.
-        if (
-            (m_catalog.Length == 0) &&
-            (definition.Population.LocalSeats > 0)
-        ) {
-            m_catalog = [
-                WorldIdentity.FromProjection(
-                    projection: new WorldIdentityProjection(
-                        Id: "seat1",
-                        Name: "seat1",
-                        ColorHex: definition.PlayerDefaults.NeutralColor,
-                        MoveSpeed: null,
-                        TurnSpeed: null
-                    ),
-                    defaults: m_playerDefaults
-                ),
-            ];
-        }
+        m_catalog = RehydrateProfiles(profiles);
+        m_profiles = profiles;
 
         // The boot census self-provisions: EXPLICIT at each call site (SelfProvisioned(slot)), never an omitted
         // default — see SelfProvisioned's own remarks for why this is a deliberate choice, not a laundered actor.

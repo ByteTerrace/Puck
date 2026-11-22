@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <!-- The frame's side of the World: the types a produced frame runs, and the values the authority publishes for them
+             at each collect. Its architecture profile forbids Puck.World.Server and Puck.World.Machines, so a frame type
+             that names the authority is a compile error rather than a reference that outlives the boundary window. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.Commands/Puck.Commands.csproj" />
+        <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Overlays/Puck.Overlays.csproj" />
+        <ProjectReference Include="../Puck.Platform/Puck.Platform.csproj" />
+        <ProjectReference Include="../Puck.SdfVm/Puck.SdfVm.csproj" />
+        <ProjectReference Include="../Puck.Shaders/Puck.Shaders.csproj" />
+        <ProjectReference Include="../Puck.World.Client/Puck.World.Client.csproj" />
+        <ProjectReference Include="../Puck.World.Protocol/Puck.World.Protocol.csproj" />
+        <ProjectReference Include="../Puck.World.Schema/Puck.World.Schema.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+    </ItemGroup>
+</Project>
