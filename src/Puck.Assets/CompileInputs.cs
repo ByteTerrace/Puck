@@ -189,28 +189,22 @@ public static class CompileInputs {
     // move, so it is spelled afresh on every question.
     private sealed class PathEntry(string fullPath) {
         private readonly Lock m_gate = new();
-        private FileInfo? m_file;
-        private DirectoryInfo? m_directory;
+        private FileSystemInfo? m_file;
+        private FileSystemInfo? m_directory;
 
         public string FullPath { get; } = fullPath;
         public string FileKey { get; } = ("F" + fullPath);
         public string ListingKey { get; } = ("D" + fullPath);
 
+        public Stamp FileStamp() => Refreshed(handle: ref m_file, directory: false);
+        public Stamp DirectoryStamp() => Refreshed(handle: ref m_directory, directory: true);
         // The handle's cached attributes are written by Refresh and read by StampOf, so both run under the gate.
-        public Stamp FileStamp() {
+        private Stamp Refreshed(ref FileSystemInfo? handle, bool directory) {
             lock (m_gate) {
-                var file = (m_file ??= new FileInfo(fileName: FullPath));
+                var entry = (handle ??= (directory ? new DirectoryInfo(path: FullPath) : new FileInfo(fileName: FullPath)));
 
-                file.Refresh();
-                return StampOf(entry: file);
-            }
-        }
-        public Stamp DirectoryStamp() {
-            lock (m_gate) {
-                var directory = (m_directory ??= new DirectoryInfo(path: FullPath));
-
-                directory.Refresh();
-                return StampOf(entry: directory);
+                entry.Refresh();
+                return StampOf(entry: entry);
             }
         }
     }
