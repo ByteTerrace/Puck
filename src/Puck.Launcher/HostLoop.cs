@@ -37,10 +37,10 @@ public readonly ref struct HostIteration {
     /// <param name="intervalTicks">The wall interval the iteration sampled, in engine ticks.</param>
     /// <param name="stepTicks">The fixed step, in engine ticks.</param>
     /// <param name="elapsedTicks">The engine ticks the pump has consumed.</param>
-    /// <param name="steps">The whole steps the iteration ran.</param>
+    /// <param name="steps">The whole steps collected since the previous iteration was minted.</param>
     /// <param name="hasSimulation">Whether the host steps a simulation.</param>
     /// <param name="holding">Whether the previous frame left its tick owing a rendered frame.</param>
-    /// <param name="stepsNext">Whether the next iteration is expected to run a step (<see cref="StepsNext"/>).</param>
+    /// <param name="stepsNext">Whether the next iteration is expected to begin a step (<see cref="StepsNext"/>).</param>
     /// <exception cref="InvalidOperationException">No control phase of <paramref name="loop"/> has run since its last
     /// iteration was minted.</exception>
     internal HostIteration(HostLoop loop, bool tickLocked, ulong intervalTicks, ulong stepTicks, ulong elapsedTicks, int steps, bool hasSimulation, bool holding, bool stepsNext) {
@@ -64,15 +64,17 @@ public readonly ref struct HostIteration {
     public ulong StepTicks => (Minted() ? m_stepTicks : 0UL);
     /// <summary>Gets the engine ticks the pump has consumed.</summary>
     public ulong ElapsedTicks => (Minted() ? m_elapsedTicks : 0UL);
-    /// <summary>Gets the whole steps the iteration ran.</summary>
+    /// <summary>Gets the whole steps collected since the previous iteration was minted: those this iteration's step
+    /// section completed, and those a step left executing beside an earlier frame completed after that frame was
+    /// produced. The frame shows the state through the last of them.</summary>
     public int Steps => (Minted() ? m_steps : 0);
     /// <summary>Gets whether the host steps a simulation.</summary>
     public bool HasSimulation => (Minted() && m_hasSimulation);
     /// <summary>Gets whether the previous frame left its tick owing a rendered frame.</summary>
     public bool Holding => (Minted() && m_holding);
-    /// <summary>Gets whether the next iteration is expected to run a step: under lockstep whenever the host steps a
-    /// simulation, otherwise when the pump's held remainder and one more interval like this one reach a step
-    /// (<see cref="FrameContext.StepsNext"/>).</summary>
+    /// <summary>Gets whether the next iteration is expected to begin a step: under lockstep whenever the host steps a
+    /// simulation, otherwise when the pump's held remainder, less the step still in progress, and one more interval
+    /// like this one reach a step (<see cref="FrameContext.StepsNext"/>).</summary>
     public bool StepsNext => (Minted() && m_stepsNext);
     /// <summary>Gets the simulation tick the pump has consumed through.</summary>
     public long Tick => ((StepTicks == 0UL) ? 0L : ((long)(ElapsedTicks / StepTicks)));
@@ -145,28 +147,40 @@ public sealed class HostLoop(
         var holding = false;
         Exception? fault = null;
         // Whether this iteration goes on while its last due step executes on the simulation's own thread, instead of
-        // waiting for it. Only a host with no frame does yet: a frame reads state the step writes.
+        // waiting for it: every host does, with or without a frame, unless it steps one tick per frame, whose frame
+        // shows exactly the tick it stepped.
         var beside = false;
+        // The steps collected since the last frame was produced: what the next frame's iteration reports.
+        var frameSteps = 0;
         // Set on the simulation's thread when a pending step can make progress, and taken by the service below.
         var progressed = 0;
         System.Runtime.ExceptionServices.ExceptionDispatchInfo? resumeFault = null;
-        // Resumes the open step from the pacing wait when the simulation reports progress: it collects what finished
-        // and hands over what follows in the same step, and starts no new step, which only the step section does after
-        // the iteration's input capture and control phase.
-        var resume = ((pump is null) ? null : HostWaits.Serve(reason: in ResumeReason, service: _ => {
-            if (!beside || (resumeFault is not null) || (Interlocked.Exchange(location1: ref progressed, value: 0) == 0)) {
-                return null;
+        // Resumes the open step where no input capture or console drain has run, after produce and from the pacing
+        // wait: it collects what finished and hands over what follows in the same step, and starts no new step, which
+        // only the step section does after the iteration's input capture and control phase. A step it completes is
+        // counted, and its time charged to simulate, in the iteration that collected it.
+        void ResumeOpenStep(HostFramePhase charged) {
+            if (!beside || (resumeFault is not null) || (pump is not { StepPending: true })) {
+                return;
             }
 
-            timeline.Mark(phase: HostFramePhase.Wait);
+            timeline.Mark(phase: charged);
             try {
                 using (timeline.FrameWork.Bind()) {
-                    if (pump!.Resume()) { timeline.NoteSteps(steps: 1); }
+                    if (pump.Resume()) {
+                        timeline.NoteSteps(steps: 1);
+                        frameSteps++;
+                    }
                 }
             } catch (Exception exception) {
                 resumeFault = System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(source: exception);
             }
             timeline.Mark(phase: HostFramePhase.Simulate);
+        }
+        var resume = ((pump is null) ? null : HostWaits.Serve(reason: in ResumeReason, service: _ => {
+            if (Interlocked.Exchange(location1: ref progressed, value: 0) != 0) {
+                ResumeOpenStep(charged: HostFramePhase.Wait);
+            }
 
             return null;
         }));
@@ -213,8 +227,7 @@ public sealed class HostLoop(
                 var interval = clock.Sample();
                 var steps = 0;
 
-                beside = (!tickLocked && (produce is null));
-                if (pump is not null) { pump.RunsBesideStep = beside; }
+                beside = !tickLocked;
 
                 using (timeline.FrameWork.Bind()) {
                     if (!tickLocked) {
@@ -229,29 +242,39 @@ public sealed class HostLoop(
                     }
                 }
                 timeline.NoteSteps(steps: steps);
+                frameSteps = ((produce is null) ? 0 : (frameSteps + steps));
                 timeline.Mark(phase: HostFramePhase.Simulate);
                 timeline.Mark(phase: HostFramePhase.Commands);
 
-                if (produce is not null && pump?.StepPending != true) {
-                    var stepsNext = ((pump is not null) && (tickLocked || ((pump.AccumulatorTicks + interval) >= stepTicks)));
+                // A step in progress withholds the frame only from a host that steps one tick per frame. Beside the
+                // step the frame shows the last tick collected: what the step writes reaches the frame's state only
+                // when this thread collects it.
+                if ((produce is not null) && (beside || (pump?.StepPending != true))) {
+                    var stepsNext = ((pump is not null) && (tickLocked || ((pump.UnbegunTicks + interval) >= stepTicks)));
 
+                    if (pump?.StepPending == true) { timeline.NoteProducedBesideStep(); }
                     holding = produce(new HostIteration(
                         elapsedTicks: (pump?.ElapsedTicks ?? 0UL),
                         hasSimulation: (pump is not null),
                         holding: holding,
                         intervalTicks: interval,
                         loop: this,
-                        steps: steps,
+                        steps: frameSteps,
                         stepsNext: stepsNext,
                         stepTicks: stepTicks,
                         tickLocked: tickLocked
                     ));
+                    frameSteps = 0;
+                    // The step the frame ran beside may have finished meanwhile.
+                    ResumeOpenStep(charged: HostFramePhase.Present);
+                    resumeFault?.Throw();
                 }
                 if (terminal.TryConsumeExit()) {
                     break;
                 }
                 if (wait is not null) {
                     wait();
+                    resumeFault?.Throw();
                 } else if (!pacing.IsUnpaced || pump?.StepPending == true) {
                     var period = (frequency / ((long)m_ratePerSecond));
 
@@ -266,6 +289,13 @@ public sealed class HostLoop(
                         timeline.NoteLate(ticks: Math.Max(val1: 0L, val2: (time.GetTimestamp() - nextDeadline)));
                     }
                     timeline.Mark(phase: HostFramePhase.Wait);
+                }
+            }
+
+            // A step left executing beside the last iteration is collected before the host tears down.
+            if (pump is { StepPending: true }) {
+                using (timeline.FrameWork.Bind()) {
+                    _ = pump.Settle();
                 }
             }
         } catch (Exception exception) {

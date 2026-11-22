@@ -1,5 +1,10 @@
+using System.Diagnostics;
 using System.Globalization;
+using System.Numerics;
+using Puck.Abstractions.Gpu;
 using Puck.Commands;
+using Puck.Maths;
+using Puck.World.Client;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -84,5 +89,148 @@ public sealed class OutboxLawTests {
         Assert.NotEmpty(deferredDuringTick);
         Assert.All(deferredDuringTick, static reached => Assert.Equal(0, reached));
         Assert.Equal(inline.Records.Skip(inlineFrom), deferred.Records.Skip(deferredFrom));
+    }
+
+    [Fact]
+    public async Task OffPumpMirrorAndRemoteRouteDeliveriesWaitForTheBoundaryWindowCollect() {
+        var ct = TestContext.Current.CancellationToken;
+        var definition = CountingTable() with {
+            CamerasRaw = [new WorldCamera(
+                Name: "cam",
+                RenderHeight: 72U,
+                RenderWidth: 128U,
+                Rig: new WorldCameraProgram(
+                    Name: "cam-rig",
+                    Operations: [new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(binding: "state.ticks"))],
+                    Version: WorldCameraProgram.CurrentVersion
+                )
+            )],
+        };
+        var boundary = new WorldLinkBoundary();
+        var hub = new WorldOutputHub { Boundary = boundary };
+        var mirror = new WorldSessionMirror(placeholder: definition);
+        var stateMirror = mirror.FollowState();
+        var bodyCursor = new GpuRowCursor();
+        var bodyRuns = new GpuUploadRuns(capacity: 8);
+        _ = mirror.CollectBodyChanges(cursor: bodyCursor, into: bodyRuns);
+        bodyCursor.Commit();
+        var stateRevisionBefore = stateMirror.Revision;
+        var changedSlots = new List<int>();
+
+        var route = hub.RouteTo(sink: mirror, fault: static exception => throw exception);
+        var observedRoutes = new List<(WorldAuthorityRouteDescription Route, int ThreadId)>();
+        var keyPath = Path.Combine(Path.GetTempPath(), $"puck-outbox-law-{Guid.NewGuid():N}.pk8");
+        var origin = new WorldEntityAddress("source", 0, 1);
+        var authenticator = new WorldAttestedAuthenticator(trustEntries: null);
+        using var network = new WorldPeerNetwork(identityFile: keyPath);
+        using var rootRemote = new WorldRemoteAuthority(
+            endpoint: "127.0.0.1:49152",
+            placeholder: definition,
+            security: authenticator,
+            observerAuthority: "source",
+            expectedAuthority: "peer",
+            network: network,
+            boundary: boundary
+        );
+        using var travelerRemote = new WorldRemoteAuthority(
+            endpoint: "127.0.0.1:49152",
+            placeholder: definition,
+            security: authenticator,
+            observerAuthority: "source",
+            expectedAuthority: "peer",
+            submissionAuthority: rootRemote,
+            submissionCredential: new WorldRemoteRouteCredential(0, "source", new WorldMobilityIdentity(Incarnation: origin, Epoch: 1UL, DepartedFrom: origin)),
+            routeChanged: observed => observedRoutes.Add((observed, Environment.CurrentManagedThreadId)),
+            boundary: boundary
+        );
+
+        var pumpThread = Environment.CurrentManagedThreadId;
+        var stampedOnWire = 0L;
+        var version = new WorldDocumentVersion(Guid.NewGuid(), 1);
+        var ticksOrdinal = definition.StateCatalog.Descriptors.Select(static (row, index) => (row.Name, index)).First(static item => item.Name == "ticks").index;
+        boundary.RegisterPump();
+        try {
+            // While the pump stands in its frame section (window closed), a socket worker delivers a stream and two
+            // onward route updates. Nothing touches the mirror's body journal, its state mirror, or the route listener.
+            await Task.Run(() => {
+                const ulong StreamId = 77UL;
+                route.DeliverDefinition(definition, version, new WorldStreamStamp(StreamId, 1, 1));
+                var movedScratch = new[] { ticksOrdinal };
+                route.DeliverState(definition, version,
+                    new WorldStateStamp(Tick: 2, EngineTick: 1680, Everything: true, MovedRows: movedScratch),
+                    new WorldStreamStamp(StreamId, 1, 2));
+                movedScratch[0] = 99;
+
+                stampedOnWire = Stopwatch.GetTimestamp() - (Stopwatch.Frequency / 4);
+                using (WorldDeliveryClock.ReplayAt(stampedOnWire)) {
+                    var entries = new[] {
+                        new EntitySnapshot(0, Vector3.UnitX, Quaternion.Identity, Vector3.One, true, 0, 0, 0,
+                            new EntityContinuity(EntityContinuityKind.Continuous, 1), 1, null, 0f, default, default),
+                    };
+                    var cells = new[] {
+                        new FieldCellDelta(Cell: 0, Field: 0, Raw: 0, Row: ticksOrdinal, Image: new ArenaCellImage(CellName.Parse("$value"), CellValue.Int(7), default, default)),
+                    };
+                    route.DeliverSnapshot(new WorldSnapshot(
+                        Tick: 2UL,
+                        Revision: 1,
+                        StepTicks: 840UL,
+                        Entries: entries,
+                        Authority: "peer",
+                        FieldCells: cells,
+                        FieldsFull: true,
+                        EngineTick: 1680UL
+                    ), new WorldStreamStamp(StreamId, 1, 3));
+                    entries[0] = default;
+                }
+
+                travelerRemote.ObserveRoute(new WorldAuthorityRouteDescription(
+                    "127.0.0.1:49152", new WorldEntityAddress("hop-1", 0, 1), 3UL, default, FixedQuaternion.Identity,
+                    Vector3.One, 0, 0, 0, FixedQ4816.One, null, definition, version));
+                travelerRemote.ObserveRoute(new WorldAuthorityRouteDescription(
+                    "127.0.0.1:49152", new WorldEntityAddress("hop-2", 2, 4), 5UL, default, FixedQuaternion.Identity,
+                    Vector3.One, 0, 0, 0, FixedQ4816.FromInteger(2), null, definition, version));
+            }, ct);
+
+            Assert.False(mirror.IsActive(0));
+            Assert.False(mirror.CollectBodyChanges(cursor: bodyCursor, into: bodyRuns));
+            Assert.Equal(0, bodyRuns.Count);
+            Assert.Equal(stateRevisionBefore, mirror.FollowState().Revision);
+            Assert.Empty(observedRoutes);
+            Assert.Equal(1, travelerRemote.PendingDeliveries);
+
+            // Opening the boundary window and collecting replays the stream and the latest route on the pump thread.
+            boundary.Open(drain: false);
+            try {
+                hub.Collect();
+                travelerRemote.CollectDeliveries();
+            } finally {
+                boundary.Close();
+            }
+
+            Assert.True(mirror.IsActive(0));
+            Assert.True(mirror.CollectBodyChanges(cursor: bodyCursor, into: bodyRuns) || (bodyRuns.Count > 0));
+            Assert.Equal(stampedOnWire, mirror.SnapshotArrivalTimestamp);
+            Assert.True(mirror.FollowState().TryChangedSince(stateRevisionBefore, changedSlots));
+            Assert.NotEmpty(changedSlots);
+            var deliveredRoute = Assert.Single(observedRoutes);
+            Assert.Equal(pumpThread, deliveredRoute.ThreadId);
+            Assert.Equal(new WorldEntityAddress("hop-2", 2, 4), deliveredRoute.Route.Entity);
+
+            // A dropped remote session closes its span through the same outbox, so withdrawal also waits for the window.
+            await Task.Run(() => route.CloseSpan(stream: 77UL), ct);
+            Assert.True(mirror.IsActive(0));
+
+            boundary.Open(drain: false);
+            try {
+                hub.Collect();
+            } finally {
+                boundary.Close();
+            }
+
+            Assert.False(mirror.IsActive(0));
+        } finally {
+            boundary.UnregisterPump();
+            try { File.Delete(keyPath); } catch (IOException) { }
+        }
     }
 }

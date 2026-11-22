@@ -113,7 +113,8 @@ public sealed partial class WorldInstanceHost {
                 source.Federation.Subject,
                 applicationStopping: m_applicationStopping,
                 expectedAuthority: authority,
-                network: source.Federation.Network
+                network: source.Federation.Network,
+                boundary: m_linkBoundary
             );
             m_recoveredRemoteAuthorities.Add(
                 key: key,

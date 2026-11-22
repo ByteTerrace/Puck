@@ -117,6 +117,9 @@ public sealed class WorldDocumentStateView : IWorldStateView {
     // body contiguous), the catalog ordinal each slot's lane row holds, and which slots a delivery moved since the
     // owner last took them, all shaped for the definition last shaped for.
     private long[] m_bodyState = [];
+    // Whether a delivery has applied each body's register file. A body the sink knows of before its first snapshot
+    // entry (a seeded route) reads no value, never the zeros its registers start at.
+    private bool[] m_bodyStateApplied = [];
     private bool[] m_bodyStateMoved = [];
     private int[] m_bodyStateOrdinals = [];
 
@@ -221,7 +224,7 @@ public sealed class WorldDocumentStateView : IWorldStateView {
                 Max: null,
                 Min: null,
                 Motion: WorldStateMotion.Still,
-                Value: ((stateCell >= 0)
+                Value: (((stateCell >= 0) && m_bodyStateApplied[stateBody])
                     ? CellValue.Fixed(rawBits: m_bodyState[stateCell])
                     : default)
             );
@@ -443,7 +446,7 @@ public sealed class WorldDocumentStateView : IWorldStateView {
     /// values its body's <see cref="WorldBodyStateReads.RowPrefix"/> rows read, noting each slot a value moved until
     /// <see cref="TakeMovedBodyState"/>. A body outside the delivered population, or a register file whose width is not
     /// the delivered definition's, is ignored. It allocates nothing unless the delivered definition changed the
-    /// population or the register file, which starts every value at zero until the next snapshot writes it.</summary>
+    /// population or the register file, after which every body reads no value until the next snapshot writes it.</summary>
     /// <param name="body">The 0-based entity index.</param>
     /// <param name="values">The entry's presented slot values.</param>
     public void ApplyBodyState(int body, ReadOnlySpan<long> values) {
@@ -463,13 +466,29 @@ public sealed class WorldDocumentStateView : IWorldStateView {
             length: slots,
             start: (body * slots)
         );
+        // A body's first register file moves every row it reads: each goes from no value to one.
+        var first = !m_bodyStateApplied[body];
 
+        m_bodyStateApplied[body] = true;
         for (var slot = 0; (slot < slots); slot++) {
-            if (stored[slot] != values[slot]) {
+            if (first || (stored[slot] != values[slot])) {
                 stored[slot] = values[slot];
                 m_bodyStateMoved[slot] = true;
             }
         }
+    }
+    /// <summary>Forgets a body's register file, for a slot a new occupant takes before any snapshot entry has described
+    /// it: its rows read no value until <see cref="ApplyBodyState"/> writes them, never the occupant before's.</summary>
+    /// <param name="body">The 0-based entity index; one outside the delivered population is ignored.</param>
+    public void ForgetBodyState(int body) {
+        _ = Shape();
+
+        if ((((uint)body) >= ((uint)m_bodyStateApplied.Length)) || !m_bodyStateApplied[body]) {
+            return;
+        }
+
+        m_bodyStateApplied[body] = false;
+        Array.Fill(array: m_bodyStateMoved, value: true);
     }
     /// <summary>Names each body-state row a value moved since the last call, so the owner refreshes the mirror slots
     /// bound to it (<see cref="WorldStateMirror.RefreshRows"/>), and forgets them.</summary>
@@ -505,6 +524,7 @@ public sealed class WorldDocumentStateView : IWorldStateView {
             (m_bodyState.Length != width)
         ) {
             m_bodyState = new long[width];
+            m_bodyStateApplied = new bool[((slots == 0) ? 0 : (width / slots))];
             m_bodyStateMoved = new bool[slots];
             m_bodyStateOrdinals = new int[slots];
         }

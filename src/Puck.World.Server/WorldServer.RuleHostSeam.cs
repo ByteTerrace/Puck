@@ -12,17 +12,19 @@ public sealed partial class WorldServer {
     /// the activation has frozen for retirement — which is what a read-back answering during a freeze needs.</remarks>
     public Lock AuthorityGate => m_authorityGate;
     /// <summary>Gets the tick the latest authoritative step completed, or zero before the first step.</summary>
-    public ulong CompletedTick => m_tick.CompletedTick;
+    public ulong CompletedTick { get { ThrowIfOutsideWindow(); return m_tick.CompletedTick; } }
     /// <inheritdoc cref="WorldRuleHost.DecisionWork"/>
     public WorldDecisionWork DecisionWork => m_ruleHost.DecisionWork;
     /// <summary>Gets the input-hold runtime the hold reads and the pad fold consult.</summary>
-    public WorldInputHoldRuntime InputHold => m_inputHold;
+    public WorldInputHoldRuntime InputHold { get { ThrowIfOutsideWindow(); return m_inputHold; } }
     /// <summary>Gets the rule facade — the evaluator, the compiled rules, groups and tables, the edge latches, the
     /// decision, pattern and identity-fact runtimes, and the world facts and effect arms the evaluator reaches
     /// through.</summary>
     public WorldRuleHost RuleHost { get { ThrowIfTickPending(); return m_ruleHost; } }
+    /// <summary>Gets the <c>state.rules</c> counters: the rule evaluator's monotonic work.</summary>
+    public Puck.Abstractions.Counting.IWorkCounterSource RuleWorkSource => m_ruleHost.RuleWork;
     /// <inheritdoc cref="WorldRuleHost.Time"/>
-    public ArenaTime Time => m_ruleHost.Time;
+    public ArenaTime Time { get { ThrowIfOutsideWindow(); return m_ruleHost.Time; } }
 
     // The trusted composer, for the server's own internals (replay, transfer publication). It answers no one in
     // particular, so it stays inside this assembly: every caller answering a principal crosses AnswerSubmittedQuery.

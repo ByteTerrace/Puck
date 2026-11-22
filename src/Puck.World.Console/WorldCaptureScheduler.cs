@@ -234,6 +234,13 @@ public sealed class WorldCaptureScheduler {
             : unscheduled.Request.Claimed)
     );
 
+    /// <summary>Returns whether completing a tick arms a scheduled capture, known before the tick is stepped: a host
+    /// that would otherwise produce its frame beside the tick waits for it, so the capture is served by the frame of
+    /// the iteration that stepped it.</summary>
+    /// <param name="tick">The tick about to be stepped.</param>
+    /// <returns><see langword="true"/> when the schedule holds a row at <paramref name="tick"/>.</returns>
+    public bool ArmsAt(ulong tick) => m_schedule.Holds(tick: tick);
+
     /// <summary>Gets every capture outcome recorded so far, in the order each was decided.</summary>
     public IReadOnlyList<WorldCaptureManifestEntry> Entries => m_landed;
 

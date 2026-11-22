@@ -38,7 +38,7 @@ public static class WorldCountersServiceRegistration {
 
         return services
             .AddSingleton<IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldServer>().ArenaWorkSource)
-            .AddSingleton<IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldServer>().RuleHost.RuleWork)
+            .AddSingleton<IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldServer>().RuleWorkSource)
             .AddSingleton<IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldServer>().SearchWorkSource)
             .AddSingleton<IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldServer>().DisclosureWorkSource);
     }

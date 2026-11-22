@@ -70,6 +70,13 @@ public sealed class JobPool : IDisposable {
     public JobWorkers Workers { get; }
     /// <summary>Gets whether every fork runs inline on the calling thread.</summary>
     public bool Serial => (m_threads.Length == 0);
+    /// <summary>Gets whether the calling thread is running a partition of a fork, of any pool: a worker's, or the
+    /// forking thread's own share. State a fork's partitions read without a lock is written only where this is
+    /// <see langword="false"/>, on the thread that forks, so nothing writes it while a fork runs.</summary>
+    public static bool InPartition => (PartitionDepth != 0);
+
+    // How many partition bodies the calling thread is inside: a partition may fork again, inline.
+    [ThreadStatic] private static int PartitionDepth;
     /// <summary>Gets the wake signals issued to idle workers that no worker has taken yet: at most the pool's worker
     /// thread count however many forks have run, so an idle worker never wakes for a fork that has finished more
     /// than that many times.</summary>
@@ -354,6 +361,7 @@ public sealed class JobPool : IDisposable {
         private int m_partition;
 
         public static bool TryRun(IJobPartitions body, int partition, out Exception? error) {
+            PartitionDepth++;
             try {
                 body.Run(partition: partition);
                 error = null;
@@ -361,6 +369,8 @@ public sealed class JobPool : IDisposable {
             } catch (Exception exception) {
                 error = exception;
                 return false;
+            } finally {
+                PartitionDepth--;
             }
         }
         public void Run(IJobPartitions body, int partition) {

@@ -53,6 +53,7 @@ public sealed class HostFrameTimeline {
     private readonly long[] m_open = new long[PhaseCount];
     private readonly long[] m_tickCosts = new long[Capacity];
     private readonly long[] m_controlGaps = new long[Capacity];
+    private readonly bool[] m_besideStep = new bool[Capacity];
 
     private long m_tickCount;
     private long m_shedSteps;
@@ -73,6 +74,7 @@ public sealed class HostFrameTimeline {
     private int m_openSteps;
     private long m_openLate;
     private long m_openControlGap;
+    private bool m_openBesideStep;
     private long m_lastControl;
     private HostFrameRecording? m_recording;
 
@@ -168,6 +170,7 @@ public sealed class HostFrameTimeline {
             m_steps[slot] = m_openSteps;
             m_late[slot] = m_openLate;
             m_controlGaps[slot] = m_openControlGap;
+            m_besideStep[slot] = m_openBesideStep;
             m_collections[(slot * 3)] = (gen0 - m_gen0);
             m_collections[((slot * 3) + 1)] = (gen1 - m_gen1);
             m_collections[((slot * 3) + 2)] = (gen2 - m_gen2);
@@ -210,6 +213,7 @@ public sealed class HostFrameTimeline {
         m_openSteps = 0;
         m_openLate = 0L;
         m_openControlGap = 0L;
+        m_openBesideStep = false;
         m_openProduceBlocked = 0L;
         m_iterationStart = now;
         m_phaseStart = now;
@@ -247,9 +251,13 @@ public sealed class HostFrameTimeline {
         }
         m_lastControl = now;
     }
-    /// <summary>Records the fixed steps the iteration ran.</summary>
+    /// <summary>Records fixed steps the iteration collected: in its step section, after its frame, or in its pacing
+    /// wait.</summary>
     /// <param name="steps">The step count.</param>
     public void NoteSteps(int steps) => m_openSteps += steps;
+    /// <summary>Records that the iteration produced its frame while a step was still executing on the simulation's
+    /// own thread.</summary>
+    public void NoteProducedBesideStep() => m_openBesideStep = true;
     // Takes the tick execution a step thread reported into this iteration's work (HostFrameWork.Fold), converted from
     // stopwatch ticks to this timeline's clock ticks; zero when the simulation ran its tick on the pump thread.
     internal long TakeExecutedTicks() => ((long)(FrameWork.TakeExecuted() * (((double)m_frequency) / Stopwatch.Frequency)));
@@ -397,6 +405,12 @@ public sealed class HostFrameTimeline {
             }
         }
 
+        var beside = 0;
+
+        for (var i = 0; (i < count); i++) {
+            beside += (m_besideStep[((int)(indices[i] % Capacity))] ? 1 : 0);
+        }
+
         var builder = new StringBuilder();
 
         builder.Append(
@@ -458,6 +472,7 @@ public sealed class HostFrameTimeline {
             builder.Append(provider: CultureInfo.InvariantCulture,
                 handler: $"\n  ticks: count={tickCount} avg={(totalCost / tickCount):0.00} p50={OrderStatistics.Quantile(ascending: costs, fraction: 0.5):0.00} p99={OrderStatistics.Quantile(ascending: costs, fraction: 0.99):0.00} max={costs[^1]:0.00} ms");
         }
+        builder.Append(provider: CultureInfo.InvariantCulture, handler: $"\n  produced beside a step: {beside} of {count} iterations");
         builder.Append(provider: CultureInfo.InvariantCulture, handler: $"\n  steps.shed={ShedSteps}");
         return builder.ToString();
     }

@@ -659,11 +659,15 @@ wait behind them.
    [its steps](tick-thread.md#the-steps) come in three stages, and the second
    stage's steps (the outbox, a delivered document bound to its sink's values,
    adjacency in prepare, the link, presentation out of the composition root)
-   can run in separate lanes. Stage one is built: every authority tick
-   executes on the host's step thread while the loop waits for it. Of stage
-   two, a delivered document bound to its sink's values and adjacency in
-   prepare are built. Next: the rest of
-   stage two's doors, then stage three. Check: `host.frames` shows the
+   can run in separate lanes. All three stages are built: every authority
+   tick executes on the host's step thread, the frame reads the authority
+   only through what a collect delivered or published, and a host that paces
+   to the wall clock produces its frame beside its last due tick. Left: the
+   wave, which hands every other world's tick over together where the pump
+   now visits once for each, and the lead's readings of frame time and
+   input-to-display time on the route
+   ([what the lead measures](tick-thread.md#what-the-lead-measures)). Check:
+   `host.frames` shows the
    step outside the frame's interval on the route, and
    `puck test --reproduce` passes at every worker count. At scale: every
    world a client runs steps on its own thread, which is the shape the silo's

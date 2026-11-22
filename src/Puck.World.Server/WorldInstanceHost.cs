@@ -87,7 +87,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private readonly bool m_admitsSpawn;
     private readonly bool m_presents;
     private readonly bool m_scenario;
-    private readonly WorldLinkBoundary? m_linkBoundary;
+    private readonly WorldLinkBoundary m_linkBoundary;
     private readonly CancellationToken m_applicationStopping;
     // The host-selected machine metadata used by every live instance load, neighbour composition, and reload.
     private readonly string m_catalogFingerprint;
@@ -138,6 +138,21 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private readonly ConcurrentDictionary<(WorldServer Server, WorldEntityAddress Incarnation), ForwardedBody> m_forwardedBodies = [];
     private readonly Queue<PendingTransfer> m_pendingTransfers = new();
     private readonly List<InDoubtTransfer> m_inDoubtTransfers = [];
+
+    /// <summary>Replays every delivery and callback recorded off the pump while the boundary window was closed: each
+    /// remote authority's stream and route updates, and each admitted server's outbox when no tick of that server
+    /// executes. Call on the pump inside a settled boundary window.</summary>
+    public void CollectDeliveries() {
+        foreach (var instance in m_instances.Values) {
+            instance.Server.Output.Collect();
+        }
+        foreach (var remote in m_remoteAuthorities.Values) {
+            remote.CollectDeliveries();
+        }
+        foreach (var remote in m_recoveredRemoteAuthorities.Values) {
+            remote.CollectDeliveries();
+        }
+    }
     // The transfer id a seat's crossing hold has already been announced under, so the held-crossing line prints
     // once per traversal rather than once per suppressed scan.
     private readonly Dictionary<(string Instance, int Seat), ulong> m_announcedCrossingHolds = [];
@@ -476,6 +491,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return;
         }
 
+        // A look step whose world took no tick after all (an earlier world's settle stopped it) is presented here.
+        m_seats.PresentSeatLook(endpoint: null);
         m_seats.ClearAnalog();
     }
     /// <summary>The directory an instance's owned worlds live under — derived from its name so two instances never
@@ -506,7 +523,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return;
         }
 
-        m_seats.AdvanceSeatViews(deltaSeconds: ((float)FixedTickConversion.ToSeconds(ticks: stepTicks)));
+        m_lookStepsBoot = stepsBoot;
+        m_lookStepTicks = stepTicks;
+        m_seats.AdvanceSeatViews(carried: (m_carriesLookStep ??= CarriesLookStep), deltaSeconds: ((float)FixedTickConversion.ToSeconds(ticks: stepTicks)));
 
         if (!stepsBoot) {
             return;
@@ -517,6 +536,35 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             tick: tick
         );
     }
+
+    // Whether the host step being prepared hands the step thread a tick of the local world behind endpoint, which then
+    // carries the seat look step integrated in this prepare: the boot world when it steps, and another world this
+    // host clocks when a tick of it is due. A paused or stopped world, one not due, and one another process clocks
+    // carry none, so a seat routed there presents its step at once.
+    private bool CarriesLookStep(WorldAuthorityEndpoint endpoint) {
+        if (!endpoint.ClockOwnedHere || !m_instances.TryGetValue(key: endpoint.Identity, value: out var instance)) {
+            return false;
+        }
+        if (ReferenceEquals(objA: instance, objB: Boot)) {
+            return m_lookStepsBoot;
+        }
+
+        var rateHz = instance.Server.Configuration.SimulationRateHz;
+
+        return (
+            !instance.AwaitingMirrors &&
+            !instance.IsPaused &&
+            !instance.Server.IsRetiring &&
+            !instance.Server.Tick.ExecutionInterrupted &&
+            (rateHz > 0) &&
+            ((instance.ScheduleAccumulatorTicks + m_lookStepTicks) >= FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz)))
+        );
+    }
+
+    private Func<WorldAuthorityEndpoint, bool>? m_carriesLookStep;
+    private bool m_lookStepsBoot;
+    private ulong m_lookStepTicks;
+
     /// <summary>Reaps a running instance whose seat occupancy just hit zero — a lifetime rule over the occupancy fact
     /// <see cref="Server.WorldPopulation.ActiveCount"/> already reports (see that member's own remarks on why it is
     /// already per-instance scoped, which is what makes reading it here honest), never bespoke teardown: any caller
@@ -771,8 +819,20 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <param name="collectBy">How long the calling thread waits for the step thread before it leaves the tick in
     /// flight and answers <see cref="WorldStepThread.ExecuteWait"/>; <see langword="null"/> waits for the tick.</param>
     public ulong TryStepAuthority(WorldServer server, WorldReplayTape? tape, Action<ulong> publishTick, in FixedStepContext context, HostPacing pacing,
-        WaitDeadline deadline, out WaitReason? pending, WaitDeadline? collectBy = null) =>
-        WorldServerStepShell.TryStep(server, tape, publishTick, in context, pacing, deadline, out pending, m_stepThread, collectBy);
+        WaitDeadline deadline, out WaitReason? pending, WaitDeadline? collectBy = null) {
+        var completed = WorldServerStepShell.TryStep(server, tape, publishTick, in context, pacing, deadline, out pending, m_stepThread, collectBy);
+
+        // The tick's poses are delivered: a seat routed to this world presents the look step the tick carried.
+        if ((completed != context.Tick) && m_authorityEndpoints.TryGetValue(key: server.InstanceIdentity, value: out var endpoint)) {
+            m_seats.PresentSeatLook(endpoint: endpoint);
+        }
+
+        return completed;
+    }
+
+    /// <summary>Gets the boundary window of this host: the span in which the thread that loops it touches the worlds
+    /// it steps. A host loop registers its thread with it and opens it around its control phase and steps.</summary>
+    public WorldLinkBoundary Boundary => m_linkBoundary;
 
     /// <summary>Sets what the step thread calls, on its own thread, each time a tick slice finishes: the wake of a
     /// host loop that went on without waiting for it, which then resumes the open host step.</summary>
@@ -1577,7 +1637,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null, Func<WorldDefinition, WorldServer, IWorldAddonHost>? addonHostFactory = null, bool presents = true, Puck.Hosting.Jobs.JobPool? jobs = null, bool scenario = false, WorldLinkBoundary? linkBoundary = null) {
         m_presents = presents;
         m_scenario = scenario;
-        m_linkBoundary = linkBoundary;
+        m_linkBoundary = (linkBoundary ?? new WorldLinkBoundary());
         m_pacing = (pacing ?? HostPacing.WallClockInline);
         m_jobs = jobs;
         ArgumentNullException.ThrowIfNull(argument: seats);
@@ -1597,7 +1657,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         m_addonHostFactory = addonHostFactory;
         m_admitsSpawn = admitsSpawn;
         m_travelerRouteStarted = travelerRouteStarted;
-        m_stepThread = new WorldStepThread(narration: m_narration);
+        m_stepThread = new WorldStepThread(boundary: m_linkBoundary, narration: m_narration);
     }
 
     /// <summary>Admits <paramref name="row"/> into the registry under its own name — the one place a row enters this
@@ -1616,6 +1676,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             );
         }
 
+        row.Server.Boundary = m_linkBoundary;
         row.Server.TransferForwarder = this;
         row.Server.CustodyPeers = ResolveCustodyPeer;
         m_instances[row.Name] = row;

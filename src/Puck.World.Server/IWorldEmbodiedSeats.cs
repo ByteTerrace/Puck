@@ -47,8 +47,17 @@ public interface IWorldEmbodiedSeats {
     void ClearHeld(int slot);
     /// <summary>Clears every local seat's tick-local analog samples.</summary>
     void ClearAnalog();
-    /// <summary>Advances every local seat's own camera/view state.</summary>
-    void AdvanceSeatViews(float deltaSeconds);
+    /// <summary>Advances every local seat's own camera/view state by one fixed tick.</summary>
+    /// <param name="deltaSeconds">The fixed tick's length, in seconds.</param>
+    /// <param name="carried">Whether a tick of the authority behind an endpoint is about to execute on the host's step
+    /// thread and carry this step. A seat routed to such an endpoint holds its look step until
+    /// <see cref="PresentSeatLook"/> names the endpoint, so a frame produced while the tick executes shows the look
+    /// with the tick it still shows the body at.</param>
+    void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried);
+    /// <summary>Presents the look step held by every local seat routed to <paramref name="endpoint"/>, whose tick has
+    /// been collected and its poses delivered.</summary>
+    /// <param name="endpoint">The endpoint whose tick was collected, or <see langword="null"/> for every seat.</param>
+    void PresentSeatLook(WorldAuthorityEndpoint? endpoint);
     /// <summary>Submits the intents of every local seat currently routed to <paramref name="endpoint"/> for
     /// <paramref name="tick"/>.</summary>
     void SubmitAuthorityIntents(WorldAuthorityEndpoint endpoint, ulong tick);
@@ -64,7 +73,8 @@ public static class WorldEmbodiedSeats {
     private sealed class NoneSeats : IWorldEmbodiedSeats {
         public int SeatCount => 0;
 
-        public void AdvanceSeatViews(float deltaSeconds) { }
+        public void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried) { }
+        public void PresentSeatLook(WorldAuthorityEndpoint? endpoint) { }
         public void ClearAnalog() { }
         public void ClearHeld(int slot) { }
         public void ConfigureLeave(Func<int, Principal, bool> leave) { }

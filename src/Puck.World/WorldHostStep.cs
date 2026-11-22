@@ -1,6 +1,7 @@
 using Puck.Abstractions.Waiting;
 using Puck.Hosting;
 using Puck.World.Client;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -42,26 +43,35 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     /// (<see cref="WorldCaptureScheduler.Drain"/>).</summary>
     public void SettleOwedFrames() => m_captureScheduler.Drain();
 
-    // What the host loop reads of the boot authority, published so the loop never reads the authority beside a tick
-    // the step thread is executing: refreshed at each read and before each hand-off while no slice is in flight, and
-    // left as last published while one is.
+    // What the host loop reads of the boot authority outside its boundary window, where it may not read the authority:
+    // published each time the window closes with no tick in flight (WorldLinkBoundary.PublishOnClose), so the loop
+    // reads the values of the boundary it last stood at. A reader that may read the authority (a thread no pump is
+    // registered on, or the pump inside its window) refreshes them as it reads.
     private uint m_publishedRate;
     private bool m_publishedInterrupted;
+    private bool m_publishes;
 
     private void Publish() {
-        if (m_instances.StepInFlight) { return; }
+        if (!m_publishes) {
+            m_publishes = true;
+            m_instances.Boundary.PublishOnClose(publish: Publish);
+        }
+        if ((m_instances.Boundary.Refusal != WorldBoundaryRefusal.None) || m_instances.StepInFlight) { return; }
         m_publishedRate = ((uint)m_server.Configuration.SimulationRateHz);
         m_publishedInterrupted = ((m_phase == StepPhase.Boot) && m_server.Tick.ExecutionInterrupted);
     }
 
-    /// <summary>The authored simulation rate the fixed-step pump paces this world at: the boot authority's own while no
-    /// tick slice is in flight on the step thread, and the rate last published while one is.</summary>
+    /// <summary>The authored simulation rate the fixed-step pump paces this world at: the boot authority's own where the
+    /// caller may read it, and otherwise the rate published as the host's boundary window last closed.</summary>
     public uint RatePerSecond {
         get {
             Publish();
             return m_publishedRate;
         }
     }
+    /// <summary>Gets whether the next step's tick arms a scheduled capture, which only a frame produced once the tick
+    /// is collected can serve: the host waits for that tick instead of producing beside it.</summary>
+    public bool NextStepOwesFrame => m_captureScheduler.ArmsAt(tick: m_server.NextInputTick);
     /// <summary>The number of fixed ticks completed on the current authority timeline.</summary>
     public ulong Tick => (m_server.NextInputTick - 1UL);
 
@@ -123,9 +133,9 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     private bool m_stepsBoot;
 
     /// <summary>Gets whether the step in progress can no longer finish: the boot authority froze at a stall while its
-    /// tick was held. A row that freezes is skipped, so only the boot phase can hold the step for good. While a tick
-    /// slice is in flight on the step thread the answer is the one last published: a slice still executing has not
-    /// frozen its authority.</summary>
+    /// tick was held. A row that freezes is skipped, so only the boot phase can hold the step for good. Outside the
+    /// host's boundary window, and while a tick slice is in flight on the step thread, the answer is the one last
+    /// published: a slice still executing has not frozen its authority.</summary>
     public bool StepInterrupted {
         get {
             Publish();
@@ -155,11 +165,9 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
             m_phase = StepPhase.Boot;
         }
         if (m_phase == StepPhase.Boot) {
-            Publish();
             if (!StepBoot(in context, m_stepsBoot, deadline, collectBy)) { return false; }
             m_phase = StepPhase.Rows;
         }
-        Publish();
         if (m_instances.TryStepInstances(context.StepTicks, deadline, collectBy) is not null) { return false; }
         roster.PublishProfiles(m_server.CaptureRosterProfiles());
         _ = m_seatRouter.DeliverRouteChanges();
@@ -170,9 +178,17 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         return true;
     }
 
+    /// <summary>Replays deliveries recorded off the pump while the boundary window was closed and delivers any seat
+    /// route changes they seeded. Call on the pump inside a settled boundary window.</summary>
+    public void CollectDeliveries() {
+        m_instances.CollectDeliveries();
+        _ = m_seatRouter.DeliverRouteChanges();
+    }
+
     private void PrepareStep(in FixedStepContext context) {
         sourceWatch.Poll();
         reload.Poll();
+        m_instances.CollectDeliveries();
         // A seat claim can be published off this thread (a federated observer reporting an onward handoff) or by a
         // console verb in the drain just run. Its subscribers change seat state and bind state mirrors, so the edge is
         // delivered here, on the pump thread, at each point of the step after which a claim can have moved: before

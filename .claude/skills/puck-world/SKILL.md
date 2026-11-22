@@ -871,7 +871,8 @@ check the flag: the owner may be holding the pad.
   tier's preset (`WorldDeviceProfile.TableIn`), and memory bars. A windowed or offscreen boot selects the row whose
   `match` the adapter's name contains once the device names its adapter, caps the device and host pools at its bars
   before the first frame stages anything (`WorldDeviceProfileState.ApplyAtBoot`, over `MemoryAccount.SetBudget`, which
-  only lowers a limit), then writes the table on the frame thread through the `world.quality` levers
+  only lowers a limit), then writes the table in the loop's next boundary window (`WorldLinkBoundary.Post`: the levers
+  are writes to the authority, which the frame may not make) through the `world.quality` levers
   (`IWorldQualityPresets`) by the door `world.device-profile` takes (`WorldDeviceProfileState.Select`), never as a queued
   console line a session hold could delay; a lever command after it overrides it, and `world.device-profile` echoes
   `table=<tier or profile name>` (`pending` while the levers are written). `puck benchmark --profile` sends it before the first chapter, and the run report's

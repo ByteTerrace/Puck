@@ -6,7 +6,7 @@ namespace Puck.World.Server;
 public sealed partial class WorldServer {
     /// <summary>Gets the persistence facade — journal undo and its depth horizon, the authority checkpoint's
     /// capture and restore, the simulation state hash, and the replay timeline gate.</summary>
-    public WorldPersistence Persistence => m_persistence;
+    public WorldPersistence Persistence { get { ThrowIfOutsideWindow(); return m_persistence; } }
 
     /// <inheritdoc cref="WorldPersistence.FromCheckpoint"/>
     [Replaces(root: typeof(StateArena))]

@@ -36,6 +36,10 @@ public sealed class WorldTickSchedule<TRow> {
         atTick.Add(item: row);
         PendingCount++;
     }
+    /// <summary>Returns whether any row still waits for a tick.</summary>
+    /// <param name="tick">The simulation tick.</param>
+    /// <returns><see langword="true"/> when publishing <paramref name="tick"/> would hand out a row.</returns>
+    public bool Holds(ulong tick) => m_entries.ContainsKey(key: tick);
     /// <summary>Drops every pending row, returning the number dropped.</summary>
     /// <returns>The number dropped.</returns>
     public int Clear() {

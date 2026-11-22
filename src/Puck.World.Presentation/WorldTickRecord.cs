@@ -26,8 +26,10 @@ public readonly record struct WorldHistoryWindow(ulong Oldest, ulong Head, ulong
 /// seat in none, indexed by 0-based seat.</param>
 /// <param name="Commands">The live document's authored commands, which the console registry answers beside the
 /// engine's verbs.</param>
+/// <param name="EditableSeats">Bitmask of 0-based local seats whose principal may mutate placements in the world the
+/// seat is routed to.</param>
 public sealed record WorldTickRecord(ulong Tick, WorldDocumentVersion DocumentVersion, int SimulatedBodies, int PeerCapacity,
-    WorldHistoryWindow? History, IReadOnlyList<string?> SeatPlaces, AuthoredCommandSet Commands) {
+    WorldHistoryWindow? History, IReadOnlyList<string?> SeatPlaces, AuthoredCommandSet Commands, byte EditableSeats = 0xFF) {
     /// <summary>Gets the record a feed holds before its first collect: tick zero, no bodies, no history, no places and no
     /// authored commands.</summary>
     public static WorldTickRecord Empty { get; } = new(Commands: AuthoredCommandSet.Empty, DocumentVersion: default, History: null, PeerCapacity: 0, SeatPlaces: [], SimulatedBodies: 0, Tick: 0UL);
@@ -36,4 +38,8 @@ public sealed record WorldTickRecord(ulong Tick, WorldDocumentVersion DocumentVe
     /// <param name="seat">The 0-based seat.</param>
     /// <returns>The seat body's innermost place, or <see langword="null"/> for a seat in none or out of range.</returns>
     public string? SeatPlace(int seat) => ((((uint)seat) < ((uint)SeatPlaces.Count)) ? SeatPlaces[seat] : null);
+    /// <summary>Reads whether a local seat's principal may mutate placements in the world the seat is routed to.</summary>
+    /// <param name="seat">The 0-based seat.</param>
+    /// <returns><see langword="true"/> when the seat may mutate placements.</returns>
+    public bool SeatMayEditPlacements(int seat) => ((((uint)seat) >= 8U) || ((EditableSeats & (1 << seat)) != 0));
 }

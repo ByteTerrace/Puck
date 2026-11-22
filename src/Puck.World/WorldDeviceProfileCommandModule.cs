@@ -7,8 +7,9 @@ namespace Puck.World;
 /// <c>world.device-profile</c>: selects the device profile (<see cref="WorldDeviceProfile"/>) the world authors for the
 /// adapter the process runs on, or the one named, and applies it: the quality table (the profile's own, or the world's
 /// preset of its tier) through the render levers where a renderer is composed, and the memory bars to the process account.
-/// A windowed or offscreen boot selects by adapter once its device opens and names its adapter, on the frame thread
-/// before its first frame stages anything (<see cref="WorldDeviceProfileState.ApplyAtBoot"/>), through the same door
+/// A windowed or offscreen boot selects by adapter once its device opens and names its adapter: its bars on the frame
+/// thread before its first frame stages anything, and its table in the loop's next boundary window
+/// (<see cref="WorldDeviceProfileState.ApplyAtBoot"/>), through the same door
 /// (<see cref="WorldDeviceProfileState.Select"/>), so every device boots on its own table; a benchmark run applies its
 /// named profile before its first chapter.
 /// </summary>

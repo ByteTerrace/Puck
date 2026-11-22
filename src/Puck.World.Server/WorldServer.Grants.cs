@@ -39,15 +39,15 @@ public sealed partial class WorldServer {
     }
 
     /// <summary>Gets the mounted Simulation-lane addon host, or <see langword="null"/> when none is attached.</summary>
-    public IWorldAddonHost? Addons => m_addons;
+    public IWorldAddonHost? Addons { get { ThrowIfOutsideWindow(); return m_addons; } }
     /// <summary>Gets the concrete grant facade — the capability table plus the grant-application, ownership-escrow
     /// and peer/session admission halves that run against it.</summary>
     /// <remarks><see cref="Grants"/> remains the narrow <see cref="IWorldGrantsView"/> every ordinary reader holds;
     /// this property is the facade itself. Its direct grant/revoke doors require the actor and pass through the
     /// same authority transition admission as document installation.</remarks>
-    public WorldGrants GrantTable => m_grants;
+    public WorldGrants GrantTable { get { ThrowIfOutsideWindow(); return m_grants; } }
     /// <summary>Gets the per-tick dispatch tally behind the mutation admission budget gate.</summary>
-    public WorldMutationBudgetMeter MutationBudget => m_mutationBudget;
+    public WorldMutationBudgetMeter MutationBudget { get { ThrowIfOutsideWindow(); return m_mutationBudget; } }
 
     /// <inheritdoc cref="WorldGrants.ApplySession"/>
     public SessionReply ApplySession(SessionRequest request) => m_grants.ApplySession(request: request);

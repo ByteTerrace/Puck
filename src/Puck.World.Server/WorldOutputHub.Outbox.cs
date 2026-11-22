@@ -6,18 +6,18 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 // The outbox at the last hop. A delivery has two halves: composing it reads the authority (the fan-out's disclosure,
-// a session sink's projection, the tick's cues) and stays on the thread that makes it; handing it to the receiving
-// sink is the receiver's work and belongs to the host loop. While the hub records, the hand-off to every sink that
-// is not an IWorldInlineSink, and every callback the server routed through here (a loopback submission's completion,
-// the edit echo, a rule's save), is recorded in order instead of made, and Collect replays the records on the
-// collecting thread.
+// a session sink's projection, the tick's cues, or a remote authority's socket frame) and stays on the thread that
+// makes it; handing it to the receiving sink is the receiver's work and belongs to the host loop. While the hub records,
+// the hand-off to every sink that is not an IWorldInlineSink, and every callback routed through here (a loopback
+// submission's completion, the edit echo, a rule's save, a remote traveler's observed route), is recorded in order
+// instead of made, and Collect replays the records on the collecting thread.
 //
-// The invariant: no non-inline sink and no routed callback runs while a tick of this hub's server executes, or on any
-// thread other than the collector once one has collected. Enforced by the types: the hub, the attach primer and a
-// session sink reach a receiving sink only through a WorldSinkRoute, which only this hub mints, and a routed callback
-// is the delegate the server stores, so no call site can reach the target around it. Where it stops: a sink reached
-// by a path that holds the raw IClientSink (WorldRemoteAuthority's own receive loop, which delivers another process's
-// stream) is outside it.
+// The invariant: no non-inline sink and no routed callback runs while a tick of this hub's server executes, or, once a
+// host has bound the hub to its boundary window, anywhere but on the host loop's thread inside that window
+// (WorldLinkBoundary.DeliversHere). Enforced by the types: the hub, the attach primer, a session sink and a remote
+// authority's observer each reach a receiving sink only through a WorldSinkRoute, which only this hub mints, and a
+// routed callback is the delegate the caller stores, so no call site can reach the target around it. Where it stops: a
+// server or remote authority no host bound to a boundary window defers only while a local tick executes.
 public sealed partial class WorldOutputHub {
     private enum RecordKind : byte {
         Snapshot,
@@ -25,6 +25,7 @@ public sealed partial class WorldOutputHub {
         Presentation,
         State,
         Cut,
+        CloseSpan,
         Composition,
         SessionLever,
         Callback,
@@ -42,6 +43,7 @@ public sealed partial class WorldOutputHub {
         public WorldStateStamp Stamp;
         public WorldStreamStamp Stream;
         public WorldDocumentVersion Version;
+        public long ArrivedAt;
         public bool Terminal;
         public Loan? Loan;
     }
@@ -143,20 +145,16 @@ public sealed partial class WorldOutputHub {
     // Nonzero while a tick of this hub's server executes. Only the thread running the tick changes it, under the
     // authority gate, so a delivery from any thread (each holds that gate) reads it settled.
     private int m_executing;
-    // The managed thread id of the thread that last collected, or zero before the first collect: the one thread a
-    // non-inline sink and a routed callback run on once the host has started collecting.
-    private int m_collector;
     private bool m_collecting;
 
+    /// <summary>Gets or sets the boundary window of the host that steps this hub's server, or <see langword="null"/>
+    /// for a server no host admitted.</summary>
+    public WorldLinkBoundary? Boundary { get; set; }
+
     /// <summary>Gets whether a hand-off made now on the calling thread is recorded for the collect: a tick of this
-    /// hub's server is executing, or a collector exists and the calling thread is another.</summary>
-    internal bool Records {
-        get {
-            if (Volatile.Read(location: ref m_executing) != 0) { return true; }
-            var collector = Volatile.Read(location: ref m_collector);
-            return ((collector != 0) && (collector != Environment.CurrentManagedThreadId));
-        }
-    }
+    /// hub's server is executing, or the calling thread is not the host loop's thread inside its boundary
+    /// window.</summary>
+    public bool Records => ((Volatile.Read(location: ref m_executing) != 0) || (Boundary is { DeliversHere: false }));
 
     /// <summary>Gets the number of hand-offs recorded and not yet replayed.</summary>
     public int PendingRecords {
@@ -169,14 +167,18 @@ public sealed partial class WorldOutputHub {
     /// <summary>Marks the end of a tick's execution begun by <see cref="BeginExecute"/>.</summary>
     internal void EndExecute() => Interlocked.Decrement(location: ref m_executing);
 
-    /// <summary>Replays every recorded hand-off, in the order it was made, on the calling thread, which becomes this
-    /// hub's collector. A sink that throws on a replayed delivery is handed to its route's fault handler; a routed
-    /// callback that throws propagates, as it would have from the tick. Returns at once while a tick executes, since
-    /// its records belong to its own collect, and inside a replay, whose loop takes what the replay records.</summary>
-    internal void Collect() {
+    /// <summary>Replays every recorded hand-off, in the order it was made, on the calling thread: the host loop's,
+    /// inside its boundary window. A sink that throws on a replayed delivery is handed to its route's fault handler; a
+    /// routed callback that throws propagates, as it would have from the tick. Returns at once while a tick executes,
+    /// since its records belong to its own collect, and inside a replay, whose loop takes what the replay
+    /// records.</summary>
+    /// <param name="completedAt">The stopwatch timestamp the tick whose records these are finished executing at, which
+    /// a replayed snapshot's receiver stamps as its arrival (<see cref="WorldDeliveryClock"/>); zero stamps the time
+    /// of the replay.</param>
+    public void Collect(long completedAt = 0L) {
         if ((Volatile.Read(location: ref m_executing) != 0) || m_collecting) { return; }
-        Volatile.Write(location: ref m_collector, value: Environment.CurrentManagedThreadId);
         m_collecting = true;
+        using var arrival = WorldDeliveryClock.ReplayAt(timestamp: completedAt);
         try {
             while (true) {
                 List<Record> batch;
@@ -187,7 +189,7 @@ public sealed partial class WorldOutputHub {
                 }
                 try {
                     for (var index = 0; index < batch.Count; index++) {
-                        Replay(in CollectionsMarshal.AsSpan(batch)[index]);
+                        Replay(in CollectionsMarshal.AsSpan(batch)[index], completedAt: completedAt);
                     }
                 } finally {
                     lock (m_outboxLock) {
@@ -207,15 +209,24 @@ public sealed partial class WorldOutputHub {
         }
     }
 
-    private static void Replay(in Record record) {
+    private static void Replay(in Record record, long completedAt) {
         var route = record.Route;
         switch (record.Kind) {
             case RecordKind.Callback: record.Callback!.Replay(record.Payload); break;
-            case RecordKind.Snapshot: route!.ReplaySnapshot(in record.Snapshot, in record.Stream); break;
+            case RecordKind.Snapshot: {
+                if ((completedAt == 0L) && (record.ArrivedAt != 0L)) {
+                    using var arrival = WorldDeliveryClock.ReplayAt(timestamp: record.ArrivedAt);
+                    route!.ReplaySnapshot(in record.Snapshot, in record.Stream);
+                } else {
+                    route!.ReplaySnapshot(in record.Snapshot, in record.Stream);
+                }
+                break;
+            }
             case RecordKind.Definition: route!.ReplayDefinition((WorldDefinition)record.Payload!, record.Version, in record.Stream); break;
             case RecordKind.Presentation: route!.ReplayPresentation((WorldDefinition)record.Payload!, record.Rows!, record.Version, in record.Stream); break;
             case RecordKind.State: route!.ReplayState((WorldDefinition)record.Payload!, record.Version, in record.Stamp, in record.Stream); break;
             case RecordKind.Cut: route!.ReplayCut(in record.Stream, record.Terminal); break;
+            case RecordKind.CloseSpan: route!.ReplayCloseSpan(record.Stream.Stream); break;
             case RecordKind.Composition: route!.ReplayComposition((WorldComposition)record.Payload!); break;
             case RecordKind.SessionLever: route!.ReplaySessionLever((WorldSessionLever)record.Payload!); break;
         }
@@ -235,12 +246,12 @@ public sealed partial class WorldOutputHub {
     /// <param name="sink">The receiving sink.</param>
     /// <param name="fault">The handler a replayed delivery's exception is handed to.</param>
     /// <returns>The route.</returns>
-    internal WorldSinkRoute RouteTo(IClientSink sink, Action<Exception> fault) => new(hub: this, sink: sink, fault: fault);
+    public WorldSinkRoute RouteTo(IClientSink sink, Action<Exception> fault) => new(hub: this, sink: sink, fault: fault);
 
     internal void RecordSnapshot(WorldSinkRoute route, in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         var loan = RentLoan();
         var held = loan.Hold(in snapshot);
-        Add(new Record { Kind = RecordKind.Snapshot, Route = route, Snapshot = held, Stream = stream, Loan = loan }, loan.Bytes);
+        Add(new Record { Kind = RecordKind.Snapshot, Route = route, Snapshot = held, Stream = stream, ArrivedAt = WorldDeliveryClock.Arrival, Loan = loan }, loan.Bytes);
     }
     internal void RecordState(WorldSinkRoute route, WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         Loan? loan = null;
@@ -257,6 +268,8 @@ public sealed partial class WorldOutputHub {
         Add(new Record { Kind = RecordKind.Presentation, Route = route, Payload = definition, Rows = rows, Version = version, Stream = stream });
     internal void RecordCut(WorldSinkRoute route, in WorldStreamStamp stream, bool terminal) =>
         Add(new Record { Kind = RecordKind.Cut, Route = route, Stream = stream, Terminal = terminal });
+    internal void RecordCloseSpan(WorldSinkRoute route, ulong span) =>
+        Add(new Record { Kind = RecordKind.CloseSpan, Route = route, Stream = new WorldStreamStamp(Stream: span, Generation: 0L, Ordinal: 0L) });
     internal void RecordComposition(WorldSinkRoute route, WorldComposition composition) =>
         Add(new Record { Kind = RecordKind.Composition, Route = route, Payload = composition });
     internal void RecordSessionLever(WorldSinkRoute route, WorldSessionLever lever) =>
@@ -281,6 +294,7 @@ public sealed class WorldSinkRoute {
     private readonly IClientSink m_sink;
     private readonly IWorldDetachableSink? m_detachable;
     private readonly Action<Exception> m_fault;
+    private volatile bool m_faulted;
 
     internal WorldSinkRoute(WorldOutputHub hub, IClientSink sink, Action<Exception> fault) {
         ArgumentNullException.ThrowIfNull(argument: sink);
@@ -308,9 +322,11 @@ public sealed class WorldSinkRoute {
     /// <param name="snapshot">The snapshot.</param>
     /// <param name="stream">The stamp of the record in its stream.</param>
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
+        if (m_faulted) { return; }
         if (Defers) { m_hub.RecordSnapshot(this, in snapshot, in stream); } else { m_sink.DeliverSnapshot(in snapshot, in stream); }
     }
     internal void DeliverSnapshot(in WorldSnapshot snapshot, WorldInterestFrame frame) {
+        if (m_faulted) { return; }
         if (m_sink is IWorldInterestSink observer && Inline) { observer.DeliverSnapshot(in snapshot, frame); } else { DeliverSnapshot(in snapshot, WorldStreamStamp.Unspanned); }
     }
     /// <summary>Hands the sink a definition.</summary>
@@ -318,6 +334,7 @@ public sealed class WorldSinkRoute {
     /// <param name="version">The version of <paramref name="definition"/>.</param>
     /// <param name="stream">The stamp of the record in its stream.</param>
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
+        if (m_faulted) { return; }
         if (Defers) { m_hub.RecordDefinition(this, definition, version, in stream); } else { m_sink.DeliverDefinition(definition, version, in stream); }
     }
     /// <summary>Hands the sink changed creation and shade rows.</summary>
@@ -326,6 +343,7 @@ public sealed class WorldSinkRoute {
     /// <param name="version">The version of <paramref name="definition"/>.</param>
     /// <param name="stream">The stamp of the record in its stream.</param>
     public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+        if (m_faulted) { return; }
         if (Defers) { m_hub.RecordPresentation(this, definition, rows, version, in stream); } else { m_sink.DeliverPresentation(definition, rows, version, in stream); }
     }
     /// <summary>Hands the sink a value-only definition; a recorded hand-off holds a copy of the moved rows.</summary>
@@ -334,46 +352,67 @@ public sealed class WorldSinkRoute {
     /// <param name="stamp">The tick the values hold as of and the rows whose values moved.</param>
     /// <param name="stream">The stamp of the record in its stream.</param>
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
+        if (m_faulted) { return; }
         if (Defers) { m_hub.RecordState(this, definition, version, in stamp, in stream); } else { m_sink.DeliverState(definition, version, in stamp, in stream); }
     }
     /// <summary>Hands the sink a cut, or the end of its stream.</summary>
     /// <param name="stream">The stamp of the record.</param>
     /// <param name="terminal">Whether the stream ends.</param>
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
+        if (m_faulted) { return; }
         if (Defers) { m_hub.RecordCut(this, in stream, terminal); } else { m_sink.DeliverCut(in stream, terminal); }
+    }
+    /// <summary>Closes the span the sink was reading from <paramref name="stream"/>.</summary>
+    /// <param name="stream">The stream identifier.</param>
+    public void CloseSpan(ulong stream) {
+        if (m_faulted) { return; }
+        if (Defers) { m_hub.RecordCloseSpan(this, stream); } else { m_sink.CloseSpan(stream); }
     }
     /// <summary>Hands the sink an accepted composition override.</summary>
     /// <param name="composition">The composition override.</param>
     public void DeliverComposition(WorldComposition composition) {
+        if (m_faulted) { return; }
         if (Defers) { m_hub.RecordComposition(this, composition); } else { m_sink.DeliverComposition(composition); }
     }
     /// <summary>Hands the sink an accepted session lever.</summary>
     /// <param name="lever">The lever write.</param>
     public void DeliverSessionLever(WorldSessionLever lever) {
+        if (m_faulted) { return; }
         if (Defers) { m_hub.RecordSessionLever(this, lever); } else { m_sink.DeliverSessionLever(lever); }
     }
 
     // The collect's half: the recorded hand-off made now, on the collector. A sink that throws is handed to the fault
     // handler its composer gave, which detaches it, rather than unwinding the collect past the records after it.
     internal void ReplaySnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
-        try { m_sink.DeliverSnapshot(in snapshot, in stream); } catch (Exception exception) { m_fault(exception); }
+        if (m_faulted) { return; }
+        try { m_sink.DeliverSnapshot(in snapshot, in stream); } catch (Exception exception) { m_faulted = true; m_fault(exception); }
     }
     internal void ReplayDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
-        try { m_sink.DeliverDefinition(definition, version, in stream); } catch (Exception exception) { m_fault(exception); }
+        if (m_faulted) { return; }
+        try { m_sink.DeliverDefinition(definition, version, in stream); } catch (Exception exception) { m_faulted = true; m_fault(exception); }
     }
     internal void ReplayPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
-        try { m_sink.DeliverPresentation(definition, rows, version, in stream); } catch (Exception exception) { m_fault(exception); }
+        if (m_faulted) { return; }
+        try { m_sink.DeliverPresentation(definition, rows, version, in stream); } catch (Exception exception) { m_faulted = true; m_fault(exception); }
     }
     internal void ReplayState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
-        try { m_sink.DeliverState(definition, version, in stamp, in stream); } catch (Exception exception) { m_fault(exception); }
+        if (m_faulted) { return; }
+        try { m_sink.DeliverState(definition, version, in stamp, in stream); } catch (Exception exception) { m_faulted = true; m_fault(exception); }
     }
     internal void ReplayCut(in WorldStreamStamp stream, bool terminal) {
-        try { m_sink.DeliverCut(in stream, terminal); } catch (Exception exception) { m_fault(exception); }
+        if (m_faulted) { return; }
+        try { m_sink.DeliverCut(in stream, terminal); } catch (Exception exception) { m_faulted = true; m_fault(exception); }
+    }
+    internal void ReplayCloseSpan(ulong stream) {
+        if (m_faulted) { return; }
+        try { m_sink.CloseSpan(stream); } catch (Exception exception) { m_faulted = true; m_fault(exception); }
     }
     internal void ReplayComposition(WorldComposition composition) {
-        try { m_sink.DeliverComposition(composition); } catch (Exception exception) { m_fault(exception); }
+        if (m_faulted) { return; }
+        try { m_sink.DeliverComposition(composition); } catch (Exception exception) { m_faulted = true; m_fault(exception); }
     }
     internal void ReplaySessionLever(WorldSessionLever lever) {
-        try { m_sink.DeliverSessionLever(lever); } catch (Exception exception) { m_fault(exception); }
+        if (m_faulted) { return; }
+        try { m_sink.DeliverSessionLever(lever); } catch (Exception exception) { m_faulted = true; m_fault(exception); }
     }
 }

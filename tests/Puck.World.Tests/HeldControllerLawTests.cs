@@ -74,10 +74,10 @@ public sealed class HeldControllerLawTests {
                 Assert.Equal(1, roster.DeviceSlot(device));
                 Assert.True(roster.IsPending(1));
                 Assert.Equal(preferred.Id, roster.ProfileAt(1)?.Id);
-                Assert.NotNull(server.Body(1));
             } finally {
                 boundary.UnregisterPump();
             }
+            Assert.NotNull(server.Body(1));
         }, services => services.AddSingleton<IWorldMachineHost>(provider => {
             var machines = DispatchProxy.Create<IWorldMachineHost, HeldMachineAdvance>();
             ((HeldMachineAdvance)machines).Inner = provider.GetRequiredService<WorldMachineHost>();
