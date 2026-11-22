@@ -239,6 +239,7 @@ public sealed partial class SdfMeshPathBake {
         var due = 0;
         var watched = 0;
         var framed = 0;
+        var renewed = 0;
         var stood = 0;
         var moved = 0;
         var copied = 0;
@@ -333,6 +334,8 @@ public sealed partial class SdfMeshPathBake {
             foreach (var group in m_framedDue) {
                 if (!group.Listed || group.Retired) {
                     m_watches.Release(group: group);
+                } else if ((group.Watch.Stamp != stamp) && (CopiesOf(group: group) is null) && Renewed(group: group)) {
+                    renewed++;
                 } else if (Measure(group: group)) {
                     due++;
                     framed++;
@@ -395,6 +398,7 @@ public sealed partial class SdfMeshPathBake {
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandDueScale, amount: dueBy[1]);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandWatched, amount: watched);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandFramed, amount: framed);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandRenewed, amount: renewed);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandViews, amount: (boxes * Demand.Count));
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandStood, amount: stood);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandMoved, amount: moved);
@@ -505,6 +509,13 @@ public sealed partial class SdfMeshPathBake {
             var travel = (((((clocks[0] - watch.At[0]) + (metres / watch.Focal)) / units)) + (pixel * MathF.Abs(x: ((watch.Units / units) - 1f))));
 
             return ((((pixel + travel) * Math.Exp(d: (clocks[1] - watch.At[1]))) - pixel) >= watch.Slack);
+        }
+        // Whether a group's moved frustums all still answer as they did at its box as it stands, renewing their watch
+        // (SdfMeshDemand.Renew), so it needs no measure.
+        bool Renewed(Group group) {
+            var (center, half) = WorldBox(group: group);
+
+            return Demand.Renew(center: center, half: half, watch: m_watches.Of(record: group.FrustumWatch));
         }
         // Chooses one listed group to measure this frame, once: its readings are taken with the rest of the frame's after
         // every route has chosen (MeasureChosen), and from now on the frame's routes read it as measured.

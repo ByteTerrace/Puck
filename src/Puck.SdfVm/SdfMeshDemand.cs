@@ -149,9 +149,9 @@ public sealed class SdfMeshDemand {
     /// (<see cref="BoundsOf"/>, <see cref="Watch"/>).</summary>
     public int FrustumLanes => m_frustumLanes;
     /// <summary>Gets the length of one field of a frustum watch: the frustum lanes, padded to whole vectors. A watch
-    /// holds four fields (<see cref="Watch"/>).</summary>
+    /// holds five fields (<see cref="Watch"/>).</summary>
     public int FrustumStride => ((m_frustumLanes + (Vector256<float>.Count - 1)) & ~(Vector256<float>.Count - 1));
-    /// <summary>Gets the length of a frustum watch at this layout: four fields of <see cref="FrustumStride"/>.</summary>
+    /// <summary>Gets the length of a frustum watch at this layout: five fields of <see cref="FrustumStride"/>.</summary>
     public int WatchLength => (WatchFields * FrustumStride);
     /// <summary>Gets the layout of the frustum lanes: one more each time a lane's point came, went, jumped or took another
     /// lane, or the lanes' odometers were started again. A watch taken at the layout before is carried into this one
@@ -418,21 +418,19 @@ public sealed class SdfMeshDemand {
     /// <param name="point">The demand point that sees the box finest, below <see cref="Count"/>; -1 with none.</param>
     /// <returns>The pixel's size in metres; infinity with no demand point.</returns>
     public float PixelAt(Vector3 center, Vector3 half, out int point) {
-        var finest = float.PositiveInfinity;
-
         point = -1;
-        if (Count == 0) { return finest; }
+        if (Count == 0) { return float.PositiveInfinity; }
 
         var read = Read(center: center, half: half);
+        var lanes = read.Lanes!;
+        ref var demanded = ref MemoryMarshal.GetArrayDataReference(array: read.Demanded);
+        var least = Vector256.Create(value: float.PositiveInfinity);
 
-        for (var index = 0; (index < Count); index++) {
-            var pixel = read.Pixel[index];
+        for (var at = 0; (at < lanes.Stride); at += Vector256<float>.Count) { least = Vector256.Min(left: least, right: Vector256.LoadUnsafe(elementOffset: ((nuint)at), source: ref demanded)); }
 
-            if ((pixel < finest) && (!m_within[index] || !read.Refuses(index: index))) {
-                finest = pixel;
-                point = index;
-            }
-        }
+        var finest = Least(values: least);
+
+        if (float.IsFinite(f: finest)) { point = lanes.Points[read.Demanded.AsSpan(start: 0, length: lanes.Stride).IndexOf(value: finest)]; }
 
         return finest;
     }
@@ -459,22 +457,26 @@ public sealed class SdfMeshDemand {
     /// <param name="half">The box's half extents along the world axes, none negative.</param>
     /// <returns>The priority: past one for a demanded box, below one for another.</returns>
     public float Priority(Vector3 center, Vector3 half) {
-        var diagonal = (2f * half.Length());
-        var best = 0f;
-
-        if (Count == 0) { return best; }
+        if (Count == 0) { return 0f; }
 
         var read = Read(center: center, half: half);
+        var lanes = read.Lanes!;
+        var diagonal = Vector256.Create(value: (2f * half.Length()));
+        var one = Vector256.Create(value: 1f);
+        var best = Vector256<float>.Zero;
+        ref var demanded = ref MemoryMarshal.GetArrayDataReference(array: read.Demanded);
 
-        for (var index = 0; (index < Count); index++) {
-            var density = (1f / read.Pixel[index]);
+        for (var at = 0; (at < lanes.Stride); at += Vector256<float>.Count) {
+            var density = (one / Vector256.LoadUnsafe(elementOffset: ((nuint)at), source: ref demanded));
             var size = (diagonal * density);
-            var priority = ((size >= 1f) ? (1f + density) : size);
 
-            if ((priority > best) && (!m_within[index] || !read.Refuses(index: index))) { best = priority; }
+            best = Vector256.Max(left: best, right: Vector256.ConditionalSelect(condition: Vector256.GreaterThanOrEqual(left: size, right: one), left: (one + density), right: size));
         }
 
-        return best;
+        var most = 0f;
+
+        for (var lane = 0; (lane < Vector256<float>.Count); lane++) { most = MathF.Max(x: most, y: best.GetElement(index: lane)); }
+        return most;
     }
     /// <summary>Returns whether a box is in view: some demand point's view may see it, its frustum widened by
     /// <see cref="WithinViewMargin"/> so the viewer's next steps and turns find it, or a point placed with no frame
@@ -486,13 +488,10 @@ public sealed class SdfMeshDemand {
     public bool Sees(Vector3 center, Vector3 half) {
         if (Count == 0) { return true; }
 
-        // An unframed point's planes hold every box.
+        // An unframed point's planes hold every box; a pad's refuse it.
         var read = Read(center: center, half: half);
 
-        for (var index = 0; (index < Count); index++) {
-            if (!read.Refuses(index: index)) { return true; }
-        }
-        return false;
+        return (read.Refused.AsSpan(start: 0, length: read.Lanes!.Stride).IndexOf(value: 0) >= 0);
     }
     /// <summary>Returns whether a planned group's box is in view (<see cref="Sees(Vector3, Vector3)"/>): a dynamic
     /// group's box carried into world space by its slot's transform among <paramref name="transforms"/>.</summary>
@@ -604,64 +603,111 @@ public sealed class SdfMeshDemand {
     /// <param name="half">The box's half extents along the world axes, none negative.</param>
     /// <param name="units">The units the box's pixels are read in; positive.</param>
     /// <param name="top">The pixel, in those units, a point must reach to count.</param>
-    /// <param name="watch">The frustum watch the box's group keeps: <see cref="FrustumStride"/> times four values, begun
+    /// <param name="watch">The frustum watch the box's group keeps: <see cref="FrustumStride"/> times five values, begun
     /// with <see cref="Unwatched"/>.</param>
     /// <returns>The bounds.</returns>
-    /// <exception cref="ArgumentException"><paramref name="watch"/> is not four fields long.</exception>
+    /// <exception cref="ArgumentException"><paramref name="watch"/> is not five fields long.</exception>
     public Bounds BoundsOf(Vector3 center, Vector3 half, float units, float top, Span<float> watch) {
         var stride = FrustumStride;
 
-        if (watch.Length != (WatchFields * stride)) { throw new ArgumentException(message: "A frustum watch holds four fields of the frustum stride.", paramName: nameof(watch)); }
+        if (watch.Length != (WatchFields * stride)) { throw new ArgumentException(message: "A frustum watch holds five fields of the frustum stride.", paramName: nameof(watch)); }
 
-        var bounds = Bounds.None;
+        if (Count == 0) { return Bounds.None; }
 
-        if (Count == 0) { return bounds; }
-
-        var (focal, clearance, beyond, framed) = (bounds.Focal, bounds.Clearance, bounds.Beyond, false);
         var read = Read(center: center, half: half);
-        var slacks = watch.Slice(start: (2 * stride), length: stride);
-        var reaches = watch.Slice(start: (3 * stride), length: stride);
+        var lanes = read.Lanes!;
+        var inverse = Vector256.Create(value: (1f / units));
+        var unit = Vector256.Create(value: units);
+        var tops = Vector256.Create(value: top);
+        var infinity = Vector256.Create(value: float.PositiveInfinity);
+        var (cx, cy, cz) = (Vector256.Create(value: center.X), Vector256.Create(value: center.Y), Vector256.Create(value: center.Z));
+        var extent = Vector256.Create(value: ((half.X + half.Y) + half.Z));
+        var (beyond, clearance, focal) = (infinity, infinity, infinity);
+        var framed = Vector256<float>.Zero;
+        ref var pixels = ref MemoryMarshal.GetArrayDataReference(array: read.Pixel);
+        ref var slackOf = ref MemoryMarshal.GetArrayDataReference(array: read.Slack);
+        ref var real = ref MemoryMarshal.GetArrayDataReference(array: lanes.Real);
+        ref var focals = ref MemoryMarshal.GetArrayDataReference(array: lanes.Focal);
+        ref var xs = ref MemoryMarshal.GetArrayDataReference(array: lanes.X);
+        ref var ys = ref MemoryMarshal.GetArrayDataReference(array: lanes.Y);
+        ref var zs = ref MemoryMarshal.GetArrayDataReference(array: lanes.Z);
+        ref var slacks = ref MemoryMarshal.GetReference(span: watch.Slice(start: (2 * stride), length: stride));
+        ref var reaches = ref MemoryMarshal.GetReference(span: watch.Slice(start: (3 * stride), length: stride));
+        ref var answers = ref MemoryMarshal.GetReference(span: watch.Slice(start: (4 * stride), length: stride));
+        ref var refusals = ref MemoryMarshal.GetArrayDataReference(array: read.Refused);
+        var (one, zero, mixed) = (Vector256.Create(value: 1f), Vector256<float>.Zero, Vector256.Create(value: AnswerMixed));
 
-        for (var index = 0; (index < Count); index++) {
-            var pixel = (read.Pixel[index] / units);
+        for (var at = 0; (at < lanes.Stride); at += Vector256<float>.Count) {
+            var offset = ((nuint)at);
+            var pixel = (Vector256.LoadUnsafe(elementOffset: offset, source: ref pixels) * inverse);
+            var stands = Vector256.LoadUnsafe(elementOffset: offset, source: ref real).AsSingle();
+            var past = Vector256.GreaterThan(left: pixel, right: tops);
+            var over = (past & stands);
+            var counted = Vector256.AndNot(left: stands, right: past);
+            var lensing = Vector256.LoadUnsafe(elementOffset: offset, source: ref focals);
 
-            if (pixel > top) {
-                beyond = MathF.Min(x: beyond, y: pixel);
-                clearance = MathF.Min(x: clearance, y: ((pixel - top) * m_focal[index] * units));
-                continue;
-            }
-            focal = MathF.Min(x: focal, y: m_focal[index]);
-            if (m_laneOf[index] is not (>= 0 and var lane)) { continue; }
-            framed = true;
-            slacks[lane] = MathF.Min(x: slacks[lane], y: read.Slack[index]);
-            reaches[lane] = MathF.Max(x: reaches[lane], y: (Vector3.Distance(value1: center, value2: m_points[index]) + ((half.X + half.Y) + half.Z)));
+            beyond = Vector256.Min(left: beyond, right: Vector256.ConditionalSelect(condition: over, left: pixel, right: infinity));
+            clearance = Vector256.Min(left: clearance, right: Vector256.ConditionalSelect(condition: over, left: (((pixel - tops) * lensing) * unit), right: infinity));
+            focal = Vector256.Min(left: focal, right: Vector256.ConditionalSelect(condition: counted, left: lensing, right: infinity));
+            if (at >= stride) { continue; }
+
+            // The frustum lanes: a counted point bounded to its view watches its frustum.
+            var dx = (Vector256.LoadUnsafe(elementOffset: offset, source: ref xs) - cx);
+            var dy = (Vector256.LoadUnsafe(elementOffset: offset, source: ref ys) - cy);
+            var dz = (Vector256.LoadUnsafe(elementOffset: offset, source: ref zs) - cz);
+            var reach = (Vector256.Sqrt(vector: (((dx * dx) + (dy * dy)) + (dz * dz))) + extent);
+            var slack = Vector256.LoadUnsafe(elementOffset: offset, source: ref slacks);
+            var held = Vector256.LoadUnsafe(elementOffset: offset, source: ref reaches);
+
+            framed |= counted;
+            Vector256.ConditionalSelect(condition: counted, left: Vector256.Min(left: slack, right: Vector256.LoadUnsafe(elementOffset: offset, source: ref slackOf)), right: slack).StoreUnsafe(destination: ref slacks, elementOffset: offset);
+            Vector256.ConditionalSelect(condition: counted, left: Vector256.Max(left: held, right: reach), right: held).StoreUnsafe(destination: ref reaches, elementOffset: offset);
+
+            // The answer read now, joined into the one the watch holds (JoinAnswer).
+            var answer = Vector256.ConditionalSelect(condition: Vector256.LoadUnsafe(elementOffset: offset, source: ref refusals).AsSingle(), left: one, right: zero);
+            var before = Vector256.LoadUnsafe(elementOffset: offset, source: ref answers);
+            var joined = Vector256.ConditionalSelect(condition: Vector256.LessThan(left: before, right: zero), left: answer, right: Vector256.ConditionalSelect(condition: Vector256.Equals(left: before, right: answer), left: before, right: mixed));
+
+            Vector256.ConditionalSelect(condition: counted, left: joined, right: before).StoreUnsafe(destination: ref answers, elementOffset: offset);
         }
 
-        return new Bounds(Beyond: beyond, Clearance: clearance, Focal: focal, Framed: framed);
+        return new Bounds(Beyond: Least(values: beyond), Clearance: Least(values: clearance), Focal: Least(values: focal), Framed: (framed != Vector256<float>.Zero));
+    }
+    // The least of a vector's lanes.
+    private static float Least(Vector256<float> values) {
+        var least = float.PositiveInfinity;
+
+        for (var lane = 0; (lane < Vector256<float>.Count); lane++) { least = MathF.Min(x: least, y: values.GetElement(index: lane)); }
+        return least;
     }
 
     // A frustum watch's fields, each FrustumStride long: each lane's shift and turn odometers when the watch was taken,
-    // and the box's slack toward that lane's frustum and reach from its eye (BoundsOf); a lane whose frustum cannot move
-    // the box's tier holds an infinite slack.
-    private const int WatchFields = 4;
+    // the box's slack toward that lane's frustum and reach from its eye (BoundsOf), and the frustum's answer then: one
+    // where it refused the box, zero where it may hold it, two where a shared geometry's copies stood either side, and
+    // below zero before any. A lane whose frustum cannot move the box's tier holds an infinite slack.
+    private const int WatchFields = 5;
+    private const float AnswerMixed = 2f;
 
     /// <summary>Begins a frustum watch: no lane's frustum can move the box's tier, so none is watched.</summary>
-    /// <param name="watch">The watch, <see cref="FrustumStride"/> times four values.</param>
+    /// <param name="watch">The watch, <see cref="FrustumStride"/> times five values.</param>
     public static void Unwatched(Span<float> watch) {
         var stride = (watch.Length / WatchFields);
 
         watch[..(2 * stride)].Clear();
         watch.Slice(start: (2 * stride), length: stride).Fill(value: float.PositiveInfinity);
         watch.Slice(start: (3 * stride), length: stride).Clear();
+        watch.Slice(start: (4 * stride), length: stride).Fill(value: -1f);
     }
+    // Joins a frustum's answer for one more box into the answer a watch holds for its lane.
+    private static float JoinAnswer(float held, float answer) => ((held < 0f) ? answer : ((held == answer) ? held : AnswerMixed));
     /// <summary>Takes a frustum watch whose slacks and reaches <see cref="BoundsOf"/> wrote: each lane's odometers as
     /// they stand, from which <see cref="Moves"/> reads how far each frustum moved since.</summary>
-    /// <param name="watch">The watch, <see cref="FrustumStride"/> times four values.</param>
-    /// <exception cref="ArgumentException"><paramref name="watch"/> is not four fields of the frustum stride.</exception>
+    /// <param name="watch">The watch, <see cref="FrustumStride"/> times five values.</param>
+    /// <exception cref="ArgumentException"><paramref name="watch"/> is not five fields of the frustum stride.</exception>
     public void Watch(Span<float> watch) {
         var stride = FrustumStride;
 
-        if (watch.Length != (WatchFields * stride)) { throw new ArgumentException(message: "A frustum watch holds four fields of the frustum stride.", paramName: nameof(watch)); }
+        if (watch.Length != (WatchFields * stride)) { throw new ArgumentException(message: "A frustum watch holds five fields of the frustum stride.", paramName: nameof(watch)); }
         m_laneShift.AsSpan(start: 0, length: stride).CopyTo(destination: watch);
         m_laneTurn.AsSpan(start: 0, length: stride).CopyTo(destination: watch[stride..]);
     }
@@ -678,12 +724,48 @@ public sealed class SdfMeshDemand {
         watch[(stride + lane)] = m_laneTurn[lane];
         watch[((2 * stride) + lane)] = MathF.Min(x: watch[((2 * stride) + lane)], y: slack);
         watch[((3 * stride) + lane)] = MathF.Max(x: watch[((3 * stride) + lane)], y: reach);
+        watch[((4 * stride) + lane)] = JoinAnswer(answer: 1f, held: watch[((4 * stride) + lane)]);
+    }
+    /// <summary>Renews each lane of a frustum watch whose frustum may have moved far enough to answer otherwise for its box
+    /// (<see cref="Moves"/>) where the frustum still answers as it did: its slack, reach and odometers are taken again from
+    /// where the box and the frustum stand now. While every frustum answers as when the box was measured, the box's pixel
+    /// stands on the same points, so only a lane whose answer changed asks for the box to be measured again.</summary>
+    /// <param name="watch">The watch, taken at this layout for one box, <see cref="WatchLength"/> values.</param>
+    /// <param name="center">The box's center, in world space.</param>
+    /// <param name="half">The box's half extents along the world axes, none negative.</param>
+    /// <returns><see langword="false"/> when a moved frustum answers otherwise, or the watch was taken over several
+    /// boxes, so the box must be measured again.</returns>
+    public bool Renew(Span<float> watch, Vector3 center, Vector3 half) {
+        var stride = FrustumStride;
+
+        if (watch.Length != (WatchFields * stride)) { return false; }
+
+        var read = Read(center: center, half: half);
+        var extent = ((half.X + half.Y) + half.Z);
+
+        for (var lane = 0; (lane < m_frustumLanes); lane++) {
+            var slack = watch[((2 * stride) + lane)];
+
+            if (!float.IsFinite(f: slack)) { continue; }
+
+            var shifted = (m_laneShift[lane] - watch[lane]);
+            var turned = (m_laneTurn[lane] - watch[(stride + lane)]);
+
+            if ((shifted + (turned * (watch[((3 * stride) + lane)] + shifted))) <= (slack * 0.999f)) { continue; }
+            if (watch[((4 * stride) + lane)] != ((read.Refused[lane] != 0) ? 1f : 0f)) { return false; }
+            watch[lane] = m_laneShift[lane];
+            watch[(stride + lane)] = m_laneTurn[lane];
+            watch[((2 * stride) + lane)] = read.Slack[lane];
+            watch[((3 * stride) + lane)] = (Vector3.Distance(value1: center, value2: m_points[read.Lanes!.Points[lane]]) + extent);
+        }
+
+        return true;
     }
     /// <summary>Carries a frustum watch taken at the layout before this one (<see cref="Layout"/>) into it: each lane that
     /// continues keeps its slack and reach in its new lane, its odometers read from where the lane stood when the layout
     /// changed; a lane whose point went or jumped is watched no more, since the change of points the bake reads then
     /// measures what that point could reach. A watch taken earlier than the layout before cannot be carried.</summary>
-    /// <param name="before">The watch at the layout before: four fields of that layout's stride.</param>
+    /// <param name="before">The watch at the layout before: five fields of that layout's stride.</param>
     /// <param name="after">Receives the watch at this layout, <see cref="WatchLength"/> values.</param>
     /// <returns><see langword="true"/> when a lane is still watched.</returns>
     public bool Carry(ReadOnlySpan<float> before, Span<float> after) {
@@ -700,6 +782,7 @@ public sealed class SdfMeshDemand {
             after[(stride + into)] = (before[(from + lane)] - m_layoutTurn[lane]);
             after[((2 * stride) + into)] = slack;
             after[((3 * stride) + into)] = before[((3 * from) + lane)];
+            after[((4 * stride) + into)] = before[((4 * from) + lane)];
             watched = true;
         }
 
@@ -709,14 +792,14 @@ public sealed class SdfMeshDemand {
     /// for its box: for each lane, the box moved by a distance, the lane's shift and its turn times the box's reach (with
     /// the shift and the distance added to it) reach the box's slack toward that frustum. Read each frame, so no answer
     /// changes on a frame this answers no.</summary>
-    /// <param name="watch">The watch, taken at this layout, <see cref="FrustumStride"/> times four values.</param>
+    /// <param name="watch">The watch, taken at this layout, <see cref="FrustumStride"/> times five values.</param>
     /// <param name="metres">The distance, in metres, the box has moved since the watch was taken; zero for none.</param>
     /// <returns><see langword="true"/> when the box must be measured again.</returns>
-    /// <exception cref="ArgumentException"><paramref name="watch"/> is not four fields of the frustum stride.</exception>
+    /// <exception cref="ArgumentException"><paramref name="watch"/> is not five fields of the frustum stride.</exception>
     public bool Moves(ReadOnlySpan<float> watch, float metres) {
         var stride = FrustumStride;
 
-        if (watch.Length != (WatchFields * stride)) { throw new ArgumentException(message: "A frustum watch holds four fields of the frustum stride.", paramName: nameof(watch)); }
+        if (watch.Length != (WatchFields * stride)) { throw new ArgumentException(message: "A frustum watch holds five fields of the frustum stride.", paramName: nameof(watch)); }
 
         var moved = Vector256.Create(value: metres);
         var margin = Vector256.Create(value: 0.999f);
@@ -737,77 +820,98 @@ public sealed class SdfMeshDemand {
         return false;
     }
 
-    // The points in lanes, a vector's worth at a time: each point's eye and pixels a metre, and its frustum's near plane
-    // and four sides widened by WithinViewMargin (CameraSnapshot.BoundingPlanes), PlaneLanes lanes a plane in their
-    // order (the unit normal's three, its offset, and the normal's three magnitudes). An unframed point's planes hold
-    // every box. Built whole each time the points change, into new arrays when they outgrow the old, so a reader on
-    // another thread indexes only arrays as long as the stride it read.
+    // The points in lanes, a vector's worth at a time: first the points bounded to their views, in their order, each at
+    // its frustum lane (LaneOf), padded to whole vectors (FrustumStride), then the rest, padded too. Each lane holds its
+    // point (-1 for a pad), whether a point stands there, its eye and pixels a metre, and its frustum's near plane and
+    // four sides widened by WithinViewMargin (CameraSnapshot.BoundingPlanes), PlaneLanes lanes a plane in their order
+    // (the unit normal's three, its offset, and the normal's three magnitudes). An unframed point's planes hold every
+    // box and a pad's refuse it, and a pad's pixel is infinite. Built whole each time the points change, into new arrays
+    // when they outgrow the old, so a reader on another thread indexes only arrays as long as the stride it read.
     private const int PlaneLanes = 7;
     private sealed class PointLanes(int capacity) {
+        public readonly int[] Points = new int[capacity];
+        public readonly int[] Real = new int[capacity];
         public readonly float[] X = new float[capacity];
         public readonly float[] Y = new float[capacity];
         public readonly float[] Z = new float[capacity];
         public readonly float[] Focal = new float[capacity];
         public readonly float[] Planes = new float[(capacity * CameraSnapshot.BoundingPlaneCount * PlaneLanes)];
+        public int Framed;
         public int Stride;
 
         public int Capacity => X.Length;
     }
     // Lays the points out in lanes after they change.
     private void Lanes() {
-        var stride = ((Count + (Vector256<float>.Count - 1)) & ~(Vector256<float>.Count - 1));
+        var framedStride = FrustumStride;
+        var rest = 0;
+
+        for (var index = 0; (index < Count); index++) {
+            if (m_laneOf[index] < 0) { rest++; }
+        }
+
+        var stride = (framedStride + ((rest + (Vector256<float>.Count - 1)) & ~(Vector256<float>.Count - 1)));
         var lanes = m_lanes;
 
         if (lanes.Capacity < stride) { lanes = new PointLanes(capacity: ArrayCapacity.Grown(lanes.Capacity, stride)); }
+        lanes.Points.AsSpan(start: 0, length: stride).Fill(value: -1);
+
+        var next = framedStride;
+
+        for (var index = 0; (index < Count); index++) { lanes.Points[((m_laneOf[index] is >= 0 and var lane) ? lane : next++)] = index; }
 
         Span<Vector4> planes = stackalloc Vector4[CameraSnapshot.BoundingPlaneCount];
         var width = lanes.Capacity;
 
-        for (var index = 0; (index < stride); index++) {
-            var point = (index < Count);
+        for (var at = 0; (at < stride); at++) {
+            var index = lanes.Points[at];
+            var point = (index >= 0);
 
-            lanes.X[index] = (point ? m_points[index].X : 0f);
-            lanes.Y[index] = (point ? m_points[index].Y : 0f);
-            lanes.Z[index] = (point ? m_points[index].Z : 0f);
-            lanes.Focal[index] = (point ? m_focal[index] : 1f);
+            lanes.Real[at] = (point ? -1 : 0);
+            lanes.X[at] = (point ? m_points[index].X : 0f);
+            lanes.Y[at] = (point ? m_points[index].Y : 0f);
+            lanes.Z[at] = (point ? m_points[index].Z : 0f);
+            lanes.Focal[at] = (point ? m_focal[index] : 0f);
             if (point && m_framed[index]) {
                 m_cameras[index].BoundingPlanes(margin: WithinViewMargin, planes: planes);
             } else {
-                planes.Fill(value: new Vector4(x: 0f, y: 0f, z: 0f, w: -1f));
+                planes.Fill(value: new Vector4(x: 0f, y: 0f, z: 0f, w: (point ? -1f : 1f)));
             }
             for (var plane = 0; (plane < CameraSnapshot.BoundingPlaneCount); plane++) {
-                var at = ((plane * PlaneLanes * width) + index);
+                var lane = ((plane * PlaneLanes * width) + at);
                 var (normal, offset) = (new Vector3(x: planes[plane].X, y: planes[plane].Y, z: planes[plane].Z), planes[plane].W);
 
-                lanes.Planes[at] = normal.X;
-                lanes.Planes[(at + width)] = normal.Y;
-                lanes.Planes[(at + (2 * width))] = normal.Z;
-                lanes.Planes[(at + (3 * width))] = offset;
-                lanes.Planes[(at + (4 * width))] = MathF.Abs(x: normal.X);
-                lanes.Planes[(at + (5 * width))] = MathF.Abs(x: normal.Y);
-                lanes.Planes[(at + (6 * width))] = MathF.Abs(x: normal.Z);
+                lanes.Planes[lane] = normal.X;
+                lanes.Planes[(lane + width)] = normal.Y;
+                lanes.Planes[(lane + (2 * width))] = normal.Z;
+                lanes.Planes[(lane + (3 * width))] = offset;
+                lanes.Planes[(lane + (4 * width))] = MathF.Abs(x: normal.X);
+                lanes.Planes[(lane + (5 * width))] = MathF.Abs(x: normal.Y);
+                lanes.Planes[(lane + (6 * width))] = MathF.Abs(x: normal.Z);
             }
         }
+        lanes.Framed = framedStride;
         lanes.Stride = stride;
         m_lanes = lanes;
         m_version++;
     }
 
-    // One box read against every point (Read): each point's pixel there, as PixelAt measures it, and its frustum's answer,
-    // whether it refuses the box and how far the box may move before the answer changes (CameraSnapshot.FrustumSlack),
-    // with the demand, its points' version and the box it was read for. Each thread keeps its own, a few boxes by their
+    // One box read against every point (Read), by lane: each point's pixel there, the pixel it demands the box at (its
+    // pixel, or infinity for a point bounded to its view whose frustum refuses the box), and its frustum's answer, whether
+    // it refuses the box and how far the box may move before the answer changes (CameraSnapshot.FrustumSlack), with the
+    // lanes, the demand, its points' version and the box it was read for. Each thread keeps its own, a few boxes by their
     // hash, so a diagnostic reading on its own thread keeps no measure's read from it, and a measure of a shared
     // geometry reads each copy once for its pixel and its bounds.
     private sealed class BoxRead {
         public float[] Pixel = [];
+        public float[] Demanded = [];
         public float[] Slack = [];
         public int[] Refused = [];
+        public PointLanes? Lanes;
         public SdfMeshDemand? Demand;
         public long Version;
         public Vector3 Center;
         public Vector3 Half;
-
-        public bool Refuses(int index) => (Refused[index] != 0);
     }
     [ThreadStatic] private static BoxRead[]? ThreadReads;
     private const int KeptReads = 32;
@@ -832,6 +936,7 @@ public sealed class SdfMeshDemand {
 
         if (read.Pixel.Length < stride) {
             read.Pixel = new float[width];
+            read.Demanded = new float[width];
             read.Slack = new float[width];
             read.Refused = new int[width];
         }
@@ -846,7 +951,9 @@ public sealed class SdfMeshDemand {
         ref var focal = ref MemoryMarshal.GetArrayDataReference(array: lanes.Focal);
         ref var planes = ref MemoryMarshal.GetArrayDataReference(array: lanes.Planes);
         ref var pixels = ref MemoryMarshal.GetArrayDataReference(array: read.Pixel);
+        ref var demanded = ref MemoryMarshal.GetArrayDataReference(array: read.Demanded);
         ref var slacks = ref MemoryMarshal.GetArrayDataReference(array: read.Slack);
+        var framed = lanes.Framed;
         ref var refusals = ref MemoryMarshal.GetArrayDataReference(array: read.Refused);
 
         for (var at = 0; (at < stride); at += Vector256<float>.Count) {
@@ -858,8 +965,9 @@ public sealed class SdfMeshDemand {
             var refused = Vector256<float>.Zero;
             var inside = infinity;
             var outside = Vector256<float>.Zero;
+            var pixel = (Vector256.Max(left: near, right: distance) / Vector256.LoadUnsafe(elementOffset: offset, source: ref focal));
 
-            (Vector256.Max(left: near, right: distance) / Vector256.LoadUnsafe(elementOffset: offset, source: ref focal)).StoreUnsafe(destination: ref pixels, elementOffset: offset);
+            pixel.StoreUnsafe(destination: ref pixels, elementOffset: offset);
             for (var plane = 0; (plane < CameraSnapshot.BoundingPlaneCount); plane++) {
                 ref var lane = ref Unsafe.Add(source: ref planes, elementOffset: ((nuint)((plane * PlaneLanes * width) + at)));
                 var centerSide = ((((Vector256.LoadUnsafe(source: ref lane) * cx) + (Vector256.LoadUnsafe(elementOffset: ((nuint)width), source: ref lane) * cy)) + (Vector256.LoadUnsafe(elementOffset: ((nuint)(2 * width)), source: ref lane) * cz)) + Vector256.LoadUnsafe(elementOffset: ((nuint)(3 * width)), source: ref lane));
@@ -875,8 +983,9 @@ public sealed class SdfMeshDemand {
             // A refused box is held again once it lies past no plane; a held one is refused once it lies past any.
             Vector256.ConditionalSelect(condition: refused, left: outside, right: inside).StoreUnsafe(destination: ref slacks, elementOffset: offset);
             refused.AsInt32().StoreUnsafe(destination: ref refusals, elementOffset: offset);
+            (((at < framed) ? Vector256.ConditionalSelect(condition: refused, left: infinity, right: pixel) : pixel)).StoreUnsafe(destination: ref demanded, elementOffset: offset);
         }
-        (read.Demand, read.Version, read.Center, read.Half) = (this, version, center, half);
+        (read.Lanes, read.Demand, read.Version, read.Center, read.Half) = (lanes, this, version, center, half);
         return read;
     }
     private static BoxRead[] NewReads() {
