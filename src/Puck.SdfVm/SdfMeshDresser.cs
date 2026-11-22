@@ -56,6 +56,9 @@ public sealed class SdfMeshDresser : IDisposable {
     private bool m_faultThisDress;
     private SdfDressedPickMap? m_map;
     private long m_skipHostThrough;
+    // One past the highest slot a group binding rides (DrawBinding.Slot): a moved slot at or past it (a rigid copy's root,
+    // which no group binding names) poses no row, so the slot walk stops there.
+    private int m_slotEnd;
 
     /// <summary>Creates a dresser and its private write capability.</summary>
     public SdfMeshDresser(SdfMeshPathBake bake) {
@@ -165,7 +168,9 @@ public sealed class SdfMeshDresser : IDisposable {
             for (var row = 0; (row < m_bindings.Length); row++) { if (m_bindings[row] is not null) { m_candidates.Add(length: 1, start: row); } }
         }
         for (var run = 0; (run < m_slots.Count); run++) {
-            for (var slot = m_slots.Start(index: run); (slot < (m_slots.Start(index: run) + m_slots.Length(index: run))); slot++) { AddCandidates(key: (false, slot)); }
+            var end = Math.Min(val1: (m_slots.Start(index: run) + m_slots.Length(index: run)), val2: m_slotEnd);
+
+            for (var slot = m_slots.Start(index: run); (slot < end); slot++) { AddCandidates(key: (false, slot)); }
         }
         for (var run = 0; (run < m_copyRuns.Count); run++) {
             for (var i = m_copyRuns.Start(index: run); (i < (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run))); i++) {
@@ -175,12 +180,13 @@ public sealed class SdfMeshDresser : IDisposable {
         for (var r = 0; (r < m_candidates.Count); r++) {
             for (var row = m_candidates.Start(index: r); (row < (m_candidates.Start(index: r) + m_candidates.Length(index: r))); row++) {
                 if ((row >= m_bindings.Length) || (m_bindings[row] is not { } binding)) { continue; }
-                var draw = binding.Pose(frame: frame, matrices: ref matrices);
+                visited++;
+                // A draw placed by its slot whose slot only moved poses as it did: its row stands, and the kernels and
+                // every CPU reader place it from the slot's row (SdfMeshDraw.PlacementIn).
+                if (!binding.Repose(frame: frame, matrices: ref matrices, draw: out var draw) && !programChanged) { continue; }
 
                 var (run, offset) = BindingRun(row: row);
                 Write(run, offset, draw, OwnerOf(binding: binding));
-                IndexBinding(binding: binding, row: row);
-                visited++;
             }
         }
         m_writer.SetClips(clips: frame.SlotClips);
@@ -312,7 +318,7 @@ public sealed class SdfMeshDresser : IDisposable {
     private void StartOver() {
         m_writer.StartOver();
         m_groups.Clear(); m_own.Clear(); m_bindingsByOwner.Clear(); Array.Clear(array: m_bindings);
-        m_host = default; m_program = null; m_layout = -1; m_product = -1;
+        m_host = default; m_program = null; m_layout = -1; m_product = -1; m_slotEnd = 0;
     }
     private void RemoveBindings(SdfMeshRows.Run run) {
         for (var row = run.Start; (row < (run.Start + run.Count)); row++) { if (row < m_bindings.Length) { m_bindings[row] = null; m_bindingsByOwner.Remove(row: row); } }
@@ -324,12 +330,13 @@ public sealed class SdfMeshDresser : IDisposable {
         m_bindings[row] = binding;
         binding.Run = run;
         IndexBinding(binding: binding, row: row);
-        Write(run, offset, binding.Pose(frame: frame, matrices: ref matrices), OwnerOf(binding: binding));
+        _ = binding.Repose(frame: frame, matrices: ref matrices, draw: out var draw);
+        Write(run, offset, draw, OwnerOf(binding: binding));
     }
     private static SdfMeshRows.Owner OwnerOf(DrawBinding binding) => new(Instance: binding.FirstInstance, RigidCopy: (binding.CopyIndex >= 0));
     private void IndexBinding(int row, DrawBinding binding) {
         m_bindingsByOwner.Remove(row: row);
-        if (binding.CopyIndex >= 0) { m_bindingsByOwner.Set(row, (true, binding.CopyIndex)); } else if (binding.Slot is { } slot) { m_bindingsByOwner.Set(key: (false, slot), row: row); }
+        if (binding.CopyIndex >= 0) { m_bindingsByOwner.Set(row, (true, binding.CopyIndex)); } else if (binding.Slot is { } slot) { m_bindingsByOwner.Set(key: (false, slot), row: row); m_slotEnd = Math.Max(val1: m_slotEnd, val2: (slot + 1)); }
     }
     private void AddCandidates((bool Copy, int Index) key) {
         for (var row = m_bindingsByOwner.First(key: key); (row >= 0); row = m_bindingsByOwner.Next(row: row)) { m_candidates.Add(length: 1, start: row); }
@@ -346,10 +353,10 @@ public sealed class SdfMeshDresser : IDisposable {
             var copies = access.CopiesOf(group: group);
 
             for (var c = 0; (c < (copies?.Count ?? 1)); c++) {
-                for (var p = 0; (p < mesh.PieceCount); p++) { expected.Add(item: new DrawBinding(mesh.Piece(index: p), group, ((copies is null) ? -1 : copies[c]), ((copies is null) && (mesh.Chunks.Count > 0)), access.TierOf(group: group), access.TraceOf(group: group), p).Pose(frame: frame, matrices: ref matrices)); }
+                for (var p = 0; (p < mesh.PieceCount); p++) { _ = new DrawBinding(mesh.Piece(index: p), group, ((copies is null) ? -1 : copies[c]), ((copies is null) && (mesh.Chunks.Count > 0)), access.TierOf(group: group), access.TraceOf(group: group), p).Repose(frame: frame, matrices: ref matrices, draw: out var draw); expected.Add(item: draw); }
             }
         }
-        for (var i = 0; (i < frame.MeshInstances.Count); i++) { if (frame.MeshInstances[i].Mesh is { } mesh) { expected.Add(item: new DrawBinding(mesh, null, i).Pose(frame: frame, matrices: ref matrices)); } }
+        for (var i = 0; (i < frame.MeshInstances.Count); i++) { if (frame.MeshInstances[i].Mesh is { } mesh) { _ = new DrawBinding(mesh, null, i).Repose(frame: frame, matrices: ref matrices, draw: out var draw); expected.Add(item: draw); } }
         SdfSlotClip.Apply(expected, frame.SlotClips);
         foreach (var (row, draw) in m_rows.Live()) {
             var at = expected.FindIndex(match: candidate => candidate.SameStagedContent(other: in draw));
@@ -364,7 +371,9 @@ public sealed class SdfMeshDresser : IDisposable {
     public void Dispose() { if (m_disposed) { return; } m_disposed = true; StartOver(); }
 
     // A row's draw: one piece of a group's mesh, or a copy's own mesh, the tier the group's drawn mesh was baked at, and
-    // the mesh the irradiance volume traces in the placement's place with the piece the row draws.
+    // the mesh the irradiance volume traces in the placement's place with the piece the row draws. A moving group's and a
+    // moving copy's draws are placed by their slots (SdfMeshDraw.PlacedBySlot): the draw keeps their scale, so the slot
+    // moving leaves it standing.
     private sealed class DrawBinding(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false, int tier = -1, SdfMesh? trace = null, int piece = 0) {
         private object? m_motionSource;
         private object? m_motionIdentity;
@@ -373,17 +382,7 @@ public sealed class SdfMeshDresser : IDisposable {
         private SdfMeshCopySurface? m_pickIdentity;
         private SdfMeshDraw m_draw;
         private bool m_posed;
-        private Vector3 m_position;
-
-        private Quaternion m_orientation = Quaternion.Identity;
         private float m_scale = 1f;
-
-        private (Vector3 Position, Quaternion Orientation, float Scale) PoseOf(SdfFrame frame) {
-            if ((group is not { Dynamic: true }) || (group.Slot >= frame.DynamicTransforms.Count)) { return (m_position, m_orientation, m_scale); }
-            var transform = frame.DynamicTransforms[group.Slot];
-
-            return (transform.Position, transform.Orientation, SdfMeshGeometryBuilder.UnitsOf(transform: transform));
-        }
 
         public SdfMeshRows.Run Run;
 
@@ -391,12 +390,18 @@ public sealed class SdfMeshDresser : IDisposable {
         public int FirstInstance => (group?.FirstInstance ?? -1);
         public int? Slot => ((group is { Dynamic: true }) ? group.Slot : null);
 
-        public SdfMeshDraw Pose(SdfFrame frame, ref int matrices) {
+        // Poses the row's draw for the frame, answering whether it differs from the draw last posed. A copy's draw changes
+        // only with the copy's revision, which a moving copy's pose leaves standing (SdfMeshInstance.Revision), and a
+        // moving group's only with its slot's scale.
+        public bool Repose(SdfFrame frame, ref int matrices, out SdfMeshDraw draw) {
             if (copyIndex >= 0) {
                 var copy = frame.MeshInstances[copyIndex];
                 var firstInstance = (group?.FirstInstance ?? -1);
 
-                if (ReferenceEquals(objA: copy, objB: m_copy) && (m_copyRevision == copy.Revision) && (m_draw.FrameSlot == copy.FrameSlot) && (m_pickIdentity?.FirstInstance == firstInstance)) { return m_draw; }
+                if (ReferenceEquals(objA: copy, objB: m_copy) && (m_copyRevision == copy.Revision) && (m_draw.FrameSlot == copy.FrameSlot) && (m_pickIdentity?.FirstInstance == firstInstance)) {
+                    draw = m_draw;
+                    return false;
+                }
                 m_copy = copy;
                 m_copyRevision = copy.Revision;
                 if ((m_pickIdentity is null) || !Equals(objA: m_pickIdentity.Identity, objB: copy.Identity) || (m_pickIdentity.FirstInstance != firstInstance)) {
@@ -409,8 +414,8 @@ public sealed class SdfMeshDresser : IDisposable {
                     m_motionIdentity = ((source, (((object?)group?.Selector) ?? "mesh")));
                 }
                 matrices++;
-                return m_draw = new SdfMeshDraw(Identity: m_pickIdentity, Material: ((group is null) ? copy.Material : 0),
-                    Mesh: ((group is null) ? copy.Mesh! : mesh), ObjectToWorld: copy.Matrix) {
+                draw = m_draw = new SdfMeshDraw(identity: m_pickIdentity, material: ((group is null) ? copy.Material : 0),
+                    mesh: ((group is null) ? copy.Mesh! : mesh), objectToWorld: copy.Matrix) {
                     FrameSlot = copy.FrameSlot,
                     Glass = (group?.Glass ?? false),
                     IsDynamic = copy.IsDynamic,
@@ -420,20 +425,20 @@ public sealed class SdfMeshDresser : IDisposable {
                     Trace = trace,
                     UsesRootMaterialFrame = copy.UsesRootMaterialFrame,
                 };
+                return true;
             }
-            var (position, orientation, scale) = PoseOf(frame: frame);
-            if (m_posed && (m_position == position) && (m_orientation == orientation) && (m_scale == scale) && (m_draw.FrameSlot == (group!.Dynamic ? group.Slot : null)) && (m_draw.Glass == group.Glass) && (m_draw.Displacement == group.Displacement)) { return m_draw; }
-            m_position = position;
-            m_orientation = orientation;
+            var scale = (((group!.Dynamic) && (group.Slot < frame.DynamicTransforms.Count)) ? SdfMeshGeometryBuilder.UnitsOf(transform: frame.DynamicTransforms[group.Slot]) : m_scale);
+
+            if (m_posed && (m_scale == scale) && (m_draw.FrameSlot == (group.Dynamic ? group.Slot : null)) && (m_draw.Glass == group.Glass) && (m_draw.Displacement == group.Displacement)) {
+                draw = m_draw;
+                return false;
+            }
             m_scale = scale;
             m_posed = true;
-            if (group!.Dynamic) { matrices++; }
-            var matrix = (group.Dynamic
-                ? ((Matrix4x4.CreateScale(scale: scale) * Matrix4x4.CreateFromQuaternion(quaternion: orientation)) * Matrix4x4.CreateTranslation(position: position))
-                : Matrix4x4.Identity);
+            if (group.Dynamic) { matrices++; }
 
-            return m_draw = new SdfMeshDraw(Identity: (chunked ? mesh : group), Material: 0, Mesh: mesh,
-                ObjectToWorld: matrix) {
+            draw = m_draw = new SdfMeshDraw(identity: (chunked ? mesh : group), material: 0, mesh: mesh,
+                objectToWorld: (group.Dynamic ? Matrix4x4.CreateScale(scale: scale) : Matrix4x4.Identity)) {
                 FrameSlot = (group.Dynamic ? group.Slot : null),
                 Glass = group.Glass,
                 // A displaced surface is never static (SdfMeshDraw.IsStatic), whatever its placement does.
@@ -443,9 +448,8 @@ public sealed class SdfMeshDresser : IDisposable {
                 Tier = tier,
                 Trace = trace,
             };
+            return true;
         }
     }
 
 }
-
-
