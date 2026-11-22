@@ -1003,11 +1003,12 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     // Writes, once per slot, every storage the pass's ports bind at the member its access reads or writes it through, the
     // world's shared shadow layers (SdfWorldShadows) at theirs, and the tables' dummy and fillers at every member nothing
     // binds. The storages a slot resolves stay the instance's for the recorder's life; the shadow layers are written again
-    // whenever the shadows allocate anew (SdfWorldShadows.BindingRevision).
+    // whenever the shadows allocate anew or the view reads another anchor (SdfWorldShadows.BindingRevisionOf).
     private void BindPorts(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var slot = recording.Slot;
         var shadows = tables.Shadows;
-        var shadowRevision = (shadows?.BindingRevision ?? -1L);
+        var view = m_view.View;
+        var shadowRevision = (shadows?.BindingRevisionOf(view: view) ?? -1L);
 
         if (ReferenceEquals(objA: m_portTables[slot], objB: tables) && (m_portShadows[slot] == shadowRevision)) {
             return;
@@ -1051,7 +1052,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             }
         }
         foreach (var (entry, member) in OpticalBindings) {
-            if (shadows?.OpticalOf(entry: entry) is { } optical) {
+            if (shadows?.OpticalOf(view: view, entry: entry) is { } optical) {
                 tables.WriteInterfaceBuffer(buffer: optical, layout: layout, member: member, set: set);
             }
         }
@@ -1075,7 +1076,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         );
         foreach (var (entry, exit, binding) in CascadeBindings) {
             bindings.WriteSampledImage(arrayElement: 0, binding: binding, descriptorSetHandle: set,
-                imageViewHandle: (shadows?.ViewOf(entry: entry, exit: exit, filler: tables.SampledFiller.ImageViewHandle) ?? tables.SampledFiller.ImageViewHandle));
+                imageViewHandle: (shadows?.ViewOf(view: view, entry: entry, exit: exit, filler: tables.SampledFiller.ImageViewHandle) ?? tables.SampledFiller.ImageViewHandle));
         }
         Array.Clear(array: m_screens[slot]);
     }

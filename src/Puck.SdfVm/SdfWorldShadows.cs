@@ -8,16 +8,21 @@ namespace Puck.SdfVm;
 /// <summary>
 /// A world's one shadow solution, which every view of its residency reads and none draws: the cascade set's entries
 /// (<see cref="SdfMeshShadowCascades"/>) kept as layers the residency's upload draws, ahead of every view's submission, so a
-/// world shown on three screens and a painting pays for its shadows once.
-/// <para>Each entry is anchored to the world (eye-centred on the residency's first view and snapped to a cell of an eighth
-/// of its reach) and is cached: its layers are drawn whole only when the light turns past the entry's tolerance, the eye
-/// crosses into another cell, the entry's texels change or a static draw changes
-/// (<see cref="SdfWorldTables.StaticDrawRevision"/>), a redraw spread over several frames into a back layer where the
-/// authored rate asks. Between redraws the near, far and secondary entries follow what moves by rectangles: every draw
-/// record a staging changes reports the box it held and the box it holds (<see cref="Moved"/>), each entry projects those
-/// boxes into its texels and merges them into at most <see cref="MaxRectangles"/> rectangles, and the upload clears and
-/// draws every caster inside each rectangle again through a viewport of its own. A still world draws nothing; a walking
-/// player costs the rectangles its body's shadow sweeps. The distant entry holds the static scene alone.</para>
+/// world shown on many screens pays for each place's shadows once, however many views look at it.
+/// <para>The entries are anchored to the world, never to the way a camera faces: the near, far and secondary entries are
+/// held by anchors, each eye-centred on one view and snapped to cells of an eighth of each entry's reach, and every view of
+/// the world reads the anchor whose near cell holds its eye, a view in a cell no anchor holds taking one of its own, up to
+/// <see cref="MaxAnchors"/>, past which it reads the anchor nearest it. The distant entry is one for the world, centred on
+/// its first shadowed view: its reach spans a place of a kilometre and more from anywhere in it.</para>
+/// <para>Every entry is cached: its layers are drawn whole only when the light turns past the entry's tolerance, its eye
+/// crosses into another cell, its texels change or a static draw changes (<see cref="SdfWorldTables.StaticDrawRevision"/>),
+/// a redraw spread over several frames into a back layer where the authored rate asks. Between redraws the near, far and
+/// secondary entries follow what moves by rectangles: every draw record a staging changes reports the box it held and the
+/// box it holds (<see cref="Moved"/>), each entry judges the caster against where it last drew it and, once it has moved a
+/// texel of that entry's, owes the rectangles where it was and where it is, merged into at most
+/// <see cref="MaxRectangles"/>; the upload clears and draws every caster inside each rectangle again through a viewport of
+/// its own. A still world draws nothing; a walking player costs the rectangles its body's shadow sweeps; a grass blade
+/// swaying less than a texel costs nothing. The distant entry holds the static scene alone.</para>
 /// <para>Invariant: a layer is read only through the camera it was drawn from. One door enforces it: <see cref="Decide"/>
 /// chooses every entry's work for the upload about to be submitted and the cameras readers read after it,
 /// <see cref="Record"/> draws exactly that work into the upload's command buffer, which the residency submits ahead of every
@@ -26,13 +31,19 @@ namespace Puck.SdfVm;
 /// attachment layout and back, so a view's submission samples them without a transition of its own.</para>
 /// </summary>
 internal sealed class SdfWorldShadows : IDisposable {
+    /// <summary>The most anchors one world holds: the places its views look at that each hold near, far and secondary
+    /// entries of their own.</summary>
+    public const int MaxAnchors = 8;
     /// <summary>The most rectangles one entry redraws in one upload; more moved boxes merge into these.</summary>
     public const int MaxRectangles = 4;
+    /// <summary>The distance, in an entry's texels, a caster moves across the entry's plane or along its light before the
+    /// entry draws it again: below a texel its shadow cannot be told from the one the entry holds.</summary>
+    public const float MoveTexels = 1f;
+    // The uploads an anchor no view reads is kept for, so a view that leaves and comes back finds its layers.
+    private const ulong AnchorKeptUploads = 240;
     // The texels a moved box's footprint is widened by on each side: rasterization covers a pixel whose centre a triangle
     // holds, and the bake's coarser levels stand a little proud of the box.
     private const int RectanglePad = 2;
-    // The most moved boxes one upload keeps; past it every entry that follows motion redraws whole.
-    private const int MaxMoved = 8192;
     // The drawings an entry may record: its whole layer (a redraw or a share of one), its glass extinction, and one per
     // rectangle.
     private const int WholeKind = 0;
@@ -53,14 +64,11 @@ internal sealed class SdfWorldShadows : IDisposable {
 
     private readonly SdfWorldTables m_tables;
     private readonly GpuDeviceServices m_gpu;
-    private readonly Entry[] m_entries;
-    private readonly nint m_pool;
+    private readonly List<Anchor> m_anchors = [];
+    private readonly Entry m_distant;
     private readonly IGpuBuffer m_counters;
     private readonly IGpuRenderPass m_loadPass;
     private readonly byte[] m_block = new byte[SdfFrameBlock.SizeBytes];
-    // The boxes the stagings since the last decision moved, and whether a change no box bounds moved anything.
-    private readonly List<SdfMeshBox> m_moved = [];
-    private bool m_movedAll;
     private bool m_disposed;
 
     // The decision for the upload about to be submitted (Decide): the frame it was made for, whether it stands, and
@@ -69,13 +77,18 @@ internal sealed class SdfWorldShadows : IDisposable {
     private bool m_decided;
     private bool m_frozen;
     private ulong m_uploads;
-    private SdfMeshShadowCascades m_readers;
+    // Each view's anchor, -1 for none, and the cascade set it reads; the cascade set of a view with no anchor is empty.
+    private int[] m_viewAnchors = [];
+    private SdfMeshShadowCascades[] m_viewReaders = [];
     private long m_contentRevision;
     private long m_bindingRevision;
+    // What the stagings reported, for the report: the changes judged and the changes no box bounds.
+    private long m_movedChanges;
+    private long m_movedUnbounded;
 
-    /// <summary>Initializes a new instance of the <see cref="SdfWorldShadows"/> class: its descriptor pool, its sets and
-    /// pass blocks for every entry, drawing and upload ring slot, and each entry's selections; its layers are allocated when
-    /// an entry is first drawn.</summary>
+    /// <summary>Initializes a new instance of the <see cref="SdfWorldShadows"/> class: the distant entry, the timestamps the
+    /// upload's shadow work is measured by, and the render pass that loads a layer; anchors are made as views need them, and
+    /// layers when an entry is first drawn.</summary>
     /// <param name="tables">The tables whose upload draws the layers, whose device creates them and whose pipelines draw.</param>
     /// <param name="gpu">The tables' counted device services.</param>
     internal SdfWorldShadows(SdfWorldTables tables, GpuDeviceServices gpu) {
@@ -83,30 +96,21 @@ internal sealed class SdfWorldShadows : IDisposable {
         m_gpu = gpu;
 
         var ring = SdfWorldTables.FrameRingSize;
-        var sets = (SdfMeshShadowCascades.MaxEntries * Kinds * ring);
-        var sizes = default(GpuDescriptorPoolSizes);
-
-        for (var set = 0; (set < sets); set++) {
-            // A mesh set and its two selection sets, and a glass extinction set beside each.
-            sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.Mesh.Groups);
-            sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.Mesh.Groups);
-            for (var phase = 0; (phase < OcclusionSets); phase++) {
-                sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.MeshOcclusion.Groups);
-            }
-        }
 
         using var scope = new GpuCreationScope();
 
-        m_pool = scope.Own(handle: gpu.Bindings.CreatePool(name: Name(part: "descriptors"), sizes: sizes), release: gpu.Bindings.DestroyPool);
         // The work counters the shadow pipelines bind; every block disables counting (GpuKernelCounters.DisabledRow), so
         // they are never written.
         m_counters = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "counters"), sizeBytes: 256, usage: GpuBufferUsage.Storage));
         m_loadPass = scope.Own(created: gpu.RenderPassFactory.Create(
             description: SdfMeshRasterPass.ShadowRenderPass with { Depth = SdfWorldPackage.MeshShadowDepthAttachment with { Load = GpuAttachmentLoad.Load } },
             name: Name(part: "retained depth")));
-        m_entries = new Entry[SdfMeshShadowCascades.MaxEntries];
-        for (var index = 0; (index < m_entries.Length); index++) {
-            m_entries[index] = scope.Own(created: new Entry(index: index, owner: this, ring: ring));
+        m_distant = scope.Own(created: new Entry(index: SdfMeshShadowCascades.DistantEntry, owner: this, ring: ring, anchor: 0));
+        m_timestamps = ((gpu.TimestampFactory?.Create(count: (uint)(2 * ring), name: Name(part: "timestamps")) is { } pool) ? scope.Own(created: pool) : null);
+        m_times = new IGpuReadbackBuffer[ring];
+        m_timed = new bool[ring];
+        for (var slot = 0; (slot < ring); slot++) {
+            m_times[slot] = scope.Own(created: gpu.BufferFactory.CreateReadback(name: Name(part: "times", index: slot), sizeBytes: (2 * sizeof(ulong))));
         }
         scope.Complete();
     }
@@ -115,52 +119,72 @@ internal sealed class SdfWorldShadows : IDisposable {
     /// redraw or redraws a rectangle, so a pass that samples them folds it into its signature and renders again exactly when
     /// what it would read changes.</summary>
     public long ContentRevision => m_contentRevision;
-    /// <summary>Gets the revision of the images and buffers the layers are held in: one more for every allocation, so a
-    /// view's pass set writes them again before it binds them.</summary>
-    public long BindingRevision => m_bindingRevision;
 
-    /// <summary>Returns the cascade set a view of the frame reads: the world's set, each entry through the camera its layers
-    /// were drawn from, or none for a view that skips shadows.</summary>
+    /// <summary>Returns the cascade set a view of the frame reads: the entries of its anchor and the world's distant entry,
+    /// each through the camera its layers were drawn from, or none for a view that skips shadows.</summary>
     /// <param name="frame">The frame the tables hold.</param>
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>
     /// <returns>The set.</returns>
     public SdfMeshShadowCascades CascadesOf(SdfFrame frame, int view) {
         ArgumentNullException.ThrowIfNull(argument: frame);
-
-        if ((frame.Views.Count == 0) || frame.Views[Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1))].Quality.DisableSoftShadows) {
-            return default;
-        }
-
         Decide(frame: frame);
 
-        return m_readers;
+        return (((view >= 0) && (view < m_viewReaders.Length)) ? m_viewReaders[view] : default);
     }
+    /// <summary>Returns the revision of the images and buffers a view's pass binds: one more for every allocation, and
+    /// another whenever the view reads another anchor, so the view's pass set writes them again before it binds them.</summary>
+    /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>
+    /// <returns>The revision.</returns>
+    public long BindingRevisionOf(int view) => ((m_bindingRevision << 8) | (long)(AnchorOf(view: view) + 1));
     /// <summary>Returns the image view a view's pass samples at one of the layers' bindings, or <paramref name="filler"/>
     /// for a layer that is not allocated.</summary>
+    /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>
     /// <param name="entry">The entry, from zero below <see cref="SdfMeshShadowCascades.MaxEntries"/>.</param>
     /// <param name="exit">Whether the binding is the entry's exit layer rather than its depth.</param>
     /// <param name="filler">The view a binding with no layer samples.</param>
     /// <returns>The image view.</returns>
-    public nint ViewOf(int entry, bool exit, nint filler) => (m_entries[entry].Read(exit: exit)?.Image.ImageViewHandle ?? filler);
-    /// <summary>Returns the glass extinction buffer an entry holds, or <see langword="null"/> for none.</summary>
+    public nint ViewOf(int view, int entry, bool exit, nint filler) => (EntryOf(view: view, entry: entry)?.Read(exit: exit)?.Image.ImageViewHandle ?? filler);
+    /// <summary>Returns the glass extinction buffer an entry a view reads holds, or <see langword="null"/> for none.</summary>
+    /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>
     /// <param name="entry">The entry, from zero below <see cref="SdfMeshShadowCascades.MaxEntries"/>.</param>
     /// <returns>The buffer, or <see langword="null"/>.</returns>
-    public IGpuBuffer? OpticalOf(int entry) => m_entries[entry].Optical;
+    public IGpuBuffer? OpticalOf(int view, int entry) => EntryOf(view: view, entry: entry)?.Optical;
+    private int AnchorOf(int view) => (((view >= 0) && (view < m_viewAnchors.Length)) ? m_viewAnchors[view] : -1);
+    private Entry? EntryOf(int view, int entry) => ((entry == SdfMeshShadowCascades.DistantEntry)
+        ? m_distant
+        : ((AnchorOf(view: view) is var anchor and >= 0) ? m_anchors[anchor].Entries[entry] : null));
 
-    /// <summary>Notes a box a staging moved: a draw record as it stood before a change, or as it stands after, each a
-    /// caster the entries that follow motion must draw again where it was and where it is.</summary>
-    /// <param name="box">The box, or <see langword="null"/> for a change no box bounds, which redraws those entries whole.</param>
-    internal void Moved(in SdfMeshBox? box) {
-        if (box is not { } bounded) {
-            m_movedAll = true;
-        } else if (m_moved.Count < MaxMoved) {
-            m_moved.Add(item: bounded);
-        } else {
-            m_movedAll = true;
+    /// <summary>Notes a change a staging made to one draw record: the box it held before, the box it holds after, each
+    /// only while the draw drew something. Each entry that follows motion owes the rectangles where the caster was when the
+    /// entry last drew it and where it is now, once the caster has moved at least <see cref="MoveTexels"/> of that entry's
+    /// texels across its plane or along its light since; a change below an entry's resolution owes it nothing.</summary>
+    /// <param name="row">The draw's row in the staged records, by which each entry remembers where it last drew the caster.</param>
+    /// <param name="wasLive">Whether the draw drew something before the change.</param>
+    /// <param name="before">The box it was drawn by before, or <see langword="null"/> for a draw no box bounds.</param>
+    /// <param name="isLive">Whether the draw draws something after the change.</param>
+    /// <param name="after">The box it is drawn by after, or <see langword="null"/> for a draw no box bounds.</param>
+    internal void Moved(int row, bool wasLive, in SdfMeshBox? before, bool isLive, in SdfMeshBox? after) {
+        if ((wasLive && (before is null)) || (isLive && (after is null))) {
+            MovedEverywhere();
+            return;
+        }
+        m_movedChanges++;
+        foreach (var anchor in m_anchors) {
+            foreach (var entry in anchor.Entries) {
+                entry.Note(row: row, before: (wasLive ? before : null), after: (isLive ? after : null));
+            }
         }
     }
-    /// <summary>Decides, once for the upload about to be submitted, what every entry draws and through which camera
-    /// receivers read it after that upload. Every reader of the frame and the upload's recording share the one decision.</summary>
+    /// <summary>Notes a change no box bounds: every entry that follows motion owes its whole layer.</summary>
+    internal void MovedEverywhere() {
+        m_movedUnbounded++;
+        foreach (var anchor in m_anchors) {
+            foreach (var entry in anchor.Entries) { entry.OweAll(); }
+        }
+    }
+    /// <summary>Decides, once for the upload about to be submitted, which anchor every view reads, what every entry draws
+    /// and through which camera receivers read it after that upload. Every reader of the frame and the upload's recording
+    /// share the one decision.</summary>
     /// <param name="frame">The frame the tables hold.</param>
     internal void Decide(SdfFrame frame) {
         if (m_frozen || (m_decided && ReferenceEquals(objA: m_decidedFrame, objB: frame))) {
@@ -170,19 +194,101 @@ internal sealed class SdfWorldShadows : IDisposable {
         m_decided = true;
         m_decidedFrame = frame;
 
-        var fit = SdfMeshShadowCascades.Fit(frame: frame, view: 0);
-        var readers = fit;
-        var changes = false;
+        var views = frame.Views.Count;
 
-        foreach (var entry in m_entries) {
-            changes |= entry.Decide(fit: in fit, frame: frame, upload: m_uploads, moved: m_moved, movedAll: m_movedAll);
-            readers = (fit.Holds(index: entry.Index) ? readers.WithCamera(index: entry.Index, camera: entry.ReaderCamera) : readers);
+        if (m_viewAnchors.Length != views) {
+            Array.Resize(array: ref m_viewAnchors, newSize: views);
+            Array.Resize(array: ref m_viewReaders, newSize: views);
         }
-        // Each entry holds what it took of the moved boxes until it draws it.
-        m_moved.Clear();
-        m_movedAll = false;
-        m_readers = readers;
+        Assign(frame: frame);
+
+        var changes = false;
+        var first = Array.FindIndex(array: m_viewAnchors, match: static anchor => (anchor >= 0));
+        var distantFit = ((first >= 0) ? SdfMeshShadowCascades.Fit(frame: frame, view: first) : default);
+
+        changes |= m_distant.Decide(fit: in distantFit, frame: frame, upload: m_uploads, eye: ((first >= 0) ? frame.Views[first].Camera.Position : Vector3.Zero));
+        foreach (var anchor in m_anchors) {
+            if (anchor.View < 0) {
+                foreach (var entry in anchor.Entries) { entry.Idle(); }
+                continue;
+            }
+            anchor.Fit = SdfMeshShadowCascades.Fit(frame: frame, view: anchor.View);
+            foreach (var entry in anchor.Entries) {
+                changes |= entry.Decide(fit: in anchor.Fit, frame: frame, upload: m_uploads, eye: frame.Views[anchor.View].Camera.Position);
+            }
+        }
+        for (var view = 0; (view < views); view++) {
+            var at = m_viewAnchors[view];
+
+            if (at < 0) {
+                m_viewReaders[view] = default;
+                continue;
+            }
+
+            var anchor = m_anchors[at];
+            var readers = anchor.Fit;
+
+            foreach (var entry in anchor.Entries) {
+                readers = (readers.Holds(index: entry.Index) ? readers.WithCamera(index: entry.Index, camera: entry.ReaderCamera) : readers);
+            }
+            if (readers.Holds(index: SdfMeshShadowCascades.DistantEntry)) {
+                readers = readers.WithCamera(index: SdfMeshShadowCascades.DistantEntry, camera: m_distant.ReaderCamera);
+            }
+            m_viewReaders[view] = readers;
+        }
         if (changes) { m_contentRevision++; }
+    }
+    // Chooses each view's anchor: one whose near cell already holds the view's eye; else the anchor the view held last,
+    // following it; else a free anchor or a new one; else, past the most anchors, the anchor whose eye lies nearest.
+    private void Assign(SdfFrame frame) {
+        var views = frame.Views.Count;
+        var previous = new int[views];
+
+        Array.Copy(sourceArray: m_viewAnchors, destinationArray: previous, length: views);
+        foreach (var anchor in m_anchors) { anchor.View = -1; }
+        for (var view = 0; (view < views); view++) {
+            m_viewAnchors[view] = -1;
+            if (frame.Views[view].Quality.DisableSoftShadows) { continue; }
+
+            var eye = frame.Views[view].Camera.Position;
+            var cell = SdfMeshShadowCascades.CellOf(eye: eye, reach: SdfMeshShadowCascades.ReachOf(frame: frame, index: SdfMeshShadowCascades.NearEntry));
+            var chosen = m_anchors.FindIndex(match: anchor => ((anchor.View >= 0) && (anchor.Cell == cell)));
+
+            if ((chosen < 0) && (previous[view] is var held and >= 0) && (held < m_anchors.Count) && (m_anchors[held].View < 0)) {
+                chosen = held;
+            }
+            if (chosen < 0) {
+                chosen = m_anchors.FindIndex(match: static anchor => (anchor.View < 0));
+            }
+            if ((chosen < 0) && (m_anchors.Count < MaxAnchors)) {
+                m_anchors.Add(item: new Anchor(owner: this, index: m_anchors.Count));
+                chosen = (m_anchors.Count - 1);
+            }
+            if (chosen < 0) {
+                var nearest = float.MaxValue;
+
+                for (var at = 0; (at < m_anchors.Count); at++) {
+                    var distance = Vector3.DistanceSquared(value1: frame.Views[m_anchors[at].View].Camera.Position, value2: eye);
+
+                    if (distance < nearest) { (chosen, nearest) = (at, distance); }
+                }
+                m_viewAnchors[view] = chosen;
+                continue;
+            }
+            if (m_anchors[chosen].View < 0) {
+                m_anchors[chosen].View = view;
+                m_anchors[chosen].Cell = cell;
+            }
+            m_anchors[chosen].LastUpload = m_uploads;
+            m_viewAnchors[view] = chosen;
+            if (previous[view] != chosen) { m_bindingRevision++; }
+        }
+        // An anchor no view has read for a while gives its layers back.
+        foreach (var anchor in m_anchors) {
+            if ((anchor.View < 0) && ((m_uploads - anchor.LastUpload) > AnchorKeptUploads)) {
+                anchor.Release();
+            }
+        }
     }
     /// <summary>Records the decided work into the upload's command buffer, every image it writes left shader-readable for
     /// the views' submissions that follow.</summary>
@@ -196,15 +302,45 @@ internal sealed class SdfWorldShadows : IDisposable {
             m_decided = false;
         }
         Decide(frame: frame);
-        foreach (var entry in m_entries) {
+
+        var timed = ((m_timestamps is not null) && Entries().Any(predicate: static entry => entry.Draws));
+
+        if (timed) {
+            m_timestamps!.Reset(command: commandBuffer, count: 2, first: (uint)(2 * slot));
+            m_timestamps.Write(command: commandBuffer, index: (uint)(2 * slot));
+        }
+        foreach (var entry in Entries()) {
             entry.Record(commandBuffer: commandBuffer, frame: frame, slot: slot);
         }
+        if (timed) {
+            m_timestamps!.Write(command: commandBuffer, index: (uint)((2 * slot) + 1));
+            m_timestamps.Resolve(command: commandBuffer, count: 2, destination: m_times[slot].BufferHandle, first: (uint)(2 * slot), offset: 0);
+            m_gpu.Recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_times[slot].BufferHandle,
+                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+                destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
+        }
+        m_timed[slot] = timed;
     }
+    // Every entry the world holds: the distant entry, then each anchor's.
+    private IEnumerable<Entry> Entries() {
+        yield return m_distant;
+        foreach (var anchor in m_anchors) {
+            foreach (var entry in anchor.Entries) { yield return entry; }
+        }
+    }
+    // The GPU time the upload's shadow work took, measured where the device can: a timestamp pair a ring slot, read back
+    // once the slot's upload is known complete; the total, the count and the most of those measured.
+    private readonly IGpuTimestampPool? m_timestamps;
+    private readonly IGpuReadbackBuffer[] m_times;
+    private readonly bool[] m_timed;
+    private double m_gpuSum;
+    private double m_gpuMost;
+    private long m_gpuSamples;
     /// <summary>Commits the decided work once the upload that records it is submitted: the cameras and revisions each
     /// entry drew, the rectangles it drew, and the next share of a redraw in progress.</summary>
     /// <param name="slot">The upload's ring slot.</param>
     internal void Submitted(int slot) {
-        foreach (var entry in m_entries) {
+        foreach (var entry in Entries()) {
             entry.Submitted(slot: slot);
         }
         m_uploads++;
@@ -216,26 +352,43 @@ internal sealed class SdfWorldShadows : IDisposable {
         m_decided = false;
     }
     /// <summary>Lets the selections read what an earlier upload into a ring slot read back, once the upload before the
-    /// one about to reuse the slot is known complete.</summary>
+    /// one about to reuse the slot is known complete, and reads the shadow work's measured time.</summary>
     /// <param name="slot">The ring slot about to be reused.</param>
     internal void Completed(int slot) {
-        foreach (var entry in m_entries) {
+        foreach (var entry in Entries()) {
             entry.Completed(slot: slot);
         }
+        if (m_timed[slot] && (m_timestamps is { } timestamps)) {
+            Span<byte> times = stackalloc byte[(2 * sizeof(ulong))];
+
+            m_times[slot].Read(destination: times);
+
+            var mask = ((timestamps.ValidBits >= 64) ? ulong.MaxValue : ((1UL << ((int)timestamps.ValidBits)) - 1UL));
+            var ticks = ((BitConverter.ToUInt64(value: times[sizeof(ulong)..]) - BitConverter.ToUInt64(value: times)) & mask);
+            var milliseconds = ((ticks * timestamps.NanosecondsPerTick) * 1e-6);
+
+            m_gpuSum += milliseconds;
+            m_gpuMost = Math.Max(m_gpuMost, milliseconds);
+            m_gpuSamples++;
+            m_timed[slot] = false;
+        }
     }
-    /// <summary>Describes each entry for <c>world.residency</c>: its camera's half extent, texels, whether its layers stand,
-    /// how many uploads it held, its redraw in progress and the rectangles it owes.</summary>
+    /// <summary>Describes the world's shadows for <c>world.residency</c>: the uploads, the measured GPU time of their shadow
+    /// work, what moved, the anchors and the views each serves, and each entry's camera, texels, holds, redraw and owed
+    /// rectangles.</summary>
     /// <returns>The description.</returns>
-    public string Describe() => string.Join(separator: ' ', values: m_entries.Select(selector: static entry => entry.Describe()));
+    public string Describe() => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
+        handler: $"uploads={m_uploads} gpu={((m_gpuSamples > 0) ? (m_gpuSum / m_gpuSamples) : 0d):0.000}ms/{m_gpuSamples}timed/most{m_gpuMost:0.000}ms moved={m_movedChanges}changes/{m_movedUnbounded}unbounded anchors={m_anchors.Count(predicate: static anchor => (anchor.View >= 0))}/{m_anchors.Count} views={string.Join(separator: ',', values: m_viewAnchors)} {m_distant.Describe()} {string.Join(separator: ' ', values: m_anchors.SelectMany(selector: static anchor => anchor.Entries).Select(selector: static entry => entry.Describe()))}");
 
     /// <inheritdoc/>
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
-        foreach (var entry in m_entries) { entry?.Dispose(); }
+        foreach (var entry in Entries()) { entry.Dispose(); }
+        foreach (var times in m_times) { times.Dispose(); }
+        m_timestamps?.Dispose();
         m_loadPass.Dispose();
         m_counters.Dispose();
-        m_gpu.Bindings.DestroyPool(poolHandle: m_pool);
     }
 
     private GpuObjectName Name(string part, string? detail = null, int index = 0) => new(detail: detail, index: index, owner: $"{m_tables.DebugLabel} shadows", part: part);
@@ -243,6 +396,25 @@ internal sealed class SdfWorldShadows : IDisposable {
     private void Retire(IDisposable? replaced) {
         if (replaced is null) { return; }
         m_tables.RetireShadowObject(replaced: replaced);
+    }
+
+    // One place the world's views look at: its near, far and secondary entries, the view it is centred on this upload (-1
+    // while none reads it), that view's near cell and fit, and the upload a view last read it.
+    private sealed class Anchor(SdfWorldShadows owner, int index) {
+        public Entry[] Entries { get; } = [
+            new(index: SdfMeshShadowCascades.NearEntry, owner: owner, ring: SdfWorldTables.FrameRingSize, anchor: index),
+            new(index: SdfMeshShadowCascades.FarEntry, owner: owner, ring: SdfWorldTables.FrameRingSize, anchor: index),
+            new(index: SdfMeshShadowCascades.SecondEntry, owner: owner, ring: SdfWorldTables.FrameRingSize, anchor: index),
+        ];
+        public int View { get; set; } = -1;
+        public Vector3 Cell { get; set; }
+        public SdfMeshShadowCascades Fit;
+        public ulong LastUpload { get; set; }
+
+        // Gives the layers back; the next view that takes the anchor allocates them again.
+        public void Release() {
+            foreach (var entry in Entries) { entry.ReleaseLayers(); }
+        }
     }
 
     // One image an entry holds, with the layout the upload last left it in.
@@ -258,6 +430,17 @@ internal sealed class SdfWorldShadows : IDisposable {
         public bool IsEmpty => ((X1 <= X0) || (Y1 <= Y0));
         public TexelRect Union(in TexelRect other) => new(X0: Math.Min(X0, other.X0), Y0: Math.Min(Y0, other.Y0), X1: Math.Max(X1, other.X1), Y1: Math.Max(Y1, other.Y1));
         public bool Touches(in TexelRect other) => ((X0 <= other.X1) && (other.X0 <= X1) && (Y0 <= other.Y1) && (other.Y0 <= Y1));
+    }
+
+    // Where a caster lies in an entry's texels: the centre across the plane and along the light, the half extents across
+    // the plane, and the generation of the layer it was judged against.
+    private readonly record struct Footprint(float U, float V, float W, float HalfU, float HalfV, int Generation) {
+        // Whether another footprint of the same caster lies MoveTexels or more away, across the plane, in extent or along
+        // the light.
+        public bool Movable(in Footprint other) =>
+            ((MathF.Abs(U - other.U) + MathF.Abs(HalfU - other.HalfU)) >= MoveTexels) ||
+            ((MathF.Abs(V - other.V) + MathF.Abs(HalfV - other.HalfV)) >= MoveTexels) ||
+            (MathF.Abs(W - other.W) >= MoveTexels);
     }
 
     // What an entry draws for one upload.
@@ -284,6 +467,7 @@ internal sealed class SdfWorldShadows : IDisposable {
     // One entry of the cascade set: its layers, its selections and their sets per ring slot, and what it holds.
     private sealed class Entry : IDisposable {
         private readonly SdfWorldShadows m_owner;
+        private readonly nint m_pool;
         private readonly SdfMeshOcclusion[] m_selections;
         private readonly IGpuStorageBuffer[][] m_blocks;
         private readonly nint[][] m_meshSets;
@@ -300,6 +484,10 @@ internal sealed class SdfWorldShadows : IDisposable {
         private readonly SdfShadowEntryCounts m_kinds;
         // The rectangles this entry owes, in the texels of the camera receivers read, and whether it owes the whole layer.
         private readonly TexelRect[] m_owed = new TexelRect[MaxRectangles];
+        // Where the entry last drew each staged row's caster (Note), valid while its generation is the layer's: every
+        // whole redraw moves the generation, after which a row's next change says where the redraw drew it.
+        private Footprint[] m_drawn = [];
+        private int m_drawnGeneration = 1;
         private int m_owedCount;
         private bool m_owedAll;
 
@@ -330,7 +518,7 @@ internal sealed class SdfWorldShadows : IDisposable {
         private bool m_recorded;
         private bool m_holds;
 
-        public Entry(int index, SdfWorldShadows owner, int ring) {
+        public Entry(int index, SdfWorldShadows owner, int ring, int anchor) {
             Index = index;
             m_owner = owner;
             FollowsMotion = (index != SdfMeshShadowCascades.DistantEntry);
@@ -338,8 +526,19 @@ internal sealed class SdfWorldShadows : IDisposable {
 
             var gpu = owner.m_gpu;
             var tables = owner.m_tables;
-            var part = $"shadow-{EntryNames[index]}";
+            var part = (FollowsMotion ? $"shadow-{EntryNames[index]}.a{anchor}" : $"shadow-{EntryNames[index]}");
             var named = $"{tables.DebugLabel} shadows";
+            var sizes = default(GpuDescriptorPoolSizes);
+
+            for (var set = 0; (set < (Kinds * ring)); set++) {
+                // A mesh set and its two selection sets, and a glass extinction set beside each.
+                sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.Mesh.Groups);
+                sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.Mesh.Groups);
+                for (var phase = 0; (phase < OcclusionSets); phase++) {
+                    sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.MeshOcclusion.Groups);
+                }
+            }
+            m_pool = gpu.Bindings.CreatePool(name: owner.Name(part: part, detail: "descriptors"), sizes: sizes);
 
             m_selections = new SdfMeshOcclusion[Kinds];
             for (var kind = 0; (kind < Kinds); kind++) {
@@ -373,19 +572,19 @@ internal sealed class SdfWorldShadows : IDisposable {
                     var block = gpu.BufferFactory.CreateHostVisible(name: owner.Name(part: part, detail: $"pass block {kind}", index: slot), sizeBytes: blockBytes, usage: GpuBufferUsage.Uniform);
 
                     m_blocks[kind][slot] = block;
-                    m_meshSets[kind][slot] = gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: meshLayout, name: owner.Name(part: part, detail: $"mesh group {kind}", index: slot), poolHandle: owner.m_pool);
+                    m_meshSets[kind][slot] = gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: meshLayout, name: owner.Name(part: part, detail: $"mesh group {kind}", index: slot), poolHandle: m_pool);
                     gpu.Bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: block.BufferHandle, bufferSize: block.SizeBytes, descriptorSetHandle: m_meshSets[kind][slot]);
                     m_meshSetBuffers[kind][slot] = new IGpuBuffer?[MeshSetBuffers];
                     m_meshSetOcclusion[kind][slot] = new IGpuBuffer?[MeshSetOcclusionBuffers];
                     for (var phase = 0; (phase < OcclusionSets); phase++) {
                         var at = OcclusionSetOf(kind: kind, slot: slot, phase: phase);
 
-                        m_occlusionSets[at] = [gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: occlusionLayout, name: owner.Name(part: part, detail: $"occlusion group {kind}.{phase}", index: slot), poolHandle: owner.m_pool)];
+                        m_occlusionSets[at] = [gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: occlusionLayout, name: owner.Name(part: part, detail: $"occlusion group {kind}.{phase}", index: slot), poolHandle: m_pool)];
                         gpu.Bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: block.BufferHandle, bufferSize: block.SizeBytes, descriptorSetHandle: m_occlusionSets[at][0]);
                         m_occlusionSetBuffers[at] = new IGpuBuffer?[MeshSetBuffers + MeshSetOcclusionBuffers];
                     }
                     if (kind == OpticalKind) {
-                        m_glassSets[slot] = gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: meshLayout, name: owner.Name(part: part, detail: "glass group", index: slot), poolHandle: owner.m_pool);
+                        m_glassSets[slot] = gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: meshLayout, name: owner.Name(part: part, detail: "glass group", index: slot), poolHandle: m_pool);
                         gpu.Bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: block.BufferHandle, bufferSize: block.SizeBytes, descriptorSetHandle: m_glassSets[slot]);
                         m_glassSetBuffers[slot] = new IGpuBuffer?[MeshSetBuffers];
                         m_glassSetOcclusion[slot] = new IGpuBuffer?[MeshSetOcclusionBuffers];
@@ -405,11 +604,13 @@ internal sealed class SdfWorldShadows : IDisposable {
 
         // The layer receivers sample.
         public Layer? Read(bool exit) => (exit ? m_exit : m_depth);
+        // Whether this upload's work draws anything.
+        public bool Draws => (m_holds && ((m_work.Share >= 0) || (m_work.Rectangles > 0) || m_work.Optical || (m_depth is { Layout: GpuImageLayout.Undefined })));
 
         private static int OcclusionSetOf(int kind, int slot, int phase) => ((((kind * SdfWorldTables.FrameRingSize) + slot) * OcclusionSets) + phase);
 
         // Chooses this upload's work; returns whether it changes what receivers read.
-        public bool Decide(in SdfMeshShadowCascades fit, SdfFrame frame, ulong upload, List<SdfMeshBox> moved, bool movedAll) {
+        public bool Decide(in SdfMeshShadowCascades fit, SdfFrame frame, ulong upload, Vector3 eye) {
             m_work = new Work { Share = -1, Counts = frame.RateCounts };
             m_recorded = false;
             m_holds = fit.Holds(index: Index);
@@ -421,7 +622,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             var fresh = fit[Index];
             var texels = fit.TexelsOf(index: Index);
             var reach = SdfMeshShadowCascades.ReachOf(frame: frame, index: Index);
-            var cell = SdfMeshShadowCascades.CellOf(eye: frame.Views[0].Camera.Position, reach: reach);
+            var cell = SdfMeshShadowCascades.CellOf(eye: eye, reach: reach);
             var revision = tables.StaticDrawRevision;
             var rates = frame.UpdateRates;
             var holds = ((rates & SdfUpdateRates.ShadowDistant) != 0);
@@ -461,21 +662,17 @@ internal sealed class SdfWorldShadows : IDisposable {
             if (FollowsMotion) {
                 var camera = ReaderCamera;
 
-                // A layer drawn anew answers what moved before it; what moved this upload is owed in its camera.
+                // A layer drawn anew answers every move before it, and where it drew each caster is unknown until it
+                // moves again.
                 if (completes) {
                     m_owedCount = 0;
                     m_owedAll = false;
-                }
-                if (camera.HalfHeight > 0f) {
-                    if (movedAll) { m_owedAll = true; }
-                    foreach (var box in moved) {
-                        Owe(box: in box, camera: in camera);
-                    }
+                    m_drawnGeneration++;
                 }
                 // The far entry draws its moving casters at its authored rate, owing what moved between.
                 var paced = (((rates & SdfUpdateRates.ShadowFar) == 0) || (Index != SdfMeshShadowCascades.FarEntry) || ((upload % (ulong)FarPeriodOf(frame: frame)) == 0UL));
 
-                if ((camera.HalfHeight > 0f) && paced) {
+                if ((camera.HalfHeight > 0f) && paced && !completes) {
                     if (m_owedAll) {
                         m_owed[0] = new TexelRect(X0: 0, Y0: 0, X1: m_texels, Y1: m_texels);
                         m_work.Rectangles = 1;
@@ -488,21 +685,66 @@ internal sealed class SdfWorldShadows : IDisposable {
 
             return (completes || (m_work.Rectangles > 0) || reallocated);
         }
-        // Projects a moved box into the camera's texels and merges it into the owed rectangles.
-        private void Owe(in SdfMeshBox box, in SdfMeshShadowCamera camera) {
-            if (m_owedAll || !box.MayCast(cascade: in camera)) { return; }
+        // Owes the whole layer: a change no box bounds may have moved any caster.
+        public void OweAll() {
+            if (m_stands) { m_owedAll = true; }
+        }
+        // Judges one draw's change against where this entry last drew it, in the committed camera's texels: a draw that
+        // appears or goes owes the rectangle it covers, and one that moves owes where it was drawn and where it is once it
+        // has moved MoveTexels across the plane or along the light since.
+        public void Note(int row, in SdfMeshBox? before, in SdfMeshBox? after) {
+            if (!m_stands || m_owedAll || (m_texels <= 0) || (row < 0)) { return; }
 
+            var camera = m_camera;
+
+            if (row >= m_drawn.Length) {
+                Array.Resize(array: ref m_drawn, newSize: Math.Max((row + 1), (m_drawn.Length * 2)));
+            }
+            ref var drawn = ref m_drawn[row];
+
+            if (after is not { } now) {
+                if (before is { } gone) { Owe(footprint: Footprint(box: in gone, camera: in camera)); }
+                drawn = default;
+                return;
+            }
+
+            var current = Footprint(box: in now, camera: in camera);
+
+            if (drawn.Generation != m_drawnGeneration) {
+                // Not judged since the layer was drawn: it was drawn where it stood before this change.
+                drawn = ((before is { } was) ? (Footprint(box: in was, camera: in camera) with { Generation = m_drawnGeneration }) : default);
+                if (before is null) {
+                    Owe(footprint: current);
+                    drawn = current with { Generation = m_drawnGeneration };
+                    return;
+                }
+            }
+            if (!drawn.Movable(other: in current)) { return; }
+            Owe(footprint: drawn);
+            Owe(footprint: current);
+            drawn = current with { Generation = m_drawnGeneration };
+        }
+        // Where a box lies in the camera's texels: its centre and half extents across the plane, and its centre's depth
+        // along the light, in texels.
+        private Footprint Footprint(in SdfMeshBox box, in SdfMeshShadowCamera camera) {
             var relative = (box.Center - camera.Position);
             var scale = ((0.5f * m_texels) / camera.HalfHeight);
-            var u = (((Vector3.Dot(relative, camera.Right) / camera.HalfHeight) * 0.5f) + 0.5f) * m_texels;
-            var v = (0.5f - ((Vector3.Dot(relative, camera.Up) / camera.HalfHeight) * 0.5f)) * m_texels;
-            var halfU = (((MathF.Abs(Vector3.Dot(box.HalfX, camera.Right)) + MathF.Abs(Vector3.Dot(box.HalfY, camera.Right))) + MathF.Abs(Vector3.Dot(box.HalfZ, camera.Right))) * scale);
-            var halfV = (((MathF.Abs(Vector3.Dot(box.HalfX, camera.Up)) + MathF.Abs(Vector3.Dot(box.HalfY, camera.Up))) + MathF.Abs(Vector3.Dot(box.HalfZ, camera.Up))) * scale);
+
+            return new Footprint(
+                U: ((((Vector3.Dot(relative, camera.Right) / camera.HalfHeight) * 0.5f) + 0.5f) * m_texels),
+                V: ((0.5f - ((Vector3.Dot(relative, camera.Up) / camera.HalfHeight) * 0.5f)) * m_texels),
+                W: (Vector3.Dot(relative, camera.Forward) * scale),
+                HalfU: (((MathF.Abs(Vector3.Dot(box.HalfX, camera.Right)) + MathF.Abs(Vector3.Dot(box.HalfY, camera.Right))) + MathF.Abs(Vector3.Dot(box.HalfZ, camera.Right))) * scale),
+                HalfV: (((MathF.Abs(Vector3.Dot(box.HalfX, camera.Up)) + MathF.Abs(Vector3.Dot(box.HalfY, camera.Up))) + MathF.Abs(Vector3.Dot(box.HalfZ, camera.Up))) * scale),
+                Generation: 0);
+        }
+        // Merges a footprint's rectangle into the owed rectangles.
+        private void Owe(in Footprint footprint) {
             var rect = new TexelRect(
-                X0: Math.Clamp(value: ((int)MathF.Floor(u - halfU) - RectanglePad), min: 0, max: m_texels),
-                Y0: Math.Clamp(value: ((int)MathF.Floor(v - halfV) - RectanglePad), min: 0, max: m_texels),
-                X1: Math.Clamp(value: ((int)MathF.Ceiling(u + halfU) + RectanglePad), min: 0, max: m_texels),
-                Y1: Math.Clamp(value: ((int)MathF.Ceiling(v + halfV) + RectanglePad), min: 0, max: m_texels)
+                X0: Math.Clamp(value: ((int)MathF.Floor(footprint.U - footprint.HalfU) - RectanglePad), min: 0, max: m_texels),
+                Y0: Math.Clamp(value: ((int)MathF.Floor(footprint.V - footprint.HalfV) - RectanglePad), min: 0, max: m_texels),
+                X1: Math.Clamp(value: ((int)MathF.Ceiling(footprint.U + footprint.HalfU) + RectanglePad), min: 0, max: m_texels),
+                Y1: Math.Clamp(value: ((int)MathF.Ceiling(footprint.V + footprint.HalfV) + RectanglePad), min: 0, max: m_texels)
             );
 
             if (rect.IsEmpty) { return; }
@@ -607,7 +849,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             colors: [],
             depth: layer.Image,
             renderPass: (load ? m_owner.m_loadPass : m_owner.m_tables.ShadowRenderPass));
-        private void ReleaseLayers() {
+        public void ReleaseLayers() {
             foreach (var framebuffer in (ReadOnlySpan<IGpuFramebuffer?>)[m_depthClear, m_exitClear, m_exitLoad, m_backClear, m_backExitClear, m_backLoad, m_backExitLoad]) {
                 m_owner.Retire(replaced: framebuffer);
             }
@@ -616,6 +858,17 @@ internal sealed class SdfWorldShadows : IDisposable {
             }
             (m_depthClear, m_exitClear, m_exitLoad, m_backClear, m_backExitClear, m_backLoad, m_backExitLoad) = (null, null, null, null, null, null, null);
             (m_depth, m_exit, m_backDepth, m_backExit) = (null, null, null, null);
+            m_stands = false;
+            m_sliced = false;
+            m_redraw = null;
+            m_owedCount = 0;
+            m_owedAll = false;
+        }
+        // Draws nothing this upload: no view reads the entry's anchor.
+        public void Idle() {
+            m_work = new Work { Share = -1 };
+            m_recorded = false;
+            m_holds = false;
         }
 
         public void Record(nint commandBuffer, SdfFrame frame, int slot) {
@@ -903,6 +1156,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             m_owner.Retire(replaced: Optical);
             Optical = null;
             foreach (var selection in m_selections) { selection.Dispose(); }
+            m_owner.m_gpu.Bindings.DestroyPool(poolHandle: m_pool);
             foreach (var blocks in m_blocks) {
                 foreach (var block in blocks) { block?.Dispose(); }
             }
