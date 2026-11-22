@@ -221,28 +221,69 @@ public readonly record struct CameraSnapshot {
     /// plane, or past one widened side, each moved out by <paramref name="reach"/>; otherwise <see langword="true"/>.</returns>
     public bool MaySee(Vector3 center, Vector3 halfX, Vector3 halfY, Vector3 halfZ, float margin, float far = float.PositiveInfinity, Vector3 sweep = default, float reach = 0f) {
         var box = new SweptBox(Center: (center - Position), HalfX: halfX, HalfY: halfY, HalfZ: halfZ, Reach: reach, Sweep: sweep);
+        Span<(Vector3 Normal, float Offset)> planes = stackalloc (Vector3, float)[FrustumPlanes];
+
+        Planes(far: far, margin: margin, planes: planes);
+        foreach (var (normal, offset) in planes) {
+            if (box.Nearest(normal: normal, offset: offset) >= 0f) { return false; }
+        }
+
+        return true;
+    }
+    /// <summary>Returns how far a box may move before <see cref="MaySee"/>, with no sweep or reach, answers otherwise for
+    /// it: the least distance, over the frustum's planes, between the plane and the box's nearest point to it, on
+    /// whichever side the box lies. A box whose center moves by <c>d</c> and whose half axes move by <c>e</c> in all
+    /// (the sum of their moves' lengths) keeps its answer while <c>d + e</c> stays under the result.</summary>
+    /// <param name="center">The box's center, in world space.</param>
+    /// <param name="halfX">The box's first half axis.</param>
+    /// <param name="halfY">The box's second half axis.</param>
+    /// <param name="halfZ">The box's third half axis.</param>
+    /// <param name="margin">The fraction the frustum's sides are widened by, as <see cref="MaySee"/> takes it.</param>
+    /// <param name="far">The forward distance of the far plane; infinity, the default, has none.</param>
+    /// <returns>The distance in world units, never negative; infinity for a frustum with no finite plane.</returns>
+    public float FrustumSlack(Vector3 center, Vector3 halfX, Vector3 halfY, Vector3 halfZ, float margin, float far = float.PositiveInfinity) {
+        var box = new SweptBox(Center: (center - Position), HalfX: halfX, HalfY: halfY, HalfZ: halfZ, Reach: 0f, Sweep: default);
+        Span<(Vector3 Normal, float Offset)> planes = stackalloc (Vector3, float)[FrustumPlanes];
+        var slack = float.PositiveInfinity;
+
+        Planes(far: far, margin: margin, planes: planes);
+        foreach (var (normal, offset) in planes) {
+            var length = normal.Length();
+            var nearest = box.Nearest(normal: normal, offset: offset);
+
+            if ((length > 0f) && float.IsFinite(f: nearest)) { slack = MathF.Min(x: slack, y: (MathF.Abs(x: nearest) / length)); }
+        }
+
+        return slack;
+    }
+
+    // The planes MaySee tests, in its order.
+    private const int FrustumPlanes = 6;
+
+    // The frustum's planes: each through the eye or at the near distance, or at the far one, its normal pointing out of
+    // the frustum and its sides widened by a fraction of the half extents. A box lies past one when its nearest point
+    // does (SweptBox.Nearest).
+    private void Planes(float margin, float far, Span<(Vector3 Normal, float Offset)> planes) {
         var vertical = (TanHalfFieldOfView * (1f + margin));
         var horizontal = (AspectRatio * vertical);
 
-        // A plane through the eye or at the near distance, its normal pointing out of the frustum: the box lies past it
-        // when its nearest point does, the center's distance less the box's reach along the normal, less the sweep's
-        // where it moves the box toward the plane.
-        return !(
-            box.Beyond(normal: -Forward, offset: Near) ||
-            box.Beyond(normal: Forward, offset: -far) ||
-            box.Beyond(normal: (Right - ((FrustumOffset.X + horizontal) * Forward)), offset: 0f) ||
-            box.Beyond(normal: (((FrustumOffset.X - horizontal) * Forward) - Right), offset: 0f) ||
-            box.Beyond(normal: (Up - ((FrustumOffset.Y + vertical) * Forward)), offset: 0f) ||
-            box.Beyond(normal: (((FrustumOffset.Y - vertical) * Forward) - Up), offset: 0f)
-        );
+        planes[0] = (-Forward, Near);
+        planes[1] = (Forward, -far);
+        planes[2] = ((Right - ((FrustumOffset.X + horizontal) * Forward)), 0f);
+        planes[3] = ((((FrustumOffset.X - horizontal) * Forward) - Right), 0f);
+        planes[4] = ((Up - ((FrustumOffset.Y + vertical) * Forward)), 0f);
+        planes[5] = ((((FrustumOffset.Y - vertical) * Forward) - Up), 0f);
     }
 
-    // A box relative to the eye, swept and grown by a reach, tested against one plane at a time.
+    // A box relative to the eye, swept and grown by a reach, measured against one plane at a time.
     private readonly record struct SweptBox(Vector3 Center, Vector3 HalfX, Vector3 HalfY, Vector3 HalfZ, Vector3 Sweep, float Reach) {
-        public bool Beyond(Vector3 normal, float offset) {
+        // The signed distance, in the plane normal's length, from the plane to the box's point nearest it: at or past
+        // zero the whole box lies past the plane. The center's distance less the box's reach along the normal, less the
+        // sweep's where it moves the box toward the plane, less the reach.
+        public float Nearest(Vector3 normal, float offset) {
             var nearest = (((((Vector3.Dot(vector1: normal, vector2: Center) + offset) - MathF.Abs(x: Vector3.Dot(vector1: normal, vector2: HalfX))) - MathF.Abs(x: Vector3.Dot(vector1: normal, vector2: HalfY))) - MathF.Abs(x: Vector3.Dot(vector1: normal, vector2: HalfZ))) + MathF.Min(x: 0f, y: Vector3.Dot(vector1: normal, vector2: Sweep)));
 
-            return ((nearest - (Reach * normal.Length())) >= 0f);
+            return (nearest - (Reach * normal.Length()));
         }
     }
 

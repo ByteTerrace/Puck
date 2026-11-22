@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.SignedDistance;
@@ -28,7 +29,8 @@ public sealed class SdfMeshDresser : IDisposable {
     private readonly List<int> m_removedOwn = [];
     private readonly GpuRowIndex<(bool Copy, int Index)> m_bindingsByOwner = new();
     private DrawBinding?[] m_bindings = [];
-    private readonly GpuUploadRuns m_candidates = new(GpuRegion.MaxCopyRuns);
+    // The rows whose owner moved this dress, visited in row order so their writes coalesce (SdfMeshRows.Writer.Set).
+    private readonly MarkedIndexSet m_candidates = new();
     private readonly GpuUploadRuns m_slots = new(GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_hostChanges = new(GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_copyRuns = new(GpuRegion.MaxCopyRuns);
@@ -165,7 +167,7 @@ public sealed class SdfMeshDresser : IDisposable {
         }
         m_candidates.Clear();
         if (programChanged) {
-            for (var row = 0; (row < m_bindings.Length); row++) { if (m_bindings[row] is not null) { m_candidates.Add(length: 1, start: row); } }
+            for (var row = 0; (row < m_bindings.Length); row++) { if (m_bindings[row] is not null) { _ = m_candidates.Add(index: row); } }
         }
         for (var run = 0; (run < m_slots.Count); run++) {
             var end = Math.Min(val1: (m_slots.Start(index: run) + m_slots.Length(index: run)), val2: m_slotEnd);
@@ -177,17 +179,16 @@ public sealed class SdfMeshDresser : IDisposable {
                 if (programChanged || (i >= m_copies.Length) || !ReferenceEquals(objA: m_copies[i], objB: frame.MeshInstances[i]) || (m_copyRevisions[i] != frame.MeshInstances[i].Revision) || (m_copyFrames[i] != frame.MeshInstances[i].FrameSlot)) { AddCandidates(key: (true, i)); }
             }
         }
-        for (var r = 0; (r < m_candidates.Count); r++) {
-            for (var row = m_candidates.Start(index: r); (row < (m_candidates.Start(index: r) + m_candidates.Length(index: r))); row++) {
-                if ((row >= m_bindings.Length) || (m_bindings[row] is not { } binding)) { continue; }
-                visited++;
-                // A draw placed by its slot whose slot only moved poses as it did: its row stands, and the kernels and
-                // every CPU reader place it from the slot's row (SdfMeshDraw.PlacementIn).
-                if (!binding.Repose(frame: frame, matrices: ref matrices, draw: out var draw) && !programChanged) { continue; }
+        m_candidates.Sort();
+        foreach (var row in m_candidates.Members) {
+            if ((row >= m_bindings.Length) || (m_bindings[row] is not { } binding)) { continue; }
+            visited++;
+            // A draw placed by its slot whose slot only moved poses as it did: its row stands, and the kernels and
+            // every CPU reader place it from the slot's row (SdfMeshDraw.PlacementIn).
+            if (!binding.Repose(frame: frame, matrices: ref matrices, draw: out var draw) && !programChanged) { continue; }
 
-                var (run, offset) = BindingRun(row: row);
-                Write(run, offset, draw, OwnerOf(binding: binding));
-            }
+            var (run, offset) = BindingRun(row: row);
+            Write(run, offset, draw, OwnerOf(binding: binding));
         }
         m_writer.SetClips(clips: frame.SlotClips);
         // If clip-copy reconciliation allocated or freed
@@ -339,7 +340,7 @@ public sealed class SdfMeshDresser : IDisposable {
         if (binding.CopyIndex >= 0) { m_bindingsByOwner.Set(row, (true, binding.CopyIndex)); } else if (binding.Slot is { } slot) { m_bindingsByOwner.Set(key: (false, slot), row: row); m_slotEnd = Math.Max(val1: m_slotEnd, val2: (slot + 1)); }
     }
     private void AddCandidates((bool Copy, int Index) key) {
-        for (var row = m_bindingsByOwner.First(key: key); (row >= 0); row = m_bindingsByOwner.Next(row: row)) { m_candidates.Add(length: 1, start: row); }
+        for (var row = m_bindingsByOwner.First(key: key); (row >= 0); row = m_bindingsByOwner.Next(row: row)) { _ = m_candidates.Add(index: row); }
     }
     private (SdfMeshRows.Run Run, int Offset) BindingRun(int row) => (m_bindings[row]!.Run, (row - m_bindings[row]!.Run.Start));
     private void CheckDress(SdfFrame frame, SdfMeshPathBake.FrameAccess access) {

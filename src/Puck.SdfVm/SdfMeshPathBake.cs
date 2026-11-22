@@ -569,9 +569,11 @@ public sealed partial class SdfMeshPathBake {
     private IReadOnlyList<SdfMeshInstance> m_demandCopies = [];
     private CopyLayout[] m_copyLayout = [];
     private int[] m_copyAssetSlots = [];
-    // The copy journal's endpoint the layout was last compared at, and the runs it named.
+    // The copy journal's endpoint the layout was last compared at, the runs it named, and whether they are every copy
+    // because the journal could not prove the window.
     private readonly GpuRowCursor m_copyCursor = new();
     private readonly GpuUploadRuns m_copyRuns = new(GpuRegion.MaxCopyRuns);
+    private bool m_copiesWhole;
 
     private long m_copyLayoutRevision;
 
@@ -622,6 +624,7 @@ public sealed partial class SdfMeshPathBake {
         ArgumentNullException.ThrowIfNull(frame);
         using (EnterFrameGate(site: BakeGate.Frame)) {
             m_preparedFrames++;
+            SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.Prepared);
             // The copies are indexed before anything plans: a plan measures a shared geometry where they stand (Tiers).
             m_demandTransforms = frame.DynamicTransforms;
             m_demandCopies = frame.MeshInstances;
@@ -770,6 +773,7 @@ public sealed partial class SdfMeshPathBake {
         var whole = m_copyCursor.Collect(frame.MeshCopyChanges, frame.MeshCopyChangesSerial, frame.MeshInstances, frame.MeshInstances.Count, 0,
             m_copyRuns, force: ((frame.MeshCopyChanges is null) || (m_copyLayout.Length != frame.MeshInstances.Count)));
 
+        m_copiesWhole = whole;
         if ((m_copyLayout.Length != frame.MeshInstances.Count) || (m_copyAssetSlots.Length != frame.MeshAssetSlots.Count)) { return false; }
         if (whole) {
             for (var index = 0; (index < m_copyAssetSlots.Length); index++) { if (m_copyAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
@@ -803,6 +807,7 @@ public sealed partial class SdfMeshPathBake {
             m_copyLayout[index] = new(copy.AssetSlot, copy.TemplateRange, copy.IsDynamic, (copy.Mesh is not null), copy.OtherAssetSlots.ToArray());
         }
         m_copyLayoutRevision++;
+        m_demandReset = true;
         for (var index = 0; (index < frame.MeshInstances.Count); index++) {
             var copy = frame.MeshInstances[index];
 
@@ -1465,6 +1470,8 @@ public sealed partial class SdfMeshPathBake {
             group.InView = displaced.InView;
         }
         m_groups.Set(group: group, index: index);
+        // A group set into a place may draw another tier than the one it demands: the tier decisions read it.
+        Attend(group: group);
         Touch(group: group);
         if (!ReferenceEquals(objA: displaced, objB: group)) {
             Touch(group: displaced);
@@ -3283,6 +3290,25 @@ public sealed partial class SdfMeshPathBake {
         // The metres one display pixel covers at its demand box, as the bake last measured it (MeasureDemands); not a
         // number before the first measure.
         public float DemandPixel { get; set; } = float.NaN;
+        // The demand points' travel (SdfMeshDemand.Travel) at which DemandPixel may next name another tier, the group's
+        // place in the due queue; infinity when no travel can, and not a number before the demand first measured it
+        // (MeasureDemand). Whether it waits to be measured as a group newly set into a place (GroupList.TakeFresh), the
+        // prepared frame that last measured it, and whether the tier decisions read it (Attend).
+        public double DemandDueAt { get; set; } = double.NaN;
+        public long DemandQueuedEpoch { get; set; } = -1L;
+        // What the latest measure stood on, which a moved slot's bound reads (MeasureDemands): the travel it was taken at,
+        // the travel its tier band leaves (in travel units, its pixel slack times its units), and the world box and units
+        // it read, units of zero for a measure that read no single box (a shared geometry's copies); and how far the box
+        // may move before a frustum-bound point answers otherwise for it (SdfMeshDemand.FrustumSlack).
+        public double DemandMeasuredTravel { get; set; }
+        public float DemandSlack { get; set; }
+        public float DemandFrustumSlack { get; set; } = float.PositiveInfinity;
+        public Vector3 DemandWorldCenter { get; set; }
+        public Vector3 DemandWorldHalf { get; set; }
+        public float DemandUnits { get; set; }
+        public bool DemandFresh { get; set; }
+        public long DemandMeasuredAt { get; set; } = -1L;
+        public bool Attended { get; set; }
 
         public int OwedFrames { get; set; }
         // The frames in a row the demand has asked a coarser tier than it draws, and, for a tier's replacement, the

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Maths;
 using System.Collections;
 
@@ -10,8 +11,16 @@ public sealed partial class SdfMeshPathBake {
     // rather than a search of the list. Only Set and Clear change the list, and each moves the flags with it; Plan adds
     // groups unlisted, which Restart then sets into their places. Each group also knows the index it stands at
     // (Group.Index), which the order of a take breaks ties by. Read and written under the bake's gate.
+    //
+    // The list also keeps each listed group's index under the key its demand box moves by (OwnerKey): a dynamic group's
+    // slot, a static group's first instance, so a moved slot or copy finds the groups it moves without a walk; and the
+    // groups set into a place since the demand last measured (TakeFresh), each of which the demand measures before its
+    // next tier decision (MeasureDemands). Set being the one door into the list is what keeps both whole.
     private sealed class GroupList : IReadOnlyList<Group> {
         private readonly List<Group> m_items = [];
+        private readonly GpuRowIndex<(bool Dynamic, int Key)> m_byOwner = new();
+        private List<Group> m_fresh = [];
+        private List<Group> m_freshSpare = [];
 
         public int Count => m_items.Count;
 
@@ -19,6 +28,14 @@ public sealed partial class SdfMeshPathBake {
 
         // Whether the group stands at an index of the list.
         public static bool Holds(Group group) => group.Listed;
+
+        // The key a group's demand box moves by: its slot's transform or its copies (a dynamic group), or its first
+        // instance's copies (a static one).
+        public static (bool Dynamic, int Key) OwnerKey(SdfMeshBakeGroup group) => (group.Dynamic, (group.Dynamic ? group.Slot : group.FirstInstance));
+
+        // The first index whose group has the owner key, and the next on its chain; -1 past the last.
+        public int FirstOf(bool dynamic, int key) => m_byOwner.First(key: (dynamic, key));
+        public int NextOf(int index) => m_byOwner.Next(row: index);
 
         // Puts a group at an index, taking the group it displaces out of the list.
         public void Set(int index, Group group) {
@@ -28,11 +45,28 @@ public sealed partial class SdfMeshPathBake {
             group.Index = index;
             group.Listed = true;
             m_items[index] = group;
+            m_byOwner.Set(key: OwnerKey(group: group), row: index);
+            if (double.IsNaN(d: group.DemandDueAt) && !group.DemandFresh) {
+                group.DemandFresh = true;
+                m_fresh.Add(item: group);
+            }
         }
         // Takes every group out of the list.
         public void Clear() {
             foreach (var group in m_items) { group.Listed = false; }
             m_items.Clear();
+            m_byOwner.Clear();
+        }
+        // Hands over the groups set into a place since the last hand-over, some of which may have left the list since.
+        public List<Group> TakeFresh() {
+            var taken = m_fresh;
+
+            m_fresh = m_freshSpare;
+            m_fresh.Clear();
+            m_freshSpare = taken;
+            foreach (var group in taken) { group.DemandFresh = false; }
+
+            return taken;
         }
         // Appends planned groups, unlisted until Set puts each into its place.
         public void Plan(IEnumerable<Group> groups) {
@@ -146,6 +180,8 @@ public sealed partial class SdfMeshPathBake {
         private long m_boxes;
         private long m_sweep;
 
+        // The boxes the last whole sweep read.
+        public readonly long Boxes => m_boxes;
         // The boxes the next frame's share reads at most.
         public readonly long Share => Math.Max(val1: SdfMeshTier.MeasureBoxes, val2: m_boxes.CeilingDivide(divisor: ((long)SdfMeshTier.MeasureFrames)));
 

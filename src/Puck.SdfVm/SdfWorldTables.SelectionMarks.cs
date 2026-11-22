@@ -27,6 +27,8 @@ public sealed partial class SdfWorldTables {
     private long m_unselectedBytes;
     private int m_unselectedMeshes;
     private long m_selectedBytes;
+    // The upload a report last asked for the sums at, which keeps them counted for a window after it.
+    private ulong m_selectionAskedAt;
     // Each raster selection's latest read marks, by the occlusion that read them.
     private readonly ConcurrentDictionary<object, SelectionSummary> m_selections = new(comparer: ReferenceEqualityComparer.Instance);
 
@@ -58,8 +60,11 @@ public sealed partial class SdfWorldTables {
         m_marksRead++;
         if (m_rowSelectedAt.Length < m_stagedDraws.Length) { Array.Resize(array: ref m_rowSelectedAt, newSize: m_stagedDraws.Length); }
 
-        var levels = new long[3];
-        var tiers = new long[(SdfMeshTier.Last + 2)];
+        // The triangle sums are the report's alone: kept only while a reading asked within the window, as the byte sums
+        // are (CountUnselected). The selection stamps always are, so the window is whole when a reading asks.
+        var summarized = ((m_uploads - Volatile.Read(location: ref m_selectionAskedAt)) <= SelectionWindowUploads);
+        var levels = (summarized ? new long[3] : null);
+        var tiers = (summarized ? new long[(SdfMeshTier.Last + 2)] : null);
         var selected = 0L;
         var stamp = (m_uploads + 1UL);
 
@@ -70,16 +75,17 @@ public sealed partial class SdfWorldTables {
                 var level = ((int)(bits & 3u) - 1);
 
                 if ((level < 0) || (m_stagedDraws[draw].Mesh is not { } mesh)) { continue; }
+                m_rowSelectedAt[draw] = stamp;
+                selected++;
+                if ((levels is null) || (tiers is null)) { continue; }
 
                 var triangles = ((level == 0) ? mesh.TriangleCount : ((level <= mesh.Levels.Count) ? mesh.Levels[(level - 1)].TriangleCount : 0));
 
                 levels[level] += triangles;
                 tiers[Math.Clamp(value: (m_stagedDraws[draw].Tier + 1), min: 0, max: (tiers.Length - 1))] += triangles;
-                m_rowSelectedAt[draw] = stamp;
-                selected++;
             }
         }
-        m_selections[source] = new SelectionSummary(Draws: selected, Levels: levels, Part: source.Part, Tiers: tiers);
+        if ((levels is not null) && (tiers is not null)) { m_selections[source] = new SelectionSummary(Draws: selected, Levels: levels, Part: source.Part, Tiers: tiers); }
         CountUnselected();
     }
     /// <summary>Forgets a raster selection's marks, for one that is disposed or now selects another residency's
@@ -87,10 +93,11 @@ public sealed partial class SdfWorldTables {
     /// <param name="source">The selection.</param>
     internal void ForgetSelectionMarks(SdfMeshOcclusion source) => m_selections.TryRemove(key: source, value: out _);
 
-    // Sums the placed meshes no row naming them was marked selected within the window, once a mark round: a mesh no
-    // draw names counts too, since it holds its words for nothing a pass reads.
+    // Sums the placed meshes no row naming them was marked selected within the window, once a mark round while a reading
+    // asked for it within the window (DescribeSelection): a mesh no draw names counts too, since it holds its words for
+    // nothing a pass reads. Only the report reads the sums, so a frame nobody reads them in walks no placement.
     private void CountUnselected() {
-        if ((m_uploads - m_unselectedCountedAt) < SelectionMarkFrames) { return; }
+        if (((m_uploads - m_unselectedCountedAt) < SelectionMarkFrames) || ((m_uploads - Volatile.Read(location: ref m_selectionAskedAt)) > SelectionWindowUploads)) { return; }
         m_unselectedCountedAt = m_uploads;
 
         var since = ((m_uploads > SelectionWindowUploads) ? (m_uploads - SelectionWindowUploads) : 0UL);
@@ -98,6 +105,7 @@ public sealed partial class SdfWorldTables {
         var meshes = 0;
         var selected = 0L;
 
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.MarkMeshes, amount: m_meshArena.Placements.Count);
         foreach (var mesh in m_meshArena.Placements.Keys) {
             var bytes = (((long)SdfMeshRegion.WordsOf(mesh: mesh)) * sizeof(uint));
             var used = false;
@@ -120,11 +128,14 @@ public sealed partial class SdfWorldTables {
     /// <summary>Describes what the raster passes selected, from their latest marks: per pass part, the triangles drawn at
     /// each level and at each tier the meshes were baked at (<c>none</c> for a mesh no bake tiered), the mesh bytes
     /// placed in the region that some pass selected and those none selected within
-    /// <see cref="SelectionWindowUploads"/> uploads, and the mark rounds read and those stale. Safe to read from any
-    /// thread.</summary>
+    /// <see cref="SelectionWindowUploads"/> uploads, and the mark rounds read and those stale. The byte sums are counted
+    /// only for a window of uploads after a reading asks for them, so the first reading after a quiet spell shows the
+    /// sums as last counted and a reading a mark round later shows them current. Safe to read from any thread.</summary>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeSelection() {
         var line = new StringBuilder();
+
+        Volatile.Write(location: ref m_selectionAskedAt, value: m_uploads);
         var parts = new SortedDictionary<string, (long[] Levels, long[] Tiers, long Draws)>(comparer: StringComparer.Ordinal);
 
         foreach (var summary in m_selections.Values) {

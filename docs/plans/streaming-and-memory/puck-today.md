@@ -30,8 +30,9 @@ All paths are under `src/` unless stated.
 
 ### 1.2 `SdfMeshTier` + `SdfMeshPathBake.Retier` (SdfMeshTier.cs, SdfMeshPathBake.Tiers.cs) — detail by demand, inside the region budget
 
-- **Driven by:** `MeasureDemands` spreads one measure over `MeasureFrames = 8` (SdfMeshTier.cs:28;
-  SdfMeshPathBake.Tiers.cs:124-148); `Retier` decides once a measure (`if (++m_decideFrames < SdfMeshTier.MeasureFrames) { return; }`,
+- **Driven by:** `MeasureDemands` measures only the groups whose demand moved: set, moved by their slot or copy, or
+  made due by the demand points' travel (`SdfMeshPathBake.Demand.cs`, `SdfMeshDemand.Travel`, `SdfMeshTier.Slack`),
+  and every group over `MeasureFrames` frames after a change no travel bounds; `Retier` decides once a measure (`if (++m_decideFrames < SdfMeshTier.MeasureFrames) { return; }`,
   Tiers.cs:234) **[opened]**. Demanded tier = coarsest rung under half a pixel (`PixelShare = 0.5f`, SdfMeshTier.cs:18;
   `Of`, :84), held to `Finest`/`Coarsest` rungs (`Clamp`, :104) **[opened]**.
 - **Bound:** `RegionBudgetBytes => ((m_regionLimitBytes == 0L) ? long.MaxValue : ((m_regionLimitBytes / 8L) * SdfMeshTier.BudgetEighths));`

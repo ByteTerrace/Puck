@@ -14,8 +14,8 @@ public sealed class MarkedIndexSet {
 
     /// <summary>Gets the number of members.</summary>
     public int Count => m_count;
-    /// <summary>Gets the members in the order they were first added since the last <see cref="Clear"/>; valid until
-    /// the set next changes.</summary>
+    /// <summary>Gets the members in the order they were first added since the last <see cref="Clear"/>, or ascending
+    /// after <see cref="Sort"/>; valid until the set next changes.</summary>
     public ReadOnlySpan<int> Members => m_members.AsSpan(start: 0, length: m_count);
 
     /// <summary>Returns whether <paramref name="index"/> is a member.</summary>
@@ -37,6 +37,12 @@ public sealed class MarkedIndexSet {
         return true;
     }
 
+    /// <summary>Gets the bytes the set's mark table and member list retain, excluding array headers.</summary>
+    public long StorageBytes => (((long)m_marked.Length) + (((long)m_members.Length) * sizeof(int)));
+
+    /// <summary>Puts the members in ascending order, so a consumer that writes a table at each visits it in increasing
+    /// order and its writes coalesce into runs.</summary>
+    public void Sort() => m_members.AsSpan(start: 0, length: m_count).Sort();
     /// <summary>Removes every member, unmarking only the members themselves.</summary>
     public void Clear() {
         foreach (var index in Members) { m_marked[index] = false; }

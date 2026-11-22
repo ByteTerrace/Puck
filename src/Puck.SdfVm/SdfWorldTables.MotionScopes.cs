@@ -213,6 +213,8 @@ public sealed partial class SdfWorldTables {
                 m_frameReaders.Add(item: new(Center: Vector3.Transform(value: volume.Position, rotation: Quaternion.Conjugate(value: turn)), Half: volume.HalfExtent, Reader: "medium", Slot: volume.DynamicSlot, Turn: turn));
             }
         }
+        // In slot order, as the paints are, so a moved slot finds its readers by search (NoteMovedReaders).
+        m_frameReaders.Sort(comparison: static (left, right) => left.Slot.CompareTo(value: right.Slot));
         foreach (var reader in m_frameReaders) { Mark(slot: reader.Slot, mark: FrameMark, set: true); }
         if (!ReferenceEquals(objA: m_paintProgram, objB: m_liveProgram)) {
             foreach (var reader in m_paintReaders) { Mark(slot: reader.Slot, mark: PaintMark, set: false); }
@@ -536,14 +538,14 @@ public sealed partial class SdfWorldTables {
             if ((m_motionOpen == 0) || (slot >= m_motionTransforms.Count)) { break; }
             var now = SdfMeshGeometryBuilder.PoseOf(transform: m_motionTransforms[slot]);
 
-            if ((m_slotReaderMarks[slot] & PaintMark) != 0) {
-                for (var index = PartitionPoint.Of(span: m_paintReaders.AsSpan(), state: slot, isBefore: static (at, reader) => (reader.Slot < at)); ((index < m_paintReaders.Length) && (m_paintReaders[index].Slot == slot)); index++) {
-                    Judge(reader: in m_paintReaders[index]);
-                }
-            }
-            if ((m_slotReaderMarks[slot] & FrameMark) != 0) {
-                foreach (var reader in m_frameReaders) {
-                    if (reader.Slot == slot) { Judge(reader: in reader); }
+            if ((m_slotReaderMarks[slot] & PaintMark) != 0) { JudgeAll(readers: m_paintReaders); }
+            if ((m_slotReaderMarks[slot] & FrameMark) != 0) { JudgeAll(readers: CollectionsMarshal.AsSpan(list: m_frameReaders)); }
+
+            // The readers riding the slot, found by search in a list held in slot order.
+            void JudgeAll(ReadOnlySpan<SlotReader> readers) {
+                for (var index = PartitionPoint.Of(span: readers, state: slot, isBefore: static (at, reader) => (reader.Slot < at)); ((index < readers.Length) && (readers[index].Slot == slot)); index++) {
+                    SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.MotionReaders);
+                    Judge(reader: in readers[index]);
                 }
             }
 
@@ -576,6 +578,7 @@ public sealed partial class SdfWorldTables {
                     var live = RowSelection(row: row, record: record, box: out var before, glass: out var glass);
 
                     _ = JudgeSelection(row: row, record: record, box: out var after, glass: out _);
+                    SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.MotionRows);
                     NoteMotion(cause: SdfMotionCause.Slot, row: row, wasLive: live, before: in before, wasGlass: glass, isLive: live, after: in after, isGlass: glass);
                 }
             }

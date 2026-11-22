@@ -526,7 +526,7 @@ laws exercise that boundary.
   on its reader, and a frame thread blocked there holds every worker.
   `Prioritize` measures a share of the groups' priority and view each prepared
   frame, outside the gate but on the frame thread, from a cursor
-  (`GroupSweep`, the one cursor `MeasureDemands` shares): a rank is up to a
+  (`GroupSweep`, the cursor the demand watch's reset sweeps use too): a rank is up to a
   measure old, a restart ranks every group it plans, and a group planned in a
   listed group's place takes that group's rank (`Replace`). The counts of the
   groups that owe the frame and of those with nothing to draw
@@ -712,12 +712,25 @@ laws exercise that boundary.
   and a replan plans only the group's own instances, `SdfMeshBakeGroup.Refresh`,
   never its slot's other groups or the program's other instances): the coarser mesh draws
   until the finer is baked and its words stand in the mesh region
-  (`FinishReplacements`; the swap bullet below). The demand is measured a share of the groups each frame
-  (`SdfMeshPathBake.MeasureDemands`, one sweep of every group's boxes in
-  `SdfMeshTier.MeasureFrames` frames), so its cost a frame does not grow
-  with the resident world; `Retier` decides the tiers from the measured
-  pixels once a measure, since no pixel moves faster, and a frame between
-  decisions pays the measure's share alone. A bake whose groups have all landed can still owe
+  (`FinishReplacements`; the swap bullet below). A frame measures again only
+  the groups whose demand may have moved (`SdfMeshPathBake.MeasureDemands`,
+  the demand watch in `SdfMeshPathBake.Demand.cs`): groups newly set into a
+  place, groups whose slot or copy moved (the frame's transform and copy
+  journals, through the list's owner index), and groups the demand points'
+  travel made due. A moved slot's group is measured only once its world box
+  has moved, with the travel since, by as much as its tier band leaves, and
+  under a frustum-bound point by less than its distance to that frustum's
+  planes (`CameraSnapshot.FrustumSlack`). `SdfMeshDemand.Travel` bounds how far any pixel moves
+  while `SdfMeshDemand.Revision` stands, so a group waits in a due queue at
+  its tier band's slack (`SdfMeshTier.Slack`); a change no travel bounds (a
+  view came or went, a frustum-bound point moved, the bias or the copy layout
+  moved) measures every group once over `SdfMeshTier.MeasureFrames` frames.
+  `Retier` decides the tiers once every `MeasureFrames` frames, reading only
+  the groups the watch attends: those measured or set since they last stood
+  at the tier they draw. A still view measures nothing and decides over
+  nothing; `world.counters sdf.residency` counts the measures, resets and
+  groups decided. Any new input to `MeasurePixel` needs its own route into
+  the watch, or a group keeps a stale tier. A bake whose groups have all landed can still owe
   the tiers its demand moved to, which `SdfMeshPathBake.Pending` does not
   say: `SdfMeshPathBake.DetailSettled` does, once `Retier` has replaced
   nothing, had nothing landing or waiting its hold, and pressed on nothing

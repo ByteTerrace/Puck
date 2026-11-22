@@ -105,6 +105,28 @@ public static class SdfMeshTier {
 
         return Math.Clamp(value: ((int)MathF.Ceiling(x: MathF.Log2(x: (cell / BaseCell)))), min: 0, max: Last);
     }
+    /// <summary>Returns how far a demand pixel may move before the tier it demands under a bias, held to a group's rungs,
+    /// changes: its distance to the nearer edge of the band of pixels that demand the same held tier
+    /// (<see cref="Of"/>, <see cref="Biased"/>, <see cref="Clamp"/>), taken a hair short so a pixel that moves by exactly
+    /// the answer cannot reach the edge. Infinity where neither edge exists (a tier held at both the group's finest and
+    /// coarsest rungs) or the pixel is not finite.</summary>
+    /// <param name="pixel">The metres one display pixel covers at the group's box, in the group's units.</param>
+    /// <param name="halfRungs">The bias, from zero to <see cref="MaxBias"/>.</param>
+    /// <param name="finest">The group's finest tier (<see cref="Finest"/>).</param>
+    /// <param name="coarsest">The group's coarsest tier (<see cref="Coarsest"/>).</param>
+    /// <returns>The distance, in the pixel's units; never negative.</returns>
+    public static float Slack(float pixel, int halfRungs, int finest, int coarsest) {
+        if (!float.IsFinite(f: pixel)) { return float.PositiveInfinity; }
+
+        var top = Math.Max(val1: finest, val2: coarsest);
+        var tier = Clamp(coarsest: coarsest, finest: finest, tier: Of(pixel: Biased(halfRungs: halfRungs, pixel: pixel)));
+        // The pixel at which the raw tier reaches a rung: its cell over the pixel share, unbiased.
+        var scale = (1f / (PixelShare * MathF.Pow(x: 2f, y: (0.5f * halfRungs))));
+        var below = ((tier > finest) ? (pixel - (Cell(tier: tier) * scale)) : float.PositiveInfinity);
+        var above = ((tier < top) ? ((Cell(tier: (tier + 1)) * scale) - pixel) : float.PositiveInfinity);
+
+        return MathF.Max(x: 0f, y: (MathF.Min(x: below, y: above) * 0.999f));
+    }
     /// <summary>Returns a demanded tier held to the rungs that change a group's mesh.</summary>
     /// <param name="tier">The demanded tier.</param>
     /// <param name="finest">The group's finest tier (<see cref="Finest"/>).</param>

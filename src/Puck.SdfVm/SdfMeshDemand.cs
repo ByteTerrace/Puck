@@ -40,6 +40,25 @@ public sealed class SdfMeshDemand {
     /// <summary>Gets how many demand points the latest frame named.</summary>
     public int Count { get; private set; }
 
+    /// <summary>Gets the revision of the demand points' shape: one more each time an observation changes them in a way
+    /// <see cref="Travel"/> does not bound (a point came or went, a point's pixels a metre changed, a point that demands
+    /// inside its view moved or turned at all, or a point was placed with no frame). A measure taken under an older
+    /// revision may stand on any answer.</summary>
+    public long Revision { get; private set; }
+    /// <summary>Gets the demand points' travel since the bake began, in metres a display pixel covers: each observation
+    /// that keeps <see cref="Revision"/> adds the most any point moved over that point's pixels a metre. No
+    /// <see cref="PixelAt(Vector3, Vector3)"/> answer changes by more than the travel between two observations of one
+    /// revision, divided by the units the box is measured in, since a box's distance from a point moves no more than the
+    /// point does and the near clamp keeps that bound.</summary>
+    public double Travel { get; private set; }
+    /// <summary>Gets the fewest pixels a metre any demand point covers one metre in front of it, infinity with none: a
+    /// box that moves a distance moves a <see cref="PixelAt(Vector3, Vector3)"/> answer by at most that distance over
+    /// this, as the points' own travel does.</summary>
+    public float LeastPixelsPerMetre { get; private set; } = float.PositiveInfinity;
+    /// <summary>Gets whether some demand point demands only inside its view (<see cref="SdfViewSnapshot.DemandWithinView"/>):
+    /// a box that moves across its frustum moves its answer by any amount, so no distance bounds a moved box's answer.</summary>
+    public bool AnyWithinView { get; private set; }
+
     /// <summary>Reads the demand points from a frame's views: each view's eye, and its pixels a metre one metre in front of
     /// it, from the height its sizes are measured in (<see cref="SdfViewSnapshot.DemandHeight"/>) or else its share of
     /// the output's height, and its field of view. A view that demands only inside its frustum
@@ -54,6 +73,8 @@ public sealed class SdfMeshDemand {
 
         var views = frame.Views;
         var count = 0;
+        var reshaped = false;
+        var travel = 0f;
 
         EnsureCapacity(views.Count);
         for (var index = 0; (index < views.Count); index++) {
@@ -62,14 +83,44 @@ public sealed class SdfMeshDemand {
             var tan = camera.TanHalfFieldOfView;
 
             if (view.Elsewhere || !(view.Region.Height > 0f) || !(tan > 0f) || !float.IsFinite(f: camera.Position.X)) { continue; }
+
+            var focal = ((((view.DemandHeight > 0f) ? view.DemandHeight : MathF.Max(x: 1f, y: (view.Region.Height * height))) * 0.5f) / tan);
+            var within = view.DemandWithinView;
+            var held = (within ? (camera with { Near = (camera.Near * SdfMeshCull.NearKeeps) }) : camera);
+
+            // A point held at this index before keeps the revision while only its eye moved: a distance moves no more
+            // than the eye does. A point bounded to its view moves its frustum with it, which no distance bounds.
+            if ((count >= Count) || !m_framed[count] || (m_within[count] != within) || (m_focal[count] != focal) || (within && (m_cameras[count] != held))) {
+                reshaped = true;
+            } else {
+                travel = MathF.Max(x: travel, y: (Vector3.Distance(value1: m_points[count], value2: camera.Position) / focal));
+            }
             m_points[count] = camera.Position;
-            m_focal[count] = ((((view.DemandHeight > 0f) ? view.DemandHeight : MathF.Max(x: 1f, y: (view.Region.Height * height))) * 0.5f) / tan);
-            m_within[count] = view.DemandWithinView;
+            m_focal[count] = focal;
+            m_within[count] = within;
             m_framed[count] = true;
-            m_cameras[count] = (view.DemandWithinView ? (camera with { Near = (camera.Near * SdfMeshCull.NearKeeps) }) : camera);
+            m_cameras[count] = held;
             count++;
         }
+        if (reshaped || (count != Count)) {
+            Revision++;
+        } else {
+            Travel += travel;
+        }
         Count = count;
+        Measured();
+    }
+    // Reads the figures a moved box's bound takes from the points (LeastPixelsPerMetre, AnyWithinView).
+    private void Measured() {
+        var least = float.PositiveInfinity;
+        var within = false;
+
+        for (var index = 0; (index < Count); index++) {
+            least = MathF.Min(x: least, y: m_focal[index]);
+            within |= m_within[index];
+        }
+        LeastPixelsPerMetre = least;
+        AnyWithinView = within;
     }
     private void EnsureCapacity(int required) {
         if (required <= m_points.Length) { return; }
@@ -95,6 +146,8 @@ public sealed class SdfMeshDemand {
         m_framed[Count] = false;
         m_focal[Count] = ((Math.Max(val1: height, val2: 1u) * 0.5f) / tanHalfFieldOfView);
         Count++;
+        Revision++;
+        Measured();
     }
     /// <summary>Returns the metres one display pixel covers at a box from the demand point that sees it finest: the
     /// distance from the eye to the box, no nearer than <see cref="NearDistance"/>, over the point's pixels a metre; what
@@ -252,6 +305,29 @@ public sealed class SdfMeshDemand {
         center = box.Center;
         half = box.AxisHalf;
         return boxed;
+    }
+
+    /// <summary>Returns how far a world-axis box may move before some point that demands only inside its view
+    /// (<see cref="AnyWithinView"/>) answers otherwise whether its widened frustum may hold it
+    /// (<see cref="CameraSnapshot.FrustumSlack"/>): the least over those points; infinity with none.</summary>
+    /// <param name="center">The box's center, in world space.</param>
+    /// <param name="half">The box's half extents along the world axes, none negative.</param>
+    /// <returns>The distance in metres.</returns>
+    public float FrustumSlack(Vector3 center, Vector3 half) {
+        var slack = float.PositiveInfinity;
+
+        for (var index = 0; (index < Count); index++) {
+            if (!m_within[index]) { continue; }
+            slack = MathF.Min(x: slack, y: m_cameras[index].FrustumSlack(
+                center: center,
+                halfX: new Vector3(x: half.X, y: 0f, z: 0f),
+                halfY: new Vector3(x: 0f, y: half.Y, z: 0f),
+                halfZ: new Vector3(x: 0f, y: 0f, z: half.Z),
+                margin: WithinViewMargin
+            ));
+        }
+
+        return slack;
     }
 
     // Whether a point demands a world-axis box at all: always for a point that demands by distance alone, and only a
