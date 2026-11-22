@@ -31,7 +31,9 @@ public sealed partial class SdfWorldTables {
             return;
         }
         m_work.EnterPass(pass: ShadowsPass);
+        m_gpu.Recorder.BeginDebugGroup(commandBufferHandle: commandBuffer, label: "shadows");
         shadows.Record(commandBuffer: commandBuffer, frame: frame, slot: slot);
+        m_gpu.Recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
         m_work.LeavePass();
     }
 }

@@ -502,6 +502,8 @@ internal sealed class SdfWorldShadows : IDisposable {
         private IGpuFramebuffer? m_backLoad;
         private IGpuFramebuffer? m_backExitLoad;
         private bool m_opticalInitialized;
+        // The side the glass extinction buffer was sized for; zero while none is held.
+        private int m_opticalTexels;
         private int m_texels;
         private bool m_sliced;
 
@@ -822,8 +824,11 @@ internal sealed class SdfWorldShadows : IDisposable {
                 m_sliced = true;
                 changed = true;
             }
-            if (optical != (Optical is not null)) {
+            // The glass stages index the buffer by the entry's side (SdfWorldPackage.ShadowOpticalTexelWords), so it is
+            // replaced whenever the texels change.
+            if ((optical != (Optical is not null)) || (optical && (m_opticalTexels != texels))) {
                 m_owner.Retire(replaced: Optical);
+                m_opticalTexels = (optical ? texels : 0);
                 Optical = (optical
                     ? m_owner.m_gpu.BufferFactory.CreateDeviceLocal(
                         name: m_owner.Name(part: $"shadow-{EntryNames[Index]}", detail: "optical"),
@@ -1155,6 +1160,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             ReleaseLayers();
             m_owner.Retire(replaced: Optical);
             Optical = null;
+            m_opticalTexels = 0;
             foreach (var selection in m_selections) { selection.Dispose(); }
             m_owner.m_gpu.Bindings.DestroyPool(poolHandle: m_pool);
             foreach (var blocks in m_blocks) {
