@@ -142,6 +142,9 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     /// arena or its prepared replacement, a seed view declarations are read through, a derived board's recompute, a
     /// settlement's seed, a compose or transform scratch store, and a client's state mirror.</summary>
     public static WorkKind ArenaBuilds { get; } = Registry.Declare(name: "world.boot.arena-builds", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the rows a client's state view reloads into the arena it keeps, in place of a
+    /// build, when a document over the same catalog replaces only some rows.</summary>
+    public static WorkKind ArenaRowReloads { get; } = Registry.Declare(name: "world.boot.arena-row-reloads", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the full installs of a live document: the rules recompiled and the arena, the
     /// fields and the screens reconciled against the candidate, with or without the population's rebuild.</summary>
     public static WorkKind FullInstalls { get; } = Registry.Declare(name: "world.boot.full-installs", unit: "count", workClass: WorkClass.Deterministic);

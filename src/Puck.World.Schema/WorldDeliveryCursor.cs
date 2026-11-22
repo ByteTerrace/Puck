@@ -113,9 +113,9 @@ public sealed class WorldDeliveryCursor {
     }
 
     /// <summary>Decides what the stream owes its reader, now, to complete the document <see cref="DeliverDefinition"/>
-    /// just returned. A reader's arena is replaced with every document, which carries every cell the reader may read but
-    /// no observation header, so the headers of its restricted rows are owed (<see cref="OwesRows"/>) until a snapshot's
-    /// rows advance through this cursor. The stream's first document is completed by its attach primer. A cut, a
+    /// just returned. Every document carries every cell the reader may read but no observation header, and a reader
+    /// reloads the rows it replaces (all of them, or only those whose disclosed instance changed), so the headers of its
+    /// restricted rows are owed (<see cref="OwesRows"/>) until a snapshot's rows advance through this cursor. The stream's first document is completed by its attach primer. A cut, a
     /// whole-document replacement (a shape change or a jump, whose bodies and lattice values may have moved without a
     /// delta) and a document whose fields the reader does not all keep owe the whole primer. Any other replacement (a
     /// frame move, an authority transition) owes only the headers, which the running tick's own snapshot carries when it

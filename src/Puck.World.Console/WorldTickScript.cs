@@ -82,8 +82,10 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
     public int PendingCount => m_pending.PendingCount;
 
     /// <summary>Raised on the host pump as each armed line answers, with the handler's result exactly as it returned
-    /// it (its output's line breaks intact), before <see cref="Line.Answer"/> records the one-line form: a refusal at
-    /// submission, an immediate answer, or a simulation line's settled verdict when its tick applies.</summary>
+    /// it (its output's line breaks intact), after <see cref="Line.Outcome"/> records how it answered and before
+    /// <see cref="Line.Answer"/> records the one-line form: a refusal at submission, an immediate answer, a simulation
+    /// line's settled verdict when its tick applies, or the verdict of work an immediate line started off the pump when
+    /// it settles.</summary>
     public event Action<Line, CommandResult>? Answered;
 
     /// <summary>Raised on the host pump in the authority tick-complete hook, with the just-completed tick, before that
@@ -250,9 +252,9 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
     // Records a ran line's answer and narrates it on stderr, beside the lines it caused. Answered sees the handler's
     // result itself, before the line's one-line form flattens it.
     private void Answer(Line line, in CommandResult result) {
+        line.Outcome = (result.Faulted ? "faulted" : (result.IsError ? "refused" : "ran"));
         Answered?.Invoke(arg1: line, arg2: result);
         line.Answer = result.Output.ReplaceLineEndings(replacementText: " ");
-        line.Outcome = (result.Faulted ? "faulted" : (result.IsError ? "refused" : "ran"));
         line.Session?.Dispose();
         if (line.Quiet && !result.IsError) {
             return;
@@ -310,10 +312,16 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
         var settling = ((simulation && (line.Router is null)) ? m_settling.AddLast(value: line) : null);
         var result = commands.SubmitSession(line: line.Text, session: session);
 
-        // A simulation line answers when its tick applies; one refused at submission answers now.
+        // A simulation line answers when its tick applies; one refused at submission answers now, and one whose
+        // handler settles its answer later (work started off the pump) answers when it settles, after the lines
+        // pinned behind it have run on their own ticks.
         if (!simulation || result.IsError) {
             if (settling?.List is not null) {
                 m_settling.Remove(node: settling);
+            }
+            if (!result.IsError && (result.Settlement is { } pending)) {
+                pending.OnSettled(continuation: verdict => Answer(line: line, result: verdict));
+                return;
             }
 
             Answer(line: line, result: result);

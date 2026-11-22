@@ -56,7 +56,10 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     internal Func<CommandMetadata, bool>? Authorize { get; }
     internal TextSubmissionBarrier Barrier => m_barrier;
     internal bool HasPendingSimulationSubmission => m_barrier.HasPending;
-    internal bool SettlesResults => (m_onSettled is not null);
+    /// <summary>Gets whether this session reports each line's settled result, a pending verdict's included, so a handler
+    /// that settles its answer later (<see cref="CommandResult.Settling"/>) is answered when it settles; a session that
+    /// settles nothing publishes only what a line returned at submission.</summary>
+    public bool SettlesResults => (m_onSettled is not null);
     // This session's own hold predicate, or null for a session nothing suspends on its own (the ordinary case; nothing
     // holds every session at once). While it returns true, Collect rotates this session to the
     // tail exactly like a read-after-write-blocked one, leaving every other session's drain unaffected.
@@ -319,6 +322,19 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
             m_tracked = true;
             m_source.TrackHold(session: this);
         }
+    }
+    /// <summary>Runs <paramref name="complete"/> on the host pump, in the first console drain that finds
+    /// <paramref name="done"/> true, without holding this session or any other: the way a handler that started work off
+    /// the pump settles its answer on the pump. Call only from the host pump, normally through an immediate handler's
+    /// <see cref="CommandContext.TextSession"/>.</summary>
+    /// <param name="done">A short pump-thread predicate that turns true once the work has finished.</param>
+    /// <param name="complete">The completion, run once on the pump.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="done"/> or <paramref name="complete"/> is
+    /// <see langword="null"/>.</exception>
+    public void CompleteOnPump(Func<bool> done, Action complete) {
+        ArgumentNullException.ThrowIfNull(argument: done);
+        ArgumentNullException.ThrowIfNull(argument: complete);
+        m_source.TrackCompletion(done: done, complete: complete);
     }
     /// <summary>Queues a short host operation behind this session's preceding commands, mutation barriers and
     /// waits. The delegate runs on the command pump, never on the calling worker. It must not block on I/O or

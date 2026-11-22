@@ -546,6 +546,51 @@ public sealed class WorldDocumentStateView : IWorldStateView {
             );
         }
     }
+    private readonly List<StateRow> m_reloadedRows = [];
+
+    // Reloads into the kept arena the authored rows of after that are not the instances before holds at the same
+    // position, when the two sections differ in nothing else; false, leaving the arena as it was, when they do or
+    // the arena refuses the rows. A reloaded row's observation header is dropped, as a build drops every one: the
+    // authority owes it again with the row's next snapshot.
+    private bool TryReloadRows(WorldStateSection? before, WorldStateSection? after) {
+        if (
+            (before is null) || (after is null) ||
+            !ReferenceEquals(objA: before.Body, objB: after.Body) ||
+            !ReferenceEquals(objA: before.Identity, objB: after.Identity) ||
+            !ReferenceEquals(objA: before.Lattices, objB: after.Lattices) ||
+            !ReferenceEquals(objA: before.Spaces, objB: after.Spaces) ||
+            !ReferenceEquals(objA: before.Enums, objB: after.Enums) ||
+            !ReferenceEquals(objA: before.Families, objB: after.Families) ||
+            !ReferenceEquals(objA: before.Records, objB: after.Records) ||
+            !ReferenceEquals(objA: before.Pools, objB: after.Pools) ||
+            !ReferenceEquals(objA: before.PairPools, objB: after.PairPools)
+        ) {
+            return false;
+        }
+
+        var held = (before.World ?? []);
+        var next = (after.World ?? []);
+
+        if (held.Count != next.Count) { return false; }
+
+        var rows = m_reloadedRows;
+
+        rows.Clear();
+        for (var index = 0; (index < next.Count); index++) {
+            if (!ReferenceEquals(objA: held[index], objB: next[index])) { rows.Add(item: next[index]); }
+        }
+        if ((rows.Count != 0) && !m_arena.TryLoad(rows: rows, time: ArenaTime.Origin, reason: out _)) {
+            rows.Clear();
+            return false;
+        }
+        for (var index = 0; (index < next.Count); index++) {
+            if (!ReferenceEquals(objA: held[index], objB: next[index])) { _ = m_observations.Remove(key: index); }
+        }
+        WorldBootWork.Count(amount: rows.Count, kind: WorldBootWork.ArenaRowReloads);
+        rows.Clear();
+
+        return true;
+    }
     // Resolves the field rows of the definition currently delivered, keeping the delivered cells while the lattice
     // keeps its shape; a definition already shaped for costs one comparison.
     private WorldDefinition Shape() => Shape(document: m_definition());
@@ -559,10 +604,13 @@ public sealed class WorldDocumentStateView : IWorldStateView {
 
         // A definition carrying the same state section and catalog over (a response swap moves only placements) keeps the
         // arena and the values delivered into it: building one again from the section costs a whole state load.
+        // A section over the same catalog whose rows are the instances the arena last loaded except for some (a replica
+        // document disclosed again after its frame moved) reloads only those rows, as the authority's own store does
+        // (WorldServer.SyncArenaValues).
         if (
-            (m_shaped is null) ||
-            !ReferenceEquals(objA: document.StateRaw, objB: m_shaped.StateRaw) ||
-            !ReferenceEquals(objA: document.StateCatalog, objB: m_shaped.StateCatalog)
+            (m_shaped is not { } shaped) ||
+            !ReferenceEquals(objA: document.StateCatalog, objB: shaped.StateCatalog) ||
+            (!ReferenceEquals(objA: document.StateRaw, objB: shaped.StateRaw) && !TryReloadRows(before: shaped.StateRaw, after: document.StateRaw))
         ) {
             WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
             m_arena = new StateArena(catalog: document.StateCatalog, section: document.StateRaw, time: ArenaTime.Origin);

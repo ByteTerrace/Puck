@@ -30,14 +30,25 @@ public sealed class TextCommandSource : ITextCommandSink {
     }
     // Pump thread only, as HoldWhile is.
     internal void TrackHold(TextCommandSession session) => m_holding.Add(item: session);
+    // Pump thread only, as CompleteOnPump is.
+    internal void TrackCompletion(Func<bool> done, Action complete) => m_completions.Add(item: (done, complete));
 
-    // Reads every armed hold once per drain, so a hold ends, reports and answers its line when it releases, whether
-    // or not a line waits behind it.
+    private readonly List<(Func<bool> Done, Action Complete)> m_completions = [];
+
+    // Reads every armed hold and pending completion once per drain, so a hold ends, reports and answers its line when
+    // it releases, whether or not a line waits behind it, and a completion runs once its work is done.
     private void PollHolds() {
         for (var index = (m_holding.Count - 1); (index >= 0); index--) {
             if (!m_holding[index].PollHold()) {
                 m_holding.RemoveAt(index: index);
             }
+        }
+        for (var index = 0; (index < m_completions.Count); index++) {
+            var (done, complete) = m_completions[index];
+
+            if (!done()) { continue; }
+            m_completions.RemoveAt(index: index--);
+            complete();
         }
     }
 
