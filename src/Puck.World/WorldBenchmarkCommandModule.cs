@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -83,6 +84,16 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     private static readonly CommandForms WorldBenchmarkForms = CommandForms.Of(verb: "world.benchmark", "run <route>|<source.puck> [<chapter name prefix>|-] [at <tick>] [budget <ms>] [timeout <seconds>] [loops <n>] [output <directory>]", "stop", "overlay on|off|auto");
 
     private sealed record Row(int At, int Slot, string Command, bool Refusal);
+
+    // A run that has asked the seat's navigation to bake and starts once it has, or fails once the run's own wall-time
+    // limit has passed without it; Stopped is set by world.benchmark stop.
+    private sealed class Preparation(string reference, Puck.World.Client.WorldAuthorityEndpoint endpoint, long started, long limit) {
+        public Puck.World.Client.WorldAuthorityEndpoint Endpoint { get; } = endpoint;
+        public string Reference { get; } = reference;
+        public long Limit { get; } = limit;
+        public long Started { get; } = started;
+        public bool Stopped { get; set; }
+    }
 
     // One reading of the seat's body: the tick it was taken on and its answer, a body.where or body.place line's or, for
     // a route chapter, what the seat driver read from the seat's own deliveries, spelled as those lines spell it.
@@ -174,6 +185,10 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     private Puck.World.Client.WorldSeatDriver? m_driver;
     private int m_rateHz;
     private Chapter? m_goalChapter;
+    // A route run waiting for its seat's navigation to bake, off the tick, before it arms; and what that wait took, which
+    // the run's report names beside its frames and which none of them include.
+    private Preparation? m_preparing;
+    private JsonObject? m_prepared;
 
     private int CurrentChapter => m_chapters.FindLastIndex(static chapter => chapter.BeginIndex >= 0);
     private bool OverlayVisible => m_overlay ?? m_running;
@@ -207,6 +222,9 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         if (m_running) {
             return CommandResult.Error(output: $"[world.benchmark: '{m_route}' is running — world.benchmark stop ends it]");
         }
+        if (m_preparing is { } preparing) {
+            return CommandResult.Error(output: $"[world.benchmark: '{preparing.Reference}' is preparing navigation — world.benchmark stop ends it]");
+        }
         if (m_finishOwed is not null) {
             return CommandResult.Error(output: $"[world.benchmark: '{m_route}' finished and its report waits for its last chapter reads; ask again once it is written]");
         }
@@ -227,21 +245,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
             if ((context.TextSession is { } session) && !senses.Navigation(endpoint: endpoint).Ready && route.Chapters.Any(predicate: chapter =>
                 chapter.Name.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal) && chapter.Steps.Any(predicate: static step => step is WorldRouteStep.Go { Direct: false }))) {
-                senses.Navigation(endpoint: endpoint).Prepare();
-                session.HoldWhile(
-                    hold: () => {
-                        var navigation = senses.Navigation(endpoint: endpoint);
-
-                        if (navigation.Ready) { return false; }
-                        navigation.Prepare();
-                        return true;
-                    },
-                    released: deadlinePassed => (deadlinePassed
-                        ? CommandResult.Error(output: $"[world.benchmark: navigation preparation reached the answer deadline; {senses.Navigation(endpoint: endpoint).Domains.Baked}/{senses.Navigation(endpoint: endpoint).Domains.Declared} domains of the document '{endpoint.Identity}' delivered are baked, the rest bake on]")
-                        : Run(at: at, budget: budget, context: context, loops: loops, output: output, prefix: prefix, reference: reference, timeout: timeout)),
-                    publishResult: true
-                );
-                return new CommandResult(Output: $"[world.benchmark: preparing navigation for '{reference}' over the document '{endpoint.Identity}' delivered, off the tick]");
+                return Prepare(at: at, budget: budget, context: context, endpoint: endpoint, loops: loops, output: output, prefix: prefix, reference: reference, session: session, timeout: timeout);
             }
             return RunRoute(at: at, budget: budget, loops: loops, output: output, prefix: prefix, route: route, timeout: timeout);
         }
@@ -321,6 +325,59 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         var lastTick = (firstTick + ((ulong)(m_programs.Sum(selector: static program => (program.Duration + GapTicks)) * loops)) - GapTicks);
 
         return Enter(budget: budget, firstTick: firstTick, label: (string.IsNullOrEmpty(value: prefix) ? reference : $"{reference}#{prefix}"), lastTick: lastTick, loops: loops, output: output, timeout: timeout);
+    }
+
+    // Asks the seat's navigation to bake and answers at once. The pump starts the run once the bake is done, or reports that
+    // it never started once the run's own wall-time limit passes, so the wait is bounded by the caller's timeout and not by
+    // the time its call may take to answer; world.benchmark reads which. The wait precedes the run's recording, so no frame
+    // of it is a measured one.
+    private CommandResult Prepare(CommandContext context, TextCommandSession session, Puck.World.Client.WorldAuthorityEndpoint endpoint, string reference, string prefix, ulong? at, double budget, int timeout, int loops, string? output) {
+        var started = Stopwatch.GetTimestamp();
+        var preparing = new Preparation(endpoint: endpoint, limit: (started + (Stopwatch.Frequency * timeout)), reference: reference, started: started);
+
+        senses!.Navigation(endpoint: endpoint).Prepare();
+        m_preparing = preparing;
+        session.CompleteOnPump(
+            done: () => {
+                var navigation = senses.Navigation(endpoint: endpoint);
+
+                if (preparing.Stopped || navigation.Ready || (Stopwatch.GetTimestamp() >= preparing.Limit)) { return true; }
+                navigation.Prepare();
+                return false;
+            },
+            complete: () => {
+                m_preparing = null;
+                if (preparing.Stopped) { return; }
+
+                var navigation = senses.Navigation(endpoint: endpoint);
+                var (baked, declared) = navigation.Domains;
+                var seconds = Stopwatch.GetElapsedTime(startingTimestamp: started).TotalSeconds;
+
+                if (!navigation.Ready) {
+                    Unstarted(reference: reference, reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"navigation preparation did not finish within the run's {timeout} s limit; {baked}/{declared} domains of the document '{endpoint.Identity}' delivered are baked, the rest bake on"));
+                    return;
+                }
+
+                m_prepared = new JsonObject { ["what"] = "navigation", ["seconds"] = seconds, ["domainsBaked"] = baked, ["domainsDeclared"] = declared };
+
+                var begun = Run(at: at, budget: budget, context: context, loops: loops, output: output, prefix: prefix, reference: reference, timeout: timeout);
+
+                if (begun.IsError) {
+                    m_prepared = null;
+                    Unstarted(reference: reference, reason: begun.Output);
+                } else {
+                    Console.Error.WriteLine(value: begun.Output);
+                }
+            }
+        );
+
+        return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.benchmark: preparing navigation for '{reference}' over the document '{endpoint.Identity}' delivered, off the tick; the run starts once it is baked, or never starts after {timeout} s — world.benchmark reads which]"));
+    }
+
+    // Records, and narrates on standard error, that a route run never started.
+    private void Unstarted(string reference, string reason) {
+        m_summary = $"[world.benchmark: the route '{reference}' never started: {reason}]";
+        Console.Error.WriteLine(value: m_summary);
     }
 
     // Plays a route of the running document: each chapter's steps are played by the route's seat program through the
@@ -909,6 +966,11 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     private string Frames(HostFrameStatistics statistics) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{statistics.Frames} iterations in {statistics.Seconds:0.00} s ({statistics.AverageRate:0.0}/s), interval avg {statistics.Interval.Mean:0.00} p99 {statistics.Interval.P99:0.00} max {statistics.Interval.Max:0.00} ms, work avg {statistics.Work.Mean:0.00} p99 {statistics.Work.P99:0.00} max {statistics.Work.Max:0.00} ms, {statistics.Over} over {m_budget:0.0} ms ({statistics.OverTwice} over twice it)");
 
     private CommandResult Status() {
+        if (m_preparing is { } preparing) {
+            var (baked, declared) = senses!.Navigation(endpoint: preparing.Endpoint).Domains;
+
+            return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.benchmark: preparing navigation for '{preparing.Reference}': {baked}/{declared} domains baked, {Stopwatch.GetElapsedTime(startingTimestamp: preparing.Started).TotalSeconds:0} s of {Stopwatch.GetElapsedTime(startingTimestamp: preparing.Started, endingTimestamp: preparing.Limit).TotalSeconds:0} s]"));
+        }
         if (!m_running) {
             return new CommandResult(Output: m_summary);
         }
@@ -926,7 +988,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.benchmark",
-            description: $"Plays a route through the running world in real time and reports every host iteration of it: {WorldBenchmarkForms.Spelling}. A route named by a routes row of the running document is played chapter by chapter by its seat program, which works the seat's own controls each tick toward the chapter's places; a chapter arrives when its steps finish and fails, naming the kind, the tick and the place, on a stick held while the body goes nowhere, on leaving the places its path crosses, on a lost path or past its time limit; its driver is the seat's client and reads only what the seat's authority delivered, in this process or another, and each chapter is armed as the one before it ends. Otherwise a route is the test blocks of a .puck source whose names start with the prefix (every one, with none or '-'), each a chapter played in declaration order: its when lines are armed through the seat's own ingress at their ticks, as a headless puck test submits them, and its expect lines are its arrival. The first line lands {LeadTicks} ticks after the run is armed, or at the tick 'at' names when that is later, and each chapter follows the one before by {GapTicks} ticks. 'loops' plays the route that many times (at most {MaxLoops}), each loop armed from the tick the one before it ends on, so a run is reported as its cold first loop, its warm second and its steady rest. A run armed before the world's first tick (a paused boot) is fresh: every line lands on a tick its caller chose from the boot image, so its state hashes compare with another fresh run's armed at the same tick. Any other run is attached, starts wherever the world stands, and its hashes are informational. Nothing in a run pauses, settles or waits, and lockstep presentation is turned off for its span and restored after. Every host iteration from the first chapter's start is recorded past host.frames' ring, and the host's first iterations through that start are its boot span. Each chapter ends with the body's pose judged against its position and grounded gates (arrived or off course), the authority's state hash, its identity (the hash of its program), and its iterations' statistics: interval and work (the interval less the pacer's wait) as mean, median, 95th, 99th and 99.9th percentile and maximum, the counts whose work passed the budget (default one 60 Hz period), twice it, 50 ms and 100 ms, pacing deviation, collections and ticks shed; the iterations over budget with their tick, the body's last sampled position and their phases; each GPU pass's mean and maximum over samples taken every {SampleTicks} ticks; and the raw answers of world.residency, the render.record, gpu.queue and sdf counters and host.memory at both ends, whose change a reader takes. A chapter is written disturbed, with the reason and its statistics beside it, when presentation was locked to ticks in any iteration, the simulation stepped no tick for {StallMilliseconds:0} ms, or a step did not answer as authored. The run writes run.json (puck.benchmark.run.v2) and frames.csv (one row per iteration) to the output directory, by default benchmarks/<local date and time> under the run's state root. The imported authored HUD panel follows a playing run by default; overlay on|off|auto overrides that visibility on demand. The report records that choice and the closing rolling GPU timestamp window, including the overlay pass when measured. With no argument it reads the running route's chapter and tick, or the last run's summary. Each chapter's first tick releases, ahead of its own lines, every control the chapter before it left held, so a chapter starts from released input whatever came before it. stop ends the run where it stands, drops its armed lines, lets go every control the lines that reached the seat left held and writes the partial report, listing every requested loop; a run that passes its wall-time limit (default {DefaultTimeoutSeconds} s) ends the same way, and so does a run whose World shuts down. Refused while world.at lines are armed: a run owns the pinned lines while it plays. An iteration is the host loop's interval, never the time a frame stood on the display, and a headless host records iterations without a renderer.",
+            description: $"Plays a route through the running world in real time and reports every host iteration of it: {WorldBenchmarkForms.Spelling}. A route named by a routes row of the running document is played chapter by chapter by its seat program, which works the seat's own controls each tick toward the chapter's places; a chapter arrives when its steps finish and fails, naming the kind, the tick and the place, on a stick held while the body goes nowhere, on leaving the places its path crosses, on a lost path or past its time limit; its driver is the seat's client and reads only what the seat's authority delivered, in this process or another, and each chapter is armed as the one before it ends. Otherwise a route is the test blocks of a .puck source whose names start with the prefix (every one, with none or '-'), each a chapter played in declaration order: its when lines are armed through the seat's own ingress at their ticks, as a headless puck test submits them, and its expect lines are its arrival. The first line lands {LeadTicks} ticks after the run is armed, or at the tick 'at' names when that is later, and each chapter follows the one before by {GapTicks} ticks. 'loops' plays the route that many times (at most {MaxLoops}), each loop armed from the tick the one before it ends on, so a run is reported as its cold first loop, its warm second and its steady rest. A run armed before the world's first tick (a paused boot) is fresh: every line lands on a tick its caller chose from the boot image, so its state hashes compare with another fresh run's armed at the same tick. Any other run is attached, starts wherever the world stands, and its hashes are informational. Nothing in a run pauses, settles or waits, and lockstep presentation is turned off for its span and restored after. A route whose paths need the seat's navigation baked first waits for the bake before it arms, off the tick and without holding the call: the line answers at once, world.benchmark reads the bake's progress, and the run starts when it is baked or is reported as never started once 'timeout' seconds have passed. That wait is the run's preparation, written beside its frames and in none of them. Every host iteration from the first chapter's start is recorded past host.frames' ring, and the host's first iterations through that start are its boot span. Each chapter ends with the body's pose judged against its position and grounded gates (arrived or off course), the authority's state hash, its identity (the hash of its program), and its iterations' statistics: interval and work (the interval less the pacer's wait) as mean, median, 95th, 99th and 99.9th percentile and maximum, the counts whose work passed the budget (default one 60 Hz period), twice it, 50 ms and 100 ms, pacing deviation, collections and ticks shed; the iterations over budget with their tick, the body's last sampled position and their phases; each GPU pass's mean and maximum over samples taken every {SampleTicks} ticks; and the raw answers of world.residency, the render.record, gpu.queue and sdf counters and host.memory at both ends, whose change a reader takes. A chapter is written disturbed, with the reason and its statistics beside it, when presentation was locked to ticks in any iteration, the simulation stepped no tick for {StallMilliseconds:0} ms, or a step did not answer as authored. The run writes run.json (puck.benchmark.run.v2) and frames.csv (one row per iteration) to the output directory, by default benchmarks/<local date and time> under the run's state root. The imported authored HUD panel follows a playing run by default; overlay on|off|auto overrides that visibility on demand. The report records that choice and the closing rolling GPU timestamp window, including the overlay pass when measured. With no argument it reads the running route's chapter and tick, or the last run's summary. Each chapter's first tick releases, ahead of its own lines, every control the chapter before it left held, so a chapter starts from released input whatever came before it. stop ends the run where it stands, drops its armed lines, lets go every control the lines that reached the seat left held and writes the partial report, listing every requested loop; a run that passes its wall-time limit (default {DefaultTimeoutSeconds} s) ends the same way, and so does a run whose World shuts down. Refused while world.at lines are armed: a run owns the pinned lines while it plays. An iteration is the host loop's interval, never the time a frame stood on the display, and a headless host records iterations without a renderer.",
             forms: WorldBenchmarkForms,
             handler: (context, args) => {
                 if (args.Count == 2 && args.Is(0, "overlay")) {
@@ -940,6 +1002,14 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
                     return Status();
                 }
                 if ((args.Count == 1) && args.Is(index: 0, value: "stop")) {
+                    if (m_preparing is { } preparing) {
+                        preparing.Stopped = true;
+                        m_preparing = null;
+                        Unstarted(reference: preparing.Reference, reason: "world.benchmark stop ended its navigation preparation");
+
+                        return new CommandResult(Output: m_summary);
+                    }
+
                     return End(reason: "stopped");
                 }
                 if ((args.Count == 3) && args.Is(index: 0, value: "mark") && args.TryInt(index: 1, value: out var chapter) && (args.Is(index: 2, value: "begin") || args.Is(index: 2, value: "end"))) {
