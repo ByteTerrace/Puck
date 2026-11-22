@@ -23,7 +23,7 @@ namespace Puck.SdfVm;
 // the node proves the slot complete (RenderGraphSlotResults), then handed to the residency's exposures
 // (SdfViewExposures.Publish) with the view, its generation and the multiplier the frame drew with. Both buffers are the recorder's own,
 // never a graph version, and each slot's are touched only by that slot's recordings, which the slot's fence orders.
-internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
+internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     // The common frame values copy by name from the world layout, whose block the one frame writer lays out.
     private static readonly SdfFrameBlock.Copy[] FrameCopies = SdfFrameBlock.CopiesInto(layout: SdfWorldInterfaces.SkyParameters);
     private static readonly int ResolvedSurfaceOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.ResolvedSurface));
@@ -64,7 +64,6 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
     private readonly bool[] m_declaredScreens = new bool[SdfWorldTables.MaxScreenSurfaces];
     private readonly bool[] m_sampledScreens = new bool[SdfWorldTables.MaxScreenSurfaces];
 
-    private SdfWorldView m_view;
     private bool m_disposed;
     // The composite's image meter, one slot each; empty for the sky.
     private readonly MeterSlot[] m_meters;
@@ -82,10 +81,9 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
         internal float Local;
     }
 
-    internal SdfSkyRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
+    internal SdfSkyRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) : base(owner: owner, instance: context.Instance, view: view) {
         m_context = context;
         m_owner = owner;
-        m_view = view;
         m_kernel = ((context.Part == SdfWorldPackage.Parts.Composite) ? SdfKernel.Composite : SdfKernel.Sky);
 
         var fragment = owner.FragmentOf(instance: context.Instance)!;
@@ -141,7 +139,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
             meter.Histogram.Dispose();
             meter.Readback.Dispose();
         }
-        m_owner.Leave(view: m_view);
+        LeaveView();
     }
     // The sky's detail rows: its runs', then every layer label the composition's skies have packed, which only grow.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_view.Residency.SkyDetails.Labels;
@@ -164,13 +162,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
         }
         return hash.Value;
     }
-    // The view's residency is the state every recording of it shares (IRenderGraphPackageRecorder.RecordingDomain).
-    public object? RecordingDomain => m_view.Residency;
-    public void PrepareRecord(in FrameContext context) {
-        if (m_owner.PrepareRecord(instance: m_context.Instance, view: ref m_view, context: in context)) {
-            DeclareScreens(residency: m_view.Residency);
-        }
-    }
+    private protected override void FollowedResidency() => DeclareScreens(residency: m_view.Residency);
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         var residency = m_view.Residency;
         var tables = residency.Staged(context: recording.Context);

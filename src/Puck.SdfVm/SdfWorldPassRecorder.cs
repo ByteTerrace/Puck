@@ -17,7 +17,7 @@ namespace Puck.SdfVm;
 // the planner's are the instance's, and the node's orders the work counters. The one exception is the mesh part's
 // occlusion (SdfMeshOcclusion), which orders its own buffers and moves the mesh target between its two phases, leaving it
 // in its attachment layout as the planner expects.
-internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
+internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     // Views attribute analytic sky lighting by layer; the bins pass counts each bin's tiles (sdf-world-views-bins.comp.hlsl),
     // a row for every bin a plan gives a width (SdfShadeDispatch.PlanBins).
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part switch {
@@ -86,9 +86,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // Whether the far pass keeps a static layer (SdfWorldPackage.WithShadows' farStatic).
     private bool HasFarStatic => ((m_part == SdfWorldPackage.Parts.ShadowFar) && m_outputs.Contains(value: SdfWorldPackage.Parts.ShadowFarStaticDepth));
 
-    // The view the pass records, followed in place when the instance resolves another its passes can record
-    // (SdfWorldPasses.CanFollow); one they cannot record rebuilds them instead.
-    private SdfWorldView m_view;
 
     // Which screen indices the residency binds.
     private readonly bool[] m_declaredScreens = new bool[SdfWorldTables.MaxScreenSurfaces];
@@ -203,11 +200,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
     private readonly SdfShadeSlots m_shade;
 
-    public SdfWorldPassRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
+    public SdfWorldPassRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) : base(owner: owner, instance: context.Instance, view: view) {
         m_context = context;
         m_shade = new SdfShadeSlots(slots: context.InFlightFrames);
         m_owner = owner;
-        m_view = view;
         m_part = (context.Part ?? throw new ArgumentException(message: $"Pass '{context.Pass}' runs no part of '{RenderGraphPackageCatalog.SdfWorld}'.", paramName: nameof(context)));
         // Port declarations are captured by graph planning, before the asynchronous build. The live frame may already
         // request another fade capacity when this recorder installs or follows a view.
@@ -540,7 +536,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
 
         m_shade.Release(releases: m_owner.ShadeReleases);
-        m_owner.Leave(view: m_view);
+        LeaveView();
     }
     private void DisposeBackFramebuffers() {
         foreach (var framebuffer in m_staticFramebuffers) { framebuffer?.Dispose(); }
@@ -911,12 +907,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         return -1;
     }
-    // The view's residency is the state every recording of it shares (IRenderGraphPackageRecorder.RecordingDomain).
-    public object? RecordingDomain => m_view.Residency;
-    // Takes the view the instance resolved this frame (SdfWorldPasses.PrepareRecord). A counter change holds recording
-    // until matching passes install. The ports and screens rebind for another residency's tables on this recording.
-    public void PrepareRecord(in FrameContext context) {
-        if (!m_owner.PrepareRecord(instance: m_context.Instance, view: ref m_view, context: in context)) { return; }
+    // The view follows the one the instance resolved this frame in place when its passes can record it
+    // (SdfWorldPasses.CanFollow); one they cannot record rebuilds them instead. A counter change holds recording until
+    // matching passes install. The ports and screens rebind for another residency's tables on this recording.
+    private protected override void FollowedResidency() {
         DeclareScreens(residency: m_view.Residency);
         foreach (var screens in m_screens) {
             Array.Clear(array: screens);

@@ -36,7 +36,7 @@ one.
   what E4 keeps serial (the field and input tail and the subscribers'
   `DeliverSnapshot`), which is profiled before T3 assumes otherwise.
 - With residency staging moved out of recording into package preparation,
-  per-view command recording (`ShaderPipelineRenderNode.RenderFrame`) sums to
+  per-view command recording (`ShaderPipelineRenderNode.RecordPendingFrame`) sums to
   about 1 ms in the debug world, while total produce reaches about 26 ms at
   2560 by 1440 (beside 7 to 10 ms of tick). Most of produce is therefore
   outside recording. The breakdown by part now exists (below); the 2060's one

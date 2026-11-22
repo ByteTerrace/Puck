@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
-using Puck.Hosting;
 using Puck.Shaders;
 using Puck.Maths;
 
@@ -13,7 +12,7 @@ namespace Puck.SdfVm;
 // stationary window it updates in place. A spatial
 // resolve binds the tables' fillers at the temporal members. The sky and the composite follow it, so it leaves the render
 // to the composite to complete.
-internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
+internal sealed class SdfResolveRecorder : SdfViewRecorder, IRenderGraphPackageRecorder {
     // Resolve-only values may shift common members. Compile the name-based copies once; native pass blocks retain
     // their established layout, and the one frame writer remains authoritative for common values.
     private static readonly SdfFrameBlock.Copy[] FrameCopies = SdfFrameBlock.CopiesInto(layout: SdfWorldInterfaces.ResolveParameters);
@@ -45,13 +44,11 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
     private readonly SdfWorldTables?[] m_portTables;
     private readonly (nint Lit, nint ColorRead, nint SurfaceRead, nint ColorWrite, nint SurfaceWrite, nint Window)[] m_portHistory;
 
-    private SdfWorldView m_view;
     private bool m_disposed;
 
-    internal SdfResolveRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
+    internal SdfResolveRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) : base(owner: owner, instance: context.Instance, view: view) {
         m_context = context;
         m_owner = owner;
-        m_view = view;
         m_temporal = owner.FragmentOf(instance: context.Instance)!.Resources.Any(predicate: static resource => resource.History);
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
         m_portHistory = new (nint, nint, nint, nint, nint, nint)[context.InFlightFrames];
@@ -64,11 +61,8 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
             return;
         }
         m_disposed = true;
-        m_owner.Leave(view: m_view);
+        LeaveView();
     }
-    // The view's residency is the state every recording of it shares (IRenderGraphPackageRecorder.RecordingDomain).
-    public object? RecordingDomain => m_view.Residency;
-    public void PrepareRecord(in FrameContext context) => _ = m_owner.PrepareRecord(instance: m_context.Instance, view: ref m_view, context: in context);
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         var residency = m_view.Residency;
         var tables = residency.Staged(context: recording.Context);

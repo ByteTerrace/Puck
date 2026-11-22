@@ -174,7 +174,7 @@ revision counters, not traced.
 
 Confirmed. A withdrawal unpublishes and stops there:
 
-`src/Puck.Shaders/ShaderPipelineRenderNode.cs:2231-2238`
+`src/Puck.Shaders/ShaderPipelineRenderNode.cs:2203-2210`
 
 ```csharp
     public void WithdrawPublication() {
@@ -218,7 +218,7 @@ Confirmed, three ways.
 Partly true. The default hook does nothing, and the environment producer does
 not override it:
 
-`src/Puck.Shaders/Graph/RenderGraphPackageRecorders.cs:344`
+`src/Puck.Shaders/Graph/RenderGraphPackageRecorders.cs:360`
 
 ```csharp
     void OnOutputsForgotten(string instance) { }
@@ -249,7 +249,7 @@ contract says "An anchored light and the screens are no part of the sample"
 Partly true as stated. The root's image is read from its latest output, which a
 withdrawal clears,
 
-`src/Puck.Shaders/Graph/RenderGraphRuntime.cs:1686-1689`
+`src/Puck.Shaders/Graph/RenderGraphRuntime.cs:1447-1450`
 
 ```csharp
     private Surface RootImage() {
