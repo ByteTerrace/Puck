@@ -37,6 +37,18 @@ public sealed partial class WorldInputRuntime {
             }
         }
     }
+    /// <summary>Stops the evaluation in flight observing what is read until <see cref="ResumeObservation"/>: a read
+    /// the host makes for its own bookkeeping inside an evaluation is not one the evaluation made.</summary>
+    /// <returns>Whether an evaluation was observing, to hand back to <see cref="ResumeObservation"/>.</returns>
+    internal bool SuspendObservation() {
+        var observing = m_observingEvaluation;
+
+        m_observingEvaluation = false;
+
+        return observing;
+    }
+    /// <summary>Restores what <see cref="SuspendObservation"/> answered.</summary>
+    internal void ResumeObservation(bool observing) => m_observingEvaluation = observing;
     internal void ObserveBodyChannel(int body, ushort channel) {
         if (!m_observingEvaluation) { return; }
         foreach (var owner in m_ordered) {

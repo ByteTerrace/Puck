@@ -15,26 +15,37 @@ public sealed partial class WorldServer {
     /// <summary>Opens one atomic gameplay batch. Every producer uses this journal boundary.</summary>
     public int BeginStateTransaction() {
         var mark = m_arena.BeginScope();
+        if (m_arena.Journal.Scopes == 1) { m_transactionDrawReads = DrawKeys.Reads; }
         if (Configuration.StateRaw?.DrawInstallCount > 0) { DrawKeys.TrackRewind(m_arena.Journal); }
         return mark;
     }
+
+    // The private draw words read when the outermost open transaction began.
+    private long m_transactionDrawReads;
+
     /// <summary>Commits a prepared batch. Deliveries happen after this boundary.</summary>
     /// <remarks>A batch that wrote a drive-gate row resyncs the gates and every input owner. Otherwise only the owners
     /// routing a body whose selection registers the batch touched resynchronize; every other owner's selection reads
     /// nothing the batch wrote.</remarks>
-    public void CommitStateTransaction(int mark) {
+    /// <returns><see langword="true"/> when the commit closed the outermost scope and did nothing else: no gate or
+    /// input owner resynchronised, no body cell resynchronised, and the batch read no private draw word
+    /// (<see cref="IEffectHost.CommitStateTransaction"/>).</returns>
+    public bool CommitStateTransaction(int mark) {
         FlagTransactionRows();
         var driveGateChanged = DrivesGate();
+        var outermost = (m_arena.Journal.Scopes == 1);
 
         m_transactionBodies.Clear();
         if (!driveGateChanged) { m_transactionBodies.AddRange(collection: Input.TouchedSelectionBodies(writtenRows: m_transactionWritten)); }
         ClearTransactionRows();
         m_arena.Commit(mark: mark);
         if (driveGateChanged) { m_grants.SyncState(Document.Definition, m_arena); }
-        m_population.SyncBodyCells(definition: Document.Definition);
+        var cellsSynced = m_population.SyncBodyCells(definition: Document.Definition);
         // Every selection was admitted by ValidateStateTransaction while the journal could still rewind; applying them
         // cannot refuse, so nothing past the arena commit can need the rewind.
         if (driveGateChanged) { Input.ApplyPreparedAll(); } else if (m_transactionBodies.Count > 0) { Input.ApplyPreparedBodies(bodies: m_transactionBodies); }
+
+        return (outermost && !driveGateChanged && !cellsSynced && (m_transactionBodies.Count == 0) && (DrawKeys.Reads == m_transactionDrawReads));
     }
     /// <summary>Restores a refused batch.</summary>
     public void RewindStateTransaction(int mark) => m_arena.Rewind(mark: mark);

@@ -7,7 +7,7 @@ public enum RuleOutcome : byte {
     /// <summary>The gate closed, the edge was already held, or the firing moved nothing.</summary>
     Idle,
 
-    /// <summary>The firing committed and moved the arena.</summary>
+    /// <summary>The firing committed, or a Level firing proven to change nothing was not run again.</summary>
     Fired,
 
     /// <summary>An effect refused, so the firing's scope rewound and one refusal was counted.</summary>
@@ -84,6 +84,15 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     private readonly List<CellKey> m_eachKeyScratch = [];
     private readonly List<StateInstanceHandle>?[] m_poolHandleScratch = new List<StateInstanceHandle>[StateCapacity.MaxInstanceBindings];
     private readonly List<CellAccess> m_readScratch = [];
+    private readonly List<int> m_writtenRows = [];
+
+    private Puck.Abstractions.Counting.WorkCount m_settled;
+    // How many firings committed through this evaluator, by whichever door: what tells a firing that ran from one a
+    // schedule answered for.
+    private long m_firingsRun;
+    // Whether the commit Commit last made did nothing on the host but close the arena's scope.
+    private bool m_commitArenaOnly;
+    private bool[] m_writtenFlags = [];
 
     /// <summary>Initializes a new evaluator over a host.</summary>
     /// <param name="host">The host every read and write goes through.</param>
@@ -133,6 +142,11 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
             return true;
         }
+        if (ReferenceEquals(objA: kind, objB: RuleWorkKinds.Settled)) {
+            value = m_settled.Value;
+
+            return true;
+        }
         if (ReferenceEquals(objA: kind, objB: RuleWorkKinds.Firings)) {
             value = m_firings.Value;
 
@@ -163,11 +177,20 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         }
     }
 
-    /// <summary>Gets or sets whether a rule whose gate closed last time, whose reads carry no host or tick
-    /// dependency, and whose every read row's version is unchanged may keep its closed verdict without re-running
-    /// its bindings and gate — and whether an unchanged binding may reuse its memoized value. Defaults to
-    /// <see langword="true"/>; a law flips it off to prove the skip changes no observable result.</summary>
+    /// <summary>Gets or sets whether a verdict whose schedule names every dependency, each at the version it was
+    /// captured at, may stand without running again: a closed gate or a held Edge keeps its verdict without its
+    /// bindings and gate, a Level firing that changed nothing is not fired again, and an unchanged binding reuses its
+    /// memoized value. Defaults to <see langword="true"/>; a law flips it off to prove the skip changes no observable
+    /// result.</summary>
     public bool SchedulingEnabled { get; set; } = true;
+    /// <summary>Gets or sets whether a Level firing its schedule would answer for is fired anyway and held to
+    /// changing nothing again: the check that the skip is invisible. A firing that then moves a row, queues an arm,
+    /// refuses or closes is recorded in <see cref="StaleQuiescence"/>. Defaults to <see langword="false"/>.</summary>
+    public bool QuiescenceChecked { get; set; }
+    /// <summary>Gets the first Level firing <see cref="QuiescenceChecked"/> found that its schedule answered for and
+    /// that did not settle again, naming the rule, the tick and the schedule; <see langword="null"/> when every one
+    /// did.</summary>
+    public string? StaleQuiescence { get; private set; }
 
     /// <summary>Returns the read schedule this evaluator holds for a rule, deriving it when the rule has not been
     /// scheduled yet: what the measured sheet and <c>--why</c> print beside a rule's counts.</summary>
@@ -179,6 +202,23 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         ArgumentNullException.ThrowIfNull(argument: latch);
 
         return Schedule(rule: rule, state: latch.Rule(name: rule.Name));
+    }
+
+    /// <summary>Returns the schedule a Level firing of a rule stands on once it has changed nothing: every row the
+    /// firing reads or writes and every host fact it observes.</summary>
+    /// <param name="rule">The compiled rule.</param>
+    /// <param name="latch">The family's edge latch, which holds the rule's state.</param>
+    /// <returns>The schedule, or <see langword="null"/> for a rule whose firing is never taken as settled: an Edge,
+    /// or a group rewind.</returns>
+    public RuleSchedule? FiringScheduleOf(CompiledRule rule, RuleLatch latch) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+        ArgumentNullException.ThrowIfNull(argument: latch);
+
+        var state = latch.Rule(name: rule.Name);
+
+        _ = Schedule(rule: rule, state: state);
+
+        return state.FiringSchedule;
     }
 
     // A rule's and its locals' schedules are a function of the compiled rule, the layout and what the host answers
@@ -228,6 +268,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             localSchedules[ordinal] = Schedule(binding: locals[ordinal]);
         }
 
+        state.FiringSchedule = FiringSchedule(deadline: deadline, rule: rule);
         state.Schedule = schedule;
         state.LocalSchedules = localSchedules;
         state.ScheduleRule = rule;
@@ -235,6 +276,33 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         state.ScheduleEpoch = m_host.FactScheduleEpoch;
 
         return schedule;
+    }
+    // Everything one firing of a rule observes or writes (RuleDataflow.CollectFiring), for the rules whose firing can
+    // be taken as settled: a Level rule fires every tick its gate holds, so a firing that changed nothing is the one
+    // worth not repeating. An Edge fires once per crossing, and a group rewind restores state no scope encloses.
+    private RuleSchedule? FiringSchedule(CompiledRule rule, RuleDeadline? deadline) {
+        if ((rule.Mode == ActionTriggerMode.Edge) || (rule.Effects is [RewindGroupEffect])) {
+            return null;
+        }
+
+        m_readScratch.Clear();
+
+        var needs = new RuleNeedsBuilder();
+
+        RuleDataflow.CollectFiring(
+            deadline: deadline,
+            facts: needs,
+            reads: m_readScratch,
+            rule: rule
+        );
+
+        return RuleSchedule.Build(
+            deadline: deadline,
+            facts: needs.FacetFacts,
+            needs: needs.Build(),
+            reader: m_host,
+            reads: m_readScratch
+        );
     }
     private RuleSchedule Schedule(CompiledRuleLocal binding) {
         m_readScratch.Clear();
@@ -524,6 +592,9 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     private RuleOutcome EvaluateRule(CompiledRule rule, RuleLatch latch, RuleLatch.RuleState bindings, ulong stepTicks, out bool applied) {
         applied = false;
         bindings.Spent.Visits++;
+
+        var firingsRun = m_firingsRun;
+
         if (
             (m_owner is { } owner) &&
             owner.TryEvaluateOwn(
@@ -538,7 +609,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         ) {
             applied = own;
             // A firing may change a later pair's inputs and another firing restore them before the next drain.
-            m_anyRerun |= ownOutcome == RuleOutcome.Fired;
+            m_anyRerun |= (m_firingsRun != firingsRun);
 
             return ownOutcome;
         }
@@ -779,29 +850,41 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             ? Schedule(rule: rule, state: state)
             : null
         );
-
-        if (
+        var level = (rule.Mode != ActionTriggerMode.Edge);
+        // A Level gate that held fires again, so the verdict it stands on is its whole firing; every other verdict
+        // fires nothing while it stands, and is the judgement alone.
+        var refires = (wasOpen && level);
+        var standing = ((schedule is null) ? null : (refires ? state.FiringSchedule : schedule));
+        var stands = (
             existed &&
-            (!wasOpen || (rule.Mode == ActionTriggerMode.Edge)) &&
-            (schedule is { Volatile: false } kept) &&
-            ReferenceEquals(objA: scheduling.GateOwner, objB: kept) &&
+            (standing is { Volatile: false }) &&
+            ReferenceEquals(objA: scheduling.Owner, objB: standing) &&
             (tick < scheduling.WakeTick) &&
+            (!refires || (scheduling.StepTicks == stepTicks)) &&
             VersionsMatch(
-            cached: scheduling.GateVersions,
-            schedule: kept
+            cached: scheduling.Versions,
+            schedule: standing
         )
-        ) {
-            // Nothing this rule reads has changed since its verdict was captured, it reads nothing a version cannot
-            // see through, and its deadline (if it has one) is still ahead: the verdict stands — closed, or an Edge
-            // already held, which fires nothing — so bindings and gate need not run at all.
+        );
+        var held = (stands && refires && QuiescenceChecked);
+
+        if (stands && !held) {
+            // Nothing the verdict stands on has changed since it was captured, it stands on nothing a version cannot
+            // see through, and its deadline (if it has one) is still ahead. A closed gate or a held Edge fires
+            // nothing, so bindings and gate need not run; a Level firing that changed nothing would read what it read
+            // and write what is already there, so it need not fire, and answers what its firing answered.
             m_skips.Increment();
             state.Spent.Skips++;
+            if (refires) {
+                m_settled.Increment();
+                state.Spent.Settled++;
+            }
             latch.Touch(schedule: scheduling);
             EndTrace(entry: trace);
             m_rerun = false;
             m_minWake = Math.Min(val1: m_minWake, val2: scheduling.WakeTick);
 
-            return RuleOutcome.Idle;
+            return (refires ? RuleOutcome.Fired : RuleOutcome.Idle);
         }
 
         var judged = Judge(
@@ -817,6 +900,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         if (!judged.Decided) {
             // A binding that could not evaluate refused (and was reported) this tick, so the next tick judges it again.
             m_rerun = true;
+            NoteUnsettled(held: held, rule: rule, standing: standing, tick: tick);
 
             return HoldOnFault(faulted: judged.Faulted, latch: latch, scheduling: scheduling, trace: trace);
         }
@@ -827,24 +911,24 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         if (
             (schedule is { } reads) &&
-            (!open || (rule.Mode == ActionTriggerMode.Edge))
+            (!open || !level)
         ) {
             // A verdict that fires nothing while its reads hold — closed, or an Edge that is held once it crosses —
             // remembers what its reads looked like, so an unchanged read next time skips. A crossing's own firing may
             // move what it read, and then the versions differ and the next tick judges again.
             CaptureVersions(
-                cache: ref scheduling.GateVersions,
+                cache: ref scheduling.Versions,
                 schedule: reads
             );
-            scheduling.GateOwner = reads;
+            scheduling.Owner = reads;
             scheduling.WakeTick = judged.WakeTick;
             m_minWake = Math.Min(val1: m_minWake, val2: judged.WakeTick);
         }
 
-        // A Level gate that holds fires every tick it holds: the author's per-tick choice, judged again next tick.
-        m_rerun = ((schedule is not { Volatile: false }) || (open && (rule.Mode != ActionTriggerMode.Edge)));
+        // A Level gate that holds fires again next tick, unless its firing below proves it changes nothing.
+        m_rerun = ((schedule is not { Volatile: false }) || (open && level));
 
-        var fires = (open && ((rule.Mode != ActionTriggerMode.Edge) || !wasOpen));
+        var fires = (open && (level || !wasOpen));
 
         if (trace is not null) {
             trace.EdgeHeld = (open && !fires);
@@ -855,10 +939,18 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         if (!changed && !fires) {
             EndTrace(entry: trace);
+            NoteUnsettled(held: held, rule: rule, standing: standing, tick: tick);
 
             return RuleOutcome.Idle;
         }
 
+        // A Level firing over a bit that already reads open writes no bookkeeping, so the firing is all its scope
+        // holds: the one a versioned firing schedule can take as settled.
+        var settles = ((fires && !changed && (schedule is not null) && (state.FiringSchedule is { Volatile: false } firingSchedule))
+            ? firingSchedule
+            : null
+        );
+        var settled = false;
         var outcome = ((fires && (rule.Effects is [RewindGroupEffect]))
             ? FireRewind(
                 applied: out applied,
@@ -877,15 +969,36 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 latch: latch,
                 open: open,
                 rule: rule,
+                settled: out settled,
+                settles: settles,
                 state: state,
                 stepTicks: stepTicks,
                 tick: tick
             ));
 
+        if (settled) {
+            // The firing moved no row, queued no arm, refused nothing and left the host as it was, and everything it
+            // read or wrote is named and versioned: fired again over the same versions it reads the same values and
+            // writes what is already there. The verdict stands until a version it names moves.
+            CaptureVersions(
+                cache: ref scheduling.Versions,
+                schedule: settles!
+            );
+            scheduling.Owner = settles;
+            scheduling.StepTicks = stepTicks;
+            scheduling.WakeTick = judged.WakeTick;
+            m_minWake = Math.Min(val1: m_minWake, val2: judged.WakeTick);
+            // Under the check every such firing is fired again, so a due list keeps visiting it.
+            m_rerun = QuiescenceChecked;
+        } else if (fires && level) {
+            scheduling.Owner = null;
+        }
+        NoteUnsettled(held: (held && !settled), rule: rule, standing: standing, tick: tick);
+
         if (outcome is RuleOutcome.Faulted or RuleOutcome.Refused) {
             // The scope rewound the edge bit, so the verdict the schedule cached against it is stale, and the next tick
             // judges the binding again.
-            scheduling.GateOwner = null;
+            scheduling.Owner = null;
             m_rerun = true;
         }
         if (outcome == RuleOutcome.Fired) {
@@ -903,8 +1016,15 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     }
     // One evaluation's proposal: the edge bit and the firing's effects written into one journal scope, which the one
     // door (Commit) then commits or rewinds together.
-    private RuleOutcome FireProposal(CompiledRule rule, RuleLatch.RuleState state, LatchKey binding, RuleLatch latch, bool changed, bool fires, bool open, ulong tick, ulong stepTicks, out bool applied) {
+    // `settles` is the firing schedule a firing that changes nothing may stand on, or null; `settled` answers whether
+    // this one did. The proof is the firing's own: its scope is the outermost one, so its commit settles every row
+    // version; no version moved across it (StateArena.MoveSequence moves exactly when one does); every row it wrote,
+    // changed or not, is one the schedule names (the journal's own entries, so no effect's declared write set is
+    // trusted for the rows it did write); it queued no arm, reported no refusal, and the host's commit closed the
+    // arena's scope and nothing else (IEffectHost.CommitStateTransaction).
+    private RuleOutcome FireProposal(CompiledRule rule, RuleLatch.RuleState state, LatchKey binding, RuleLatch latch, bool changed, bool fires, bool open, ulong tick, ulong stepTicks, out bool applied, RuleSchedule? settles, out bool settled) {
         applied = false;
+        settled = false;
 
         var firing = new EffectFiring(
             EngineTick: m_host.EngineTick,
@@ -912,6 +1032,12 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             StepTicks: stepTicks,
             Tick: tick
         );
+        // Held as an identity alone: after the commit, which may install another arena, it is compared with the live
+        // arena's journal and never read through.
+        object opened = m_host.Arena.Journal;
+        var moves = m_host.Arena.MoveSequence;
+        var refusals = m_refusalSerial;
+        var outermost = !m_host.Arena.Journal.ScopeOpen;
         var mark = m_host.BeginStateTransaction();
         var queued = m_deferred.Count;
         Step step;
@@ -949,7 +1075,18 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             throw;
         }
 
-        return Commit(
+        var quiet = (
+            (settles is not null) &&
+            outermost &&
+            (step == Step.Done) &&
+            (m_deferred.Count == queued) &&
+            (m_refusalSerial == refusals) &&
+            WritesWithin(arena: m_host.Arena, schedule: settles)
+        );
+
+        m_commitArenaOnly = false;
+
+        var outcome = Commit(
             applied: ref applied,
             firing: in firing,
             proposal: new Proposal(
@@ -966,6 +1103,40 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 Queued: queued
             )
         );
+
+        settled = (
+            quiet &&
+            (outcome == RuleOutcome.Fired) &&
+            m_commitArenaOnly &&
+            ReferenceEquals(objA: m_host.Arena.Journal, objB: opened) &&
+            (m_host.Arena.MoveSequence == moves)
+        );
+
+        return outcome;
+    }
+    // Whether every row the open scopes wrote, whether or not a value moved, is a row the schedule names.
+    private bool WritesWithin(StateArena arena, RuleSchedule schedule) {
+        if (m_writtenFlags.Length < arena.Layout.RowCount) {
+            m_writtenFlags = new bool[arena.Layout.RowCount];
+        }
+
+        m_writtenRows.Clear();
+        arena.FlagOpenRows(rows: m_writtenFlags, written: m_writtenRows);
+
+        var within = true;
+
+        foreach (var row in m_writtenRows) {
+            m_writtenFlags[row] = false;
+            within &= (Array.BinarySearch(array: schedule.Rows, value: row) >= 0);
+        }
+
+        return within;
+    }
+    // Records the first Level firing the check fired in place of a skip that did not settle again.
+    private void NoteUnsettled(bool held, CompiledRule rule, RuleSchedule? standing, ulong tick) {
+        if (held && (StaleQuiescence is null)) {
+            StaleQuiescence = $"rule '{rule.Name}' at tick {tick}: a Level firing its schedule answered for did not settle when fired again ({standing?.Describe(reader: m_host)})";
+        }
     }
     // A rule whose whole effect is rewinding its group restores the world to a turn boundary the undo arena holds, which
     // no scope can enclose, so the edge bit cannot ride a scope: it is written after the restore, and only when the

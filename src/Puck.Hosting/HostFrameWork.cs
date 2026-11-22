@@ -27,18 +27,28 @@ public enum HostFrameWorkPart {
     Flush,
     /// <summary>Applies tick inputs and pending commands.</summary>
     TickIngress,
+    /// <summary>Runs the bodies' producer programs.</summary>
+    TickProducers,
+    /// <summary>Admits the snapshots the bodies' own producers published.</summary>
+    TickAdmission,
     /// <summary>Advances bodies and their constraints.</summary>
     TickMotion,
     /// <summary>Solves dynamic contacts.</summary>
     TickContact,
-    /// <summary>Evaluates world rules, fields and events.</summary>
+    /// <summary>Collects the tick's collision, region and link events.</summary>
+    TickEvents,
+    /// <summary>Evaluates world rules and interactions.</summary>
     TickRules,
+    /// <summary>Steps board enforcement, searches, fields and deadlines.</summary>
+    TickFields,
     /// <summary>Installs placement responses and deals.</summary>
     TickResponses,
     /// <summary>Advances emulated machines.</summary>
     TickMachines,
     /// <summary>Delivers definition changes and snapshots.</summary>
     TickDelivery,
+    /// <summary>Hashes and compares the scoped replays.</summary>
+    TickReplay,
     /// <summary>The number of named parts.</summary>
     Count
 }

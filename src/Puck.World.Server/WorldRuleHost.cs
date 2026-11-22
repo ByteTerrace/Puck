@@ -698,6 +698,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         m_rules = compilation.Rules;
         m_tables = compilation.Tables;
         m_ungroupedRules = compilation.Ungrouped;
+        ForgetValueFacts();
         CompileCueReads();
 
         AdmitRules(

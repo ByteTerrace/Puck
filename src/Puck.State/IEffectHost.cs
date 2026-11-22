@@ -288,7 +288,17 @@ public interface IEffectHost : IStateReader {
     /// <summary>Checks the complete state batch before its commit.</summary>
     bool PrepareStateCommit(out EffectRefusal refusal) { refusal = EffectRefusal.None; return true; }
     /// <summary>Commits a prepared state batch.</summary>
-    void CommitStateTransaction(int mark) => Arena.Commit(mark: mark);
+    /// <param name="mark">The mark <see cref="BeginStateTransaction"/> returned.</param>
+    /// <returns><see langword="true"/> when the commit did nothing but close the arena's scope;
+    /// <see langword="false"/> when the host also did work of its own because of what the batch wrote (a
+    /// resynchronisation the written rows drive, a private draw read), whether or not a cell's value moved. A rule
+    /// evaluator takes a firing as having changed nothing only when its commit answers <see langword="true"/>, so a
+    /// host that cannot tell answers <see langword="false"/>.</returns>
+    bool CommitStateTransaction(int mark) {
+        Arena.Commit(mark: mark);
+
+        return true;
+    }
     /// <summary>Rewinds a refused state batch.</summary>
     void RewindStateTransaction(int mark) => Arena.Rewind(mark: mark);
     /// <summary>Runs one mutation through the host's own door, inside the firing's open journal scope.</summary>

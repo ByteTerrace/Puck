@@ -36,9 +36,14 @@ public sealed partial class WorldRuleHost {
     /// <inheritdoc/>
     /// <remarks>A commit may switch input owners (the selection a written register drives), so the input versions are
     /// derived again before the next read of one.</remarks>
-    public void CommitStateTransaction(int mark) {
-        Host.CommitStateTransaction(mark: mark);
+    public bool CommitStateTransaction(int mark) {
+        var arenaOnly = Host.CommitStateTransaction(mark: mark);
+
         m_inputsStale = true;
+        // A commit that resynchronised gates, input owners or body cells moved host state a fact may answer from.
+        m_factsStale |= !arenaOnly;
+
+        return arenaOnly;
     }
     /// <inheritdoc/>
     public void RewindStateTransaction(int mark) => Host.RewindStateTransaction(mark: mark);

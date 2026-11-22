@@ -76,6 +76,9 @@ public sealed class WorldReplayProbe : IDisposable {
         Divergence = null;
         Dispose();
         m_tape.SuspendCapture();
+        // The recording kept every Level firing its schedule answered for unfired; the replay fires each one and holds
+        // it to changing nothing, so the hashes below compare the skip with the firing it stood for.
+        m_server.RuleHost.QuiescenceChecked = true;
         try {
             m_server.Persistence.RestoreReplayStart(checkpoint: m_start);
             var startDifference = WorldStateHashComposition.DifferingComponents(left: m_startComponents,
@@ -107,6 +110,9 @@ public sealed class WorldReplayProbe : IDisposable {
                 if (WorldStateHashComposition.DescribeStaleDigest(hash: replayed, server: m_server, tick: (m_server.NextInputTick - 1)) is { Length: > 0 } stale) {
                     throw new InvalidOperationException(message: $"replayed tick {tick}: {stale}");
                 }
+                if (m_server.RuleHost.StaleQuiescence is { } unsettled) {
+                    throw new InvalidOperationException(message: $"replayed tick {tick}: {unsettled}");
+                }
                 if (replayed != m_hashes[tick]) {
                     Divergence = string.Join(separator: ", ", values: WorldStateHashComposition.DifferingComponents(left: m_components[tick],
                         right: WorldStateHashComposition.AuthoritativeComponents(server: m_server, tick: (m_server.NextInputTick - 1))));
@@ -120,7 +126,7 @@ public sealed class WorldReplayProbe : IDisposable {
                 static rebuild => (null, rebuild.ContentHash));
             return ((m_finalExport.AsSpan().SequenceEqual(other: WorldStateExport.ToCanonicalJson(server: m_server)) &&
                 m_finalMachines.SequenceEqual(second: WorldReplaySnapshot.MachineDigests(machines: m_server.Machines))) ? -1 : m_inputs.Count);
-        } finally { m_server.DrawKeys.AdvanceGeneration(); m_tape.ResumeCapture(); }
+        } finally { m_server.RuleHost.QuiescenceChecked = false; m_server.DrawKeys.AdvanceGeneration(); m_tape.ResumeCapture(); }
     }
     /// <summary>Detaches capture without changing the authority.</summary>
     public void Dispose() {

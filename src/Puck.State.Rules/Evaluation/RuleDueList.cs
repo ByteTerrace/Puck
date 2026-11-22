@@ -100,7 +100,14 @@ internal sealed class RuleDueList {
             foreach (var row in schedule.IterationRows) {
                 Add(index: rowReaders, key: row, rule: index);
             }
-            foreach (var fact in schedule.Facts.Concat(schedule.IterationFacts)) {
+            // A Level firing taken as settled stands on everything the firing reads or writes, so a move of any of it
+            // puts the rule back on the list.
+            var firing = ((States[index].FiringSchedule is { Volatile: false } settles) ? settles : null);
+
+            foreach (var row in (firing?.Rows ?? [])) {
+                Add(index: rowReaders, key: row, rule: index);
+            }
+            foreach (var fact in schedule.Facts.Concat(schedule.IterationFacts).Concat(firing?.Facts ?? [])) {
                 switch (fact.Body) {
                     case FactRead.EachBody:
                         Add(index: each, key: fact.Source, rule: index);

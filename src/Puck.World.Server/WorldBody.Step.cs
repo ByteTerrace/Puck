@@ -70,6 +70,8 @@ public sealed partial class WorldBody {
         var inputRuntime = m_stateLane?.Input;
 
         if (InputImages.HasProducer && SourceNamesProducer(source: InputImages.Source) && (inputRuntime is not null)) {
+            using var admission = Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickAdmission);
+
             InputImagesEdit.Producer = inputRuntime.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
         }
 

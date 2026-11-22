@@ -16,6 +16,19 @@ public sealed partial class WorldRuleHost {
     private const int ClockSource = 5;
     private const int TagPositionSource = 6;
     private const int OccupancySource = 7;
+    private const int ValueSource = 8;
+
+    // The facts versioned by the value they answer: a read that names no binding (a literal seat, a compiled census)
+    // and answers from host state alone, so its value moves only where the host's state does. Each is read again
+    // whenever that state may have moved (DeriveValues) and its version moves when the answer differs. One entry
+    // serves every operand that spells the same fact.
+    private readonly List<WorldFactOperand> m_valueFacts = [];
+    private readonly List<Fact> m_seenValues = [];
+    private readonly List<ulong> m_valueVersions = [];
+    // Whether the fact answers from input images, pointer rays or the grant table, which a commit's resynchronisation
+    // can move; a census of the bodies moves only with them.
+    private readonly List<bool> m_valueReadsInput = [];
+    private readonly Dictionary<(Type Kind, string Spelling), int> m_valueFactOf = [];
 
     private readonly Dictionary<int, HashSet<int>> m_positionTags = [];
     private readonly List<(string Name, int Ordinal, ulong Version)> m_regions = [];
@@ -126,8 +139,36 @@ public sealed partial class WorldRuleHost {
     public bool SearchPlyIsFixed => true;
     /// <inheritdoc/>
     /// <remarks>An action-state read resolves to the arena row its slot is stored in, which a register-file rebind
-    /// moves.</remarks>
-    public int FactScheduleEpoch => Host.Population.ActionStateLane.Binding;
+    /// moves; a fact versioned by its value is read through the operand a compilation created, which an install
+    /// replaces. Either moves the epoch.</remarks>
+    public int FactScheduleEpoch {
+        get {
+            var binding = Host.Population.ActionStateLane.Binding;
+
+            if (binding != m_scheduledBinding) {
+                m_scheduledBinding = binding;
+                m_scheduleEpoch++;
+            }
+
+            return m_scheduleEpoch;
+        }
+    }
+
+    private int m_scheduledBinding;
+    private int m_scheduleEpoch;
+
+    // Forgets the facts versioned by value: their operands belong to the compilation an install just replaced, and a
+    // fact of the same spelling may now read something else. The epoch moves, so every schedule that named one is
+    // derived again before it is read.
+    private void ForgetValueFacts() {
+        m_valueFacts.Clear();
+        m_seenValues.Clear();
+        m_valueVersions.Clear();
+        m_valueReadsInput.Clear();
+        m_valueFactOf.Clear();
+        m_scheduleEpoch++;
+        m_factMovesAll = true;
+    }
 
     /// <inheritdoc/>
     /// <remarks>A body's action state is an arena row (its slot's row in the participant or identity lane); its pose
@@ -145,11 +186,24 @@ public sealed partial class WorldRuleHost {
 
             return true;
         }
-        if (fact is not WorldBodyFactOperand { Payload: { } payload }) {
+        if (fact is WorldPhysicsQuiescentOperand or WorldPopulationOperand) {
+            var census = (WorldFactOperand)fact;
+
+            facts.Add(item: new FactRead(Body: WatchValue(fact: census, readsInput: false, spelling: (ReferenceEquals(objA: census, objB: WorldPhysicsQuiescentOperand.Instance) ? string.Empty : null)), Source: ValueSource));
+
+            return true;
+        }
+        if (fact is not WorldBodyFactOperand { Payload: { } payload } bodyOperand) {
             return false;
         }
 
         switch (payload) {
+            // A seat's channel, its pointer and its place at a board are read for a literal seat: from the image and
+            // ray its body integrated, its application set and its body's position.
+            case ChannelOperand or PointerOperand or BoardSeatOperand:
+                facts.Add(item: new FactRead(Body: WatchValue(fact: bodyOperand, readsInput: true, spelling: bodyOperand.Describe), Source: ValueSource));
+
+                return true;
             case WorldInputOperand input when TryInputScope(input: input, scope: out var inputScope):
                 facts.Add(item: new FactRead(Body: inputScope, Source: InputSource));
 
@@ -234,6 +288,14 @@ public sealed partial class WorldRuleHost {
 
             return true;
         }
+        if (source == ValueSource) {
+            if (((uint)body) >= ((uint)m_valueVersions.Count)) {
+                return false;
+            }
+            version = m_valueVersions[body];
+
+            return true;
+        }
         if (source == PlacementPoseSource) {
             var ordinal = ((body == FactRead.EachBody) ? EachPlacementOrdinal() : body);
 
@@ -277,6 +339,7 @@ public sealed partial class WorldRuleHost {
         ClockSource => "clock",
         TagPositionSource => "carrierPositions",
         OccupancySource => "regionOccupancy",
+        ValueSource => "value",
         _ => $"source {source}",
     });
 
@@ -300,7 +363,12 @@ public sealed partial class WorldRuleHost {
     // Read(UprightOperand) and Read(BodyFactOperand) answer them. Every reader of a version or of the moved feed
     // passes through here first, so a version is current wherever it is read.
     private void DeriveFacts() {
+        var inputsStale = m_inputsStale;
+
         DeriveInputs();
+        if (inputsStale || m_factsStale) {
+            DeriveValues(bodies: m_factsStale);
+        }
         if (!m_factsStale) {
             return;
         }
@@ -384,6 +452,60 @@ public sealed partial class WorldRuleHost {
         return true;
     }
     private WorldInputOwner? InputOwner(Puck.Commands.Principal principal) => (Host.Input.TryGet(input: out var owner, principal: principal) ? owner : null);
+    // Starts versioning a fact by its value, or finds the entry an operand spelling the same fact already has. A null
+    // spelling names the operand instance alone.
+    private int WatchValue(WorldFactOperand fact, bool readsInput, string? spelling) {
+        var key = (fact.GetType(), spelling ?? string.Empty);
+
+        if (spelling is not null) {
+            if (m_valueFactOf.TryGetValue(key: key, value: out var known)) {
+                return known;
+            }
+        } else {
+            for (var held = 0; (held < m_valueFacts.Count); held++) {
+                if (ReferenceEquals(objA: m_valueFacts[held], objB: fact)) {
+                    return held;
+                }
+            }
+        }
+
+        var index = m_valueFacts.Count;
+
+        m_valueFacts.Add(item: fact);
+        m_seenValues.Add(item: ReadValue(fact: fact));
+        m_valueVersions.Add(item: 1UL);
+        m_valueReadsInput.Add(item: readsInput);
+        if (spelling is not null) {
+            m_valueFactOf.Add(key: key, value: index);
+        }
+        m_factMovesAll = true;
+
+        return index;
+    }
+    // One watched fact's answer now, read as a rule reads it but outside any evaluation's observation: a read the host
+    // makes to version a fact is not a read the evaluation in flight made of the seat's input.
+    private Fact ReadValue(WorldFactOperand fact) {
+        var observing = Host.Input.SuspendObservation();
+
+        try {
+            return fact.Read(facet: this, reader: this);
+        } finally {
+            Host.Input.ResumeObservation(observing: observing);
+        }
+    }
+    // Reads every watched fact again and moves the version of each whose answer differs. Called wherever host state
+    // may have moved since the versions were derived: `bodies` when the bodies may have, otherwise only the facts
+    // that answer from input.
+    private void DeriveValues(bool bodies) {
+        var seen = CollectionsMarshal.AsSpan(list: m_seenValues);
+        var versions = CollectionsMarshal.AsSpan(list: m_valueVersions);
+
+        for (var index = 0; (index < seen.Length); index++) {
+            if (bodies || m_valueReadsInput[index]) {
+                _ = See(move: new FactRead(Body: index, Source: ValueSource), now: ReadValue(fact: m_valueFacts[index]), seen: ref seen[index], version: ref versions[index]);
+            }
+        }
+    }
     // Compares every watched owner with what it answered when the versions were last derived. An admission, an expiry,
     // a switch or an owner replaced moves its version whichever door made the change.
     private void DeriveInputs() {

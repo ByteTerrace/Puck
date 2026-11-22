@@ -128,6 +128,8 @@ public sealed partial class RuleEvaluator {
 
             m_host.BoundEachKey = key;
 
+            var firingsRun = m_firingsRun;
+
             var outcome = EvaluateOnce(
                 applied: out var moved,
                 binding: binding,
@@ -145,7 +147,7 @@ public sealed partial class RuleEvaluator {
                 // A binding that could not evaluate is closed exactly as a full sweep's end closes it.
                 latch.Forget(binding: binding, journal: m_host.Arena.Journal, state: state);
             }
-            if (outcome == RuleOutcome.Fired) {
+            if ((outcome == RuleOutcome.Fired) && (m_firingsRun != firingsRun)) {
                 list.Drain();
             }
         }

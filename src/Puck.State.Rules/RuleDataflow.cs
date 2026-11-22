@@ -12,11 +12,17 @@ public static class RuleDataflow {
     /// declared sources read during preflight, a value source's operand and the key facts behind it, a destination's
     /// live key and a branch condition's key facts. Whether a firing lands (and so whether what it emits exists)
     /// depends on all of them, which a disclosure decision over the firing must see.</param>
-    public static void CollectEffectFacts(IRuleEffect[] effects, RuleNeedsBuilder into, bool includeSources = false) {
+    /// <param name="queued">Whether to include the arms a firing queues rather than fires
+    /// (<see cref="EffectNeeds.Irreversible"/>), with their sources and nested arms. A queued arm observes nothing
+    /// until its preflight, so a walk over what a firing that queued none observed leaves them out.</param>
+    public static void CollectEffectFacts(IRuleEffect[] effects, RuleNeedsBuilder into, bool includeSources = false, bool queued = true) {
         ArgumentNullException.ThrowIfNull(argument: effects);
         ArgumentNullException.ThrowIfNull(argument: into);
 
         foreach (var effect in effects) {
+            if (!queued && ((effect.Needs & EffectNeeds.Irreversible) != EffectNeeds.None)) {
+                continue;
+            }
             into.AddFact(fact: effect);
             if (effect is IfEffect branch) {
                 if (includeSources) {
@@ -45,8 +51,77 @@ public static class RuleDataflow {
                 CollectEffectFacts(
                     effects: arm,
                     into: into,
-                    includeSources: includeSources
+                    includeSources: includeSources,
+                    queued: queued
                 );
+            }
+        }
+    }
+    /// <summary>Appends everything one firing of a rule observes or writes while it queues no arm: its judgement
+    /// (<see cref="CollectJudgement"/>), the locals deferred to the firing, every cell its effects read and every
+    /// cell they write, and every fact they observe. A firing that queued an arm is never taken as settled, so the
+    /// facts only a queued arm and its sources carry are left out; every other facet-bearing fact the compiler created
+    /// for the rule is included wherever it sits (<see cref="RuleNeeds.FacetFacts"/>), and so is every read of the
+    /// tick beyond the deadline's own (<see cref="RuleNeeds.TickReads"/>).</summary>
+    /// <param name="rule">The compiled rule.</param>
+    /// <param name="reads">The rows being collected: the reads and the writes.</param>
+    /// <param name="facts">The needs being built, with every facet-bearing fact instance recorded.</param>
+    /// <param name="deadline">The gate's deadline conjunct, or <see langword="null"/>.</param>
+    public static void CollectFiring(CompiledRule rule, List<CellAccess> reads, RuleNeedsBuilder facts, RuleDeadline? deadline = null) {
+        CollectJudgement(deadline: deadline, facts: facts, reads: reads, rule: rule);
+
+        var locals = (rule.Locals ?? []);
+
+        for (var ordinal = 0; (ordinal < locals.Length); ordinal++) {
+            if (rule.IsDeferred(ordinal: ordinal)) {
+                CollectExpression(into: reads, tokens: locals[ordinal].Expression);
+                CollectExpressionSchedulingFacts(into: facts, tokens: locals[ordinal].Expression);
+            }
+        }
+        rule.CollectReads(into: reads);
+        rule.CollectWrites(into: reads);
+        CollectEffectFacts(effects: rule.Effects, includeSources: true, into: facts, queued: false);
+
+        var needs = rule.Needs;
+        var onlyQueued = new RuleNeedsBuilder();
+
+        CollectQueuedFacts(effects: rule.Effects, into: onlyQueued);
+        foreach (var fact in needs.FacetFacts) {
+            if (!Contains(facts: onlyQueued.FacetFacts, fact: fact)) {
+                facts.AddFact(fact: fact);
+            }
+        }
+        foreach (var row in needs.HostOwnedRows) {
+            facts.AddHostOwnedRow(rowOrdinal: row);
+        }
+        if (needs.ReadsSearchPly) {
+            facts.MarkReadsSearchPly();
+        }
+        if (needs.TickReads > ((deadline is null) ? 0 : 1)) {
+            facts.MarkReadsTick();
+        }
+
+        static bool Contains(IReadOnlyList<ICompiledFact> facts, ICompiledFact fact) {
+            foreach (var held in facts) {
+                if (ReferenceEquals(objA: held, objB: fact)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    // The facts only a queued arm carries: the arm itself, what its declared sources read, and its nested arms.
+    private static void CollectQueuedFacts(IRuleEffect[] effects, RuleNeedsBuilder into) {
+        foreach (var effect in effects) {
+            if ((effect.Needs & EffectNeeds.Irreversible) != EffectNeeds.None) {
+                CollectEffectFacts(effects: [effect], includeSources: true, into: into);
+
+                continue;
+            }
+            foreach (var arm in effect.Arms) {
+                CollectQueuedFacts(effects: arm, into: into);
             }
         }
     }

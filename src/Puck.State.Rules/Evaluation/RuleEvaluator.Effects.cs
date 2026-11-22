@@ -82,6 +82,7 @@ public sealed partial class RuleEvaluator {
                 ReportRefusal(detail: ((m_host is IArenaUndoHost) ? reason : "host has no retained undo arena"), effect: rewind.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: ruleName, tick: tick);
                 return RuleOutcome.Refused;
             }
+            m_firingsRun++;
             return RuleOutcome.Fired;
         }
 
@@ -168,7 +169,8 @@ public sealed partial class RuleEvaluator {
         var ruleName = firing.RuleName;
         var tick = firing.Tick;
 
-        m_host.CommitStateTransaction(mark: mark);
+        m_firingsRun++;
+        m_commitArenaOnly = m_host.CommitStateTransaction(mark: mark);
 
         // An arm is the only work during rule evaluation that changes host state (a pose, a spawn, an install), so a
         // firing that queued one brings the host's fact versions up to date once its arms are delivered; arena writes

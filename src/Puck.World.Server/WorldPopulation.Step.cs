@@ -520,6 +520,8 @@ public sealed partial class WorldPopulation {
     }
     // Run the named producer before motion. Live and Idle name no producer.
     private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks) {
+        using var work = Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickProducers);
+
         body.SetFlockMovementDomain(domain: null);
         var kitIndex = ResolveKitIndex(index: index);
 
