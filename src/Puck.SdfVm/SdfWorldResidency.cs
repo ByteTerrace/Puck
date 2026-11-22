@@ -714,9 +714,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
         return true;
     }
 
-    /// <summary>Returns whether a view's latest render stands for this frame: the frame forces no render
-    /// (<see cref="SdfWorldTables.ForcesRender"/>) and the view's signature is the one it last rendered at. A residency
-    /// that filmed nothing this frame keeps its latest frame, which every view rendered already.</summary>
+    /// <summary>Returns whether a view's latest render stands for this frame as far as the residency's own inputs go: the
+    /// cadence gate is on and the view's signature is the one it last rendered at. The images of other instances the
+    /// view samples (a screen's source, a sky layer's infinity image) change behind their handles where no signature sees
+    /// them; <see cref="SdfWorldPasses.IsUnchanged"/> holds those to their publications. A residency that filmed nothing
+    /// this frame keeps its latest frame, which every view rendered already.</summary>
     /// <param name="context">The host's frame context.</param>
     /// <param name="view">The view's index in the frame's views.</param>
     /// <returns><see langword="true"/> when the view need not render.</returns>
@@ -728,12 +730,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
             (view >= frame.Views.Count) ||
             (view >= m_renderedSignatures.Length) ||
             (m_renderedSignatures[view] is not { } rendered) ||
-            m_tables!.ForcesRender(frame: frame)
+            !frame.EnableCadenceGate
         ) {
             return false;
         }
 
-        return (rendered == m_tables.ViewSignature(
+        return (rendered == m_tables!.ViewSignature(
             frame: frame,
             view: view
         ));
@@ -925,9 +927,15 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
         return imaged;
     }
+    /// <summary>Returns the instance a screen shows in one view (<see cref="ISdfScreenSources.ReadOf"/>), whose image
+    /// the screen samples.</summary>
+    /// <param name="view">The view's index in the residency's frame.</param>
+    /// <param name="screen">The program-declared screen index.</param>
+    /// <returns>The instance's name, or <see langword="null"/> for a screen that shows none.</returns>
+    public string? ScreenProducerOf(int view, int screen) => m_screenSources?.ReadOf(screen: screen, view: view);
     /// <summary>Returns where the read a screen samples in one view lies among the images a view's render graph hands
-    /// its pass: the instance the screen shows in that view (<see cref="ISdfScreenSources.ReadOf"/>). The image, its
-    /// lease and its publication are that read's (<see cref="RenderGraphExternalReads"/>).</summary>
+    /// its pass: the instance the screen shows in that view (<see cref="ScreenProducerOf"/>). The image, its lease and
+    /// its publication are that read's (<see cref="RenderGraphExternalReads"/>).</summary>
     /// <param name="view">The view's index in the residency's frame.</param>
     /// <param name="screen">The program-declared screen index.</param>
     /// <param name="reads">The images the pass's instance reads that its graph binds to no version, or

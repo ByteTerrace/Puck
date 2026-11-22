@@ -367,21 +367,6 @@ public sealed partial class SdfWorldTables {
     private static void AddMembers(ref Fnv1aHash hash, Span<byte> block, (int Offset, int Length)[] members) {
         foreach (var member in members) { hash.Add(values: block.Slice(length: member.Length, start: member.Offset)); }
     }
-    /// <summary>Returns whether the frame the tables hold forces every view to render whatever its signature: the cadence
-    /// gate is off, or a view samples another instance's image (a screen showing a source, a sky layer's infinity image),
-    /// which changes in place behind the same handle. A view's passes identify those images by their publications instead
-    /// (<see cref="SdfWorldPasses"/>), which the whole view's signature cannot see.</summary>
-    /// <param name="frame">The frame the tables packed.</param>
-    /// <returns><see langword="true"/> when no view's latest render may stand for the frame.</returns>
-    public bool ForcesRender(SdfFrame frame) {
-        ArgumentNullException.ThrowIfNull(argument: frame);
-
-        if (!frame.EnableCadenceGate || (BoundScreenCount() != 0u)) { return true; }
-        for (var view = 0; (view < frame.Views.Count); view++) {
-            if (frame.Views[view].SkyViews is { Count: > 0 }) { return true; }
-        }
-        return false;
-    }
 
     /// <summary>Returns the 64-bit FNV-1a signature of what one view renders from in the frame the tables hold: the
     /// tables' signature (<see cref="UpdateTablesSignature"/>) folded with the view's pass block

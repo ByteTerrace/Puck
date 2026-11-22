@@ -530,7 +530,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public Dictionary<string, List<long>> AskedUnreadBy { get; } = [];
 
-        public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) {
+        public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context, in RenderGraphReadStands reads) {
             AskedUnread.Add(item: unreadFrames);
             if (!AskedUnreadBy.TryGetValue(key: instance, value: out var asked)) {
                 AskedUnreadBy[instance] = (asked = []);

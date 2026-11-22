@@ -336,8 +336,11 @@ public interface IRenderGraphPackageFactory {
     /// while the instance is parked, so an instance shown again is asked with a count its latest render did not
     /// see.</param>
     /// <param name="context">The host's frame context of the frame being scheduled.</param>
+    /// <param name="reads">What the instance's reads of other instances' images will bind this frame: a package whose
+    /// passes sample such an image stands only while each image it samples stands with the publication its latest render
+    /// sampled.</param>
     /// <returns><see langword="true"/> when the instance's latest render stands for this frame.</returns>
-    bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) => false;
+    bool IsUnchanged(string instance, long unreadFrames, in FrameContext context, in RenderGraphReadStands reads) => false;
     /// <summary>Returns why the package cannot build or record an instance's passes until something they are built from
     /// changes, naming the refusal, or <see langword="null"/> while it can or is still building. A refusal is permanent
     /// until its inputs move, so the runtime reports a frame such an instance cannot render as

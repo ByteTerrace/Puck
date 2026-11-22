@@ -20,6 +20,8 @@ public sealed class SdfMeshDresser : IDisposable {
         public int Tier = -1;
         // The mesh the irradiance volume traces in its place, which its rows carry (SdfMeshDraw.Trace).
         public SdfMesh? Trace;
+        // The floor the group keeps beside its drawn mesh, which its band rows draw (SdfMeshBand), or null.
+        public SdfMesh? Floor;
         public bool Seen;
     }
 
@@ -276,16 +278,17 @@ public sealed class SdfMeshDresser : IDisposable {
             }
         }
     }
-    // Rebinds a group's rows where its mesh, its place in the copies, its tier or its trace changed.
+    // Rebinds a group's rows where its mesh, its floor, its place in the copies, its tier or its trace changed.
     private void DressGroup(in SdfMeshPathBake.FrameAccess access, SdfFrame frame, SdfMeshBakeGroup group, SdfMesh mesh, ref int matrices, ref int visited, ref int updated) {
         if (!m_groups.TryGetValue(key: group, value: out var state)) { m_groups.Add(key: group, value: state = new()); }
         state.Seen = true;
         var copies = access.CopiesOf(group: group);
-        var count = (mesh.PieceCount * (copies?.Count ?? 1));
+        var floor = access.FloorOf(group: group);
+        var count = RowsOf(copies: copies, floor: floor, mesh: mesh);
         var tier = access.TierOf(group: group);
         var trace = access.TraceOf(group: group);
-        var changed = (!ReferenceEquals(objA: mesh, objB: state.Mesh) || (state.Run.Count != count) || (state.Tier != tier) || !ReferenceEquals(objA: trace, objB: state.Trace) ||
-            ((m_layout != access.CopyLayoutRevision) && !state.Copies.SequenceEqual(second: (copies ?? Array.Empty<int>()))));
+        var changed = (!ReferenceEquals(objA: mesh, objB: state.Mesh) || !ReferenceEquals(objA: floor, objB: state.Floor) || (state.Run.Count != count) || (state.Tier != tier) ||
+            !ReferenceEquals(objA: trace, objB: state.Trace) || ((m_layout != access.CopyLayoutRevision) && !state.Copies.SequenceEqual(second: (copies ?? Array.Empty<int>()))));
 
         if (!changed) { return; }
         var old = state.Run;
@@ -293,18 +296,53 @@ public sealed class SdfMeshDresser : IDisposable {
         if (old.Count != count) { state.Run = m_writer.Allocate(count: count); }
         RemoveBindings(run: old);
         state.Mesh = mesh;
+        state.Floor = floor;
         state.Tier = tier;
         state.Trace = trace;
         state.Copies = (copies?.ToArray() ?? []);
 
-        for (var offset = 0; (offset < count); offset++) {
-            var binding = new DrawBinding(mesh.Piece(index: (offset % mesh.PieceCount)), group,
-                ((copies is null) ? -1 : copies[(offset / mesh.PieceCount)]), ((copies is null) && (mesh.Chunks.Count > 0)), tier, trace, (offset % mesh.PieceCount));
-
+        foreach (var (offset, binding) in BindingsOf(access: in access, copies: copies, floor: floor, group: group, mesh: mesh, run: state.Run, tier: tier, trace: trace)) {
             Bind(binding: binding, frame: frame, matrices: ref matrices, offset: offset, run: state.Run);
             visited++; updated++;
         }
         if (old != state.Run) { m_writer.Free(run: old); }
+    }
+    // The rows a group's placements take: each placement (each copy, or the group once) draws its mesh's pieces and,
+    // where the group keeps a floor beside it (SdfMeshPathBake.FrameAccess.FloorOf), the floor's pieces after them.
+    private static int RowsOf(SdfMesh mesh, SdfMesh? floor, IReadOnlyList<int>? copies) => ((mesh.PieceCount + (floor?.PieceCount ?? 0)) * (copies?.Count ?? 1));
+    // Each row of a group's run and the binding it holds, in RowsOf's layout. Where the group keeps a floor, every row of
+    // a placement takes one band (SdfMeshBand): the sphere about the box holding both meshes and the floor's cell, its
+    // mesh's pieces as the fine tier naming the placement's floor rows, and the floor's pieces as the floor.
+    private static (int Offset, DrawBinding Binding)[] BindingsOf(in SdfMeshPathBake.FrameAccess access, SdfMeshBakeGroup group, SdfMesh mesh, SdfMesh? floor,
+        IReadOnlyList<int>? copies, SdfMeshRows.Run run, int tier, SdfMesh? trace) {
+        var pieces = mesh.PieceCount;
+        var floorPieces = (floor?.PieceCount ?? 0);
+        var stride = (pieces + floorPieces);
+        var placements = (copies?.Count ?? 1);
+        var chunked = ((copies is null) && (mesh.Chunks.Count > 0));
+        var band = ((floor is null) ? SdfMeshBand.None : SdfMeshBand.Of(
+            floorTier: access.CoarsestTierOf(group: group),
+            high: Vector3.Max(value1: mesh.PositionHigh, value2: floor.PositionHigh),
+            low: Vector3.Min(value1: mesh.PositionLow, value2: floor.PositionLow)
+        ));
+        var floorTier = ((floor is null) ? tier : access.CoarsestTierOf(group: group));
+        var bindings = new (int, DrawBinding)[(stride * placements)];
+
+        for (var placement = 0; (placement < placements); placement++) {
+            var copy = ((copies is null) ? -1 : copies[placement]);
+            var first = (placement * stride);
+
+            for (var piece = 0; (piece < pieces); piece++) {
+                var fine = ((floor is null) ? band : (band with { FloorRow = (run.Start + first + pieces), FloorRows = floorPieces, Role = SdfMeshBandRole.Fine }));
+
+                bindings[(first + piece)] = ((first + piece), new DrawBinding(mesh.Piece(index: piece), group, copy, chunked, tier, trace, piece, fine));
+            }
+            for (var piece = 0; (piece < floorPieces); piece++) {
+                bindings[(first + pieces + piece)] = ((first + pieces + piece), new DrawBinding(floor!.Piece(index: piece), group, copy, (chunked && (floor.Chunks.Count > 0)), floorTier, null, piece,
+                    (band with { Role = SdfMeshBandRole.Floor })));
+            }
+        }
+        return bindings;
     }
     // Lets go of the rows a copy's own mesh held at an index, if any.
     private void DropOwn(int index) {
@@ -326,7 +364,7 @@ public sealed class SdfMeshDresser : IDisposable {
 
             if (access.MeshOf(group: group) is not { } mesh) { continue; }
             finished++;
-            if (!m_groups.TryGetValue(key: group, value: out var state) || (state.Run.Count != (mesh.PieceCount * (access.CopiesOf(group: group)?.Count ?? 1)))) { return true; }
+            if (!m_groups.TryGetValue(key: group, value: out var state) || (state.Run.Count != RowsOf(copies: access.CopiesOf(group: group), floor: access.FloorOf(group: group), mesh: mesh))) { return true; }
         }
         if (finished != m_groups.Count) { return true; }
         var own = 0;
@@ -380,10 +418,13 @@ public sealed class SdfMeshDresser : IDisposable {
             var group = access.GroupAt(index: g);
 
             if (access.MeshOf(group: group) is not { } mesh) { continue; }
-            var copies = access.CopiesOf(group: group);
+            // A band's floor rows are named by where the group's run stands, which the rebuild takes from the run it holds.
+            var run = (m_groups.TryGetValue(key: group, value: out var state) ? state.Run : default);
 
-            for (var c = 0; (c < (copies?.Count ?? 1)); c++) {
-                for (var p = 0; (p < mesh.PieceCount); p++) { var binding = new DrawBinding(mesh.Piece(index: p), group, ((copies is null) ? -1 : copies[c]), ((copies is null) && (mesh.Chunks.Count > 0)), access.TierOf(group: group), access.TraceOf(group: group), p); _ = binding.Repose(frame: frame, matrices: ref matrices); expected.Add(item: binding.Draw); }
+            foreach (var (_, binding) in BindingsOf(access: in access, copies: access.CopiesOf(group: group), floor: access.FloorOf(group: group), group: group, mesh: mesh, run: run,
+                tier: access.TierOf(group: group), trace: access.TraceOf(group: group))) {
+                _ = binding.Repose(frame: frame, matrices: ref matrices);
+                expected.Add(item: binding.Draw);
             }
         }
         for (var i = 0; (i < frame.MeshInstances.Count); i++) { if (frame.MeshInstances[i].Mesh is { } mesh) { var binding = new DrawBinding(mesh, null, i); _ = binding.Repose(frame: frame, matrices: ref matrices); expected.Add(item: binding.Draw); } }
@@ -404,7 +445,7 @@ public sealed class SdfMeshDresser : IDisposable {
     // the mesh the irradiance volume traces in the placement's place with the piece the row draws. A moving group's and a
     // moving copy's draws are placed by their slots (SdfMeshDraw.PlacedBySlot): the draw keeps their scale, so the slot
     // moving leaves it standing.
-    private sealed class DrawBinding(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false, int tier = -1, SdfMesh? trace = null, int piece = 0) {
+    private sealed class DrawBinding(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false, int tier = -1, SdfMesh? trace = null, int piece = 0, SdfMeshBand band = default) {
         private object? m_motionSource;
         private object? m_motionIdentity;
         private SdfMeshInstance? m_copy;
@@ -455,6 +496,7 @@ public sealed class SdfMeshDresser : IDisposable {
                     Piece = piece,
                     Tier = ((group is null) ? -1 : tier),
                     Trace = trace,
+                    Band = band,
                     UsesRootMaterialFrame = copy.UsesRootMaterialFrame,
                 };
                 return true;
@@ -478,6 +520,7 @@ public sealed class SdfMeshDresser : IDisposable {
                 Piece = piece,
                 Tier = tier,
                 Trace = trace,
+                Band = band,
             };
             return true;
         }

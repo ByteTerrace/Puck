@@ -200,7 +200,7 @@ public sealed partial class WorldScreenBinder {
 
             entry.Screens = screens;
             m_nestedOwners.Add(key: screens, value: new NestedOwner(instance, () => mirror.Definition,
-                () => ((entry.Views.Count == 0) ? null : entry.Views[0].Camera.Position), null, null) { Infinity = entry });
+                () => ((entry.Views.Count == 0) ? null : entry.Views[0].Camera), null, null) { Infinity = entry });
             m_accessBindingsVersion++;
         }
         if (Observations.EnvelopeOf(instance: instance) is { } envelope) {

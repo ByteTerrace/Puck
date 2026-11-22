@@ -754,6 +754,10 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             m_readsHistory = (m_temporal && temporal.HasPreviousView);
         }
 
+        Span<System.Numerics.Vector4> windows = stackalloc System.Numerics.Vector4[SdfWorldPackage.ScreenSourceCount];
+
+        m_owner.ScreenWindowsOf(residency: residency, view: view, windows: windows);
+        SdfFrameBlock.WriteScreenWindows(block: recording.PassBlock, windows: windows);
         SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
         SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
 

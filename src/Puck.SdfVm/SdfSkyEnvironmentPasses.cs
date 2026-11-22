@@ -78,7 +78,7 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
     /// first.</remarks>
     public void PrepareRead(string instance, in FrameContext context) => _ = BegunResidencyOf(instance: instance)?.Prepare(context: in context);
     /// <inheritdoc/>
-    public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) {
+    public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context, in RenderGraphReadStands reads) {
         if ((BegunResidencyOf(instance: instance) is not { } residency) || !residency.Prepare(context: context)) { return false; }
         var tables = residency.Tables!;
 

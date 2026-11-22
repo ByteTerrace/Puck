@@ -38,42 +38,150 @@ public static class WorldPortalVisibility {
     /// still bakes or lands its meshes: the least that keeps it rendering, since a world's meshes arrive only in frames
     /// that render one of its views.</summary>
     public const double ArrivalShare = 0.0625;
-    /// <summary>Returns the fraction of a camera's image a screen's glass spans on each axis: the extent of its face's
-    /// projected slab bounds, unclipped by the image's edges, so a session rendered at that fraction of the camera's extent
-    /// draws one texel for each pixel the glass covers wherever it lies. A face reaching to or behind the camera's near
-    /// plane spans the whole image.</summary>
+    /// <summary>The fraction the frustum's sides are widened by when the visible part of a glass is found
+    /// (<see cref="Window"/>, <see cref="Coverage"/>): room for the reader's texture filter at the image's edge.</summary>
+    public const float VisibleMargin = 0.02f;
+    /// <summary>The step, as a share of the glass on each axis, a visible window's edges are rounded outward to, so the
+    /// floating-point noise of a still camera never moves the window.</summary>
+    public const float WindowStep = (1f / 256f);
+
+    /// <summary>Returns the fraction of a camera's image the visible part of a screen's glass spans on each axis: the
+    /// extent, in the image, of the glass's slab clipped to the camera's near plane and to its sides widened by
+    /// <see cref="VisibleMargin"/>, so a session whose frustum is fitted to that part (<see cref="Window"/>) and rendered
+    /// at that fraction of the camera's extent draws about one texel for each pixel the glass covers, however near the
+    /// glass stands or however far it runs past the image's edges.</summary>
     /// <param name="camera">The camera, in the screen's world.</param>
     /// <param name="glass">The screen row whose face is the glass.</param>
-    /// <returns>The fractions of the image's width and height, each in [0, 1].</returns>
+    /// <returns>The fractions of the image's width and height, each in [0, 1]; zero for a glass the camera does not
+    /// see.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="glass"/> is <see langword="null"/>.</exception>
     public static (double Width, double Height) Coverage(in CameraSnapshot camera, WorldScreen glass) {
         ArgumentNullException.ThrowIfNull(argument: glass);
 
-        var (origin, right, up, thickness) = Slab(glass);
+        Span<Vector3> visible = stackalloc Vector3[VisibleCapacity];
+        var count = Visible(camera: in camera, glass: glass, visible: visible);
         var low = new Vector2(value: float.PositiveInfinity);
         var high = new Vector2(value: float.NegativeInfinity);
 
-        for (var corner = 0; (corner < 8); corner++) {
-            if (
-                !camera.TryProject(
-                    depth: out var depth,
-                    ndc: out var projected,
-                    world: (origin + (((corner & 1) == 0) ? -right : right) + (((corner & 2) == 0) ? -up : up) + (((corner & 4) == 0) ? -thickness : thickness))
-                ) ||
-                (depth <= camera.Near)
-            ) {
-                return (Width: 1.0, Height: 1.0);
-            }
-
+        for (var index = 0; (index < count); index++) {
+            // A clipped point lies on or in front of the near plane, so it projects.
+            if (!camera.TryProject(depth: out _, ndc: out var projected, world: visible[index])) { continue; }
             low = Vector2.Min(value1: low, value2: projected);
             high = Vector2.Max(value1: high, value2: projected);
         }
+        if (!(high.X >= low.X)) { return (Width: 0.0, Height: 0.0); }
 
         // Normalized device coordinates span two units on each axis.
         return (
-            Width: Math.Clamp(value: (0.5 * (high.X - low.X)), min: 0.0, max: 1.0),
-            Height: Math.Clamp(value: (0.5 * (high.Y - low.Y)), min: 0.0, max: 1.0)
+            Width: Math.Clamp(value: (0.5 * (Math.Min(val1: high.X, val2: 1f) - Math.Max(val1: low.X, val2: -1f))), min: 0.0, max: 1.0),
+            Height: Math.Clamp(value: (0.5 * (Math.Min(val1: high.Y, val2: 1f) - Math.Max(val1: low.Y, val2: -1f))), min: 0.0, max: 1.0)
         );
+    }
+    /// <summary>Returns the part of a screen's glass a camera sees, as the rectangle of the glass's own image coordinates
+    /// it spans (<c>u</c> from the glass's left edge to its right, <c>v</c> from its top to its bottom, each in [0, 1], as
+    /// the screen shading reads them): the glass's slab clipped to the camera's near plane and to its sides widened by
+    /// <see cref="VisibleMargin"/>, its bounds rounded outward to <see cref="WindowStep"/>. A window's session fits its
+    /// frustum to that rectangle (<see cref="WorldWindowFrustumFit"/>) and the glass maps its image there, so only what
+    /// can be seen is rendered. The whole glass where all of it is seen, or none of it.</summary>
+    /// <param name="camera">The camera looking at the glass, in the screen's world.</param>
+    /// <param name="glass">The screen row whose face is the glass.</param>
+    /// <returns>The rectangle: its left, top, right and bottom.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="glass"/> is <see langword="null"/>.</exception>
+    public static Vector4 Window(in CameraSnapshot camera, WorldScreen glass) {
+        ArgumentNullException.ThrowIfNull(argument: glass);
+
+        Span<Vector3> visible = stackalloc Vector3[VisibleCapacity];
+        var count = Visible(camera: in camera, glass: glass, visible: visible);
+
+        if (count == 0) { return WholeWindow; }
+
+        var right = Vector3.Normalize(value: glass.Right);
+        var up = Vector3.Normalize(value: glass.Up);
+        var origin = (Vector3)glass.Origin;
+        var low = new Vector2(value: float.PositiveInfinity);
+        var high = new Vector2(value: float.NegativeInfinity);
+
+        for (var index = 0; (index < count); index++) {
+            var local = (visible[index] - origin);
+            var uv = new Vector2(
+                x: (0.5f + ((0.5f * Vector3.Dot(vector1: local, vector2: right)) / glass.HalfWidth)),
+                y: (0.5f - ((0.5f * Vector3.Dot(vector1: local, vector2: up)) / glass.HalfHeight))
+            );
+
+            low = Vector2.Min(value1: low, value2: uv);
+            high = Vector2.Max(value1: high, value2: uv);
+        }
+
+        var window = new Vector4(
+            x: Math.Clamp(value: (MathF.Floor(x: (low.X / WindowStep)) * WindowStep), min: 0f, max: 1f),
+            y: Math.Clamp(value: (MathF.Floor(x: (low.Y / WindowStep)) * WindowStep), min: 0f, max: 1f),
+            z: Math.Clamp(value: (MathF.Ceiling(x: (high.X / WindowStep)) * WindowStep), min: 0f, max: 1f),
+            w: Math.Clamp(value: (MathF.Ceiling(x: (high.Y / WindowStep)) * WindowStep), min: 0f, max: 1f)
+        );
+
+        return (((window.Z - window.X) >= WindowStep) && ((window.W - window.Y) >= WindowStep)) ? window : WholeWindow;
+    }
+    /// <summary>Gets the window that shows the whole glass (<see cref="Window"/>).</summary>
+    public static Vector4 WholeWindow => new(x: 0f, y: 0f, z: 1f, w: 1f);
+
+    // The most points one face of the slab keeps through the five planes it is clipped by, and the points all six keep.
+    private const int FacePoints = (4 + CameraSnapshot.BoundingPlaneCount);
+    private const int VisibleCapacity = (6 * FacePoints);
+
+    // Writes the points bounding what a camera sees of a glass's slab: each of its six faces clipped to the camera's near
+    // plane and its widened sides (CameraSnapshot.BoundingPlanes; a point inside has dot(normal, point) + W at or under
+    // zero). Returns how many it wrote, zero for a slab the camera does not see.
+    private static int Visible(in CameraSnapshot camera, WorldScreen glass, Span<Vector3> visible) {
+        Span<Vector4> planes = stackalloc Vector4[CameraSnapshot.BoundingPlaneCount];
+        Span<Vector3> face = stackalloc Vector3[FacePoints];
+        Span<Vector3> clipped = stackalloc Vector3[FacePoints];
+        var (center, right, up, thickness) = Slab(glass);
+        var count = 0;
+
+        camera.BoundingPlanes(margin: VisibleMargin, planes: planes);
+        for (var side = 0; (side < 6); side++) {
+            // The face's normal axis and the two axes across it.
+            var (axis, across, along) = ((side >> 1) switch {
+                0 => (thickness, right, up),
+                1 => (right, up, thickness),
+                _ => (up, thickness, right),
+            });
+            var middle = (center + (((side & 1) == 0) ? axis : -axis));
+
+            face[0] = ((middle - across) - along);
+            face[1] = ((middle + across) - along);
+            face[2] = ((middle + across) + along);
+            face[3] = ((middle - across) + along);
+
+            var points = 4;
+
+            for (var plane = 0; ((plane < planes.Length) && (points > 0)); plane++) {
+                points = ClipAgainst(clipped: clipped, plane: planes[plane], points: face[..points]);
+                clipped[..points].CopyTo(destination: face);
+            }
+            face[..points].CopyTo(destination: visible[count..]);
+            count += points;
+        }
+
+        return count;
+    }
+    // Clips a convex polygon to the side of a plane where dot(normal, point) + W is at or under zero (Sutherland and
+    // Hodgman), writing the kept polygon; returns its point count.
+    private static int ClipAgainst(ReadOnlySpan<Vector3> points, Vector4 plane, Span<Vector3> clipped) {
+        var normal = new Vector3(x: plane.X, y: plane.Y, z: plane.Z);
+        var kept = 0;
+
+        for (var index = 0; (index < points.Length); index++) {
+            var current = points[index];
+            var next = points[((index + 1) % points.Length)];
+            var at = (Vector3.Dot(vector1: normal, vector2: current) + plane.W);
+            var to = (Vector3.Dot(vector1: normal, vector2: next) + plane.W);
+
+            if (at <= 0f) { clipped[kept++] = current; }
+            if ((at <= 0f) != (to <= 0f)) { clipped[kept++] = Vector3.Lerp(value1: current, value2: next, amount: (at / (at - to))); }
+        }
+
+        return kept;
     }
 
     // Visibility and coverage bound the same sampled solid. WorldScreenStamper seats its front at Origin and its

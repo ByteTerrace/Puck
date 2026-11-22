@@ -130,7 +130,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     // The WINDOW projection's per-produced-frame override — set by WorldScreenBinder.Publish (the one place with access
     // to both the local eye and the border pair's two face rows) before the render graph renders this view.
     // Null (the default, and every non-window session's steady state) leaves Dress on the ordinary camera path below.
-    private Func<CameraSnapshot?>? m_windowFit;
+    private Func<WorldWindowFit?>? m_windowFit;
     // The camera the last dressed frame renders from, which a hit on the session's image continues through.
     private CameraSnapshot? m_dressedCamera;
     // The last dressed program's fixed-point field, built when a pick first asks for it, and the far distance a pick
@@ -422,7 +422,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_avatarSeconds += deltaSeconds;
 
         var fitted = m_windowFit?.Invoke();
-        var camera = (fitted ?? ResolveCamera(
+        var camera = (fitted?.Camera ?? ResolveCamera(
             cameraName: m_effectiveCameraName,
             domains: m_domains,
             height: height,
@@ -441,6 +441,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 ? 0f
                 : WorldWindowFrustumFit.ShownHeight(fitted: in camera, viewerPixelsPerMetre: (ViewerPixelsPerMetre?.Invoke() ?? 0f))),
             DemandWithinView = (fitted is not null),
+            ImageWindow = (fitted?.Window ?? default),
             Quality = (Session?.NestedViewQuality(view: ViewName) ?? default),
             RenderScale = (((Session is { } settings) && (ViewName is { } name)) ? settings.Ceiling(view: name) : 1f),
             // A window shows the luminance beyond its glass, which the view looking through it exposes.
@@ -649,12 +650,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         );
     }
     /// <summary>Sets (or clears) the fit a window session renders through: asked once as each frame is dressed, it returns
-    /// the off-axis frustum fit against the border pair's two face rows and the viewer's eye in that same frame, its
-    /// shear carried as <see cref="CameraSnapshot.FrustumOffset"/>. A fit returning <see langword="null"/> (no eye or
+    /// the off-axis frustum fit against the border pair's two face rows and the part of the glass the viewer sees in that
+    /// same frame (<see cref="WorldWindowFit.Window"/>, which the view carries as its image window), its shear carried as <see cref="CameraSnapshot.FrustumOffset"/>. A fit returning <see langword="null"/> (no eye or
     /// aperture yet, or the fit refused — see <c>SdfAsymmetricFrustum.TryFit</c>) falls back to
     /// <see cref="ResolveCamera"/>'s ordinary named/default projection for that frame.</summary>
     /// <param name="fit">The window's fit, or <see langword="null"/> for a session that is not a window.</param>
-    public void SetWindowFit(Func<CameraSnapshot?>? fit) => m_windowFit = fit;
+    public void SetWindowFit(Func<WorldWindowFit?>? fit) => m_windowFit = fit;
     /// <summary>Finds the camera the last frame <see cref="Dress"/> dressed renders from, in the destination's own
     /// space: a window's fitted camera, its shear included, or the named or default projection. A hit on the session's
     /// image continues through it into the destination.</summary>

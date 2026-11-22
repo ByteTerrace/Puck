@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.Hosting.Jobs;
@@ -265,8 +266,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// settle, and a temporally resolved view renders one jitter period after its inputs or sample grid last changed, then
     /// stands converged. A view whose installed graph is not the one its temporal ask selects renders, and so does a
     /// temporal view shown again after frames nothing showed it (<paramref name="unreadFrames"/>), whose epoch starts
-    /// anew.</remarks>
-    public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) {
+    /// anew. A view that samples another instance's image (a screen's source, an infinity image) stands only while each
+    /// image stands with the publication its latest render sampled (<paramref name="reads"/>), so a still screen in a
+    /// still view renders nothing.</remarks>
+    public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context, in RenderGraphReadStands reads) {
         var entry = Refresh(instance: instance);
 
         entry.UnreadFrames = unreadFrames;
@@ -294,6 +297,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             (entry.RenderedSharpness == entry.CurrentSharpness) &&
             (entry.InstalledTemporal == entry.RequestsTemporal) &&
             (view.Residency.Tables is { } tables) &&
+            ReadsStand(entry: entry, stands: in reads, tables: tables, view: view) &&
             entry.Temporal.Stands(
                 // Asked before any pass of the frame records, so no upload has advanced the tables this frame: the poses
                 // the instance's scope holds now are the previous poses of a render taken this frame.
@@ -515,7 +519,38 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <remarks>Stages the residency the instance renders this frame (<see cref="SdfWorldResidency.Stage"/>): its upload
     /// is submitted and its background GPU work pumped here, before any pass records, so no pass's recording pays for
     /// them.</remarks>
-    public void PrepareRender(string instance, in FrameContext context) => _ = BegunResidencyOf(instance: instance)?.Stage(context: in context);
+    public void PrepareRender(string instance, in FrameContext context) {
+        if (BegunResidencyOf(instance: instance) is not { } residency) { return; }
+        _ = residency.Stage(context: in context);
+        NoteImageWindow(instance: instance, residency: residency);
+    }
+
+    // The part of its glass each instance's latest scheduled render spans (SdfViewSnapshot.ImageWindow), by instance.
+    // Invariant: a view that samples an instance's image maps it by the window that image was rendered at. The window is
+    // noted here, on the frame thread, as each render is prepared, before any node of the frame records, and read as the
+    // sampling view records (ScreenWindowsOf), so a sampled image rendered this frame carries this frame's window and one
+    // held from an earlier frame keeps the window it was rendered at, whatever the window has moved to since.
+    private readonly Dictionary<string, Vector4> m_imageWindows = new(comparer: StringComparer.Ordinal);
+    private readonly Lock m_imageWindowsGate = new();
+
+    private void NoteImageWindow(string instance, SdfWorldResidency residency) {
+        if ((Refresh(instance: instance).View is not { } view) || (residency.Frame is not { Views.Count: > 0 } frame)) { return; }
+
+        var window = frame.Views[Math.Min(val1: view.View, val2: (frame.Views.Count - 1))].ImageWindow;
+
+        lock (m_imageWindowsGate) { m_imageWindows[instance] = window; }
+    }
+    // Writes, for each screen a view of a residency samples, the window its source's latest scheduled render spans
+    // (NoteImageWindow), the unit rectangle for a screen that shows no view's image.
+    internal void ScreenWindowsOf(SdfWorldResidency residency, int view, Span<Vector4> windows) {
+        lock (m_imageWindowsGate) {
+            for (var screen = 0; (screen < windows.Length); screen++) {
+                var window = (((residency.ScreenProducerOf(screen: screen, view: view) is { } producer) && m_imageWindows.TryGetValue(key: producer, value: out var noted)) ? noted : default);
+
+                windows[screen] = ((window.Z > window.X) && (window.W > window.Y)) ? window : new Vector4(x: 0f, y: 0f, z: 1f, w: 1f);
+            }
+        }
+    }
     // The residency of the view an instance resolves this frame, its frame started; null for an instance that resolves none.
     private SdfWorldResidency? BegunResidencyOf(string instance) {
         if (Refresh(instance: instance).View is not { } view) { return null; }

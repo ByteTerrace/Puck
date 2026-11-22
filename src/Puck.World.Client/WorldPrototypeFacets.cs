@@ -114,7 +114,7 @@ public static class WorldPrototypeFacets {
     /// <summary>Returns where the glass a face's screen draws lies along the face's normal, measured from its frame's
     /// origin: its back and its front, a display's front proud of the face and an opening's about its mid-plane. A
     /// window looking through the face as its counterpart, from either side, starts its rays past it
-    /// (<see cref="WorldWindowFrustumFit.TryFitFromEye"/>).</summary>
+    /// (<see cref="WorldWindowFrustumFit.FitFrom"/>).</summary>
     /// <param name="frame">The face's frame.</param>
     /// <param name="source">The face's source, which decides whether its glass is an opening (<see cref="IsOpening"/>).</param>
     /// <returns>The glass's back and front, in world units along the frame's normal.</returns>

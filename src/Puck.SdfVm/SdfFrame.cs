@@ -51,6 +51,11 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// before the glass can enter its image without the viewer walking. <see langword="false"/>, the default, for a view
     /// that can turn to anything about its eye within a frame, which demands by distance alone.</summary>
     public bool DemandWithinView { get; init; }
+    /// <summary>The part of the glass a window's image spans when its frustum is fitted to the part of the glass its
+    /// viewer sees: the rectangle's left, top, right and bottom in the glass's image coordinates, each in [0, 1]. The
+    /// views that sample the image map it onto that rectangle (<see cref="SdfWorldPasses"/>), whatever frame it was
+    /// rendered in. Zero, the default, and the unit rectangle span the whole glass.</summary>
+    public System.Numerics.Vector4 ImageWindow { get; init; }
 
     /// <summary>The render-scale ceiling in (0, 1], quantized by <see cref="RenderGraphExtent"/> into
     /// <see cref="RenderCeiling"/>. Scratch is allocated at that fraction of the view's output extent; its published
