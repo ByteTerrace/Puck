@@ -47,9 +47,12 @@ public static class WorldPlacementFrameCompilation {
     // Reference spellings are immutable even when the values they read move. Share this derivation across every
     // section cache that otherwise retains a resolved frame, without walking all placements on every lookup.
     internal static bool HasLiveInputs(WorldPlacementsSection section) => Inputs.GetValue(section, static rows =>
-        new FrameInputs(Live: (rows.Rows ?? []).Any(predicate: row => ((row.Position.Reference is not null) ||
-            ((row.Distribution?.Region is WorldDistributionRegion.Lattice lattice) &&
-            ((lattice.StepA.Reference is not null) || (lattice.StepB.Reference is not null))))))).Live;
+        new FrameInputs(Live: (rows.Rows ?? []).Any(predicate: IsLive))).Live;
+
+    // Whether a row's frame, or a dealt child's slot offset over it, reads a bound value that moves without the row.
+    private static bool IsLive(WorldPlacement row) => ((row.Position.Reference is not null) ||
+        ((row.Distribution?.Region is WorldDistributionRegion.Lattice lattice) &&
+        ((lattice.StepA.Reference is not null) || (lattice.StepB.Reference is not null))));
 
     /// <summary>Returns a row's local frame in its parent's frame and whether its offset takes the parent's scale. A
     /// dealt child (<see cref="WorldPlacementDeal.IsChild"/>) stands at its slot's fixed-point offset
@@ -125,6 +128,30 @@ public static class WorldPlacementFrameCompilation {
     }
     private static bool Within(Func<FixedQ4816, bool> within, FixedVector3 value) => within(value.X) && within(value.Y) && within(value.Z);
 
+    // A row's resolved frame, held against the row instance with the inputs it was composed from: the seed, the parent
+    // row instance and that parent's frame. A row is immutable, so a frame table compiled for another section that
+    // holds the same row under the same parent and parent frame carries the frame instead of composing it again (a
+    // replica document recomposed after one row moved compiles only the rows whose chain moved). A row or parent with
+    // live inputs (IsLive) is neither carried nor held: its frame moves without its instance.
+    private sealed record CarriedFrame(ulong WorldSeed, WorldPlacement? Parent, CompiledPlacementFrame ParentFrame, CompiledPlacementFrame Frame);
+
+    private static readonly CodeDerivedTable<WorldPlacement, CarriedFrame> Carried = new();
+
+    private static bool Carries(WorldPlacement row, WorldPlacement? parent) => !IsLive(row: row) && ((parent is null) || !IsLive(row: parent));
+    private static bool TryCarried(WorldPlacement row, WorldPlacement? parent, CompiledPlacementFrame parentFrame, ulong worldSeed, out CompiledPlacementFrame frame) {
+        if (Carries(row: row, parent: parent) && Carried.TryGetValue(key: row, value: out var held) && (held.WorldSeed == worldSeed) && ReferenceEquals(objA: held.Parent, objB: parent) && (held.ParentFrame == parentFrame)) {
+            WorldBootWork.Count(kind: WorldBootWork.PlacementFramesCarried);
+            frame = held.Frame;
+            return true;
+        }
+        frame = default;
+        return false;
+    }
+    private static void Carry(WorldPlacement row, WorldPlacement? parent, CompiledPlacementFrame parentFrame, ulong worldSeed, CompiledPlacementFrame frame) {
+        WorldBootWork.Count(kind: WorldBootWork.PlacementFramesComposed);
+        if (Carries(row: row, parent: parent)) { Carried.AddOrUpdate(key: row, value: new CarriedFrame(WorldSeed: worldSeed, Parent: parent, ParentFrame: parentFrame, Frame: frame)); }
+    }
+
     // The one parent-chain resolver. A caller with a representability envelope (spatial compilation) passes it as
     // within, which every rotation input, resolved position and scale on the chain must satisfy; the general document
     // read keeps best-effort authored roots for malformed chains until validation reports their named error.
@@ -134,7 +161,6 @@ public static class WorldPlacementFrameCompilation {
         if (frames.TryGetValue(key: placement.Id, value: out frame)) { reason = string.Empty; return true; }
         if (!visiting.Add(item: placement.Id)) { frame = default; reason = $"placement '{placement.Id}' participates in a parent cycle"; return false; }
         try {
-            frame = LocalFrame(inheritScale: out _, parent: null, row: placement, worldSeed: worldSeed);
             if (placement.Parent is { Length: > 0 } parentId) {
                 if (!byId.TryGetValue(key: parentId, value: out var parent) ||
                     ((parent.Distribution is not null) && (parent.Deal is null)) || (parent.Mirror is not null) ||
@@ -144,9 +170,15 @@ public static class WorldPlacementFrameCompilation {
                 if (!TryResolveFrame(byId: byId, frame: out var parentFrame, frames: frames, placement: parent, reason: out reason, visiting: visiting, within: within, worldSeed: worldSeed)) {
                     frame = default; return false;
                 }
-                var local = LocalFrame(inheritScale: out var inherit, parent: parent, row: placement, worldSeed: worldSeed);
+                if ((within is not null) || !TryCarried(frame: out frame, parent: parent, parentFrame: parentFrame, row: placement, worldSeed: worldSeed)) {
+                    var local = LocalFrame(inheritScale: out var inherit, parent: parent, row: placement, worldSeed: worldSeed);
 
-                frame = ComposeCore(inheritScale: inherit, local: local, parent: parentFrame, within: within);
+                    frame = ComposeCore(inheritScale: inherit, local: local, parent: parentFrame, within: within);
+                    if (within is null) { Carry(frame: frame, parent: parent, parentFrame: parentFrame, row: placement, worldSeed: worldSeed); }
+                }
+            } else if ((within is not null) || !TryCarried(frame: out frame, parent: null, parentFrame: default, row: placement, worldSeed: worldSeed)) {
+                frame = LocalFrame(inheritScale: out _, parent: null, row: placement, worldSeed: worldSeed);
+                if (within is null) { Carry(frame: frame, parent: null, parentFrame: default, row: placement, worldSeed: worldSeed); }
             }
             if ((within is not null) && (!Within(within, frame.FixedPosition) || !within(frame.FixedScale))) {
                 frame = default; reason = $"placement '{placement.Id}' transform exceeds the fixed-point query range"; return false;

@@ -43,8 +43,13 @@ public static class WorldCreationWork {
     public static WorkKind StaticTemplates { get; } = new(name: "sdf.creations.static.templates", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Retained static occurrences published during a visual program build.</summary>
     public static WorkKind StaticCopies { get; } = new(name: "sdf.creations.static.copies", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Static rosters reconciled against a new definition or row list.</summary>
+    public static WorkKind StaticReconciles { get; } = new(name: "sdf.creations.static.reconciles", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Static occurrences a reconcile placed anew: those of rows it had not met, or whose compiled stamp or
+    /// asset moved. A row met again with its stamp standing keeps its occurrences and counts none.</summary>
+    public static WorkKind StaticCopiesRebuilt { get; } = new(name: "sdf.creations.static.copies-rebuilt", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Process totals; read twice to measure a window. Posed, retained and the visited share of rate-held
     /// partition visited registrations; the bodies and placements among the posed and held count in
     /// <see cref="Puck.SdfVm.SdfUpdateRateCounts"/>.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Forked, Retained, RateHeld, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, TermsEvaluated, EffectorSolves, StaticTemplates, StaticCopies, Packs]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Forked, Retained, RateHeld, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, TermsEvaluated, EffectorSolves, StaticTemplates, StaticCopies, StaticReconciles, StaticCopiesRebuilt, Packs]);
 }

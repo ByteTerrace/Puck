@@ -554,18 +554,23 @@ public sealed class WorldDocumentStateView : IWorldStateView {
     // row's observation header is dropped, as a build drops every one: the authority owes it again with the row's next
     // snapshot.
     private bool TryReloadRows(WorldDefinition before, WorldDefinition after) {
-        if (
-            (before.StateRaw is not { } heldSection) || (after.StateRaw is not { } nextSection) ||
-            !heldSection.SharesDeclarations(other: nextSection) ||
-            (!ReferenceEquals(objA: before.StateCatalog, objB: after.StateCatalog) && !before.StateCatalog.MatchesShape(section: nextSection))
-        ) {
+        if ((before.StateRaw is not { } heldSection) || (after.StateRaw is not { } nextSection)) { return false; }
+        if (!heldSection.SharesDeclarations(other: nextSection)) {
+            WorldBootWork.Count(kind: WorldBootWork.ArenaReloadsRefusedDeclarations);
+            return false;
+        }
+        if (!ReferenceEquals(objA: before.StateCatalog, objB: after.StateCatalog) && !before.StateCatalog.MatchesShape(section: nextSection)) {
+            WorldBootWork.Count(kind: WorldBootWork.ArenaReloadsRefusedCatalog);
             return false;
         }
 
         var held = before.State;
         var next = after.State;
 
-        if (held.Count != next.Count) { return false; }
+        if (held.Count != next.Count) {
+            WorldBootWork.Count(kind: WorldBootWork.ArenaReloadsRefusedRows);
+            return false;
+        }
 
         var rows = m_reloadedRows;
 
@@ -574,6 +579,7 @@ public sealed class WorldDocumentStateView : IWorldStateView {
             if (!ReferenceEquals(objA: held[index], objB: next[index])) { rows.Add(item: next[index]); }
         }
         if ((rows.Count != 0) && !m_arena.TryLoad(rows: rows, time: ArenaTime.Origin, reason: out _)) {
+            WorldBootWork.Count(kind: WorldBootWork.ArenaReloadsRefusedLoad);
             rows.Clear();
             return false;
         }
@@ -607,6 +613,7 @@ public sealed class WorldDocumentStateView : IWorldStateView {
                 !TryReloadRows(before: shaped, after: document))
         ) {
             WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
+            WorldBootWork.Count(kind: WorldBootWork.ArenaViewBuilds);
             m_arena = new StateArena(catalog: document.StateCatalog, section: document.StateRaw, time: ArenaTime.Origin);
             m_observations.Clear();
         }

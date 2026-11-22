@@ -138,10 +138,49 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     public static WorkKind SurfaceFields { get; } = Registry.Declare(name: "world.boot.surface.fields", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Canonical occurrence/identity array payload created; not live or process memory.</summary>
     public static WorkKind StampPayloadBytes { get; } = Registry.Declare(name: "world.boot.stamp.payload-created", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the presentation manifests compiled, one per document instance a reader asks
+    /// for.</summary>
+    public static WorkKind ManifestCompiles { get; } = Registry.Declare(name: "world.boot.manifest.compiles", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the document parts a manifest compile walked: a direct member of the definition,
+    /// or a placement, look or creation row, that no earlier compile met.</summary>
+    public static WorkKind ManifestPartsWalked { get; } = Registry.Declare(name: "world.boot.manifest.parts-walked", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the document parts a manifest compile replayed from an earlier compile that met
+    /// the same instance, without walking it.</summary>
+    public static WorkKind ManifestPartsReplayed { get; } = Registry.Declare(name: "world.boot.manifest.parts-replayed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the placement frames a frame table composes from a row's authored transform
+    /// and its parent's frame.</summary>
+    public static WorkKind PlacementFramesComposed { get; } = Registry.Declare(name: "world.boot.placement-frames.composed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the placement frames a frame table carries from an earlier table: the same row
+    /// instance under the same parent row, parent frame and seed.</summary>
+    public static WorkKind PlacementFramesCarried { get; } = Registry.Declare(name: "world.boot.placement-frames.carried", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the state arenas a world builds from a document's state section: a server's
     /// arena or its prepared replacement, a seed view declarations are read through, a derived board's recompute, a
     /// settlement's seed, a compose or transform scratch store, and a client's state mirror.</summary>
     public static WorkKind ArenaBuilds { get; } = Registry.Declare(name: "world.boot.arena-builds", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the <see cref="ArenaBuilds"/> that are a seed view of a state section no earlier
+    /// read built (<c>WorldStateReader.Seed</c>).</summary>
+    public static WorkKind ArenaSeedBuilds { get; } = Registry.Declare(name: "world.boot.arena-builds.seed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the <see cref="ArenaBuilds"/> that are a client state view's, one for each
+    /// delivered document it could not reload in place.</summary>
+    public static WorkKind ArenaViewBuilds { get; } = Registry.Declare(name: "world.boot.arena-builds.view", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the <see cref="ArenaBuilds"/> that are an authority's live arena or its prepared
+    /// replacement.</summary>
+    public static WorkKind ArenaInstallBuilds { get; } = Registry.Declare(name: "world.boot.arena-builds.install", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the <see cref="ArenaBuilds"/> that are scratch: a compose or transform store, a
+    /// settlement's seed.</summary>
+    public static WorkKind ArenaScratchBuilds { get; } = Registry.Declare(name: "world.boot.arena-builds.scratch", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the delivered documents a client state view could not reload in place because
+    /// the new state section does not share the held one's declaration lists.</summary>
+    public static WorkKind ArenaReloadsRefusedDeclarations { get; } = Registry.Declare(name: "world.boot.arena-reloads-refused.declarations", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the delivered documents a client state view could not reload in place because
+    /// the new catalog does not have the held one's shape.</summary>
+    public static WorkKind ArenaReloadsRefusedCatalog { get; } = Registry.Declare(name: "world.boot.arena-reloads-refused.catalog", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the delivered documents a client state view could not reload in place because
+    /// the new section holds another number of rows.</summary>
+    public static WorkKind ArenaReloadsRefusedRows { get; } = Registry.Declare(name: "world.boot.arena-reloads-refused.rows", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the delivered documents a client state view could not reload in place because
+    /// the kept arena refused the changed rows.</summary>
+    public static WorkKind ArenaReloadsRefusedLoad { get; } = Registry.Declare(name: "world.boot.arena-reloads-refused.load", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the rows a client's state view reloads into the arena it keeps, in place of a
     /// build, when a document over the same catalog replaces only some rows.</summary>
     public static WorkKind ArenaRowReloads { get; } = Registry.Declare(name: "world.boot.arena-row-reloads", unit: "count", workClass: WorkClass.Pacing);

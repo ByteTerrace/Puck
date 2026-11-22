@@ -12,7 +12,8 @@ namespace Puck.World;
 public static partial class WorldPlacementStamp {
     private sealed partial class CompilationContext {
         private readonly IReadOnlyDictionary<string, WorldPlacement> m_rows;
-        private readonly Dictionary<string, WorldPrototype> m_creations = new(comparer: StringComparer.Ordinal);
+        // The creations the context was compiled under, found through the list's shared key index.
+        private readonly IReadOnlyList<WorldPrototype> m_creations;
 
         private readonly IReadOnlyDictionary<string, CompiledPlacementFrame> m_authored;
 
@@ -36,9 +37,10 @@ public static partial class WorldPlacementStamp {
 
             m_rows = WorldPlacementIndex.ById(placements: (section.Rows ?? []));
             foreach (var row in m_rows.Values) { projected |= (row.Surface is not null); }
-            foreach (var creation in creations) { _ = m_creations.TryAdd(key: creation.Id, value: creation); }
+            m_creations = creations;
             FrameTable = (projected ? new LazyFrames(owner: this) : m_authored);
         }
+        private WorldPrototype? CreationOf(string id) => WorldDefinitionRows.FindCreation(creations: m_creations, id: id);
         private static bool SingleRoot(WorldPlacement row) => row.Distribution is null && row.Mirror is null && row.Deal is null;
         private bool Owned(WorldPlacement row) => m_rows.TryGetValue(row.Id, out var declared) && ReferenceEquals(row, declared);
         private CompiledPlacementFrame Authored(WorldPlacement row) => (Owned(row: row)

@@ -1247,29 +1247,43 @@ The frame bar is read with `bench frames`, `host.frames` (produce split into
 authority at each stop, so it reads the frame side alone; a played frame also
 carries the tick.
 
-What a delivered document still costs the frame (a `gc-verbose` trace of the
-moving route's later chapters, frame thread, 60 s):
+What a delivered document still costs the frame (the lift chapter, windowed
+D3D12, `world.counters` read before and after `world.benchmark run debug "the
+lift"`). A redisclosed replica reloads its rows in place
+(`world.boot.arena-builds` +0, `arena-row-reloads` +4716), reconciles its
+static copies by row identity (`sdf.creations.static.copies-rebuilt` +77 over
+27 reconciles), carries placement frames by row identity
+(`world.boot.placement-frames.composed` +124, `.carried` +797k) and replays the
+manifest parts it met (`world.boot.manifest.parts-walked` +275, `.replayed`
++660k). What remains is in proportion to the document, not the change:
 
-- [high] A replica document disclosed again after its frame moved (the lift's
-  car) is a new definition object, and `WorldRigidAssets.ReconcileStatic`
-  rebuilds every static copy whenever the definition object changes. Each
-  rebuild resolves every placement's stamp (`WorldPlacementStamp.Resolve`),
-  which compiles the whole new placements section's frames
-  (`WorldPlacementFrameCompilation.Resolve`, `FixedQ4816.FromDegreesExact`
-  over `BigInteger`) and builds descriptors through `WorldDocumentWalker`.
-  That was most of 1.5 GB the frame thread allocated in a minute, and the
-  produce frames that follow a lift delivery. Reconcile only the placements
-  whose row or parent chain changed, and carry a frame table across a section
-  whose rows are reused (as `CarryAcrossHolding` does for holdings). Check:
-  the frame thread's allocation in the lift chapter, and `world.boot`'s
-  counters per delivery.
-- [high] `SdfMeshRegionArena.Clip` ran 80 to 190 ms on several consecutive
-  frames of the lift ride (`SdfWorldTables.EnsureMeshRegionCapacity`): a
-  region that cannot grow clips, refuses and re-plans the same meshes each
-  frame. Check: `world.residency`'s region line holds still while the car
-  rides.
-- [medium] `WorldPresentationManifest.Compile` walks the whole document again
-  for each new delivered definition (`WorldStateMirror.Install`).
+- [high] Each new placements section (a response change in a disclosed
+  document; about 110 compiles over the chapter) builds a new
+  `WorldPlacementStamp` compilation context, which validates every surface
+  descriptor again (`world.boot.surface.descriptors` +117k over the chapter),
+  and the frame table and the manifest still visit every row to find it
+  unchanged. Carry a context's descriptors and frames across a section whose
+  rows are reused, and derive the frame table and manifest of a section from
+  the section it replaced by its changed rows, so a disclosure costs the rows
+  that moved. Check: those counters per delivery.
+- [high] The frame thread still allocated 1054 MiB in the lift chapter (647
+  iterations, `frames.csv` `frameThreadAllocatedBytes`), and the longest frames
+  were gen2 collections (pauses of 350 to 700 ms) on a machine short of memory.
+  Attribute the frame thread's allocations with a `gc-verbose` trace read by
+  allocation tick, not a speedscope conversion (which weights by time), and
+  remove the largest sources.
+- [medium] A mesh region whose growth is refused holds its limit to what it
+  holds (`SdfWorldTables.HoldsRefusedGrowth`, `sdf.rows.check.region.refusal-holds`)
+  until the region's size, a release, the pool's room or a trim moves, or a
+  fixed number of plans pass: the grant reserves growth in the
+  `MemoryAccount` that the device admission (`GpuDeviceMemoryWork.TryAdmit`)
+  then refuses, and memory another owner gives back reaches the region by no
+  event. Make the two ledgers agree, so the reservation that admits a growth
+  is the one the device admission honours, and drop the plan-count fallback.
+- [low] `MemoryAccount.RefreshAvailable` samples the process's resident memory
+  on whichever thread first asks after its interval, the frame thread among
+  them (a `DeviceReservation.TryReserve` from the mesh region). Sample it off
+  the frame thread.
 
 What an arrival and a hand-over still cost the frame:
 
@@ -3874,8 +3888,9 @@ The edit loop:
   reload a same-catalog arena in place (`StateCatalog.MatchesShape` answers
   whether the catalog survives).
 - A state-section edit builds five arenas on the debug world
-  (`world.boot.arena-builds`), one not yet attributed, and an undisturbed run
-  grows the counter with no edit at all.
+  (`world.boot.arena-builds`); its `.seed`, `.view`, `.install` and `.scratch`
+  counters name each site, so read them across an edit to attribute the
+  fifth.
 - An edit to a project outside `PuckHotReload` is refused and `dotnet watch`
   stops applying changes; it should reboot as a rude edit does
   ([in-world editing](#in-world-editing) extends that reboot with a resume).

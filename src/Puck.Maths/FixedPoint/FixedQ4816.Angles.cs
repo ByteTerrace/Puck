@@ -43,7 +43,8 @@ public readonly partial record struct FixedQ4816 {
     /// of the exact value; the result is the nearest raw unless the exact value lies within that distance of a
     /// half-raw, an envelope stated rather than proved absent.</remarks>
     public static FixedQ4816 FromDegrees(double degrees) {
-        if (double.IsNaN(d: degrees)) {
+        // Zero (either sign) and not-a-number are zero; most authored headings are zero, so they skip the exact path.
+        if ((degrees == 0d) || double.IsNaN(d: degrees)) {
             return Zero;
         }
         if (double.IsPositiveInfinity(d: degrees)) {
@@ -66,7 +67,7 @@ public readonly partial record struct FixedQ4816 {
     /// <returns>The raw nearest to the exact <c>degrees · π / 180</c>, under the same rule and envelope as
     /// <see cref="FromDegrees(double)"/>. Never saturates: the result's magnitude is below the input's.</returns>
     /// <remarks>Not the product of the input with a rounded radians-per-degree factor, which rounds twice.</remarks>
-    public static FixedQ4816 FromDegrees(FixedQ4816 degrees) =>
+    public static FixedQ4816 FromDegrees(FixedQ4816 degrees) => (degrees.Value == 0L) ? Zero :
         FromDegreesExact(
             numerator: degrees.Value,
             denominatorExponent: FractionBitCount

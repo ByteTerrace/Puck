@@ -492,14 +492,21 @@ public static class WorldStateDocumentValues {
             visitor: new Finder(collected: rows, soughtRow: null)
         );
     }
-    /// <summary>Reports whether <paramref name="graph"/> retains any document-value reference at all.</summary>
+    /// <summary>Reports whether <paramref name="graph"/> retains any document-value reference at all. A graph object's
+    /// answer is walked once per instance and kept for its lifetime: a document graph is immutable, and a rewrite that
+    /// drops or resolves a reference is a new instance. A boxed value is walked each time, since every box is new.</summary>
     /// <param name="graph">The object graph to walk — a definition, or an egress document composed over one.</param>
     /// <returns><see langword="true"/> when at least one bound value is present.</returns>
     public static bool HasReference(object graph) {
         ArgumentNullException.ThrowIfNull(argument: graph);
 
-        return Find(graph: graph, soughtRow: null);
+        if (graph.GetType().IsValueType) { return Find(graph: graph, soughtRow: null); }
+        return ReferenceEquals(objA: ReferenceVerdicts.GetValue(key: graph, derive: static held => (Find(graph: held, soughtRow: null) ? Referenced : Literal)), objB: Referenced);
     }
+
+    private static readonly Puck.Abstractions.CodeDerivedTable<object, object> ReferenceVerdicts = new();
+    private static readonly object Referenced = new();
+    private static readonly object Literal = new();
     /// <summary>Reports whether <paramref name="graph"/> — one section or value holder of
     /// <paramref name="definition"/> — carries a document-value reference naming <paramref name="rowName"/>.</summary>
     /// <param name="definition">The document the references resolve against.</param>

@@ -50,6 +50,7 @@ public static class WorldStateReader {
         }
 
         WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
+        WorldBootWork.Count(kind: WorldBootWork.ArenaSeedBuilds);
         seed = new StateArena(catalog: definition.StateCatalog, section: definition.StateRaw, time: ArenaTime.Origin);
 
         return Seeds.GetValue(key: section, derive: _ => seed);

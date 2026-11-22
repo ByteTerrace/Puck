@@ -109,6 +109,8 @@ public sealed partial class WorldDocument {
 
                 if ((entry is null) || !CanReuseComposeArena(definition: definition, entry: entry)) {
                     WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
+                    WorldBootWork.Count(kind: WorldBootWork.ArenaScratchBuilds);
+            WorldBootWork.Count(kind: WorldBootWork.ArenaScratchBuilds);
                     if (!StateArena.TryCreateSeeding(
                         catalog: definition.StateCatalog, section: definition.StateRaw,
                         options: WorldSlotLanes.Options(definition: definition), time: in time,
