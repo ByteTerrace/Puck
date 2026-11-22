@@ -71,19 +71,10 @@ public sealed partial class StateArena {
         if (column == ArenaColumn.Number) {
             return;
         }
-        if (column == ArenaColumn.LaneRoster) {
-            var lane = LaneOfRoster(rosterIndex: index);
 
-            for (var ordinal = lane.FirstOrdinal; (ordinal < (lane.FirstOrdinal + lane.Count)); ordinal++) {
-                m_rowOpaqueStamp[ordinal] = m_changeEpoch;
-            }
+        var (first, count) = RowsOf(column: column, index: index);
 
-            return;
-        }
-
-        var row = m_layout.RowOf(column: column, index: index);
-
-        if (row >= 0) {
+        for (var row = first; (row < (first + count)); row++) {
             m_rowOpaqueStamp[row] = m_changeEpoch;
         }
     }

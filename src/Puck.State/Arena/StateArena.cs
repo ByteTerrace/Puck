@@ -747,17 +747,14 @@ public sealed partial class StateArena {
         m_reindexRow[m_reindexCount] = row;
         m_reindexCount++;
     }
-    private void BumpGeneration(ArenaColumn column, int index) {
-        // A roster bit belongs to a whole lane rather than to one row: joining or leaving changes what every slot
-        // of that lane answers, so every one of its descriptors moves.
+    // The rows one column position belongs to, as a run of catalog ordinals: the row that owns the position, none for
+    // a position no row owns, or every descriptor of a lane for a roster bit, which belongs to the whole lane (joining
+    // or leaving changes what every slot of that lane answers).
+    private (int First, int Count) RowsOf(ArenaColumn column, int index) {
         if (column == ArenaColumn.LaneRoster) {
             var lane = LaneOfRoster(rosterIndex: index);
 
-            for (var ordinal = lane.FirstOrdinal; (ordinal < (lane.FirstOrdinal + lane.Count)); ordinal++) {
-                m_rowGenerations[ordinal]++;
-            }
-
-            return;
+            return (lane.FirstOrdinal, lane.Count);
         }
 
         var row = m_layout.RowOf(
@@ -765,11 +762,14 @@ public sealed partial class StateArena {
             index: index
         );
 
-        if (row < 0) {
-            return;
-        }
+        return ((row < 0) ? (0, 0) : (row, 1));
+    }
+    private void BumpGeneration(ArenaColumn column, int index) {
+        var (first, count) = RowsOf(column: column, index: index);
 
-        m_rowGenerations[row]++;
+        for (var row = first; (row < (first + count)); row++) {
+            m_rowGenerations[row]++;
+        }
     }
     private void MarkVersion(ArenaColumn column, int index) {
         if (column == ArenaColumn.LaneRoster) {
