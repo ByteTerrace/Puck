@@ -60,7 +60,7 @@ public sealed partial class WorldCostLawTests {
             m_map.Instances(first: 1, end: 3, target: new WorldPickTarget(BodyIndex: null, Placement: "separate") { Prototype = "pair" });
         }
         public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved,
-            IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height,
+            SdfMeshDrawList meshDraws, uint width, uint height,
             float deltaSeconds, float interpolationAlpha) => new(Program: program, ProgramChanged: true, Time: 0, Views: []);
     }
 

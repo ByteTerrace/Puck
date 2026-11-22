@@ -667,19 +667,6 @@ wait behind them.
    client's body journal, the mirror's change log, a due cursor or their own
    continuation woke, and held poses out of every view's sight are culled a
    cell at a time. Left:
-   - The mesh dresser still rebuilds the draw and its row for each moved
-     slot-riding copy and group (`SdfMeshDresser.DressHeld`), for the CPU
-     readers of `SdfMeshDraw.ObjectToWorld`, though the kernels place such a
-     draw from its slot's row. Deriving the CPU placement from the slot
-     leaves a moving body no dress work.
-   - The adjacency emitter asks every index of each neighbour's capacity each
-     frame (`WorldAdjacencySceneEmitter.SelectBand`, from its `PrepareFrame`,
-     `WriteRevision` and pack). A neighbour needs an active list and a body
-     journal of its own, as a stamp source has
-     (`IWorldStampSource.CopyActiveBodies`, `IWorldStampSource.BodyChanges`).
-   - A session scene's source keeps no body journal
-     (`WorldSessionStampSource`), so its pool and avatars read every body
-     they draw each pack.
    - Recording in dependency waves
      ([the memo's R1](engine-job-system.md#6-build-order)) waits on its
      admission reading, taken with four seats' views (M2) beside one.

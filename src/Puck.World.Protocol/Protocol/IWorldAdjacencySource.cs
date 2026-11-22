@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Gpu;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -77,6 +78,33 @@ public interface IWorldAdjacencyNeighbour {
 
     /// <summary>Whether a delivered entity slot is active.</summary>
     bool IsEntityActive(int index);
+    /// <summary>Gets the active entity slots, those <see cref="IsEntityActive"/> answers for, in ascending order, so a
+    /// reader that visits each active entity never asks every slot of <see cref="EntityCapacity"/>. The default asks
+    /// every slot.</summary>
+    IReadOnlyList<int> ActiveEntities {
+        get {
+            var active = new List<int>();
+
+            for (var index = 0; (index < EntityCapacity); index++) {
+                if (IsEntityActive(index: index)) { active.Add(item: index); }
+            }
+
+            return active;
+        }
+    }
+    /// <summary>Collects the entity slots whose delivered entry (its activity, address, pose epoch, placement, endpoints,
+    /// color, look, rig, collider or contact) changed since a cursor last committed, through the link's journal across
+    /// the images it published, so a reader keeps what it derived from the rest. The caller commits the cursor once it
+    /// has consumed the runs, on the one thread it reads it from.</summary>
+    /// <param name="cursor">The reader's cursor.</param>
+    /// <param name="into">The runs of slots, cleared first.</param>
+    /// <returns><see langword="true"/> when every slot may have changed: the first collection, another link, a window
+    /// the journal no longer holds, or a neighbour that keeps no journal, as the default does.</returns>
+    bool CollectEntityChanges(GpuRowCursor cursor, GpuUploadRuns into) {
+        ArgumentNullException.ThrowIfNull(argument: cursor);
+
+        return cursor.Collect(force: true, into: into, reader: null, revision: 0L, rows: EntityCapacity, table: this, through: 0L);
+    }
     /// <summary>The durable address of a delivered entity slot.</summary>
     WorldEntityAddress EntityAddress(int index);
     /// <summary>The pose epoch of a delivered entity slot: it moves each time the entity becomes active or teleports,

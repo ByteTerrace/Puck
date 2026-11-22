@@ -135,6 +135,6 @@ public sealed class SdfAppliedCodeUpdateLawTests {
         }
         public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) {
         }
-        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) => new(Program: program, ProgramChanged: false, Time: 0f, Views: []) { DynamicTransforms = transforms };
+        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, SdfMeshDrawList meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) => new(Program: program, ProgramChanged: false, Time: 0f, Views: []) { DynamicTransforms = transforms };
     }
 }

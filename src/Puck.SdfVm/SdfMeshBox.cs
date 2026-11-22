@@ -94,16 +94,7 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
     /// draw's box spans its displacement's band of heights (<see cref="SdfMeshDraw.Displacement"/>) as well as its
     /// mesh's.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="draw"/> is placed by its slot.</exception>
-    public static bool TryOfFixed(in SdfMeshDraw draw, out SdfMeshBox box) {
-        if (!TryOfObject(draw: in draw, center: out var center, half: out var half)) {
-            box = default;
-
-            return false;
-        }
-        box = Placed(center: center, draw: in draw, half: half, matrix: draw.FixedPlacement);
-
-        return true;
-    }
+    public static bool TryOfFixed(in SdfMeshDraw draw, out SdfMeshBox box) => TryAt(draw: in draw, matrix: (draw.Mesh.Members.IsEmpty ? draw.FixedPlacement : default), box: out box);
     /// <summary>Returns the box a draw's triangles lie in within a frame, when its triangles have one the host knows: the
     /// box <see cref="TryOfFixed"/> returns, placed where the frame's transforms place the draw
     /// (<see cref="SdfMeshDraw.PlacementIn"/>), so a draw riding its slot is boxed where its slot's row stands.</summary>
@@ -114,12 +105,17 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
     /// <exception cref="ArgumentNullException"><paramref name="transforms"/> is <see langword="null"/>.</exception>
     public static bool TryOf(in SdfMeshDraw draw, IReadOnlyList<DynamicTransform> transforms, out SdfMeshBox box) {
         ArgumentNullException.ThrowIfNull(argument: transforms);
+
+        return TryAt(draw: in draw, matrix: draw.PlacementIn(transforms: transforms), box: out box);
+    }
+    // The box a draw's object-space box becomes at a matrix and then the draw's carry, for a draw the host can box.
+    private static bool TryAt(in SdfMeshDraw draw, in Matrix4x4 matrix, out SdfMeshBox box) {
         if (!TryOfObject(draw: in draw, center: out var center, half: out var half)) {
             box = default;
 
             return false;
         }
-        box = Placed(center: center, draw: in draw, half: half, matrix: draw.PlacementIn(transforms: transforms));
+        box = Placed(center: center, draw: in draw, half: half, matrix: in matrix);
 
         return true;
     }

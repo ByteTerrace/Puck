@@ -33,7 +33,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
 
         Assert.Same(mesh, draw.Mesh);
         Assert.Equal(1, draw.FrameSlot);
-        Assert.Equal(10, draw.ObjectToWorld.M41);
+        Assert.Equal(10, draw.PlacementIn(transforms: poses).M41);
         Assert.False(condition: bake.Pending);
     }
 }

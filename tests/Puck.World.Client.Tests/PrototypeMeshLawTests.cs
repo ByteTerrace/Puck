@@ -158,8 +158,8 @@ public sealed class PrototypeMeshLawTests {
         Assert.NotNull(@object: draw.FrameSlot);
         Assert.False(condition: draw.UsesRootMaterialFrame);
         Assert.Equal(expected: (Assert.Single(collection: new Scene(definition: Animated(mesh: (Quad() with { Material = 0 }))).Frame()).Material + 1), actual: draw.Material);
-        AssertNear(expected: new Vector3(x: 2f, y: 0f, z: -1f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[1], matrix: draw.ObjectToWorld));
-        AssertNear(expected: new Vector3(x: 2f, y: 2f, z: -3f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[3], matrix: draw.ObjectToWorld));
+        AssertNear(expected: new Vector3(x: 2f, y: 0f, z: -1f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[1], matrix: draw.PlacementIn(transforms: scene.Transforms)));
+        AssertNear(expected: new Vector3(x: 2f, y: 2f, z: -3f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[3], matrix: draw.PlacementIn(transforms: scene.Transforms)));
         var revision = scene.Revision;
 
         Assert.Same(expected: first, actual: scene.Frame());
@@ -200,8 +200,8 @@ public sealed class PrototypeMeshLawTests {
         Assert.Equal(expected: meshless, actual: Allocated(mesh: Quad()));
     }
     /// <summary>An attached placement's mesh draws at its body's pose composed with the facet's offset (0, 1, 0), under
-    /// the row's scale 2, and follows the body: a moved body moves the draws' revision with the draw moved. While the
-    /// body is inactive the row draws nothing.</summary>
+    /// the row's scale 2, and follows the body through its root slot's row: a moved body moves the draw's placement and
+    /// leaves the draws and their revision standing. While the body is inactive the row draws nothing.</summary>
     [Fact]
     public void AnAttachedPlacementsMeshFollowsItsBody() {
         var scene = new Scene(definition: Attached(mesh: Quad()));
@@ -219,7 +219,7 @@ public sealed class PrototypeMeshLawTests {
 
         // Author (0, 1, 0) is engine (0, 1, 0), scaled to (0, 2, 0), lifted by the offset to (0, 3, 0) and carried to
         // the body at (5, 0, 0).
-        AssertNear(expected: new Vector3(x: 5f, y: 3f, z: 0f), actual: Vector3.Transform(position: rest.Mesh.Positions.Span[3], matrix: rest.ObjectToWorld));
+        AssertNear(expected: new Vector3(x: 5f, y: 3f, z: 0f), actual: Vector3.Transform(position: rest.Mesh.Positions.Span[3], matrix: rest.PlacementIn(transforms: scene.Transforms)));
 
         _ = scene.Frame();
 
@@ -230,10 +230,11 @@ public sealed class PrototypeMeshLawTests {
             tick: 2UL
         );
 
-        var moved = scene.Frame();
+        var moved = Assert.Single(collection: scene.Frame());
 
-        Assert.NotEqual(expected: still, actual: scene.Revision);
-        Assert.NotEqual(expected: rest.ObjectToWorld, actual: Assert.Single(collection: moved).ObjectToWorld);
+        Assert.Equal(expected: still, actual: scene.Revision);
+        Assert.Equal(expected: rest, actual: moved);
+        AssertNear(expected: new Vector3(x: 8f, y: 3f, z: 0f), actual: Vector3.Transform(position: moved.Mesh.Positions.Span[3], matrix: moved.PlacementIn(transforms: scene.Transforms)));
     }
     /// <summary>A static placement reaches the mesh draws once, as the prototype's triangles turned into the engine
     /// frame (X and Z negated) under the placement's scale 2, yaw 90° and position (2, 0, -3), derived here from the
@@ -253,8 +254,8 @@ public sealed class PrototypeMeshLawTests {
 
         // Author (1, 0, 0) is engine (-1, 0, 0); scaled by 2 it is (-2, 0, 0); a +90° yaw about +Y takes -X to +Z,
         // so (0, 0, 2); placed at (2, 0, -3) it lands at (2, 0, -1). Author (0, 1, 0) stays on the axis: (2, 2, -3).
-        AssertNear(expected: new Vector3(x: 2f, y: 0f, z: -1f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[1], matrix: draw.ObjectToWorld));
-        AssertNear(expected: new Vector3(x: 2f, y: 2f, z: -3f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[3], matrix: draw.ObjectToWorld));
+        AssertNear(expected: new Vector3(x: 2f, y: 0f, z: -1f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[1], matrix: draw.FixedPlacement));
+        AssertNear(expected: new Vector3(x: 2f, y: 2f, z: -3f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[3], matrix: draw.FixedPlacement));
 
         var entryZero = Assert.Single(collection: Draws(definition: With(mesh: (Quad() with { Material = 0 }))));
 
@@ -354,15 +355,19 @@ public sealed class PrototypeMeshLawTests {
 
         // The revision of the draws the last frame composed.
         public long Revision => m_dresser.MeshDrawsRevision;
+        // The dynamic transforms the last frame packed, which place its draws.
+        public IReadOnlyList<DynamicTransform> Transforms => m_dresser.Transforms;
     }
     // Keeps the composed mesh draws each frame hands it.
     private sealed class RecordingDresser : ISdfFrameDresser {
         public IReadOnlyList<SdfMeshDraw> MeshDraws { get; private set; } = [];
         public long MeshDrawsRevision { get; private set; }
+        public DynamicTransform[] Transforms { get; private set; } = [];
 
-        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
-            MeshDraws = meshDraws;
-            MeshDrawsRevision = meshDrawsRevision;
+        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, SdfMeshDrawList meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+            MeshDraws = meshDraws.Draws;
+            MeshDrawsRevision = meshDraws.Revision;
+            Transforms = transforms;
 
             return new SdfFrame(
                 Program: program,
@@ -371,8 +376,8 @@ public sealed class PrototypeMeshLawTests {
                 Views: []
             ) {
                 DynamicTransforms = transforms,
-                MeshDraws = meshDraws,
-                MeshDrawsRevision = meshDrawsRevision,
+                MeshDraws = meshDraws.Draws,
+                MeshDrawsRevision = meshDraws.Revision,
                 MovedTransforms = moved,
             };
         }

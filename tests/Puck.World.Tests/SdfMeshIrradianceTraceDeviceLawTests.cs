@@ -37,9 +37,9 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
     private void Verify(GpuDeviceServices gpu, string extension) {
         var mesh = Box();
         SdfMeshDraw[] draws = [
-            new(Identity: new object(), Material: 2, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity),
-            new(Identity: new object(), Material: 7, Mesh: mesh, ObjectToWorld: Matrix4x4.CreateScale(2, 0.7f, 3) * Matrix4x4.CreateRotationY(0.37f) * Matrix4x4.CreateTranslation(5, 2, 1)),
-            new(Identity: new object(), Material: 13, Mesh: mesh, ObjectToWorld: Matrix4x4.CreateScale(-1, 3, 2) * Matrix4x4.CreateRotationZ(0.23f) * Matrix4x4.CreateTranslation(-4, 0, -2)),
+            new(identity: new object(), material: 2, mesh: mesh, objectToWorld: Matrix4x4.Identity),
+            new(identity: new object(), material: 7, mesh: mesh, objectToWorld: Matrix4x4.CreateScale(2, 0.7f, 3) * Matrix4x4.CreateRotationY(0.37f) * Matrix4x4.CreateTranslation(5, 2, 1)),
+            new(identity: new object(), material: 13, mesh: mesh, objectToWorld: Matrix4x4.CreateScale(-1, 3, 2) * Matrix4x4.CreateRotationZ(0.23f) * Matrix4x4.CreateTranslation(-4, 0, -2)),
         ];
         var origins = new List<Vector4>();
         for (var x = -7; x <= 7; x += 2) {
@@ -139,7 +139,7 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         var ties = 0;
         var maximumError = 0f;
         var maximumBound = 0f;
-        var sceneScale = draws.SelectMany(draw => draw.Mesh.Positions.ToArray().Select(p => Vector3.Transform(p, draw.ObjectToWorld).Length())).DefaultIfEmpty(1).Max();
+        var sceneScale = draws.SelectMany(draw => draw.Mesh.Positions.ToArray().Select(p => Vector3.Transform(p, draw.FixedPlacement).Length())).DefaultIfEmpty(1).Max();
         for (var probe = 0; probe < origins.Length; probe++) {
             var origin = origins[probe];
             SdfMeshProbeDepth.TraceHits(scene, new Vector3(origin.X, origin.Y, origin.Z), origin.W, expected, out var backs);

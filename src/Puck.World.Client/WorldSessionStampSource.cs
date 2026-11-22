@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Gpu;
 using Puck.Physics.Motion;
 using Puck.SignedDistance.Queries;
 using Puck.World.Protocol;
@@ -50,6 +51,50 @@ public sealed class WorldSessionStampSource : IWorldStampSource {
     public bool IsActive(int index) => m_mirror.IsActive(index: index);
     /// <inheritdoc/>
     public void CopyActiveBodies(List<int> bodies) => m_mirror.CopyActiveBodies(bodies: bodies);
+
+    // The source's body journal: its frames, its place in the mirror's delivery journal, the runs and moving bodies one
+    // frame reads, and the interpolation alpha the last frame closed at.
+    private readonly GpuChangedRows m_bodyChanges = new(stableRows: true);
+    private readonly GpuRowCursor m_deliveries = new();
+    private readonly GpuUploadRuns m_delivered = new(capacity: GpuRegion.MaxCopyRuns);
+    private readonly List<int> m_moving = [];
+    private float m_alpha = float.NaN;
+
+    /// <inheritdoc/>
+    /// <remarks>A journal frame names the bodies the mirror's deliveries changed since the last frame
+    /// (<see cref="WorldSessionMirror.CollectBodyChanges"/>), and, when the interpolation alpha moved, every body whose
+    /// two endpoints differ (<see cref="WorldSessionMirror.CopyMovingBodies"/>), since its interpolated pose moved with
+    /// it.</remarks>
+    public GpuRowChanges BodyChanges => m_bodyChanges.Reader;
+    /// <inheritdoc/>
+    /// <remarks>Reading it closes a journal frame over whatever moved since the last read, so the first consumer of a
+    /// frame publishes the changes and the rest read the same serial while nothing moves between them.</remarks>
+    public long BodyChangesSerial {
+        get {
+            var whole = m_mirror.CollectBodyChanges(cursor: m_deliveries, into: m_delivered);
+            var alpha = m_mirror.InterpolationAlpha;
+
+            m_deliveries.Commit();
+            m_moving.Clear();
+            if (BitConverter.SingleToInt32Bits(value: alpha) != BitConverter.SingleToInt32Bits(value: m_alpha)) {
+                m_alpha = alpha;
+                m_mirror.CopyMovingBodies(bodies: m_moving);
+            }
+            if (whole || (m_delivered.Count > 0) || (m_moving.Count > 0)) {
+                m_bodyChanges.Begin(everything: whole, rows: WorldClient.EntityCapacity);
+                if (!whole) {
+                    for (var run = 0; (run < m_delivered.Count); run++) {
+                        m_bodyChanges.Owe(count: m_delivered.Length(index: run), start: m_delivered.Start(index: run));
+                    }
+                    foreach (var index in m_moving) {
+                        m_bodyChanges.Owe(count: 1, start: index);
+                    }
+                }
+            }
+
+            return m_bodyChanges.Serial;
+        }
+    }
     /// <inheritdoc/>
     public WorldLook Look(int index) => m_mirror.Look(index: index);
     /// <inheritdoc/>

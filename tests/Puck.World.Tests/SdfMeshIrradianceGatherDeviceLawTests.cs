@@ -171,7 +171,7 @@ public sealed class SdfMeshIrradianceGatherDeviceLawTests {
 
         return new SdfMesh(indices: indices, positions: positions);
     }
-    private static SdfMeshDraw Draw(Vector3 low, Vector3 high) => new(Identity: new object(), Material: 0, Mesh: Box(high: high, low: low), ObjectToWorld: Matrix4x4.Identity);
+    private static SdfMeshDraw Draw(Vector3 low, Vector3 high) => new(identity: new object(), material: 0, mesh: Box(high: high, low: low), objectToWorld: Matrix4x4.Identity);
     // A two-storey hall 12 m wide, its storeys 4 m apart over 0.3 m slabs, from x = -10 to the end wall, with an exhibit
     // block on its floor, a sunlit ground outside and a sealed room 3 m on a side 60 m out; the camera stands in the hall
     // at the origin.
