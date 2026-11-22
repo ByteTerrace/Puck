@@ -1046,7 +1046,7 @@ named in sections 1 to 3 of the catalogue, `docs/plans/companion-redesign.md`,
 `docs/plans/mmo-foundations.md`, `docs/development/hazards.md:286-289`,
 `docs/development/security-review-reference.md:143` and
 `docs/reference/attestation.md`. Two holding citations are narrower than their
-prose: `src/Puck.World.Server/WorldAdjacencyFields.cs:486-498` declares the
+prose: `src/Puck.World.Server/WorldAdjacencyFields.cs` declares the
 local arrays, while the copy into them is the pinned snapshot path; and
 `src/Puck.World.Server/WorldAuthorityCheckpointCodec.Escrow.cs:308-314` shows
 mobility admissions, with leases at `:273` and `:294`.

@@ -28,19 +28,10 @@ public sealed partial class WorldReleaseGroupStore {
                 "restore requires an acknowledged, proven recovery point and an admitted group without unfinished work"
             ));
         }
-        var history = ((old.PendingOperationId is { } previous)
-            ? old.History.Append(element: new WorldReleaseGroupHistoryEntry {
-                OperationId = previous,
-                RecoveryRoots = old.RecoveryRoots,
-                RestorePoint = old.RestorePoint,
-                Result = "committed",
-                Revision = old.Revision,
-                SourceRelease = old.PendingSourceRelease,
-                TargetRelease = old.PendingTargetRelease!,
-            }).ToArray()
-            : old.History
-        );
-        var next = old with {
+        var next = CloseRetained(
+            old: old,
+            result: WorldReleaseGroupHistoryEntry.CommittedResult
+        ) with {
             PendingOperationId = operationId,
             PendingSourceRelease = old.ActiveRelease,
             PendingTargetRelease = point.Release,
@@ -49,11 +40,6 @@ public sealed partial class WorldReleaseGroupStore {
             point.Identity
         ),
             PendingPhase = WorldReleaseOperationPhase.Prepare,
-            PendingCommitted = false,
-            PendingFailure = null,
-            RecoveryRoots = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal),
-            History = history,
-            Revision = checked((old.Revision + 1)),
         };
 
         return WriteAsync(
