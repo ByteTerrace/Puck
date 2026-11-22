@@ -16,10 +16,16 @@ public static partial class SdfWorldPackage {
     /// the tile the records are counted per, so a tile holds whole cells.
     /// <c>SdfIsaHlsl</c> generates it as <c>SDF_VIEWS_PROBE_RATE</c>.</summary>
     public const uint ViewsProbeRate = 2;
-    /// <summary>The words of one cell's probe record: two cages, sixteen UNORM16 weights, a state word and the gather's
-    /// blended six-axis cube in twenty-one words of half floats. <c>SdfIsaHlsl</c> generates it as
+    /// <summary>The words of one cell's probe record: the representative's gather (two cages, sixteen UNORM16 weights, a
+    /// state word and its blended six-axis cube in twenty-one words of half floats), then an extra slot of
+    /// <see cref="ViewsProbeExtraWords"/> words for each other pixel of the cell, which holds that pixel's own gather where
+    /// its receiver is not compatible with the representative's. <c>SdfIsaHlsl</c> generates it as
     /// <c>SDF_VIEWS_PROBE_WORDS</c>.</summary>
-    public const uint ViewsProbeWords = 32;
+    public const uint ViewsProbeWords = (ViewsProbeGatherWords + (((ViewsProbeRate * ViewsProbeRate) - 1) * ViewsProbeExtraWords));
+    /// <summary>The words of a cell's record before its extra slots: the representative's gather and blended cube.</summary>
+    public const uint ViewsProbeGatherWords = 32;
+    /// <summary>The words of one extra slot: two cages, sixteen UNORM16 weights and the share and measured flags.</summary>
+    public const uint ViewsProbeExtraWords = 11;
 
     // The cells of one tile of the extent, the basis the records are counted on.
     private const uint ViewsProbeCellsPerTile = ((ShaderPipelineStorageCounts.TileEdge / ViewsProbeRate) * (ShaderPipelineStorageCounts.TileEdge / ViewsProbeRate));
