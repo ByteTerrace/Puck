@@ -343,13 +343,21 @@ remains, each step with the check that shows it worked:
    hits are those of the fixed-point march, as the banded evaluator's
    contract states, and exact samples a march fall.
 
-Two things outside this lane would cut what a sample costs as much, and both
-stay exact:
+What a leaf near the floor holds is terrain, and no certificate would shrink
+it. Most of the chains in the leaf at the debug world's origin are relieved
+terrain masses: a scope of one superellipsoid, a relief whose amplitude is
+units, and a hard-union pop. The box walk already charges such a scope only
+what its relief can reach inside the cube (the octave sum enclosed over the
+cube's lattice cells, times the masks' weight), and the regional walk reads
+the point certificate, which superellipsoids and capsules have, so a box
+certificate for them changes nothing. A mass stays because, with a relief
+that deep, it can be the nearest thing somewhere in a cube two units across.
+What would shorten those tapes is a smaller least cube where reliefs are
+deep, at more regions for the same ground.
 
-- **Tighter certificates for relieved scopes.** A dozen relieved terrain
-  masses stand in every leaf near the floor because a relief's scope carries
-  a wide slack. *It would show:* the leaf at the debug world's origin holding
-  fewer than its 186 instructions.
+One thing outside this lane would cut what the evaluator costs, and stays
+exact:
+
 - **The evaluator's retained bytes.** The compiled instruction is the bulk of
   what the client's evaluator holds. *It would show:* `puck host heap` naming
   the tenant and its size.
