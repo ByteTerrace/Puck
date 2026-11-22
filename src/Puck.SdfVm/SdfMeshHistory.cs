@@ -101,6 +101,12 @@ public sealed class SdfMeshHistory {
     /// shading pass reading a glass target. Zero on a correct run; the hit door bounds such a read, but cannot tell an
     /// occupant that is in bounds from the one the target named.</summary>
     public static WorkKind TargetsStale { get; } = Registry.Declare(name: "sdf.instances.targets.stale", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts the times the mesh region ordered its owed meshes for landing.</summary>
+    public static WorkKind LandingOrders { get; } = Registry.Declare(name: "sdf.instances.landing.orders", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts the draw rows whose demand priority the landing order measured.</summary>
+    public static WorkKind LandingRowsOrdered { get; } = Registry.Declare(name: "sdf.instances.landing.rows-ordered", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts the owed meshes a staging visited to order or account the landing.</summary>
+    public static WorkKind LandingMeshesVisited { get; } = Registry.Declare(name: "sdf.instances.landing.meshes-visited", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the most rows one staging submitted to the mesh placement planner since the peaks were last
     /// cleared.</summary>
     public static WorkKind PeakRowsPlanned { get; } = Registry.DeclarePeak(name: "sdf.instances.peak.rows.planned", unit: "count", workClass: WorkClass.Pacing);

@@ -109,7 +109,7 @@ All paths are under `src/` unless stated.
   (:203) **[opened]**. The arena places through one `GpuRangeAllocator` sized to that limit
   (SdfMeshRegionArena.cs:81) **[opened]**. Growth is need + an eighth in 16 MiB granules (`MeshRegionGrownBytes`,
   MeshRegion.cs:255-261) **[opened]**.
-- **Landing order:** owed meshes land through background work in `MeshDemand` priority (`OrderLanding`,
+- **Landing order:** owed meshes land through background work in `MeshDemand` priority (`RankLanding`,
   SdfWorldTables.MeshLanding.cs:59-76) **[opened]**. A draw whose mesh is owed or refused is filtered out of the
   staged list (MeshRegion.cs:488-498) **[opened]**.
 - **Kept:** each placed mesh holds a cached claim on its CPU mesh (`mesh.Acquire(cached: true);`,

@@ -228,7 +228,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         // The arena places nothing past the region's first granule until the grant reserves room to grow
         // (PrepareMeshRegionLimit).
         m_meshArena = new SdfMeshRegionArena(limitBytes: MeshRegionGranuleBytes);
-        m_meshesOwed = new OwedMeshes(arena: m_meshArena);
+        m_meshesOwed = new OwedMeshes(arena: m_meshArena, touched: m_landingTouched);
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(passes.RegionCopy);
         ObjectDisposedException.ThrowIf(

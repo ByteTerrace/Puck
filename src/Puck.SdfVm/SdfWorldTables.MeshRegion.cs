@@ -169,9 +169,9 @@ public sealed partial class SdfWorldTables {
         if (owed != 0) {
             var restoring = 0;
 
-            foreach (var mesh in m_activeOwed) { if (!mesh.Resident) { restoring++; } }
+            foreach (var mesh in m_landingRanks.Keys) { if (!mesh.Resident) { restoring++; } }
             return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler:
-                $"owes {(owed * sizeof(uint))}B of {m_activeOwed.Count} staged meshes ({restoring} restoring from the store, {m_landing.Count} in landing) binds-background={BindsBackgroundWork} uploads={m_uploads} binding-revision={m_bindingRevision}/{m_uploadedBindingRevision} relocations={m_meshArena.Relocations} ({m_meshArena.RelocationReason}) moved={m_meshMoved} refused={m_meshArena.Refused.Count}");
+                $"owes {(owed * sizeof(uint))}B of {m_landingRanks.Count} staged meshes ({restoring} restoring from the store, {m_landing.Count} in landing) binds-background={BindsBackgroundWork} uploads={m_uploads} binding-revision={m_bindingRevision}/{m_uploadedBindingRevision} relocations={m_meshArena.Relocations} ({m_meshArena.RelocationReason}) moved={m_meshMoved} refused={m_meshArena.Refused.Count}");
         }
         if (m_meshArena.Refused.Count > 0) {
             return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler:
@@ -217,7 +217,6 @@ public sealed partial class SdfWorldTables {
         m_meshesWithUpload.Clear();
     }
 
-    private readonly HashSet<SdfMesh> m_activeOwed = new(comparer: ReferenceEqualityComparer.Instance);
     // A copy of each producer draw last staged, including rows staged absent: the comparison for changed runs.
     private SdfMeshDraw[] m_stagedDraws = [];
 
@@ -556,6 +555,7 @@ public sealed partial class SdfWorldTables {
 
                 if (ReferenceEquals(objA: old, objB: mesh) && !occupantChanged) { continue; }
                 RowChanged(row: row);
+                TouchLanding(mesh: old); TouchLanding(mesh: mesh);
                 if (occupantChanged && ReferenceEquals(objA: old, objB: mesh) && (mesh is not null)) { m_meshArena.NameRow(index: row, mesh: null); }
                 m_meshArena.NameRow(index: row, mesh: mesh);
                 if (mesh is not null) { m_meshClaims.Claim(mesh: mesh); m_rowsByMesh.Set(key: mesh, row: row); } else { m_rowsByMesh.Remove(row: row); }
@@ -584,14 +584,14 @@ public sealed partial class SdfWorldTables {
         m_meshHistory.RetireAfter(count: draws.Count);
         EnsurePreviousMeshCapacity(count: draws.Count);
         m_meshSource = draws.Roster; m_meshCauseSource = draws.Roster; m_meshSourceRevision = draws.Revision; m_meshSourceSerial = draws.Serial; m_meshStaged = true;
-        OrderLanding(draws: draws); CountOwed();
+        RankLanding(draws: draws, sweep: true);
         EndMotionStaging();
         FinishMeshStaging(frame: frame);
     }
     private void Unname(int row) {
         RowChanged(row: row);
         if (m_stagedDraws[row].IsStatic) { StaticDrawsChanged(); }
-        if (m_stagedDraws[row].Mesh is { } mesh) { m_meshClaims!.Release(mesh: mesh); }
+        if (m_stagedDraws[row].Mesh is { } mesh) { m_meshClaims!.Release(mesh: mesh); TouchLanding(mesh: mesh); }
         m_rowsByMesh.Remove(row: row); m_absentRows.Remove(item: row); m_glassIndices.Remove(item: row);
         m_stagedDraws[row] = default; m_stagedOccupancies[row] = 0; m_stagedCasterState[row] = CasterNeverStood;
     }
@@ -721,6 +721,9 @@ public sealed partial class SdfWorldTables {
                     // swap or an eviction of a caster that stood while no pass read the casters cast the same shadow.
                     var stands = ((draw.Mesh is not null) && MeshStands(mesh: draw.Mesh));
 
+                    // An owed mesh's draw that changed may change where its mesh lands in the order.
+                    if (!stands && (m_landingRanks.Count > 0)) { TouchLanding(mesh: draw.Mesh); }
+
                     if (draw.IsStatic || previous.IsStatic) {
                         ref var state = ref m_stagedCasterState[index];
 
@@ -774,9 +777,6 @@ public sealed partial class SdfWorldTables {
     /// thread, when a staging orders the owed meshes.</summary>
     public SdfMeshDemand? MeshDemand { get; set; }
 
-    // The draws naming owed meshes by priority, reused frame to frame.
-    private readonly List<(float Priority, int Index)> m_owedOrder = [];
-
     // Owes one placed mesh's words to this frame's upload: the region keeps no copy of the mesh section, and the upload's
     // flush stages the words from the mesh itself (WriteSourcedMeshWords). Only a mesh a grown draw reserve moved is
     // written so; every other lands through the background work. The byte offset is a long: a mesh placed past 512 M
@@ -821,18 +821,6 @@ public sealed partial class SdfWorldTables {
             Volatile.Write(location: ref m_frameStagedMost, value: bytes);
             Volatile.Write(location: ref m_frameStagedMostUpload, value: ((long)(m_uploads + 1UL)));
         }
-    }
-    // Counts a staging that still owes meshes, and the time from the first such staging to the one that owes none.
-    private void CountOwed() {
-        var words = 0L;
-
-        m_activeOwed.Clear();
-        // Retained placements can be absent from the current roster. They still need an upload if reused, but they
-        // neither block this roster's residency nor disable its changed-draw fast path. Count a shared mesh once.
-        foreach (var mesh in m_meshesOwed.Set) {
-            if ((m_rowsByMesh.First(key: mesh) >= 0) && m_activeOwed.Add(item: mesh)) { words += SdfMeshRegion.WordsOf(mesh: mesh); }
-        }
-        Volatile.Write(location: ref m_owedWords, value: words);
     }
     // One accounting door for the owed window. Count a prepared upload once even when a held frame is staged again;
     // completion and a row's last name leaving can close the window without another whole-list plan.
@@ -889,7 +877,7 @@ public sealed partial class SdfWorldTables {
         }
         // A mesh that left the set unnamed lets its need go, and one named again takes it back and its place in line.
         m_meshesOwed.Sync();
-        OrderLandingAhead();
+        m_landingAheadStale = true;
     }
     /// <summary>Returns whether a mesh's words stand in the mesh region where a draw naming it would read them: the
     /// arena holds it, the region owes none of its words, and its destination page generation still stands.
