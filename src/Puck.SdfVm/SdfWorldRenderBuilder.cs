@@ -13,10 +13,12 @@ public static class SdfWorldRenderBuilder {
     /// <param name="pipelines">The composition's pipeline catalog, forwarded unchanged into the built residency. The factory
     /// reads its kernels through it (<see cref="SdfWorldPipelineCatalog.LoadDeployed"/>).</param>
     /// <param name="spec">The render spec.</param>
+    /// <param name="jobs">The job pool the residency forks its frame's parallel work across, or <see langword="null"/> to run it on
+    /// the frame's thread.</param>
     /// <returns>The residency, which the caller holds.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> or <paramref name="spec"/> is
     /// <see langword="null"/>.</exception>
-    public static SdfWorldResidency Build(SdfWorldPipelineCatalog pipelines, SdfWorldRenderSpec spec) {
+    public static SdfWorldResidency Build(SdfWorldPipelineCatalog pipelines, SdfWorldRenderSpec spec, Puck.Hosting.Jobs.JobPool? jobs = null) {
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(spec);
 
@@ -25,6 +27,7 @@ public static class SdfWorldRenderBuilder {
             frameSource: spec.FrameSource,
             height: spec.Height,
             instanceCapacity: spec.InstanceCapacity,
+            jobs: jobs,
             // The views built over the same cache read this same deployed set, so a boot reads the kernels once.
             kernels: pipelines.LoadDeployed(target: ShaderTargets.Of(hostsOnDirectX: spec.HostsOnDirectX)),
             name: spec.Name,

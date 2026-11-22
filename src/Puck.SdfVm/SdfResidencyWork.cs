@@ -19,7 +19,7 @@ public static class SdfResidencyWork {
     /// <summary>Counts the boxes those measures read: one a group, or each copy of a shared geometry.</summary>
     public static readonly WorkKind DemandBoxes = new(name: "sdf.residency.demand.boxes", unit: "boxes", workClass: WorkClass.Pacing);
     /// <summary>Counts the demand points those measures read their boxes against, one a point and box, its eye and
-    /// frustum together (<see cref="SdfMeshDemand.PointReads"/>).</summary>
+    /// frustum together.</summary>
     public static readonly WorkKind DemandViews = new(name: "sdf.residency.demand.views", unit: "views", workClass: WorkClass.Pacing);
     /// <summary>Counts the measures the demand points' movement made due, a part of <see cref="DemandGroups"/>: a clock's
     /// (<see cref="DemandDueTravel"/>, <see cref="DemandDueScale"/>) or a frustum's (<see cref="DemandFramed"/>).</summary>

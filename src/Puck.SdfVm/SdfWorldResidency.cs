@@ -123,9 +123,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// for.</param>
     /// <param name="meshLibrary">The library the residency's bake shares meshes through with every other residency
     /// holding it (<see cref="SdfMeshPathBake.Library"/>), or <see langword="null"/> for a library of its own.</param>
+    /// <param name="jobs">The job pool the residency's bake forks its frame's demand readings across
+    /// (<see cref="SdfMeshPathBake.Jobs"/>), or <see langword="null"/> to read them on the frame's thread.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfWorldResidency(SdfWorldPipelineCatalog pipelines, ISdfFrameSource frameSource, SdfKernelSet kernels, string name, uint width, uint height, ISdfScreenSources? screenSources = null, Func<FrameContext, bool>? film = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, SdfMeshLibrary? meshLibrary = null) {
+    public SdfWorldResidency(SdfWorldPipelineCatalog pipelines, ISdfFrameSource frameSource, SdfKernelSet kernels, string name, uint width, uint height, ISdfScreenSources? screenSources = null, Func<FrameContext, bool>? film = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, SdfMeshLibrary? meshLibrary = null, JobPool? jobs = null) {
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(frameSource);
         ArgumentException.ThrowIfNullOrEmpty(name);
@@ -153,7 +155,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_width = width;
         Name = name;
         m_ownedLibrary = ((meshLibrary is null) ? new SdfMeshLibrary() : null);
-        MeshPathBake = new SdfMeshPathBake { Demand = MeshDemand, Identity = SdfMeshStore.IdentityOf(kernels: kernels), Library = (meshLibrary ?? m_ownedLibrary!), Residency = name };
+        MeshPathBake = new SdfMeshPathBake { Demand = MeshDemand, Identity = SdfMeshStore.IdentityOf(kernels: kernels), Jobs = jobs, Library = (meshLibrary ?? m_ownedLibrary!), Residency = name };
         m_meshDresser = new SdfMeshDresser(bake: MeshPathBake);
         // A program built in the background plans its bake before the frame that adopts it, at the far distance of the
         // frames before it, which a restart at another plans again.

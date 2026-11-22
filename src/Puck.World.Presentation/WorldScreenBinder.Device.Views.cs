@@ -22,6 +22,7 @@ public sealed partial class WorldScreenBinder {
             ),
             height: ((uint)resolution.Height),
             instanceCapacity: source.InstanceCapacity,
+            jobs: m_jobs,
             kernels: ViewKernels(),
             name: name,
             meshLibrary: MeshLibrary,

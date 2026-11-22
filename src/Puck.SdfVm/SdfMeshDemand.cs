@@ -179,10 +179,6 @@ public sealed class SdfMeshDemand {
     private PointLanes m_lanes = new(capacity: 0);
     private long m_version;
 
-    /// <summary>Gets how many point and box pairs this demand has read: each box once against every point, eye and
-    /// frustum, however many of <see cref="PixelAt(Vector3, Vector3)"/>, <see cref="BoundsOf"/>, <see cref="Priority"/>
-    /// and <see cref="Sees(Vector3, Vector3)"/> ask about it in a row. A count of work, for the residency's report.</summary>
-    public long PointReads { get; private set; }
 
     /// <summary>Reads the demand points from a frame's views: each view's eye, and its pixels a metre one metre in front of
     /// it, from the height its sizes are measured in (<see cref="SdfViewSnapshot.DemandHeight"/>) or else its share of
@@ -881,7 +877,6 @@ public sealed class SdfMeshDemand {
             refused.AsInt32().StoreUnsafe(destination: ref refusals, elementOffset: offset);
         }
         (read.Demand, read.Version, read.Center, read.Half) = (this, version, center, half);
-        PointReads += Count;
         return read;
     }
     private static BoxRead[] NewReads() {

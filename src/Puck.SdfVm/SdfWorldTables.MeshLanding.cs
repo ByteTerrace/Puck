@@ -32,6 +32,11 @@ public sealed partial class SdfWorldTables {
     private readonly HashSet<SdfMesh> m_landingOrdered = new(comparer: ReferenceEqualityComparer.Instance);
 
     private int m_landingCursor;
+    // The owed set's additions the order was taken at, and the stagings since: the order is taken again only when a mesh
+    // came to be owed, or once a measure of the demand has passed (SdfMeshTier.MeasureFrames), since a landed mesh
+    // leaving the set needs no new order and the demand's ranking drifts no faster than its measures.
+    private long m_landingAdditions = -1;
+    private int m_landingStagings;
 
     // The owed meshes named ahead of the draws that the order above does not hold, and the first that may still
     // have words to take: listed again whenever the set named ahead changes, whether or not a draw list is staged.
@@ -58,8 +63,12 @@ public sealed partial class SdfWorldTables {
 
     // Orders the owed meshes the draw list names for landing: those the demand points see largest first, a draw no host
     // box bounds (a skinned body) before any, then the list's order, and after them the owed meshes named ahead
-    // (OrderLandingAhead). Any other placed mesh no draw names stays owed until a list names it again.
+    // (OrderLandingAhead). Any other placed mesh no draw names stays owed until a list names it again. The order stands
+    // while no mesh came to be owed, for up to a measure's frames.
     private void OrderLanding(SdfMeshDraws draws) {
+        if ((m_meshesOwed.Count > 0) && (m_meshesOwed.Additions == m_landingAdditions) && (++m_landingStagings < SdfMeshTier.MeasureFrames)) { return; }
+        m_landingAdditions = m_meshesOwed.Additions;
+        m_landingStagings = 0;
         m_landingOrder.Clear();
         m_landingOrdered.Clear();
         m_landingCursor = 0;
@@ -254,10 +263,14 @@ public sealed partial class SdfWorldTables {
 
         public int Count => m_set.Count;
         public IReadOnlySet<SdfMesh> Set => m_set;
+        // One more each time a mesh came to be owed.
+        public long Additions { get; private set; }
 
         public bool Contains(SdfMesh mesh) => m_set.Contains(item: mesh);
         public void Add(SdfMesh mesh) {
-            if (m_set.Add(item: mesh) && arena.Names(mesh: mesh) && m_needed.Add(item: mesh)) { mesh.Need(); }
+            if (!m_set.Add(item: mesh)) { return; }
+            Additions++;
+            if (arena.Names(mesh: mesh) && m_needed.Add(item: mesh)) { mesh.Need(); }
         }
         public bool Remove(SdfMesh mesh) {
             if (!m_set.Remove(item: mesh)) { return false; }
@@ -271,6 +284,7 @@ public sealed partial class SdfWorldTables {
             m_spare.Clear();
             foreach (var mesh in meshes) { _ = m_spare.Add(item: mesh); }
             (m_set, m_spare) = (m_spare, m_set);
+            Additions++;
             m_spare.Clear();
             Sync();
         }

@@ -222,7 +222,7 @@ public sealed partial class WorldScreenBinder {
             instanceCapacity: source.InstanceCapacity,
             programWordCapacity: source.ProgramWordCapacity,
             kernels: ViewKernels(), meshLibrary: MeshLibrary, name: entry.Name, pipelines: m_viewPipelines,
-            screenSources: new InfinityScreenSources(entry: entry));
+            screenSources: new InfinityScreenSources(entry: entry), jobs: m_jobs);
 
         entry.Residency = residency;
         RegisterViewWork(lifetime: residency.WorkLifetime, name: entry.Name, transforms: source.MovedTransforms, work: residency.Work);

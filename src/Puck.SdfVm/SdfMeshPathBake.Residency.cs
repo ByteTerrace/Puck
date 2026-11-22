@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 using Puck.Abstractions.Memory;
+using Puck.Hosting.Jobs;
 using Puck.Maths;
 using Puck.SignedDistance;
 using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
@@ -14,6 +15,9 @@ public sealed partial class SdfMeshPathBake {
     /// <summary>Gets the demand points the bake measures its groups by: the residency's, which it observes from each frame
     /// before dressing it. A bake no residency observes for has none, and keeps its plan's order.</summary>
     public SdfMeshDemand Demand { get; init; } = new();
+    /// <summary>Gets the job pool the bake forks its frame's demand readings across (<see cref="JobClass.Frame"/>), or
+    /// <see langword="null"/> to read them on the frame's thread alone.</summary>
+    public JobPool? Jobs { get; init; }
 
     /// <summary>Gets or sets what the done line reports of the dispatches that answered the bake (the residency's
     /// background GPU work, <see cref="SdfGpuWork.Describe"/>), or <see langword="null"/> for nothing. It only reports:
