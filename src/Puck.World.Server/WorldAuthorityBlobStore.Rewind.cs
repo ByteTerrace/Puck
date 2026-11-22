@@ -31,32 +31,13 @@ public sealed partial class WorldAuthorityBlobStore {
         ) {
             return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "restore request does not match the pinned group point");
         }
-        var groups = new WorldReleaseGroupStore(
-            m_store,
-            m_target,
-            operation.Owner
+        Task<bool> OwnsAsync() => StillOwnsActivationAsync(
+            cancellationToken: cancellationToken,
+            key: key,
+            operation: operation,
+            recoveryPin: recoveryPin
         );
 
-        async Task<bool> OwnsAsync() {
-            var state = await groups.LoadAsync(
-                operation.DeploymentGroup,
-                cancellationToken
-            ).ConfigureAwait(continueOnCapturedContext: false);
-
-            return (
-                (state is { } found) &&
-                (found.Record.PendingOperationId == operationId) &&
-                (found.Record.RestorePoint == operation.RestorePoint) &&
-                (found.Record.PendingPhase == WorldReleaseOperationPhase.Activate) &&
-                !found.Record.PendingCommitted &&
-                (found.Record.Admission == WorldReleaseAdmissionState.Closed) &&
-                found.Record.RecoveryRoots.TryGetValue(
-                key: key,
-                value: out var saved
-            ) &&
-                (saved == recoveryPin)
-            );
-        }
         if (!await OwnsAsync().ConfigureAwait(continueOnCapturedContext: false)) { return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "restore no longer owns private activation"); }
         var history = await new WorldReleaseFixtureArchive(
             m_store,
