@@ -61,7 +61,7 @@ public sealed partial class WorldInputRuntime {
     private PlayerIntent ProjectSnapshot(int body, in WorldInputBatch batch) {
         var target = m_host.Body(index: body)!;
         var channels = Catalog.Mappings[batch.Mapping].Channels;
-        var accepted = batch.Image with { Channels = default };
+        var accepted = default(ChannelValues);
         var remap = channels.RemapTo(target: target.Channels);
 
         foreach (var logical in Catalog.Mappings[batch.Mapping].Live) {
@@ -71,11 +71,13 @@ public sealed partial class WorldInputRuntime {
             var destination = remap[address];
 
             if (destination < 0) { continue; }
-            accepted = ((channels.Shape(ordinal: address) == ChannelShape.Relative)
-                ? accepted.WithRelative(ordinal: destination, value: batch.Image.Channels.Relative(ordinal: address))
-                : accepted.WithChannel(ordinal: destination, value: batch.Image[address]));
+            if (channels.Shape(ordinal: address) == ChannelShape.Relative) {
+                accepted.SetRelative(ordinal: destination, value: batch.Image.Channels.Relative(ordinal: address));
+            } else {
+                accepted[destination] = batch.Image[address];
+            }
         }
-        return accepted;
+        return batch.Image with { Channels = accepted };
     }
 
     /// <summary>Publishes a complete synthetic observation through a generation-bearing input session. The caller

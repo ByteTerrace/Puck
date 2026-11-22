@@ -66,6 +66,9 @@ public sealed partial class SdfFieldEvaluator {
     private static List<(int First, int End)>? RegionRecord;
 
     private readonly RegionIndex? m_regions;
+    // Whether a point walk marks a region no walk has reached before a later one records it; a walk of an evaluator
+    // that does not records every region on its way, as a box walk always does.
+    private readonly bool m_marksRegions;
 
     /// <summary>Gets the kind counting regions recorded, a region recorded twice by a race counted twice.</summary>
     public static WorkKind RegionsBuilt { get; } = new(name: "sdf.regions.built", unit: "count", workClass: WorkClass.Pacing);
@@ -80,7 +83,8 @@ public sealed partial class SdfFieldEvaluator {
     public static WorkCounterSet RegionWork { get; } = new(name: "sdf.regions", kinds: [RegionsBuilt, RegionBuildInstructions, RegionTapeInstructions, RegionResets]);
 
     /// <summary>Gets whether the evaluator indexes its program by region: a point query walks the chains that can
-    /// change the field in the region its point lies in, in place of the whole program, to the same answer.</summary>
+    /// change the field in the region its point lies in, in place of the whole program, to the same answer, and a box
+    /// query walks them over each region the box meets, to an enclosure of every point answer in the box.</summary>
     public bool IndexesRegions => (m_regions is not null);
 
     // Whether a walk has an instruction to read: inside the range it stands in, or in a later range of its tape, entered
@@ -101,69 +105,162 @@ public sealed partial class SdfFieldEvaluator {
     }
 
     // The tape of the smallest recorded region a point of the frame lies in, or none when no walk has read the point's
-    // root region before. A region is recorded on the second walk that reaches it and only marked on the first, which
-    // reads the region around it (the whole stream, for a root): a point no later walk comes near costs one walk, and
-    // an index that drops its regions loses only those walks came back to.
+    // root region before. A region is recorded on the second point walk that reaches it and only marked on the first,
+    // which reads the region around it (the whole stream, for a root): a point no later walk comes near costs one walk,
+    // and an index that drops its regions loses only those walks came back to.
     private bool TryRegionTape(FixedVector3 point, out ReadOnlySpan<int> tape) {
+        var region = RegionAt(least: RegionLeafShift, record: !m_marksRegions, x: point.X.Value, y: point.Y.Value, z: point.Z.Value);
+
+        tape = ((region is null) ? default : region.Tape);
+
+        return (region is not null);
+    }
+    // The region a raw point of the frame lies in whose edge is no less than the least asked for: the smallest such
+    // region that does not divide further. A walk that does not record marks a region no walk has reached and stops
+    // there, at the region around it, or at none when that is the root; it records a region an earlier walk marked. A
+    // walk that records does so for every region on its way and never stops at a mark. A box query records and a point
+    // query does not: a point answer is the same over any tape, but a box's interval is the tape's own, so the region a
+    // box reads has to be a function of the program and the point alone, whatever walks came before and whenever the
+    // index last dropped its regions.
+    private RegionNode? RegionAt(long x, long y, long z, int least, bool record) {
         var regions = m_regions!;
-        var (x, y, z) = (point.X.Value, point.Y.Value, point.Z.Value);
         var shift = RegionRootShift;
         var key = new RegionKey(X: (x >> shift), Y: (y >> shift), Z: (z >> shift));
 
-        tape = default;
-
+        // A walk that loses a race, or finds the index dropped, reads the region it recorded itself: the same tape.
         if (!regions.Roots.TryGetValue(key: key, value: out var node)) {
-            if (regions.Roots.TryAdd(key: key, value: RegionNode.Reached)) {
+            node = (record ? RecordRegion(parent: null, shift: shift, x: key.X, y: key.Y, z: key.Z) : RegionNode.Reached);
+
+            if (regions.Roots.TryAdd(key: key, value: node)) {
                 regions.Admit();
             }
 
-            return false;
-        }
-
-        if (ReferenceEquals(objA: node, objB: RegionNode.Reached)) {
+            if (!record) {
+                return null;
+            }
+        } else if (ReferenceEquals(objA: node, objB: RegionNode.Reached)) {
             node = RecordRegion(parent: null, shift: shift, x: key.X, y: key.Y, z: key.Z);
-            // A walk that loses the race, or finds the index dropped, reads the tape it recorded itself.
             _ = regions.Roots.TryUpdate(comparisonValue: RegionNode.Reached, key: key, newValue: node);
         }
 
-        while ((shift > RegionLeafShift) && (node.Instructions > RegionShortTape)) {
+        while ((shift > least) && (node.Instructions > RegionShortTape)) {
             shift--;
 
             var children = (node.Children ?? (Interlocked.CompareExchange(comparand: null, location1: ref node.Children, value: new RegionNode?[8]) ?? node.Children!));
             var slot = ((int)((((x >> shift) & 1L) | (((y >> shift) & 1L) << 1)) | (((z >> shift) & 1L) << 2)));
-            var child = (Volatile.Read(location: ref children[slot]) ?? Interlocked.CompareExchange(comparand: null, location1: ref children[slot], value: RegionNode.Reached));
+            var child = Volatile.Read(location: ref children[slot]);
 
-            if (child is null) {
-                break;
+            if ((child is null) && !record) {
+                child = Interlocked.CompareExchange(comparand: null, location1: ref children[slot], value: RegionNode.Reached);
+
+                if (child is null) {
+                    break;
+                }
             }
 
-            if (ReferenceEquals(objA: child, objB: RegionNode.Reached)) {
+            if ((child is null) || ReferenceEquals(objA: child, objB: RegionNode.Reached)) {
                 var recorded = RecordRegion(parent: node, shift: shift, x: (x >> shift), y: (y >> shift), z: (z >> shift));
-                var held = Interlocked.CompareExchange(comparand: RegionNode.Reached, location1: ref children[slot], value: recorded);
+                var held = Interlocked.CompareExchange(comparand: child, location1: ref children[slot], value: recorded);
 
-                child = (ReferenceEquals(objA: held, objB: RegionNode.Reached) ? recorded : held!);
+                child = (((held is null) || ReferenceEquals(objA: held, objB: RegionNode.Reached)) ? recorded : held);
                 regions.Admit();
             }
 
             node = child;
         }
 
-        tape = node.Tape;
-
-        return true;
+        return node;
     }
+    // The bounds over a box of a regional evaluator: the box is cut along the faces of the regions it meets, each part is
+    // walked over its own region's tape, and the answer is the hull of the parts' intervals.
+    //
+    // The invariant this rests on is the region index's own: at every point of a region's cube, a point walk over the
+    // region's tape answers what a walk over the whole stream answers. A part lies inside its region's cube, so the
+    // interval walk over the tape (the walk that records a child region over its parent's tape, here without a record,
+    // making the box skips of any culling box walk) encloses every answer the whole stream gives at a point of the part.
+    // The parts cover every raw point of the box, so their hull encloses the box. The interval is a function of the
+    // program and the box alone, since RegionAt's region is: it is not the interval the whole stream's walk answers,
+    // because each part is walked on its own over a shorter stream, and a walk over a smaller box answers tighter.
+    //
+    // The parts are taken at the least region edge that is at least twice the box's widest side, so a box meets at most
+    // two regions an axis and seldom more than one; a box wider than half a root region is walked over the whole stream.
+    private FixedInterval BoundsOverRegions(IntervalVector3 world, out int instructionsWalked, out int rotationsExpanded) {
+        var widest = Math.Max(val1: Side(side: world.X), val2: Math.Max(val1: Side(side: world.Y), val2: Side(side: world.Z)));
+
+        if (widest > (1UL << (RegionRootShift - 1))) {
+            return BoundsOver(instructionsWalked: out instructionsWalked, rotationsExpanded: out rotationsExpanded, world: world);
+        }
+
+        var shift = RegionLeafShift;
+
+        while ((1UL << (shift - 1)) < widest) {
+            shift++;
+        }
+
+        var result = FixedInterval.Entire;
+        var walked = 0;
+        var expanded = 0;
+        var first = true;
+
+        for (var x = (world.X.Lower.Value >> shift); (x <= (world.X.Upper.Value >> shift)); x++) {
+            for (var y = (world.Y.Lower.Value >> shift); (y <= (world.Y.Upper.Value >> shift)); y++) {
+                for (var z = (world.Z.Lower.Value >> shift); (z <= (world.Z.Upper.Value >> shift)); z++) {
+                    var part = new IntervalVector3(
+                        X: CellSide(cell: x, least: world.X.Lower.Value, most: world.X.Upper.Value, pad: 0L, shift: shift),
+                        Y: CellSide(cell: y, least: world.Y.Lower.Value, most: world.Y.Upper.Value, pad: 0L, shift: shift),
+                        Z: CellSide(cell: z, least: world.Z.Lower.Value, most: world.Z.Upper.Value, pad: 0L, shift: shift)
+                    );
+                    var region = RegionAt(least: shift, record: true, x: part.X.Lower.Value, y: part.Y.Lower.Value, z: part.Z.Lower.Value)!;
+                    var query = new BoxQuery(box: part);
+                    var primer = BoxPrimer.None;
+                    // Only a region whose tape is long keeps the instances it holds; a short tape's walk tests none.
+                    var reaches = ((region.Instructions > RegionShortTape) ? BoxReaches().AsSpan(start: 0, length: m_cullBounds.Length) : []);
+
+                    if (!reaches.IsEmpty) {
+                        SdfBoundsCache.ProcessWork.Add(amount: region.Bounds.Length, kind: SdfBoundsCache.PrepassBounds);
+
+                        foreach (var bound in region.Bounds) {
+                            RankBoxReach(bound: bound, primer: ref primer, query: in query, reaches: BoxReaches());
+                        }
+                    }
+
+                    var bounds = WalkBounds(
+                        cull: true,
+                        end: m_instructions.Length,
+                        first: 0,
+                        primer: ref primer,
+                        query: in query,
+                        reaches: reaches,
+                        rotationsExpanded: ref expanded,
+                        tape: region.Tape,
+                        walked: ref walked,
+                        world: part
+                    );
+
+                    result = (first ? bounds : FixedInterval.Union(first: result, second: bounds));
+                    first = false;
+                }
+            }
+        }
+
+        instructionsWalked = walked;
+        rotationsExpanded = expanded;
+
+        return result;
+    }
+    // A side's width in raws: its ends lie inside the frame, so their difference fits unsigned.
+    private static ulong Side(FixedInterval side) => unchecked((ulong)(side.Upper.Value - side.Lower.Value));
     // Records one region: the culling box walk over its box, over the whole stream for a root and over the parent's tape
-    // for a child, with the primer chosen among the instances that walk can meet.
+    // for a child, with the primer chosen among the instances that walk can meet. Its box is its cube and the pad either
+    // side, less what lies outside the frame, whose points no walk reads.
     private RegionNode RecordRegion(RegionNode? parent, int shift, long x, long y, long z) {
         var cullBounds = m_cullBounds;
         var query = new BoxQuery(box: new IntervalVector3(
-            X: RegionSide(cell: x, frame: m_frameRaw, shift: shift),
-            Y: RegionSide(cell: y, frame: m_frameRaw, shift: shift),
-            Z: RegionSide(cell: z, frame: m_frameRaw, shift: shift)
+            X: CellSide(cell: x, least: -m_frameRaw, most: m_frameRaw, pad: RegionPad, shift: shift),
+            Y: CellSide(cell: y, least: -m_frameRaw, most: m_frameRaw, pad: RegionPad, shift: shift),
+            Z: CellSide(cell: z, least: -m_frameRaw, most: m_frameRaw, pad: RegionPad, shift: shift)
         ));
-        var reaches = (((BoxReachScratch is { } scratch) && (scratch.Length >= cullBounds.Length))
-            ? scratch
-            : (BoxReachScratch = CreateReachScratch(length: cullBounds.Length, work: SdfBoundsCache.ProcessWork, arrays: SdfBoundsCache.ScratchArraysCreated, bytes: SdfBoundsCache.ScratchPayloadCreated)));
+        var reaches = BoxReaches();
         var primer = BoxPrimer.None;
         var record = (RegionRecord ??= []);
         var walked = 0;
@@ -201,19 +298,17 @@ public sealed partial class SdfFieldEvaluator {
         RegionWork.Add(amount: walked, kind: RegionBuildInstructions);
         RegionWork.Add(amount: instructions, kind: RegionTapeInstructions);
 
-        // Only a region that divides hands its instances to a child's record.
-        var divides = ((shift > RegionLeafShift) && (instructions > RegionShortTape));
-
-        return new RegionNode(bounds: (divides ? BoundsIn(candidates: parent?.Bounds, tape: tape) : []), instructions: instructions, tape: tape);
+        // Only a region whose tape is long hands its instances on: to a child's record when it divides, and to a box
+        // query's walk over it (BoundsOverRegions) at any edge.
+        return new RegionNode(bounds: ((instructions > RegionShortTape) ? BoundsIn(candidates: parent?.Bounds, tape: tape) : []), instructions: instructions, tape: tape);
     }
-    // One side of a region's box: the cell's raws and the pad either side, less what lies outside the frame, whose
-    // points no walk reads.
-    private static FixedInterval RegionSide(long cell, int shift, long frame) {
+    // One side of a region cell on an axis: the cell's raws and a pad either side, held between two raws.
+    private static FixedInterval CellSide(long cell, int shift, long pad, long least, long most) {
         var lower = (cell << shift);
 
         return new FixedInterval(
-            lower: FixedQ4816.FromRawBits(value: Math.Max(val1: (lower - RegionPad), val2: -frame)),
-            upper: FixedQ4816.FromRawBits(value: Math.Min(val1: ((lower + ((1L << shift) - 1L)) + RegionPad), val2: frame))
+            lower: FixedQ4816.FromRawBits(value: Math.Max(val1: (lower - pad), val2: least)),
+            upper: FixedQ4816.FromRawBits(value: Math.Min(val1: ((lower + ((1L << shift) - 1L)) + pad), val2: most))
         );
     }
     // A walk's record as a tape: its ranges in stream order, joined where they meet or overlap (the primer's own walk
@@ -314,7 +409,7 @@ public sealed partial class SdfFieldEvaluator {
         }
     }
     // One region: its tape as pairs of a range's first instruction and the one after its last, the cullable instances
-    // the tape holds (of a region that divides), the instructions it holds, and its eight children by the low bit of
+    // the tape holds (of a region whose tape is long), the instructions it holds, and its eight children by the low bit of
     // each axis's cell, each null until a walk reaches it and Reached until a second walk records it.
     private sealed class RegionNode(int[] tape, int[] bounds, int instructions) {
         // The mark of a region one walk has reached and none has recorded.

@@ -145,7 +145,50 @@ public sealed class SdfFieldEvaluatorRegionLawTests {
     }
     // A relieved scope, a carve and a chamfer beside plain shapes: what the region's walk cannot judge it keeps.
     [Fact]
-    public void ScopesCarvesAndOtherBlendsAnswerAsTheWholeStream() {
+    public void ScopesCarvesAndOtherBlendsAnswerAsTheWholeStream() =>
+        AssertSame(points: Lattice(high: new Vector3(x: 8f, y: 3f, z: 3f), low: new Vector3(x: -8f, y: -2f, z: -3f), steps: 12).Concat(second: Faces()), program: MixedProgram());
+    // A box query over regions is cut along the faces of the regions it meets and answers the hull of its parts. Each
+    // box here stands where a wrong cut or a wrong tape would show: inside one region, across region faces of every
+    // edge and across the origin, where eight root regions meet, about the carve and the chamfer, as a single point, and
+    // wider than half a root region, which the whole stream answers. The enclosure is held to the whole stream's point
+    // answers, and to itself from an index no query has touched, since a tape is a function of the program alone: the
+    // warmed index has taken point walks first, which mark some regions and record others, and a box reads neither state.
+    [Fact]
+    public void ABoxOverRegionsEnclosesEveryPointAnswerInIt() {
+        var program = MixedProgram();
+        var plain = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact);
+        var warmed = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact, regional: true);
+
+        foreach (var point in Lattice(high: new Vector3(x: 6f, y: 2f, z: 2f), low: new Vector3(x: -6f, y: -1f, z: -2f), steps: 6).Concat(second: Lattice(high: new Vector3(x: 1f, y: 1f, z: 1f), low: new Vector3(x: -1f, y: 0f, z: -1f), steps: 6))) {
+            _ = warmed.TryDistance(distance: out _, material: out _, position: point);
+        }
+
+        var centres = new[] {
+            new Vector3(x: 0f, y: 0f, z: 0f), new Vector3(x: 0.3f, y: 0.1f, z: -0.2f), new Vector3(x: 2f, y: 0f, z: 2f), new Vector3(x: 4f, y: 0.5f, z: 0f),
+            new Vector3(x: 5f, y: 0.75f, z: 0f), new Vector3(x: 5.2f, y: 1.4f, z: 0.3f), new Vector3(x: -5f, y: 0f, z: 1f), new Vector3(x: -4f, y: 0.6f, z: 2f),
+            new Vector3(x: 8f, y: 1f, z: -1f), new Vector3(x: -8f, y: -1f, z: 0f), new Vector3(x: 0f, y: 6.5f, z: 0f), new Vector3(x: 15.9f, y: 0.2f, z: 0.1f),
+            new Vector3(x: -16f, y: 6f, z: 16f),
+        };
+
+        foreach (var centre in centres) {
+            foreach (var half in new[] { 0f, 0.2f, 0.55f, 1.1f, 2.3f, 4.5f }) {
+                var low = (centre - new Vector3(value: half));
+                var high = (centre + new Vector3(x: half, y: (1.5f * half), z: half));
+                var (lower, upper) = (At(x: low.X, y: low.Y, z: low.Z), At(x: high.X, y: high.Y, z: high.Z));
+                var fresh = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact, regional: true);
+
+                Assert.True(condition: warmed.TryDistanceBounds(distance: out var bounds, lower: lower, upper: upper));
+                Assert.True(condition: fresh.TryDistanceBounds(distance: out var again, lower: lower, upper: upper));
+                Assert.Equal(actual: again, expected: bounds);
+
+                foreach (var point in Lattice(high: high, low: low, steps: 5)) {
+                    Assert.True(condition: plain.TryDistance(distance: out var distance, material: out _, position: point));
+                    Assert.True(condition: bounds.Contains(value: distance), userMessage: $"The box about {centre} of half {half} answered {bounds}, which leaves out {distance}.");
+                }
+            }
+        }
+    }
+    private static SdfProgram MixedProgram() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
         var other = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.UnitZ));
@@ -163,7 +206,7 @@ public sealed class SdfFieldEvaluatorRegionLawTests {
             _ = builder.ResetPoint().Translate(offset: new Vector3(x: (-60f + (3f * copy)), y: 6f, z: (20f - copy))).Capsule(blend: ((copy % 2) == 0) ? SdfBlendOp.Union : SdfBlendOp.SmoothUnion, endpoint: new Vector3(x: 0f, y: 1f, z: 0f), material: other, radius: 0.25f, smooth: 0.2f);
         }
 
-        AssertSame(points: Lattice(high: new Vector3(x: 8f, y: 3f, z: 3f), low: new Vector3(x: -8f, y: -2f, z: -3f), steps: 12).Concat(second: Faces()), program: builder.Build());
+        return builder.Build();
     }
     // The point of a tape: far from most of a large program, a walk reads a small part of it.
     [Fact]
@@ -188,8 +231,32 @@ public sealed class SdfFieldEvaluatorRegionLawTests {
         }
 
         Assert.True(condition: ((walked * 50) < program.Instructions.Count), userMessage: $"A walk beside one shape of {program.Instructions.Count} instructions read {walked}.");
+        Assert.True(condition: regional.TryDistanceBounds(distance: out _, instructionsWalked: out var boxWalked, lower: At(x: 60.0, y: 12.5, z: 60.5), upper: At(x: 61.0, y: 13.5, z: 61.5)));
+        Assert.True(condition: ((boxWalked * 50) < program.Instructions.Count), userMessage: $"A box beside one shape of {program.Instructions.Count} instructions read {boxWalked}.");
 
         AssertSame(points: Lattice(high: new Vector3(x: 64f, y: 15f, z: 64f), low: new Vector3(x: 56f, y: 9f, z: 56f), steps: 8), program: program);
+
+        // An evaluator that records on its point walks reads the leaf's tape from the first walk on: the work of a
+        // point is the same on the first ask, on a later one and from an index that has read other points first, and
+        // the answer is the plain evaluator's.
+        var plain = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact);
+        var recording = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact, recordsRegions: true, regional: true);
+        var later = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact, recordsRegions: true, regional: true);
+
+        foreach (var point in Lattice(high: new Vector3(x: 80f, y: 20f, z: 80f), low: new Vector3(x: 40f, y: 5f, z: 40f), steps: 4)) {
+            _ = later.TryDistance(distance: out _, material: out _, position: point);
+        }
+
+        foreach (var point in Lattice(high: new Vector3(x: 64f, y: 15f, z: 64f), low: new Vector3(x: 56f, y: 9f, z: 56f), steps: 4)) {
+            Assert.True(condition: plain.TryDistance(distance: out var expected, material: out var expectedMaterial, position: point));
+            Assert.True(condition: recording.TryDistance(distance: out var first, instructionsWalked: out var firstWalked, material: out var firstMaterial, position: point));
+            Assert.True(condition: recording.TryDistance(distance: out _, instructionsWalked: out var againWalked, material: out _, position: point));
+            Assert.True(condition: later.TryDistance(distance: out var other, instructionsWalked: out var otherWalked, material: out _, position: point));
+            Assert.Equal(actual: (first, firstMaterial), expected: (expected, expectedMaterial));
+            Assert.Equal(actual: other, expected: expected);
+            Assert.Equal(actual: againWalked, expected: firstWalked);
+            Assert.Equal(actual: otherWalked, expected: firstWalked);
+        }
     }
     // A chain that joins by a blend the accumulator's size does not order (an exclusive or) before a join that stands
     // below the accumulator: what the stream read before the chain still reaches the answer through the first join, so

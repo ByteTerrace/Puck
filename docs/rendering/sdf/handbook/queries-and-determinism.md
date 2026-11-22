@@ -507,15 +507,49 @@ or pops a scope before a join that would take over, and on the raws either
 side of every region face.
 
 Regions are immutable once published, so queries on any thread share them. A
-region is recorded by the second query that reaches it: the first only marks
-it and reads the region around it (the whole stream, for a root cube), so
+region of the presentation field is recorded by the second point query that reaches it: the first only
+marks it and reads the region around it (the whole stream, for a root cube), so
 queries scattered over a world record nothing and cost what a plain query
 costs. The index holds a bounded number of marks and regions and drops them
 all when it reaches its limit. `world.counters sdf.regions` reads regions recorded, the
 instructions the recording walks visited, the instructions the tapes hold and
 the drops. Regions pay for a program large enough that walking all of it is
-what a query costs; the presentation field is regional and the server's
-per-collider fields are not.
+what a query costs; the presentation field and the server's per-collider
+fields are regional.
+
+A box query reads the same tapes (`SdfFieldEvaluator.TryDistanceBounds` on a
+regional evaluator). The box is cut along the faces of the regions it meets,
+at the least region edge that is at least twice the box's widest side, so it
+meets at most two regions an axis. Each part is walked over its own region's
+tape, as a child region's recording walks its parent's, and the answer is the
+hull of the parts. A part lies inside its region's cube, where the tape
+answers what the whole stream answers at every point, so the hull encloses
+every point answer in the box. It is as certain an enclosure as a plain
+evaluator's and usually a tighter one, since each part is a smaller box, but
+it is not the same interval. A box wider than half a root region, and a
+program too short to divide a region, are walked over the whole stream.
+
+A box's interval depends on the tape it was walked over, where a point's
+answer does not. So a box query never reads the marks: it records every
+region on the way to the one it reads, and its interval is a function of the
+program and the box alone, whatever queries came before and whenever the
+index last dropped its regions. Contact reads these intervals, so two runs of
+a world, or a run restored from a checkpoint with a cold index, agree. An
+evaluator the simulation reads is built to record on its point queries too
+(`recordsRegions`, as the per-collider fields are), so the tape a point reads
+is also a function of the program and the point alone: its answers would
+repeat even if a tape ever dropped something it should have kept, and its
+work counts repeat between runs. A marking evaluator's point work counts
+under `sdf.point.marked`, apart from the counts runs are compared on.
+`SdfFieldEvaluatorRegionLawTests` holds a box's interval to the whole
+stream's point answers across it, and to the interval an untouched index
+gives, for boxes inside one region, across region faces of every edge and
+across the origin.
+
+A body on a relieved creation proves its capsule clear with a few such boxes
+a tick, so their cost follows the shapes beside the body and not the size of
+the creation. `world.counters sdf.bounds` reads the boxes asked, the walks
+made and the instructions they visited.
 
 ### A surface normal in one walk
 
