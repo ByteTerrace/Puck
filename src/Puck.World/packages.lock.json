@@ -184,8 +184,8 @@
       },
       "Parlot": {
         "type": "Transitive",
-        "resolved": "2.4.0",
-        "contentHash": "4g+MoUrqaSpjdezwQs/wHegyi9FDw3r6Ey/UgrHaD7jn47zLjqNvHO0+dW1HJJNXHGnOE+DBH5c/O2ma1K8KTw=="
+        "resolved": "2.3.1",
+        "contentHash": "wCNWERk46ATkXor8SK43dgpO8GCuH5BQnvwuVogEVWrYilDKA7QituNhq17iYyL0RAHTuIIyczfuV0AWSe8ZLw=="
       },
       "System.Diagnostics.EventLog": {
         "type": "Transitive",
