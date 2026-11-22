@@ -934,13 +934,18 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   probe record. The views entry packs each cell's representatives into adjacent
   lanes and writes each pixel once. For the table fields and the four tile counts
   see [temporal reconstruction](../../../docs/rendering/sdf/handbook/frame-rendering.md#temporal-reconstruction).
-- **The irradiance volume is gathered once a cell and read once per shading sample.** The
+- **The irradiance volume is gathered in the probe lookup and read once per shading sample.** The
   probe lookup pass (`views-probes`) runs `sdfMeshProbesAt` at one representative
   pixel of each `SdfWorldPackage.ViewsProbeRate`-pixel cell, at its geometric
-  normal; views reuses that gather where the pixel's receiver lies within the
-  normal bias of the representative's, on its tangent plane and facing alike
-  (`sdfViewsProbesAt`), and gathers for itself across a depth or crease edge, so
-  the reuse never steps across a visibility edge the record shows. The cube reads
+  normal, and again at each other pixel of the cell whose receiver does not lie
+  within the normal bias of the representative's, on its tangent plane and facing
+  alike (`sdfViewsProbesCompatible`), each into its cell's record; views reads the
+  gather the record names for its pixel (`sdfViewsProbesAt`) and never gathers, so
+  the reuse never steps across a visibility edge the record shows and the shading
+  kernels carry none of the gather's code. The lookup runs a group's gathers as
+  one list, a gather a lane: in foliage a quarter of the pixels gather, and inside
+  the views kernel each warp holding one would pay a whole gather at views'
+  occupancy. The cube reads
   stay per shading sample, along its shading normal and mirror direction. The gather
   supplies indirect light, reflections and traced static-light visibility; glass
   gathers at its own pane (`passes/sdf-glass-stage.hlsli`), since a pane is lit
