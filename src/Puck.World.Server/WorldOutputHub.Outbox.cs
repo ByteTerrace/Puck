@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Memory;
@@ -252,7 +251,7 @@ public sealed partial class WorldOutputHub {
     internal void RecordSnapshot(WorldSinkRoute route, in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         var loan = RentLoan();
         var held = loan.Hold(in snapshot);
-        Add(new Record { Kind = RecordKind.Snapshot, Route = route, Snapshot = held, Stream = stream, ArrivedAt = Stopwatch.GetTimestamp(), Loan = loan }, loan.Bytes);
+        Add(new Record { Kind = RecordKind.Snapshot, Route = route, Snapshot = held, Stream = stream, ArrivedAt = WorldDeliveryClock.Arrival, Loan = loan }, loan.Bytes);
     }
     internal void RecordState(WorldSinkRoute route, WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         Loan? loan = null;

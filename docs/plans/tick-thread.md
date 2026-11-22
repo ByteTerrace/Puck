@@ -440,15 +440,19 @@ or an order, so the same document and input give the same state.
 - The seam check covers the pump. Another thread that reads a server's
   property without `WorldServer.ExecuteAuthorityOperation` was unsafe before
   this change and still is.
-- A world another process steps delivers on its socket task
-  (`WorldRemoteAuthority`'s observation loop), outside the outbox, into a
-  `WorldSessionMirror`. The mirror is written for that: its tables publish
-  through volatile writes and whole images, and its dense sets are read under
-  its write gate. Its presentation state mirror has one writer,
-  `WorldSessionMirror.FollowState`, which does not write from inside a fork's
-  partition (`JobPool.InPartition`), so a delivery that lands while a frame's
-  fork runs waits for the next follow. What is left is a per-slot read (a
-  pose, a fact) that can see a delivery half applied, as it could before.
+- A world another process steps receives on its socket task
+  (`WorldRemoteAuthority`'s observation loop), which delivers through a
+  `WorldOutputHub` bound to the host's `WorldLinkBoundary` (`WorldInstanceHost`)
+  and stamps each snapshot with its wire arrival time before deferring it
+  (`WorldDeliveryClock.ReplayAt`), closing spans in order (`WorldSinkRoute`) and
+  coalescing off-pump route notifications to the latest head. The pump drains
+  those deliveries inside the window (`WorldHostStep.CollectDeliveries`, from
+  `WorldLinkBoundary.CollectOnOpen`, step prepare and
+  `WorldLinkBoundary.PublishOnClose`), so neither a client's body journal nor a
+  mirror's change log (`WorldStateMirror.TryChangedSince`) is written while the
+  frame reads it. For any mirror wired without a boundary,
+  `WorldSessionMirror.FollowState` still refuses to write from inside a fork's
+  partition (`JobPool.InPartition`).
 - Presentation is outside the contract, as [rule 4](../../AGENTS.md#core-rules)
   says: which frame first shows a tick depends on timing.
 
@@ -497,17 +501,23 @@ authority through a closure, which the reference search does not follow.
 | A screen's machine clock | Four fields the machine host writes one after another as the tick advances it | `WorldMachinePresentation.PresentedTicks`, on a value the host publishes whole into the feed's `WorldMachineTable`; never a reference to the host |
 
 Step 8's first slice built the rows that read the feed. The composition
-root's collect, `WorldPresentationCollect`, runs at the seat post-step, after
-every instance has stepped and inside the window, and fills
-`WorldPresentationFeed` with three immutable values: the tick record
+root's collect, `WorldPresentationCollect`, runs inside the window as each
+settled boundary closes (`WorldSimulation`, through
+`WorldLinkBoundary.PublishOnClose` while no step is in progress), after
+`WorldHostStep.CollectDeliveries` drains pending local and remote deliveries,
+and fills `WorldPresentationFeed` with four immutable values: the tick record
 (`WorldTickRecord`: the completed boot tick, the installed document version,
-body counts, the history window, seat places and authored commands), the
-machine table and the diagnostic copy (`WorldDiagnosticCopy`). The HUD binding
-resolver, the iteration clock, the diagnostic overlay, the seat view input and
-the pointer and overlay feeds moved into `Puck.World.Presentation`, whose
-architecture profile refuses a reference to the server or the machines. The
-screen binder reads its machine output and clock from the feed, and the render
-root its device profile from `WorldClient.Definition`.
+body counts, the history window, seat places, seat placement-edit grants and
+authored commands), the machine table, the observation table and the diagnostic
+copy (`WorldDiagnosticCopy`). Because the control phase runs only at a tick
+boundary, a revoke or session withdrawal made there collects as its window
+closes and takes effect on the next frame before the next tick is handed over.
+The HUD binding resolver, the iteration clock, the diagnostic overlay, the seat
+view input and the pointer and overlay feeds moved into
+`Puck.World.Presentation`, whose architecture profile refuses a reference to
+the server or the machines. The screen binder reads its machine output and
+clock from the feed, and the render root its device profile from
+`WorldClient.Definition`.
 
 Step 8b moved the screen binder, the render root, the audio director, the
 device profile state and the inspector into `Puck.World.Presentation` as
@@ -583,16 +593,17 @@ step thread and the audio thread (`JobWorkers.MachineWorkers`).
 
 The frame's fork puts one condition on this design. Its partitions read
 `WorldStateMirror` without a lock, so the mirror's install, refresh and apply
-must not run while a frame fork is in flight. They do not move to the step
-thread: a delivery reaches the client's mirror only through the outbox's
-replay, which runs on the frame thread in a collect, and a collect runs in
-the step section, after produce or inside the pacing wait, never inside
-produce, where the frame's fork is opened and joined. Nothing checks that at
-the replay: it rests on a fork joining in the call that opened it
-(`JobPool.Fork`). A frame fork held open across iterations would need the
-replay to refuse while the frame class has a fork open, which is not built.
-A session's state mirror, which a socket task's delivery can reach, is
-guarded at its one writer ([above](#the-determinism-invariant)).
+must not run while a frame fork is in flight. Neither local ticks nor remote
+observation tasks reach a mirror during `produce`: both record into an outbox
+bound to `WorldLinkBoundary` and replay on the pump in a collect, which runs in
+the control phase, the step section, after `produce` or inside the pacing wait,
+never inside `produce`, where the frame's fork is opened and joined. Nothing
+checks that at the replay: it rests on a fork joining in the call that opened
+it (`JobPool.Fork`). A frame fork held open across iterations would need the
+replay to refuse while the frame class has a fork open, which is not built. For
+a mirror wired without a boundary, `WorldSessionMirror.FollowState` still
+refuses to write from inside a fork's partition (`JobPool.InPartition`)
+([above](#the-determinism-invariant)).
 
 ## Input, and the time from input to display
 
@@ -1024,10 +1035,14 @@ what stages two and three must keep.
    thread, the refusal of the thread that handed a tick over, which was a
    mark on the tick, and `WorldHostStep`'s rate and stall flag, which now
    publish as the window closes. Check: `TickBesideLoopLawTests` reads
-   `WorldServer.Population` and five more members from a registered pump
-   outside the window, which throws, inside it, which reads, and from another
-   thread, which the gate orders; the windowed debug world walks its gallery,
-   a portal crossing and a machine screen on both backends with no throw.
+   `WorldServer.Population` and every tick-mutated member (plus
+   `WorldEditorSeats.IsReadOnly`) from a registered pump outside the window,
+   which throws, inside it, which reads, and from another thread, which the
+   gate orders, and proves a control-phase withdrawal reaches the next frame
+   before an in-flight tick collects; `OutboxLawTests` proves off-pump mirror
+   and remote-route deliveries wait for the boundary window collect; the
+   windowed debug world walks its gallery, a portal crossing and a machine
+   screen on both backends with no throw.
 
 **Stage three: the wait ends.** Built for every wall-clock host
 ([the loop beside the tick](#the-loop-beside-the-tick)).
