@@ -23,8 +23,10 @@ public static partial class WorldPlacementStamp {
     private sealed partial class CompilationContext {
         private readonly Dictionary<WorldPlacement, SurfaceValidation> m_descriptors = new(ReferenceEqualityComparer.Instance);
         private readonly Dictionary<WorldPlacement, ParentValidation> m_parentValidation = new(ReferenceEqualityComparer.Instance);
-        // The lookups the validations running now have read; each validation keeps those after its own start.
+        // The lookups the validations running now have read; each validation keeps those after its own start, and the
+        // log empties when the outermost one ends, so a context's log holds one validation's reads at most.
         private readonly List<RowRead> m_reads = [];
+        private int m_recording;
 
         // The one door a validation looks a row up by id through, so every lookup it reads is recorded.
         private bool Lookup(string id, out WorldPlacement row) {
@@ -64,14 +66,15 @@ public static partial class WorldPlacementStamp {
             if (row.Surface is not { } surface) { return true; }
             var owned = Owned(row);
             if (owned && (m_descriptors.TryGetValue(row, out var cached) || TryRemembered(row, out cached))) {
-                m_reads.AddRange(cached.Reads);
+                if (m_recording > 0) { m_reads.AddRange(cached.Reads); }
                 descriptor = cached.Descriptor; reason = cached.Reason; return reason.Length == 0;
             }
             if (!m_validatingStamps.Add(row)) {
                 return Invalid(out descriptor, out reason, $"placement '{row.Id}' has a cyclic surface/frame dependency.");
             }
+            var start = m_reads.Count;
+            m_recording++;
             try {
-                var start = m_reads.Count;
                 var valid = BuildDescriptor(row, surface, out descriptor, out reason);
                 if (owned) {
                     var validation = new SurfaceValidation(descriptor, reason, ReadsSince(start: start));
@@ -80,7 +83,10 @@ public static partial class WorldPlacementStamp {
                     if (CodeRevision.Current == m_revision) { Descriptors.AddOrUpdate(row, validation); }
                 }
                 return valid;
-            } finally { m_validatingStamps.Remove(row); }
+            } finally {
+                m_validatingStamps.Remove(row);
+                if (--m_recording == 0) { m_reads.Clear(); }
+            }
         }
         // The validation another context made of this row object, when this context's index and creations answer
         // everything it read as they did there.
@@ -134,9 +140,13 @@ public static partial class WorldPlacementStamp {
         private bool TryParentFrame(WorldPlacement row, out string reason) {
             reason = string.Empty;
             var owned = Owned(row);
-            if (owned && m_parentValidation.TryGetValue(row, out var cached)) { m_reads.AddRange(cached.Reads); reason = cached.Reason; return reason.Length == 0; }
+            if (owned && m_parentValidation.TryGetValue(row, out var cached)) {
+                if (m_recording > 0) { m_reads.AddRange(cached.Reads); }
+                reason = cached.Reason; return reason.Length == 0;
+            }
             if (!m_validatingFrames.Add(row)) { reason = $"placement '{row.Id}' has a cyclic parent frame."; return false; }
             var start = m_reads.Count;
+            m_recording++;
             try {
                 if (row.Parent is { Length: > 0 } parentId) {
                     if (!Lookup(parentId, out var parent) || parent.Attach is not null || parent.Inhabit is not null ||
@@ -148,7 +158,10 @@ public static partial class WorldPlacementStamp {
                 }
                 if (owned) { m_parentValidation[row] = new ParentValidation(reason, ReadsSince(start: start)); }
                 return reason.Length == 0;
-            } finally { m_validatingFrames.Remove(row); }
+            } finally {
+                m_validatingFrames.Remove(row);
+                if (--m_recording == 0) { m_reads.Clear(); }
+            }
         }
     }
 }
