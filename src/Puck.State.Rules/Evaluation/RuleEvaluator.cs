@@ -87,11 +87,14 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     private readonly List<int> m_writtenRows = [];
 
     private Puck.Abstractions.Counting.WorkCount m_settled;
+    private Puck.Abstractions.Counting.WorkCount m_armed;
     // How many firings committed through this evaluator, by whichever door: what tells a firing that ran from one a
     // schedule answered for.
     private long m_firingsRun;
     // Whether the commit Commit last made did nothing on the host but close the arena's scope.
     private bool m_commitArenaOnly;
+    // Whether the firing Commit last committed had queued an arm.
+    private bool m_commitArmed;
     private bool[] m_writtenFlags = [];
 
     /// <summary>Initializes a new evaluator over a host.</summary>
@@ -149,6 +152,11 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         }
         if (ReferenceEquals(objA: kind, objB: RuleWorkKinds.Firings)) {
             value = m_firings.Value;
+
+            return true;
+        }
+        if (ReferenceEquals(objA: kind, objB: RuleWorkKinds.Armed)) {
+            value = m_armed.Value;
 
             return true;
         }
@@ -952,6 +960,9 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             : null
         );
         var settled = false;
+
+        m_commitArmed = false;
+
         var outcome = ((fires && (rule.Effects is [RewindGroupEffect]))
             ? FireRewind(
                 applied: out applied,
@@ -1005,6 +1016,9 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         if (outcome == RuleOutcome.Fired) {
             m_firings.Increment();
             state.Spent.Firings++;
+            if (m_commitArmed) {
+                state.Spent.Armed++;
+            }
 
             if (rule.Effects is [RewindGroupEffect]) {
                 latch.InvalidateScheduler();

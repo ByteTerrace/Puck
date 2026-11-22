@@ -55,8 +55,11 @@ public sealed class RuleLatch : IJournalParticipant {
         public long Skips { get; internal set; }
         /// <summary>Gets how many of <see cref="Skips"/> stood for a Level firing proven to change nothing.</summary>
         public long Settled { get; internal set; }
-        /// <summary>Gets how many firings committed and moved the arena.</summary>
+        /// <summary>Gets how many firings ran and committed.</summary>
         public long Firings { get; internal set; }
+        /// <summary>Gets how many of <see cref="Firings"/> queued an arm that leaves the arena (a cue, a pose, a
+        /// spawn): the firings after which the host's fact versions are derived again.</summary>
+        public long Armed { get; internal set; }
         /// <summary>Gets how many ticks a due list left the rule unvisited, because nothing it reads had moved and its
         /// last verdict asked for nothing.</summary>
         public long Elided { get; internal set; }

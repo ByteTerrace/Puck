@@ -24,6 +24,9 @@ public static class RuleWorkKinds {
     public static WorkKind Settled { get; } = Registry.Declare(name: "state.rules.settled", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the firings that ran and committed.</summary>
     public static WorkKind Firings { get; } = Registry.Declare(name: "state.rules.firings", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the firings that queued an arm that leaves the arena: each is followed by the
+    /// host deriving its fact versions again.</summary>
+    public static WorkKind Armed { get; } = Registry.Declare(name: "state.rules.armed", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the rules a due list visited: each rule once per tick it was due.</summary>
     public static WorkKind Due { get; } = Registry.Declare(name: "state.rules.due", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the rules a due list left unvisited: each rule once per tick nothing it reads

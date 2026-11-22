@@ -323,13 +323,14 @@ public sealed partial class WorldDisclosureImages {
     }
     internal string Audience(WorldRecipientView view) {
         Prepare(view);
-        var observer = view.Observer;
+        var unrestricted = view.Unrestricted;
+        var observer = view.ObserverAs(unrestricted);
         var length = (m_policies.Length + 2);
         var key = ((length <= 512) ? stackalloc char[length] : new char[length]);
         key[0] = view.Observes ? (char)('1' + (int)view.Ceiling) : '0';
         // An authority reads storage bookkeeping even on a declaration that can withhold cells. A recipient
         // admitted by every current policy still does not, so their definition caches cannot share a class.
-        key[1] = view.Unrestricted ? '1' : '0';
+        key[1] = unrestricted ? '1' : '0';
         for (var index = 0; index < m_policies.Length; index++) { key[index + 2] = observer.Allows(m_policies[index]) ? '1' : '0'; }
         // The key is a function of the answers alone, so a view whose answers stand keeps the string it was handed.
         if ((view.AudienceKey is { } held) && key.SequenceEqual(held)) { return held; }
@@ -540,8 +541,8 @@ public sealed partial class WorldDisclosureImages {
     // Only the source, the audience and the images of the rows the placements read (FrameRows) move it, so only those
     // rows are imaged here: every other changed row waits for the definition's own identity (Current), which a session
     // sink's per-tick check never asks for.
-    internal ContentPin FrameIdentity(WorldRecipientView view) {
-        var audience = Audience(view);
+    internal ContentPin FrameIdentity(WorldRecipientView view) => FrameIdentity(view, Audience(view));
+    internal ContentPin FrameIdentity(WorldRecipientView view, string audience) {
         var entry = DefinitionFor(view, audience);
         return FrameOf(FrameRowsMoved(view, audience, entry) ? Compose(view, audience) : entry);
     }

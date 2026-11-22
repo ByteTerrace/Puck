@@ -204,6 +204,11 @@ public sealed partial class WorldRuleHost {
                 facts.Add(item: new FactRead(Body: WatchValue(fact: bodyOperand, readsInput: true, spelling: bodyOperand.Describe), Source: ValueSource));
 
                 return true;
+            // A census of the placements a roster row named when the rule compiled: the bodies that inhabit them.
+            case PhysicsQuiescentOperand:
+                facts.Add(item: new FactRead(Body: WatchValue(fact: bodyOperand, readsInput: false, spelling: bodyOperand.Describe), Source: ValueSource));
+
+                return true;
             case WorldInputOperand input when TryInputScope(input: input, scope: out var inputScope):
                 facts.Add(item: new FactRead(Body: inputScope, Source: InputSource));
 
@@ -343,10 +348,40 @@ public sealed partial class WorldRuleHost {
         _ => $"source {source}",
     });
 
-    // The placement the bound key names, as ResolveBodyRef resolves a placement:$each reference, or -1.
-    private int EachPlacementOrdinal() => (Host.Arena.Keys.TryGetName(key: BoundEachKey, name: out var name)
-        ? Host.PlacementOrdinalOf(id: name.Value)
-        : -1);
+    // The placement the bound key names, as ResolveBodyRef resolves a placement:$each reference, or -1. A sweep asks
+    // once per binding per tick, so the answer is kept per key ordinal beside the name it was resolved for: a key
+    // table can hand an ordinal to another name after a rewind, and then the name differs and the placement is
+    // resolved again.
+    private int EachPlacementOrdinal() {
+        var key = BoundEachKey;
+
+        if (!Host.Arena.Keys.TryGetName(key: key, name: out var name)) {
+            return -1;
+        }
+
+        var placements = Host.Document.Definition.Placements;
+
+        if (!ReferenceEquals(objA: m_keyPlacementsFor, objB: placements)) {
+            m_keyPlacementsFor = placements;
+            Array.Clear(array: m_keyPlacementNames);
+        }
+        if (key.Ordinal >= m_keyPlacementNames.Length) {
+            var room = Math.Max(val1: (key.Ordinal + 1), val2: (m_keyPlacementNames.Length * 2));
+
+            Array.Resize(array: ref m_keyPlacementNames, newSize: room);
+            Array.Resize(array: ref m_keyPlacements, newSize: room);
+        }
+        if (!ReferenceEquals(objA: m_keyPlacementNames[key.Ordinal], objB: name.Value)) {
+            m_keyPlacementNames[key.Ordinal] = name.Value;
+            m_keyPlacements[key.Ordinal] = Host.PlacementOrdinalOf(id: name.Value);
+        }
+
+        return m_keyPlacements[key.Ordinal];
+    }
+
+    private object? m_keyPlacementsFor;
+    private string?[] m_keyPlacementNames = [];
+    private int[] m_keyPlacements = [];
     /// <inheritdoc/>
     /// <remarks>Marks the derived versions stale; they are derived again before the next version read or drain
     /// (<see cref="DeriveFacts"/>), so several firings with arms in a row cost one comparison, not one each.</remarks>

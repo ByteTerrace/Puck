@@ -47,6 +47,7 @@ public sealed partial class RuleEvaluator {
         var list = m_dueLists[slot];
 
         if ((list is null) || !list.Covers(epoch: m_host.FactScheduleEpoch, latch: latch, rules: rules)) {
+            list?.SettleElided();
             m_dueLists[slot] = list = new RuleDueList(evaluator: this, latch: latch, rules: rules);
         }
 
@@ -162,4 +163,13 @@ public sealed partial class RuleEvaluator {
     }
 
     internal RuleSchedule ScheduleOf(CompiledRule rule, RuleLatch.RuleState state) => Schedule(rule: rule, state: state);
+
+    /// <summary>Brings every rule's elided count (<see cref="RuleLatch.RuleSpent.Elided"/>) up to date. A due list
+    /// counts a rule's elided ticks when the rule is next visited, so a reader of the spent counts calls this
+    /// first.</summary>
+    public void SettleSpent() {
+        foreach (var list in m_dueLists) {
+            list?.SettleElided();
+        }
+    }
 }

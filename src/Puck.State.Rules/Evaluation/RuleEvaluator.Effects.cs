@@ -177,6 +177,11 @@ public sealed partial class RuleEvaluator {
         // move row versions on their own.
         var armed = (m_deferred.Count > queued);
 
+        m_commitArmed = armed;
+        if (armed) {
+            m_armed.Increment();
+        }
+
         // The scope is closed. The transactional arms install first, as the unit the host prepared, and the rest are
         // delivered in authored order: a delivery that refuses is counted, undoes nothing, and stops no later
         // delivery. Every firing reads the queue from its own mark up, so an arm left below it would never

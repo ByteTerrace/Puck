@@ -40,6 +40,8 @@ public sealed partial class WorldRuleHost {
 
         var lines = new List<SpentLine>(capacity: (m_rules.Length + m_interactions.Length));
 
+        m_evaluator.SettleSpent();
+
         Collect(compiled: m_rules, isInteraction: false, latch: m_ruleGateHeld);
         Collect(compiled: m_interactions, isInteraction: true, latch: m_interactionGateHeld);
         lines.Sort(comparison: static (left, right) => {
@@ -73,7 +75,7 @@ public sealed partial class WorldRuleHost {
         for (var index = 0; (index < shown); index++) {
             var line = lines[index];
 
-            output.Add(item: $"[world.budget.rules --spent {line.Name}{(line.IsInteraction ? " interaction" : string.Empty)} visits={line.Spent.Visits} elided={line.Spent.Elided} evaluations={line.Spent.Evaluations} skips={line.Spent.Skips} settled={line.Spent.Settled} firings={line.Spent.Firings} work={line.Work} work/tick={PerTick(total: line.Work, ticks: ticks)}; {line.Schedule}]");
+            output.Add(item: $"[world.budget.rules --spent {line.Name}{(line.IsInteraction ? " interaction" : string.Empty)} visits={line.Spent.Visits} elided={line.Spent.Elided} evaluations={line.Spent.Evaluations} skips={line.Spent.Skips} settled={line.Spent.Settled} firings={line.Spent.Firings} armed={line.Spent.Armed} work={line.Work} work/tick={PerTick(total: line.Work, ticks: ticks)}; {line.Schedule}]");
         }
 
         return output;

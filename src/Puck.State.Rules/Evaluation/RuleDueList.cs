@@ -29,7 +29,11 @@ internal sealed class RuleDueList {
     private readonly IStateReader m_host;
     private readonly Kind[] m_kinds;
     private readonly ulong[] m_due;
-    private readonly ulong[] m_visited;
+    // The walk each rule was last visited in, or -1: what a rule's elided ticks are counted from when it is next
+    // visited or read, so a walk that visits few rules costs nothing for the rest.
+    private readonly long[] m_settledWalk;
+    private long m_walk;
+    private int m_visits;
     private readonly bool[] m_full;
     private readonly ulong[] m_wake;
     private readonly ulong[]?[] m_bodies;
@@ -63,7 +67,7 @@ internal sealed class RuleDueList {
         States = latch.States(rules: rules);
         m_kinds = new Kind[rules.Length];
         m_due = new ulong[rules.Length.CeilingDivide(divisor: 64)];
-        m_visited = new ulong[m_due.Length];
+        m_settledWalk = new long[rules.Length];
         m_full = new bool[rules.Length];
         m_wake = new ulong[rules.Length];
         Array.Fill(array: m_wake, value: ulong.MaxValue);
@@ -159,10 +163,13 @@ internal sealed class RuleDueList {
 
         return -1;
     }
-    /// <summary>Takes a rule off the list for its visit and records the visit.</summary>
+    /// <summary>Takes a rule off the list for its visit and records the visit, counting the walks since its last one
+    /// into its <see cref="RuleLatch.RuleSpent.Elided"/>.</summary>
     public void Visit(int index) {
         m_due[(index >> 6)] &= ~(1UL << (index & 63));
-        m_visited[(index >> 6)] |= (1UL << (index & 63));
+        States[index].Spent.Elided += (m_walk - m_settledWalk[index]);
+        m_settledWalk[index] = (m_walk + 1L);
+        m_visits++;
     }
     /// <summary>Returns whether the rule is a body sweep the list tracks per body.</summary>
     public bool IsBodySweep(int index) => (m_kinds[index] == Kind.BodySweep);
@@ -199,21 +206,29 @@ internal sealed class RuleDueList {
             }
         }
     }
-    /// <summary>Counts the rules the walk did not visit into each one's <see cref="RuleLatch.RuleSpent.Elided"/>, and
-    /// forgets the walk's visits.</summary>
+    /// <summary>Closes one walk of the list and answers how many rules it did not visit. A rule's own
+    /// <see cref="RuleLatch.RuleSpent.Elided"/> takes the walks it was left out of when it is next visited or when
+    /// <see cref="SettleElided"/> runs, so closing a walk costs nothing per rule.</summary>
     /// <returns>How many rules the walk did not visit.</returns>
     public long CountElided() {
-        var elided = 0L;
+        var elided = (Rules.Length - m_visits);
 
-        for (var index = 0; (index < Rules.Length); index++) {
-            if ((m_visited[(index >> 6)] & (1UL << (index & 63))) == 0UL) {
-                States[index].Spent.Elided++;
-                elided++;
-            }
-        }
-        Array.Clear(array: m_visited);
+        m_visits = 0;
+        m_walk++;
 
         return elided;
+    }
+    /// <summary>Brings every rule's <see cref="RuleLatch.RuleSpent.Elided"/> up to the walks closed so far: what a
+    /// read of the spent counts calls first.</summary>
+    public void SettleElided() {
+        for (var index = 0; (index < Rules.Length); index++) {
+            var owed = (m_walk - m_settledWalk[index]);
+
+            if (owed > 0L) {
+                States[index].Spent.Elided += owed;
+                m_settledWalk[index] = m_walk;
+            }
+        }
     }
     /// <summary>Marks every rule due in full.</summary>
     public void MarkAll() {
