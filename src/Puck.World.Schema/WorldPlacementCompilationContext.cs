@@ -59,8 +59,8 @@ public static partial class WorldPlacementStamp {
             WorldPlacement Row(WorldPlacement row) => replaced.GetValueOrDefault(key: row, defaultValue: row);
             RowRead[] Reads(RowRead[] held) {
                 foreach (var read in held) {
-                    if ((read.Row is { } row) && replaced.ContainsKey(key: row)) {
-                        return [.. held.Select(each => (each.Row is { } kept) ? each with { Row = Row(row: kept) } : each)];
+                    if (!read.Creation && (read.Row is WorldPlacement row) && replaced.ContainsKey(key: row)) {
+                        return [.. held.Select(each => (!each.Creation && (each.Row is WorldPlacement kept)) ? each with { Row = Row(row: kept) } : each)];
                     }
                 }
                 return held;

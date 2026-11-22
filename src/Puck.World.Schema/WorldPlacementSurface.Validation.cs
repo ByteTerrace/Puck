@@ -8,20 +8,17 @@ namespace Puck.World;
 public static partial class WorldPlacementStamp {
     private sealed record SurfaceSource(WorldPlacement Row, CreationDocument Document, float Margin);
     private sealed record SurfaceDescriptor(WorldPlacementSurface Policy, SurfaceSource[] Sources);
-    // One lookup of a row by id that a validation read, and the row it found (null for none).
-    private readonly record struct RowRead(string Id, WorldPlacement? Row);
-    // A validation's answer and every row lookup it read, its nested validations' included. The answer is a function of
-    // the row, the creations and those lookups alone, so a context whose index answers each read with the same row
-    // under the same creations answers the same (Reads).
+    // One lookup by id that a validation read, of a placement row or (Creation) of a creation, and what it found (null
+    // for none).
+    private readonly record struct RowRead(string Id, object? Row, bool Creation = false);
+    // A validation's answer and every lookup it read, its nested validations' included. The answer is a function of the
+    // row and those lookups alone, so a context whose index and creations answer each read with the same object answers
+    // the same (Reads).
     private sealed record SurfaceValidation(SurfaceDescriptor? Descriptor, string Reason, RowRead[] Reads);
     private sealed record ParentValidation(string Reason, RowRead[] Reads);
-    // The validation a row last had in any context, with the creations it was made under: a new section that keeps the
-    // row object, the rows its validation read and the creations validates it no further.
-    private sealed class DescriptorMemo(IReadOnlyList<WorldPrototype> creations, SurfaceValidation validation) {
-        public IReadOnlyList<WorldPrototype> Creations { get; } = creations;
-        public SurfaceValidation Validation { get; } = validation;
-    }
-    private static readonly CodeDerivedTable<WorldPlacement, DescriptorMemo> Descriptors = new();
+    // The validation a row last had in any context: a new section that keeps the row object and every row and creation
+    // its validation read validates it no further.
+    private static readonly CodeDerivedTable<WorldPlacement, SurfaceValidation> Descriptors = new();
 
     private sealed partial class CompilationContext {
         private readonly Dictionary<WorldPlacement, SurfaceValidation> m_descriptors = new(ReferenceEqualityComparer.Instance);
@@ -36,11 +33,18 @@ public static partial class WorldPlacementStamp {
             m_reads.Add(new RowRead(Id: id, Row: (found ? row : null)));
             return found;
         }
+        // The one door a validation looks a creation up by id through, recorded as Lookup records a row.
+        private WorldPrototype? CreationRead(string id) {
+            var creation = CreationOf(id: id);
+
+            m_reads.Add(new RowRead(Creation: true, Id: id, Row: creation));
+            return creation;
+        }
         private bool Holds(RowRead[] reads) {
             foreach (var read in reads) {
-                var found = m_rows.TryGetValue(read.Id, out var row);
+                object? now = (read.Creation ? CreationOf(id: read.Id) : (m_rows.TryGetValue(read.Id, out var row) ? row : null));
 
-                if (!ReferenceEquals(objA: (found ? row : null), objB: read.Row)) { return false; }
+                if (!ReferenceEquals(objA: now, objB: read.Row)) { return false; }
             }
             return true;
         }
@@ -73,7 +77,7 @@ public static partial class WorldPlacementStamp {
                     var validation = new SurfaceValidation(descriptor, reason, ReadsSince(start: start));
 
                     m_descriptors[row] = validation;
-                    if (CodeRevision.Current == m_revision) { Descriptors.AddOrUpdate(row, new DescriptorMemo(m_creations, validation)); }
+                    if (CodeRevision.Current == m_revision) { Descriptors.AddOrUpdate(row, validation); }
                 }
                 return valid;
             } finally { m_validatingStamps.Remove(row); }
@@ -82,8 +86,8 @@ public static partial class WorldPlacementStamp {
         // everything it read as they did there.
         private bool TryRemembered(WorldPlacement row, out SurfaceValidation validation) {
             validation = null!;
-            if (!Descriptors.TryGetValue(row, out var memo) || !ReferenceEquals(objA: memo.Creations, objB: m_creations) || !Holds(memo.Validation.Reads)) { return false; }
-            validation = memo.Validation;
+            if (!Descriptors.TryGetValue(row, out var remembered) || !Holds(remembered.Reads)) { return false; }
+            validation = remembered;
             m_descriptors[row] = validation;
             WorldBootWork.Count(WorldBootWork.SurfaceDescriptorsCarried);
             return true;
@@ -92,7 +96,7 @@ public static partial class WorldPlacementStamp {
             out SurfaceDescriptor? descriptor, out string reason) {
             descriptor = null; reason = string.Empty;
             var prefix = new Prefix(row.Id);
-            if (row.Attach is not null || row.Inhabit is not null || !LiteralRoot(row) || (CreationOf(row.ShownPrototypeId) is null)) {
+            if (row.Attach is not null || row.Inhabit is not null || !LiteralRoot(row) || (CreationRead(row.ShownPrototypeId) is null)) {
                 return Invalid(out descriptor, out reason, $"{prefix} requires a literal static root, without live root attachment or inhabitance.");
             }
             if (surface.Targets is not { Count: > 0 }) {
@@ -110,7 +114,7 @@ public static partial class WorldPlacementStamp {
             for (var i = 0; i < surface.Targets.Count; i++) {
                 var id = surface.Targets[i];
                 if (id == row.Id || !seen.Add(id) || !Lookup(id, out var target) ||
-                    (CreationOf(target.ShownPrototypeId) is not { } creation) || target.Solid is null ||
+                    (CreationRead(target.ShownPrototypeId) is not { } creation) || target.Solid is null ||
                     target.Deal is not null || target.Attach is not null || target.Inhabit is not null || !LiteralRoot(target) ||
                     CreationRig.Of(document: creation.Document).Animates || WorldStateDocumentValues.HasReference(creation.Document) ||
                     !CreationStampEmitter.EmitsContact(creation.EngineDocument)) {
