@@ -12,11 +12,11 @@ namespace Puck.World;
 /// <para>What an audience is disclosed of a row is read from the store and one <see cref="WorldRowMask"/>, the audience's
 /// answers about that row, and from nothing else about the audience (<see cref="WorldRowImageWriter"/>). The table
 /// asks an audience for its mask in one place (<see cref="Reading"/>) and shares a row's composition between two
-/// audiences only when their masks for the row are equal, byte for byte, at one row version. A composition is the
-/// canonical bytes' digest, which costs no allocation and is all a steady tick asks for, and the image those bytes
-/// describe, built only when a delivery carries it. A digest is never what an image is found by: an audience is
-/// handed the composition its own mask names or the image it held itself before, never another audience's because a
-/// digest matched.</para>
+/// audiences only when their masks for the row are equal, byte for byte. A composition is the canonical bytes'
+/// digest, which costs no allocation and is all a steady tick asks for, and the image those bytes describe, built
+/// from the store only when a delivery carries it and dropped whenever the composition is written again. An image
+/// is never found by a digest: an audience is handed the one built from the store under its own mask, and a digest
+/// decides only whether a stream is sent a row again.</para>
 /// <para>A row every audience reads whole has one composition. The table learns of a replaced arena or policy index
 /// only when a read next brings it current, so until then it holds what it composed before; no read reaches that,
 /// since every lookup is keyed by an audience that bringing the table current produces.</para></summary>
@@ -63,7 +63,7 @@ public sealed partial class WorldDisclosureImages {
         public ulong Version { get; set; }
         public Sha256Digest Digest { get; set; }
         public int Bytes { get; set; }
-        // The image the digest names, once a delivery asked for it; dropped when the digest moves.
+        // The image built from the store under the mask, once a delivery asked for it; dropped at every write.
         public WorldRecipientImage? Image { get; set; }
         // The ordinals of the keys of its replica cells, which a key-change proof tests a write against.
         public int[] Keys = [];
@@ -378,9 +378,9 @@ public sealed partial class WorldDisclosureImages {
     internal WorldRecipientImage Image(WorldRecipientView view, int row, string audience) {
         var composition = Reading(view, row, audience);
 
+        // An image the composition holds was built since the composition was last written, and the row has since
+        // moved, if at all, only by writes this audience's key proof covers.
         if (composition.Image is { } held) { return held; }
-        // The composition is current to the store or proven to disclose what it did when its digest was taken, so the
-        // store holds what the digest names.
         m_work.Count(RowImages);
         return composition.Image = WorldRowImageWriter.Materialize(
             arena: view.Arena,
@@ -441,12 +441,6 @@ public sealed partial class WorldDisclosureImages {
         var length = WorldRowMask.Take(arena: arena, observer: ref observer, row: row, scratch: ref m_maskScratch);
         var composition = Written(arena, row, Masked(row, m_maskScratch.AsSpan(0, length)), version);
 
-        // An audience whose content stands keeps the image it held, whichever mask now names that content: a hidden
-        // cell that joined the row changed the mask and nothing the audience reads.
-        if ((entry is not null) && !ReferenceEquals(entry.Composition, composition) && (composition.Image is null) &&
-            (entry.Composition.Image is { } own) && (entry.Composition.Digest == composition.Digest)) {
-            composition.Image = own;
-        }
         if (entry is null) { m_rows[key] = entry = new Entry(); }
         entry.Version = version; entry.Dependencies = dependencies; entry.Composition = composition;
         return composition;
@@ -477,8 +471,10 @@ public sealed partial class WorldDisclosureImages {
     private const int MaskedRetained = 8;
 
     // Brings a composition current to its row: one pass of the one writer over the store and the mask, whose bytes are
-    // digested in the table's reused buffer and never kept. A write that leaves the disclosed content as it was keeps
-    // the image; one that moves it drops the image, which the next delivery to carry the row builds.
+    // digested in the table's reused buffer and never kept. Every such write drops the composition's image, whether or
+    // not the digest moved, so an image is never carried from one state of the row to another on the strength of a
+    // digest: the next delivery to carry the row builds it from the store. A stream whose digest stands keeps the
+    // image it holds itself (WorldDeliveryCursor), which costs nothing.
     private Composition Written(StateArena arena, int row, Composition composition, ulong version) {
         if (composition.Composed && (composition.Version == version)) { return composition; }
         var keyed = (composition.Mask.Reading == WorldRowReading.Restricted);
@@ -490,7 +486,7 @@ public sealed partial class WorldDisclosureImages {
 
         Compositions++; ComposedBytes += m_imageBytes.WrittenCount;
         m_work.Count(RowCompositions); m_work.Add(RowBytes, m_imageBytes.WrittenCount);
-        if (!composition.Composed || (digest != composition.Digest)) { composition.Image = null; }
+        composition.Image = null;
         composition.Digest = digest;
         composition.Bytes = m_imageBytes.WrittenCount;
         composition.Version = version;

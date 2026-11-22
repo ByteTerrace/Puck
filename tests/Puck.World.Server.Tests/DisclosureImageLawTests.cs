@@ -163,7 +163,7 @@ public sealed class DisclosureImageLawTests {
         // A write to the cell that tells them apart moves seat 1's image and leaves seat 2's as it stood.
         Commit(arena: arena, write: () => Assert.True(condition: arena.TryWrite(rowOrdinal: hand, key: Key(arena: arena, name: "ours"), value: CellValue.Int(value: 9L), reason: out _)));
         Assert.NotEqual(expected: held[1].Identity, actual: views[1].Image(row: hand).Identity);
-        Assert.Same(expected: held[2], actual: views[2].Image(row: hand));
+        Assert.Equal(expected: held[2].Identity, actual: views[2].Image(row: hand).Identity);
         Assert.False(condition: cursors[1].Holds(view: views[1]));
         Assert.True(condition: cursors[2].Holds(view: views[2]));
     }

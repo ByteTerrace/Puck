@@ -267,13 +267,15 @@ public sealed class WorldDeliveryCursor {
                 }
                 continue;
             }
+            // A row whose digest stands is the row as the stream holds it: nothing is lost, nothing is sent, and the
+            // stream keeps its own image, so no image is built. Only a header it is still owed sends the row again.
+            var owed = m_metadataPrimers.Remove(row);
+
+            if (!owed && holds && (held.Image is { } delivered) &&
+                (delivered.Digest == view.Images.RowDigest(view, row, audience ??= view.Images.Audience(view)))) { continue; }
             var image = view.Images.Image(view, row, audience ??= view.Images.Audience(view));
-            if (holds) {
-                cut |= Loses(held, image);
-                if (!m_metadataPrimers.Remove(row) && (held.Image is { } delivered) && (delivered.Digest == image.Digest)) { continue; }
-            } else {
-                m_metadataPrimers.Remove(row);
-            }
+
+            if (holds) { cut |= Loses(held, image); }
             m_rows[name] = new HeldRow(Image: image, Keys: WorldRowMembers.Empty);
             (result ??= []).Add(new(row, image));
         }
