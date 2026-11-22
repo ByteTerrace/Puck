@@ -458,7 +458,7 @@ expiry (`src/Puck.World.Azure/EntraWorldAuthenticator.cs:85`), and the session
 segment is a per-process GUID the client mints (`:31`) **[opened]**. The token
 lifetime is Entra's policy and is not in this repository **[unverified]**. The
 deployed silo selects this provider with one group **[opened]**
-(`src/Puck.Azure.Resources/main.bicepparam:597-605`):
+(`src/Puck.Azure.Resources/main.bicepparam`):
 
 ```text
   worldSilo: {
