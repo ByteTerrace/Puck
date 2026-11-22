@@ -597,7 +597,7 @@ add the row you found.
 | Weight a relief by regions (no relief over a bowl, a pad, a path) | `SdfReliefMask` (a band, `SdfReliefBand`, over listed region shapes, `SdfReliefRegion`), carried as `SdfOp.ReliefRow` rows before the relief and decoded once by the program's door (`SdfProgram.ReliefMasksAt`); a document's masks compile through `CreationStampEmitter.ReliefMasks` | `src/Puck.SignedDistance`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters) |
 | Evaluate the field on the CPU, deterministically (contact, picking, bounds, cull certificates) | `SdfFieldEvaluator`; its GPU partner is `mapCore` | `src/Puck.SignedDistance/Queries`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters) |
 | Make a point query of a world-sized program cost what stands near the point, or prune a program per region | A regional `SdfFieldEvaluator` (`regional: true`, `IndexesRegions`): a tape per cube of the world, recorded by the interval walk, answering what the plain evaluator answers to the bit. A new drop rule belongs in that walk, proved against its enclosing interval, never in a pruner of its own or on a Lipschitz bound, which holds for no single candidate | `SdfFieldEvaluator.Regions.cs`; [region tapes](../../../docs/rendering/sdf/handbook/queries-and-determinism.md#region-tapes) |
-| Write or change a primitive's or blend's distance arithmetic once for both readers (fixed-point C# and precise HLSL) | `SdfFieldFormulas` in the closed expression language of `SdfFormula`, named by the catalogue entry's `Formula` facet | `src/Puck.SignedDistance/Formulas`; [changing the instruction set](#changing-the-instruction-set) |
+| Write or change a primitive's or blend's distance arithmetic, an op's point map or field edit, a scope pop or a material winner once for every reader (fixed-point C#, precise HLSL, the wide C# for normals) | `SdfFieldFormulas` in the closed expression language of `SdfFormula`, named by the catalogue entry's `Formula`, `DistanceFormula`, `Winner` or `Operand` | `src/Puck.SignedDistance/Formulas`; [changing the instruction set](#changing-the-instruction-set) |
 | Bake a mesh from the field, or find the one already baked | `SdfMeshPathBake` (the path), `SdfSampledLattice` and `SdfDualContouring` (the sampling and contouring), `SdfMeshStore` (the shared on-disk cache of baked meshes, one set per bake identity) | `src/Puck.SdfVm`, `src/Puck.SignedDistance/Baking`; [mesh bake](references/mesh-bake.md) |
 | Judge which way a contour's triangle faces, or hold a vertex move to it | `SdfContourFacing` (the lattice edge a quad crosses, then its corners' patches), read through `SdfContour.QuadAxes` and `Patches`; never vertex normals or a triangle's earlier facing | `src/Puck.SignedDistance/Baking`; [mesh bake](references/mesh-bake.md#contouring) |
 | Make coarser levels of a baked mesh, or choose a draw's level | `SdfMeshCollapse` (half-edge collapse, every level a subset of the mesh's own vertices), `SdfMeshDetail` (the level a draw takes) | `src/Puck.SdfVm` |
@@ -1130,6 +1130,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   function's guard cannot protect them. An ordinary material becomes a huge
   unsigned index otherwise, which can lose the Vulkan device while Direct3D 12
   returns zero for the out-of-bounds read.
+- **A fragment stage addresses per-pixel storage only from a covered lane.** A
+  quad that straddles the last row or column of a grid with an odd height or
+  width runs helper lanes outside the grid, and a helper's `SV_Position` names a record
+  past the end of the visibility records or glass sums. Read or write a buffer
+  addressed by the pixel only under `!IsHelperLane()`, as the glass raster
+  (`passes/sdf-mesh-glass.frag.hlsl`) and the cascade glass
+  (`passes/sdf-mesh-shadow-glass.frag.hlsl`) do; a texture `Load` there is
+  bounded. Vulkan on NVIDIA loses the device on the read once it passes the
+  allocation's slack, while Direct3D 12 returns zero, so an even-sized window
+  and Direct3D 12 both hide it.
 - **One `mapCore` call site.** The bake (`passes/sdf-mesh-bake.comp.hlsl`) is
   the only GPU kernel that walks the field, and it does so through one rolled
   `[loop]` over its samples. Every call site is a full inlined copy of the
@@ -1228,6 +1238,26 @@ so neither reader is written by hand. A shape whose readers need a side table, a
 texture or a loop is a target escape (a null `Formula`, hand-written `Shader`
 and `ShapePoint`) and takes a case in `SdfFieldDeviceLawTests`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters)
 lists the escapes and where generation's guarantee stops.
+
+An op's effect on the walk is a formula too. A point op's `Formula` maps the
+local point (and `DistanceFormula` gives the factor a scale puts on the
+distances read through it), a field op's `Formula` maps the running distance,
+a blend's `Winner` says whose material stands and its `Operand` computes what
+a scope pop passes to both, and a relief row may carry one. The op's `Shader`,
+`RigidShader` and `PartShader` arms are then `SdfShaderAction.Map`, `Rigid` and
+`Part` over those formulas, which bind the walk's state to the name each
+kernel holds it under, and the evaluator's `MapPoint`, `EditField`,
+`BlendShape`, `CandidateWins` and `PopOperand` are generated. An op with no
+formula (a reset, a scope, a join, the two warps and the render-only ops) keeps
+a hand-written arm and a hand-written case in the evaluator's walk.
+
+Every formula lowers three ways: fixed-point C#, HLSL, and the wide C# a
+regional evaluator reads normals through (`SdfFieldEvaluator.TrySurfaceNormal`,
+double precision, one point a lane). A node added to `SdfFormulaOp` states all
+three in `SdfFormula.Render`; the wide form is the fixed form's text unless the
+node says otherwise, so a new fixed carrier call needs the same member on the
+evaluator's `Wide` carriers. The wide reader refuses a tape that holds an op
+without a formula and the fixed-point gradient answers instead.
 
 `ShaderDeclarations` regenerates the field switch includes and operand readers
 under `Assets/Shaders/Sdf/isa/`, and `SdfIsaHlsl` stamps both the field and whole
@@ -1467,9 +1497,12 @@ world.counters render.record  # record jobs' host time per phase, serial sum and
 The bodies lever rates every stamp pool the presentation packs: the boot world's
 and each routed scene's (a shared session scene among them), each by the views and
 shadow cascades of its own frame (`WorldCreationInstances.ShadowBy`). A pool no view
-rates poses every registration every frame and re-stages each of its mesh rows, which
+rates poses every awake registration every frame and re-stages each of its mesh rows, which
 shows as `capture` and `pack` in `host.frames` and as `sdf.creations.slots.posed` far
-above the transform rows `sdf.transforms` packs.
+above the transform rows `sdf.transforms` packs. `world.rates` lists the bodies as of
+the frames after its previous read: the pool rates only what it must pose, and rates
+every body for the listing only for `SdfUpdateRateReadings.FramesPerRead` frames after
+a read or while the tier tint is on, so read twice and keep the second.
 
 Divide `gpu.queue` and `render.record` deltas by their `frames` deltas; [gpu
 cost](references/gpu-cost.md#count-queue-work-and-record-jobs) reads them, and
@@ -1635,7 +1668,20 @@ counts in `sdf.transforms`, never in `records.posed`.
   through the composition source's copy journal (`SdfFrame.MeshCopyChanges`, a `GpuChangedRows` read by a
   `GpuRowCursor`), which the dresser and the bake's layout check each read. `sdf.instances.dress.groups-visited`,
   `.groups-stood` and `.copies-visited` count it.
-- **The pose pack forks by registration.** `WorldCreationInstances.PackTransforms` decides every registration in a
+- **A pack visits only what woke.** The stamp pool, its rigid bodies (`WorldRigidAssets.Pack`) and the catalog
+  avatars (`WorldCatalogAvatars.Pack`) each keep an awake set, so a frame costs the registrations something woke, never
+  the pool: a body's presented inputs through the source's journal (`IWorldStampSource.BodyChanges`, which
+  `WorldClient` fills as it resolves poses and admits snapshots), a leased state cell through the mirror's change log
+  (`WorldLeaseWatch`, `WorldStateMirror.TryChangedSince`), a replay cursor or cue coming due (a deadline heap; nothing
+  walks the pool to tick it), and the registration's own continuation. The header of
+  `WorldCreationInstances.Awake.cs` lists every cause and its one door: an input a pose reads that neither the
+  journal nor the change log carries must wake its readers there, or a sleeping registration draws a stale pose. A
+  held pose (`RateOwed`) sits in a 32 m cell; each pack tests each occupied cell's box once against the views and
+  cascades, leaves the members of a cell nothing may show asleep and wakes the rest to rate themselves.
+  `WorldCreationInstances.VisitCount`, `WorldRigidAssets.VisitCount` and `sdf.creations.registrations.visited` count
+  the visits. The composition reads only the rigid copies a pack names (`ISdfSceneEmitter.MeshInstanceChanges`) while
+  every emitter's `MeshInstancesRevision` stands.
+- **The pose pack forks by registration.** `WorldCreationInstances.PackTransforms` decides every visited registration in a
   serial pass (`BeginStep`), poses the woken ones across the `JobPool` as one `JobClass.Frame` fork, one partition a
   registration (`Pose`, `PackRegistration`), and settles them in pool order (`EndStep`). A partition writes only its own
   registration and slot range and keeps its scratch on its own stack; anything shared it would write (a list, a pool

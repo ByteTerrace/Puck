@@ -17,6 +17,10 @@
 #include "sdf-program.hlsli"
 #include "sdf-point.hlsli"
 #include "sdf-noise.hlsli"
+// What each instruction does to the walk and a relief band's weight: shared formulas generated with their fixed-point
+// twins (Puck.SignedDistance's SdfFieldFormulas).
+#include "../isa/sdf-field-op-formulas.hlsli"
+#include "../isa/sdf-field-relief-formulas.hlsli"
 #include "sdf-shapes.hlsli"
 #include "sdf-blend.hlsli"
 #include "sdf-layout.hlsli"

@@ -27,7 +27,7 @@ public sealed partial class RenderGraphRuntime {
                 continue;
             }
 
-            var standable = StandableVersions(plan: graph.Pipeline.Plan);
+            var standable = graph.Pipeline.Plan.Derived.Standable(compose: StandableVersions);
 
             foreach (var binding in inputs[index]) {
                 if (
@@ -99,17 +99,15 @@ public sealed partial class RenderGraphRuntime {
     // The external versions a graph's default output may stand for: following package passes in order, an output at a
     // position stands for the input at that position, or for whatever that input stands for, only when the node can
     // leave that pass standing. A pass whose buffers, history or other accesses require a draw breaks the chain.
-    private static HashSet<string> StandableVersions(ShaderPipelinePlan plan) {
+    // Composed once a plan (ShaderPipelinePlan.Facts.Standable).
+    private static IReadOnlySet<string> StandableVersions(ShaderPipelinePlan plan) {
         var standing = new Dictionary<string, HashSet<string>>(comparer: StringComparer.Ordinal);
 
         foreach (var pass in plan.Passes) {
             if (pass.Package is not { } step) {
                 continue;
             }
-            if (ShaderPipelineRenderNode.AliasRefusalOf(
-                plan: plan,
-                planned: pass
-            ) is not null) {
+            if (plan.Derived.AliasRefusal(planned: pass) is not null) {
                 continue;
             }
 
@@ -149,6 +147,6 @@ public sealed partial class RenderGraphRuntime {
             value: out var published
         )
             ? published
-            : []);
+            : new HashSet<string>());
     }
 }

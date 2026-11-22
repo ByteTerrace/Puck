@@ -181,6 +181,17 @@ public sealed class PublishArena<T> {
         }
     }
 
+    /// <summary>Returns every entry to unpublished and drops every value, keeping the storage, so the owner can publish
+    /// into the arena afresh. The owner calls it only once no reader can reach the arena any more (an epoch reclamation,
+    /// <see cref="Memory.ReaderEpochs{T}"/>); a reader still inside it would read the cleared entries.</summary>
+    /// <exception cref="InvalidOperationException">The arena publishes images from a factory, which a reset cannot
+    /// restore.</exception>
+    public void Reset() {
+        if (m_create is not null) { throw new InvalidOperationException(message: "an image arena cannot be reset"); }
+        RefuseNested();
+        Array.Clear(array: m_states);
+        foreach (var column in m_slots) { Array.Clear(array: column); }
+    }
     /// <summary>Visits all retained values, including held retired publications, under the owner's writer gate.
     /// Clears unheld retired assignment-copy values first. A visitor must not publish to this arena.</summary>
     /// <typeparam name="TState">Visitor state.</typeparam>

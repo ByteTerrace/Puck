@@ -6,15 +6,19 @@ internal enum SdfReliefStreamRole { None, ReliefOwner, ReliefRow }
 [SdfFieldCatalogue("SdfOp", unsigned: true)]
 public static partial class SdfFieldOps {
     private abstract class Entry {
+        // The shared formula (SdfFieldFormulas) every reader lowers for what the op does to the walk: a point op's map of
+        // the local point, a field op's map of the running distance. Null where the op is the walk's own control (a
+        // reset, a scope, a join) or its readers are hand-written twins.
+        public virtual SdfFormula? Formula => null;
+        // The formula for the factor a point op multiplies into the distance scale, where it has one.
+        public virtual SdfFormula? DistanceFormula => null;
         public abstract SdfShaderAction Shader { get; }
         public abstract SdfShaderAction RigidShader { get; }
         public abstract SdfShaderAction PartShader { get; }
         public abstract bool PartDomain { get; }
         public abstract SdfPointAction Point { get; }
         public abstract SdfIntervalAction Interval { get; }
-        public abstract SdfPointFoldAction PointFold { get; }
         public abstract SdfIntervalFoldAction IntervalFold { get; }
-        public abstract SdfPointFieldEditAction PointFieldEdit { get; }
         public abstract SdfIntervalFieldEditAction IntervalFieldEdit { get; }
         public abstract SdfRenderWarpAction RenderWarp { get; }
         public abstract SdfRenderWarpBoundsAction RenderWarpBounds { get; }
@@ -100,9 +104,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.ResetPoint;
         public override SdfIntervalAction Interval => SdfIntervalAction.ResetPoint;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -134,27 +136,14 @@ public static partial class SdfFieldOps {
 
     [SdfFieldEntry(1)]
     private sealed class Translate : Entry {
-        public override SdfShaderAction Shader => new(
-            Code: """
-                localPosition -= data0.xyz;
-                break;
-                """,
-            Operands: SdfShaderOperands.Data0
-        );
-        public override SdfShaderAction RigidShader => new(
-            Code: """
-                p -= data0.xyz;
-                break;
-                """,
-            Operands: SdfShaderOperands.None
-        );
+        public override SdfFormula? Formula => SdfFieldFormulas.TranslatePoint;
+        public override SdfShaderAction Shader => SdfShaderAction.Map(("p", Formula!));
+        public override SdfShaderAction RigidShader => SdfShaderAction.Rigid(("p", Formula!));
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.Translate;
         public override SdfIntervalAction Interval => SdfIntervalAction.Translate;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -186,27 +175,14 @@ public static partial class SdfFieldOps {
 
     [SdfFieldEntry(2)]
     private sealed class Rotate : Entry {
-        public override SdfShaderAction Shader => new(
-            Code: """
-                localPosition = rotatePointByInverseQuaternion(localPosition, data0);
-                break;
-                """,
-            Operands: SdfShaderOperands.Data0
-        );
-        public override SdfShaderAction RigidShader => new(
-            Code: """
-                p = rotatePointByInverseQuaternion(p, data0);
-                break;
-                """,
-            Operands: SdfShaderOperands.None
-        );
+        public override SdfFormula? Formula => SdfFieldFormulas.RotatePoint;
+        public override SdfShaderAction Shader => SdfShaderAction.Map(("p", Formula!));
+        public override SdfShaderAction RigidShader => SdfShaderAction.Rigid(("p", Formula!));
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.Rotate;
         public override SdfIntervalAction Interval => SdfIntervalAction.Rotate;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -238,29 +214,15 @@ public static partial class SdfFieldOps {
 
     [SdfFieldEntry(3)]
     private sealed class Scale : Entry {
-        public override SdfShaderAction Shader => new(
-            Code: """
-                localPosition /= data0.xyz;
-                distanceScale *= data0.w;
-                break;
-                """,
-            Operands: SdfShaderOperands.Data0
-        );
+        public override SdfFormula? Formula => SdfFieldFormulas.ScalePoint;
+        public override SdfFormula? DistanceFormula => SdfFieldFormulas.ScaleDistance;
+        public override SdfShaderAction Shader => SdfShaderAction.Map(("p", Formula!), ("distanceScale", DistanceFormula!));
         public override SdfShaderAction RigidShader => new(Code: "break;", Operands: SdfShaderOperands.None);
-        public override SdfShaderAction PartShader => new(
-            Code: """
-                localPosition /= data0.xyz;
-                distanceScale *= data0.w;
-                break;
-                """,
-            Operands: SdfShaderOperands.None
-        );
+        public override SdfShaderAction PartShader => SdfShaderAction.Part(("p", Formula!), ("distanceScale", DistanceFormula!));
         public override bool PartDomain => true;
         public override SdfPointAction Point => SdfPointAction.Scale;
         public override SdfIntervalAction Interval => SdfIntervalAction.Scale;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -323,9 +285,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.Unsupported;
         public override SdfIntervalAction Interval => SdfIntervalAction.Unsupported;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -379,9 +339,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.Warp;
         public override SdfIntervalAction Interval => SdfIntervalAction.Warp;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -415,21 +373,14 @@ public static partial class SdfFieldOps {
     /// cross-section is swept over <c>±extents</c> — the classic capsule-from-sphere operator.</summary>
     [SdfFieldEntry(6)]
     private sealed class Elongate : Entry {
-        public override SdfShaderAction Shader => new(
-            Code: """
-                localPosition -= clamp(localPosition, -data0.xyz, data0.xyz);
-                break;
-                """,
-            Operands: SdfShaderOperands.Data0
-        );
+        public override SdfFormula? Formula => SdfFieldFormulas.ElongatePoint;
+        public override SdfShaderAction Shader => SdfShaderAction.Map(("p", Formula!));
         public override SdfShaderAction RigidShader => SdfShaderAction.Unavailable;
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.Fold;
         public override SdfIntervalAction Interval => SdfIntervalAction.Fold;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Elongate;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Elongate;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -538,9 +489,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.ShapeBlend;
         public override SdfIntervalAction Interval => SdfIntervalAction.ShapeBlend;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -572,30 +521,14 @@ public static partial class SdfFieldOps {
 
     [SdfFieldEntry(8)]
     private sealed class Repeat : Entry {
-        public override SdfShaderAction Shader => new(
-            Code: """
-                // data0 arrives pre-clamped and data1 = 1/spacing, both HOST-BAKED by SdfProgramBuilder.Repeat.
-                SDF_VM_LOAD_DATA0;
-                SDF_VM_LOAD_DATA1;
-                localPosition -= (data0.xyz * round(localPosition * data1.xyz));
-                break;
-                """,
-            Operands: SdfShaderOperands.None
-        );
-        public override SdfShaderAction RigidShader => new(
-            Code: """
-                p -= (data0.xyz * round(p * data1.xyz));
-                break;
-                """,
-            Operands: SdfShaderOperands.None
-        );
+        public override SdfFormula? Formula => SdfFieldFormulas.RepeatPoint;
+        public override SdfShaderAction Shader => SdfShaderAction.Map(("p", Formula!));
+        public override SdfShaderAction RigidShader => SdfShaderAction.Rigid(("p", Formula!));
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.Fold;
         public override SdfIntervalAction Interval => SdfIntervalAction.Fold;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Repeat;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Repeat;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -627,33 +560,14 @@ public static partial class SdfFieldOps {
 
     [SdfFieldEntry(9)]
     private sealed class RepeatLimited : Entry {
-        public override SdfShaderAction Shader => new(
-            Code: """
-                // data0.xyz = spacing, pre-clamped away from 0 exactly as SDF_OP_REPEAT's is (HOST-BAKED by
-                // SdfProgramBuilder.RepeatLimited); data1.xyz = the per-axis cell limit. Unlike Repeat there is no
-                // free lane for 1/spacing, so the divide stays — a per-instruction-uniform divisor lowers to one
-                // reciprocal anyway.
-                SDF_VM_LOAD_DATA0;
-                SDF_VM_LOAD_DATA1;
-                localPosition -= (data0.xyz * clamp(round(localPosition / data0.xyz), -data1.xyz, data1.xyz));
-                break;
-                """,
-            Operands: SdfShaderOperands.None
-        );
-        public override SdfShaderAction RigidShader => new(
-            Code: """
-                p -= (data0.xyz * clamp(round(p / data0.xyz), -data1.xyz, data1.xyz));
-                break;
-                """,
-            Operands: SdfShaderOperands.None
-        );
+        public override SdfFormula? Formula => SdfFieldFormulas.RepeatLimitedPoint;
+        public override SdfShaderAction Shader => SdfShaderAction.Map(("p", Formula!));
+        public override SdfShaderAction RigidShader => SdfShaderAction.Rigid(("p", Formula!));
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.Fold;
         public override SdfIntervalAction Interval => SdfIntervalAction.Fold;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.RepeatLimited;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.RepeatLimited;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -687,21 +601,14 @@ public static partial class SdfFieldOps {
     /// solids into hollow skins. A field op, not a point op — order objects so it follows everything it should shell.</summary>
     [SdfFieldEntry(10)]
     private sealed class Onion : Entry {
-        public override SdfShaderAction Shader => new(
-            Code: """
-                result.distance = (abs(result.distance) - data0.x);
-                break;
-                """,
-            Operands: SdfShaderOperands.Data0
-        );
+        public override SdfFormula? Formula => SdfFieldFormulas.OnionField;
+        public override SdfShaderAction Shader => SdfShaderAction.Map(("distance", Formula!));
         public override SdfShaderAction RigidShader => SdfShaderAction.Unavailable;
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.EditField;
         public override SdfIntervalAction Interval => SdfIntervalAction.EditField;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Onion;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Onion;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -735,21 +642,14 @@ public static partial class SdfFieldOps {
     /// and fattens everything before it. A field operation, not a point operation.</summary>
     [SdfFieldEntry(11)]
     private sealed class Dilate : Entry {
-        public override SdfShaderAction Shader => new(
-            Code: """
-                result.distance -= data0.x;
-                break;
-                """,
-            Operands: SdfShaderOperands.Data0
-        );
+        public override SdfFormula? Formula => SdfFieldFormulas.DilateField;
+        public override SdfShaderAction Shader => SdfShaderAction.Map(("distance", Formula!));
         public override SdfShaderAction RigidShader => SdfShaderAction.Unavailable;
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.EditField;
         public override SdfIntervalAction Interval => SdfIntervalAction.EditField;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Dilate;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Dilate;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -821,9 +721,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.RenderWarp;
         public override SdfIntervalAction Interval => SdfIntervalAction.RenderWarp;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.WallpaperFold;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.WallpaperFold;
@@ -901,9 +799,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.RenderWarp;
         public override SdfIntervalAction Interval => SdfIntervalAction.RenderWarp;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.LogSphere;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.LogSphere;
@@ -1023,9 +919,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.RenderWarp;
         public override SdfIntervalAction Interval => SdfIntervalAction.RenderWarp;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -1109,9 +1003,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.RenderWarp;
         public override SdfIntervalAction Interval => SdfIntervalAction.RenderWarp;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.RepeatPolar;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.RepeatPolar;
@@ -1167,9 +1059,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.RenderEditField;
         public override SdfIntervalAction Interval => SdfIntervalAction.RenderEditField;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -1223,9 +1113,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.RenderWarp;
         public override SdfIntervalAction Interval => SdfIntervalAction.RenderWarp;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.DomainWarp;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.DomainWarp;
@@ -1267,29 +1155,14 @@ public static partial class SdfFieldOps {
     /// plane is folded onto itself.</summary>
     [SdfFieldEntry(18)]
     private sealed class SymmetryPlane : Entry {
-        public override SdfShaderAction Shader => new(
-            Code: """
-                float spT = (dot(localPosition, data0.xyz) + data0.w);
-                localPosition -= ((2.0 * min(spT, 0.0)) * data0.xyz);
-                break;
-                """,
-            Operands: SdfShaderOperands.Data0
-        );
-        public override SdfShaderAction RigidShader => new(
-            Code: """
-                float t = (dot(p, data0.xyz) + data0.w);
-                p -= ((2.0 * min(t, 0.0)) * data0.xyz);
-                break;
-                """,
-            Operands: SdfShaderOperands.None
-        );
+        public override SdfFormula? Formula => SdfFieldFormulas.SymmetryPlanePoint;
+        public override SdfShaderAction Shader => SdfShaderAction.Map(("p", Formula!));
+        public override SdfShaderAction RigidShader => SdfShaderAction.Rigid(("p", Formula!));
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.Fold;
         public override SdfIntervalAction Interval => SdfIntervalAction.Fold;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.SymmetryPlane;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.SymmetryPlane;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -1357,9 +1230,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.PushField;
         public override SdfIntervalAction Interval => SdfIntervalAction.PushField;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -1403,7 +1274,7 @@ public static partial class SdfFieldOps {
     [SdfFieldEntry(20)]
     private sealed class PopField : Entry {
         public override SdfShaderAction Shader => new(
-            Code: """
+            Code: $$"""
                 if (fieldDepth == 0u) { return sdfIsaErrorHit(); }
                 fieldDepth--;
                 SDF_VM_LOAD_DATA1;
@@ -1412,10 +1283,9 @@ public static partial class SdfFieldOps {
                 // parityMaterialDelta must NOT touch it (the fusion trap). Restore the parent accumulator as the
                 // blend LHS, then fall into the SAME material-winner + blendShape tail a SHAPE uses. The compose blend
                 // + smooth ride the POP instruction (header.z / data1.x, baked by SdfProgramBuilder.PushField).
-                // data1.y is the scope's baked 1/L candidate scale on every pop; a stairs pop carries its step count
-                // in data1.z (KEEP IN SYNC with AnalyzeLipschitz and the fixed-point mirror).
+                // data1.y is the scope's baked 1/L candidate scale on every pop. The pop's operand is a stairs pop's
+                // step count in data1.z, or a morph pop's weight from its lane.
                 composeBlend = SDF_INSTRUCTION_BLEND(instructionHeader);
-                bool isStairs = (composeBlend == SDF_BLEND_STAIRS_UNION || composeBlend == SDF_BLEND_STAIRS_SUBTRACTION);
                 float candidateScale = data1.y;
                 composeCandidate = result.distance;
                 if (candidateScale > 0.0) {
@@ -1427,59 +1297,17 @@ public static partial class SdfFieldOps {
                     composeSlot = result.frameSlot;
                 }
                 composeSmooth = data1.x;
+                composeOperand = data1.z;
+                if (composeBlend == SDF_BLEND_MORPH) {
+                    SDF_VM_LOAD_DATA0;
+                    composeOperand = {{SdfFieldFormulas.MorphWeight.Dispatch(shader: true)}};
+                }
                 switch (fieldDepth) {
                     case 0u: result = parent0; break;
                     case 1u: result = parent1; break;
                     case 2u: result = parent2; break;
                     default: result = parent3; break;
                 }
-
-                if (composeBlend == SDF_BLEND_MORPH) {
-                    SDF_VM_LOAD_DATA0;
-                    float lane = sdfFieldLane(currentSlot, (uint)data0.x);
-                    float t = saturate((lane - data0.y) / (data0.z - data0.y));
-                    result.distance = lerp(result.distance, composeCandidate, t);
-                    if (trackMaterial && t >= 0.5) {
-                        result.material = composeMaterial;
-                        result.instanceIndex = composeInstance;
-                        result.frameSlot = composeSlot;
-                    }
-                    break;
-                }
-
-                if (isStairs) {
-                    float r = composeSmooth;
-                    float n = data1.z;
-                    if (n >= 1.0 && r > 0.0) {
-                        float s = r / n;
-                        float period = 2.0 * s;
-                        bool isSub = (composeBlend == SDF_BLEND_STAIRS_SUBTRACTION);
-                        float a = result.distance;
-                        float b = composeCandidate;
-                        float u = isSub ? (-b - r) : (b - r);
-                        float arg = u - a + s;
-                        float m = arg - period * floor(arg / period);
-                        float w = m - s;
-                        float dStairs = 0.5 * (u + a + abs(w));
-                        if (isSub) {
-                            result.distance = max(max(a, -b), -dStairs);
-                            if (trackMaterial && -b > a) {
-                                // A cut face keeps the parent's frame slot (sdfComposeCandidate).
-                                result.material = composeMaterial;
-                                result.instanceIndex = composeInstance;
-                            }
-                        } else {
-                            result.distance = min(min(a, b), dStairs);
-                            if (trackMaterial && b < a) {
-                                result.material = composeMaterial;
-                                result.instanceIndex = composeInstance;
-                                result.frameSlot = composeSlot;
-                            }
-                        }
-                        break;
-                    }
-                }
-
                 composePending = true;
                 break;
                 """,
@@ -1490,9 +1318,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.PopField;
         public override SdfIntervalAction Interval => SdfIntervalAction.PopField;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -1538,42 +1364,20 @@ public static partial class SdfFieldOps {
     /// bounded by 1) — the scoped-field margin and cull channels read that. amplitude = 0 is an exact identity.</summary>
     [SdfFieldEntry(21)]
     private sealed class NoiseDisplace : Entry {
-        public override SdfShaderAction Shader => new(
-            Code: """
-                // The relief's mask rows stand directly before it in its segment (the program's door, SdfProgram.
-                // ReliefRows.cs); malformed words that count past the segment's start or the row cap are refused here.
-                uint reliefRows = SDF_INSTRUCTION_MATERIAL(instructionHeader);
-                if ((reliefRows > SDF_MAX_RELIEF_ROWS) || (reliefRows > (index - segmentMeta.z))) { return sdfIsaErrorHit(); }
-                float maskProduct = ((reliefRows == 0u) ? 1.0 : sdfMaskProduct((index - reliefRows), reliefRows, localPosition, dataOffset));
-                // A weight of exactly zero adds no relief, so the noise is not evaluated.
-                if (maskProduct <= 0.0) { break; }
-                // Keep the field continuous, including outside the zero-set neighborhood: the bake's lattice,
-                // material points and gradient taps all consume these values (see SDF_OP_DISPLACE).
-                float3 q = (localPosition * data0.x);
-                float octaveAmplitude = 1.0;
-                float noiseSum = 0.0;
-                uint octaveCount = SDF_INSTRUCTION_BLEND(instructionHeader);
-                for (uint octave = 0u; octave < SDF_MAX_NOISE_OCTAVES; octave++) {
-                    if (octave >= octaveCount) { break; }
-                    uint octaveSeed = (SDF_INSTRUCTION_SHAPE(instructionHeader) + octave);
-                    noiseSum += (octaveAmplitude * sdfValueNoise3(q, uint3(octaveSeed, (octaveSeed * SDF_HASH_STREAM_A), (octaveSeed * SDF_HASH_STREAM_B))));
-                    q *= data0.w;
-                    octaveAmplitude *= data0.z;
-                }
-                // A relief its masks left at weight one adds exactly what an unmasked one adds.
-                result.distance += (((data0.y * data1.x) * noiseSum) * maskProduct);
-                break;
-                """,
-            Operands: SdfShaderOperands.Data0 | SdfShaderOperands.Data1
-        );
+        public override SdfFormula? Formula => SdfFieldFormulas.ReliefField;
+        public override SdfShaderAction Shader => SdfShaderAction.Map(("distance", Formula!)).After("""
+            // The relief's mask rows stand directly before it in its segment (the program's door, SdfProgram.
+            // ReliefRows.cs); malformed words that count past the segment's start or the row cap are refused here.
+            uint reliefRows = SDF_INSTRUCTION_MATERIAL(instructionHeader);
+            if ((reliefRows > SDF_MAX_RELIEF_ROWS) || (reliefRows > (index - segmentMeta.z))) { return sdfIsaErrorHit(); }
+            float weight = ((reliefRows == 0u) ? 1.0 : sdfMaskProduct((index - reliefRows), reliefRows, localPosition, dataOffset));
+            """);
         public override SdfShaderAction RigidShader => SdfShaderAction.Unavailable;
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.WeightedRelief;
         public override SdfIntervalAction Interval => SdfIntervalAction.WeightedRelief;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -1632,9 +1436,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => true;
         public override SdfPointAction Point => SdfPointAction.Warp;
         public override SdfIntervalAction Interval => SdfIntervalAction.Warp;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -1691,9 +1493,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => true;
         public override SdfPointAction Point => SdfPointAction.RenderWarp;
         public override SdfIntervalAction Interval => SdfIntervalAction.RenderWarp;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Shear;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Shear;
@@ -1743,9 +1543,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.RenderWarp;
         public override SdfIntervalAction Interval => SdfIntervalAction.RenderWarp;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.GaussianPush;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.GaussianPush;
@@ -1814,9 +1612,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.LaneErode;
         public override SdfIntervalAction Interval => SdfIntervalAction.LaneErode;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -1851,24 +1647,14 @@ public static partial class SdfFieldOps {
     /// The 27-cell PCG3D neighborhood is exact within the mode's admitted randomness range.</summary>
     [SdfFieldEntry(26)]
     private sealed class CellDisplace : Entry {
-        public override SdfShaderAction Shader => new(
-            Code: """
-                float3 ignoredGradient;
-                float value = sdfCellDistanceGrad(localPosition * data0.x, SDF_INSTRUCTION_SHAPE(instructionHeader),
-                    SDF_INSTRUCTION_BLEND(instructionHeader), data0.z, ignoredGradient);
-                result.distance += data0.y * (value - 0.5);
-                break;
-                """,
-            Operands: SdfShaderOperands.Data0
-        );
+        public override SdfFormula? Formula => SdfFieldFormulas.CellDisplaceField;
+        public override SdfShaderAction Shader => SdfShaderAction.Map(("distance", Formula!));
         public override SdfShaderAction RigidShader => SdfShaderAction.Unavailable;
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.EditField;
         public override SdfIntervalAction Interval => SdfIntervalAction.EditField;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.CellDisplace;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.CellDisplace;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;
@@ -1913,9 +1699,7 @@ public static partial class SdfFieldOps {
         public override bool PartDomain => false;
         public override SdfPointAction Point => SdfPointAction.Identity;
         public override SdfIntervalAction Interval => SdfIntervalAction.Identity;
-        public override SdfPointFoldAction PointFold => SdfPointFoldAction.Unsupported;
         public override SdfIntervalFoldAction IntervalFold => SdfIntervalFoldAction.Unsupported;
-        public override SdfPointFieldEditAction PointFieldEdit => SdfPointFieldEditAction.Unsupported;
         public override SdfIntervalFieldEditAction IntervalFieldEdit => SdfIntervalFieldEditAction.Unsupported;
         public override SdfRenderWarpAction RenderWarp => SdfRenderWarpAction.Unsupported;
         public override SdfRenderWarpBoundsAction RenderWarpBounds => SdfRenderWarpBoundsAction.Unbounded;

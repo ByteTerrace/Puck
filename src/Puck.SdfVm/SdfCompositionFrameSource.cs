@@ -430,9 +430,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         for (var index = 0; (index < m_emitters.Count); index++) {
             if (m_emitters[index].SlotClips is { Count: > 0 } clips) { only = clips; lists++; }
         }
-        foreach (var copy in m_meshInstances) {
-            if (copy.Clip is not null) { copies++; }
-        }
+        copies = m_clippedCopies.Count;
         if ((lists + copies) == 0) { return []; }
         if ((lists == 1) && (copies == 0)) { return only!; }
         m_composedClips.Clear();
@@ -441,7 +439,9 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
             for (var at = 0; (at < clips.Count); at++) { m_composedClips.Add(item: clips[at]); }
         }
-        foreach (var copy in m_meshInstances) {
+        foreach (var position in m_clippedCopies) {
+            var copy = m_meshInstances[position];
+
             if (copy.Clip is { } clip) { m_composedClips.Add(item: (clip with { FirstSlot = copy.FrameSlot, SlotCount = 1 })); }
         }
         return m_composedClips;
@@ -571,38 +571,51 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             }
         }
         if (slots < m_meshAssetSlots.Count) { m_meshAssetSlots.RemoveRange(index: slots, count: (m_meshAssetSlots.Count - slots)); slotsMoved = true; }
+        var resized = (copyCount != m_meshInstances.Count);
+
         if (copyCount < m_meshInstances.Count) {
             m_meshInstances.RemoveRange(index: copyCount, count: (m_meshInstances.Count - copyCount));
             m_meshInstanceRevisions.RemoveRange(index: copyCount, count: (m_meshInstanceRevisions.Count - copyCount));
+            while ((m_clippedCopies.Count > 0) && (m_clippedCopies.Max >= copyCount)) { _ = m_clippedCopies.Remove(item: m_clippedCopies.Max); }
         }
         m_copyChanges.Begin(everything: slotsMoved, rows: copyCount);
-        var root = m_programSlots;
+
+        // The copies stand where the last pack left them unless the table was parked, the roots moved, or an emitter's
+        // roster changed or names no changed copies; then only the copies each emitter's pack rewrote are read.
+        var standing = (!everything && !repack && !slotsMoved && !resized && (m_copyRoot == m_programSlots));
+
+        if (m_copyRevisions.Length != m_emitters.Count) {
+            m_copyRevisions = new long[m_emitters.Count];
+            standing = false;
+        }
+        for (var owner = 0; (owner < m_emitters.Count); owner++) {
+            var emitter = m_emitters[owner];
+            var revision = emitter.MeshInstancesRevision;
+
+            standing &= ((m_copyRevisions[owner] == revision) && ((emitter.MeshInstances.Count == 0) || (emitter.MeshInstanceChanges is not null)));
+            m_copyRevisions[owner] = revision;
+        }
+
+        m_copyRoot = m_programSlots;
+
         var position = 0;
 
         for (var owner = 0; (owner < m_emitters.Count); owner++) {
             var copies = m_emitters[owner].MeshInstances;
 
-            for (var at = 0; (at < copies.Count); at++, position++) {
-                var copy = copies[at];
-                // A copy the producer rewrote in place (a moving body's pose) is the same row at another revision.
-                var held = ((position < m_meshInstances.Count) && ReferenceEquals(objA: m_meshInstances[position], objB: copy) &&
-                    (m_meshInstanceRevisions[position] == copy.Revision) && (copy.FrameSlot == root));
-
-                copy.FrameSlot = root;
-                var previous = m_transforms[root];
-
-                m_transforms[root] = copy.Transform;
-                if (previous != copy.Transform) { m_moved.Owe(count: 1, start: root); }
-                if (position == m_meshInstances.Count) {
-                    m_meshInstances.Add(item: copy);
-                    m_meshInstanceRevisions.Add(item: copy.Revision);
-                } else {
-                    m_meshInstances[position] = copy;
-                    m_meshInstanceRevisions[position] = copy.Revision;
+            if (standing) {
+                if (m_emitters[owner].MeshInstanceChanges is { } changes) {
+                    for (var at = 0; (at < changes.Count); at++) {
+                        ReadCopy(copy: copies[changes[at]], position: (position + changes[at]));
+                    }
                 }
-                if (!held) { m_copyChanges.Owe(count: 1, start: position); }
-                root++;
+            } else {
+                for (var at = 0; (at < copies.Count); at++) {
+                    ReadCopy(copy: copies[at], position: (position + at));
+                }
             }
+
+            position += copies.Count;
         }
         if (repack) {
             m_moved.CompleteRepack(
@@ -613,6 +626,35 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
         m_transformsPacked = true;
     }
+    // Reads one rigid copy into the composition at its position: seats its root row, owes the row and the copy where
+    // either differs from what the composition held, and keeps the set of copies drawn clipped at a door.
+    private void ReadCopy(SdfMeshInstance copy, int position) {
+        var root = (m_programSlots + position);
+        // A copy the producer rewrote in place (a moving body's pose) is the same row at another revision.
+        var held = ((position < m_meshInstances.Count) && ReferenceEquals(objA: m_meshInstances[position], objB: copy) &&
+            (m_meshInstanceRevisions[position] == copy.Revision) && (copy.FrameSlot == root));
+
+        copy.FrameSlot = root;
+        var previous = m_transforms[root];
+
+        m_transforms[root] = copy.Transform;
+        if (previous != copy.Transform) { m_moved.Owe(count: 1, start: root); }
+        if (position == m_meshInstances.Count) {
+            m_meshInstances.Add(item: copy);
+            m_meshInstanceRevisions.Add(item: copy.Revision);
+        } else {
+            m_meshInstances[position] = copy;
+            m_meshInstanceRevisions[position] = copy.Revision;
+        }
+        if (!held) { m_copyChanges.Owe(count: 1, start: position); }
+        if (copy.Clip is null) { _ = m_clippedCopies.Remove(item: position); } else { _ = m_clippedCopies.Add(item: position); }
+    }
+
+    // The positions in m_meshInstances of the copies that straddle a door, in order: the only copies ComposeSlotClips reads.
+    private readonly SortedSet<int> m_clippedCopies = [];
+    // The root slot the copies were last seated from, and each emitter's MeshInstancesRevision at the last pack.
+    private int m_copyRoot = -1;
+    private long[] m_copyRevisions = [];
 
     // Apart from CaptureFrame, whose closure scope would otherwise cover every frame: a steady frame starts no build.
     private void StartBuild(SdfProgramBuilder builder) {

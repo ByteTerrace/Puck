@@ -36,6 +36,56 @@ public sealed record WorldProjectedKit(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null,
     WorldBodyContactMode BodyContact = WorldBodyContactMode.Overlap
 );
+/// <summary>
+/// One machine as a visitor's client sees it: what the device is and what it is cabled to, which is what a screen
+/// showing it and a client running it from its inputs both read. The projection document's own row type, not a
+/// <see cref="WorldMachine"/> with holes: it carries no member for the machine's <c>memory</c> bindings, which tie its
+/// hardware to state rows a projection does not carry, nor for its <c>contentFolders</c> and
+/// <c>preferFolderDefault</c>, which name places on the authority's disk and are read only by the authority that
+/// mounts from them. The content a machine runs is named by pin where the machine's state is delivered, never by a
+/// folder.
+/// </summary>
+/// <param name="Name">The instance identity a screen's machine source names.</param>
+/// <param name="Engine">The registered provider identifier.</param>
+/// <param name="Configuration">The provider's versioned configuration. A path inside it is a label on a recipient:
+/// nothing a delivery names is opened.</param>
+/// <param name="Running">Whether the authority advances the instance.</param>
+/// <param name="Cable">The standing cable endpoint, when the machine authors one: linked machines step as one unit, so a
+/// recipient reads which machines a unit holds.</param>
+public sealed record WorldProjectedMachine(
+    string Name,
+    string Engine,
+    JsonElement Configuration,
+    bool Running = true,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineCable? Cable = null
+) {
+    /// <summary>Projects a machine declaration: its presentation half.</summary>
+    /// <param name="machine">The authority's declaration.</param>
+    /// <returns>The projected row.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="machine"/> is <see langword="null"/>.</exception>
+    public static WorldProjectedMachine Of(WorldMachine machine) {
+        ArgumentNullException.ThrowIfNull(argument: machine);
+
+        return new WorldProjectedMachine(
+            Name: machine.Name,
+            Engine: machine.Engine,
+            Configuration: machine.Configuration,
+            Running: machine.Running,
+            Cable: machine.Cable
+        );
+    }
+
+    /// <summary>Rebuilds the declaration a recipient holds: the presentation half, with no hardware binding and no
+    /// content folder.</summary>
+    /// <returns>The declaration.</returns>
+    public WorldMachine ToMachine() => new(
+        Name: Name,
+        Engine: Engine,
+        Configuration: Configuration,
+        Running: Running,
+        Cable: Cable
+    );
+}
 /// <summary>Where a projection came from and what it is. Every projection carries this: a document that cannot say
 /// which authority composed it, at what revision, and under which tier is a document a reader has to guess
 /// about.</summary>
@@ -56,8 +106,9 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <para>Absent by construction: <c>rules</c>, <c>grants</c>, <c>state</c>, <c>admission</c>,
 /// <c>generation</c>, <c>generators</c>, <c>groups</c>, <c>properties</c>, <c>addons</c>, <c>storage</c>,
 /// <c>host</c>, <c>authoring</c>, <c>identity</c>, <c>inputHold</c>, <c>targetRegisters</c>,
-/// <c>bodyMotionPrograms</c>, <c>portals</c>, and every kit's <c>producers</c>/<c>actions</c> (see
-/// <see cref="WorldProjectedKit"/>).</para>
+/// <c>bodyMotionPrograms</c>, <c>portals</c>, every kit's <c>producers</c>/<c>actions</c> (see
+/// <see cref="WorldProjectedKit"/>), and every machine's <c>memory</c>, <c>contentFolders</c> and
+/// <c>preferFolderDefault</c> (see <see cref="WorldProjectedMachine"/>).</para>
 /// <para><see cref="Adjacencies"/>, <see cref="Destinations"/>, <see cref="References"/>, and
 /// <see cref="Interactions"/> cross because <see cref="WorldAdjacencyPolicy.TryDeriveOverlap(WorldDefinition, WorldDefinition, out Puck.Maths.FixedQ4816, out string)"/> reads them from both
 /// sides of a seam and must derive the same depth on each; withholding one side's inputs desymmetrizes it silently.</para>
@@ -123,6 +174,11 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Shades">The shade programs the render defaults and the prototype bodies name by key
 /// (<see cref="WorldShadeTable"/>): a body travels naming its programs, never holding them, so each program crosses
 /// once however many bodies use it.</param>
+/// <param name="Text">The world's font catalog: each font by name, content pin and generated subset, so a recipient
+/// draws the text its screens and creations carry. A font's source path is a label on a recipient; its bytes are read
+/// by the pin (<see cref="WorldProjectionContent.Resolver"/>).</param>
+/// <param name="Machines">The world's machines, projected (see <see cref="WorldProjectedMachine"/>), so a recipient
+/// knows what each machine screen shows.</param>
 public sealed record WorldProjectionDocument(
     WorldProjectionProvenance Provenance,
     WorldMotionDefaults Motion,
@@ -164,7 +220,9 @@ public sealed record WorldProjectionDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHapticRow>? Haptics = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldKeyLightSection? KeyLights = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHighlightRow>? Highlights = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? Shades = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? Shades = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Text.TextFontCatalogDefinition? Text = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProjectedMachine>? Machines = null
 ) {
     /// <summary>The document schema version. A reader refuses any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.projection.v1";
@@ -362,7 +420,11 @@ public static class WorldProjection {
             Haptics: definition.HapticsRaw,
             KeyLights: definition.KeyLightsRaw,
             Highlights: definition.HighlightsRaw,
-            Shades: definition.ShadesRaw
+            Shades: definition.ShadesRaw,
+            Text: definition.Text,
+            Machines: ((definition.MachinesRaw is { Count: > 0 } machines)
+            ? [.. machines.Select(selector: WorldProjectedMachine.Of)]
+            : null)
         );
 
         WorldStateDisclosure.ValidateBindings(
@@ -742,8 +804,10 @@ public static class WorldProjection {
             (projection.Haptics?.Any(predicate: static row => (row is null)) == true) ||
             (projection.KeyLights?.Rows?.Any(predicate: static row => (row is null)) == true) ||
             (projection.Highlights?.Any(predicate: static row => (row is null)) == true) ||
+            (projection.Machines?.Any(predicate: static row => (row is null)) == true) ||
+            ((projection.Text is { } catalog) && ((catalog.Fonts is null) || catalog.Fonts.Any(predicate: static row => (row is null)))) ||
             (projection.Observations?.Any(predicate: static row => ((row is null) || (row.Cells is null) || row.Cells.Any(predicate: static cell => (cell is null)))) == true)) {
-            reason = "projection kits, observations and observed cells must be non-null rows.";
+            reason = "projection kits, machines, fonts, observations and observed cells must be non-null rows.";
 
             return false;
         }
@@ -850,7 +914,11 @@ public static class WorldProjection {
             TimelineRaw: projection.Timeline,
             HapticsRaw: projection.Haptics,
             KeyLightsRaw: projection.KeyLights,
-            HighlightsRaw: projection.Highlights
+            HighlightsRaw: projection.Highlights,
+            Text: projection.Text,
+            MachinesRaw: ((projection.Machines is { Count: > 0 } projectedMachines)
+            ? [.. projectedMachines.Select(selector: static machine => machine.ToMachine())]
+            : null)
         ) {
             DocumentId = projection.Provenance.DocumentId,
             ShadesRaw = projection.Shades,
@@ -875,6 +943,7 @@ public static class WorldProjection {
         }
 
         definition = resolved;
+        WorldContentIndex.Fetch(definition: resolved, fetch: fetch, held: content);
 
         return true;
     }
@@ -1041,9 +1110,49 @@ public static class WorldProjectionContent {
     /// again through the authorized door.</summary>
     public static readonly CacheBound Retention = new(MaxBytes: (256L << 20), MaxEntries: 4096);
 
+    /// <summary>The most bytes one prototype body read by pin may hold; a larger one reads as missing.</summary>
+    public const int MaxPrototypeBytes = (32 << 20);
+
+    /// <summary>The bound every authority's content together is held to: how many authorities' stores are kept, least
+    /// recently used out and removed whole, and the bytes they hold between them.</summary>
+    public static readonly CacheBound AuthorityRetention = new(MaxBytes: (1L << 30), MaxEntries: 16);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ContentAddressedStore> AuthorityStores = new(comparer: StringComparer.Ordinal);
+    private static readonly System.Collections.Concurrent.ConcurrentBag<FileStream?> AuthorityHolds = [];
+
     /// <summary>Gets the process's one resolver of content by pin: the files its loaded worlds registered, then
     /// <see cref="Shared"/>. A document another process delivered has no directory, so its content is read here.</summary>
     public static ContentResolver Resolver { get; } = new(store: static () => Shared);
+
+    /// <summary>Gets the store one authority's fetched content is kept in: a directory of its own beside
+    /// <see cref="Shared"/>'s objects, named by a digest of the authority's identity and held to
+    /// <see cref="Retention"/>. What an authority makes this process fetch evicts only that authority's own content,
+    /// so no authority can push another's, or this process's own, out of the cache. The stores together are held to
+    /// <see cref="AuthorityRetention"/>.</summary>
+    /// <param name="authority">The authority's identity: the name this process authenticated it under.</param>
+    /// <returns>The authority's store, the same instance for one identity.</returns>
+    /// <exception cref="ArgumentException"><paramref name="authority"/> is <see langword="null"/>, empty or white
+    /// space.</exception>
+    public static ContentAddressedStore AuthorityStore(string authority) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: authority);
+
+        return AuthorityStores.GetOrAdd(
+            key: authority,
+            valueFactory: static name => {
+                var directory = Path.Combine(path1: Shared.Root, path2: "authorities");
+                var root = Path.Combine(path1: directory, path2: ContentDigest.HexOfText(text: name)[..32]);
+                var created = new ContentAddressedStore(retention: Retention, root: root);
+
+                // The store is pinned for the life of this process, so no process's enforcement removes it; the least
+                // recently used of the others go whole once the stores together pass their bound. The hold is never
+                // released: the operating system drops it with the process.
+                AuthorityHolds.Add(item: CacheRetention.HoldSet(setDirectory: root));
+                _ = CacheRetention.EnforceSets(bound: AuthorityRetention, directory: directory, isEntry: static name => !name.EndsWith(value: ".lease", comparisonType: StringComparison.Ordinal));
+
+                return created;
+            }
+        );
+    }
 
     /// <summary>Gets the recipient cache shared across worlds and observation lifetimes.</summary>
     public static ContentAddressedStore Shared {
@@ -1094,24 +1203,37 @@ public static class WorldProjectionContent {
         if (references is null) { return false; }
         foreach (var reference in references) {
             if ((reference is null) || !ContentPin.TryParse(text: reference.Content, pin: out var pin)) { return false; }
-            if (!store.TryGet(content: out var bytes, pin: pin)) {
-                bytes = fetch?.Invoke(pin);
-                if ((bytes is null) || (ContentPin.Compute(content: bytes) != pin)) { return false; }
-                _ = store.Put(content: bytes);
-            } else if (ContentPin.Compute(content: bytes) != pin) {
-                return false;
-            }
-            try {
-                var body = JsonSerializer.Deserialize(utf8Json: bytes, jsonTypeInfo: WorldJsonContext.Untrusted.WorldPrototypeContent);
 
-                if (body?.Document is null) { return false; }
-                result.Add(item: new WorldPrototype(Id: reference.Id, Document: body.Document, Mesh: body.Mesh));
-            } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
+            // A fetched body is parsed before it is stored, so bytes that are no prototype never enter the store; a
+            // body the store already held is parsed after the read.
+            WorldPrototypeContent? body = null;
+
+            if (!Resolver.TryRead(
+                admit: arrived => TryParse(bytes: arrived.Span, body: out body),
+                content: out var bytes,
+                fetch: fetch,
+                held: store,
+                maximumBytes: MaxPrototypeBytes,
+                pin: pin
+            ) || ((body is null) && !TryParse(bytes: bytes.Span, body: out body))) {
                 return false;
             }
+            result.Add(item: new WorldPrototype(Id: reference.Id, Document: body!.Document, Mesh: body.Mesh));
         }
         prototypes = result;
         reason = string.Empty;
         return true;
+    }
+
+    private static bool TryParse(ReadOnlySpan<byte> bytes, out WorldPrototypeContent? body) {
+        try {
+            body = JsonSerializer.Deserialize(utf8Json: bytes, jsonTypeInfo: WorldJsonContext.Untrusted.WorldPrototypeContent);
+        } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
+            body = null;
+        }
+
+        if (body?.Document is null) { body = null; }
+
+        return (body is not null);
     }
 }

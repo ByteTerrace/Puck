@@ -266,6 +266,11 @@ public sealed partial class SdfFieldEvaluator {
         // the record: its shapes need no certificate, since the walk has enclosed their candidates over the box.
         var chain = -1;
         var inert = false;
+        // The live stretch and the record's length as the chain opened. While the chain is inert each of its joins is
+        // left out of the record as it is read (an inert join changes no point walk whatever follows it), and a chain
+        // inert to its end takes its record back to these and leaves out whole.
+        var chainLive = first;
+        var chainMark = 0;
 
         for (var index = first; NextLive(at: ref tapeAt, end: ref end, index: ref index, tape: tape); index++) {
             // A tape can open past an instance's first instruction, which then meets no instance test.
@@ -280,7 +285,8 @@ public sealed partial class SdfFieldEvaluator {
                 var bound = cullIndex++;
 
                 if (inert) {
-                    record!.Add(item: (live, chain));
+                    record!.RemoveRange(count: (record.Count - chainMark), index: chainMark);
+                    record.Add(item: (chainLive, chain));
                     live = index;
                     inert = false;
                 }
@@ -347,7 +353,8 @@ public sealed partial class SdfFieldEvaluator {
                         laneErodeAmount = FixedInterval.FromPoint(value: FixedQ4816.Zero);
 
                         if (inert) {
-                            record!.Add(item: (live, chain));
+                            record!.RemoveRange(count: (record.Count - chainMark), index: chainMark);
+                            record.Add(item: (chainLive, chain));
                             live = index;
                         }
 
@@ -360,6 +367,9 @@ public sealed partial class SdfFieldEvaluator {
 
                         chain = index;
                         inert = (regional && (skipped < 0));
+
+                        chainLive = live;
+                        chainMark = (record?.Count ?? 0);
 
                         if (skipped >= 0) {
                             record?.Add(item: (live, index));
@@ -444,13 +454,16 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfIntervalAction.PushField: {
+                        // A scope's accumulator is its own: no chain spans a push or a pop.
                         scopes[scopeDepth++] = result;
                         result = FixedInterval.FromPoint(value: FarDistance);
+                        chain = -1;
                         inert = false;
                         break;
                     }
                 case SdfIntervalAction.PopField: {
                         result = PopFieldBounds(candidate: result, instruction: instruction, saved: scopes[--scopeDepth]);
+                        chain = -1;
                         inert = false;
                         break;
                     }
@@ -471,20 +484,36 @@ public sealed partial class SdfFieldEvaluator {
                         // so the interval that encloses them stands as it is, tighter than the blend's rule would
                         // leave it.
                         if (regional && RegionJoinClears(farther: candidate, instruction: in instruction, nearer: result, strictly: false)) {
+                            if (inert) {
+                                record!.Add(item: (live, index));
+                                live = (index + 1);
+                            }
+
                             break;
                         }
 
+                        // The chain's first join that is not inert, where every join before it in the chain is out of
+                        // the record: a walk that entered the stream at the chain's ResetPoint arrives here holding
+                        // the far seed. Where the candidate stands below both the accumulator and the far seed by the
+                        // blend's margin, that walk and the whole stream's leave with the candidate and its material,
+                        // so nothing before the chain reaches any later instruction. A chain that has read anything
+                        // else (a join of another blend, a field edit, a scope) arrives holding what a walk from its
+                        // ResetPoint does not, and takes nothing over; the primer's own walk holds its instance's
+                        // accumulator, not the root's, and a scope holds its own.
+                        var opens = inert;
+
                         inert = false;
 
-                        // A join that takes the root accumulator over, the accumulator past its candidate, leaves
-                        // nothing the stream read before its chain to reach any later instruction. The primer's own
-                        // walk holds its instance's accumulator, not the root's, and a scope holds its own.
-                        if (regional && !nested && (scopeDepth == 0) && (chain >= 0) && RegionJoinClears(farther: result, instruction: in instruction, nearer: candidate, strictly: true)) {
+                        if (
+                            opens && !nested && (scopeDepth == 0) &&
+                            RegionJoinClears(farther: result, instruction: in instruction, nearer: candidate, strictly: true) &&
+                            RegionJoinClears(farther: FixedInterval.FromPoint(value: FarDistance), instruction: in instruction, nearer: candidate, strictly: true)
+                        ) {
                             var kept = 0;
 
                             for (var entry = 0; (entry < record!.Count); entry++) {
                                 if (record[entry].End > chain) {
-                                    record[kept++] = record[entry];
+                                    record[kept++] = (Math.Max(val1: record[entry].First, val2: chain), record[entry].End);
                                 }
                             }
 
@@ -508,7 +537,8 @@ public sealed partial class SdfFieldEvaluator {
         rotationsExpanded += expanded;
 
         if (inert) {
-            record!.Add(item: (live, chain));
+            record!.RemoveRange(count: (record.Count - chainMark), index: chainMark);
+            record.Add(item: (chainLive, chain));
             live = int.MaxValue;
         }
 

@@ -167,10 +167,7 @@ public sealed partial class ShaderPipelineRenderNode {
             accesses: runtime.Accesses,
             ports: runtime.Outputs
         );
-        runtime.PackageAliasRefusal = AliasRefusalOf(
-            plan: m_pipeline!.Plan,
-            planned: planned
-        );
+        runtime.PackageAliasRefusal = m_pipeline!.Plan.Derived.AliasRefusal(planned: planned);
         runtime.PackageArguments = ((planned.Package.Dispatch is { Kind: ShaderPipelineDispatchKind.Indirect, Arguments: { } arguments })
             ? arguments
             : null);

@@ -38,26 +38,11 @@ internal enum SdfIntervalAction : byte {
     Unsupported,
 }
 
-internal enum SdfPointFoldAction {
-    Repeat,
-    RepeatLimited,
-    SymmetryPlane,
-    Elongate,
-    Unsupported,
-}
-
 internal enum SdfIntervalFoldAction {
     Repeat,
     RepeatLimited,
     SymmetryPlane,
     Elongate,
-    Unsupported,
-}
-
-internal enum SdfPointFieldEditAction {
-    Onion,
-    CellDisplace,
-    Dilate,
     Unsupported,
 }
 
@@ -395,12 +380,6 @@ internal enum SdfUnboundedFoldAction {
     RepeatLimit,
     WallpaperLimit,
     Bounded,
-}
-
-internal enum SdfMaterialWinnerAction {
-    Farther,
-    Cut,
-    Nearer,
 }
 
 internal enum SdfIntervalBlendAction {

@@ -78,6 +78,12 @@ public sealed class WorldTransformOwners {
     /// <param name="owner">The owner's index in the band.</param>
     /// <returns><see langword="true"/> when the repack reseats the owner's slots.</returns>
     public bool Reseats(int owner) => m_reseated[owner];
+    /// <summary>Returns whether an owner has not come to rest: its last repack changed its slots, so the next advancing
+    /// frame wakes it (<see cref="Wake"/>) whatever its inputs do. A band that visits only its awake owners keeps a
+    /// restless one among them.</summary>
+    /// <param name="owner">The owner's index in the band.</param>
+    /// <returns><see langword="true"/> while the owner is restless.</returns>
+    public bool Restless(int owner) => m_restless[owner];
     /// <summary>Records an owner's repack: an advancing frame settles unchanged slots; a zero-time frame preserves
     /// pending follower work and adds any new movement.</summary>
     /// <param name="owner">The owner's index in the band.</param>

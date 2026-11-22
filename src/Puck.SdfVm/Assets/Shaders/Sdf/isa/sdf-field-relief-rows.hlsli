@@ -2,7 +2,7 @@
 case SDF_RELIEF_ROW_KIND_BAND:
 {
     if (open) {
-        weight *= sdfReliefBandWeight(band, distance);
+        weight *= sdfReliefBandWeight(distance, band.x, (band.x + band.y), band.z, band.w);
         if (weight <= 0.0) { return 0.0; }
     }
     band = rowData0;

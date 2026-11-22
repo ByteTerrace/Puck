@@ -151,7 +151,49 @@ public sealed class FontAtlasSourceResolver(
 
         return AssetContentHash.Compute(content: content);
     }
-    private FontAtlas LoadFromFont(ReadOnlyMemory<byte> fontBytes, FontAtlasGenerationOptions generationOptions) {
+    // What is left of a delivered catalog's ceilings as its fonts resolve.
+    private sealed class DeliveredBudget(TextFontCatalogLimits limits) {
+        public TextFontCatalogLimits Limits { get; } = limits;
+        public int FontBytes { get; set; } = limits.MaxFontBytes;
+        public long Pixels { get; set; } = limits.MaxAtlasPixels;
+    }
+
+    // Reads a delivered font by its pin and resolves its atlas inside what is left of the catalog's ceilings. An
+    // atlas the cache already held was made under no ceiling, so its pixels are charged like any other's.
+    private FontAtlas LoadDelivered(string expectedHash, FontAtlasGenerationOptions generationOptions, DeliveredBudget budget) {
+        var requested = budget.Limits.Requested(options: generationOptions);
+
+        if (requested > budget.Limits.MaxGlyphs) {
+            throw new InvalidDataException(message: $"A font asks for {requested} glyphs; a delivered catalog asks for at most {budget.Limits.MaxGlyphs}.");
+        }
+
+        if (!TryReadPinned(expectedHash: expectedHash, font: out var held, maximumBytes: budget.FontBytes)) {
+            throw new InvalidDataException(message: UnheldMessage(expectedHash: expectedHash));
+        }
+
+        budget.FontBytes -= held.Length;
+
+        var atlas = LoadFromFont(
+            fontBytes: held,
+            generationOptions: generationOptions,
+            limits: new FontAtlasGenerationLimits {
+                MaxAtlasPixels = Math.Max(val1: 1L, val2: budget.Pixels),
+                MaxFontBytes = Math.Max(val1: 1, val2: held.Length),
+                MaxGlyphs = ((int)Math.Clamp(value: requested, min: 1L, max: 65_535L)),
+                MaxWork = budget.Limits.MaxWorkPerFont,
+            }
+        );
+
+        if (atlas.ImageData is { } image) {
+            budget.Pixels -= (((long)image.Width) * image.Height);
+        }
+        if (budget.Pixels < 0) {
+            throw new InvalidDataException(message: $"The font catalog's atlases hold more than {budget.Limits.MaxAtlasPixels} pixels, the most a delivered catalog may.");
+        }
+
+        return atlas;
+    }
+    private FontAtlas LoadFromFont(ReadOnlyMemory<byte> fontBytes, FontAtlasGenerationOptions generationOptions, FontAtlasGenerationLimits? limits = null) {
         var fontHash = AssetContentHash.Compute(content: fontBytes.Span);
         var cacheHash = CombineHashes(
             first: fontHash,
@@ -170,6 +212,7 @@ public sealed class FontAtlasSourceResolver(
                     FontBytes = fontBytes,
                     FontIdentifier = fontIdentifier,
                     ImageIdentifier = $"{fontIdentifier}#generated-atlas.png",
+                    Limits = (limits ?? new FontAtlasGenerationLimits()),
                     Options = generationOptions,
                 });
             }
@@ -221,15 +264,26 @@ public sealed class FontAtlasSourceResolver(
         );
     }
     /// <summary>Resolves and packs an entire hash-pinned font catalog: beside one document directory, or, for a
-    /// document that has none because another process delivered it, by each font's pin alone.</summary>
+    /// document that has none because another process delivered it, by each font's pin alone and inside the ceilings
+    /// a delivered catalog is held to (<see cref="TextFontCatalogLimits.Delivered"/>).</summary>
     /// <param name="definition">The catalog.</param>
     /// <param name="basePath">The containing document directory, or <see langword="null"/> for a delivered
     /// document.</param>
     /// <returns>The packed catalog.</returns>
+    /// <exception cref="InvalidDataException">A font name is duplicated, a font fails its pin or is not held, or a
+    /// delivered catalog is past a ceiling.</exception>
     public PackedFontAtlasCatalog ResolveCatalog(TextFontCatalogDefinition definition, string? basePath) {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: definition.DefaultFont);
         ArgumentNullException.ThrowIfNull(definition.Fonts);
+
+        DeliveredBudget? budget = null;
+
+        if (basePath is null) {
+            // Everything the rows alone decide is refused here, before a font is read or a glyph rasterized.
+            TextFontCatalogLimits.Delivered.Admit(definition: definition);
+            budget = new DeliveredBudget(limits: TextFontCatalogLimits.Delivered);
+        }
 
         var fonts = new Dictionary<string, FontAtlas>(
             capacity: definition.Fonts.Count,
@@ -246,12 +300,18 @@ public sealed class FontAtlasSourceResolver(
 
             fonts.Add(
                 key: row.Name,
-                value: ResolvePinned(
-                    fontPath: row.Source,
-                    expectedHash: row.Hash,
-                    generationOptions: row.ToGenerationOptions(),
-                    basePath: basePath
-                )
+                value: ((budget is null)
+                    ? ResolvePinned(
+                        fontPath: row.Source,
+                        expectedHash: row.Hash,
+                        generationOptions: row.ToGenerationOptions(),
+                        basePath: basePath
+                    )
+                    : LoadDelivered(
+                        budget: budget,
+                        expectedHash: row.Hash,
+                        generationOptions: row.ToGenerationOptions()
+                    ))
             );
         }
 
@@ -267,26 +327,19 @@ public sealed class FontAtlasSourceResolver(
     /// <param name="generationOptions">The generation options.</param>
     /// <param name="basePath">The containing document directory, or <see langword="null"/> for a document another
     /// process delivered: its path is then a label that is never opened, and the font is read by its pin from what this
-    /// process already holds.</param>
+    /// process already holds, inside the ceilings a delivered catalog is held to.</param>
     /// <returns>The font's atlas.</returns>
     /// <exception cref="InvalidDataException">The file does not hash to its pin, or the document has no directory and
-    /// this process holds no content under the pin.</exception>
+    /// this process holds no content under the pin or the font is past a delivered catalog's ceiling.</exception>
     public FontAtlas ResolvePinned(string fontPath, string expectedHash, FontAtlasGenerationOptions generationOptions, string? basePath) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: fontPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: expectedHash);
         ArgumentNullException.ThrowIfNull(generationOptions);
 
         if (basePath is null) {
-            if (
-                (pinned is null) ||
-                !ContentPin.TryParse(pin: out var pin, text: expectedHash) ||
-                !pinned.TryRead(content: out var held, maximumBytes: MaxPinnedFontBytes, pin: pin)
-            ) {
-                throw new InvalidDataException(message: $"Font '{expectedHash}' is not held by this process: no loaded package registered it and the content store does not hold it.");
-            }
-
-            return LoadFromFont(
-                fontBytes: held,
+            return LoadDelivered(
+                budget: new DeliveredBudget(limits: TextFontCatalogLimits.Delivered),
+                expectedHash: expectedHash,
                 generationOptions: generationOptions
             );
         }
@@ -315,6 +368,27 @@ public sealed class FontAtlasSourceResolver(
             generationOptions: generationOptions
         );
     }
+    /// <summary>Reads a font by its pin from what this process holds, the one read a document with no directory
+    /// takes: nothing is rasterized and no path is opened.</summary>
+    /// <param name="expectedHash">The canonical <c>sha256/{64 lowercase hex}</c> content pin.</param>
+    /// <param name="font">The font's bytes, which hash to the pin, when this returns <see langword="true"/>.</param>
+    /// <param name="maximumBytes">The most bytes the caller admits, never more than
+    /// <see cref="MaxPinnedFontBytes"/>; a larger font reads as not held.</param>
+    /// <returns><see langword="true"/> when this process holds the font.</returns>
+    public bool TryReadPinned(string expectedHash, out ReadOnlyMemory<byte> font, int maximumBytes = MaxPinnedFontBytes) {
+        font = default;
+
+        return (
+            (pinned is not null) &&
+            ContentPin.TryParse(pin: out var pin, text: expectedHash) &&
+            pinned.TryRead(content: out font, maximumBytes: Math.Min(val1: MaxPinnedFontBytes, val2: maximumBytes), pin: pin)
+        );
+    }
+    /// <summary>Returns the refusal a font that <see cref="TryReadPinned"/> could not read is reported with.</summary>
+    /// <param name="expectedHash">The font's content pin.</param>
+    /// <returns>The message.</returns>
+    public static string UnheldMessage(string expectedHash) =>
+        $"Font '{expectedHash}' is not held by this process: no loaded world names a file that holds it and the content store does not hold it.";
     /// <summary>Resolves a pre-baked font atlas metadata file through <see cref="FontAtlasLoader"/> instead of generating one.</summary>
     /// <remarks>
     /// The atlas image is expected alongside <paramref name="atlasPath"/>, sharing its base name with a

@@ -3,6 +3,10 @@ precise float sdfBlendUnion(float current, float candidate) {
     return min(current, candidate);
 }
 
+bool sdfNearerWins(float current, float candidate) {
+    return (candidate < current);
+}
+
 precise float sdfBlendSmoothMinimum(float a, float b, float k) {
     precise float h = clamp((0.5 + ((0.5 * (b - a)) / k)), 0.0, 1.0);
     if ((h <= 0.0)) { return b; }
@@ -19,8 +23,16 @@ precise float sdfBlendSubtraction(float current, float candidate) {
     return max(current, (-candidate));
 }
 
+bool sdfCutWins(float current, float candidate) {
+    return ((-candidate) > current);
+}
+
 precise float sdfBlendIntersection(float current, float candidate) {
     return max(current, candidate);
+}
+
+bool sdfFartherWins(float current, float candidate) {
+    return (candidate > current);
 }
 
 precise float sdfBlendXor(float current, float candidate) {
@@ -62,6 +74,18 @@ precise float sdfBlendPipeUnion(float current, float candidate, float smoothRadi
     return min(min(current, candidate), (length(float2(current, candidate)) - chamfer));
 }
 
+precise float sdfBlendMorph(float current, float candidate, float weight) {
+    return (((1.0 - weight) * current) + (weight * candidate));
+}
+
+bool sdfWeightWins(float weight) {
+    return (weight >= 0.5);
+}
+
+precise float sdfMorphWeight(float lane, float from, float to) {
+    return clamp(((lane - from) / (to - from)), 0.0, 1.0);
+}
+
 precise float sdfBlendGrooveSubtraction(float current, float candidate, float smoothRadius) {
     precise float chamfer = max(smoothRadius, 0.0);
     return max(max(current, (-candidate)), (chamfer - length(float2(current, candidate))));
@@ -70,4 +94,28 @@ precise float sdfBlendGrooveSubtraction(float current, float candidate, float sm
 precise float sdfBlendPipeSubtraction(float current, float candidate, float smoothRadius) {
     precise float chamfer = max(smoothRadius, 0.0);
     return min(max(current, (-candidate)), (length(float2(current, candidate)) - chamfer));
+}
+
+precise float sdfBlendStairsUnion(float current, float candidate, float smoothRadius, float steps) {
+    if ((steps < 1.0)) { return min(current, candidate); }
+    if ((smoothRadius <= 0.0)) { return min(current, candidate); }
+    precise float s = (smoothRadius / steps);
+    precise float period = (s * 2.0);
+    precise float u = (candidate - smoothRadius);
+    precise float arg = ((u - current) + s);
+    precise float m = (arg - (period * floor((arg / period))));
+    precise float stairs = (0.5 * ((u + current) + abs((m - s))));
+    return min(min(current, candidate), stairs);
+}
+
+precise float sdfBlendStairsSubtraction(float current, float candidate, float smoothRadius, float steps) {
+    if ((steps < 1.0)) { return max(current, (-candidate)); }
+    if ((smoothRadius <= 0.0)) { return max(current, (-candidate)); }
+    precise float s = (smoothRadius / steps);
+    precise float period = (s * 2.0);
+    precise float u = ((-candidate) - smoothRadius);
+    precise float arg = ((u - current) + s);
+    precise float m = (arg - (period * floor((arg / period))));
+    precise float stairs = (0.5 * ((u + current) + abs((m - s))));
+    return max(max(current, (-candidate)), (-stairs));
 }

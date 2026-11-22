@@ -49,12 +49,6 @@ public static class WorldFieldSurface {
     public static Vector3 NormalAt(SdfFieldEvaluator field, FixedPosition point) {
         ArgumentNullException.ThrowIfNull(argument: field);
 
-        if (!field.TryFieldGradient(gradient: out var gradient, position: point)) {
-            return Vector3.Zero;
-        }
-
-        var unit = Vector3.Normalize(value: gradient.ToVector3());
-
-        return (VectorFunctions.IsFinite(vector: unit) ? unit : Vector3.Zero);
+        return (field.TrySurfaceNormal(normal: out var normal, position: point) ? normal : Vector3.Zero);
     }
 }

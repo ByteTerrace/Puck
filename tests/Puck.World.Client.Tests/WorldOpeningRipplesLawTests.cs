@@ -37,6 +37,7 @@ public sealed class WorldOpeningRipplesLawTests {
     }
 
     private static SdfScreenRipple Advance(WorldOpeningRipples ripples, Bodies bodies, double seconds, Vector3? origin = null) => ripples.Advance(
+        active: [.. bodies.Positions.Keys],
         bodies: bodies,
         capacity: Capacity,
         halfHeight: 1.5f,
@@ -161,6 +162,7 @@ public sealed class WorldOpeningRipplesLawTests {
             precision: 3
         );
         Assert.Throws<ArgumentNullException>(testCode: () => ripples.Advance(
+            active: [],
             bodies: null!,
             capacity: Capacity,
             halfHeight: 1f,
@@ -181,6 +183,7 @@ public sealed class WorldOpeningRipplesLawTests {
         bodies.Positions[0] = new Vector3(x: 0.4f, y: 0.2f, z: 0f);
 
         var ripple = ripples.Advance(
+            active: [0],
             bodies: bodies,
             capacity: Capacity,
             halfHeight: 1f,

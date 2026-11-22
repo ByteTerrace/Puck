@@ -21,10 +21,12 @@ public static partial class CliProjectBuild {
     [GeneratedRegex(pattern: @"^(?:(?:(?!\b(?:warning|error)(?: [A-Za-z]+[0-9]+)?\s*:).)+:\s*)?error(?: [A-Za-z]+[0-9]+)?\s*:")]
     private static partial Regex ErrorLine();
 
-    /// <summary>The build command without its output directory, which the World source-state key covers.</summary>
+    /// <summary>The build or publish command without its output directory. A publish builds the closure into each
+    /// project's own output in the checkout, as an ordinary <c>dotnet build</c> of it does, and publishes from there.</summary>
     /// <param name="project">The project file to build.</param>
-    /// <returns>The arguments shared by every build.</returns>
-    public static string[] Arguments(string project) => ["build", CliOptions.NoNodeReuse, "-m:2", "--disable-build-servers", project, "-c", "Release", "--nologo", "-p:NuGetAudit=false"];
+    /// <param name="publish">Whether the command publishes rather than builds.</param>
+    /// <returns>The arguments shared by every build, or by every publish.</returns>
+    public static string[] Arguments(string project, bool publish = false) => [(publish ? "publish" : "build"), CliOptions.NoNodeReuse, "-m:2", "--disable-build-servers", project, "-c", "Release", "--nologo", "-p:NuGetAudit=false"];
 
     // A failed build's refusal: why it failed, its first error lines (or its last lines when none is an error), and
     // where its whole output is kept.
@@ -102,7 +104,8 @@ public static partial class CliProjectBuild {
     /// <paramref name="outputDirectory"/>, restoring its closure first.</summary>
     /// <param name="repositoryRoot">The directory the build runs from.</param>
     /// <param name="project">The project to build, relative to <paramref name="repositoryRoot"/> or absolute.</param>
-    /// <param name="outputDirectory">The directory every project in the closure writes into.</param>
+    /// <param name="outputDirectory">The directory every project in the closure writes into, or the publish directory
+    /// when <paramref name="publish"/> is set.</param>
     /// <param name="logDirectory">The caller's log directory, created only when output is kept.</param>
     /// <param name="timeout">How long the build may run.</param>
     /// <param name="build">The captured build process, or <see langword="null"/> when it could not start.</param>
@@ -110,16 +113,21 @@ public static partial class CliProjectBuild {
     /// <param name="artifactName">The required artifact inside the output directory, or null to check only the build.</param>
     /// <param name="runner">A captured process runner, or null to launch dotnet.</param>
     /// <param name="properties">Extra MSBuild switches (<c>-p:Name=value</c>) added to the shared arguments, or null.</param>
+    /// <param name="publish">Whether to publish (<see cref="Arguments"/>) rather than build: the closure then builds
+    /// into the checkout's own outputs, which every build of the same sources shares, and only the published files go
+    /// into <paramref name="outputDirectory"/>.</param>
     /// <param name="cancellationToken">Cancels the build process.</param>
     /// <returns><see langword="true"/> when the build exited 0 inside its budget.</returns>
-    public static bool TryBuild(string repositoryRoot, string project, string outputDirectory, string logDirectory, TimeSpan timeout, out CliProcessResult? build, out string error, string? artifactName = null, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? runner = null, IReadOnlyList<string>? properties = null, CancellationToken cancellationToken = default) {
+    public static bool TryBuild(string repositoryRoot, string project, string outputDirectory, string logDirectory, TimeSpan timeout, out CliProcessResult? build, out string error, string? artifactName = null, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? runner = null, IReadOnlyList<string>? properties = null, bool publish = false, CancellationToken cancellationToken = default) {
         cancellationToken.ThrowIfCancellationRequested();
         build = null;
 
         var name = Path.GetFileNameWithoutExtension(path: project);
         // A directory a build writes with --output can outlive the build (the World store keeps it), so its content items
-        // are copies: a link would let an editor saving a source in place rewrite the kept build.
-        List<string> arguments = [.. Arguments(project: project), .. (properties ?? []), "-p:CreateHardLinksForAdditionalFilesIfPossible=false", "--output", outputDirectory];
+        // are copies: a link would let an editor saving a source in place rewrite the kept build. A publish copies what it
+        // publishes already.
+        List<string> arguments = [.. Arguments(project: project, publish: publish), .. (properties ?? []),
+            .. (publish ? (string[])[] : ["-p:CreateHardLinksForAdditionalFilesIfPossible=false"]), "--output", outputDirectory];
 
         try {
             build = CliReferenceAssemblyRecovery.Run(

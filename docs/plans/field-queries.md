@@ -35,9 +35,13 @@ fixed-point contact.
   generated expression does not bound the disagreement between readers, and
   that an approximate sample breaks the march's contract. The pruning is now
   exact and rests on the interval interpreter and the cull's certificates,
-  which already carry those proofs. The float reader keeps a narrower role: it
-  never decides a hit, and its field semantics are lowered from the
-  catalogue's shared definitions, not written a third time.
+  which already carry those proofs.
+- **The gradient is one walk, in double precision.** A foot probe spent three
+  quarters of its evaluations on the six taps of one gradient. A wide reader
+  answers them over the region's tape, one tap a lane of a hardware vector. It
+  decides nothing: the march that finds the hit is still fixed point. Its
+  field semantics are a third lowering of the catalogue's shared definitions,
+  which the stream's own semantics now are, so no reader states them by hand.
 - **The fixed-point evaluator stays on the client.** It is the reference that
   makes every decision and records every region. Its retained bytes are their
   own item ([memory](open-items.md#memory-on-the-deck-tier)); this design
@@ -134,12 +138,17 @@ every op, shape and blend. Against that interval the walk drops three things:
 - an instance or a chain whose cull certificate clears the interval's upper
   end at every point of the cube (the point walk's own skip, asked at the
   cube's nearest point to the certificate's centre);
-- a chain whose every join it finds inert, because the candidate it enclosed
-  over the cube stands past the accumulator's upper end by the margin at which
-  the blend returns the accumulator to the bit;
-- everything before a chain whose join takes the root accumulator over,
-  because the accumulator's lower end stands past its candidate by the same
-  margin.
+- a join it finds inert, because the candidate it enclosed over the cube
+  stands past the accumulator's upper end by the margin at which the blend
+  returns the accumulator to the bit: the whole chain when every join is
+  inert, and otherwise the inert joins that stand before the chain's first
+  join that is not;
+- everything before a chain whose first join that is not inert takes the root
+  accumulator over, because the candidate stands below the accumulator's lower
+  end, and below the far seed a walk starts from, by the same margin. A chain
+  that has joined by another blend, edited the field or crossed a scope takes
+  nothing over ([the handbook](../rendering/sdf/handbook/queries-and-determinism.md#region-tapes)
+  holds the argument).
 
 Each of those leaves every point walk in the cube with the distance and
 material it had. Nothing is dropped on a tolerance, a Lipschitz bound or a
@@ -155,68 +164,67 @@ scene's dressed field (`WorldSessionSceneEmitter`) and the motion check's
 clearance (`MotionClearance`) are regional. The server's fields are not: its
 samples already cost what one collider holds.
 
-## The float reader
+## The wide reader
 
-This part is open, and the review reshaped it.
+A foot probe spends three quarters of its evaluations on the six taps of one
+gradient. Those taps are one walk: `SdfFieldEvaluator.TrySurfaceNormal` reads
+them in double precision, one tap a lane of a hardware vector, over the tape
+of the point's region. The effectors' probes and a pick's normal
+(`WorldFieldSurface.NormalAt`) read it.
 
-**What it is for.** After region tapes, what a sample costs near the floor is
-the arithmetic of a hundred or two instructions in fixed point, and a foot
-probe spends three quarters of its evaluations on the six taps of one
-gradient. A reader in single precision and vector width answers those six
-taps as one walk, and fills a lattice for the mesh audit and the CPU bake
-eight points at a time. That is its payoff. It is smaller than the first
-design claimed, because the walk it was to remove is already gone.
+**It decides nothing.** The march that finds the hit is the fixed-point walk
+of the same tape, so the march's contract is untouched: `SdfFieldMarch`'s
+sampler takes an exact sample, or a value at or below the exact one. The wide
+reader answers a normal as a float vector, which no fixed-point consumer can
+take. Where it cannot answer, the fixed-point gradient does, and
+`sdf.wide.refusals` counts it: the point's region is not recorded yet, the
+tape holds an op the wide reader has no lowering for, or the point stands
+within a step of the frame.
 
-**What it may not do.** It never decides a hit, an overlap or a clearance.
-The march's contract is that a sample is exact or is a value at or below the
-exact one (`SdfFieldMarch`'s sampler), and a float answer is neither until
-its error is certified. So:
+**Its semantics are lowered, not rewritten.** The stream's own semantics are
+shared definitions (`SdfFieldFormulas`), beside the shapes and blends:
 
-1. Its first consumers take no decision from it: the gradient at a hit the
-   fixed-point march has already accepted, and lattice samples for the audit
-   and the bake, which are compared with the kernels in single precision
-   anyway.
-2. A march may take a float sample only as a bound, the role the banded
-   evaluator's grid already plays (`SdfBandedFieldEvaluator`): the float value
-   less a certified error, used to advance, with the fixed-point walk of the
-   same tape wherever the march could accept or stop. That needs a per-tape
-   error bound this design does not have yet, and it is the last step, taken
-   only if the counters show marches still matter.
+- a point op is a map of the local point, and a scale also a factor on the
+  distances read through it;
+- a field edit is a map of the running distance;
+- a scope's pop is a blend that takes the pop's operand, which is a stairs
+  pop's step count or a morph pop's weight from its lane;
+- a material winner is a condition;
+- the masked relief and its band's weight are formulas over a mask weight
+  that each reader's own row walk multiplies up.
 
-**Its semantics are lowered, not rewritten.** `SdfFormula` lowers each shared
-shape and blend formula to fixed-point C# and to HLSL. The stream's own
-semantics are not shared today: a fold, a field edit, the masked relief and a
-scope's pop are each written once in `SdfFieldEvaluator` and once in the
-kernels, with the catalogue only choosing the dispatch. The review found one
-where the two read differently: a morph pop reads its lane in the kernels and
-a fixed zero in the evaluator, a convention no shared definition states. So
-the order is:
+`SdfFormula` lowers each to three readers: the fixed-point C# the evaluator
+runs, the kernels' HLSL, and the wide C#. The wide lowering is the fixed-point
+lowering's text over carriers that name every operation as the fixed carriers
+do, with a guarded return turned into a select per lane. What a formula calls
+that is not a formula (a shape with a hand-written reader, the lattice noises,
+the ellipse's root) the wide reader reads a lane at a time through the
+fixed-point reader, so it states none of them again. Each reader's walk, its
+culls and its scope stack stay its own.
 
-1. Move the state transitions into shared definitions in the catalogue: a
-   point op as a map of the point and the distance scale, a field edit as a
-   map of the accumulator, a pop as a blend with its lane value an input.
-   Lower the two existing readers from them. This step pays without a third
-   reader: it removes the hand-synced pairs and settles the morph pop.
-2. Add the vector lowering. A condition becomes a mask and an early return a
-   select. The table and loop shapes (the convex polygon, the sweep, the
-   path, the ellipse's projection) take an algorithm definition lowered the
-   same way, or stay with the fixed-point reader, which then answers their
-   chains for the float reader.
+Moving the semantics found two places where the hand-written readers had
+drifted. A morph pop read its lane in the kernels and a fixed zero in the
+evaluator; the lane is now an operand, bound to zero where the evaluator
+walks a static field. A stairs subtraction named the nearer-wins material arm
+in the kernels and the cut winner in the evaluator, which showed only when
+its stairs fell back to the hard seam; the arm is now derived from the one
+winner.
 
-**Precision.** The reference is the fixed-point reader, not the kernels. The
-review's example shows why: a small shape behind two large translations loses
-its offset in the kernels' single-precision accumulation and keeps it in
-fixed point, so the two existing readers already differ by millimetres there.
-The float reader therefore takes each chain's rigid prefix from the
-fixed-point reader's compiled instructions, composes it exactly, and rebases
-it to its region's centre before narrowing to single precision. Its
-agreement with the fixed-point reader is stated on a domain (a region's
-extent, a fold's phase clear of its seam by a stated margin, the lanes'
-packed ranges) and checked by a law over that domain. Off that domain the
-chain is the fixed-point reader's.
+**Precision.** The lanes are doubles. A double holds every Q48.16 value
+exactly, so the wide reader reads the operands and the world coordinates the
+fixed-point reader reads, and needs no rebasing to a region's centre, which a
+single-precision reader would. The two still round differently: a wide
+distance stands a few raws from the fixed one, and a fold's seam, where one
+raw chooses the copy a point reads, can fall a raw apart between them.
+`SdfFieldEvaluatorWideLawTests` holds the normals to an angle over shapes,
+blends, a fold, a relieved scope and scope pops.
 
-**The gradient keeps its stencil.** The six-tap central difference fits one
-vector of eight. The four-tap tetrahedral stencil the first design proposed
+**Tapes are padded.** A region's tape is recorded over its cube and 2⁻⁵ units
+either side, so it answers every tap of a gradient around any point of the
+cube, and the six taps read one tape.
+
+**The gradient keeps its stencil.** Six central taps: one walk where a vector
+holds eight doubles, two where it holds four. A four-tap tetrahedral stencil
 reads zero at a corner where the central one reads the corner's diagonal, and
 a foot's standoff moves by centimetres with it.
 
@@ -226,8 +234,8 @@ a foot's standoff moves by centimetres with it.
 |---|---|---|
 | A regional evaluator answers what the plain one answers, to the bit, in distance and material. | A tape is made only by the regional box walk (`SdfFieldEvaluator`'s `WalkBounds` with a record), and each of its three drops is one predicate stated against the enclosing interval. `SdfFieldEvaluatorRegionLawTests` holds the two evaluators to each other on a fold across its seam, tied candidates, a staircase of smooth unions, relieved scopes and carves, and on the raws either side of every region face. | It is an exactness-preserving skip, the class [silent invariants](../development/hazards.md#silent-invariants) marks review-only: sampled agreement can miss an arithmetic edge. It rests on the interval interpreter's inclusion and on the cull certificates, as the plain evaluator's own skips do. |
 | A sample reads the tape of the cube it lies in. | The lookup is the only way to a tape, and it descends by the point's own raws. Each tap of a gradient looks its own cube up. | None known. |
-| The index is bounded. | It counts the regions it records and drops them all at its limit (`sdf.regions.resets`). | A workload that scatters samples over more cubes than the limit rebuilds as it goes; a lattice consumer would need a larger limit or coarser leaves. |
-| A float answer decides nothing. | To be enforced by its type when it is built: it offers a gradient and a lattice fill, and a march sampler only in the bound role with a certified error. | Not built. |
+| The index is bounded, and scattered samples do not churn it. | It counts the cubes it marks and records and drops them all at its limit (`sdf.regions.resets`). A cube is recorded by the second sample that reaches it; the first marks it and reads the cube around it. | A sample that never comes back costs a plain walk. A workload that returns to more cubes than the limit rebuilds as it goes; a lattice consumer would need a larger limit or coarser leaves. |
+| A wide answer decides nothing. | Its type: `TrySurfaceNormal` answers a float vector, which no fixed-point consumer takes, and the wide walk is private to the evaluator. | A march sampler in the bound role, with a certified error, is not built. |
 | A held answer is reused only over the field it was asked of. | `WorldFieldAnswer.Ask` compares the field instance, as before. | Unchanged. |
 
 ## Answers to the design review
@@ -248,18 +256,18 @@ counterexample is a law
 
 **H2. Generating the same expression does not enforce a distance tolerance.**
 Confirmed, including the translation example: the rigid plan accumulates its
-pose in single precision (`SdfProgram.CompileRigidPlan`). The float reader no
-longer claims agreement with the kernels. Its reference is the fixed-point
-reader, it takes its transforms from that reader's exact form and rebases
-before narrowing, and its agreement is stated on a domain and checked there
-([precision](#the-float-reader)). The fixed-point grid's half tick is part of
-that budget.
+pose in single precision (`SdfProgram.CompileRigidPlan`). The wide reader
+makes no claim against the kernels. Its reference is the fixed-point reader,
+whose compiled operands it reads in double precision, which holds them
+exactly, so the translation example does not arise. Its agreement is stated
+as an angle between normals and checked by a law
+([precision](#the-wide-reader)).
 
 **H3. An approximate sample cannot enter the march as exact or as a lower
 bound.** Confirmed against `SdfFieldMarch`'s sampler contract. Region tapes
 are exact, so their samples enter as exact and the march is untouched. The
-float reader takes no decision; it may enter a march only in the bound role
-with a certified error, which is the last and optional step.
+wide reader answers normals and takes no decision. A march sample in the
+bound role needs a certified error and is not built.
 
 **M1. The proof fails at the last drop.** Confirmed: the tape's accumulator
 can still stand at the far seed when the last dropped operand acts, so the
@@ -276,11 +284,10 @@ amplify: a dropped join returns the accumulator to the bit by the margin the
 cull already proves (`SdfFieldEvaluator`'s smooth-union identity margin), and a take-over returns the candidate to the bit by the same margin on the blend's other arm.
 
 **M3. A hand-written vector walk is another implementation of field
-semantics.** Accepted, and it is the larger correction to the float reader.
-The stream's semantics move into shared definitions first, the two existing
-readers are lowered from them, and the vector reader is a third lowering. The
-morph pop's two readings become one definition in that step, with the lane
-value an input the evaluator sets to zero where a static bake does.
+semantics.** Accepted and built that way. The stream's semantics are shared
+definitions, the two existing readers are lowered from them, and the wide
+reader is a third lowering ([the wide reader](#the-wide-reader)). The morph
+pop's two readings are one definition with the lane an operand.
 
 **M4. Exact distance agreement does not preserve foot normals.** Confirmed:
 at a corner of three planes the tetrahedral taps all read the same value. The
@@ -299,41 +306,58 @@ a windowed run, which is a verification request.
 
 ## Build order
 
-Region tapes are built. What remains, each step with the check that shows it
-worked:
+Region tapes, the shared definitions and the wide gradient are built. What
+remains, each step with the check that shows it worked:
 
-1. **Windowed verification of region tapes, by the lead.** Feet on a slope
-   and on the stairs (`debug.go stairs`) and the camera against walls read as
-   before, which they must, since the answers are the plain evaluator's.
-   `world.counters world.field-queries`, `sdf.point` and `sdf.regions` over
-   the benchmark route give instructions a sample and regions recorded on the
+1. **Windowed verification, by the lead.** Feet on a slope and on the stairs
+   (`debug.go stairs`) and the camera against walls read as before: the
+   marches' answers are the plain evaluator's, and a foot's normal is the
+   same stencil in double precision. `world.counters world.field-queries`,
+   `sdf.point`, `sdf.regions` and `sdf.wide` over the benchmark route give
+   instructions a sample, regions recorded, wide walks and refusals on the
    live field. `host.frames`' capture part before and after, from frozen
    builds, is the timing.
-2. **Shared definitions for the stream's semantics.** *Check:* the generated
-   fixed-point walk answers every law in `tests/Puck.SignedDistance.Tests` as
-   the hand-written one does; `puck shaders generate --check` passes;
-   `SdfFieldDeviceLawTests` gains the morph and stairs pops it leaves out
-   today.
-3. **The vector lowering, on its stated domain.** *Check:* a CPU law samples
-   every admitted op, shape and blend through the vector reader against
-   `SdfFieldEvaluator` inside the domain and shows the fall-back outside it.
-4. **The gradient as one vector, and a lattice fill.** *Check:* a foot
-   probe's point evaluations fall from eight to the march's two or three plus
-   one vector walk (`sdf.point` beside the reader's own counter); the
-   normals agree with the fixed-point stencil within the stated angle on the
-   debug field; `puck mesh audit --cpu` passes from the float lattice.
-5. **Float samples as march bounds.** Only if step 1's counters show marches
-   still matter after step 4. It needs the per-tape error certificate.
-   *Check:* a march's hits are those of the fixed-point march, as the banded
-   evaluator's contract states, and exact samples a march fall.
+2. **The kernels' side of the shared definitions, on a device.** The fixed
+   reader's laws pass on the generated walk and the kernels compile. *Check:*
+   `SdfFieldDeviceLawTests` on both backends, whose legs hold the encoding
+   probe's morph and stairs scopes beside every shape and blend.
+3. **The noises in vector width.** The wide reader reads a relief's octave
+   sum a lane at a time through the fixed-point noise, and a relieved terrain
+   mass is most of what a tape near the floor holds. *Check:* a wide
+   primitive of the lattice noise answers the fixed one within the grid on a
+   law, and a foot probe's wide walk makes no per-lane call.
+4. **A lattice fill.** The mesh audit and the CPU bake sample lattices a
+   vector of points at a time through the wide reader. *Check:*
+   `puck mesh audit --cpu` passes from the wide lattice.
+5. **The ops with no shared definition yet.** The two warps (`RotatePlane`,
+   `AxialProfile`) and the render-only ops are still one body in the
+   evaluator and one in the kernels, and a tape that holds one is refused by
+   the wide reader. *Check:* each has a formula, and the evaluator's
+   `WarpPoint` and render ops are generated.
+6. **The interval rules as a lowering.** The box walk's rule for each op is
+   hand-written beside the point rule. A fourth lowering, to outward-rounded
+   intervals, would make the two one definition. *Check:*
+   `SdfFieldBoundsLawTests` on the generated rules.
+7. **Wide samples as march bounds.** Only if step 1's counters show marches
+   still matter. It needs a certified error for a tape. *Check:* a march's
+   hits are those of the fixed-point march, as the banded evaluator's
+   contract states, and exact samples a march fall.
 
-Two things outside this lane would cut what a sample costs as much as the
-float reader, and both stay exact:
+What a leaf near the floor holds is terrain, and no certificate would shrink
+it. Most of the chains in the leaf at the debug world's origin are relieved
+terrain masses: a scope of one superellipsoid, a relief whose amplitude is
+units, and a hard-union pop. The box walk already charges such a scope only
+what its relief can reach inside the cube (the octave sum enclosed over the
+cube's lattice cells, times the masks' weight), and the regional walk reads
+the point certificate, which superellipsoids and capsules have, so a box
+certificate for them changes nothing. A mass stays because, with a relief
+that deep, it can be the nearest thing somewhere in a cube two units across.
+What would shorten those tapes is a smaller least cube where reliefs are
+deep, at more regions for the same ground.
 
-- **Tighter certificates for relieved scopes.** A dozen relieved terrain
-  masses stand in every leaf near the floor because a relief's scope carries
-  a wide slack. *It would show:* the leaf at the debug world's origin holding
-  fewer than its 186 instructions.
+One thing outside this lane would cut what the evaluator costs, and stays
+exact:
+
 - **The evaluator's retained bytes.** The compiled instruction is the bulk of
   what the client's evaluator holds. *It would show:* `puck host heap` naming
   the tenant and its size.
@@ -347,7 +371,7 @@ float reader, and both stay exact:
 | `SdfDistanceGrid` and `SdfBandedFieldEvaluator` | A lattice of exact values, filled on first touch, that lets a march read a bound far from surfaces. | The contract a float sample would enter a march under. |
 | `FixedColliderGrid` | The static colliders near a region, by their bounds. | Not used: bounds keep about 1,100 instructions near any foot of the debug world, because terrain bounds reach everywhere, and it lives in the physics layer. |
 | `SdfProgram.Excerpt` | A program of some of another program's instructions. | Not used: it builds and validates a whole program per excerpt, where a tape is a list of ranges into one. |
-| `SdfFormula` and `SdfFieldCatalogueGenerator` | One formula and one catalogue entry generating both readers. | Extended in the float reader's steps: the stream's semantics join the shared definitions, then a third lowering. |
+| `SdfFormula` and `SdfFieldCatalogueGenerator` | One formula and one catalogue entry generating both readers. | Extended: the stream's semantics are shared definitions, and the wide reader is a third lowering. |
 | The two root-union certificates | "Every root compose is a hard union", computed once for the kernels' part walk and once for the evaluator's primer. | Folded into one (`SdfProgram`'s `ComposesByHardUnion`), read both ways. |
 | The bake kernel's point mode and `SdfGpuWork` | Samples point lists on the GPU off the frame. | The GPU option, weighed above. |
 | `WorldFieldAnswer` | Holds an answer on its owner and proves when it may be reused. | Kept as it is. |

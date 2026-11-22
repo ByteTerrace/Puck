@@ -79,7 +79,7 @@ Decisions: [rendering](../decisions/rendering.md), [residency](../decisions/resi
 - [Blends between parts that move](moving-blends.md): a blended seam that holds under continuous motion, as a skinned seam.
 - [Arrival work proportional to change](arrival-proportional.md): draw rows that keep their place, the trace scene's top level, and what a hand-over rewrites.
 - [Field programs](field-programs.md): the SDF programs the bake, CPU queries, contact and the editor still interpret, one definition per field op generating every reader, and the bake kernel's cost.
-- [Presentation field queries](field-queries.md): the camera's clearance and the effectors' probes weighed between a GPU batch answered late and the CPU; region tapes, which are built, the float reader that remains, and the design review's findings answered one by one.
+- [Presentation field queries](field-queries.md): the camera's clearance and the effectors' probes weighed between a GPU batch answered late and the CPU; region tapes, which are built, the wide reader that answers a normal's taps as one walk, and the design review's findings answered one by one.
 - [Ink](ink.md): outlines as edge signals the engine computes per view and an ink phase authors write in the shade program.
 - [Illumination](illumination.md): direct light at author scale, ambient occlusion and area lights, and what the GPU probe trace still owes.
 - [Transmission and self-shadow](transmission.md): the shadow term a wrapped material reads past the terminator, by a body identity per cascade texel.

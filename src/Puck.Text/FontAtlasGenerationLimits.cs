@@ -14,6 +14,9 @@ public sealed record FontAtlasGenerationLimits {
     /// <summary>Gets the maximum kerning entries processed or emitted, including zero-valued GPOS matches.
     /// Defaults to one million; Unicode alias expansion is charged as well.</summary>
     public int MaxKerningPairs { get; init; } = 1_000_000;
+    /// <summary>Gets the maximum pixel count of the generated atlas image; the lesser of this and the generation
+    /// options' own image limit applies. Defaults to no ceiling beyond the options'.</summary>
+    public long MaxAtlasPixels { get; init; } = long.MaxValue;
     /// <summary>Gets the total work-unit ceiling. Defaults to two billion.</summary>
     public long MaxWork { get; init; } = 2_000_000_000;
 }
@@ -34,6 +37,7 @@ public sealed class FontGenerationBudget {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limits.MaxGlyphs);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limits.MaxKerningPairs);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limits.MaxWork);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limits.MaxAtlasPixels);
         m_limits = limits;
         CancellationToken = cancellationToken;
         cancellationToken.ThrowIfCancellationRequested();

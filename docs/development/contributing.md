@@ -354,9 +354,9 @@ reference `AtomicFile`, writes a temporary file beside the destination and moves
 it over the destination. The compiler is the one writer that rewrites its
 outputs in place (`obj/<name>.dll`, `.pdb` and `.xml`), so the copy from `obj` to
 `bin` and the copy into a publish directory stay plain copies, and a `bin` file
-never shares its file with a compiler output. A build into a directory that outlives it, such as the World
-builds in `world-builds`, passes `--output` and links no content items, since
-an editor saving a source in place would otherwise rewrite the kept build.
+never shares its file with a compiler output. A build into a directory that outlives it passes `--output` and
+links no content items, since an editor saving a source in place would otherwise rewrite the kept build; the
+World builds in `world-builds` are publishes, which copy every file they publish.
 
 ## C# file apps
 
@@ -659,9 +659,9 @@ those proofs on that backend alone and names it in the verdict; it is not the
 merge gate, which refuses `--backend` and holds both.
 
 `puck canary`, `puck parity`, `puck test`, and `puck docs citations` share one
-Release build of `Puck.World` per source state. The build lives in
-`world-builds` in the [per-user directory](#per-user-directory), never in the
-checkout. It is keyed by
+Release build of `Puck.World` per source state. The closure compiles in the
+checkout's own outputs, shared with `dotnet build`, and the published World
+lives in `world-builds` in the [per-user directory](#per-user-directory). It is keyed by
 git's view of the World's project closure, including uncommitted and untracked
 changes. Running a second gate over an unchanged checkout does not rebuild, and
 an edit to documentation or tests leaves the build in place. An edit under a

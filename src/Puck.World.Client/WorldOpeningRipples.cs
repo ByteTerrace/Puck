@@ -37,11 +37,13 @@ public sealed class WorldOpeningRipples {
     /// <param name="halfWidth">The glass's half width, in metres.</param>
     /// <param name="halfHeight">The glass's half height, in metres.</param>
     /// <param name="bodies">The bodies' render poses, by entity index.</param>
-    /// <param name="capacity">The count of entity indices to read.</param>
+    /// <param name="active">The entity indices that may resolve a pose, each below <paramref name="capacity"/>: the
+    /// only ones read, beside those the opening read last time.</param>
+    /// <param name="capacity">The count of entity indices the world holds.</param>
     /// <param name="seconds">The presentation clock, in seconds.</param>
     /// <returns>The opening's ripple.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="bodies"/> is <see langword="null"/>.</exception>
-    public SdfScreenRipple Advance(int screen, Vector3 origin, Vector3 right, Vector3 up, float halfWidth, float halfHeight, ISdfAnchorSource bodies, int capacity, double seconds) {
+    public SdfScreenRipple Advance(int screen, Vector3 origin, Vector3 right, Vector3 up, float halfWidth, float halfHeight, ISdfAnchorSource bodies, ReadOnlySpan<int> active, int capacity, double seconds) {
         ArgumentNullException.ThrowIfNull(argument: bodies);
 
         if (!m_openings.TryGetValue(
@@ -60,7 +62,16 @@ public sealed class WorldOpeningRipples {
             // A wall's glass is touched at a body's middle, a floor's or a ceiling's at its feet.
             var lift = ((MathF.Abs(x: normal.Y) < 0.5f) ? BodyCentre : 0f);
 
-            for (var body = 0; (body < capacity); body++) {
+            // A body read last time that resolves no pose now (it left) forgets where it stood.
+            foreach (var body in opening.Read) {
+                if (!bodies.TryResolveAnchor(anchor: out _, anchorId: body)) {
+                    opening.Distance[body] = float.NaN;
+                    opening.Touching[body] = false;
+                }
+            }
+
+            opening.Read.Clear();
+            foreach (var body in active) {
                 if (!bodies.TryResolveAnchor(
                     anchor: out var anchor,
                     anchorId: body
@@ -70,6 +81,8 @@ public sealed class WorldOpeningRipples {
 
                     continue;
                 }
+
+                opening.Read.Add(item: body);
 
                 var offset = ((anchor.Position + (Vector3.UnitY * lift)) - origin);
                 var distance = Vector3.Dot(
@@ -142,9 +155,11 @@ public sealed class WorldOpeningRipples {
         );
     }
 
-    // One opening's memory: each body's last signed distance to the glass (NaN for none) and whether it touched, and the
-    // contacts showing.
+    // One opening's memory: each body's last signed distance to the glass (NaN for none) and whether it touched, the
+    // bodies the last advance read a pose for, and the contacts showing.
     private sealed class Opening(int capacity) {
+        public List<int> Read { get; } = [];
+
         private readonly float[] m_u = new float[SdfScreenRipple.Contacts];
         private readonly float[] m_v = new float[SdfScreenRipple.Contacts];
         private readonly double[] m_start = new double[SdfScreenRipple.Contacts];

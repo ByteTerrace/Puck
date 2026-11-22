@@ -8,7 +8,7 @@ public static partial class RuleCompiler {
             var comparisons = 1L + ((long)(context.FindRowAt(rowOrdinal: target)?.Visibility?.Readers?.Count ?? 0) * StateCapacity.MaxVisibilityReaders);
             foreach (var source in reads.Distinct()) {
                 if (source < 0) { continue; }
-                var zones = context.Catalog.ContainingZones(rowOrdinal: source).Count;
+                var zones = context.Catalog.ContainingZones(rowOrdinal: source).Length;
                 var cells = BoardCells(context: context, row: context.FindRowAt(rowOrdinal: source));
                 var capacity = cells > 0 ? cells : context.RowCapacity(rowOrdinal: source);
                 cost += RuleWork.Known(units: comparisons) * (1L + (capacity * (1L + (3L * zones))));

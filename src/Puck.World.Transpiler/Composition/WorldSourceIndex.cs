@@ -137,6 +137,11 @@ public static class WorldSourceIndex {
     // its answer (the claim RegisterDeclarer registers), so the two cannot disagree.
     private static HeldClaims Build(string directory) {
         var files = CompileInputs.List(directory: directory);
+
+        // An unchanged directory proves its held claims source by source without building anything: the listing hands
+        // back the same paths and each source answers the digest the claims were built from.
+        if (HeldDirectories.TryGetValue(key: directory, value: out var held) && Stands(files: files, held: held)) { return held; }
+
         var digests = new string?[files.Count];
         var known = new Known?[files.Count];
 
@@ -144,12 +149,6 @@ public static class WorldSourceIndex {
             if (WorldDocumentName.IsSourceFile(path: files[index])) {
                 known[index] = TryKnow(digest: out digests[index], path: files[index]);
             }
-        }
-
-        if (HeldDirectories.TryGetValue(key: directory, value: out var held) &&
-            held.Files.SequenceEqual(second: files, comparer: StringComparer.Ordinal) &&
-            held.Digests.AsSpan().SequenceEqual(other: digests)) {
-            return held;
         }
 
         var claims = new List<WorldDocumentClaims>();
@@ -179,6 +178,15 @@ public static class WorldSourceIndex {
         HeldDirectories.Set(key: directory, value: built);
 
         return built;
+    }
+    private static bool Stands(IReadOnlyList<string> files, HeldClaims held) {
+        if (!ReferenceEquals(objA: held.Files, objB: files) && !held.Files.SequenceEqual(second: files, comparer: StringComparer.Ordinal)) { return false; }
+        for (var index = 0; (index < files.Count); index++) {
+            if (!WorldDocumentName.IsSourceFile(path: files[index])) { continue; }
+            _ = TryKnow(digest: out var digest, path: files[index]);
+            if (!string.Equals(a: digest, b: held.Digests[index], comparisonType: StringComparison.Ordinal)) { return false; }
+        }
+        return true;
     }
     // The canonical text of a directory's claims: each claiming file's name, then the names it claims, length-prefixed.
     // File names alone, never the directory, so the same directory spelled another way claims the same.

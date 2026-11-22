@@ -158,7 +158,7 @@ public sealed record ShaderPipelinePlannedPass(
     ) ?? (frameWidth, frameHeight));
 }
 /// <summary>The result of pipeline planning, with passes in deterministic execution order.</summary>
-public sealed class ShaderPipelinePlan {
+public sealed partial class ShaderPipelinePlan {
     internal ShaderPipelinePlan(
         RenderGraphDefinition definition,
         IReadOnlyList<ShaderPipelinePlannedResource> resources,
@@ -189,7 +189,11 @@ public sealed class ShaderPipelinePlan {
             Dependencies = new ReadOnlyCollection<int>(list: pass.Dependencies.ToArray()),
         }).ToList());
         Outputs = new ReadOnlyCollection<string>(list: Definition.Outputs.ToList());
+        m_resourcesByName = new Dictionary<string, ShaderPipelinePlannedResource>(capacity: Resources.Count, comparer: StringComparer.Ordinal);
+        foreach (var resource in Resources) { m_resourcesByName.TryAdd(key: resource.Name, value: resource); }
     }
+    // Every live version by name, the first of a name as the resource order lists it.
+    private readonly Dictionary<string, ShaderPipelinePlannedResource> m_resourcesByName;
 
     /// <summary>Gets the version a single-target runtime publishes by default: the first public output.</summary>
     public string DefaultOutput => ((Outputs.Count == 0)
@@ -286,17 +290,5 @@ public sealed class ShaderPipelinePlan {
     /// <summary>Finds a live version by name.</summary>
     /// <param name="name">The version name.</param>
     /// <returns>The planned version, or <see langword="null"/> when no live version has that name.</returns>
-    public ShaderPipelinePlannedResource? FindResource(string name) {
-        foreach (var resource in Resources) {
-            if (string.Equals(
-                a: resource.Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return resource;
-            }
-        }
-
-        return null;
-    }
+    public ShaderPipelinePlannedResource? FindResource(string name) => m_resourcesByName.GetValueOrDefault(key: name);
 }

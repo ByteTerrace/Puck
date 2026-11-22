@@ -40,6 +40,20 @@ precise float sdfValueNoise3Cells(float3 q, uint3 seed, uint cellMask) {
 precise float sdfValueNoise3(float3 q, uint3 seed) {
     return sdfValueNoise3Cells(q, seed, 0xFFFFFFFFu);
 }
+// The octave sum of a relief (the fixed-point reader's is Pcg3dLatticeNoise.Fbm3): each octave reads the lattice at
+// the next seed, its point scaled by the lacunarity and its amplitude by the gain. The builder bounds the octave count.
+precise float sdfFbm3(float3 q, uint seed, uint octaves, float gain, float lacunarity) {
+    float amplitude = 1.0;
+    float sum = 0.0;
+    for (uint octave = 0u; octave < SDF_MAX_NOISE_OCTAVES; octave++) {
+        if (octave >= octaves) { break; }
+        uint octaveSeed = (seed + octave);
+        sum += (amplitude * sdfValueNoise3(q, uint3(octaveSeed, (octaveSeed * SDF_HASH_STREAM_A), (octaveSeed * SDF_HASH_STREAM_B))));
+        q *= lacunarity;
+        amplitude *= gain;
+    }
+    return sum;
+}
 // A seeded 3D value-noise sample over the same deterministic lattice (sdfValueNoise3), folding one uint seed into
 // its three hash streams so two consumers sharing a lattice (a material's wear, a volume's advection) read different
 // noise fields.
@@ -138,6 +152,11 @@ precise float sdfCellDistanceGrad(float3 q, uint seed, uint mode, float randomne
     if (mode == SDF_CELL_MODE_F1) return first;
     gradient = (second > 1.0e-12 ? secondDelta / second : 0.0) - gradient;
     return second - first;
+}
+// The cellular field alone, for a reader that takes no gradient (the fixed-point reader's is SdfFieldEvaluator.SampleCells).
+precise float sdfCellDistance(float3 q, uint seed, uint mode, float randomness) {
+    float3 gradient;
+    return sdfCellDistanceGrad(q, seed, mode, randomness, gradient);
 }
 // === 3D primitives ===================================================================================================
 // Exact signed-distance fields unless a comment says otherwise. Derived per-shape constants (a reciprocal, a sqrt, a

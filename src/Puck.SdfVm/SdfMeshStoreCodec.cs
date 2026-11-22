@@ -99,24 +99,25 @@ internal static class SdfMeshStoreCodec {
 
     // Streams a mesh's entry to the output and returns the position planes it stored, which the caller's native copy
     // conforms to (Conform): the one place both are computed, so a published mesh holds exactly what its entry answers.
-    internal static Positions Encode(Stream output, UInt128 key, SdfMesh? mesh, int[] materials) {
+    internal static Positions Encode(Stream output, UInt128 key, SdfMesh? mesh, int[] materials, IAllocator? allocator = null) {
         var pieces = PiecesOf(mesh: mesh);
         var canonical = SdfMeshMaterials.Canonical(materials: materials, pieces: pieces);
         var stored = Positions.Prepare(pieces);
 
-        EncodePlanes(output, key, pieces, mesh is { Chunks.Count: > 0 }, stored, materials, canonical, exact: false);
+        EncodePlanes(output, key, pieces, mesh is { Chunks.Count: > 0 }, stored, materials, canonical, exact: false, allocator);
         return stored;
     }
 
     // A checkpoint feeds later geometry operations. Quantizing it here would make a warm derivation differ from a cold one.
-    internal static void EncodeExact(Stream output, UInt128 key, SdfMesh? mesh) => EncodePlanes(
-        output, key, PiecesOf(mesh), mesh is { Chunks.Count: > 0 }, new Positions(new PositionGrid(default, default, 4), []), [], [], exact: true);
+    internal static void EncodeExact(Stream output, UInt128 key, SdfMesh? mesh, IAllocator? allocator = null) => EncodePlanes(
+        output, key, PiecesOf(mesh), mesh is { Chunks.Count: > 0 }, new Positions(new PositionGrid(default, default, 4), []), [], [], exact: true, allocator);
 
     private static void EncodePlanes(Stream output, UInt128 key, IReadOnlyList<SdfMesh> pieces, bool chunked, Positions stored,
-        int[] materials, int[] canonical, bool exact) {
+        int[] materials, int[] canonical, bool exact, IAllocator? allocator) {
         var (low, high, width) = stored.Grid;
-        // The payload's length leads the envelope, so it is collected whole; its storage is rented, a pool the next entry draws on.
-        using var payload = new RentedMemoryStream(capacity: PayloadEstimate(pieces: pieces));
+        // The payload's length leads the envelope, so it is collected whole; its storage is the store's native allocator's
+        // when it has one, so an encode on the store's writer never reaches the collector, and rented otherwise.
+        using var payload = new RentedMemoryStream(allocator: allocator, capacity: PayloadEstimate(pieces: pieces));
 
         using (var writer = new BinaryWriter(payload, System.Text.Encoding.UTF8, leaveOpen: true)) {
             writer.Write(value: canonical.Length);

@@ -9,7 +9,8 @@ public sealed partial class WorldRemoteAuthority {
         FetchPrototypeAsync(pin, traveler).AsTask().GetAwaiter().GetResult();
 
     internal async ValueTask<byte[]?> FetchPrototypeAsync(Puck.Assets.ContentPin pin, WorldTravelerObservation? traveler) {
-        var answer = await AnswerAsync(sourceAuthority: (traveler?.SourceAuthority ?? string.Empty),
+        // A fetch with no traveller is asked as this authority itself, the name its lanes are opened under.
+        var answer = await AnswerAsync(sourceAuthority: (traveler?.SourceAuthority ?? m_observerAuthority),
             kind: WorldFederationRequest.Prototype,
             body: WorldFederationCodec.EncodePrototypeRequest(pin: pin, traveler: traveler)).ConfigureAwait(false);
 
