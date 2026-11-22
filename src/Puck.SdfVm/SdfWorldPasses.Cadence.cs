@@ -8,8 +8,8 @@ public sealed partial class SdfWorldPasses {
     internal ulong? SignatureOf(string instance, string part, bool temporal, in FrameContext context, RenderGraphExternalReads? reads) {
         var entry = Refresh(instance: instance);
 
+        // The recorder's preparation began the residency's frame (PrepareRecord).
         if (entry.View is not { } view) { return null; }
-        Begin(residency: view.Residency);
         var tables = view.Residency.Staged(context: in context);
         var frame = view.Residency.Frame!;
 

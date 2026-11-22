@@ -163,6 +163,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                 recorded++;
             }
             RenderRecordWork.Process.Passes(recorded: recorded, skipped: skipped, stood: stood);
+            LastPassesRecorded = recorded;
             if (countersWritten && counters is not null) {
                 counters.RecordCopy(
                     commandBuffer: command,
@@ -198,6 +199,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
             commandBufferHandles: CollectionsMarshal.AsSpan(list: commands),
             fence: fence
         );
+        RenderRecordWork.Process.Submitted(lists: commands.Count);
         m_submissions++;
         m_lastSubmissionFence = fence;
         NoteSubmitted(fence: fence);

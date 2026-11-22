@@ -115,10 +115,15 @@ already reached its value is dropped before it can split anything
 (`GpuExternalWait.IsReached`); `world.counters gpu.queue` names every split's
 cause.
 
-**A node's frame is one record job.** `ShaderPipelineRenderNode.RenderFrame` runs
-`PrepareFrame` (the slot's fence wait, lease and region binding, the cadence
-checkpoint), `RecordFrame` (the slot's lists) and `CommitFrame` (submission,
-history commit, publication, readbacks, export completion). The slot's lists
+**A node's frame is one record job.** `ShaderPipelineRenderNode.BeginFrame` runs
+`PrepareFrame` on the frame thread (the slot's fence wait, lease and region
+binding, the cadence checkpoint, each package pass's
+`IRenderGraphPackageRecorder.PrepareRecord`), `RecordPendingFrame` runs
+`RecordFrame` (the slot's lists) on whichever thread the runtime's fork gives it,
+and `EndFrame` runs `CommitFrame` on the frame thread (submission, history
+commit, publication, readbacks, export completion); `ProduceFrame` takes the
+three in a row, and `AbandonFrame` gives up a frame another instance's failure
+ended first. The slot's lists
 belong to one recording from `BeginFrameCommands` until `SubmitCounted` hands
 them over or `AbandonRecording` gives them up; every path that records into
 them (a frame, a re-presented selection, a capture pin) passes those two doors,
@@ -142,10 +147,28 @@ the staged tables through `SdfWorldResidency.Staged`, which stages and counts a
 `late-stagings` (in `world.residency`) only for a residency the preparation did
 not reach, such as a graph installed during the frame with a package the
 schedule did not name. `render.record.packages-microseconds` times the
-preparation apart from the jobs. The jobs still run serially on the frame
-thread: the pipeline cache and the counting recorder share host state across
-nodes, so recording on workers needs those made safe first
-([the job system's R1](../../../../docs/plans/engine-job-system.md#6-build-order)).
+preparation apart from the jobs.
+
+**Record jobs run in waves on the job pool.** `RenderGraphRuntime.RenderWaves`
+puts each render one wave past the latest graph node it reads this frame (the
+schedule's same-frame reads), prepares a wave on the frame thread in schedule
+order, forks its recordings as one `JobClass.Frame` fork, and commits them on the
+frame thread in schedule order before the next wave binds what they published.
+The invariant is that a recording reads and writes only its own instance and the
+recording domains its passes name (`IRenderGraphPackageRecorder.RecordingDomain`:
+an SDF recorder its view's residency, a self-contained recorder itself, any other
+its package factory; `ShaderPipelineRenderNode.AddRecordingDomains` adds the
+host buffer regions bound to the instance). One door holds it:
+`RenderGraphRuntime.RecordWave` groups the jobs that share a domain, and a group
+records on one thread in schedule order. Whatever a recording would change
+beyond that is changed in `PrepareRecord` on the frame thread (an SDF view
+followed, its residency begun and staged late, `SdfWorldPasses.PrepareRecord`);
+a residency's upload (`SdfWorldResidency.SubmitOnce`) and an SDF view's
+resolution or follow (`SdfWorldPasses.Refresh`, `Follow`) refuse to run inside a
+partition, so a recorder that misses its preparation fails its recording by name
+instead of racing. A recorder that shares state it does not name is caught only by
+review. `render.record` counts `waves`, `partitions`, `jobs.worker`,
+`passes.worker` and `lists`.
 
 ## 2. Nothing resolves silently to nothing
 

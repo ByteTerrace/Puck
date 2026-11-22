@@ -23,7 +23,7 @@ namespace Puck.SdfVm;
 // the node proves the slot complete (RenderGraphSlotResults), then handed to the residency's exposures
 // (SdfViewExposures.Publish) with the view, its generation and the multiplier the frame drew with. Both buffers are the recorder's own,
 // never a graph version, and each slot's are touched only by that slot's recordings, which the slot's fence orders.
-internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
+internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     // The common frame values copy by name from the world layout, whose block the one frame writer lays out.
     private static readonly SdfFrameBlock.Copy[] FrameCopies = SdfFrameBlock.CopiesInto(layout: SdfWorldInterfaces.SkyParameters);
     private static readonly int ResolvedSurfaceOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.ResolvedSurface));
@@ -64,7 +64,6 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
     private readonly bool[] m_declaredScreens = new bool[SdfWorldTables.MaxScreenSurfaces];
     private readonly bool[] m_sampledScreens = new bool[SdfWorldTables.MaxScreenSurfaces];
 
-    private SdfWorldView m_view;
     private bool m_disposed;
     // The composite's image meter, one slot each; empty for the sky.
     private readonly MeterSlot[] m_meters;
@@ -82,10 +81,9 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
         internal float Local;
     }
 
-    internal SdfSkyRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
+    internal SdfSkyRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) : base(owner: owner, instance: context.Instance, view: view) {
         m_context = context;
         m_owner = owner;
-        m_view = view;
         m_kernel = ((context.Part == SdfWorldPackage.Parts.Composite) ? SdfKernel.Composite : SdfKernel.Sky);
 
         var fragment = owner.FragmentOf(instance: context.Instance)!;
@@ -141,7 +139,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
             meter.Histogram.Dispose();
             meter.Readback.Dispose();
         }
-        m_owner.Leave(view: m_view);
+        LeaveView();
     }
     // The sky's detail rows: its runs', then every layer label the composition's skies have packed, which only grow.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_view.Residency.SkyDetails.Labels;
@@ -149,9 +147,8 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
         var signature = m_owner.SignatureOf(instance: m_context.Instance, part: m_context.Part!, temporal: m_temporal, context: in context, reads: reads);
 
         if (signature is not { } value) { return null; }
-        var view = (m_owner.ViewOf(instance: m_context.Instance) ?? m_view);
-        var frame = view.Residency.Frame!;
-        var index = Math.Min(val1: view.View, val2: (frame.Views.Count - 1));
+        var frame = m_view.Residency.Frame!;
+        var index = Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1));
         var hash = Fnv1aHash.Create();
 
         hash.Add(value: value);
@@ -165,13 +162,9 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
         }
         return hash.Value;
     }
+    private protected override void FollowedResidency() => DeclareScreens(residency: m_view.Residency);
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-        if (m_owner.Follow(instance: m_context.Instance, view: ref m_view)) {
-            DeclareScreens(residency: m_view.Residency);
-        }
         var residency = m_view.Residency;
-
-        m_owner.Begin(residency: residency);
         var tables = residency.Staged(context: recording.Context);
         var frame = residency.Frame!;
         var index = Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1));

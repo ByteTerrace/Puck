@@ -504,9 +504,13 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
 - **`world.counters render.record`** (`RenderRecordWork`) gives the host time of
   render nodes' record jobs per phase: preparation, recording and commit, the
   serial record sum, and `longest-microseconds`, each frame's longest single
-  recording. Divided by `frames`, the longest is the critical path a frame would
-  keep with its jobs recorded side by side; its gap to the serial sum is all that
-  concurrent recording could save. The counter is process-wide: the instance behind
+  recording. Divided by `frames`, the longest is the critical path a frame keeps
+  with its jobs recorded side by side, which the waves do
+  ([runtime contracts](runtime-contracts.md#1-image-lifetime-is-leased-per-image-and-per-reader));
+  `waves`, `partitions`, `jobs.worker` and `passes.worker` say how a frame's jobs
+  spread over the pool, and `lists` the command lists they submitted. A group of
+  jobs sharing one residency records on one thread, so the heaviest residency's
+  views are the floor concurrency leaves. The counter is process-wide: the instance behind
   the critical path is on `world.budget`'s live-frame rows and in `pipeline.inspect`,
   which carry each node's `record-jobs`, `last-` and `mean-` `prepare`, `record` and
   `commit` microseconds and its `longest-record-us`

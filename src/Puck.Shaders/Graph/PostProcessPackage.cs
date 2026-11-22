@@ -271,6 +271,8 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
             m_geometry?.Dispose();
             m_built.Dispose();
         }
+        // A recording binds and records its own sets alone, so it shares nothing with another instance's.
+        public object? RecordingDomain => this;
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
             var input = recording.Inputs[0];
             var output = recording.Outputs[0];

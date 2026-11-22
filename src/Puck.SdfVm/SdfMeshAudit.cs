@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Collections;
 using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Baking;
@@ -958,7 +959,7 @@ public static class SdfMeshAudit {
     // at the least), worst first; ties fall to the cluster nearest the frame's origin along x, then y, then z.
     private static List<SdfMeshAuditCluster> Cluster(List<Sample> flagged, float cell) {
         var reach = MathF.Max(x: (1.5f * cell), y: 0.005f);
-        using var clusters = new SdfDisjointSet(count: flagged.Count);
+        using var clusters = new DisjointSet(count: flagged.Count);
         var buckets = new Dictionary<(int, int, int), List<int>>();
 
         (int, int, int) Bucket(Vector3 point) => SdfMeshLattice.CellOf(cell: new Vector3(value: reach), point: point);

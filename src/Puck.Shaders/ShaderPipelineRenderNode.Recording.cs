@@ -1,6 +1,9 @@
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
+using Puck.Hosting;
 
 namespace Puck.Shaders;
 
@@ -20,10 +23,165 @@ public sealed partial class ShaderPipelineRenderNode {
         // The slot's frame list and region-copy list while open; zero once ended or never begun.
         public nint Frame;
         public nint Copies;
-        // When the job's phases began, in Stopwatch ticks.
+        // When the job's phases began and ended, in Stopwatch ticks. A recording run on another thread may begin well after
+        // its preparation ended and end well before its commit begins.
         public long PreparedAt;
+        public long PrepareEndedAt;
         public long RecordedAt;
+        public long RecordEndedAt;
         public long CommittedAt;
+    }
+
+    // The frame between BeginFrame and EndFrame (or AbandonFrame): what Produce prepared, and what the recording left for
+    // the commit. Only the recording itself (RecordPendingFrame) may run on another thread; it writes nothing here but
+    // Recorded and Error, which the frame thread reads after the join that ends the fork.
+    private OpenFrame m_open;
+
+    private struct OpenFrame {
+        public bool Open;
+        // Whether Produce prepared a record job; otherwise Surface is the frame's outcome.
+        public bool Pending;
+        public bool Recorded;
+        public FrameContext Context;
+        public FrameJob Job;
+        public IGpuExportableImage? Exported;
+        public bool ExportWritten;
+        public ulong ExportValue;
+        public Surface Surface;
+        // What the recording threw, and what a pass's preparation threw, which the recording throws once its lists began.
+        public ExceptionDispatchInfo? Error;
+        public ExceptionDispatchInfo? PrepareFailure;
+    }
+
+    // The passes the latest recording recorded, as against stood or skipped.
+    internal int LastPassesRecorded { get; private set; }
+
+    // A frame in three steps, which ProduceFrame takes in a row and the runtime takes across a wave of instances: BeginFrame
+    // on the frame thread prepares it (everything up to the record job, which takes the slot, its leases and its
+    // checkpoint), RecordPendingFrame records the slot's lists on whichever thread the runtime's fork runs it, and EndFrame
+    // on the frame thread commits it, or abandons it when its recording failed. Returns whether a record job is pending;
+    // either way the frame is open until EndFrame or AbandonFrame closes it.
+    internal bool BeginFrame(in FrameContext context) {
+        if (m_open.Open) {
+            throw new InvalidOperationException(message: $"Instance '{m_name}' began a frame while its previous frame was neither ended nor abandoned.");
+        }
+        // A caller that rendered the previous frame inside a batch settles it after the flush; one that did not is settled
+        // here, before anything reads the history that frame committed.
+        SettleHandOver();
+        var latch = (context.Latch.IsLatched ? context.Latch : DeliveryLatch.Capture());
+        var latched = (context.Latch.IsLatched ? context : (context with { Latch = latch }));
+
+        m_frameLatch = latch;
+        m_open.Open = true;
+        try {
+            m_open.Surface = Produce(context: in latched);
+            return m_open.Pending;
+        } catch {
+            CloseFrame(abandon: true);
+            throw;
+        }
+    }
+    // Records the open frame's record job. It touches only the instance and the recording domains its passes name
+    // (IRenderGraphPackageRecorder.RecordingDomain), and never throws: what its recording throws is kept for EndFrame,
+    // which handles it on the frame thread exactly as an inline recording's failure.
+    internal void RecordPendingFrame() {
+        if (!m_open.Pending || m_open.Recorded) { return; }
+        m_open.Recorded = true;
+        try {
+            RecordFrame(context: in m_open.Context, job: in m_open.Job);
+        } catch (Exception error) {
+            m_open.Error = ExceptionDispatchInfo.Capture(source: error);
+        }
+    }
+    // Commits the open frame, or abandons its recording when it failed: a failed recording keeps the last image and says
+    // why; anything else (a device loss) abandons the frame and propagates to the host's recovery. Returns the node's
+    // published surface.
+    internal Surface EndFrame() {
+        if (!m_open.Open) {
+            throw new InvalidOperationException(message: $"Instance '{m_name}' ended a frame it had not begun.");
+        }
+        if (!m_open.Pending) {
+            var surface = m_open.Surface;
+
+            CloseFrame(abandon: false);
+            return surface;
+        }
+        try {
+            if (!m_open.Recorded) {
+                throw new InvalidOperationException(message: $"Instance '{m_name}' ended a frame whose record job never ran.");
+            }
+            if (m_open.Error is { } failed) {
+                if (!ContainsRecordFailure(error: failed.SourceException)) {
+                    failed.Throw();
+                }
+                AbandonRecording();
+                AbortCadenceFrame();
+                NoteRecordFailure(error: failed.SourceException);
+                CloseFrame(abandon: false);
+                return m_lastSurface;
+            }
+
+            var committed = CommitFrame(
+                exportValue: out m_open.ExportValue,
+                exportWritten: out m_open.ExportWritten,
+                job: in m_open.Job
+            );
+
+            CloseFrame(abandon: false);
+            return committed;
+        } catch {
+            CloseFrame(abandon: true);
+            throw;
+        }
+    }
+    // Adds the state the open frame's recording shares with other instances' recordings: each package pass's recording
+    // domain (its package factory unless the recorder names a narrower one) and each host buffer region bound to the
+    // instance, which another instance may hold too. Read on the frame thread after BeginFrame prepared the frame.
+    internal void AddRecordingDomains(List<object> domains) {
+        foreach (var pass in m_passes) {
+            if (pass.Package is { } package) {
+                domains.Add(item: (package.RecordingDomain ?? (object?)pass.PackageFactory ?? package));
+            }
+        }
+        foreach (var region in m_externalRegions.Values) {
+            domains.Add(item: region);
+        }
+    }
+    // Gives up the open frame without committing it, when another instance's failure ends the runtime's frame first:
+    // nothing it recorded reaches the queue, its cadence rolls back and its leases retire unsampled.
+    internal void AbandonFrame() {
+        if (m_open.Open) {
+            CloseFrame(abandon: true);
+        }
+    }
+    // Closes the open frame: abandons what it recorded when asked, ends the export write it began (written only by a
+    // committed copy, unless the batch owes its completion), and retires every lease the frame bound but no submission
+    // holds.
+    private void CloseFrame(bool abandon) {
+        try {
+            if (abandon) {
+                AbandonRecording();
+                AbortCadenceFrame();
+            }
+        } finally {
+            var exported = m_open.Exported;
+            var written = m_open.ExportWritten;
+            var value = m_open.ExportValue;
+
+            m_open = default;
+            try {
+                if ((exported is not null) && (m_exportOwed is null)) {
+                    m_export!.EndWrite(
+                        image: exported,
+                        written: written,
+                        writtenValue: value
+                    );
+                }
+            } finally {
+                m_frameLatch = default;
+                ReleaseUnheldLeases();
+            }
+        }
     }
 
     /// <summary>Gets the reason the node's latest frame recording failed and was abandoned, or <see langword="null"/>
@@ -139,9 +297,9 @@ public sealed partial class ShaderPipelineRenderNode {
         var now = Stopwatch.GetTimestamp();
 
         LastRecordError = null;
-        LastRecordTicks = (m_recording.CommittedAt - m_recording.RecordedAt);
+        LastRecordTicks = (m_recording.RecordEndedAt - m_recording.RecordedAt);
         m_lastCommitTicks = (now - m_recording.CommittedAt);
-        m_lastPrepareTicks = (m_recording.RecordedAt - m_recording.PreparedAt);
+        m_lastPrepareTicks = (m_recording.PrepareEndedAt - m_recording.PreparedAt);
         RecordJobs++;
         m_totalCommitTicks += m_lastCommitTicks;
         m_totalPrepareTicks += m_lastPrepareTicks;

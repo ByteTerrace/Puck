@@ -36,7 +36,7 @@ one.
   what E4 keeps serial (the field and input tail and the subscribers'
   `DeliverSnapshot`), which is profiled before T3 assumes otherwise.
 - With residency staging moved out of recording into package preparation,
-  per-view command recording (`ShaderPipelineRenderNode.RenderFrame`) sums to
+  per-view command recording (`ShaderPipelineRenderNode.RecordPendingFrame`) sums to
   about 1 ms in the debug world, while total produce reaches about 26 ms at
   2560 by 1440 (beside 7 to 10 ms of tick). Most of produce is therefore
   outside recording. The breakdown by part now exists (below); the 2060's one
@@ -705,60 +705,29 @@ and re-records once. The fixtures are focused `*-tests.puck` sources under
 
 ## 3. Parallel view recording
 
-### What the code does today
+### As built
 
-Each render node records its frame into one command list and submits alone:
-`ShaderPipelineRenderNode`'s frame waits the slot's fence (`WaitSlot`), retires
-the slot's leases and binds its region buffers, begins the slot's command
-buffer, records every pass (`RecordPasses`), the region copies, the preview and
-the outputs, then submits (`SubmitCounted`). Every node has its own command
-pool per slot: on Direct3D 12 a `DirectXGpuCommandPool` is one allocator and
-one list, and `DirectXGpuRecorder.BeginCommandBuffer` resets that list against
-its own allocator; on Vulkan `VulkanGpuCommandPoolFactory.Create` makes one
-`VkCommandPool` holding one buffer per request. Command recording itself is
-therefore already isolated per node. Three things reached from recording are
-not:
+The render graph runtime records in dependency waves
+(`RenderGraphRuntime.RenderWaves`). A render's wave is one past the latest graph
+node it reads this frame; the frame thread prepares a wave in schedule order
+(bindings, the slot's fence wait, leases, the cadence checkpoint and each package
+pass's `IRenderGraphPackageRecorder.PrepareRecord`, which follows a view and
+begins and stages its residency), forks the wave's recordings as one `Frame`
+fork, and commits them in schedule order before the next wave binds what they
+published. Same-frame read semantics are unchanged. Every node already owned its
+command pools per slot, the backend recorders and bindings are free-threaded,
+the counting recorder counts into the node's own ledger, and the pipeline cache
+is safe on any thread, so none of them needed a change.
 
-- The graph runtime binds a consumer's reads after its producers have produced
-  and published this frame (`RenderGraphRuntime`'s `Bind` resolving a scheduled
-  producer, and its publication after `ProduceFrame`), and refuses an absent
-  buffer.
-- A node's descriptor preparation for a slot follows that slot's fence wait,
-  and the package's mesh sets are slot-specific
-  (`SdfWorldPassRecorder.MeshSetOf`).
-- A pass recorder submits its residency's upload during recording (the
-  residency's `Submit`, an unsynchronized `m_submitted` check-and-set around
-  `SdfWorldTables.SubmitUpload`), and recording mutates the residency's
-  requested extent and bound screen handles. Package preparation (`SdfWorldPasses.BeginFrame`,
-  `SdfWorldPasses.PrepareRead`) begins and prepares each residency the frame
-  reads but does not perform this upload.
-
-### What changes
-
-Decision: the render graph runtime records in **dependency waves**. Each wave
-is the set of due nodes whose same-frame producers have all published; the frame
-thread prepares every node of the wave, forks their recording as one `Frame`
-fork (one partition per node), joins, submits the wave's lists in schedule
-order, publishes the wave's outputs, then prepares the next wave. Same-frame
-read semantics are unchanged: a consumer still binds what its producer
-published this frame. Most of the debug world's nodes (views and screens) are
-leaves or one level deep, so the common frame is two waves.
-
-Preparation, on the frame thread, per node and before its wave's fork, in this
-order: the slot's fence wait (`WaitSlot`) and lease retirement; `Bind` of its reads
-against the published producers; the residency's upload submission, extent
-requests and screen-handle binding, moved from the pass recorder into
-`SdfWorldResidency`'s per-frame preparation so one owner performs them once per
-residency per frame; then the slot's descriptor writes, mesh sets included,
-which are now safe because the fence has retired the slot. A recording thread
-only binds and records; `GpuPassPipelineCache` is read-only during the fork and
-a miss is a prepare-phase `Bake` job. Submission runs after the join on the
-frame thread, keeping submission records and fence identities single-threaded;
-a wave whose join passes the wait budget stays pending with its lists unsubmitted
-and its outputs unpublished until it joins ([C0](#how-it-composes)).
-The pose pack partitions by registration (the packet's
-measurement) and runs as a `Frame` fork before the first wave; the irradiance
-and exposure staging stay serial until measured.
+Recordings that share host state record on one thread: each package pass names
+its recording domain (`IRenderGraphPackageRecorder.RecordingDomain`, an SDF
+view's residency, a self-contained recorder itself, any other its package
+factory), and `RenderGraphRuntime.RecordWave` groups the jobs whose domains
+meet, one partition a group. A residency's upload and an SDF view's resolution
+refuse to run inside a partition, so a recorder that skips its preparation fails
+its recording by name. The [runtime contracts](../../.claude/skills/rendering/references/runtime-contracts.md#1-image-lifetime-is-leased-per-image-and-per-reader)
+hold the contract and `world.counters render.record` counts waves, partitions and
+the jobs workers recorded.
 
 ### What 36 % means
 
@@ -1475,7 +1444,6 @@ as `puck mesh audit` for bake defects.
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share is read from the tick breakdown first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read. |
 | **T4 Rows as jobs** | A silo steps every row in turn on its one simulation thread (`WorldSiloSimulation.Step` calls `WorldInstanceHost.StepInstances`), each row holding its authority gate for its whole step (`WorldServerStepShell.Step`), though rows never observe one another (the remark in `StepInstances` says so). Each row's step becomes a `Tick` job, forked after the serial drain of pending transfers (`WorldInstanceHost.DrainPendingTransfers`) and joined before the extensions pump; a row reads a neighbour only through what was published before the fork. The silo registers the pool, which today only the desktop boot does (`AddWorldBoot`). Socket handlers already marshal into the row's mailbox (`WorldServer.RunOnTickThreadAsync`); the operator and grant paths that still take the gate synchronously move into the mailbox too. A cadence checkpoint stops stalling every row on one step: rows are staggered over the cadence, and each encodes from a captured copy off its step rather than under its gate (`WorldSiloHost.TryCaptureRow`). The same fork serves the desktop's instance host once open question 7 settles where its tick runs. | A silo fixture with several rows: each row's per-tick hash sequence identical at one worker and at the machine's count, and against the serial build; the master step reads near the longest row's step plus the fork in the per-world parts (`HostWorldWork`), not their sum; on a cadence tick no step carries more than one row's capture. |
 | **Serial tick and produce cuts** | Fix the tick's serial bottlenecks ranked by the tick breakdown — in particular the bounds cache missing for every box of a moving body (`BodySupportMemo.Query`, `SdfBoundsCache`) and scanning every body's facts on every rule pass (`WorldRuleHost.DeriveFacts`). A shape change's whole-document delivery on the frame thread (`WorldDeliveryCursor.DeliverDefinition` serializing and hashing per sink) is the [authoring loop's step 4](iteration/authoring-loop.md#build-order), delivering only the changed rows, and is not repeated here. On the produce side, cut the largest named parts in breakdown order: field queries are about a third of the meadow's frame (measured once), so first replace the 6-sample field gradient (`SdfFieldEvaluator.TryFieldGradient`) with the 4-sample form without building a second cache beside `WorldFieldAnswer`, eliminate redundant draw-record uploads ([visibility](visibility.md#the-build-order)), and move interpreted motion to compiled programs ([dense landscapes](dense-landscapes.md)). | Each cut reports the breakdown drop it claimed on the benchmark route; deterministic tick hashes hold for the tick cuts, and field-query counts drop on the meadow chapter. |
-| **R1 Parallel recording in waves** (held until it pays) | Admission first: recording is taken only on a workload whose serial record sum (`world.counters render.record`, `record-microseconds` over `frames`) is several milliseconds with the critical path (`longest-microseconds` over `frames`) well below it; with residency staging moved into package preparation the debug world's sum is about a millisecond, so concurrency could save about half of one and is not yet worth workers. The admission reading is taken with four split-screen seats (M2), whose views multiply the sum, beside the one-seat reading; the `Frame` class it forks on is built. When admitted: waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission; and before it is safe, a thread-safe pipeline cache lookup, a counting recorder and per-worker command pools, with queue operations still serialized and the join before commit. The prepare, record and commit separation of a node's frame stays whether or not recording forks. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
 | **B1 GI's CPU work as jobs** | The change-set closure is built; what lands is the scene build, placement and selection as `Lighting` jobs under J1's pool. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's (the windowed check the closure still owes); `[sdf.mesh-gi]` probes traced against the whole window; no `Parallel.For` left in the irradiance code. |
 | **M3 Native movers 4 and 5** | Unmanaged scratch leases, the split journal, numeric columns; the tick's deliveries. | T0 at every count; `puck bench world` unchanged; a scratch world whose rules overwrite text cells and rewind (`world.undo`) reads the restored text. |
 

@@ -2952,7 +2952,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private (int[] Quads, int[] Materials, sbyte[] Axes) WithoutSpecks(int[] quads, int[] materials, sbyte[] axes, float[] positions) {
         var quadCount = materials.Length;
         var vertexCount = (positions.Length / 3);
-        using var pieceSets = new SdfDisjointSet(count: vertexCount, owner: m_observer);
+        using var pieceSets = new DisjointSet(count: vertexCount, owner: m_observer);
 
         int Root(int vertex) => pieceSets.Find(element: vertex);
 

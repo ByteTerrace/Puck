@@ -11,7 +11,7 @@ namespace Puck.SdfVm;
 // target as sampled images, the visibility records and the glass sums as buffers, the reactivity a temporal view's
 // resolve reads (the tables' dummy in any other view) and the image it writes. Its block holds the frame's common
 // values, copied by name from the world layout, the temporal ones every part of a frame writes alike among them.
-internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
+internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     private static readonly SdfFrameBlock.Copy[] FrameCopies = SdfFrameBlock.CopiesInto(layout: SdfWorldInterfaces.GlassParameters);
     // The pass's inputs by position: the lit image, the visibility records, the glass target and the glass sums, then
     // the environment's buffers the graph orders the pass after, which the World set already binds.
@@ -28,16 +28,14 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
     // Per frame slot, the tables the slot's pass set was written against.
     private readonly SdfWorldTables?[] m_portTables;
 
-    private SdfWorldView m_view;
     private bool m_disposed;
     private SdfShadeDispatch? m_shadePlan;
     private readonly SdfShadeSlots m_shade;
 
-    internal SdfGlassRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
+    internal SdfGlassRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) : base(owner: owner, instance: context.Instance, view: view) {
         m_context = context;
         m_shade = new SdfShadeSlots(slots: context.InFlightFrames);
         m_owner = owner;
-        m_view = view;
         m_temporal = owner.FragmentOf(instance: context.Instance)!.Resources.Any(predicate: static resource => resource.History);
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: SdfKernel.Glass).GroupLayoutHandles);
@@ -50,15 +48,12 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
         }
         m_disposed = true;
         m_shade.Release(releases: m_owner.ShadeReleases);
-        m_owner.Leave(view: m_view);
+        LeaveView();
     }
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) =>
         m_owner.SignatureOf(instance: m_context.Instance, part: SdfWorldPackage.Parts.GlassShade, temporal: m_temporal, context: in context, reads: reads);
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-        _ = m_owner.Follow(instance: m_context.Instance, view: ref m_view);
         var residency = m_view.Residency;
-
-        m_owner.Begin(residency: residency);
         var tables = residency.Staged(context: recording.Context);
 
         m_owner.NoteGlassExtent(instance: m_context.Instance, width: recording.RenderWidth, height: recording.RenderHeight);

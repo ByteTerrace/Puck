@@ -61,9 +61,9 @@ Not ported again:
 **The ports that force the fundamentals are the job system's forcing
 workloads (the owner's ruling).** Each lands just before the step it proves,
 so every optimization is measured on the load it exists for:
-- the second seat (lane 5) and authored passes (lane 1) ahead of parallel
-  view recording (the [job system](engine-job-system.md#6-build-order)'s R1),
-  whose admission reading they supply;
+- the second seat (lane 5) and authored passes (lane 1), whose views load
+  the parallel view recording (the [job system](engine-job-system.md#3-parallel-view-recording))
+  as real use does;
 - the quilt (lane 2) with the [streaming plan](streaming-and-memory.md#the-build-order)'s
   staging by demand (its step 4) and the led demand point of its step 10,
   since a neighbour authority's residency arriving ahead of a walker is the
