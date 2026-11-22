@@ -477,12 +477,13 @@ public sealed partial class WorldDisclosureImages {
     // Only the source, the audience and the images of the rows the placements read (FrameRows) move it, so only those
     // rows are imaged here: every other changed row waits for the definition's own identity (Current), which a session
     // sink's per-tick check never asks for.
-    internal ContentPin FrameIdentity(WorldRecipientView view) => Framed(view, Audience(view)).Frame;
+    internal ContentPin FrameIdentity(WorldRecipientView view) => Framed(Audience(view)).Frame;
     // The audience's definition with its frame current and digested.
-    private AudienceDefinition Framed(WorldRecipientView view, AudienceKey audience) {
-        var entry = DefinitionFor(view, audience);
+    private AudienceDefinition Framed(AudienceKey audience) {
+        var view = audience.View;
+        var entry = DefinitionFor(audience);
 
-        if (FrameRowsMoved(view, audience, entry)) { entry = Compose(view, audience); }
+        if (FrameRowsMoved(audience, entry)) { entry = Compose(audience); }
         _ = FrameOf(entry);
         return entry;
     }
@@ -493,7 +494,8 @@ public sealed partial class WorldDisclosureImages {
         return (held == next && heldIdentity == identity) ||
             (held is not null && held == entry.BeforeAppearance && heldIdentity == entry.BeforeAppearanceIdentity);
     }
-    private bool FrameRowsMoved(WorldRecipientView view, AudienceKey audience, AudienceDefinition entry) {
+    private bool FrameRowsMoved(AudienceKey audience, AudienceDefinition entry) {
+        var view = audience.View;
         var arena = view.Arena;
         m_work.Add(RowVisits, entry.FrameRowOrdinals.Length);
         foreach (var row in entry.FrameRowOrdinals) {
@@ -520,7 +522,7 @@ public sealed partial class WorldDisclosureImages {
     // lookup, a changed row refreshes its image digest and, when its structure moved, its skeleton digest.
     private AudienceDefinition Current(WorldRecipientView view) {
         var audience = Audience(view);
-        var entry = DefinitionFor(view, audience);
+        var entry = DefinitionFor(audience);
         var arena = view.Arena;
         // Inside an open scope the definition was composed from the store as it stands and is kept nowhere.
         if (!Settled(arena)) { return entry; }
@@ -539,12 +541,12 @@ public sealed partial class WorldDisclosureImages {
             affected.Clear();
             AddAffected(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(moved), entry.Rows.Length, affected);
             foreach (var row in affected.Members) {
-                if (!Refresh(view, entry, audience, row)) { return Compose(view, audience); }
+                if (!Refresh(entry, audience, row)) { return Compose(audience); }
             }
         } else {
             m_work.Count(FullScans);
             for (var row = 0; row < entry.Rows.Length; row++) {
-                if (!Refresh(view, entry, audience, row)) { return Compose(view, audience); }
+                if (!Refresh(entry, audience, row)) { return Compose(audience); }
             }
         }
         entry.Arena = arena;
@@ -556,8 +558,9 @@ public sealed partial class WorldDisclosureImages {
 
     private readonly List<(int Row, int Holding)> m_holdingRows = [];
 
-    private AudienceDefinition DefinitionFor(WorldRecipientView view, AudienceKey audience) {
-        if (!Settled(view.Arena) || !m_definitions.TryGetValue(audience.Text, out var entry)) { return Compose(view, audience); }
+    private AudienceDefinition DefinitionFor(AudienceKey audience) {
+        var view = audience.View;
+        if (!Settled(view.Arena) || !m_definitions.TryGetValue(audience.Text, out var entry)) { return Compose(audience); }
         var source = view.Source;
         if (ReferenceEquals(entry.Source, source)) { return entry; }
 
@@ -570,7 +573,7 @@ public sealed partial class WorldDisclosureImages {
 
         if (ReferenceEquals(entry.Arena, view.Arena) && entry.Revision == view.Arena.DisclosureRevision &&
             WorldDocumentInputs.Changed(entry.Source, source).Except(WorldPresentationRows.Parts).IsEmpty &&
-            !FrameRowsMoved(view, audience, entry)) {
+            !FrameRowsMoved(audience, entry)) {
             entry.AdoptAppearance(source, FrameOf(entry));
             return entry;
         }
@@ -579,16 +582,17 @@ public sealed partial class WorldDisclosureImages {
         if (changes.IsEmpty ||
             !ReferenceEquals(entry.Arena, view.Arena) ||
             entry.Revision != view.Arena.DisclosureRevision ||
-            FrameRowsMoved(view, audience, entry)) {
-            return Compose(view, audience);
+            FrameRowsMoved(audience, entry)) {
+            return Compose(audience);
         }
-        return AdoptHoldings(view, audience, entry, source, changes);
+        return AdoptHoldings(audience, entry, source, changes);
     }
     // A direct row can be patched even if the audience re-deals other placements. Reuse the existing composer for
     // derived children, transformed or omitted rows, and newly active bits that read restricted state. Apart from
     // DefinitionFor, which every tick calls, so the test below captures the view only when holdings moved.
-    private AudienceDefinition AdoptHoldings(WorldRecipientView view, AudienceKey audience, AudienceDefinition entry, WorldDefinition source,
+    private AudienceDefinition AdoptHoldings(AudienceKey audience, AudienceDefinition entry, WorldDefinition source,
         ReadOnlySpan<(int Row, int Holding)> changes) {
+        var view = audience.View;
         bool Restricted(string name, string? _) => !view.ReadsWhole(name);
         m_holdingRows.Clear();
         foreach (var (row, holding) in changes) {
@@ -596,11 +600,11 @@ public sealed partial class WorldDisclosureImages {
             var ordinal = entry.PlacementOrdinal(previous, row);
             if (ordinal < 0 || previous != entry.Composed.Placements[ordinal] ||
                 (previous.Parent is not null && WorldPlacementDeal.TrySplitChildId(previous.Id, out _, out _))) {
-                return Compose(view, audience);
+                return Compose(audience);
             }
             var placement = source.Placements[row];
             if (!ReferenceEquals(placement, WorldPlacementResponse.Disclosed(placement, Restricted))) {
-                return Compose(view, audience);
+                return Compose(audience);
             }
             m_holdingRows.Add((ordinal, holding));
         }
@@ -612,7 +616,8 @@ public sealed partial class WorldDisclosureImages {
     // Brings one row of an audience's definition current, reporting false when the frame moved with it and the whole
     // definition must be composed again. A row beyond the authored rows, or one whose version and dependency versions
     // stand as recorded, is left as it is.
-    private bool Refresh(WorldRecipientView view, AudienceDefinition entry, AudienceKey audience, int row) {
+    private bool Refresh(AudienceDefinition entry, AudienceKey audience, int row) {
+        var view = audience.View;
         if ((uint)row >= (uint)entry.Rows.Length) { return true; }
         var arena = view.Arena;
         m_work.Count(RowVisits);
@@ -636,7 +641,8 @@ public sealed partial class WorldDisclosureImages {
         }
         return true;
     }
-    private AudienceDefinition Compose(WorldRecipientView view, AudienceKey audience) {
+    private AudienceDefinition Compose(AudienceKey audience) {
+        var view = audience.View;
         var source = view.Source;
         var arena = view.Arena;
         var count = source.AuthoredState.Count;

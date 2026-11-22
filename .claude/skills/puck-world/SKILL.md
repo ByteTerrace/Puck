@@ -156,14 +156,19 @@ ordinals. The recipient still has to pass the live row checks, and a projected
 placement section is recomposed when its restricted inputs can affect the result.
 Placement identity reuses each unchanged row's canonical digest.
 
-A row's image for an audience is read from the store and the audience's
-`WorldRowMask` alone (`WorldRowImageWriter`), and `WorldDisclosureImages.Reading`
-is the one door that asks an audience for its mask
+A row's image for an audience is read from the store and the audience's mask
+alone (`WorldDisclosureImages.Pass`, over the one walk
+`WorldStateDisclosure.VisitRow`), through a key only
+`WorldDisclosureImages.Audience` makes for a view, and
+`WorldDisclosureImages.Reading` is the one door that asks an audience for a
+kept mask
 ([the image invariant](../../../docs/plans/disclosure.md#5-a-delta-is-a-difference-of-views-owned-by-the-stream)).
-A steady tick takes a row's digest and builds no image. A new input to whether
-a cell is readable owes a witness in `Reading`, and a new field on a stored
-cell owes a line in `StateArena.WriteCell`, which `DisclosureImageLawTests`
-checks against what a recipient is handed.
+A steady tick takes a row's digest and builds no image. Inside an open journal
+scope the table reads the store as it stands and keeps nothing
+(`WorldDisclosureImages.Settled`): a new kept reading owes that guard. A new
+input to whether a cell is readable owes a witness in `Reading`, and a new
+field on a stored cell owes a line in `StateArena.WriteCell`, which
+`DisclosureImageLawTests` checks against what a recipient is handed.
 
 ## Diagnostic reports and pins
 

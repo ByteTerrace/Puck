@@ -1547,21 +1547,34 @@ and after structural changes. Resource measurements are visible only in the
 operator's `world.budget` answer.
 
 The image invariant: **an audience is handed a row image only if the image was
-built from the store under that audience's own disclosure mask.** Three
+built from the store under that audience's own disclosure mask.** Five
 things enforce it.
 
-- **The mask is the only thing an image knows about its audience.** A
-  `WorldRowMask` is everything an audience answers about one row: whether the
-  row reaches its ceiling, whether it reads the row whole, and otherwise
-  whether the row's own policy admits it and whether it may read each held
-  cell. `WorldRowImageWriter.Write` and `WorldRowImageWriter.Materialize` take
-  the store, the row and a mask, and no view, observer or principal, so the
-  compiler keeps anything else about the audience out of an image and out of
-  its digest.
-- **One door asks the audience.** `WorldDisclosureImages.Reading` is the only
-  caller of `WorldRowMask.Take`. It shares a row's composition between two
-  audiences only when their mask bytes are equal; a hash of the mask only
-  narrows the search.
+- **The mask is the only thing an image knows about its audience.** A mask is
+  everything an audience answers about one row: whether the row reaches its
+  ceiling, whether it reads the row whole, and otherwise whether the row's own
+  policy admits it and whether it may read each held cell. The mask type is
+  private to `WorldDisclosureImages`, so no other code can make one, and
+  `WorldDisclosureImages.Pass`, which writes a row's bytes and builds its
+  image, takes the store, the row and a mask, and no view, observer or
+  principal. The compiler keeps anything else about the audience out of an
+  image and out of its digest.
+- **One walk decides what a reader is shown.** `WorldStateDisclosure.VisitRow`
+  is the only walk of a row's cells for disclosure. The bytes, the image's
+  cells and its observation are collected by that one walk in one pass, and a
+  one-off observation (`WorldStateDisclosure.Compose`) takes the same walk
+  with a live observer. An image carries the digest of the bytes written
+  beside it, and `WorldDisclosureImages.Image` refuses one whose digest is not
+  the composition's.
+- **A row is read through a key tied to its view.**
+  `WorldDisclosureImages.Audience` is the only maker of an
+  `WorldDisclosureImages.AudienceKey`, which names the view it was taken for,
+  so a caller cannot read a row for one view under another's audience. A key
+  taken before the store moved is taken again where it is used, which also
+  brings the table current to a replaced arena or policy index.
+  `WorldDisclosureImages.Reading` is the one place a kept mask is asked for,
+  and it shares a row's composition between two audiences only when their mask
+  bytes are equal; a hash of the mask only narrows the search.
 - **No image crosses a write on the strength of a digest.** A composition
   holds the canonical bytes' SHA-256 digest and, once a delivery asked for it,
   the image. Every write of the composition drops the image
@@ -1569,6 +1582,14 @@ things enforce it.
   image an audience is handed was built from the store as it stands. A digest
   decides only whether a stream is sent a row again: a stream whose digest
   stands keeps the image it already holds.
+- **An open journal scope reads the store and keeps nothing.** Row versions
+  and the policy revision settle when the outermost scope commits, so inside
+  one nothing the table keeps can be told current. Every reading then
+  (`WorldDisclosureImages.Unsettled` for a row, and the definition, scene,
+  placement and key-list readings behind `WorldDisclosureImages.Settled`) asks
+  the observer now, reads the store as it stands and writes no kept state, so
+  a rewind leaves the table as the scope found it. `StateArena.ComputeHash`
+  treats an open scope the same way.
 
 The guarantee stops at two places, both held by review. An audience's mask for
 a row is kept while the row's version and its dependencies' versions stand,

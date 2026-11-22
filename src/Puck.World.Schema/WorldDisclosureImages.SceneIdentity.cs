@@ -39,7 +39,7 @@ public sealed partial class WorldDisclosureImages {
     // per audience while nothing it reads has moved, so the sessions of one audience share it.
     internal ContentPin SceneIdentity(WorldRecipientView view) {
         var audience = Audience(view);
-        var definition = Framed(view, audience);
+        var definition = Framed(audience);
         var frame = definition.Frame;
         var arena = view.Arena;
         var source = view.Source;
@@ -83,7 +83,7 @@ public sealed partial class WorldDisclosureImages {
     // The first row the scene reads that this view does not read whole, by name, or null when it reads every one whole;
     // for an operator's read-back of why a view's scene differs from a whole reader's.
     internal string? FirstSceneRowWithheld(WorldRecipientView view) {
-        foreach (var row in SceneRows(view, Framed(view, Audience(view)))) {
+        foreach (var row in SceneRows(view, Framed(Audience(view)))) {
             if (!view.ReadsWhole(row)) { return view.Arena.Rows[row].Name.Value; }
         }
         return null;
