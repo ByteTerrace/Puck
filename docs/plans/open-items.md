@@ -1244,26 +1244,40 @@ static copies by row identity (`sdf.creations.static.copies-rebuilt` +77 over
 manifest parts it met (`world.boot.manifest.parts-walked` +275, `.replayed`
 +660k). What remains is in proportion to the document, not the change:
 
-- [high] Each new placements section (a response change in a disclosed
-  document; about 110 compiles over the chapter) builds a new
-  `WorldPlacementStamp` compilation context, which validates every surface
-  descriptor again (`world.boot.surface.descriptors` +117k over the chapter),
-  and the frame table and the manifest still visit every row to find it
-  unchanged. Carry a context's descriptors and frames across a section whose
-  rows are reused, and derive the frame table and manifest of a section from
-  the section it replaced by its changed rows, so a disclosure costs the rows
-  that moved. Check: those counters per delivery.
-- [high] The frame thread still allocated 1054 MiB in the lift chapter (647
-  iterations, `frames.csv` `frameThreadAllocatedBytes`), and the longest frames
-  were gen2 collections (pauses of 350 to 700 ms) on a machine short of memory.
-  Attribute the frame thread's allocations with a `gc-verbose` trace read by
-  allocation tick, not a speedscope conversion (which weights by time), and
-  remove the largest sources. The largest left on the route are a graph
-  install's (`ShaderPipelineRenderNode.InstallPending`: the pass recorder,
-  its group sets and layouts, `PreserveLiveParameters`), which a secondary
-  view's resize pays each time; `DeliveryLabel.Of` under
-  `SdfWorldPasses.Refresh`; and `WorldScreenBinder.SharedSceneOf`'s name, built
-  a feed a frame.
+- [high] A response change still rebuilds whole products on background
+  threads, and their garbage stops the frame thread: every gen1 collection
+  suspends it, and the stalls at the garden painting and the lift were frames
+  holding several gen1 pauses beside the frame's own work. Per rebuild, read by
+  allocation tick (`puck host allocations --focus`): the composition's program
+  (`SdfProgram`'s word arrays, about 150 MB a build on the large object heap,
+  `SdfCompositionFrameSource.StartBuild`), and the presentation field
+  (`WorldFramePresenter.RebuildStaticField`, about 280 MB: a whole static
+  program and its field evaluator, `SdfFieldEvaluator.BuildRotationBounds` and
+  `SdfBoundsCache` among it). Build each from the one it replaces by the rows
+  that changed, or keep their storage owned and reused. Check: allocation by
+  site over the lift chapter, and no frame with more than one collection.
+- [high] Each delivery that replaces a placements section still builds a new
+  `WorldPlacementStamp` compilation context; frames now resolve on demand and
+  a surface descriptor is carried from any context whose rows and creations it
+  read stand (`world.boot.surface.descriptors-carried`), but the context's row
+  index and caches are rebuilt per section, and `WorldFaceCatalog.DeriveFrame`
+  (from `WorldNestedScreens.Reconcile`, every nested screen each delivery) asks
+  for a fresh one. Derive a section's index and context from the section it
+  replaced by its changed rows. Check: `world.boot.surface.descriptors` per
+  delivery near zero, and the placement sites gone from the frame thread's
+  allocation.
+- [high] The frame thread still allocates 150 to 600 KB a frame on average in
+  steady chapters (median 30 to 140 KB). The largest remaining sites, by
+  allocation tick: the irradiance volume replaced whole on resize
+  (`SdfMeshIrradiance.TryReplaceVolume`, `MemoryAccount.Owner.AllocateArray`),
+  render-graph reconfiguration (`ShaderPipelineRenderNode.InstallPass`,
+  `GpuGroupLayoutDescription`, `DirectXGpuBindings.PlaceGroupSet`,
+  `SdfWorldPassRecorder`), `SdfMeshOcclusion`'s sighting arrays, route labels
+  (`DeliveryLabel.Of` from `WorldScreenBinder.ResolveInstanceView`), the
+  document rebind (`WorldDocumentWalker.Cursor.RewriteItems`' object arrays) and
+  `FixedQ4816.FromDegreesExact`'s `BigInteger` work, and
+  `WorldScreenBinder.SharedSceneOf`'s name, built a feed a frame. Each is a per-change
+  rebuild of something derivable from what changed.
 - [medium] A mesh region whose growth is refused holds its limit to what it
   holds (`SdfWorldTables.HoldsRefusedGrowth`, `sdf.rows.check.region.refusal-holds`)
   until the region's size, a release, the pool's room or a trim moves, or a

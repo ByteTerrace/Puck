@@ -662,6 +662,10 @@ public sealed class SdfMeshStore {
         public bool MayHoldAny {
             get { lock (m_gate) { return (!m_listed || (m_keys.Count > 0)); } }
         }
+        // The entries the set holds, or null until its listing stands.
+        public int? Count {
+            get { lock (m_gate) { return (m_listed ? m_keys.Count : null); } }
+        }
 
         public bool MayHold(UInt128 key) {
             lock (m_gate) { return (!m_listed || m_keys.Contains(key)); }
@@ -744,14 +748,15 @@ public sealed class SdfMeshStore {
         string reason;
 
         if (File.Exists(path: IdentityPathOf(value: identity.Value))) {
-            var entries = (System.IO.Directory.Exists(path: Directory) ? new DirectoryInfo(path: Directory).GetFiles(searchOption: SearchOption.AllDirectories, searchPattern: ("*" + Extension)) : []);
-            var set = SetDirectoryOf(identity: identity.Value);
-            var own = entries.Count(predicate: file => string.Equals(a: file.DirectoryName, b: set, comparisonType: StringComparison.OrdinalIgnoreCase));
-            var sets = entries.Select(selector: static file => file.DirectoryName).Distinct(comparer: StringComparer.OrdinalIgnoreCase).Count();
+            // The set's own listing, which the store keeps as it reads and writes, answers without walking the store: a
+            // bake restarts often while a world plays, and each start that misses asks.
+            var own = EntrySetOf(identity: identity.Value, extension: Extension).Count;
 
-            reason = ((own == 0)
-                ? $"identity {value} unchanged: its set was evicted, or it never stored one ({entries.Length} entries in {sets} sets, {entries.Sum(selector: static file => file.Length)} of {CapacityBytes} bytes)"
-                : $"identity {value} unchanged: geometry new to its set of {own} entries ({entries.Length} entries in {sets} sets, {entries.Sum(selector: static file => file.Length)} of {CapacityBytes} bytes)");
+            reason = own switch {
+                null => $"identity {value} unchanged: geometry new to its set, which is still being listed",
+                0 => $"identity {value} unchanged: its set was evicted, or it never stored one (a store of {CapacityBytes} bytes)",
+                _ => $"identity {value} unchanged: geometry new to its set of {own} entries (a store of {CapacityBytes} bytes)",
+            };
         } else if (!identity.HasParts) {
             reason = $"identity {value} new, its parts unknown";
         } else if (NearestRecorded(identity: identity) is not { } nearest) {

@@ -165,7 +165,7 @@ public sealed class SdfMeshDresser : IDisposable {
                 if (state.Run.Count == 0) { state.Run = m_writer.Allocate(count: 1); }
                 RemoveBindings(run: state.Run);
                 state.Mesh = mesh;
-                Bind(state.Run, 0, new DrawBinding(mesh, null, i), frame, ref matrices);
+                Bind(state.Run, 0, Binding(mesh, null, i), frame, ref matrices);
                 visited++; updated++;
             }
         }
@@ -298,7 +298,7 @@ public sealed class SdfMeshDresser : IDisposable {
         state.Copies = (copies?.ToArray() ?? []);
 
         for (var offset = 0; (offset < count); offset++) {
-            var binding = new DrawBinding(mesh.Piece(index: (offset % mesh.PieceCount)), group,
+            var binding = Binding(mesh.Piece(index: (offset % mesh.PieceCount)), group,
                 ((copies is null) ? -1 : copies[(offset / mesh.PieceCount)]), ((copies is null) && (mesh.Chunks.Count > 0)), tier, trace, (offset % mesh.PieceCount));
 
             Bind(binding: binding, frame: frame, matrices: ref matrices, offset: offset, run: state.Run);
@@ -336,12 +336,26 @@ public sealed class SdfMeshDresser : IDisposable {
     }
     private void StartOver() {
         m_writer.StartOver();
-        m_groups.Clear(); m_own.Clear(); m_bindingsByOwner.Clear(); Array.Clear(array: m_bindings);
+        m_groups.Clear(); m_own.Clear(); m_bindingsByOwner.Clear();
+        foreach (var binding in m_bindings) { if (binding is not null) { m_releasedBindings.Push(item: binding.Release()); } }
+        Array.Clear(array: m_bindings);
         m_host = default; m_program = null; m_layout = -1; m_product = -1; m_slotEnd = 0;
     }
     private void RemoveBindings(SdfMeshRows.Run run) {
-        for (var row = run.Start; (row < (run.Start + run.Count)); row++) { if (row < m_bindings.Length) { m_bindings[row] = null; m_bindingsByOwner.Remove(row: row); } }
+        for (var row = run.Start; (row < (run.Start + run.Count)); row++) {
+            if (row >= m_bindings.Length) { continue; }
+            if (m_bindings[row] is { } released) { m_releasedBindings.Push(item: released.Release()); }
+            m_bindings[row] = null;
+            m_bindingsByOwner.Remove(row: row);
+        }
     }
+    // The bindings rows let go of, which only this stack holds once removed: the next bind takes one and resets it.
+    private readonly Stack<DrawBinding> m_releasedBindings = new();
+
+    private DrawBinding Binding(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false, int tier = -1, SdfMesh? trace = null, int piece = 0) =>
+        (m_releasedBindings.TryPop(result: out var released)
+            ? released.Reset(chunked: chunked, copyIndex: copyIndex, group: group, mesh: mesh, piece: piece, tier: tier, trace: trace)
+            : new DrawBinding(chunked: chunked, copyIndex: copyIndex, group: group, mesh: mesh, piece: piece, tier: tier, trace: trace));
     private void Bind(SdfMeshRows.Run run, int offset, DrawBinding binding, SdfFrame frame, ref int matrices) {
         var row = (run.Start + offset);
 
@@ -398,13 +412,39 @@ public sealed class SdfMeshDresser : IDisposable {
     }
 
     /// <summary>Releases the row table's mesh claims.</summary>
-    public void Dispose() { if (m_disposed) { return; } m_disposed = true; StartOver(); }
+    public void Dispose() { if (m_disposed) { return; } m_disposed = true; StartOver(); m_releasedBindings.Clear(); }
 
     // A row's draw: one piece of a group's mesh, or a copy's own mesh, the tier the group's drawn mesh was baked at, and
     // the mesh the irradiance volume traces in the placement's place with the piece the row draws. A moving group's and a
     // moving copy's draws are placed by their slots (SdfMeshDraw.PlacedBySlot): the draw keeps their scale, so the slot
     // moving leaves it standing.
-    private sealed class DrawBinding(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false, int tier = -1, SdfMesh? trace = null, int piece = 0) {
+    // A row is rebound whenever its group's mesh, tier, trace or copies move, which a retier does to many rows a frame,
+    // so a binding a dress lets go of (Release) is kept and bound again (Reset) rather than allocated anew. Reset writes
+    // every field, so a reused binding answers exactly as a new one would.
+    private sealed class DrawBinding {
+        private SdfMesh m_mesh = null!;
+        private SdfMeshBakeGroup? m_group;
+        private int m_copyIndex;
+        private bool m_chunked;
+        private int m_tier;
+        private SdfMesh? m_trace;
+        private int m_piece;
+
+        public DrawBinding(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false, int tier = -1, SdfMesh? trace = null, int piece = 0) =>
+            Reset(chunked: chunked, copyIndex: copyIndex, group: group, mesh: mesh, piece: piece, tier: tier, trace: trace);
+
+        // Makes this binding the one the constructor would make of the same arguments.
+        public DrawBinding Reset(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false, int tier = -1, SdfMesh? trace = null, int piece = 0) {
+            (m_mesh, m_group, m_copyIndex, m_chunked, m_tier, m_trace, m_piece) = (mesh, group, copyIndex, chunked, tier, trace, piece);
+            (m_motionSource, m_motionIdentity, m_copy, m_copyRevision, m_pickIdentity, m_draw, m_posed, m_scale, Run) = (null, null, null, 0L, null, default, false, 1f, default);
+            return this;
+        }
+        // Lets go of every mesh, group and copy the binding names, so a kept binding holds nothing alive.
+        public DrawBinding Release() {
+            (m_mesh, m_group, m_trace) = (null!, null, null);
+            (m_motionSource, m_motionIdentity, m_copy, m_pickIdentity, m_draw) = (null, null, null, null, default);
+            return this;
+        }
         private object? m_motionSource;
         private object? m_motionIdentity;
         private SdfMeshInstance? m_copy;
@@ -416,9 +456,9 @@ public sealed class SdfMeshDresser : IDisposable {
 
         public SdfMeshRows.Run Run;
 
-        public int CopyIndex => copyIndex;
-        public int FirstInstance => (group?.FirstInstance ?? -1);
-        public int? Slot => ((group is { Dynamic: true }) ? group.Slot : null);
+        public int CopyIndex => m_copyIndex;
+        public int FirstInstance => (m_group?.FirstInstance ?? -1);
+        public int? Slot => ((m_group is { Dynamic: true }) ? m_group.Slot : null);
 
         // The draw the row holds as last posed (Repose); read in place, since an unchanged draw is never copied out.
         public ref readonly SdfMeshDraw Draw => ref m_draw;
@@ -427,9 +467,9 @@ public sealed class SdfMeshDresser : IDisposable {
         // only with the copy's revision, which a moving copy's pose leaves standing (SdfMeshInstance.Revision), and a
         // moving group's only with its slot's scale.
         public bool Repose(SdfFrame frame, ref int matrices) {
-            if (copyIndex >= 0) {
-                var copy = frame.MeshInstances[copyIndex];
-                var firstInstance = (group?.FirstInstance ?? -1);
+            if (m_copyIndex >= 0) {
+                var copy = frame.MeshInstances[m_copyIndex];
+                var firstInstance = (m_group?.FirstInstance ?? -1);
 
                 if (ReferenceEquals(objA: copy, objB: m_copy) && (m_copyRevision == copy.Revision) && (m_draw.FrameSlot == copy.FrameSlot) && (m_pickIdentity?.FirstInstance == firstInstance)) {
                     return false;
@@ -443,41 +483,41 @@ public sealed class SdfMeshDresser : IDisposable {
 
                 if (!Equals(objA: m_motionSource, objB: source)) {
                     m_motionSource = source;
-                    m_motionIdentity = ((source, (((object?)group?.Selector) ?? "mesh")));
+                    m_motionIdentity = ((source, (((object?)m_group?.Selector) ?? "mesh")));
                 }
                 matrices++;
-                m_draw = new SdfMeshDraw(identity: m_pickIdentity, material: ((group is null) ? copy.Material : 0),
-                    mesh: ((group is null) ? copy.Mesh! : mesh), objectToWorld: copy.Matrix) {
+                m_draw = new SdfMeshDraw(identity: m_pickIdentity, material: ((m_group is null) ? copy.Material : 0),
+                    mesh: ((m_group is null) ? copy.Mesh! : m_mesh), objectToWorld: copy.Matrix) {
                     FrameSlot = copy.FrameSlot,
-                    Glass = (group?.Glass ?? false),
+                    Glass = (m_group?.Glass ?? false),
                     IsDynamic = copy.IsDynamic,
                     MotionIdentity = m_motionIdentity,
-                    Piece = piece,
-                    Tier = ((group is null) ? -1 : tier),
-                    Trace = trace,
+                    Piece = m_piece,
+                    Tier = ((m_group is null) ? -1 : m_tier),
+                    Trace = m_trace,
                     UsesRootMaterialFrame = copy.UsesRootMaterialFrame,
                 };
                 return true;
             }
-            var scale = (((group!.Dynamic) && (group.Slot < frame.DynamicTransforms.Count)) ? SdfMeshGeometryBuilder.UnitsOf(transform: frame.DynamicTransforms[group.Slot]) : m_scale);
+            var scale = (((m_group!.Dynamic) && (m_group.Slot < frame.DynamicTransforms.Count)) ? SdfMeshGeometryBuilder.UnitsOf(transform: frame.DynamicTransforms[m_group.Slot]) : m_scale);
 
-            if (m_posed && (m_scale == scale) && (m_draw.FrameSlot == (group.Dynamic ? group.Slot : null)) && (m_draw.Glass == group.Glass) && (m_draw.Displacement == group.Displacement)) {
+            if (m_posed && (m_scale == scale) && (m_draw.FrameSlot == (m_group.Dynamic ? m_group.Slot : null)) && (m_draw.Glass == m_group.Glass) && (m_draw.Displacement == m_group.Displacement)) {
                 return false;
             }
             m_scale = scale;
             m_posed = true;
-            if (group.Dynamic) { matrices++; }
+            if (m_group.Dynamic) { matrices++; }
 
-            m_draw = new SdfMeshDraw(identity: (chunked ? mesh : group), material: 0, mesh: mesh,
-                objectToWorld: (group.Dynamic ? Matrix4x4.CreateScale(scale: scale) : Matrix4x4.Identity)) {
-                FrameSlot = (group.Dynamic ? group.Slot : null),
-                Glass = group.Glass,
+            m_draw = new SdfMeshDraw(identity: (m_chunked ? m_mesh : m_group), material: 0, mesh: m_mesh,
+                objectToWorld: (m_group.Dynamic ? Matrix4x4.CreateScale(scale: scale) : Matrix4x4.Identity)) {
+                FrameSlot = (m_group.Dynamic ? m_group.Slot : null),
+                Glass = m_group.Glass,
                 // A displaced surface is never static (SdfMeshDraw.IsStatic), whatever its placement does.
-                Displacement = group.Displacement,
-                IsDynamic = group.Dynamic,
-                Piece = piece,
-                Tier = tier,
-                Trace = trace,
+                Displacement = m_group.Displacement,
+                IsDynamic = m_group.Dynamic,
+                Piece = m_piece,
+                Tier = m_tier,
+                Trace = m_trace,
             };
             return true;
         }

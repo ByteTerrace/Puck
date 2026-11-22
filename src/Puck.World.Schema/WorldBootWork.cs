@@ -120,6 +120,9 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
 
     /// <summary>Surface descriptors validated and indexed after immutable context inputs change.</summary>
     public static WorkKind SurfaceDescriptors { get; } = Registry.Declare(name: "world.boot.surface.descriptors", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the surface descriptors a new compilation context took from another context's validation of the same
+    /// row, since every row and creation that validation read stands.</summary>
+    public static WorkKind SurfaceDescriptorsCarried { get; } = Registry.Declare(name: "world.boot.surface.descriptors-carried", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Candidate static surface occurrences considered.</summary>
     public static WorkKind SurfaceCandidates { get; } = Registry.Declare(name: "world.boot.surface.candidates", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Directed surface projection rays actually queried.</summary>

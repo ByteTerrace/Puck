@@ -115,7 +115,7 @@ half of these rules on every command, with no exemptions.
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: checks the lock files with a locked restore, builds the solution and the file app, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations. | |
-| [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due; [`host heap`](#puck-host-heapthe-large-object-heap-of-another-process) names another process's large object heap tenants. |
+| [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due; [`host heap`](#puck-host-heapthe-large-object-heap-of-another-process) names another process's large object heap tenants; [`host allocations`](#puck-host-allocationswhat-another-process-allocates-by-stack) attributes another process's allocation to threads, types and call sites. |
 | [`puck landing`](#puck-landingthe-leads-landing-checks) | the lead's checks before landing a lane: `landing loss` refuses a commit that silently drops content its author never worked from, and `landing handback` checks a lane branch's commits against the hand-back contract (the `Brief:` line, subjects, trailers, plumbing and docs links). |
 | [`puck lanes`](#puck-lanesone-line-per-worktree) | prints one line per worktree: branch, commits ahead, changes, last commit, newest write, log, lease and stall state; `--watch` prints only the changes. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
@@ -1292,6 +1292,33 @@ from `puck_world_start`.
 
 Exit codes: 0 done, 2 refused (the process exposes no diagnostics port or the
 runtime wrote no dump).
+
+## `puck host allocations`—what another process allocates, by stack
+
+`puck host allocations (--pid <pid> [--seconds <n>] [--output <file>] | --trace <file>) [--thread <id>] [--from <s>] [--to <s>] [--focus <text>] [--top <n>]`
+attributes another .NET process's managed allocation by the runtime's own
+allocation ticks. With `--pid` the CLI records an EventPipe session on the
+target's diagnostics port for `--seconds` (default 20) with the runtime
+provider's GC keyword at verbose level, plus loader, JIT and rundown events
+that name the code, and keeps the `.nettrace` at `--output`; `--trace` reads a
+trace already taken, such as a `dotnet-trace collect --profile gc-verbose` one.
+The runtime raises a tick each time a thread's allocations cross about 100 KB,
+naming the type, whether it went to the large object heap and the allocating
+stack, so the sums are bytes, which a speedscope conversion of the same trace
+(weighted by time) cannot give. The report lists every thread's bytes, named by
+its outermost engine frame (the host loop, a bake worker), every gen2
+collection and every pause of 50 ms or more with its reason, then the bytes by
+type, by call site (the innermost engine frame, so a collection's growth is
+charged to the code that added to it) and beneath each engine frame.
+`--thread` reads one thread (an id the thread lines name), `--from` and `--to`
+read a window in seconds from the trace's start (the collection lines' `at-ms`
+over 1000) to look at one stall, and `--focus` keeps the ticks beneath an
+engine frame naming the text and lists the `path`s of callers from it outward.
+The target pays only the sampling, so a recording can run beside a
+`puck benchmark` route; its figures are counts, never timings.
+
+Exit codes: 0 done, 2 refused (no diagnostics port, or the trace could not be
+read).
 
 ## `puck laws prove`—a law against its fix
 
