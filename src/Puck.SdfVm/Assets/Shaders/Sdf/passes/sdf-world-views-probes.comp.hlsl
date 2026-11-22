@@ -26,10 +26,7 @@ groupshared uint sdfProbeCellState[SdfProbeGroupCells];
 void sdfProbeReceiver(ViewportData view, uint2 pixel, uint viewIndex, out float3 surfacePoint, out float3 normal) {
     SdfPixel p = sdfPixelAt(view, pixel, viewIndex);
     uint record = worldVisibilityRecord(pixel, viewIndex);
-    float t = asfloat(sdfVisibilityRecordBuffer[record + SdfVisibilityTWord]);
-    precise float3 rayTravel = (p.rayDirection * t);
-
-    surfacePoint = (p.rayOrigin + rayTravel);
+    surfacePoint = sdfPixelSurfacePoint(p, asfloat(sdfVisibilityRecordBuffer[record + SdfVisibilityTWord]));
     normal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord]);
 }
 

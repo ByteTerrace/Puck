@@ -546,10 +546,10 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
 
 ## Puck's open cases
 
-- **Register-limited pixel passes.** On Vulkan (RTX 4070) the plain views,
-  binned views and glass kernels and every specialization of them run at 168
-  registers (12 of the SM's 48 warps), so a specialized set adds no registers
-  over the kernels that run no program; the interpreter's views, binned views
+- **Register-limited pixel passes.** On Vulkan (RTX 4070) the plain views
+  kernel, the binned specializations and the glass kernels run at 168 registers
+  (12 of the SM's 48 warps) and the binned plain views kernel at 128 (16 warps),
+  so a specialized set adds registers only over the binned plain kernel; the interpreter's views, binned views
   and glass run at 255 (8 warps), the probe lookup at 128 and the views filter
   at 40, and the specialized and plain glass keep 96 and 16 bytes of local
   memory. The interpreter costs tens of times the specialized kernels where a

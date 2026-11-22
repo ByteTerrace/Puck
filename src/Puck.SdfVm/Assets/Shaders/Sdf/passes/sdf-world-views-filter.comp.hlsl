@@ -37,9 +37,7 @@ void sdfViewsFilterStage(SdfPixel p) {
 
         if (s.hit) {
             if (ambientFilter || shadowFilter) {
-                // The surface point exactly as the unsplit views stage forms it, so the filter's averages are its.
-                precise float3 rayTravel = p.rayDirection * s.t;
-                precise float3 surfacePoint = p.rayOrigin + rayTravel;
+                float3 surfacePoint = sdfPixelSurfacePoint(p, s.t);
                 float ambient;
                 float4 shadows;
 
