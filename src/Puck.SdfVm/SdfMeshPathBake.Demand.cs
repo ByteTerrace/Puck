@@ -38,13 +38,17 @@ public sealed partial class SdfMeshPathBake {
     private const int DemandClocks = 4;
 
     // What a group's latest measure stood on: the prepared frame it was taken at (zero for never), each clock as it read
-    // then, the band its pixel leaves in its own units and the units it was read in (the fewest of a shared geometry's
-    // copies), the one world box it read (none for copies), how far its boxes stood from the frustum-bound points' planes
-    // and how far they reach from those eyes, and the clock reading each clock makes it due at, with the epoch of the
-    // queue that holds that due.
+    // then, the pixel its bounds are taken about and the band that pixel leaves, in the group's own units, and the units
+    // it was read in (the fewest of a shared geometry's copies), the one world box it read (none for copies), how far its
+    // boxes stood from the planes of the frustum-bound points that could move its pixel and how far they reach from those
+    // eyes, and the clock reading each clock makes it due at, with the epoch of the queue that holds that due. The pixel
+    // is the group's own (DemandPixel) where any point demands it; where none does, it is the least pixel a frustum-bound
+    // point's distance puts it at, and its band the way down to the pixel that would move its tier
+    // (SdfMeshTier.CoarsestEdge): only such a point turning to hold it could.
     private struct DemandWatch {
         public long Stamp;
         public DemandReadings At;
+        public float Pixel;
         public float Slack;
         public float Units;
         public bool Boxed;
@@ -110,6 +114,7 @@ public sealed partial class SdfMeshPathBake {
         var moved = 0;
         var copied = 0;
         var reached = 0;
+        var changed = 0;
 
         if (bias != m_demandBias) {
             m_demandBias = bias;
@@ -167,7 +172,7 @@ public sealed partial class SdfMeshPathBake {
             foreach (var group in m_groups) {
                 if (!group.Listed || group.Retired || !group.HasDemandBox || !group.Watch.Measured || (group.Watch.Stamp == stamp)) { continue; }
                 reached++;
-                if (Reaches(group: group) && Measure(group: group)) { copied++; }
+                if (Reaches(group: group) && Measure(group: group)) { changed++; }
             }
         }
         for (var clock = 0; (clock < DemandClocks); clock++) {
@@ -212,6 +217,7 @@ public sealed partial class SdfMeshPathBake {
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandMoved, amount: moved);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandCopied, amount: copied);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandReached, amount: reached);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandChanged, amount: changed);
 
         // Measures the groups that carry a copy's geometry: its template range's, or its asset slots'.
         void MeasureCopy(SdfMeshInstance copy) {
@@ -276,7 +282,7 @@ public sealed partial class SdfMeshPathBake {
             // units' change moves the pixel it was measured at by their ratio (an animated slot's scale wavers), and the
             // points' scale multiplies the result.
             var units = UnitsOf(group: group);
-            var pixel = group.DemandPixel;
+            var pixel = watch.Pixel;
             var travel = (((((clocks[0] - watch.At[0]) + (metres / Demand.LeastPixelsPerMetre)) / units)) + (pixel * MathF.Abs(x: ((watch.Units / units) - 1f))));
 
             return ((((pixel + travel) * Math.Exp(d: (clocks[1] - watch.At[1]))) - pixel) >= watch.Slack);
@@ -289,16 +295,29 @@ public sealed partial class SdfMeshPathBake {
             var before = group.DemandPixel;
             var pixel = MeasurePixel(boxes: out var read, group: group, point: out _, units: out var units, box: out var box);
             var slack = DemandSlack(bias: bias, group: group, pixel: pixel);
+            var anchor = pixel;
+            var (frustum, reach) = (float.PositiveInfinity, 0f);
             ref var watch = ref group.Watch;
 
+            // Under frustum-bound points, only those whose distance alone could put the group under its pixel (or, for a
+            // group no point demands, under the pixel that would move its tier) bound its frustum slack. A tier held at
+            // one rung moves for no point.
+            if (Demand.AnyWithinView && !(float.IsFinite(f: pixel) && !float.IsFinite(f: slack))) {
+                var edge = (float.IsFinite(f: pixel) ? pixel : CoarsestEdgeOf(bias: bias, group: group));
+                var (bound, held, beyond) = FrustumOf(group: group, threshold: edge);
+
+                (frustum, reach) = (bound, held);
+                if (!float.IsFinite(f: pixel) && float.IsFinite(f: beyond) && float.IsFinite(f: edge)) { (anchor, slack) = (beyond, (MathF.Max(x: 0f, y: (beyond - edge)) * 0.999f)); }
+            }
             group.DemandPixel = pixel;
             watch.Stamp = stamp;
+            watch.Pixel = anchor;
             watch.Slack = slack;
             watch.Units = units;
             watch.Boxed = (box is not null);
             (watch.Center, watch.Half) = (box ?? default);
             for (var clock = 0; (clock < DemandClocks); clock++) { watch.At[clock] = clocks[clock]; }
-            (watch.FrustumSlack, watch.Reach) = (Demand.AnyWithinView ? FrustumOf(group: group) : (float.PositiveInfinity, 0f));
+            (watch.FrustumSlack, watch.Reach) = (frustum, reach);
             Schedule(group: group, clocks: in clocks);
             if ((bias > 0) && (float.IsNaN(f: before) || (FinerTierOf(bias: bias, group: group, pixel: before) != FinerTierOf(bias: bias, group: group, pixel: pixel)))) { m_finerDemandRevision++; }
             if (float.IsNaN(f: before) || (DemandedTierOf(group: group, pixel: before) != DemandedTierOf(group: group, pixel: pixel))) { Attend(group: group); }
@@ -316,7 +335,7 @@ public sealed partial class SdfMeshPathBake {
     private void Schedule(Group group, in DemandReadings clocks) {
         ref var watch = ref group.Watch;
         var slack = watch.Slack;
-        var pixel = group.DemandPixel;
+        var pixel = watch.Pixel;
         var frustum = watch.FrustumSlack;
         Span<double> dues = [
             (float.IsFinite(f: slack) ? (watch.At[0] + (0.5 * slack * watch.Units)) : double.PositiveInfinity),
@@ -342,6 +361,12 @@ public sealed partial class SdfMeshPathBake {
         for (var clock = 0; (clock < DemandClocks); clock++) { ClearQueue(clock: clock); }
         foreach (var group in m_groups) {
             if (!group.Listed || group.Retired || !group.Watch.Measured) { continue; }
+            // A group no point demands has its band from the bias's edge, which a measure this frame takes again.
+            if (!float.IsFinite(f: group.DemandPixel)) {
+                group.Watch.Dues[0] = (clocks[0] - 1.0);
+                Queue(clock: 0, group: group);
+                continue;
+            }
             group.Watch.Slack = DemandSlack(bias: bias, group: group, pixel: group.DemandPixel);
             Schedule(group: group, clocks: in clocks);
             if (DemandedTierOf(group: group, pixel: group.DemandPixel) != group.DemandedTier) { Attend(group: group); }
@@ -370,25 +395,28 @@ public sealed partial class SdfMeshPathBake {
 
         return finest;
     }
-    // How far a group's boxes stand from the frustum-bound points' planes, the least over its boxes, and how far they reach
-    // from those eyes, the most (SdfMeshDemand.FrustumSlack, FrustumReach).
-    private (float Slack, float Reach) FrustumOf(Group group) {
+    // How a group's boxes stand toward the frustum-bound points that could move its pixel under a threshold
+    // (SdfMeshDemand.FrustumBounds): the least slack and the most reach over its boxes, and the least pixel the other such
+    // points put any of them at, all in the group's units but the slack and reach, which are metres.
+    private (float Slack, float Reach, float Beyond) FrustumOf(Group group, float threshold) {
         if (CopiesOf(group: group) is not { } copies) {
             var (center, half) = WorldBox(group: group);
 
-            return (Demand.FrustumSlack(center: center, half: half), Demand.FrustumReach(center: center, half: half));
+            return Demand.FrustumBounds(center: center, half: half, threshold: threshold, units: UnitsOf(group: group));
         }
 
-        var (slack, reach) = (float.PositiveInfinity, 0f);
+        var (slack, reach, beyond) = (float.PositiveInfinity, 0f, float.PositiveInfinity);
 
         foreach (var index in copies) {
-            var (center, half) = TransformBox(center: group.DemandCenter, half: group.DemandHalf, matrix: m_demandCopies[index].Matrix);
+            var matrix = m_demandCopies[index].Matrix;
+            var (center, half) = TransformBox(center: group.DemandCenter, half: group.DemandHalf, matrix: matrix);
+            var scale = MathF.Max(x: 1.0e-6f, y: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length());
+            var (boxSlack, boxReach, boxBeyond) = Demand.FrustumBounds(center: center, half: half, threshold: threshold, units: scale);
 
-            slack = MathF.Min(x: slack, y: Demand.FrustumSlack(center: center, half: half));
-            reach = MathF.Max(x: reach, y: Demand.FrustumReach(center: center, half: half));
+            (slack, reach, beyond) = (MathF.Min(x: slack, y: boxSlack), MathF.Max(x: reach, y: boxReach), MathF.Min(x: beyond, y: boxBeyond));
         }
 
-        return (slack, reach);
+        return (slack, reach, beyond);
     }
     // Queues a group at its due on a clock, in that queue's epoch, when any reading can make it due.
     private void Queue(int clock, Group group) {
@@ -412,6 +440,13 @@ public sealed partial class SdfMeshPathBake {
         clocks[2] = Demand.Shift;
         clocks[3] = Demand.Turn;
         return clocks;
+    }
+    // The least pixel that still demands a group's coarsest held tier under the bias, or the tier half a rung finer while
+    // the bias holds any (SdfMeshTier.CoarsestEdge): the larger of the two, so a point that could move either counts.
+    private static float CoarsestEdgeOf(int bias, Group group) {
+        var edge = SdfMeshTier.CoarsestEdge(coarsest: group.CoarsestTier, finest: group.FinestTier, halfRungs: bias);
+
+        return ((bias > 0) ? MathF.Max(x: edge, y: SdfMeshTier.CoarsestEdge(coarsest: group.CoarsestTier, finest: group.FinestTier, halfRungs: (bias - 1))) : edge);
     }
     // The tier a group demands at a pixel under the bias, held to its rungs.
     private int DemandedTierOf(Group group, float pixel) => SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: TierOf(pixel: pixel));

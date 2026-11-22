@@ -127,6 +127,16 @@ public static class SdfMeshTier {
 
         return MathF.Max(x: 0f, y: (MathF.Min(x: below, y: above) * 0.999f));
     }
+    /// <summary>Returns the least pixel that still demands a group's coarsest held tier under a bias: a pixel at or past it
+    /// demands what no point demanding the group at all does (<see cref="Of"/> of infinity, held to the rungs), so a
+    /// point whose pixel cannot come under it cannot move the group's tier. Infinity for a group held at one rung, whose
+    /// tier no pixel moves.</summary>
+    /// <param name="halfRungs">The bias, from zero to <see cref="MaxBias"/>.</param>
+    /// <param name="finest">The group's finest tier (<see cref="Finest"/>).</param>
+    /// <param name="coarsest">The group's coarsest tier (<see cref="Coarsest"/>).</param>
+    /// <returns>The pixel, in the group's units.</returns>
+    public static float CoarsestEdge(int halfRungs, int finest, int coarsest) =>
+        ((coarsest <= finest) ? float.PositiveInfinity : (Cell(tier: coarsest) / (PixelShare * MathF.Pow(x: 2f, y: (0.5f * halfRungs)))));
     /// <summary>Returns a demanded tier held to the rungs that change a group's mesh.</summary>
     /// <param name="tier">The demanded tier.</param>
     /// <param name="finest">The group's finest tier (<see cref="Finest"/>).</param>

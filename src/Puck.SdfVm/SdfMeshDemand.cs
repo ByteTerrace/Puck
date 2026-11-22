@@ -113,7 +113,7 @@ public sealed class SdfMeshDemand {
     public float LeastPixelsPerMetre { get; private set; } = float.PositiveInfinity;
     /// <summary>Gets whether some demand point demands only inside its view (<see cref="SdfViewSnapshot.DemandWithinView"/>):
     /// a box that moves across its frustum moves its answer by any amount, so its distance to the frustum bounds it
-    /// (<see cref="FrustumSlack"/>).</summary>
+    /// (<see cref="FrustumBounds"/>).</summary>
     public bool AnyWithinView { get; private set; }
     /// <summary>Gets the changes no odometer bounds since the bake last took them (<see cref="TakeChanges"/>).</summary>
     public IReadOnlyList<Change> Changes => m_changes;
@@ -452,17 +452,31 @@ public sealed class SdfMeshDemand {
         return boxed;
     }
 
-    /// <summary>Returns how far a world-axis box may move before some point that demands only inside its view
-    /// (<see cref="AnyWithinView"/>) answers otherwise whether its widened frustum may hold it
-    /// (<see cref="CameraSnapshot.FrustumSlack"/>): the least over those points; infinity with none.</summary>
+    /// <summary>Returns how a world-axis box stands toward the frustums of the points bounded to their views that could
+    /// move its pixel under a threshold: those whose distance alone puts the box's pixel at or under it (the rest, however
+    /// they turn, read the box no finer). Over those points, the least distance the box may move before one of their
+    /// widened frustums answers otherwise whether it may hold it (<see cref="CameraSnapshot.FrustumSlack"/>) and the
+    /// most the box reaches from their eyes (the distance to its center plus its half extents' sum, which a frustum's
+    /// <see cref="Turn"/> multiplies into the most its distance to a plane moves); and the least pixel the others' distance
+    /// puts it at.</summary>
     /// <param name="center">The box's center, in world space.</param>
     /// <param name="half">The box's half extents along the world axes, none negative.</param>
-    /// <returns>The distance in metres.</returns>
-    public float FrustumSlack(Vector3 center, Vector3 half) {
-        var slack = float.PositiveInfinity;
+    /// <param name="units">The units the box's pixels are read in; positive.</param>
+    /// <param name="threshold">The pixel, in those units, a point must reach to count.</param>
+    /// <returns>The slack in metres (infinity with no point counted), the reach in metres (zero with none), and the least
+    /// pixel of the points not counted (infinity with none).</returns>
+    public (float Slack, float Reach, float Beyond) FrustumBounds(Vector3 center, Vector3 half, float units, float threshold) {
+        var (slack, reach, beyond) = (float.PositiveInfinity, 0f, float.PositiveInfinity);
 
         for (var index = 0; (index < Count); index++) {
             if (!m_within[index]) { continue; }
+
+            var pixel = (MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])) / (m_focal[index] * units));
+
+            if (pixel > threshold) {
+                beyond = MathF.Min(x: beyond, y: pixel);
+                continue;
+            }
             slack = MathF.Min(x: slack, y: m_cameras[index].FrustumSlack(
                 center: center,
                 halfX: new Vector3(x: half.X, y: 0f, z: 0f),
@@ -470,25 +484,10 @@ public sealed class SdfMeshDemand {
                 halfZ: new Vector3(x: 0f, y: 0f, z: half.Z),
                 margin: WithinViewMargin
             ));
+            reach = MathF.Max(x: reach, y: (Vector3.Distance(value1: center, value2: m_points[index]) + ((half.X + half.Y) + half.Z)));
         }
 
-        return slack;
-    }
-
-    /// <summary>Returns how far a world-axis box reaches from the eyes of the points bounded to their views: the most, over
-    /// those points, of the distance from the eye to the box's center plus its half extents' sum, which a frustum's turn
-    /// (<see cref="Turn"/>) multiplies into the most the box's distance to a plane moves; zero with none.</summary>
-    /// <param name="center">The box's center, in world space.</param>
-    /// <param name="half">The box's half extents along the world axes, none negative.</param>
-    /// <returns>The distance in metres.</returns>
-    public float FrustumReach(Vector3 center, Vector3 half) {
-        var reach = 0f;
-
-        for (var index = 0; (index < Count); index++) {
-            if (m_within[index]) { reach = MathF.Max(x: reach, y: (Vector3.Distance(value1: center, value2: m_points[index]) + ((half.X + half.Y) + half.Z))); }
-        }
-
-        return reach;
+        return (slack, reach, beyond);
     }
 
     // Whether a point demands a world-axis box at all: always for a point that demands by distance alone, and only a
