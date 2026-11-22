@@ -106,12 +106,12 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
         float4 shapeData1 = sdfFieldData(dataOffset, code.x, 1u);
         float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shape), localPosition, shapeData0, shapeData1) * distanceScale;
         sdfComposeCandidate(child, candidate, SDF_INSTRUCTION_BLEND(shape), trackMaterial ? (int)binding.y : 0,
-            instanceIndex, slot, shapeData1.x, trackMaterial);
+            instanceIndex, slot, shapeData1.x, 0.0, trackMaterial);
     }
 
     // Same hard-union PopField semantics as the generic scalar walk, through its baked candidate scale.
     float candidate = child.distance * asfloat(part.w);
-    sdfComposeCandidate(parent, candidate, SDF_BLEND_UNION, child.material, child.instanceIndex, child.frameSlot, 0.0, trackMaterial);
+    sdfComposeCandidate(parent, candidate, SDF_BLEND_UNION, child.material, child.instanceIndex, child.frameSlot, 0.0, 0.0, trackMaterial);
 }
 
 #endif

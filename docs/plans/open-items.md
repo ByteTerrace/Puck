@@ -115,7 +115,7 @@ lane; it does not gate starting them.
    rewrites one transform row and pack stops restaging records.
 4. **`field-queries`** · high · a principal. Item 4: presentation queries
    (effector probes, camera clearance) stop walking the whole static world.
-   Region tapes are built; the float reader is the open part
+   Region tapes, the shared stream definitions and the wide gradient are built
    ([the design](field-queries.md#build-order)).
 5. **`frame-garbage`** · high · a specialist. Item 5 and the memory tenants:
    no collection pauses during play, the 26 MB appearance clone, the 80 MB
@@ -702,9 +702,9 @@ wait behind them.
    late against the CPU and chooses the CPU. Its first part is built: the
    presentation field is a regional evaluator, which walks the chains that can
    change the field in the cube its sample lies in and answers what the plain
-   evaluator answers, to the bit. Its second part is open: a float reader in
-   vector width, lowered from shared definitions, for the gradient's taps and
-   lattice fills, which never decides a hit. These are presentation queries;
+   evaluator answers, to the bit. Its second part is built for the gradient: a wide reader in double precision and
+   vector width, lowered from shared definitions, answers a normal's six taps as one walk and never decides a hit;
+   lattice fills and the noises in vector width remain. These are presentation queries;
    the simulation's fixed-point contact is not moved. Check: the design's
    [build order](field-queries.md#build-order), step by step, with
    `world.counters world.field-queries`, `sdf.point` and `sdf.regions` and the
@@ -1317,7 +1317,7 @@ The frame thread's CPU work, largest first:
   change of the deterministic query, and it reads zero at a corner of three
   planes, where the six taps read the corner's diagonal. For presentation the
   six taps become one vector walk instead
-  ([the float reader](field-queries.md#the-float-reader)).
+  ([the wide reader](field-queries.md#the-wide-reader)).
 - [medium] Posing follows the rates, and occlusion is not consulted: a
   creation holds only while no camera's frustum and no cascade keeps its
   sphere (`WorldCreationInstances.Shown`), so at flight B the motion gallery's

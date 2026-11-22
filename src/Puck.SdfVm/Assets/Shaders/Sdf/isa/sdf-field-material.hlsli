@@ -5,23 +5,26 @@ case SDF_BLEND_XOR:
 case SDF_BLEND_CHAMFER_UNION:
 case SDF_BLEND_GROOVE_UNION:
 case SDF_BLEND_PIPE_UNION:
-case SDF_BLEND_MORPH:
 case SDF_BLEND_STAIRS_UNION:
-case SDF_BLEND_STAIRS_SUBTRACTION:
 {
-    candidateWins = (candidate < result.distance); break;
+    candidateWins = sdfNearerWins(result.distance, candidate); break;
 }
 case SDF_BLEND_SUBTRACTION:
 case SDF_BLEND_SMOOTH_SUBTRACTION:
 case SDF_BLEND_CHAMFER_SUBTRACTION:
 case SDF_BLEND_GROOVE_SUBTRACTION:
 case SDF_BLEND_PIPE_SUBTRACTION:
+case SDF_BLEND_STAIRS_SUBTRACTION:
 {
-    candidateWins = (-candidate > result.distance); handsSlot = false; break;
+    candidateWins = sdfCutWins(result.distance, candidate); handsSlot = false; break;
 }
 case SDF_BLEND_INTERSECTION:
 case SDF_BLEND_SMOOTH_INTERSECTION:
 case SDF_BLEND_CHAMFER_INTERSECTION:
 {
-    candidateWins = (candidate > result.distance); handsSlot = false; break;
+    candidateWins = sdfFartherWins(result.distance, candidate); handsSlot = false; break;
+}
+case SDF_BLEND_MORPH:
+{
+    candidateWins = sdfWeightWins(operand); break;
 }

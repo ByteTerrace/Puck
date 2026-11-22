@@ -46,8 +46,8 @@ public sealed partial class SdfFieldEvaluator {
             return false;
         }
 
-        if (m_regions is not null) {
-            (distance, material, instructionsWalked) = WalkPoint(candidate: -1, reaches: [], tape: RegionTape(point: worldPosition), worldPosition: worldPosition);
+        if ((m_regions is not null) && TryRegionTape(point: worldPosition, tape: out var tape)) {
+            (distance, material, instructionsWalked) = WalkPoint(candidate: -1, reaches: [], tape: tape, worldPosition: worldPosition);
 
             return true;
         }
@@ -230,11 +230,7 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfPointAction.Translate: {
-                        localPosition = new FixedVector3(
-                            X: FixedQ4816.FromRawBits(value: unchecked((localPosition.X.Value - instruction.Data0X.Value))),
-                            Y: FixedQ4816.FromRawBits(value: unchecked((localPosition.Y.Value - instruction.Data0Y.Value))),
-                            Z: FixedQ4816.FromRawBits(value: unchecked((localPosition.Z.Value - instruction.Data0Z.Value)))
-                        );
+                        localPosition = TranslatePoint(instruction: in instruction, p: localPosition);
                         break;
                     }
                 case SdfPointAction.Rotate: {
@@ -244,10 +240,7 @@ public sealed partial class SdfFieldEvaluator {
                             break;
                         }
 
-                        localPosition = RotateByInverseQuaternion(
-                            instruction: instruction,
-                            p: localPosition
-                        );
+                        localPosition = RotatePoint(instruction: in instruction, p: localPosition);
                         break;
                     }
                 case SdfPointAction.Scale: {
@@ -256,15 +249,12 @@ public sealed partial class SdfFieldEvaluator {
                             break;
                         }
 
-                        localPosition = FixedVector3.Divide(
-                            left: localPosition,
-                            right: Vector(instruction: instruction)
-                        );
-                        distanceScale *= instruction.Data0W;
+                        localPosition = ScalePoint(instruction: in instruction, p: localPosition);
+                        distanceScale = ScaleDistance(distanceScale: distanceScale, instruction: in instruction);
                         break;
                     }
                 case SdfPointAction.Fold: {
-                        localPosition = FoldPoint(instruction: in instruction, localPosition: localPosition);
+                        localPosition = MapPoint(instruction: in instruction, p: localPosition);
                         break;
                     }
                 case SdfPointAction.Warp: {
@@ -283,7 +273,7 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfPointAction.EditField: {
-                        resultDistance = EditField(instruction: in instruction, localPosition: localPosition, resultDistance: resultDistance);
+                        resultDistance = EditField(distance: resultDistance, instruction: in instruction, p: localPosition);
                         break;
                     }
                 case SdfPointAction.WeightedRelief: {
@@ -380,68 +370,6 @@ public sealed partial class SdfFieldEvaluator {
 
         return (resultDistance, resultMaterial);
     }
-    // The point folds no shipped contact field reaches, kept out of WalkPoints so its hot cases stay small enough to
-    // inline their helpers.
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static FixedVector3 FoldPoint(in CompiledInstruction instruction, FixedVector3 localPosition) {
-        switch (SdfFieldOps.PointFoldOf(value: instruction.Op)) {
-            case SdfPointFoldAction.Repeat: {
-                    var spacing = Vector(instruction: instruction);
-                    var inverseSpacing = Vector1(instruction: instruction);
-
-                    return (localPosition - FixedVector3.Multiply(
-                        left: spacing,
-                        right: FixedVector3.Round(value: FixedVector3.Multiply(
-                            left: localPosition,
-                            right: inverseSpacing
-                        ))
-                    ));
-                }
-            case SdfPointFoldAction.RepeatLimited: {
-                    var spacing = Vector(instruction: instruction);
-                    var limit = Vector1(instruction: instruction);
-                    var rounded = FixedVector3.Round(value: FixedVector3.Divide(
-                        left: localPosition,
-                        right: spacing
-                    ));
-
-                    return (localPosition - FixedVector3.Multiply(
-                        left: spacing,
-                        right: FixedVector3.Clamp(
-                            maximum: limit,
-                            minimum: -limit,
-                            value: rounded
-                        )
-                    ));
-                }
-            case SdfPointFoldAction.SymmetryPlane: {
-                    var normal = Vector(instruction: instruction);
-                    var t = (FixedVector3.Dot(
-                        left: localPosition,
-                        right: normal
-                    ) + instruction.Data0W);
-                    var twiceMin = (FixedQ4816.Min(
-                        x: t,
-                        y: FixedQ4816.Zero
-                    ) * Two);
-
-                    return (localPosition - (normal * twiceMin));
-                }
-            case SdfPointFoldAction.Elongate: {
-                    var extents = Vector(instruction: instruction);
-
-                    return (localPosition - FixedVector3.Clamp(
-                        maximum: extents,
-                        minimum: -extents,
-                        value: localPosition
-                    ));
-                }
-            case SdfPointFoldAction.Unsupported:
-                throw new InvalidOperationException(message: "Unsupported PointFold action.");
-            default:
-                throw new InvalidOperationException(message: "Invalid PointFold action.");
-        }
-    }
     // The render reading's warps (SdfFieldReading.Render), kept out of WalkPoints with the folds. KEEP IN SYNC with
     // mapCore's SDF_OP_AXIAL_PROFILE and SDF_OP_ROTATE_PLANE (field/sdf-map.hlsli). AxialProfile: t = saturate((top - p_axis)
     // / span) (Data0.z, Data0.w = 1/span), s = max(Data1.y + amount·t + bulge·sin(πt), FlareMinScale), the other two axes
@@ -479,41 +407,20 @@ public sealed partial class SdfFieldEvaluator {
     // The axes a RotatePlane turns, as mapCore picks them: u is Y in the YZ plane and X otherwise, v is Y in the XY plane
     // and Z otherwise.
     private static (int U, int V) PlaneAxes(uint plane) => (((plane == ((uint)Puck.SignedDistance.SdfPlane.YZ)) ? 1 : 0), ((plane == ((uint)Puck.SignedDistance.SdfPlane.XY)) ? 1 : 2));
-    // The field edits (Onion, CellDisplace, Dilate), kept out of WalkPoints with the folds.
+    // A relief at its masks' weight (MaskProduct), one for an unmasked relief. The shared formula adds nothing, and
+    // reads no noise, at a weight of exactly zero.
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static FixedQ4816 EditField(in CompiledInstruction instruction, FixedVector3 localPosition, FixedQ4816 resultDistance) => SdfFieldOps.PointFieldEditOf(value: instruction.Op) switch {
-        SdfPointFieldEditAction.Onion => (FixedQ4816.Abs(value: resultDistance) - instruction.Data0X),
-        SdfPointFieldEditAction.CellDisplace => (resultDistance + (instruction.Data0Y * (SampleCells(
-            (localPosition * instruction.Data0X),
-            instruction.Shape,
-            ((SdfCellMode)instruction.Blend),
-            instruction.Data0Z
-        ) - Half))),
-        SdfPointFieldEditAction.Dilate => (resultDistance - instruction.Data0X),
-        SdfPointFieldEditAction.Unsupported => throw new InvalidOperationException(message: "The point walk selected an unsupported field edit."),
-        _ => throw new InvalidOperationException(message: "Invalid PointFieldEdit action."),
-    };
-    // The fBm relief (sdfValueNoise3, field/sdf-noise.hlsli): amplitude times the host-baked 1/Σ gainᵏ times the sum,
-    // times its masks' weight (MaskProduct): exactly one, and no product, for an unmasked relief or where every weight is
-    // one, and no noise at all where the weight is exactly zero. KEEP IN SYNC with mapCore's SDF_OP_NOISE_DISPLACE.
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static FixedQ4816 WeightedRelief(in CompiledInstruction instruction, FixedVector3 localPosition, FixedQ4816 resultDistance, ref PowerWork powerWork) {
-        var weight = ((instruction.ReliefMasks is { } masks) ? MaskProduct(masks: masks, powerWork: ref powerWork, q: localPosition) : FixedQ4816.One);
-
-        if (weight == FixedQ4816.Zero) {
-            return resultDistance;
-        }
-
-        var relief = ((instruction.Data0Y * instruction.Data1X) * Pcg3dLatticeNoise.Fbm3(
-            gain: instruction.Data0Z, lacunarity: instruction.Data0W, octaves: ((int)instruction.Blend),
-            q: (localPosition * instruction.Data0X), seed: instruction.Shape));
-
-        return (resultDistance + ((weight == FixedQ4816.One) ? relief : (relief * weight)));
-    }
+    private static FixedQ4816 WeightedRelief(in CompiledInstruction instruction, FixedVector3 localPosition, FixedQ4816 resultDistance, ref PowerWork powerWork) =>
+        NoiseDisplaceField(
+            distance: resultDistance,
+            instruction: in instruction,
+            p: localPosition,
+            weight: ((instruction.ReliefMasks is { } masks) ? MaskProduct(masks: masks, powerWork: ref powerWork, q: localPosition) : FixedQ4816.One)
+        );
     // The product of a masked relief's weights at its point q: per mask, the least distance of its regions, each its
     // primitive (EvaluateShape) at u = turn_back(q - origin), read against the band. Once a mask's distance is at or below
     // its start its weight is its inside whatever its remaining regions read, so they are not evaluated; once the product
-    // is exactly zero, neither are the remaining masks. KEEP IN SYNC with sdfMaskProduct in field/sdf-map.hlsli.
+    // is exactly zero, neither are the remaining masks. The kernels' row walk is sdfMaskProduct (field/sdf-map.hlsli); the band's weight is the shared formula.
     private static FixedQ4816 MaskProduct(ReliefMaskFixed[] masks, FixedVector3 q, ref PowerWork powerWork) {
         var weight = FixedQ4816.One;
 
@@ -543,96 +450,21 @@ public sealed partial class SdfFieldEvaluator {
 
         return weight;
     }
-    // A band's weight at a region distance: its outside at or beyond its end, its inside at or below its start, and
-    // inside + (outside - inside)·smoothstep between. KEEP IN SYNC with sdfReliefBandWeight in field/sdf-map.hlsli.
-    private static FixedQ4816 BandWeight(ReliefMaskFixed mask, FixedQ4816 distance) {
-        if (distance >= mask.End) { return mask.Outside; }
-        if (distance <= mask.Start) { return mask.Inside; }
-
-        return (mask.Inside + ((mask.Outside - mask.Inside) * FixedQ4816.Smoothstep(edge0: mask.Start, edge1: mask.End, value: distance)));
-    }
-    // A scope's pop: its candidate, scaled by the scope's baked 1/L, joins the field the scope saved. Data1.y is that
-    // candidate scale on every pop (read on its finer compiled grid, ScopeScale), and a stairs pop carries its step count in Data1.z, as mapCore's pop and
-    // AnalyzeLipschitz read them.
+    private static FixedQ4816 BandWeight(ReliefMaskFixed mask, FixedQ4816 distance) =>
+        SdfReliefBandWeight(distance: distance, end: mask.End, inside: mask.Inside, outside: mask.Outside, start: mask.Start);
+    // A scope's pop: its candidate, scaled by the scope's baked 1/L (Data1.y, read on its finer compiled grid,
+    // ScopeScale), joins the field the scope saved, with the pop's own operand (PopOperand).
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static (FixedQ4816 Distance, int Material) PopScope(in CompiledInstruction instruction, FixedQ4816 savedFieldDistance, int savedFieldMaterial, FixedQ4816 candidateDistance, int candidateMaterial) {
-        var isStairs = (instruction.Blend is ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction));
-
-        if (instruction.ScopeScale > 0L) {
-            candidateDistance = ScaleScope(candidate: candidateDistance, scale: instruction.ScopeScale);
-        }
-
-        if (instruction.Blend == ((uint)SdfBlendOp.Morph)) {
-            var laneVal = FixedQ4816.Zero;
-            var from = instruction.Data0Y;
-            var to = instruction.Data0Z;
-            var t = FixedQ4816.Clamp(
-                value: ((laneVal - from) / (to - from)),
-                minimum: FixedQ4816.Zero,
-                maximum: FixedQ4816.One
-            );
-
-            return ((((FixedQ4816.One - t) * savedFieldDistance) + (t * candidateDistance)), ((t >= Half)
-                ? candidateMaterial
-                : savedFieldMaterial
-            ));
-        }
-
-        if (isStairs) {
-            var r = instruction.Data1X;
-            var n = instruction.Data1Z;
-
-            if (
-                (n >= FixedQ4816.One) &&
-                (r > FixedQ4816.Zero)
-            ) {
-                var s = (r / n);
-                var twoS = (s * Two);
-                var isSub = (instruction.Blend == ((uint)SdfBlendOp.StairsSubtraction));
-                var a = savedFieldDistance;
-                var b = candidateDistance;
-                var u = (isSub
-                    ? ((-b) - r)
-                    : (b - r)
-                );
-                var arg = ((u - a) + s);
-                var m = (arg - (twoS * FixedQ4816.Floor(value: (arg / twoS))));
-                var w = (m - s);
-                var dStairs = (Half * ((u + a) + FixedQ4816.Abs(value: w)));
-
-                return (isSub
-                    ? (FixedQ4816.Max(
-                        x: FixedQ4816.Max(
-                            x: a,
-                            y: -b
-                        ),
-                        y: -dStairs
-                    ), (((-b) > a)
-                        ? candidateMaterial
-                        : savedFieldMaterial
-                    ))
-                    : (FixedQ4816.Min(
-                        x: FixedQ4816.Min(
-                            x: a,
-                            y: b
-                        ),
-                        y: dStairs
-                    ), ((b < a)
-                        ? candidateMaterial
-                        : savedFieldMaterial
-                    )));
-            }
-        }
-
-        return Compose(
+    private static (FixedQ4816 Distance, int Material) PopScope(in CompiledInstruction instruction, FixedQ4816 savedFieldDistance, int savedFieldMaterial, FixedQ4816 candidateDistance, int candidateMaterial) =>
+        Compose(
+            blend: instruction.Blend,
+            candidate: ((instruction.ScopeScale > 0L) ? ScaleScope(candidate: candidateDistance, scale: instruction.ScopeScale) : candidateDistance),
+            candidateMaterial: candidateMaterial,
             current: savedFieldDistance,
             currentMaterial: savedFieldMaterial,
-            candidate: candidateDistance,
-            candidateMaterial: candidateMaterial,
-            blend: instruction.Blend,
+            operand: PopOperand(instruction: in instruction),
             smooth: instruction.Data1X
         );
-    }
     [DoesNotReturn]
     private static void ThrowUnvalidated(SdfOp op) =>
         throw new UnreachableException(message: $"The constructor validated every instruction's op is supported; op {op} reached the interpreter unvalidated.");
