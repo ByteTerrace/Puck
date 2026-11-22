@@ -179,9 +179,15 @@ public sealed partial class WorldRigidAssets {
         }
         m_bodies.Clear();
         m_liveBodies.Clear();
+        // Every index may name another body now: what is kept by index starts again, and the next pack reads them all.
+        m_bodyAt.Clear();
+        m_stateWatch.Clear();
+        m_wakeAll = true;
+        m_copiesRevision++;
         var hasBodyVolumes = false;
         foreach (var body in bodies) {
             if (IsRigid(creation: body.Creation, look: body.Look)) {
+                _ = m_bodyAt.TryAdd(key: body.BodyIndex, value: m_bodies.Count);
                 m_bodies.Add(item: body);
                 m_liveBodies.Add(item: body.BodyIndex);
                 if (body.Creation.EngineDocument.Volumes is { Count: > 0 }) {
@@ -203,6 +209,9 @@ public sealed partial class WorldRigidAssets {
     public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, int slotBase, PackedFontAtlasCatalog? text, WorldPickMapBuilder picks, WorldShapeIsolation? isolation = null) {
 
         m_isolation = isolation;
+        // The isolation, the materials and the static copies an emit places are read by every copy's row.
+        m_wakeAll = true;
+        m_copiesRevision++;
         m_slots.Clear();
         m_materials.Clear();
         for (var index = 0; (index < m_assets.Count); index++) {
@@ -269,82 +278,166 @@ public sealed partial class WorldRigidAssets {
         }
     }
 
-    /// <summary>Writes identity template poses and supplies current per-copy roots without touching the program.</summary>
-    public void Pack(Span<DynamicTransform> transforms, IWorldStampSource source, int slotBase, float deltaSeconds = 0) {
+    // The awake set, as the stamp pool keeps one (WorldCreationInstances.Awake): a pack reads only the bodies something
+    // woke. The invariant: a body's copy row stands until its body's presented inputs move (the source's journal), a
+    // state cell its lanes read moves (m_stateWatch), or its root follower is still settling (PackBody keeps it awake);
+    // a reconcile, an emit, another slot base, source or door set, or a pack its caller says owes everything reads
+    // every body. A source that keeps no journal has every body read every pack.
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_awake = new();
+    private bool m_wakeAll = true;
+    private int[] m_visits = [];
+    private readonly Dictionary<int, int> m_bodyAt = [];
+    private readonly WorldBodyChangeCursor m_bodyCursor = new();
+    private readonly List<int> m_changedBodies = [];
+    private readonly WorldLeaseWatch m_stateWatch = new();
+    private readonly List<int> m_changedCopies = [];
+    private long m_copiesRevision;
+    private IWorldStampSource? m_packedSource;
+    private IReadOnlyList<WorldPortalStraddle.Door>? m_packedDoors;
+    private int m_packedSlotBase = -1;
+
+    /// <summary>Gets the indices into <see cref="Copies"/> of the body copies whose row the latest <see cref="Pack"/>
+    /// rewrote.</summary>
+    public IReadOnlyList<int> ChangedCopies => m_changedCopies;
+    /// <summary>Gets a counter that moves whenever <see cref="Copies"/> changes other than by a row
+    /// <see cref="ChangedCopies"/> names: a reconcile's membership, or the static copies an emit places.</summary>
+    public long CopiesRevision => m_copiesRevision;
+    /// <summary>Gets the number of bodies the latest <see cref="Pack"/> read: every rigid body on a pack that owes them
+    /// all, otherwise only those something woke.</summary>
+    public int VisitCount { get; private set; }
+
+    /// <summary>Writes identity template poses and supplies current per-copy roots without touching the program. A pack
+    /// reads only the bodies something woke unless it owes them all.</summary>
+    /// <param name="transforms">The whole shared dynamic-transform table.</param>
+    /// <param name="source">The world the bodies' poses, lanes and doors are read from.</param>
+    /// <param name="slotBase">The table slot the first template's range starts at.</param>
+    /// <param name="deltaSeconds">The seconds the frame advances each body's root follower by.</param>
+    /// <param name="everything">Whether the frame owes the whole table, so every template row and body is written
+    /// again.</param>
+    public void Pack(Span<DynamicTransform> transforms, IWorldStampSource source, int slotBase, float deltaSeconds = 0, bool everything = true) {
         var doors = WorldPortalStraddle.Doors(definition: source.Definition);
+        var whole = (everything || m_wakeAll || (slotBase != m_packedSlotBase) || !ReferenceEquals(objA: source, objB: m_packedSource) || !ReferenceEquals(objA: doors, objB: m_packedDoors));
+
+        m_wakeAll = false;
+        m_packedSlotBase = slotBase;
+        m_packedSource = source;
+        m_packedDoors = doors;
+        m_changedCopies.Clear();
+        m_changedBodies.Clear();
+        if (m_bodyCursor.TryCollect(bodies: m_changedBodies, source: source)) {
+            foreach (var body in m_changedBodies) {
+                if (m_bodyAt.TryGetValue(key: body, value: out var at)) { _ = m_awake.Add(index: at); }
+            }
+        } else {
+            whole = true;
+        }
+
+        whole |= !m_stateWatch.Collect(mirror: source.StateMirror, woken: m_awake);
+
         var anyMoved = false;
 
-        if (m_hasBodyVolumes || (m_rootVolumes.Count > 0)) {
-            m_rootVolumes.Clear();
-            m_volumesDirty = true;
-        }
-        PackTemplates(transforms: transforms, slotBase: slotBase);
-        for (var index = 0; (index < m_bodies.Count); index++) {
-            var body = m_bodies[index];
-
-            if (!m_targets.TryGetValue(key: body.BodyIndex, value: out var target) || (target.Prototype != body.Creation.Id)) {
-                target = new WorldPickTarget(null, body.BodyIndex) { CreationSlots = 1, Prototype = body.Creation.Id };
-                m_targets[body.BodyIndex] = target;
+        if (whole) {
+            if (m_hasBodyVolumes || (m_rootVolumes.Count > 0)) {
+                m_rootVolumes.Clear();
+                m_volumesDirty = true;
             }
-            var position = source.Position(index: body.BodyIndex);
-            var orientation = source.Orientation(index: body.BodyIndex);
-
-            if (!m_motion.TryGetValue(key: body.BodyIndex, value: out var motion)) { m_motion.Add(key: body.BodyIndex, value: motion = new()); }
-            motion.Reads.Bind(mirror: source.StateMirror, bodyIndex: body.BodyIndex);
-            motion.Reads.Arrive(first: body.Creation, second: body.Look);
-            var lanes = WorldLookLaneEvaluator.EvaluateLanes(expressions: body.Look.Motion.Lanes, reads: motion.Reads);
-
-            if (WorldDynamicsResponse.TryResolveResponse(rows: source.Definition.Dynamics, name: body.Look.Motion.Dynamics, response: out var response)) {
-                var address = source.EntityAddress(index: body.BodyIndex);
-                var epoch = source.PoseEpoch(index: body.BodyIndex);
-                var crossings = source.Carries.Epoch(index: body.BodyIndex);
-
-                if ((motion.Address == address) && (motion.Epoch == epoch) && (motion.CarryEpoch != crossings)) {
-                    if (source.Carries.TrySince(index: body.BodyIndex, since: motion.CarryEpoch, carry: out var carry)) {
-                        motion.Position.Carry(rotation: carry.Rotation, translation: carry.Translation);
-                        motion.Orientation.Carry(rotation: carry.Rotation);
-                    } else { motion.Epoch = -1; }
-                }
-                motion.CarryEpoch = crossings;
-                if ((motion.Address != address) || (motion.Epoch != epoch)) { motion.Position.Reseed(); motion.Orientation.Reseed(); motion.Address = address; motion.Epoch = epoch; }
-                (position, orientation) = SecondOrderPoseFollower.StepPose(deltaSeconds: deltaSeconds, orientation: ref motion.Orientation, position: ref motion.Position, response: in response, targetOrientation: orientation, targetPosition: position);
+            PackTemplates(transforms: transforms, slotBase: slotBase);
+            m_awake.Clear();
+            for (var index = 0; (index < m_bodies.Count); index++) {
+                anyMoved |= PackBody(deltaSeconds: deltaSeconds, doors: doors, index: index, slotBase: slotBase, source: source, volumes: true);
             }
-            var asset = m_indices[body.Creation.Id];
-            var hidden = m_isolation?.HiddenFor(body.Creation.Id, body.Creation.EngineDocument);
-            var firstSlot = (slotBase + m_offsets[asset]);
-            var endSlot = (slotBase + (((asset + 1) < m_offsets.Count) ? m_offsets[(asset + 1)] : m_bodySlotCount));
-            var previous = m_copies[index];
-            var addressKey = source.EntityAddress(index: body.BodyIndex);
-            var epochKey = source.PoseEpoch(index: body.BodyIndex);
-            var motionIdentity = (((previous.MotionIdentity is ValueTuple<WorldPickTarget, WorldEntityAddress, int> key) && ReferenceEquals(objA: key.Item1, objB: target) && (key.Item2 == addressKey) && (key.Item3 == epochKey))
-                ? previous.MotionIdentity : (target, addressKey, epochKey));
-            var otherSlots = ((endSlot > (firstSlot + 1))
-                ? (((previous.OtherAssetSlots.Count == 1) && (previous.OtherAssetSlots[0] == (firstSlot + 1))) ? previous.OtherAssetSlots : new[] { (firstSlot + 1) }) : []);
-            var transform = new DynamicTransform(Lanes: lanes, Orientation: orientation, Position: position) { MaterialScale = body.Scale };
-            var mesh = (((hidden is null) && (body.Creation.Mesh is { } authored)) ? WorldPlacementStamper.MeshOf(mesh: authored) : null);
-            var material = ((asset < m_materials.Count) ? m_materials[asset] : 0);
-            var clip = WorldPortalStraddle.Clip(doors: doors, center: position, radius: (m_reaches[asset] * body.Scale), firstSlot: 0, slotCount: 1);
 
-            // The body's row is rewritten in place: a moving body allocates nothing, and its revision tells consumers it moved.
-            var previousRevision = previous.Revision;
+            VisitCount = m_bodies.Count;
+        } else {
+            // A body its pack keeps awake goes into the set again, so the visits are taken first.
+            var count = m_awake.Drain(members: ref m_visits);
 
-            _ = previous.Update(firstSlot, target, motionIdentity, transform, body.Scale, true, clip, mesh, material, otherSlots);
-            if (previous.Revision != previousRevision) { anyMoved = true; }
-            if (m_hasBodyVolumes) {
-                var volumeCount = (body.Creation.EngineDocument.Volumes?.Count ?? 0);
-
-                for (var volumeIndex = 0; (volumeIndex < volumeCount); volumeIndex++) {
-                    if (!WorldShapeIsolation.TryAdmitVolume(creation: body.Creation.EngineDocument, emitted: m_rootVolumes.Count, hidden: hidden, parentIndex: out var parentIndex, position: volumeIndex, volume: out var volume)) { continue; }
-
-                    var parent = ((parentIndex >= 0) ? body.Creation.EngineDocument.Shapes![parentIndex] : null);
-
-                    m_rootVolumes.Add(item: (index, volume.ToVolume(dynamicSlot: 0, origin: ((parent?.Position.Value ?? Vector3.Zero) * body.Scale), rotation: (parent?.Rotation.Value ?? Quaternion.Identity), scale: body.Scale)));
+            foreach (var index in m_visits.AsSpan(start: 0, length: count)) {
+                if (index < m_bodies.Count) {
+                    anyMoved |= PackBody(deltaSeconds: deltaSeconds, doors: doors, index: index, slotBase: slotBase, source: source, volumes: false);
                 }
             }
+
+            VisitCount = count;
         }
         if (anyMoved) {
             m_poseRevision++;
         }
+    }
+    // Reads one body into its copy's row, rewritten in place. Returns whether the row changed. The root volumes are
+    // gathered only on a pack that reads every body, since what they hold moves only with the roster or the isolation.
+    private bool PackBody(int index, IWorldStampSource source, int slotBase, float deltaSeconds, IReadOnlyList<WorldPortalStraddle.Door> doors, bool volumes) {
+        var body = m_bodies[index];
+        var settles = false;
+
+        if (!m_targets.TryGetValue(key: body.BodyIndex, value: out var target) || (target.Prototype != body.Creation.Id)) {
+            target = new WorldPickTarget(null, body.BodyIndex) { CreationSlots = 1, Prototype = body.Creation.Id };
+            m_targets[body.BodyIndex] = target;
+        }
+        var position = source.Position(index: body.BodyIndex);
+        var orientation = source.Orientation(index: body.BodyIndex);
+
+        if (!m_motion.TryGetValue(key: body.BodyIndex, value: out var motion)) { m_motion.Add(key: body.BodyIndex, value: motion = new()); }
+        motion.Reads.Bind(mirror: source.StateMirror, bodyIndex: body.BodyIndex);
+        motion.Reads.Arrive(first: body.Creation, second: body.Look);
+        var lanes = WorldLookLaneEvaluator.EvaluateLanes(expressions: body.Look.Motion.Lanes, reads: motion.Reads);
+
+        if (WorldDynamicsResponse.TryResolveResponse(rows: source.Definition.Dynamics, name: body.Look.Motion.Dynamics, response: out var response)) {
+            var address = source.EntityAddress(index: body.BodyIndex);
+            var epoch = source.PoseEpoch(index: body.BodyIndex);
+            var crossings = source.Carries.Epoch(index: body.BodyIndex);
+
+            if ((motion.Address == address) && (motion.Epoch == epoch) && (motion.CarryEpoch != crossings)) {
+                if (source.Carries.TrySince(index: body.BodyIndex, since: motion.CarryEpoch, carry: out var carry)) {
+                    motion.Position.Carry(rotation: carry.Rotation, translation: carry.Translation);
+                    motion.Orientation.Carry(rotation: carry.Rotation);
+                } else { motion.Epoch = -1; }
+            }
+            motion.CarryEpoch = crossings;
+            if ((motion.Address != address) || (motion.Epoch != epoch)) { motion.Position.Reseed(); motion.Orientation.Reseed(); motion.Address = address; motion.Epoch = epoch; }
+            (position, orientation) = SecondOrderPoseFollower.StepPose(deltaSeconds: deltaSeconds, orientation: ref motion.Orientation, position: ref motion.Position, response: in response, targetOrientation: orientation, targetPosition: position);
+            settles = true;
+        }
+        var asset = m_indices[body.Creation.Id];
+        var hidden = m_isolation?.HiddenFor(body.Creation.Id, body.Creation.EngineDocument);
+        var firstSlot = (slotBase + m_offsets[asset]);
+        var endSlot = (slotBase + (((asset + 1) < m_offsets.Count) ? m_offsets[(asset + 1)] : m_bodySlotCount));
+        var previous = m_copies[index];
+        var addressKey = source.EntityAddress(index: body.BodyIndex);
+        var epochKey = source.PoseEpoch(index: body.BodyIndex);
+        var motionIdentity = (((previous.MotionIdentity is ValueTuple<WorldPickTarget, WorldEntityAddress, int> key) && ReferenceEquals(objA: key.Item1, objB: target) && (key.Item2 == addressKey) && (key.Item3 == epochKey))
+            ? previous.MotionIdentity : (target, addressKey, epochKey));
+        var otherSlots = ((endSlot > (firstSlot + 1))
+            ? (((previous.OtherAssetSlots.Count == 1) && (previous.OtherAssetSlots[0] == (firstSlot + 1))) ? previous.OtherAssetSlots : new[] { (firstSlot + 1) }) : []);
+        var transform = new DynamicTransform(Lanes: lanes, Orientation: orientation, Position: position) { MaterialScale = body.Scale };
+        var mesh = (((hidden is null) && (body.Creation.Mesh is { } authored)) ? WorldPlacementStamper.MeshOf(mesh: authored) : null);
+        var material = ((asset < m_materials.Count) ? m_materials[asset] : 0);
+        var clip = WorldPortalStraddle.Clip(doors: doors, center: position, radius: (m_reaches[asset] * body.Scale), firstSlot: 0, slotCount: 1);
+
+        // The body's row is rewritten in place: a moving body allocates nothing, and its revision tells consumers it moved.
+        var previousRevision = previous.Revision;
+
+        _ = previous.Update(firstSlot, target, motionIdentity, transform, body.Scale, true, clip, mesh, material, otherSlots);
+
+        var changed = (previous.Revision != previousRevision);
+
+        if (changed) { m_changedCopies.Add(item: index); }
+        m_stateWatch.Index(holder: index, lease: motion.Reads);
+        // A root follower is read again while it still moves the row; a frame that advances no time cannot tell.
+        if (settles && (changed || (deltaSeconds <= 0f))) { _ = m_awake.Add(index: index); }
+        if (volumes && m_hasBodyVolumes) {
+            var volumeCount = (body.Creation.EngineDocument.Volumes?.Count ?? 0);
+
+            for (var volumeIndex = 0; (volumeIndex < volumeCount); volumeIndex++) {
+                if (!WorldShapeIsolation.TryAdmitVolume(creation: body.Creation.EngineDocument, emitted: m_rootVolumes.Count, hidden: hidden, parentIndex: out var parentIndex, position: volumeIndex, volume: out var volume)) { continue; }
+
+                var parent = ((parentIndex >= 0) ? body.Creation.EngineDocument.Shapes![parentIndex] : null);
+
+                m_rootVolumes.Add(item: (index, volume.ToVolume(dynamicSlot: 0, origin: ((parent?.Position.Value ?? Vector3.Zero) * body.Scale), rotation: (parent?.Rotation.Value ?? Quaternion.Identity), scale: body.Scale)));
+            }
+        }
+
+        return changed;
     }
     /// <summary>Returns whether this live body is represented by a rigid copy.</summary>
     public bool ContainsBody(int body) => m_liveBodies.Contains(item: body);
@@ -377,14 +470,11 @@ public sealed partial class WorldRigidAssets {
         slot = -1; return false;
     }
 
-    // The live copy of a body, or null when it has none. Loops: the pose paths run per body per frame.
-    private SdfMeshInstance? CopyOf(int body) {
-        for (var index = 0; (index < m_copies.Count); index++) {
-            if ((m_copies[index].Identity is WorldPickTarget { BodyIndex: var found }) && (found == body)) { return m_copies[index]; }
-        }
-
-        return null;
-    }
+    // The live copy of a body, or null when it has none or no pack has written its row yet.
+    private SdfMeshInstance? CopyOf(int body) => ((m_bodyAt.TryGetValue(key: body, value: out var at) && (at < m_copies.Count) &&
+        (m_copies[at].Identity is WorldPickTarget { BodyIndex: var found }) && (found == body))
+        ? m_copies[at]
+        : null);
     private static ShapeDocument? ShapeOf(CreationDocument creation, int shapeId) {
         if (creation.Shapes is not { } shapes) { return null; }
         for (var index = 0; (index < shapes.Count); index++) {
@@ -395,9 +485,7 @@ public sealed partial class WorldRigidAssets {
     }
     // The body's stamp, or false when the body has none; its creation is never null on a true answer.
     private bool TryStampOf(int body, out WorldCreationInstances.BodyStamp stamp) {
-        for (var index = 0; (index < m_bodies.Count); index++) {
-            if ((m_bodies[index].BodyIndex == body) && (m_bodies[index].Creation is not null)) { stamp = m_bodies[index]; return true; }
-        }
+        if (m_bodyAt.TryGetValue(key: body, value: out var at) && (m_bodies[at].Creation is not null)) { stamp = m_bodies[at]; return true; }
         stamp = default; return false;
     }
 }

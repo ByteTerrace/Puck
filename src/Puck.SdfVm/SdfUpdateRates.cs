@@ -335,10 +335,22 @@ public sealed class SdfUpdateRateReadings {
             m_items.Clear();
         }
     }
-    /// <summary>Returns a lever's latest readings.</summary>
+    /// <summary>The frames a producer keeps refreshing its readings for after a read (<see cref="Reads"/>).</summary>
+    public const int FramesPerRead = 120;
+
+    private long m_reads;
+
+    /// <summary>Gets a counter that moves each time <see cref="Latest"/> is read. A producer whose readings cost a visit
+    /// to every item it could rate (a stamp pool's bodies) publishes them only for <see cref="FramesPerRead"/> frames
+    /// after this moves, and for its first frames, so a frame nobody reads rates only what it must pose; its readings are
+    /// then as of the frames that followed the previous read, and a second read a moment later is current.</summary>
+    public long Reads => Volatile.Read(location: ref m_reads);
+
+    /// <summary>Returns a lever's latest readings, and notes the read (<see cref="Reads"/>).</summary>
     /// <param name="lever">The lever.</param>
     /// <returns>A copy of the readings, empty when the lever published none.</returns>
     public IReadOnlyList<Reading> Latest(SdfUpdateRates lever) {
+        _ = Interlocked.Increment(location: ref m_reads);
         lock (m_gate) {
             return (m_latest.TryGetValue(key: lever, value: out var readings) ? [.. readings] : []);
         }

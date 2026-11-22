@@ -114,6 +114,25 @@ public sealed class WorldStateLease {
     public int TemplateCount => m_templates.Count;
     /// <summary>Gets the mirror the lease reads, or <see langword="null"/> before the first <see cref="Bind"/>.</summary>
     public WorldStateMirror? Mirror => m_mirror;
+    /// <summary>Gets a counter that moves whenever the set of slots the lease holds changes (a first read, an arrival,
+    /// a release), so a consumer that indexed the lease's slots (<see cref="CopyHeld"/>) knows to index them again.</summary>
+    public int HeldVersion => m_heldVersion;
+
+    /// <summary>Appends every mirror slot the lease holds: each resolved reference's and each arrived template's. A
+    /// slot held twice is appended twice.</summary>
+    /// <param name="slots">The list the slots are appended to.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="slots"/> is <see langword="null"/>.</exception>
+    public void CopyHeld(List<int> slots) {
+        ArgumentNullException.ThrowIfNull(argument: slots);
+
+        foreach (var slot in m_slots.Values) {
+            if (slot >= 0) {
+                slots.Add(item: slot);
+            }
+        }
+
+        slots.AddRange(collection: m_templates);
+    }
 
     /// <summary>Points the lease at a mirror and a body. Binding to the mirror and body it already reads changes
     /// nothing; any other binding first releases every slot held.</summary>

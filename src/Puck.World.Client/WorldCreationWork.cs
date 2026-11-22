@@ -6,7 +6,8 @@ namespace Puck.World.Client;
 public static class WorldCreationWork {
     /// <summary>Articulated pose packs, including packs retaining all their slots.</summary>
     public static WorkKind Packs { get; } = new(name: "sdf.creations.packs", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Live registrations considered by a pose pack.</summary>
+    /// <summary>Live registrations a pose pack visited: those something woke, or every one on a pack that owes the whole
+    /// table. A sleeping registration is not visited and counts here for nothing.</summary>
     public static WorkKind Visited { get; } = new(name: "sdf.creations.registrations.visited", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Registrations whose authored pose programs ran.</summary>
     public static WorkKind Posed { get; } = new(name: "sdf.creations.registrations.posed", unit: "count", workClass: WorkClass.Pacing);
@@ -15,7 +16,8 @@ public static class WorldCreationWork {
     public static WorkKind Forked { get; } = new(name: "sdf.creations.registrations.forked", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Registrations retaining their pose because no input or continuation owed work.</summary>
     public static WorkKind Retained { get; } = new(name: "sdf.creations.registrations.retained", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Registrations whose pose evaluation was held by the existing rate mechanism.</summary>
+    /// <summary>Registrations whose pose evaluation was held by the existing rate mechanism: those a pack visited and
+    /// held, and those it held without visiting, out of every view's sight.</summary>
     public static WorkKind RateHeld { get; } = new(name: "sdf.creations.registrations.rate-held", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Transform slots owned by evaluated registrations.</summary>
     public static WorkKind SlotsPosed { get; } = new(name: "sdf.creations.slots.posed", unit: "count", workClass: WorkClass.Pacing);
@@ -41,7 +43,8 @@ public static class WorldCreationWork {
     public static WorkKind StaticTemplates { get; } = new(name: "sdf.creations.static.templates", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Retained static occurrences published during a visual program build.</summary>
     public static WorkKind StaticCopies { get; } = new(name: "sdf.creations.static.copies", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Process totals; read twice to measure a window. Posed, retained and rate-held partition visited registrations;
-    /// the bodies and placements among the posed and held count in <see cref="Puck.SdfVm.SdfUpdateRateCounts"/>.</summary>
+    /// <summary>Process totals; read twice to measure a window. Posed, retained and the visited share of rate-held
+    /// partition visited registrations; the bodies and placements among the posed and held count in
+    /// <see cref="Puck.SdfVm.SdfUpdateRateCounts"/>.</summary>
     public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Forked, Retained, RateHeld, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, TermsEvaluated, EffectorSolves, StaticTemplates, StaticCopies, Packs]);
 }

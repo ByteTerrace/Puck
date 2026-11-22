@@ -138,14 +138,16 @@ public sealed class WorldBodyStampCensus {
             : null
         );
 
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
+        // A body that left stops being read: its scale slot goes back to the mirror.
+        foreach (var index in m_read) {
             if (!source.IsActive(index: index)) {
-                // A body that left stops being read: its scale slot goes back to the mirror.
                 m_reads[index]?.Release();
-
-                continue;
             }
+        }
 
+        m_read.Clear();
+        source.CopyActiveBodies(bodies: m_read);
+        foreach (var index in m_read) {
             if (
                 (ResolveStampCreation(
                 definition: definition,
@@ -158,30 +160,82 @@ public sealed class WorldBodyStampCensus {
 
             m_stamps.Add(item: stamp);
         }
-    }
-    /// <summary>Returns whether a stamped body's presented live scale differs from the one its stamp baked at the last
-    /// <see cref="Refresh"/> or the last move this answered, answering each move once. The presented value is compared,
-    /// not the tick a slot last changed at, so an eased scale settling between ticks is a move too. A check with nothing
-    /// moved reads one slot per stamped body.</summary>
-    /// <returns><see langword="true"/> when the scene must rebuild so its stamps bake the moved scale.</returns>
-    public bool TryTakeMove() {
-        var moved = false;
+
+        // Every stamp baked the scale its body presents now, which may still be on its way between two ticks.
+        m_source = source;
+        m_watch.Clear();
+        m_settling.Clear();
+
+        var tick = source.StateMirror.Tick;
 
         foreach (var stamp in m_stamps) {
-            var index = stamp.BodyIndex;
+            m_watch.Index(holder: stamp.BodyIndex, lease: m_reads[stamp.BodyIndex]!);
+            m_settling.Add(item: (stamp.BodyIndex, tick));
+        }
+    }
 
-            if (m_reads[index] is not { } reads) {
-                continue;
+    // The bodies the last refresh read (every active one), in body order; the source the stamps were read from; the
+    // stamped bodies indexed by the mirror slot their scale reads; and the stamped bodies whose scale may still be
+    // moving, each with the tick its slot last changed at.
+    private readonly List<int> m_read = [];
+    private IWorldStampSource? m_source;
+    private readonly WorldLeaseWatch m_watch = new();
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_woken = new();
+    private readonly List<(int Body, ulong Tick)> m_settling = [];
+
+    /// <summary>Returns whether a stamped body's presented live scale differs from the one its stamp baked at the last
+    /// <see cref="Refresh"/> or the last move this answered, answering each move once. The presented value is compared,
+    /// not the tick a slot last changed at, so an eased scale settling between ticks is a move too. A check reads the
+    /// scale of the bodies whose slot the mirror's change log names, each until the tick after its change has been
+    /// presented (a slot's presented value moves only between the refresh that changed it and the next one), so a
+    /// frame in which no stamped body's scale changed reads none.</summary>
+    /// <returns><see langword="true"/> when the scene must rebuild so its stamps bake the moved scale.</returns>
+    public bool TryTakeMove() {
+        if (m_source is not { } source) {
+            return false;
+        }
+
+        var mirror = source.StateMirror;
+        var tick = mirror.Tick;
+
+        m_woken.Clear();
+        if (!m_watch.Collect(mirror: mirror, woken: m_woken)) {
+            // The changes cannot be named slot by slot, so every stamped body is read.
+            m_settling.Clear();
+            foreach (var stamp in m_stamps) {
+                m_settling.Add(item: (stamp.BodyIndex, tick));
             }
+        } else {
+            foreach (var body in m_woken.Members) {
+                var at = 0;
 
-            var scale = WorldGaitDrivers.LiveBodyScale(
-                reads: reads,
-                scaleRow: m_scaleRow
-            );
+                while ((at < m_settling.Count) && (m_settling[at].Body != body)) {
+                    at++;
+                }
 
-            if (scale != m_bakedScale[index]) {
-                m_bakedScale[index] = scale;
-                moved = true;
+                if (at == m_settling.Count) { m_settling.Add(item: (body, tick)); } else { m_settling[at] = (body, tick); }
+            }
+        }
+
+        var moved = false;
+
+        for (var at = (m_settling.Count - 1); (at >= 0); at--) {
+            var (index, changed) = m_settling[at];
+
+            if (m_reads[index] is { } reads) {
+                var scale = WorldGaitDrivers.LiveBodyScale(
+                    reads: reads,
+                    scaleRow: m_scaleRow
+                );
+
+                if (scale != m_bakedScale[index]) {
+                    m_bakedScale[index] = scale;
+                    moved = true;
+                }
+            }
+            if (tick > (changed + 1UL)) {
+                m_settling[at] = m_settling[^1];
+                m_settling.RemoveAt(index: (m_settling.Count - 1));
             }
         }
 

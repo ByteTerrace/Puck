@@ -42,4 +42,18 @@ public sealed class MarkedIndexSet {
         foreach (var index in Members) { m_marked[index] = false; }
         m_count = 0;
     }
+    /// <summary>Moves every member into a caller's array, in the order they were added, and empties the set, so a
+    /// consumer that visits the members can add to the set again while it visits them (a work list whose items may
+    /// queue themselves for the next pass).</summary>
+    /// <param name="members">The array the members are written to from index zero, grown when it is too short.</param>
+    /// <returns>The number of members written.</returns>
+    public int Drain(ref int[] members) {
+        var count = m_count;
+
+        _ = ArrayCapacity.EnsureScratch(ref members, count);
+        Members.CopyTo(destination: members);
+        Clear();
+
+        return count;
+    }
 }

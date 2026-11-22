@@ -1069,7 +1069,12 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             ));
         }
 
+        // Another authority's snapshot moves every entity's address.
+        m_bodyChangesWhole |= (m_authority != snapshot.Authority);
+
         foreach (ref readonly var entry in snapshot.Entries.Span) {
+            var wasActive = ((((uint)entry.Index) < EntityCapacity) && m_poses.IsActive(index: entry.Index));
+
             if (!m_poses.TryAdmit(
                 admission: out var admission,
                 easeCorrections: true,
@@ -1079,6 +1084,19 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             }
 
             var index = entry.Index;
+
+            // Everything a stamp pool reads of a body besides its look (BodyChanges): a step other than plain
+            // double-buffering moved its pose epoch or its carries.
+            if (
+                (admission.Step != WorldPoseStep.Interpolated) ||
+                (wasActive != entry.Active) ||
+                (m_facts[index] != entry.Facts) ||
+                (m_generation[index] != entry.Generation) ||
+                (m_renderPosition[index] != entry.Position) ||
+                (m_renderOrientation[index] != entry.Orientation)
+            ) {
+                _ = m_changedBodies.Add(index: index);
+            }
 
             m_color[index] = entry.BodyColor;
             m_kit[index] = entry.Kit;
@@ -1149,6 +1167,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_posesDelivered = true;
         if (m_poses.ActiveChanged) {
             m_activeRevision++;
+            // A body that left is in no snapshot entry, so the set that changed is not named body by body.
+            m_bodyChangesWhole = true;
         }
         m_renderPoseRevision++;
         foreach (var index in m_poses.Seen) {
@@ -1404,7 +1424,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         var nearest = FixedQ4816.MaxValue;
         var found = -1;
 
-        for (var index = 0; (index < EntityCapacity); index++) {
+        // The live bodies in ascending order, so the nearest of two equally near candidates is the lower index.
+        foreach (var index in LiveBodies) {
             if (
                 (index == sourceBody) ||
                 !m_poses.IsActive(index: index)
@@ -1520,6 +1541,74 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         WorldPoseWork.Process.Add(kind: WorldPoseWork.Resolved, amount: resolved);
     }
 
+    // The bodies whose presented inputs moved since the journal's last frame (a delivery's entries and the poses a
+    // frame resolved), and whether the set cannot be named body by body.
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_changedBodies = new();
+    private bool m_bodyChangesWhole = true;
+    private readonly Puck.Abstractions.Gpu.GpuChangedRows m_bodyChanges = new(stableRows: true);
+
+    /// <inheritdoc/>
+    /// <remarks>A journal frame names the bodies whose render pose <see cref="UpdateRenderPoses"/> resolved to another
+    /// value, and those a delivery moved the pose, pose epoch, generation, carries, facts or active flag of. A frame
+    /// that changed which bodies are active, or another authority's first snapshot, owes every body.</remarks>
+    public Puck.Abstractions.Gpu.GpuRowChanges BodyChanges => m_bodyChanges.Reader;
+    /// <inheritdoc/>
+    /// <remarks>Reading it closes a journal frame over whatever moved since the last read, so the first consumer of a
+    /// frame publishes the changes and the rest read the same serial, whether or not a presentation frame resolved
+    /// poses in between (a composition with no presentation delivers and packs without one).</remarks>
+    public long BodyChangesSerial {
+        get {
+            if (m_bodyChangesWhole || (m_changedBodies.Count > 0)) {
+                m_bodyChanges.Begin(everything: m_bodyChangesWhole, rows: EntityCapacity);
+                if (!m_bodyChangesWhole) {
+                    foreach (var index in m_changedBodies.Members) {
+                        m_bodyChanges.Owe(count: 1, start: index);
+                    }
+                }
+
+                m_changedBodies.Clear();
+                m_bodyChangesWhole = false;
+            }
+
+            return m_bodyChanges.Serial;
+        }
+    }
+    /// <inheritdoc/>
+    /// <remarks>Reads the pose table's live set (<see cref="WorldPoseTable.Live"/>), never the capacity.</remarks>
+    public void CopyActiveBodies(List<int> bodies) {
+        ArgumentNullException.ThrowIfNull(argument: bodies);
+
+        foreach (var index in LiveBodies) {
+            if (m_poses.IsActive(index: index)) {
+                bodies.Add(item: index);
+            }
+        }
+    }
+
+    // The pose table's live set in ascending order, sorted again only when a delivery changed which bodies are live.
+    private readonly List<int> m_liveBodies = [];
+    private long m_liveBodiesRevision = -1L;
+
+    /// <summary>Gets the index of every body that may be active, in ascending order: the pose table's live set
+    /// (<see cref="WorldPoseTable.Live"/>), which a body a snapshot carried inactive stays in, so a reader still asks
+    /// <see cref="IsActive"/>. What a walk of the active bodies visits in place of every index of
+    /// <see cref="EntityCapacity"/>; valid until the next delivery.</summary>
+    public ReadOnlySpan<int> LiveBodies {
+        get {
+            if (m_liveBodiesRevision != m_activeRevision) {
+                m_liveBodiesRevision = m_activeRevision;
+                m_liveBodies.Clear();
+                foreach (var index in m_poses.Live) {
+                    m_liveBodies.Add(item: index);
+                }
+
+                m_liveBodies.Sort();
+            }
+
+            return System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_liveBodies);
+        }
+    }
+
     // The live bodies whose two tick poses differ in the latest delivery (the only ones a frame between two deliveries
     // interpolates), and whether a delivery has arrived since a frame last resolved every live body.
     private int[] m_moving = [];
@@ -1553,6 +1642,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             m_renderPosition[index] = position;
             m_renderOrientation[index] = orientation;
             changed = true;
+            _ = m_changedBodies.Add(index: index);
         }
 
         return ((previousPosition != currentPosition) || (previousOrientation != currentOrientation));
