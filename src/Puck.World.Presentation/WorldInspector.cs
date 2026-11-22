@@ -98,7 +98,7 @@ public sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed curso
                     text.TimingRefused(node: runtime.Instances.Instances[index].Name, refusal: refusal);
                     continue;
                 }
-                foreach (var value in runtime.Node(instance: index).Timings) {
+                foreach (var value in runtime.Node(instance: index).TimingsAt(frame: (runtime.Latest?.Frame ?? 0L))) {
                     text.Timing(node: runtime.Instances.Instances[index].Name, timing: in value);
                 }
             }

@@ -99,7 +99,7 @@ clamped to it: asked for 3840x2160 on a 2560x1440 monitor, the World presents
 ## How the distances follow
 
 A body switches to 30 Hz at or below 30 pixels per metre, and to 15, 10 and
-5 Hz at or below 15, 10 and 5 (`SdfUpdateRateTiers.BodyTiers`): a limb moving
+5 Hz at or below 15, 10 and 5 (`SdfUpdateRateTiers.Tiers`): a limb moving
 2 m/s then steps at most two pixels between packs. Pixels per metre are the
 display's height over `2 tan(0.48)` = 1.0432 times the body's depth. The
 depth is measured to the nearest point of the sphere the body's look reaches. The chase camera stands
@@ -113,8 +113,8 @@ meadow, takes 5 Hz. The readings above match that model.
 
 A screen's source uploads at 30 Hz once its picture shows at or below its own
 240 rows on the display, and at 15 Hz at or below 120. Each screen's picture is
-2 m high. A window renders at 30 Hz at or below 120 display pixels high and
-15 Hz at or below 60. Each window's glass is the garden painting's, 2.84 m
+2 m high. A window renders at 30 Hz at or below 120 display pixels high,
+15 Hz at or below 60, 10 Hz at or below 40 and 5 Hz at or below 20. Each window's glass is the garden painting's, 2.84 m
 high. All of these sizes are display pixels, after upscaling, so the render
 grid never changes a tier.
 
