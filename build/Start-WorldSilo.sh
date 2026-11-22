@@ -4,6 +4,9 @@
 # PUCK_FEDERATION_KEYS, from that protected command.
 set -euo pipefail
 umask 077
+# A timed-out pass reports only journal lines from this pass: a worker a release reuses in place also holds its earlier
+# releases' lines, whose errors would read as this pass's cause.
+pass_started="$(date +%s)"
 federation_keys="${PUCK_FEDERATION_KEYS:?the launcher passes the federation signing keys}"
 unset PUCK_FEDERATION_KEYS
 . /etc/os-release
@@ -113,6 +116,11 @@ if [ '__MCP_ENABLED__' = 1 ]; then
     chmod 640 /etc/puck/mcp.json
     chgrp 1655 /etc/puck/tls.json
     chmod 640 /etc/puck/tls.json
+    # The keeper runs on the host as Caddy's UID, and systemd refuses a numeric User= or Group= that the host's account
+    # database lacks (its get_user_creds answers ESRCH, so the start fails at step USER and Caddy, which waits for the
+    # keeper, never starts). The containers need no host account; the keeper does, so the host carries one.
+    getent group 1655 >/dev/null || groupadd --system --gid 1655 puck-tls
+    getent passwd 1655 >/dev/null || useradd --system --uid 1655 --gid 1655 --no-create-home --home-dir /var/lib/puck-tls --shell /usr/sbin/nologin puck-tls
     install -d -m 700 -o 1655 -g 1655 /var/lib/puck-tls
     # The keeper holds the TLS state (certificate, key, ACME account) in the owner's private store, so a fresh worker
     # restores it instead of issuing again (build/Keep-WorldTls.py). It runs as Caddy's user, which /etc/puck excludes.
@@ -156,11 +164,17 @@ systemctl enable --now puck-world.service
 if [ '__MCP_ENABLED__' = 1 ]; then
     # Caddy starts only once the keeper reports ready: the stored or local certificate is fresh, or this worker holds
     # the store's issuance lease. Its start may wait on another worker's issuance, so nothing here blocks on it.
+    # The keeper's unit is the one door: Caddy's unit is Requisite on it (a start fails unless the keeper is already
+    # active, which a Type=notify unit is only after READY) and is never enabled itself, and the keeper Upholds Caddy,
+    # so systemd starts Caddy whenever the keeper is ready, including after a keeper start that failed and was retried.
+    # A Requires= edge would fail Caddy's start job with the keeper's and never queue it again.
+    systemctl disable puck-tls.service 2>/dev/null || true
     cat >/etc/systemd/system/puck-tls-keeper.service <<'KEEPERUNIT'
 [Unit]
 Description=Puck TLS state keeper
 Wants=network-online.target
 After=network-online.target
+Upholds=puck-tls.service
 [Service]
 Type=notify
 User=1655
@@ -180,7 +194,8 @@ KEEPERUNIT
     cat >/etc/systemd/system/puck-tls.service <<'TLSUNIT'
 [Unit]
 Description=Puck automatic HTTPS
-Requires=docker.service puck-tls-keeper.service
+Requires=docker.service
+Requisite=puck-tls-keeper.service
 After=docker.service network-online.target puck-world.service puck-tls-keeper.service
 [Service]
 Restart=on-failure
@@ -189,12 +204,13 @@ TimeoutStopSec=30
 ExecStartPre=-/usr/bin/docker rm puck-tls
 ExecStart=/usr/bin/docker run --name puck-tls --network host --user 1655:1655 --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --cap-drop ALL --security-opt no-new-privileges --pids-limit 128 --memory 128m --log-driver local --log-opt max-size=10m --log-opt max-file=3 --env XDG_DATA_HOME=/data --env XDG_CONFIG_HOME=/data --mount type=bind,source=/etc/puck/tls.json,target=/tls.json,readonly --mount type=bind,source=/var/lib/puck-tls,target=/data --entrypoint /usr/bin/caddy __IMAGE__ run --config /tls.json
 ExecStop=/usr/bin/docker stop --time 20 puck-tls
-[Install]
-WantedBy=multi-user.target
 TLSUNIT
     systemctl daemon-reload
-    systemctl enable puck-tls-keeper.service puck-tls.service
-    systemctl restart --no-block puck-tls-keeper.service puck-tls.service
+    systemctl enable puck-tls-keeper.service
+    # Stop both in one transaction (the keeper would uphold a Caddy stopped alone), then start the keeper: Caddy
+    # follows with this release's configuration once the keeper is ready.
+    systemctl stop puck-tls-keeper.service puck-tls.service
+    systemctl start --no-block puck-tls-keeper.service
 else
     systemctl disable --now puck-tls.service puck-tls-keeper.service 2>/dev/null || true
 fi
@@ -220,16 +236,18 @@ while [ "$(date +%s)" -lt "$ready_deadline" ]; do
 done
 # Only the tail of the extension's output survives in Azure's error, so the silo's own lines (the health listener logs
 # no access lines) and the TLS front's errors go to stdout, and the verdict of each wait goes last, to stderr.
-journalctl -u puck-world.service --no-pager -o cat -n 40 || true
+journalctl -u puck-world.service --no-pager -o cat -n 40 --since "@$pass_started" || true
 if [ '__MCP_ENABLED__' = 1 ]; then
-    { journalctl -u puck-tls.service --no-pager -o cat -n 400 | grep -e error -e fail | tail -n 6; } || true
+    { journalctl -u puck-tls.service --no-pager -o cat -n 400 --since "@$pass_started" | grep -e error -e fail | tail -n 6; } || true
 fi
 {
     printf 'World worker readiness timed out after __READY_SECONDS__ s.\n'
     printf 'private health (what this wait needs): %s\n' "$private_state"
     if [ '__MCP_ENABLED__' = 1 ]; then
         printf 'MCP TLS front (what this wait needs): %s\n' "$mcp_state"
-        printf 'TLS state keeper (starts the front): %s\n' "$(journalctl -u puck-tls-keeper.service --no-pager -o cat -n 1 2>&1)"
+        printf 'TLS state keeper (starts the front): %s; last lines: %s\n' \
+            "$(systemctl show -p ActiveState,Result,ExecMainStatus --value puck-tls-keeper.service 2>&1 | paste -sd ' ')" \
+            "$(journalctl -u puck-tls-keeper.service --no-pager -o cat -n 3 --since "@$pass_started" 2>&1 | paste -sd '|')"
     fi
     printf 'public health (opens only after the release commits): %s\n' "$(curl --silent --show-error --max-time 10 --write-out ' (HTTP %{http_code})' http://127.0.0.1:__HEALTH_PORT__/healthz 2>&1)"
     printf 'container: %s\n' "$(docker inspect -f '{{.State.Status}} restarts={{.RestartCount}} exit={{.State.ExitCode}}' puck-world 2>&1)"

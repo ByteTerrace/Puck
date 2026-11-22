@@ -1033,9 +1033,13 @@ admission closed, and the VM extension waits only for what a candidate reaches
 before its commit: private health and, with MCP, Caddy's TLS front. Public
 `/healthz` answers 503 until the commit, so the extension never waits on it, and
 the load balancer's MCP rule probes Caddy's port rather than `/healthz` so that
-ACME can validate a fresh worker's certificate before the commit. A timed-out
-extension ends its output with each wait's last answer, the public health
-reason and the container state. The coordinator
+ACME can validate a fresh worker's certificate before the commit. The platform
+reconcile, which runs before the deploy, is the only writer of the world
+subnet's security group and its MCP rule
+([the decision](../decisions/runtime-and-delivery.md#the-hosted-mcp-fronts-certificate)).
+A timed-out extension prints only this pass's journal lines, then ends its
+output with each wait's last answer (for the TLS front, the keeper's unit state
+and last lines), the public health reason and the container state. The coordinator
 verifies its identity and ownership before committing and opening admission.
 Pre-commit recovery restores only that operation's protected source roots and
 then restarts the retained source. The removed blob-version rewind path is not

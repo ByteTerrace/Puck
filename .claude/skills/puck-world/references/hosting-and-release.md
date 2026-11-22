@@ -130,9 +130,11 @@ bounded claims in an HTTP 401 bearer challenge; clients obtain fresh authorizati
 Revocation closes attachments and active requests. Optional Azure services reuse Function self-onboarding
 and observation providers through request-confined OBO with federated managed identity client assertions;
 never substitute host credentials. Deployment uses automatic Caddy TLS behind the existing load balancer
-(whose MCP rule probes Caddy's port, never the admission-gated `/healthz`, so a worker with no stored certificate certifies before its commit),
+(whose MCP rule probes Caddy's port, never the admission-gated `/healthz`, so a worker with no stored certificate certifies before its commit;
+the platform's `main.bicepparam` is the only writer of the world subnet's security group and its `WorldMcp` rule, and the compute template only references them),
 certificate state outside World mounts that `build/Keep-WorldTls.py` keeps in the owner's private store under a blob
-lease (a fresh worker restores it; one hostname issues once), and Azure expiry/readiness alerts. Durable delegated
+lease (a fresh worker restores it; one hostname issues once; Caddy's unit is `Requisite=` on the keeper, which `Upholds=` it,
+and the host carries an account for UID 1655 because systemd refuses an unknown numeric `User=`), and Azure expiry/readiness alerts. Durable delegated
 cloud writes and richer participant tools remain uninstalled.
 Run `tests/Puck.Hosting.Tests`, `tests/Puck.Networking.Tests`, `tests/Puck.Mcp.Tests`, `tests/Puck.Cli.Tests` (the `puck mcp` process interop) and the real-host smoke described in
 [`Puck.Mcp`](../../../../src/Puck.Mcp/README.md) when changing this attachment seam.
