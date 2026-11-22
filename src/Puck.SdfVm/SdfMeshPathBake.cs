@@ -3305,6 +3305,12 @@ public sealed partial class SdfMeshPathBake {
         public float DemandPixel { get; set; } = float.NaN;
         // What the demand watch's latest measure stood on and when each of its clocks next makes it due (DemandWatch).
         public DemandWatch Watch;
+        // The frustums the latest measure found could move its tier, with how far each stood from answering otherwise
+        // and the lanes' odometers then (SdfMeshDemand.Watch), at the lanes' layout it was taken at; whether any lane is
+        // watched, which keeps the group in the frustum watch (MeasureDemands).
+        public float[] Frustum = [];
+        public long FrustumLayout;
+        public bool Framed;
         // The marked lists the group stands in (MarkedGroups): each list's own bit, set while the group is in it.
         public GroupMarks Marks;
 

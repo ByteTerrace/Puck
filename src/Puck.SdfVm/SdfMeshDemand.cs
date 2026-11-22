@@ -49,6 +49,29 @@ public sealed class SdfMeshDemand {
     private object?[] m_heldSources = new object?[4];
     private long[] m_heldCuts = new long[4];
     private int m_heldCount;
+    // The points bounded to their views, each in a frustum lane of its own in the points' order: each point's lane (-1
+    // for a point bounded by distance alone), how many lanes there are, and each lane's odometers since the lanes were
+    // last laid out (Layout): the metres its eye and near plane moved and the radians its widened frustum turned
+    // (CameraSnapshot.FrustumTurn). A box's distance to one of a lane's planes moves by no more than the lane's shift
+    // and its turn times the box's reach from the eye, the shift added to the reach.
+    private int[] m_laneOf = new int[4];
+    private int m_frustumLanes;
+    private float[] m_laneShift = new float[8];
+    private float[] m_laneTurn = new float[8];
+    // Each point the latest observation read: the held point it continues in a lane (-1 for one that came or jumped)
+    // and the lane's moves since the observation before.
+    private int[] m_continues = new int[4];
+    private float[] m_movedShift = new float[4];
+    private float[] m_movedTurn = new float[4];
+    // The held points' lanes, and from the latest layout's change: each lane before it, the lane it continues in (-1 for
+    // none), and the odometers it stood at when the lanes were laid out again.
+    private int[] m_heldLane = new int[4];
+    private int[] m_layoutMap = new int[8];
+    private float[] m_layoutShift = new float[8];
+    private float[] m_layoutTurn = new float[8];
+    private int m_layoutLanes;
+    private float[] m_spareShift = new float[8];
+    private float[] m_spareTurn = new float[8];
     // The changes no odometer bounds since the bake last took them (TakeChanges), and whether they ran past what the list
     // holds, which leaves every answer open.
     private readonly List<Change> m_changes = [];
@@ -102,15 +125,18 @@ public sealed class SdfMeshDemand {
     /// logarithm of a matched point's pixels a metre over what they were. A point's pixel at a fixed distance is
     /// multiplied by at most <c>e</c> to the scale between two observations, either way.</summary>
     public double Scale { get; private set; }
-    /// <summary>Gets the travel of the points bounded to their views, in metres: each observation adds the most any such
-    /// matched point's eye and near plane moved. A box's distance to one of those frustums' planes moves by no more than
-    /// this, with <see cref="Turn"/>.</summary>
-    public double Shift { get; private set; }
-    /// <summary>Gets the turn of the points bounded to their views, in radians: each observation adds the largest angle any
-    /// such matched point's frustum planes turned through (<see cref="CameraSnapshot.FrustumTurn"/>), whether its camera
-    /// turned or its field of view or aspect moved. A box within a distance <c>r</c> of the eye has its distance to a plane
-    /// moved by no more than <c>r</c> times the turn.</summary>
-    public double Turn { get; private set; }
+    /// <summary>Gets how many of the points are bounded to their views, each in a frustum lane of its own
+    /// (<see cref="BoundsOf"/>, <see cref="Watch"/>).</summary>
+    public int FrustumLanes => m_frustumLanes;
+    /// <summary>Gets the length of one field of a frustum watch: the frustum lanes, padded to whole vectors. A watch
+    /// holds four fields (<see cref="Watch"/>).</summary>
+    public int FrustumStride => ((m_frustumLanes + (Vector256<float>.Count - 1)) & ~(Vector256<float>.Count - 1));
+    /// <summary>Gets the length of a frustum watch at this layout: four fields of <see cref="FrustumStride"/>.</summary>
+    public int WatchLength => (WatchFields * FrustumStride);
+    /// <summary>Gets the layout of the frustum lanes: one more each time a lane's point came, went, jumped or took another
+    /// lane, or the lanes' odometers were started again. A watch taken at the layout before is carried into this one
+    /// (<see cref="Carry"/>).</summary>
+    public long Layout { get; private set; }
     /// <summary>Gets the changes no odometer bounds since the bake last took them (<see cref="TakeChanges"/>).</summary>
     public IReadOnlyList<Change> Changes => m_changes;
 
@@ -145,8 +171,8 @@ public sealed class SdfMeshDemand {
     /// <see cref="WithinViewMargin"/> and begun at its near plane. The points keep the views' order, so the first is the
     /// primary seat's while that seat is presented here. Each view is matched to the point it held before by its source
     /// and cut, or by its place among the views with none: a matched point's moves add to the odometers
-    /// (<see cref="Travel"/>, <see cref="Scale"/>, <see cref="Shift"/>, <see cref="Turn"/>), and any other change is
-    /// listed (<see cref="Changes"/>).</summary>
+    /// (<see cref="Travel"/>, <see cref="Scale"/>, and its frustum lane's shift and turn when it is bounded to its view),
+    /// and any other change is listed (<see cref="Changes"/>).</summary>
     /// <param name="frame">The frame.</param>
     /// <param name="height">The output's height in display pixels.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
@@ -157,8 +183,6 @@ public sealed class SdfMeshDemand {
         var count = 0;
         var travel = 0f;
         var scale = 0f;
-        var shift = 0f;
-        var turn = 0f;
         var unsourced = 0;
 
         Hold();
@@ -179,6 +203,8 @@ public sealed class SdfMeshDemand {
             var point = new Viewpoint(Camera: held, Eye: camera.Position, Focal: focal, Framed: true, Within: within);
             var before = Match(source: view.Source, cut: view.CutRevision, unsourced: ((view.Source is null) ? unsourced++ : -1), matched: matched);
 
+            m_continues[count] = -1;
+
             // A point that jumped (a teleport, a cut) is read as one that went and one that came: the boxes either side
             // reaches are measured again, rather than every box a jump's travel would make due.
             if ((before < 0) || (m_held[before].Within != within) || !m_held[before].Framed || (Vector3.Distance(value1: m_held[before].Eye, value2: point.Eye) > JumpMetres)) {
@@ -190,8 +216,9 @@ public sealed class SdfMeshDemand {
                 travel = MathF.Max(x: travel, y: (Vector3.Distance(value1: was.Eye, value2: point.Eye) / focal));
                 scale = MathF.Max(x: scale, y: MathF.Abs(x: MathF.Log(x: (focal / was.Focal))));
                 if (within) {
-                    shift = MathF.Max(x: shift, y: (Vector3.Distance(value1: was.Eye, value2: point.Eye) + MathF.Abs(x: (held.Near - was.Camera.Near))));
-                    turn = MathF.Max(x: turn, y: held.FrustumTurn(other: was.Camera, margin: WithinViewMargin));
+                    m_continues[count] = before;
+                    m_movedShift[count] = (Vector3.Distance(value1: was.Eye, value2: point.Eye) + MathF.Abs(x: (held.Near - was.Camera.Near)));
+                    m_movedTurn[count] = held.FrustumTurn(other: was.Camera, margin: WithinViewMargin);
                 }
             }
             m_points[count] = point.Eye;
@@ -208,10 +235,71 @@ public sealed class SdfMeshDemand {
         }
         Travel += travel;
         Scale += scale;
-        Shift += shift;
-        Turn += turn;
         Count = count;
+        LayFrustums();
         Lanes();
+    }
+    // Gives each point bounded to its view its frustum lane, in the points' order, and moves each lane's odometers by its
+    // point's moves. Where every lane continues the held point of the same lane, the odometers carry on; otherwise the
+    // lanes are laid out again: each starts from its point's moves, and the lanes before are kept with the lane each
+    // continues in and the odometers it stood at, for a watch to be carried over (Carry). An odometer grown past what a
+    // float keeps to a fine fraction of a metre starts the lanes again too.
+    private void LayFrustums() {
+        const float Restart = 4096f;
+        var lanes = 0;
+        var same = true;
+
+        for (var index = 0; (index < Count); index++) {
+            if (!m_within[index]) {
+                m_laneOf[index] = -1;
+                continue;
+            }
+
+            var lane = lanes++;
+            var from = m_continues[index];
+
+            m_laneOf[index] = lane;
+            same &= ((from >= 0) && (m_heldLane[from] == lane) && (m_laneShift[lane] < Restart) && (m_laneTurn[lane] < Restart));
+        }
+        if (same && (lanes == m_frustumLanes)) {
+            for (var index = 0; (index < Count); index++) {
+                if (m_laneOf[index] is >= 0 and var lane) {
+                    m_laneShift[lane] += m_movedShift[index];
+                    m_laneTurn[lane] += m_movedTurn[index];
+                }
+            }
+            return;
+        }
+
+        var stride = ((lanes + (Vector256<float>.Count - 1)) & ~(Vector256<float>.Count - 1));
+
+        if (m_layoutMap.Length < m_frustumLanes) {
+            m_layoutMap = new int[m_laneShift.Length];
+            m_layoutShift = new float[m_laneShift.Length];
+            m_layoutTurn = new float[m_laneShift.Length];
+        }
+        m_laneShift.AsSpan(start: 0, length: m_frustumLanes).CopyTo(destination: m_layoutShift);
+        m_laneTurn.AsSpan(start: 0, length: m_frustumLanes).CopyTo(destination: m_layoutTurn);
+        m_layoutMap.AsSpan(start: 0, length: m_frustumLanes).Fill(value: -1);
+        m_layoutLanes = m_frustumLanes;
+        if (m_spareShift.Length < stride) {
+            m_spareShift = new float[ArrayCapacity.Grown(m_spareShift.Length, stride)];
+            m_spareTurn = new float[m_spareShift.Length];
+        }
+        m_spareShift.AsSpan().Clear();
+        m_spareTurn.AsSpan().Clear();
+        for (var index = 0; (index < Count); index++) {
+            if (m_laneOf[index] is not (>= 0 and var lane)) { continue; }
+            if (m_continues[index] is >= 0 and var from) {
+                m_layoutMap[m_heldLane[from]] = lane;
+                m_spareShift[lane] = m_movedShift[index];
+                m_spareTurn[lane] = m_movedTurn[index];
+            }
+        }
+        (m_laneShift, m_spareShift) = (m_spareShift, m_laneShift);
+        (m_laneTurn, m_spareTurn) = (m_spareTurn, m_laneTurn);
+        m_frustumLanes = lanes;
+        Layout++;
     }
     // Keeps the points the latest observation held, for the next one to match its views against.
     private void Hold() {
@@ -219,11 +307,13 @@ public sealed class SdfMeshDemand {
             Array.Resize(array: ref m_held, newSize: m_points.Length);
             Array.Resize(array: ref m_heldSources, newSize: m_points.Length);
             Array.Resize(array: ref m_heldCuts, newSize: m_points.Length);
+            Array.Resize(array: ref m_heldLane, newSize: m_points.Length);
         }
         for (var index = 0; (index < Count); index++) {
             m_held[index] = PointAt(index: index);
             m_heldSources[index] = m_sources[index];
             m_heldCuts[index] = m_cuts[index];
+            m_heldLane[index] = m_laneOf[index];
         }
         m_heldCount = Count;
     }
@@ -265,6 +355,16 @@ public sealed class SdfMeshDemand {
         Array.Resize(ref m_framed, capacity);
         Array.Resize(ref m_sources, capacity);
         Array.Resize(ref m_cuts, capacity);
+        Array.Resize(ref m_laneOf, capacity);
+        Array.Resize(ref m_continues, capacity);
+        Array.Resize(ref m_movedShift, capacity);
+        Array.Resize(ref m_movedTurn, capacity);
+        if (m_laneShift.Length < capacity) {
+            var lanes = ((capacity + (Vector256<float>.Count - 1)) & ~(Vector256<float>.Count - 1));
+
+            Array.Resize(ref m_laneShift, lanes);
+            Array.Resize(ref m_laneTurn, lanes);
+        }
     }
     /// <summary>Adds a demand point after those the latest frame named: an eye with its
     /// pixels a metre one metre in front of it, for a plan made with no frame (an offline audit at a chosen eye).</summary>
@@ -282,6 +382,7 @@ public sealed class SdfMeshDemand {
         m_focal[Count] = ((Math.Max(val1: height, val2: 1u) * 0.5f) / tanHalfFieldOfView);
         m_sources[Count] = null;
         m_cuts[Count] = 0L;
+        m_laneOf[Count] = -1;
         Changed(before: default, hadBefore: false, after: PointAt(index: Count), hasAfter: true);
         Count++;
         Lanes();
@@ -460,20 +561,12 @@ public sealed class SdfMeshDemand {
     /// pixel by at most that distance over this; infinity with none counted.</param>
     /// <param name="Clearance">The least distance, in metres, the box may move before a point not counted could put its
     /// pixel under the top; infinity with none uncounted.</param>
-    /// <param name="FrustumSlack">The least distance, in metres, the box may move before a frustum that could move its
-    /// tier answers otherwise whether it may hold the box (<see cref="CameraSnapshot.FrustumSlack"/>); infinity with
-    /// none. A counted point bounded to its view has such a frustum when it does not hold the box and its distance puts
-    /// the box finer than the pixel (holding it would make the box finer), and when it holds the box while no point
-    /// demanding by distance alone puts the box at the pixel (letting it go could leave the box past the top). Any other
-    /// such point's answer moves no tier: holding the box it is not the finest, and letting it go leaves a point that
-    /// demands by distance alone at the pixel.</param>
-    /// <param name="FrustumReach">The most the box reaches from a point with such a frustum, in metres: the distance to
-    /// its center plus its half extents' sum, which that frustum's <see cref="Turn"/> multiplies into the most the box's
-    /// distance to a plane moves; zero with none.</param>
     /// <param name="Beyond">The least pixel an uncounted point's distance puts the box at; infinity with none.</param>
-    public readonly record struct Bounds(float Focal, float Clearance, float FrustumSlack, float FrustumReach, float Beyond) {
+    /// <param name="Framed">Whether a counted point is bounded to its view, so the box's tier moves with that frustum's
+    /// answer, which a frustum watch follows (<see cref="Watch"/>).</param>
+    public readonly record struct Bounds(float Focal, float Clearance, float Beyond, bool Framed) {
         /// <summary>Gets the bounds of no box: nothing counted and nothing uncounted.</summary>
-        public static Bounds None { get; } = new(Beyond: float.PositiveInfinity, Clearance: float.PositiveInfinity, Focal: float.PositiveInfinity, FrustumReach: 0f, FrustumSlack: float.PositiveInfinity);
+        public static Bounds None { get; } = new(Beyond: float.PositiveInfinity, Clearance: float.PositiveInfinity, Focal: float.PositiveInfinity, Framed: false);
 
         /// <summary>Returns the bounds of two boxes read as one: the tighter of each.</summary>
         /// <param name="other">The other box's bounds.</param>
@@ -482,47 +575,140 @@ public sealed class SdfMeshDemand {
             Beyond: MathF.Min(x: Beyond, y: other.Beyond),
             Clearance: MathF.Min(x: Clearance, y: other.Clearance),
             Focal: MathF.Min(x: Focal, y: other.Focal),
-            FrustumReach: MathF.Max(x: FrustumReach, y: other.FrustumReach),
-            FrustumSlack: MathF.Min(x: FrustumSlack, y: other.FrustumSlack)
+            Framed: (Framed || other.Framed)
         );
     }
     /// <summary>Returns how a world-axis box stands toward the demand points that could move its tier past a pixel
-    /// (<see cref="Bounds"/>).</summary>
+    /// (<see cref="Bounds"/>), and writes into a frustum watch, for each counted point bounded to its view, how far the
+    /// box may move before that frustum answers otherwise whether it may hold the box
+    /// (<see cref="CameraSnapshot.FrustumSlack"/>) and how far the box reaches from that point's eye (the distance to its
+    /// center plus its half extents' sum), the tighter of each where the watch holds one already (a shared geometry's
+    /// copies read into one watch).</summary>
     /// <param name="center">The box's center, in world space.</param>
     /// <param name="half">The box's half extents along the world axes, none negative.</param>
     /// <param name="units">The units the box's pixels are read in; positive.</param>
     /// <param name="top">The pixel, in those units, a point must reach to count.</param>
-    /// <param name="pixel">The pixel the box's group stands at, in its own units: the finest over every box it is read
-    /// at (<see cref="PixelAt(Vector3, Vector3)"/> over its units); infinity where no point demands it.</param>
+    /// <param name="watch">The frustum watch the box's group keeps: <see cref="FrustumStride"/> times four values, begun
+    /// with <see cref="Unwatched"/>.</param>
     /// <returns>The bounds.</returns>
-    public Bounds BoundsOf(Vector3 center, Vector3 half, float units, float top, float pixel) {
+    /// <exception cref="ArgumentException"><paramref name="watch"/> is not four fields long.</exception>
+    public Bounds BoundsOf(Vector3 center, Vector3 half, float units, float top, Span<float> watch) {
+        var stride = FrustumStride;
+
+        if (watch.Length != (WatchFields * stride)) { throw new ArgumentException(message: "A frustum watch holds four fields of the frustum stride.", paramName: nameof(watch)); }
+
         var bounds = Bounds.None;
 
         if (Count == 0) { return bounds; }
 
-        var (focal, clearance, slack, reach, beyond) = (bounds.Focal, bounds.Clearance, bounds.FrustumSlack, bounds.FrustumReach, bounds.Beyond);
+        var (focal, clearance, beyond, framed) = (bounds.Focal, bounds.Clearance, bounds.Beyond, false);
         var read = Read(center: center, half: half);
-        // The finest pixel a point demanding by distance alone puts the box at.
-        var always = float.PositiveInfinity;
+        var slacks = watch.Slice(start: (2 * stride), length: stride);
+        var reaches = watch.Slice(start: (3 * stride), length: stride);
 
         for (var index = 0; (index < Count); index++) {
-            if (!m_within[index]) { always = MathF.Min(x: always, y: (read.Pixel[index] / units)); }
-        }
-        for (var index = 0; (index < Count); index++) {
-            var at = (read.Pixel[index] / units);
+            var pixel = (read.Pixel[index] / units);
 
-            if (at > top) {
-                beyond = MathF.Min(x: beyond, y: at);
-                clearance = MathF.Min(x: clearance, y: ((at - top) * m_focal[index] * units));
+            if (pixel > top) {
+                beyond = MathF.Min(x: beyond, y: pixel);
+                clearance = MathF.Min(x: clearance, y: ((pixel - top) * m_focal[index] * units));
                 continue;
             }
             focal = MathF.Min(x: focal, y: m_focal[index]);
-            if (!m_within[index] || (read.Refuses(index: index) ? !(at < pixel) : !(always > pixel))) { continue; }
-            slack = MathF.Min(x: slack, y: read.Slack[index]);
-            reach = MathF.Max(x: reach, y: (Vector3.Distance(value1: center, value2: m_points[index]) + ((half.X + half.Y) + half.Z)));
+            if (m_laneOf[index] is not (>= 0 and var lane)) { continue; }
+            framed = true;
+            slacks[lane] = MathF.Min(x: slacks[lane], y: read.Slack[index]);
+            reaches[lane] = MathF.Max(x: reaches[lane], y: (Vector3.Distance(value1: center, value2: m_points[index]) + ((half.X + half.Y) + half.Z)));
         }
 
-        return new Bounds(Beyond: beyond, Clearance: clearance, Focal: focal, FrustumReach: reach, FrustumSlack: slack);
+        return new Bounds(Beyond: beyond, Clearance: clearance, Focal: focal, Framed: framed);
+    }
+
+    // A frustum watch's fields, each FrustumStride long: each lane's shift and turn odometers when the watch was taken,
+    // and the box's slack toward that lane's frustum and reach from its eye (BoundsOf); a lane whose frustum cannot move
+    // the box's tier holds an infinite slack.
+    private const int WatchFields = 4;
+
+    /// <summary>Begins a frustum watch: no lane's frustum can move the box's tier, so none is watched.</summary>
+    /// <param name="watch">The watch, <see cref="FrustumStride"/> times four values.</param>
+    public static void Unwatched(Span<float> watch) {
+        var stride = (watch.Length / WatchFields);
+
+        watch[..(2 * stride)].Clear();
+        watch.Slice(start: (2 * stride), length: stride).Fill(value: float.PositiveInfinity);
+        watch.Slice(start: (3 * stride), length: stride).Clear();
+    }
+    /// <summary>Takes a frustum watch whose slacks and reaches <see cref="BoundsOf"/> wrote: each lane's odometers as
+    /// they stand, from which <see cref="Moves"/> reads how far each frustum moved since.</summary>
+    /// <param name="watch">The watch, <see cref="FrustumStride"/> times four values.</param>
+    /// <exception cref="ArgumentException"><paramref name="watch"/> is not four fields of the frustum stride.</exception>
+    public void Watch(Span<float> watch) {
+        var stride = FrustumStride;
+
+        if (watch.Length != (WatchFields * stride)) { throw new ArgumentException(message: "A frustum watch holds four fields of the frustum stride.", paramName: nameof(watch)); }
+        m_laneShift.AsSpan(start: 0, length: stride).CopyTo(destination: watch);
+        m_laneTurn.AsSpan(start: 0, length: stride).CopyTo(destination: watch[stride..]);
+    }
+    /// <summary>Carries a frustum watch taken at the layout before into this one (<see cref="Layout"/>): each lane that
+    /// continues keeps its slack and reach in its new lane, its odometers read from where the lane stood when the layout
+    /// changed; a lane whose point went or jumped is watched no more, since the change of points the bake reads then
+    /// measures what that point could reach.</summary>
+    /// <param name="watch">The watch, replaced by one of this layout's stride when that differs.</param>
+    /// <param name="layout">The layout the watch was taken at, set to this one when carried.</param>
+    /// <returns><see langword="false"/> for a watch taken before the layout before, which cannot be carried; the box is
+    /// then measured again.</returns>
+    public bool Carry(ref float[] watch, ref long layout) {
+        if (layout == Layout) { return true; }
+        if (layout != (Layout - 1)) { return false; }
+
+        var before = (watch.Length / WatchFields);
+        var stride = FrustumStride;
+        var carried = new float[(WatchFields * stride)];
+
+        Unwatched(watch: carried);
+        for (var lane = 0; (lane < Math.Min(val1: before, val2: m_layoutLanes)); lane++) {
+            var slack = watch[((2 * before) + lane)];
+
+            if (!float.IsFinite(f: slack) || (m_layoutMap[lane] is not (>= 0 and var into))) { continue; }
+            carried[into] = (watch[lane] - m_layoutShift[lane]);
+            carried[(stride + into)] = (watch[(before + lane)] - m_layoutTurn[lane]);
+            carried[((2 * stride) + into)] = slack;
+            carried[((3 * stride) + into)] = watch[((3 * before) + lane)];
+        }
+        watch = carried;
+        layout = Layout;
+        return true;
+    }
+    /// <summary>Returns whether some watched frustum may have moved far enough since a watch was taken to answer otherwise
+    /// for its box: for each lane, the box moved by a distance, the lane's shift and its turn times the box's reach (with
+    /// the shift and the distance added to it) reach the box's slack toward that frustum. Read each frame, so no answer
+    /// changes on a frame this answers no.</summary>
+    /// <param name="watch">The watch, taken at this layout, <see cref="FrustumStride"/> times four values.</param>
+    /// <param name="metres">The distance, in metres, the box has moved since the watch was taken; zero for none.</param>
+    /// <returns><see langword="true"/> when the box must be measured again.</returns>
+    /// <exception cref="ArgumentException"><paramref name="watch"/> is not four fields of the frustum stride.</exception>
+    public bool Moves(ReadOnlySpan<float> watch, float metres) {
+        var stride = FrustumStride;
+
+        if (watch.Length != (WatchFields * stride)) { throw new ArgumentException(message: "A frustum watch holds four fields of the frustum stride.", paramName: nameof(watch)); }
+
+        var moved = Vector256.Create(value: metres);
+        var margin = Vector256.Create(value: 0.999f);
+        ref var shift = ref MemoryMarshal.GetArrayDataReference(array: m_laneShift);
+        ref var turn = ref MemoryMarshal.GetArrayDataReference(array: m_laneTurn);
+        ref var fields = ref MemoryMarshal.GetReference(span: watch);
+
+        for (var at = 0; (at < stride); at += Vector256<float>.Count) {
+            var offset = ((nuint)at);
+            var shifted = (Vector256.LoadUnsafe(elementOffset: offset, source: ref shift) - Vector256.LoadUnsafe(elementOffset: offset, source: ref fields));
+            var turned = (Vector256.LoadUnsafe(elementOffset: offset, source: ref turn) - Vector256.LoadUnsafe(elementOffset: (offset + ((nuint)stride)), source: ref fields));
+            var reach = Vector256.LoadUnsafe(elementOffset: (offset + ((nuint)(3 * stride))), source: ref fields);
+            var spent = ((moved + shifted) + (turned * ((reach + shifted) + moved)));
+
+            if (Vector256.GreaterThanAny(left: spent, right: (Vector256.LoadUnsafe(elementOffset: (offset + ((nuint)(2 * stride))), source: ref fields) * margin))) { return true; }
+        }
+
+        return false;
     }
 
     // The points in lanes, a vector's worth at a time: each point's eye and pixels a metre, and its frustum's near plane
