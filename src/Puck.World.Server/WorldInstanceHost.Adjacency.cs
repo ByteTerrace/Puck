@@ -392,14 +392,22 @@ public sealed partial class WorldInstanceHost {
     // triggers exactly where it is drawn. The region test sweeps the segment from the body's previous scan origin
     // (WorldBody.FixedPreviousPosition) to its current one, so no speed, rate, or motion program can tunnel a body
     // through a face between two samples.
+    //
+    // A body whose segment's bounds miss the face's bounds (WorldFaceAperture.Box.Bounds) can neither end inside the face
+    // nor cross it, so it takes the outside observation without the region test, and only a body that holds a latch
+    // somewhere is observed at all: the scan costs a bounds compare per body and face, and a region test only near a
+    // face.
     private void ScanPortalFace(WorldInstance instance, WorldPopulation population, WorldPlacement placement, WorldPlacementFace face, WorldPlacementPortal portal, WorldFaceAperture aperture, PortalEdgeHit?[] winners) {
+        var bounds = ((aperture is WorldFaceAperture.Box box) ? box.Bounds : FixedAabb.Everywhere);
+        var occupancy = instance.PortalOccupancy;
+
         for (var seat = 0; (seat < population.Capacity); seat++) {
             if (!WorldAdjacencyOwnership.TryTraveller(
                 body: out var body,
                 index: seat,
                 population: population
             )) {
-                instance.PortalOccupancy.Forget(
+                occupancy.Forget(
                     placementId: placement.Id,
                     faceName: face.Face,
                     seat: seat
@@ -408,12 +416,23 @@ public sealed partial class WorldInstanceHost {
                 continue;
             }
 
+            var from = body.FixedPreviousPosition;
+            var to = body.FixedPosition;
+
+            if (!bounds.Intersects(other: FixedAabb.Empty.Enclose(point: from).Enclose(point: to))) {
+                if (occupancy.Holds(seat: seat)) {
+                    _ = occupancy.Observe(placementId: placement.Id, faceName: face.Face, seat: seat, inside: false, crossed: false);
+                }
+
+                continue;
+            }
+
             var crossing = WorldFaceRegion.Sweep(
                 aperture: aperture,
-                from: body.FixedPreviousPosition,
-                to: body.FixedPosition
+                from: from,
+                to: to
             );
-            var fired = instance.PortalOccupancy.Observe(
+            var fired = occupancy.Observe(
                 placementId: placement.Id,
                 faceName: face.Face,
                 seat: seat,

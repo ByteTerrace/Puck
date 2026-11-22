@@ -140,6 +140,41 @@ public sealed partial class WorldDisclosureImages {
         }
         public void AdoptValues(WorldDefinition next) => Source = next;
 
+        // The row each disclosed document carried last, with the digest of the skeleton and the image cells it was built
+        // from, carried over when the audience's definition is composed again (Inherit). A row whose skeleton digest and
+        // image stand is handed out as the same instance, so a reader reloads only the rows that moved
+        // (WorldDocumentStateView keeps its arena for a section whose other rows are the instances it holds).
+        private WorldStateRow?[] m_disclosedRows = [];
+        private Sha256Digest[] m_disclosedSkeletons = [];
+        private object?[] m_disclosedCells = [];
+
+        public void Inherit(AudienceDefinition? previous) {
+            if ((previous is null) || (previous.m_disclosedRows.Length != Rows.Length)) { return; }
+            m_disclosedRows = previous.m_disclosedRows;
+            m_disclosedSkeletons = previous.m_disclosedSkeletons;
+            m_disclosedCells = previous.m_disclosedCells;
+        }
+        public WorldStateRow DisclosedRow(int row, IReadOnlyList<StateCell> cells) {
+            var skeleton = Sha256Digest.Of(digest: Digests.AsSpan(SkeletonSlot(row), SHA256.HashSizeInBytes));
+
+            if (m_disclosedRows.Length != Rows.Length) {
+                m_disclosedRows = new WorldStateRow?[Rows.Length];
+                m_disclosedSkeletons = new Sha256Digest[Rows.Length];
+                m_disclosedCells = new object?[Rows.Length];
+            }
+            if ((m_disclosedRows[row] is { } held) && (m_disclosedSkeletons[row] == skeleton) && ReferenceEquals(m_disclosedCells[row], cells)) {
+                return held;
+            }
+
+            var built = (Rows[row] with { Cells = cells });
+
+            m_disclosedRows[row] = built;
+            m_disclosedSkeletons[row] = skeleton;
+            m_disclosedCells[row] = cells;
+
+            return built;
+        }
+
         public static int ImageSlot(int row) => (1 + (2 * row)) * SHA256.HashSizeInBytes;
         public static int SkeletonSlot(int row) => (2 + (2 * row)) * SHA256.HashSizeInBytes;
         public bool Holds(int slot, Sha256Digest digest) => (Sha256Digest.Of(digest: Digests.AsSpan(slot, SHA256.HashSizeInBytes)) == digest);
@@ -543,8 +578,10 @@ public sealed partial class WorldDisclosureImages {
         var audience = Audience(view);
         var rows = new WorldStateRow[entry.Rows.Length];
 
-        for (var row = 0; row < rows.Length; row++) { rows[row] = entry.Rows[row] with { Cells = Image(audience, row).Cells }; }
-        return entry.Disclosed = entry.Composed with { StateRaw = state with { World = rows } };
+        for (var row = 0; row < rows.Length; row++) { rows[row] = entry.DisclosedRow(row: row, cells: Image(audience, row).Cells); }
+        // The disclosed section keeps the composed one's shape, so its catalog and the other compiled products that
+        // read state carry across (WithStateSection) and a reader keeps the arena it shaped for that catalog.
+        return entry.Disclosed = entry.Composed.WithStateSection(state: state with { World = rows });
     }
     // Brings one audience's definition current: rows whose version and dependency versions stand are skipped without a
     // lookup, a changed row refreshes its image digest and, when its structure moved, its skeleton digest.
@@ -705,7 +742,10 @@ public sealed partial class WorldDisclosureImages {
         var entry = new AudienceDefinition(source, composed, frame, fields, frameRows, rows, versions, dependencies,
             arena.DisclosureRevision, digests) { Arena = arena, MovesRead = moves, Structures = structures };
 
-        if (Settled(arena)) { m_definitions[audience.Text] = entry; }
+        if (Settled(arena)) {
+            entry.Inherit(previous: m_definitions.GetValueOrDefault(audience.Text));
+            m_definitions[audience.Text] = entry;
+        }
         return entry;
     }
     private byte[] DigestOf(WorldStateRow skeleton) => Digest(CanonicalJsonDocument.SerializeCompact(skeleton, WorldJsonContext.Default.WorldStateRow));

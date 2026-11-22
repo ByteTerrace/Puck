@@ -72,7 +72,26 @@ public abstract record WorldFaceAperture {
     /// <param name="Depth">How far the slab extends behind the glass, along <see cref="WorldFaceFrame.Normal"/>. The
     /// slab is <c>[-Depth, 0]</c>, entered only from the front, so a door fires when a body's origin passes through
     /// its glass from the side it faces.</param>
-    public sealed record Box(WorldFaceFrame Frame, FixedQ4816 Depth) : WorldFaceAperture;
+    public sealed record Box(WorldFaceFrame Frame, FixedQ4816 Depth) : WorldFaceAperture {
+        /// <summary>Gets a world-axis box that holds the whole slab, grown past the rounding of the region test by a
+        /// sixty-fourth of the slab's extents and a sixty-fourth of a metre. A segment whose bounds miss it neither
+        /// ends in the slab nor crosses it, so a scan skips the region test for it
+        /// (<see cref="WorldFaceRegion.Sweep"/>).</summary>
+        public FixedAabb Bounds {
+            get {
+                var halfDepth = (Depth / FixedQ4816.FromInteger(value: 2));
+                var extent = FixedAabb.OrientedHalfExtent(
+                    axisX: Frame.Right,
+                    axisY: Frame.Up,
+                    axisZ: Frame.Normal,
+                    halfExtent: new FixedVector3(X: Frame.HalfWidth, Y: Frame.HalfHeight, Z: halfDepth)
+                );
+                var margin = (((Frame.HalfWidth + Frame.HalfHeight + Depth) / FixedQ4816.FromInteger(value: 64)) + FixedQ4816.FromRawBits(value: 1024L));
+
+                return FixedAabb.FromCenter(center: (Frame.Origin - (Frame.Normal * halfDepth)), extent: extent).Grow(margin: margin);
+            }
+        }
+    }
 }
 /// <summary>One swept region test's answer.</summary>
 /// <param name="Inside">Whether the segment's end point lies in the region. This is the occupancy latch value: it is

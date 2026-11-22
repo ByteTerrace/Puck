@@ -546,6 +546,45 @@ public sealed class WorldDocumentStateView : IWorldStateView {
             );
         }
     }
+    private readonly List<StateRow> m_reloadedRows = [];
+
+    // Reloads into the kept arena the rows of after (its pools' generated rows included) that are not the instances
+    // before holds at the same position, when after's catalog has before's shape and the two sections share every
+    // declaration list; false, leaving the arena as it was, when they do not or the arena refuses the rows. A reloaded
+    // row's observation header is dropped, as a build drops every one: the authority owes it again with the row's next
+    // snapshot.
+    private bool TryReloadRows(WorldDefinition before, WorldDefinition after) {
+        if (
+            (before.StateRaw is not { } heldSection) || (after.StateRaw is not { } nextSection) ||
+            !heldSection.SharesDeclarations(other: nextSection) ||
+            (!ReferenceEquals(objA: before.StateCatalog, objB: after.StateCatalog) && !before.StateCatalog.MatchesShape(section: nextSection))
+        ) {
+            return false;
+        }
+
+        var held = before.State;
+        var next = after.State;
+
+        if (held.Count != next.Count) { return false; }
+
+        var rows = m_reloadedRows;
+
+        rows.Clear();
+        for (var index = 0; (index < next.Count); index++) {
+            if (!ReferenceEquals(objA: held[index], objB: next[index])) { rows.Add(item: next[index]); }
+        }
+        if ((rows.Count != 0) && !m_arena.TryLoad(rows: rows, time: ArenaTime.Origin, reason: out _)) {
+            rows.Clear();
+            return false;
+        }
+        for (var index = 0; (index < next.Count); index++) {
+            if (!ReferenceEquals(objA: held[index], objB: next[index])) { _ = m_observations.Remove(key: index); }
+        }
+        WorldBootWork.Count(amount: rows.Count, kind: WorldBootWork.ArenaRowReloads);
+        rows.Clear();
+
+        return true;
+    }
     // Resolves the field rows of the definition currently delivered, keeping the delivered cells while the lattice
     // keeps its shape; a definition already shaped for costs one comparison.
     private WorldDefinition Shape() => Shape(document: m_definition());
@@ -559,10 +598,13 @@ public sealed class WorldDocumentStateView : IWorldStateView {
 
         // A definition carrying the same state section and catalog over (a response swap moves only placements) keeps the
         // arena and the values delivered into it: building one again from the section costs a whole state load.
+        // A section of the same shape whose rows are the instances the arena last loaded except for some (a replica
+        // document disclosed again after its frame moved) reloads only those rows, as the authority's own store does
+        // (WorldServer.SyncArenaValues).
         if (
-            (m_shaped is null) ||
-            !ReferenceEquals(objA: document.StateRaw, objB: m_shaped.StateRaw) ||
-            !ReferenceEquals(objA: document.StateCatalog, objB: m_shaped.StateCatalog)
+            (m_shaped is not { } shaped) ||
+            ((!ReferenceEquals(objA: document.StateRaw, objB: shaped.StateRaw) || !ReferenceEquals(objA: document.StateCatalog, objB: shaped.StateCatalog)) &&
+                !TryReloadRows(before: shaped, after: document))
         ) {
             WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
             m_arena = new StateArena(catalog: document.StateCatalog, section: document.StateRaw, time: ArenaTime.Origin);

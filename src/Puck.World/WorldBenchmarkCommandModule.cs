@@ -207,6 +207,9 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         if (m_running) {
             return CommandResult.Error(output: $"[world.benchmark: '{m_route}' is running — world.benchmark stop ends it]");
         }
+        if (m_finishOwed is not null) {
+            return CommandResult.Error(output: $"[world.benchmark: '{m_route}' finished and its report waits for its last chapter reads; ask again once it is written]");
+        }
         if (script.PendingCount > 0) {
             return CommandResult.Error(output: $"[world.benchmark: {script.PendingCount} world.at line(s) are armed, and a run owns the pinned lines while it plays — let them run or world.at clear first]");
         }
@@ -641,6 +644,11 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         if (m_raw.ContainsKey(key: line)) {
             m_raw[line] = result.Output;
         }
+        if ((m_finishOwed is { } recording) && !ReadsPending()) {
+            m_finishOwed = null;
+            script.Answered -= OnAnswered;
+            Console.Error.WriteLine(value: Finish(reason: null, dropped: 0, recording: recording).Output);
+        }
     }
 
     // Arms one seat line of a chapter through the seat's own ingress, or refuses with why.
@@ -758,6 +766,10 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     public void Shutdown() {
         if (m_running) {
             _ = End(reason: "the World shut down", releases: false);
+        } else if (m_finishOwed is { } recording) {
+            m_finishOwed = null;
+            script.Answered -= OnAnswered;
+            _ = Finish(reason: null, dropped: 0, recording: recording);
         }
     }
 
@@ -771,7 +783,6 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
         m_running = false;
         m_deadline = 0L;
-        script.Answered -= OnAnswered;
         script.Ticked -= OnTicked;
 
         var dropped = ((reason is null) ? 0 : script.Clear());
@@ -798,8 +809,20 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         }
         m_goalChapter = null;
 
+        // A read whose answer settles after its line ran (host.memory walks the process off the pump) is waited for
+        // by a run that finished, so its report holds every reading; a run ended early writes what it has.
+        if ((reason is null) && ReadsPending()) {
+            m_finishOwed = recording;
+            return new CommandResult(Output: $"[world.benchmark: '{m_route}' finished; its report is written once its last chapter reads answer]");
+        }
+        script.Answered -= OnAnswered;
         return Finish(reason: reason, dropped: dropped, recording: recording);
     }
+
+    // The recording of a finished run whose report waits for its pending reads, or null.
+    private HostFrameRecording? m_finishOwed;
+
+    private bool ReadsPending() => m_raw.Keys.Any(predicate: static line => (line.Outcome is "pending" or "unreached"));
 
     // A run that ends early lists every loop it was asked for: each loop never armed holds its chapters, unreached, at
     // the ticks it would have started on.

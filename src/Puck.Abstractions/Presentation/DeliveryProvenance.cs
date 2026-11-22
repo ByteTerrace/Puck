@@ -211,13 +211,22 @@ public readonly struct DeliveryLabel : IEquatable<DeliveryLabel> {
             throw new ArgumentException(message: "A span label names at least one span.", paramName: nameof(spans));
         }
 
-        var label = Of(external: external, span: spans[0]);
+        if (spans.Length <= 2) {
+            var label = Of(external: external, span: spans[0]);
 
-        for (var index = 1; (index < spans.Length); index++) {
-            label = label.Union(other: Of(span: spans[index]));
+            return ((spans.Length == 1) ? label : label.Union(other: Of(span: spans[1])));
         }
 
-        return label;
+        // Each span joins one list once, so a label of many spans is built in one pass, never by a union per span that
+        // copies every span gathered so far.
+        var distinct = new List<DeliverySpan>(capacity: spans.Length);
+
+        foreach (var span in spans) {
+            ArgumentNullException.ThrowIfNull(argument: span, paramName: nameof(spans));
+            AddSpan(into: distinct, span: span);
+        }
+
+        return FromDistinct(external: external, spans: distinct);
     }
     /// <summary>Returns this label with <see cref="External"/> set to <paramref name="external"/>; an unclassified
     /// label stays unclassified.</summary>
