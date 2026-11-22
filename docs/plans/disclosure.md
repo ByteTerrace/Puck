@@ -1539,12 +1539,68 @@ plan drops the physical form rather than building that translation.
 Step 1 implementation invariant: `WorldDeliveryCursor` alone owns the hashes
 and sequence of a stream's delivered images. `WorldRecipientView` reads live
 sources at its fixed ceiling; neither a read nor the world-owned
-`WorldDisclosureImages` table changes a cursor. Images copy vector bytes before
-hashing. Committed value and clock writes carry interned key bits; membership,
+`WorldDisclosureImages` table changes a cursor. Images copy vector bytes.
+Committed value and clock writes carry interned key bits; membership,
 order and audience changes conservatively invalidate a whole row. The shared
 table indexes `readersFrom` and containing-zone dependencies at installation
 and after structural changes. Resource measurements are visible only in the
 operator's `world.budget` answer.
+
+The image invariant: **an audience is handed a row image only if the image was
+built from the store under that audience's own disclosure mask.** Five
+things enforce it.
+
+- **The mask is the only thing an image knows about its audience.** A mask is
+  everything an audience answers about one row: whether the row reaches its
+  ceiling, whether it reads the row whole, and otherwise whether the row's own
+  policy admits it and whether it may read each held cell. The mask type is
+  private to `WorldDisclosureImages`, so no other code can make one, and
+  `WorldDisclosureImages.Pass`, which writes a row's bytes and builds its
+  image, takes the store, the row and a mask, and no view, observer or
+  principal. The compiler keeps anything else about the audience out of an
+  image and out of its digest.
+- **One walk decides what a reader is shown.** `WorldStateDisclosure.VisitRow`
+  is the only walk of a row's cells for disclosure. The bytes, the image's
+  cells and its observation are collected by that one walk in one pass, and a
+  one-off observation (`WorldStateDisclosure.Compose`) takes the same walk
+  with a live observer. An image carries the digest of the bytes written
+  beside it, and `WorldDisclosureImages.Image` refuses one whose digest is not
+  the composition's.
+- **A row is read through a key tied to its view.**
+  `WorldDisclosureImages.Audience` is the only maker of an
+  `WorldDisclosureImages.AudienceKey`, which names the view it was taken for,
+  so a caller cannot read a row for one view under another's audience. A key
+  taken before the store moved is taken again where it is used, which also
+  brings the table current to a replaced arena or policy index.
+  `WorldDisclosureImages.Reading` is the one place a kept mask is asked for,
+  and it shares a row's composition between two audiences only when their mask
+  bytes are equal; a hash of the mask only narrows the search.
+- **No image crosses a write on the strength of a digest.** A composition
+  holds the canonical bytes' SHA-256 digest and, once a delivery asked for it,
+  the image. Every write of the composition drops the image
+  (`WorldDisclosureImages.Written`), whether or not the digest moved, so the
+  image an audience is handed was built from the store as it stands. A digest
+  decides only whether a stream is sent a row again: a stream whose digest
+  stands keeps the image it already holds.
+- **An open journal scope reads the store and keeps nothing.** Row versions
+  and the policy revision settle when the outermost scope commits, so inside
+  one nothing the table keeps can be told current. Every reading then
+  (`WorldDisclosureImages.Unsettled` for a row, and the definition, scene,
+  placement and key-list readings behind `WorldDisclosureImages.Settled`) asks
+  the observer now, reads the store as it stands and writes no kept state, so
+  a rewind leaves the table as the scope found it. `StateArena.ComputeHash`
+  treats an open scope the same way.
+
+The guarantee stops at two places, both held by review. An audience's mask for
+a row is kept while the row's version and its dependencies' versions stand,
+which is right only while every answer in the mask has one of them as its
+witness (`WorldDisclosureImages.Reading` lists them). And the key proof below
+extends a kept mask across a write that named no key the audience reads. A
+digest that left a field out could only leave a stream holding a stale value
+it was entitled to read, never hand it another audience's:
+`DisclosureImageLawTests` checks that two readings share a digest exactly when
+the recipient is handed the same cells and observation, over every kind of
+write a row takes.
 
 Implementation choices for step 1:
 
@@ -1607,7 +1663,12 @@ Implementation choices for step 1:
   `StateArena.DisclosureRevision` a row changes only by a keyed cell write
   (`StateArena.MarkVersion` names the keyed columns; every other write moves the
   revision), so a cell-only tick refreshes the image digests of the rows it
-  wrote and a revision move also their skeletons. For a holding-only source
+  wrote, and a row whose structure moved (`StateArena.RowStructureVersion`)
+  also refreshes its skeleton. A row's image digest is taken from the store
+  without building the image, and the identity is a value
+  (`Sha256Digest`), so a tick that only identifies a stream's document
+  allocates nothing; `WorldDisclosureImages.Definition` builds the document's
+  cells when a delivery carries it. For a holding-only source
   change, `WorldDisclosureImages` can patch a directly projected placement
   when its live response reads are whole and the frame's other disclosure
   inputs still agree. The placement section reuses the canonical digests of
@@ -1628,11 +1689,13 @@ ordinary snapshot follows to repair missing observation headers.
 `WorldDeliveryCursor`, owned by each delivery stream (a session sink, a
 federation projection sink, each traveller stream of one principal), remembers
 what that stream delivered. The cursor holds, per row the recipient does not
-read whole, the content hash of the row's last delivered `Image`; images are
-immutable and shared by content in one table, so two streams or two recipients
-whose images agree hold one copy, and a stream's own memory is a hash per
-restricted row. The cursor also holds the recipient-scoped **sequence**: the
-version the recipient is shown.
+read whole, the row's last delivered `Image`; images are immutable and shared
+by disclosure mask in one table, so two streams or two recipients disclosed
+the same cells of a row hold one copy. For a row the recipient reads whole the
+cursor holds only the keys the row had (`WorldDisclosureImages.Members`, one
+list for every stream), which is all a later loss is decided from, so a value
+write to such a row costs the cursor nothing. The cursor also holds the
+recipient-scoped **sequence**: the version the recipient is shown.
 
 A tick's delivery for a stream is `view.Advance(cursor, changes)`:
 
@@ -1668,11 +1731,14 @@ A tick's delivery for a stream is `view.Advance(cursor, changes)`:
 **Cost.** The change carrier gains the set of keys each tick changed (a
 bitset beside `m_snapshotRows`), so a restricted row is recomposed only when
 one of its readable keys, its count or its placeholder order can have moved,
-and otherwise skipped without a compare. Composition of one row's image for a
-tick is cached by (row, audience class), where the audience class is the set
-of policies that admit the recipient, so a thousand spectators with the same
-rights compose once. The retained state per stream is a hash per restricted
-row; the shared image table holds one copy per distinct image. The measurement
+and otherwise skipped without a compare. An audience class is the set of
+policies that admit the recipient, and its mask for a row is cached by (row,
+audience class), so a thousand spectators with the same rights take it once.
+A row's composition is shared by mask, so audiences of different classes that
+are disclosed the same cells of a row (every seat but its owner, over a
+private hand) compose it once between them, and a row everyone reads whole
+has one composition. The retained state per stream is an image per restricted
+row; the shared image table holds one copy per distinct mask. The measurement
 in step 1's check sizes this: N spectator sessions on a restricted row of M
 readable vectors with one hidden cell written every tick, read in `world.budget`
 as per-tick disclosure work and bytes, with no per-recipient arena, no
