@@ -25,6 +25,9 @@ internal sealed class WorldCatalogBand(Action<List<int>> candidates, Func<int, b
     public int Revision { get; private set; }
     public int ArticulatedRevision { get; private set; }
 
+    // The rig, look and colour a body's avatar is emitted with.
+    public (byte Rig, WorldLook Look, Vector3 Color) AppearanceOf(int body) => appearance(body);
+
     private static int[] Unheld() {
         var slots = new int[WorldBodiesLimits.CapacityCeiling];
 

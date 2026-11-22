@@ -284,45 +284,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             TextFault = exception.Message.ReplaceLineEndings(replacementText: " ");
         }
     }
-    // Registers the avatar palette and emits the mirrored-active avatars, each sourcing its look's pinned rig and uniform
-    // scale, through WorldRigCatalog.Emit as Client.WorldSceneEmitter.Compose's own avatar block does.
+    // Registers the avatar palette and emits the mirrored avatars the band holds, as the boot scene emits its own
+    // (WorldCatalogAvatars): the program draws exactly the avatars the pack poses.
     private void EmitAvatars(SdfProgramBuilder builder, int slotBase) {
-        var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
-        var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
         var definition = m_mirror.Definition;
 
-        // The bodies the band holds, as the boot scene emits its own: the program draws exactly the avatars the pack
-        // poses.
-        foreach (var index in m_catalog.Bodies) {
-            var look = m_mirror.Look(index: index);
-
-            WorldMirroredAvatarBand.EmitPalette(
-                accentMaterials: accentMaterials,
-                bodyColor: new DisplayColor(rgb: m_bodyColor(arg: index)),
-                bodyMaterials: bodyMaterials,
-                builder: builder,
-                catalogRig: m_mirror.CatalogRig(index: index),
-                emittedGaitAmplitudes: m_avatars.GaitAmplitudes,
-                emittedRigs: m_avatars.Rigs,
-                emittedScales: m_avatars.Scales,
-                identityIndex: index,
-                look: look,
-                materialIndex: index,
-                noseFactor: definition.PlayerDefaults.NoseFactor
-            );
-            m_avatars.Follow(body: index, dynamics: definition.Dynamics, look: look);
-        }
-
-        WorldRigCatalog.Emit(
-            builder: builder,
-            isActive: index => (m_catalog.Slots[index] >= 0),
-            slotFor: index => m_catalog.Slots[index],
-            bodyMaterials: bodyMaterials,
-            accentMaterials: accentMaterials,
-            slotBase: slotBase,
-            rigFor: index => m_avatars.Rigs[index],
-            picks: m_picks
-        );
+        m_avatars.EmitPalette(builder: builder, dynamics: definition.Dynamics, noseFactor: definition.PlayerDefaults.NoseFactor);
+        m_avatars.EmitBodies(builder: builder, picks: m_picks, slotBase: slotBase);
     }
 
     // The rig each authored camera program compiles to against one state mirror, recompiled only when the cache's

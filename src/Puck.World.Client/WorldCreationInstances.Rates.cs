@@ -288,20 +288,20 @@ public sealed partial class WorldCreationInstances {
     // see the sphere it reaches though the display showed its view none last frame (a window about to open); or a shadow
     // cascade of any view may draw it where that view shows its shadow (the renderer's own caster cull, every body while
     // the cascades are not known).
-    private bool Shown(Registration live, Vector3 center, float radius) {
-        if ((live.PoseReadPack >= (m_packCount - 1L)) || !m_rateShadowsKnown) {
-            return true;
-        }
-
-        var half = new Vector3(value: radius);
+    private bool Shown(Registration live, Vector3 center, float radius) =>
+        ((live.PoseReadPack >= (m_packCount - 1L)) || !m_rateShadowsKnown || MayShow(center: center, half: new Vector3(value: radius)));
+    // Whether a view's camera may see any of an axis-aligned box, displayed or not, or a shadow cascade may draw any of
+    // it: the one test a registration's own sphere (Shown) and a held cell's box (WakeShown) both take.
+    private bool MayShow(Vector3 center, Vector3 half) {
+        var (halfX, halfY, halfZ) = ((Vector3.UnitX * half.X), (Vector3.UnitY * half.Y), (Vector3.UnitZ * half.Z));
 
         foreach (var (camera, _) in m_rateViews) {
-            if (camera.MaySee(center: center, halfX: (Vector3.UnitX * half.X), halfY: (Vector3.UnitY * half.Y), halfZ: (Vector3.UnitZ * half.Z), margin: WorldPortalVisibility.Margin)) {
+            if (camera.MaySee(center: center, halfX: halfX, halfY: halfY, halfZ: halfZ, margin: WorldPortalVisibility.Margin)) {
                 return true;
             }
         }
 
-        var box = new SdfMeshBox(Center: center, HalfX: (Vector3.UnitX * radius), HalfY: (Vector3.UnitY * radius), HalfZ: (Vector3.UnitZ * radius));
+        var box = new SdfMeshBox(Center: center, HalfX: halfX, HalfY: halfY, HalfZ: halfZ);
 
         foreach (var (_, cull) in m_rateShadows) {
             if (cull.Keeps(box: box)) {

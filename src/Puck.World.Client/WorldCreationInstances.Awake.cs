@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.Abstractions.Collections;
-using Puck.Abstractions.Gpu;
 using Puck.SdfVm;
 
 namespace Puck.World.Client;
@@ -43,8 +42,8 @@ public sealed partial class WorldCreationInstances {
     private IWorldStampSource? m_packedSource;
     private IReadOnlyList<WorldPortalStraddle.Door>? m_packedDoors;
 
-    private readonly GpuRowCursor m_bodyCursor = new();
-    private readonly GpuUploadRuns m_bodyRuns = new(capacity: GpuRegion.MaxCopyRuns);
+    private readonly WorldBodyChangeCursor m_bodyCursor = new();
+    private readonly List<int> m_changedBodies = [];
     private readonly WorldLeaseWatch m_stateWatch = new();
 
     // The entries a body's journal frame wakes: the pool indices of the rows attached to each body (a body's own
@@ -106,23 +105,17 @@ public sealed partial class WorldCreationInstances {
 
     // Gathers this pack's visits into m_visits, in pool order. Returns whether the pack visits every entry.
     private bool CollectVisits(IWorldStampSource client, bool everything) {
-        var journal = client.BodyChanges;
-
         // The cursor moves every pack, so a pack that visits everything leaves no body change for the next to repeat.
-        if (m_bodyCursor.Collect(into: m_bodyRuns, reader: journal, revision: ((journal is null) ? m_packCount : 0L), rows: WorldClient.EntityCapacity, table: client, through: client.BodyChangesSerial)) {
+        m_changedBodies.Clear();
+        if (m_bodyCursor.TryCollect(bodies: m_changedBodies, source: client)) {
+            foreach (var body in m_changedBodies) {
+                WakeBody(body: body);
+            }
+        } else {
             foreach (var index in m_bodyBound) {
                 WakeEntry(index: index);
             }
-        } else {
-            for (var run = 0; (run < m_bodyRuns.Count); run++) {
-                var end = (m_bodyRuns.Start(index: run) + m_bodyRuns.Length(index: run));
-
-                for (var body = m_bodyRuns.Start(index: run); (body < end); body++) {
-                    WakeBody(body: body);
-                }
-            }
         }
-        m_bodyCursor.Commit();
 
         everything |= !m_stateWatch.Collect(mirror: client.StateMirror, woken: m_awake);
 
@@ -382,7 +375,7 @@ public sealed partial class WorldCreationInstances {
         var holds = (((m_rates & SdfUpdateRates.Bodies) != 0) && (m_rateViews.Count > 0) && m_rateShadowsKnown && m_presentationRate.IsPaced);
 
         foreach (var cell in m_heldCells.Values) {
-            if (holds && !CellShown(cell: cell)) {
+            if (holds && !MayShow(center: ((cell.Low + cell.High) * 0.5f), half: ((cell.High - cell.Low) * 0.5f))) {
                 cell.UnseenPack = m_packCount;
 
                 continue;
@@ -392,29 +385,6 @@ public sealed partial class WorldCreationInstances {
                 WakeEntry(index: index);
             }
         }
-    }
-    // Whether a view's camera may see any of a cell's box, or a shadow cascade may draw any of it: the tests a
-    // registration's own sphere takes (BodyPixelsPerMetre, Shown), over the box that holds every member's sphere.
-    private bool CellShown(HeldCell cell) {
-        var center = ((cell.Low + cell.High) * 0.5f);
-        var half = ((cell.High - cell.Low) * 0.5f);
-        var (halfX, halfY, halfZ) = ((Vector3.UnitX * half.X), (Vector3.UnitY * half.Y), (Vector3.UnitZ * half.Z));
-
-        foreach (var (camera, _) in m_rateViews) {
-            if (camera.MaySee(center: center, halfX: halfX, halfY: halfY, halfZ: halfZ, margin: WorldPortalVisibility.Margin)) {
-                return true;
-            }
-        }
-
-        var box = new SdfMeshBox(Center: center, HalfX: halfX, HalfY: halfY, HalfZ: halfZ);
-
-        foreach (var (_, cull) in m_rateShadows) {
-            if (cull.Keeps(box: box)) {
-                return true;
-            }
-        }
-
-        return false;
     }
     // Indexes what a body's change wakes and what every pack visits; called with the reader index at each reconcile.
     private void IndexWakes() {

@@ -287,12 +287,11 @@ public sealed partial class WorldRigidAssets {
     private bool m_wakeAll = true;
     private int[] m_visits = [];
     private readonly Dictionary<int, int> m_bodyAt = [];
-    private readonly Puck.Abstractions.Gpu.GpuRowCursor m_bodyCursor = new();
-    private readonly Puck.Abstractions.Gpu.GpuUploadRuns m_bodyRuns = new(capacity: Puck.Abstractions.Gpu.GpuRegion.MaxCopyRuns);
+    private readonly WorldBodyChangeCursor m_bodyCursor = new();
+    private readonly List<int> m_changedBodies = [];
     private readonly WorldLeaseWatch m_stateWatch = new();
     private readonly List<int> m_changedCopies = [];
     private long m_copiesRevision;
-    private long m_packs;
     private IWorldStampSource? m_packedSource;
     private IReadOnlyList<WorldPortalStraddle.Door>? m_packedDoors;
     private int m_packedSlotBase = -1;
@@ -318,27 +317,21 @@ public sealed partial class WorldRigidAssets {
     public void Pack(Span<DynamicTransform> transforms, IWorldStampSource source, int slotBase, float deltaSeconds = 0, bool everything = true) {
         var doors = WorldPortalStraddle.Doors(definition: source.Definition);
         var whole = (everything || m_wakeAll || (slotBase != m_packedSlotBase) || !ReferenceEquals(objA: source, objB: m_packedSource) || !ReferenceEquals(objA: doors, objB: m_packedDoors));
-        var journal = source.BodyChanges;
 
         m_wakeAll = false;
         m_packedSlotBase = slotBase;
         m_packedSource = source;
         m_packedDoors = doors;
-        m_packs++;
         m_changedCopies.Clear();
-
-        if (m_bodyCursor.Collect(into: m_bodyRuns, reader: journal, revision: ((journal is null) ? m_packs : 0L), rows: WorldClient.EntityCapacity, table: source, through: source.BodyChangesSerial)) {
-            whole = true;
-        } else if (!whole) {
-            for (var run = 0; (run < m_bodyRuns.Count); run++) {
-                var end = (m_bodyRuns.Start(index: run) + m_bodyRuns.Length(index: run));
-
-                for (var body = m_bodyRuns.Start(index: run); (body < end); body++) {
-                    if (m_bodyAt.TryGetValue(key: body, value: out var at)) { _ = m_awake.Add(index: at); }
-                }
+        m_changedBodies.Clear();
+        if (m_bodyCursor.TryCollect(bodies: m_changedBodies, source: source)) {
+            foreach (var body in m_changedBodies) {
+                if (m_bodyAt.TryGetValue(key: body, value: out var at)) { _ = m_awake.Add(index: at); }
             }
+        } else {
+            whole = true;
         }
-        m_bodyCursor.Commit();
+
         whole |= !m_stateWatch.Collect(mirror: source.StateMirror, woken: m_awake);
 
         var anyMoved = false;
@@ -357,11 +350,8 @@ public sealed partial class WorldRigidAssets {
             VisitCount = m_bodies.Count;
         } else {
             // A body its pack keeps awake goes into the set again, so the visits are taken first.
-            var count = m_awake.Count;
+            var count = m_awake.Drain(members: ref m_visits);
 
-            if (m_visits.Length < count) { m_visits = new int[Math.Max(val1: count, val2: (m_visits.Length * 2))]; }
-            m_awake.Members.CopyTo(destination: m_visits);
-            m_awake.Clear();
             foreach (var index in m_visits.AsSpan(start: 0, length: count)) {
                 if (index < m_bodies.Count) {
                     anyMoved |= PackBody(deltaSeconds: deltaSeconds, doors: doors, index: index, slotBase: slotBase, source: source, volumes: false);

@@ -1,6 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Collections;
-using Puck.Abstractions.Gpu;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
@@ -28,9 +28,11 @@ internal delegate bool WorldCatalogAvatarPose(int body, out Vector3 position, ou
 /// prepare, a frame that owes the whole table, another source or slot base, and a source with no journal read every
 /// avatar.</remarks>
 internal sealed class WorldCatalogAvatars {
+    private readonly int[] m_accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
     private readonly MarkedIndexSet m_awake = new();
-    private readonly GpuRowCursor m_bodyCursor = new();
-    private readonly GpuUploadRuns m_bodyRuns = new(capacity: GpuRegion.MaxCopyRuns);
+    private readonly WorldBodyChangeCursor m_bodyCursor = new();
+    private readonly int[] m_bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
+    private readonly List<int> m_changedBodies = [];
     // The source's Carries count each avatar's latched world-space state was last carried to.
     private readonly int[] m_carryEpoch = new int[WorldBodiesLimits.CapacityCeiling];
     private readonly bool[] m_follows = new bool[WorldBodiesLimits.CapacityCeiling];
@@ -39,7 +41,6 @@ internal sealed class WorldCatalogAvatars {
     private readonly WorldTransformOwners m_owners = new(capacity: WorldBodiesLimits.CapacityCeiling);
     private IWorldStampSource? m_packedSource;
     private int m_packedSlotBase = -1;
-    private long m_packs;
     private readonly SecondOrderFollower3[] m_positionFollower = new SecondOrderFollower3[WorldBodiesLimits.CapacityCeiling];
     private readonly SecondOrderResponse[] m_response = new SecondOrderResponse[WorldBodiesLimits.CapacityCeiling];
     private int[] m_visits = [];
@@ -51,7 +52,15 @@ internal sealed class WorldCatalogAvatars {
         ArgumentNullException.ThrowIfNull(argument: band);
 
         Band = band;
+        m_holdsSlot = body => (Band.Slots[body] >= 0);
+        m_rigFor = body => Rigs[body];
+        m_slotFor = body => Band.Slots[body];
     }
+
+    // What the catalog emitter asks of each body, made once.
+    private readonly Func<int, bool> m_holdsSlot;
+    private readonly Func<int, int> m_rigFor;
+    private readonly Func<int, int> m_slotFor;
 
     /// <summary>Gets the bodies that draw as a catalog rig and the slots they hold.</summary>
     public WorldCatalogBand Band { get; }
@@ -67,13 +76,49 @@ internal sealed class WorldCatalogAvatars {
     /// <summary>Gets the number of avatars the latest <see cref="Pack"/> read.</summary>
     public int VisitCount { get; private set; }
 
-    /// <summary>Resolves a body's root follower from its look: an avatar whose look names a dynamics row lags toward
-    /// its presented pose instead of drawing it directly.</summary>
-    /// <param name="body">The body's index.</param>
-    /// <param name="look">The look the body wears.</param>
+    /// <summary>Registers each band body's two catalog materials and latches the look identity its geometry is emitted
+    /// with (rig, scale, gait amplitude) and its root follower: an avatar whose look names a dynamics row lags toward its
+    /// presented pose instead of drawing it directly. Called before <see cref="EmitBodies"/> in the same build, at the
+    /// point of the program the scene registers its avatar materials.</summary>
+    /// <param name="builder">The program builder.</param>
+    /// <param name="noseFactor">The accent-material color multiplier (<c>playerDefaults.noseFactor</c>).</param>
     /// <param name="dynamics">The document's dynamics rows.</param>
-    public void Follow(int body, WorldLook look, IReadOnlyList<DynamicsRow> dynamics) =>
-        m_follows[body] = WorldDynamicsResponse.TryResolveResponse(name: look.Motion.Dynamics, response: out m_response[body], rows: dynamics);
+    public void EmitPalette(SdfProgramBuilder builder, float noseFactor, IReadOnlyList<DynamicsRow> dynamics) {
+        foreach (var body in Band.Bodies) {
+            var (rig, look, color) = Band.AppearanceOf(body: body);
+
+            WorldMirroredAvatarBand.EmitPalette(
+                accentMaterials: m_accentMaterials,
+                bodyColor: new DisplayColor(rgb: color),
+                bodyMaterials: m_bodyMaterials,
+                builder: builder,
+                catalogRig: rig,
+                emittedGaitAmplitudes: GaitAmplitudes,
+                emittedRigs: Rigs,
+                emittedScales: Scales,
+                identityIndex: body,
+                look: look,
+                materialIndex: body,
+                noseFactor: noseFactor
+            );
+            m_follows[body] = WorldDynamicsResponse.TryResolveResponse(name: look.Motion.Dynamics, response: out m_response[body], rows: dynamics);
+        }
+    }
+    /// <summary>Emits each band body's catalog rig as leaf-level dynamic instances riding the body's slots, in the
+    /// materials <see cref="EmitPalette"/> registered: the program draws exactly the avatars <see cref="Pack"/> poses.</summary>
+    /// <param name="builder">The program builder.</param>
+    /// <param name="slotBase">The band's first dynamic-transform slot.</param>
+    /// <param name="picks">The presentation identity table the avatars are named in.</param>
+    public void EmitBodies(SdfProgramBuilder builder, int slotBase, WorldPickMapBuilder picks) => WorldRigCatalog.Emit(
+        accentMaterials: m_accentMaterials,
+        bodyMaterials: m_bodyMaterials,
+        builder: builder,
+        isActive: m_holdsSlot,
+        picks: picks,
+        rigFor: m_rigFor,
+        slotBase: slotBase,
+        slotFor: m_slotFor
+    );
     /// <summary>Prepares the band (<see cref="WorldCatalogBand.Prepare"/>): another set of bodies may hold the slots,
     /// so the next pack reads every avatar.</summary>
     public void Prepare() {
@@ -94,15 +139,13 @@ internal sealed class WorldCatalogAvatars {
     /// <param name="footstep">What sounds a local seat's footfall at its site, one a gait half-cycle, or
     /// <see langword="null"/> for none.</param>
     public void Pack(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved, IWorldStampSource source, WorldCreationInstances pool, float deltaSeconds, WorldCatalogAvatarPose? pose = null, Action<Vector3>? footstep = null) {
-        var journal = source.BodyChanges;
         var everything = (moved.Everything || m_wakeAll || (context.SlotBase != m_packedSlotBase) || !ReferenceEquals(objA: source, objB: m_packedSource));
 
         m_wakeAll = false;
         m_packedSlotBase = context.SlotBase;
         m_packedSource = source;
-        m_packs++;
-        everything |= m_bodyCursor.Collect(into: m_bodyRuns, reader: journal, revision: ((journal is null) ? m_packs : 0L), rows: WorldClient.EntityCapacity, table: source, through: source.BodyChangesSerial);
-        m_bodyCursor.Commit();
+        m_changedBodies.Clear();
+        everything |= !m_bodyCursor.TryCollect(bodies: m_changedBodies, source: source);
 
         if (everything) {
             m_awake.Clear();
@@ -115,12 +158,8 @@ internal sealed class WorldCatalogAvatars {
             return;
         }
 
-        for (var run = 0; (run < m_bodyRuns.Count); run++) {
-            var end = (m_bodyRuns.Start(index: run) + m_bodyRuns.Length(index: run));
-
-            for (var body = m_bodyRuns.Start(index: run); (body < end); body++) {
-                if (Band.Slots[body] >= 0) { _ = m_awake.Add(index: body); }
-            }
+        foreach (var body in m_changedBodies) {
+            if (Band.Slots[body] >= 0) { _ = m_awake.Add(index: body); }
         }
         // A seat a scene resolves the pose of may follow another authority's route, which no journal names.
         if (pose is not null) {
@@ -130,11 +169,8 @@ internal sealed class WorldCatalogAvatars {
         }
 
         // A body its pack keeps awake goes into the set again, so the visits are taken first.
-        var count = m_awake.Count;
+        var count = m_awake.Drain(members: ref m_visits);
 
-        if (m_visits.Length < count) { m_visits = new int[Math.Max(val1: count, val2: (m_visits.Length * 2))]; }
-        m_awake.Members.CopyTo(destination: m_visits);
-        m_awake.Clear();
         foreach (var body in m_visits.AsSpan(start: 0, length: count)) {
             if (Band.Slots[body] >= 0) {
                 PackBody(body: body, context: in context, deltaSeconds: deltaSeconds, footstep: footstep, moved: moved, pool: pool, pose: pose, slots: slots, source: source);

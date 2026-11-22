@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
@@ -53,7 +52,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The bounded volumes the latest live build's static placements baked (WorldPlacementStamper.EmitStatic);
     // WorldFramePresenter.Dress composes them with the pool's per-frame volumes onto SdfFrame.Volumes.
     private readonly List<SdfVolume> m_staticVolumes = new(capacity: SdfProgramBuilder.MaxVolumes);
-    private readonly Puck.State.ArenaScratch m_emissionScratch = new();
 
     // MeshDraws: the static draws each static rebuild replaces, then the pool's.
     private readonly WorldSceneMeshDraws m_meshDraws;
@@ -98,24 +96,10 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var client = m_client;
 
         m_picks.Clear();
-        // The per-avatar body + accent materials, allocated up front so the catalog emitter is a straight builder chain.
+        // The per-avatar body + accent materials, registered up front so the catalog emitter is a straight builder chain.
         // A local seat's colors come from its seated profile (a pending seat renders a desaturated candidate); a stand-in's
         // from its snapshot palette. A color change bumps the revision and rebuilds; a settings-only edit does not.
-        using var bodyMaterials = m_emissionScratch.Rent<int>(length: WorldBodiesLimits.CapacityCeiling);
-        using var accentMaterials = m_emissionScratch.Rent<int>(length: WorldBodiesLimits.CapacityCeiling);
-        var avatarBodyMaterials = bodyMaterials.Span;
-        var avatarAccentMaterials = accentMaterials.Span;
-
-        foreach (var index in m_catalog.Bodies) {
-            var (rig, look, color) = CatalogAppearance(index);
-            WorldMirroredAvatarBand.EmitPalette(
-                builder: builder, look: look, bodyColor: new DisplayColor(rgb: color), catalogRig: rig,
-                noseFactor: m_noseFactor, identityIndex: index, emittedRigs: m_avatars.Rigs,
-                emittedScales: m_avatars.Scales, emittedGaitAmplitudes: m_avatars.GaitAmplitudes,
-                materialIndex: index, bodyMaterials: avatarBodyMaterials, accentMaterials: avatarAccentMaterials
-            );
-            m_avatars.Follow(body: index, dynamics: client.Definition.Dynamics, look: look);
-        }
+        m_avatars.EmitPalette(builder: builder, dynamics: client.Definition.Dynamics, noseFactor: m_noseFactor);
 
         // The diegetic screens: each a sampled ScreenSlab whose lit face samples its bound source (or shades as dark
         // glass when unbound). STATIC data — emitted every build (probe and live), so the
@@ -155,16 +139,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             screens: screens
         );
 
-        WorldRigCatalog.Emit(
-            builder: builder,
-            isActive: index => (m_catalog.Slots[index] >= 0),
-            slotFor: index => m_catalog.Slots[index],
-            bodyMaterials: avatarBodyMaterials,
-            accentMaterials: avatarAccentMaterials,
-            slotBase: slotBase,
-            rigFor: index => m_avatars.Rigs[index],
-            picks: m_picks
-        );
+        m_avatars.EmitBodies(builder: builder, picks: m_picks, slotBase: slotBase);
     }
     // A locally followed traveler has exactly one primary avatar for its entire route. While it is in the boot
     // authority this reads the ordinary client slot; after handoff the same frozen local-seat catalog range follows
