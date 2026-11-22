@@ -188,7 +188,7 @@ Confirmed. A withdrawal unpublishes and stops there:
 ```
 
 Only `ShaderPipelineRenderNode.Reset` marks the node's storage uninitialized
-(`src/Puck.Shaders/ShaderPipelineRenderNode.Tracker.cs:415-433`). An authored
+(`src/Puck.Shaders/ShaderPipelineRenderNode.Tracker.cs`). An authored
 pane or post graph with a feedback image therefore blends the old picture into
 its next render. The SDF views restart their own temporal resolve through
 `SdfWorldPasses.OnOutputsForgotten`; an authored graph has no such hook.
@@ -218,7 +218,7 @@ Confirmed, three ways.
 Partly true. The default hook does nothing, and the environment producer does
 not override it:
 
-`src/Puck.Shaders/Graph/RenderGraphPackageRecorders.cs:360`
+`src/Puck.Shaders/Graph/RenderGraphPackageRecorders.cs`
 
 ```csharp
     void OnOutputsForgotten(string instance) { }
@@ -392,7 +392,7 @@ The first draft compared policy answers instead, and that misses a real loss.
 A cell is unreadable when it is a member of a zone whose policy denies the
 recipient, and that changes while every policy and every answer stays fixed:
 
-`src/Puck.World.Schema/WorldStateDisclosure.cs:817-832`
+`src/Puck.World.Schema/WorldStateDisclosure.cs`
 
 ```csharp
                 if (!m_arena.TryCellSlot(
