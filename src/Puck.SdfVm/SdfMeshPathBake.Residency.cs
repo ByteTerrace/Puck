@@ -958,8 +958,9 @@ public sealed partial class SdfMeshPathBake {
             // finer tiers the budget holds back, the coarser tiers landed to make room, and the half rungs every demand
             // is coarsened by, the selector's one bias, with its steps up and down.
             // The demand watch (SdfMeshPathBake.Demand.cs): the groups the tier decisions read, those waiting on each of
-            // the demand points' clocks, the boxes a whole reset sweep reads and the groups such a sweep still owes.
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" demand-attended={m_attention.Count} demand-due={m_demandDue[0].Count}/{m_demandDue[1].Count}/{m_demandDue[2].Count}/{m_demandDue[3].Count} demand-sweep-boxes={m_demandSweep.Boxes} demand-sweep-left={m_demandSweepLeft}");
+            // the demand points' clocks, the boxes a whole reset sweep reads, the groups such a sweep still owes, and the
+            // groups the watch measured since the bake began, by route.
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" demand-attended={m_attention.Count} demand-due={m_demandDue[0].Count}/{m_demandDue[1].Count}/{m_demandDue[2].Count}/{m_demandDue[3].Count} demand-sweep-boxes={m_demandSweep.Boxes} demand-sweep-left={m_demandSweepLeft} demand-measured={m_demandMeasured.Groups} demand-measured-moved={m_demandMeasured.Moved} demand-measured-due={m_demandMeasured.Due} demand-measured-changed={m_demandMeasured.Changed} demand-measured-copied={m_demandMeasured.Copied}");
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" region-budget={m_regionBudgetBytes}B region-named={m_regionNamedBytes}B region-refused={m_regionRefused} tiers-spare={m_tiersSpare} tiers-held-back={m_tiersHeldBack} coarsened={m_coarsened} detail-bias={m_bias} bias-raised={(m_detail?.Selector.BiasSteps.Raised ?? 0)} bias-lowered={(m_detail?.Selector.BiasSteps.Lowered ?? 0)}");
             for (var tier = 0; (tier < tierTriangles.Length); tier++) {
                 if (tierTriangles[tier] > 0) { _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" tier{tier}={tierTriangles[tier]}tri@{(1000f * SdfMeshTier.Cell(tier: tier)):0.###}mm"); }

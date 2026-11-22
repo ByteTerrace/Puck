@@ -86,6 +86,9 @@ public sealed partial class SdfMeshPathBake {
     // One more each time a measure moves a group's tier one half rung finer than the bias asks, which the bytes that
     // tier would name (Retier's finer figure) are cached against.
     private long m_finerDemandRevision;
+    // This bake's measures since it began, by route, for its residency's report: every group measured, and those a moved
+    // slot, a clock, a change of the points and a moved copy made.
+    private (long Groups, long Moved, long Due, long Changed, long Copied) m_demandMeasured;
     // The groups the tier decisions read (Attend).
     private readonly MarkedGroups m_attention = new(mark: GroupMarks.Attended);
 
@@ -210,6 +213,11 @@ public sealed partial class SdfMeshPathBake {
                 if (!group.Retired) { Queue(clock: clock, group: group); }
             }
         }
+        m_demandMeasured.Groups += groups;
+        m_demandMeasured.Moved += moved;
+        m_demandMeasured.Due += due;
+        m_demandMeasured.Changed += changed;
+        m_demandMeasured.Copied += copied;
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandGroups, amount: groups);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandBoxes, amount: boxes);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandDue, amount: due);
