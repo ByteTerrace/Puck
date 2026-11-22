@@ -724,12 +724,24 @@ every tier (`SdfMeshCachePolicy.Ladder`), a player's build draws stored tiers
 alone (`SdfMeshCachePolicy.Stored`), and `puck world player` refuses a folder
 whose check boots did not settle with no tier missed.
 
-- [high] It has run on Direct3D 12 on the RTX 4070 only. Owed first, the
-  Vulkan pass, which also produces Vulkan's set:
-  `puck lease gpu --holder <lane> --wait 7200 -- puck world player worlds/debug --output <folder> --extension src/Puck.World.Azure --backend vulkan --target rtx2060@1920x1080 --target rtx4070@2560x1440`.
-  Expect `player.json` to say `complete`. Then the 2060 itself, at rest and
-  over the route, reading `world.counters sdf.mesh-cache` at the end. Check:
-  `rungs-missed` is zero and every group baked is geometry a rule made.
+- [high] Both backends' fills and the `rtx2060@1920x1080` checks have run
+  complete on the RTX 4070; the `rtx4070@2560x1440` checks have not run since.
+  Owed: the cache sets of a run that names both targets
+  (`puck world player worlds/debug --output <folder> --extension src/Puck.World.Azure --backend directx --backend vulkan --target rtx2060@1920x1080 --target rtx4070@2560x1440`,
+  `player.json` saying `complete`), then the 2060 itself, at rest and over the
+  route, reading `world.counters sdf.mesh-cache` at the end. Check:
+  `rungs-missed` is zero and every group baked is geometry a rule made. A
+  check that does not settle names what holds each bake in `player.json`'s
+  `unsettled` (`SdfMeshPathBake.DescribeUnsettled`).
+- [medium · unconfirmed] One Direct3D 12 fill and one 2060 check of the
+  run before the complete one lost the device with
+  `DXGI_ERROR_INVALID_CALL` (no breadcrumb; first seen at
+  `SdfMeshOcclusion.EnsureBuffers`' `CreatePlacedResource`), each while
+  another lane's World held nearly all of the GPU's memory. Two boots under
+  `--debug-layers basic` through the same places reported no error, so the
+  call is unnamed. A loss's teardown no longer throws from
+  `DirectXGpuMappedBuffer.Dispose`. Check: a Direct3D 12 player build beside a
+  World holding most of the GPU's memory, under `--debug-layers basic`.
 - [medium] Not yet run under the stored policy: the benchmark route, and the
   launcher's install and update of a build that carries a whole set.
 - [medium] A tick-locked fill never settles in a running world: its frame
@@ -750,9 +762,6 @@ whose check boots did not settle with no tier missed.
   world's whole set in one download, so a set is fetched by content pin when
   a door to its world opens, the shared product naming of
   [the cold bake's step 4](iteration.md#the-cold-bakes-steps).
-- [low · unconfirmed] A replacement that meshed nothing is dropped without
-  being retired (`SdfMeshPathBake`'s `FinishReplacements`, the branch where
-  the group's mesh is null), so the kept floor it claimed is never released.
 
 ### A hosted world on a client
 
@@ -1836,6 +1845,12 @@ check; this packet holds the defects beside it.
   ([the player build never bakes](#the-player-build-never-bakes)). Whether a
   build that may bake still chases a moving tier bias under that profile
   (`SdfMeshTier.Biased`) is unread; an author on a small card would meet it.
+  Two holds of that shape are fixed at their cause: a tier asked of a group
+  that could plan none (a dynamic slot no active instance rides) restarted the
+  settle count at every decision, and a coarser tier placed in mesh-region
+  words the device refused to back waited ahead of the draws for good. The
+  wait now names whatever holds (`SdfMeshPathBake.DescribeUnsettled`), so a
+  source build under `rtx2060` that still does not settle says why.
 - [medium] Before sparse external targets are used, retain the exact host-word
   coverage of disjoint writes across remapping. `GpuRegion.StageOwed`
   (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs`) re-owes the known prefix;

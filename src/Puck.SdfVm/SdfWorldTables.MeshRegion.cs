@@ -84,22 +84,39 @@ public sealed partial class SdfWorldTables {
         if (Interlocked.Exchange(location1: ref m_meshTrimRequested, value: 0) == 0) { return; }
         try {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Trims);
-            m_meshArena.TrimUnused();
+            _ = ForgetUnusedMeshes();
             // A mapped region gives the forgotten meshes' chunks back now, under the pressure that asked for the trim.
             m_meshPlacementVersion++;
             CoverMeshRegion();
-            foreach (var mesh in m_meshPages.Keys) {
-                if (!m_meshArena.Placements.ContainsKey(key: mesh)) { m_meshPages.Remove(key: mesh); }
-            }
-            m_meshesOwed.RemoveWhere(match: mesh => !m_meshArena.Placements.ContainsKey(key: mesh));
-            ForgetAllLanding();
-            // The words a trim freed may hold a mesh the arena refused, so the next staging plans its list again.
-            if (m_meshArena.Refused.Count > 0) { m_meshSource = null; }
-            // The source order walks the placements, so a trim that forgot one rebuilds it.
-            m_meshOrderStale = true;
         } finally {
             Puck.Hosting.Jobs.MemoryAccount.Shared.CompleteDeferredTrim();
         }
+    }
+    // Fits the mapped region again while the latest fit left a chunk the device refused, so the meshes there back as the
+    // chunks given back for them retire. Called once a prepared frame, where the bake names its products ahead
+    // (SdfMeshPathBake.ObserveResidency), the same point every other fit of a preparation runs at.
+    internal void CoverRefusedBacking() {
+        if (!m_disposed && m_meshBackingRefused) { CoverMeshRegion(); }
+    }
+    // Forgets the placed meshes no draw names (SdfMeshRegionArena.TrimUnused) and what the tables hold for them: their
+    // pages, the words owed for them and every landing in flight. A mapped region's chunks follow at its next fit, which
+    // the moved placement version calls for. True when a mesh was forgotten.
+    private bool ForgetUnusedMeshes() {
+        var placed = m_meshArena.Placements.Count;
+
+        m_meshArena.TrimUnused();
+        if (m_meshArena.Placements.Count == placed) { return false; }
+        m_meshPlacementVersion++;
+        foreach (var mesh in m_meshPages.Keys) {
+            if (!m_meshArena.Placements.ContainsKey(key: mesh)) { m_meshPages.Remove(key: mesh); }
+        }
+        m_meshesOwed.RemoveWhere(match: mesh => !m_meshArena.Placements.ContainsKey(key: mesh));
+        ForgetAllLanding();
+        // The words a trim freed may hold a mesh the arena refused, so the next staging plans its list again.
+        if (m_meshArena.Refused.Count > 0) { m_meshSource = null; }
+        // The source order walks the placements, so a trim that forgot one rebuilds it.
+        m_meshOrderStale = true;
+        return true;
     }
 
     // Whether the arena has written its meshes into the region.
@@ -844,12 +861,15 @@ public sealed partial class SdfWorldTables {
     /// <returns><see langword="true"/> when a draw may name the mesh without waiting out of the frame.</returns>
     public bool MeshStands(SdfMesh mesh) => (m_meshArena.Placements.ContainsKey(key: mesh) &&
         !m_meshesOwed.Contains(mesh: mesh) && m_meshPages.TryGetValue(key: mesh, value: out var pages) && pages.IsCurrent);
-    /// <summary>Returns whether the region found no room for a mesh named ahead beside the meshes the draws read
-    /// (<see cref="SdfMeshRegionArena.AheadRefused"/>): it can land only in the words the mesh it replaces gives up.
-    /// Read on the frame's thread.</summary>
+    /// <summary>Returns whether the region found no room for a mesh named ahead beside the meshes the draws read: the
+    /// arena placed it nowhere (<see cref="SdfMeshRegionArena.AheadRefused"/>), or the device refused to back the words it
+    /// was placed in (a mapped region's chunk, <see cref="CoverMeshRegion"/>). Either way it can land only in the memory
+    /// the mesh it replaces gives up, so it takes the draws first. Read on the frame's thread.</summary>
     /// <param name="mesh">The mesh.</param>
     /// <returns><see langword="true"/> when the mesh is named ahead and refused.</returns>
-    public bool RefusesAhead(SdfMesh mesh) => m_meshArena.AheadRefused.Contains(item: mesh);
+    public bool RefusesAhead(SdfMesh mesh) => (m_meshArena.AheadRefused.Contains(item: mesh) || (m_meshBackingRefused &&
+        m_meshArena.Placements.TryGetValue(key: mesh, value: out var placement) &&
+        !m_meshRegion.IsBacked(bytes: (((long)SdfMeshRegion.WordsOf(mesh: mesh)) * sizeof(uint)), offset: (((long)placement.VertexWord) * sizeof(uint)))));
     /// <summary>Describes the mesh region's landing: the bytes it holds and the latest list uses, the mesh bytes written
     /// into it, the bytes it still owes, the frames and seconds it spent owing them, the mesh region bytes the frame
     /// uploads staged (the latest, the most one staged and at which upload, and their sum), the uploads submitted and the
@@ -1009,6 +1029,9 @@ public sealed partial class SdfWorldTables {
     // The placement version the mapped region's chunks were last fitted to, and the chunks the placements cover.
     private long m_meshCoveredVersion = -1L;
     private bool[] m_meshCovered = [];
+    // Whether the latest fit left a covered chunk unbacked because the device refused it, which the fit is tried again
+    // for every frame and a mesh named ahead in such a chunk is refused ahead for (RefusesAhead).
+    private bool m_meshBackingRefused;
 
     // Fits a mapped region's chunks to its placements, the one place its interior backing follows the arena: a chunk
     // that holds a placed mesh's words or a draw record is backed, and one that holds none is given back behind its
@@ -1016,13 +1039,23 @@ public sealed partial class SdfWorldTables {
     // Invariant: every word a draw or a landing may name lies in a backed chunk. The arena places a mesh only inside
     // ByteCount, which EnsureMeshRegionCapacity backs as it grows; this restores the backing of an interior chunk an
     // earlier fit gave back before any landing leases its words (a landing leases only backed pages, GpuRegion.TryLease).
+    // A chunk the device refuses to back leaves the meshes there owed, their rows absent: the fit then forgets the meshes
+    // no draw names, whose chunks go back, and is tried again every prepared frame (CoverRefusedBacking) until it backs them, since
+    // the chunks it gave back leave the pool only once their readers retire. A mesh named ahead that lies in such a chunk
+    // is refused ahead (RefusesAhead), so it takes the draws and the mesh it replaces gives up its words.
     private void CoverMeshRegion() {
         if (!m_meshRegion.Mapped || (m_meshCoveredVersion == m_meshPlacementVersion)) { return; }
+        if (!TryCoverMeshRegion() && ForgetUnusedMeshes()) { _ = TryCoverMeshRegion(); }
+    }
+    // One fit of the chunks to the placements, giving back every chunk no placement covers before backing any it now
+    // covers; false when the device refused a chunk.
+    private bool TryCoverMeshRegion() {
         m_meshCoveredVersion = m_meshPlacementVersion;
 
         var chunk = m_meshRegion.MappedChunkBytes;
         var size = m_meshRegion.ByteCount;
         var chunks = ((int)size.CeilingDivide(divisor: chunk));
+        var refused = false;
 
         if (m_meshCovered.Length < chunks) { m_meshCovered = new bool[chunks]; }
         Array.Clear(array: m_meshCovered, index: 0, length: chunks);
@@ -1033,22 +1066,28 @@ public sealed partial class SdfWorldTables {
         for (var index = 0; (index < chunks); index++) {
             var offset = (index * chunk);
             var bytes = Math.Min(val1: chunk, val2: (size - offset));
-            var backed = m_meshRegion.IsBacked(bytes: bytes, offset: offset);
 
-            if (m_meshCovered[index] && !backed) {
-                try {
-                    m_meshRegion.MapRange(bytes: bytes, offset: offset);
-                } catch (GpuMemoryRefusedException) {
-                    // The meshes there stay owed, their rows absent, until a later fit backs the chunk.
-                    m_meshGrant.Kept(refused: true);
-                    m_meshCoveredVersion = -1L;
-                    continue;
-                }
-                ReplacedMeshRegion(newBytes: ((ulong)size), replaced: GpuMappedRelease.None);
-            } else if (!m_meshCovered[index] && backed && (bytes == chunk)) {
+            if (!m_meshCovered[index] && (bytes == chunk) && m_meshRegion.IsBacked(bytes: bytes, offset: offset)) {
                 ReplacedMeshRegion(newBytes: ((ulong)size), replaced: m_meshRegion.UnmapRange(bytes: bytes, offset: offset));
             }
         }
+        for (var index = 0; (index < chunks); index++) {
+            var offset = (index * chunk);
+            var bytes = Math.Min(val1: chunk, val2: (size - offset));
+
+            if (!m_meshCovered[index] || m_meshRegion.IsBacked(bytes: bytes, offset: offset)) { continue; }
+            try {
+                m_meshRegion.MapRange(bytes: bytes, offset: offset);
+            } catch (GpuMemoryRefusedException) {
+                m_meshGrant.Kept(refused: true);
+                refused = true;
+                continue;
+            }
+            ReplacedMeshRegion(newBytes: ((ulong)size), replaced: GpuMappedRelease.None);
+        }
+        if (refused) { m_meshCoveredVersion = -1L; }
+        m_meshBackingRefused = refused;
+        return !refused;
 
         void Cover(long offset, long bytes) {
             if (bytes <= 0L) { return; }

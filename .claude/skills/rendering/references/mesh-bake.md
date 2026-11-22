@@ -1521,7 +1521,18 @@ laws exercise that boundary.
   an operand's pose, or one planned again because a sampled field it reads
   published another snapshot. The world makes that geometry as it runs, so no
   cache holds it; it bakes under every policy, has no ladder filled and is
-  counted apart. `world.counters sdf.mesh-cache` (`SdfMeshCache`) is the
+  counted apart. Liveness and a reader's waiting successor belong to its place
+  in the list, not to the group holding it: every group that takes a place
+  (`SdfMeshPathBake.Replace`, and a later program's plan in `Place`) takes both
+  from the group it displaces (`Group.InheritLive`), so a tier of a live group is
+  live and a successor survives a replacement giving its place back. A tier
+  start that plans nothing (a dynamic slot no active instance rides) marks the
+  group refused like a missing rung, so no decision asks it again until its
+  demand moves; only a replacement that started keeps the detail unsettled
+  (`TierStart`). A `world.wait bakes` that releases unsettled names what holds
+  each bake (`SdfMeshPathBake.DescribeUnsettled`: products ahead, successors,
+  groups baking and how many are live, and the latest tier decision's hold),
+  and `puck world player` records that reason per place. `world.counters sdf.mesh-cache` (`SdfMeshCache`) is the
   reading: `dispatches` and the `live-dispatches` among them, `groups-baked`
   and `live-baked`, `rungs-missed`, `loads-declined` and `rungs-filled`. A boot
   of a whole cache under `Stored` dispatches only live lattices, bakes no other
