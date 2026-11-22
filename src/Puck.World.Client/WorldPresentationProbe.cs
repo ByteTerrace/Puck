@@ -177,7 +177,7 @@ public sealed class WorldPresentationProbe(TimeProvider? time = null) {
             AddIdentity(ref hash, draw.Identity, unsupportedTypes, ref unsupportedCount);
             AddIdentity(ref hash, (draw.MotionIdentity ?? draw.Identity), unsupportedTypes, ref unsupportedCount);
             AddMesh(hash: ref hash, mesh: draw.Mesh);
-            hash.AddBits(value: draw.ObjectToWorld); hash.Add(value: unchecked((uint)(draw.FrameSlot ?? -1))); hash.Add(value: ((uint)draw.Material));
+            hash.AddBits(value: draw.PlacementIn(transforms: frame.DynamicTransforms)); hash.Add(value: unchecked((uint)(draw.FrameSlot ?? -1))); hash.Add(value: ((uint)draw.Material));
             hash.AddBits(value: draw.CarryRotation); hash.AddBits(value: draw.CarryTranslation); hash.AddBits(value: draw.CarryScale); hash.AddBits(value: draw.ClipPlane);
             hash.Add(value: ((byte)(draw.IsDynamic ? 1 : 0))); hash.Add(value: ((byte)(draw.Glass ? 1 : 0))); hash.Add(value: ((byte)(draw.UsesRootMaterialFrame ? 1 : 0)));
         }

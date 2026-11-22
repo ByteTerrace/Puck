@@ -192,7 +192,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
     // The fixture's frame with one triangle drawn.
     private static SdfFrame DrawnFrame() => Frame() with {
-        MeshDraws = [new SdfMeshDraw(Identity: "triangle", Material: 0, ObjectToWorld: System.Numerics.Matrix4x4.Identity,
-            Mesh: new SdfMesh(indices: new uint[] { 0, 1, 2 }, positions: new System.Numerics.Vector3[] { System.Numerics.Vector3.Zero, System.Numerics.Vector3.UnitX, System.Numerics.Vector3.UnitY }))],
+        MeshDraws = [new SdfMeshDraw(identity: "triangle", material: 0, objectToWorld: System.Numerics.Matrix4x4.Identity,
+            mesh: new SdfMesh(indices: new uint[] { 0, 1, 2 }, positions: new System.Numerics.Vector3[] { System.Numerics.Vector3.Zero, System.Numerics.Vector3.UnitX, System.Numerics.Vector3.UnitY }))],
     };
 }

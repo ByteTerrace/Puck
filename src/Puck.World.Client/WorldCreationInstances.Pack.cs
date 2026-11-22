@@ -48,6 +48,13 @@ public sealed partial class WorldCreationInstances {
     public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDrawList;
     /// <summary>Gets the revision of <see cref="MeshDraws"/>' content: one more for each pack that rewrote it.</summary>
     public long MeshDrawsRevision => m_meshDrawsRevision;
+    /// <summary>Gets the journal of the rows of <see cref="MeshDraws"/> each pack rewrote: one frame per revision, naming
+    /// the draws a pack rewrote in place, or owing the whole list where it composed the list again.</summary>
+    public Puck.Abstractions.Gpu.GpuRowChanges MeshDrawChanges => m_meshDrawChanges.Reader;
+    /// <summary>Gets the journal endpoint captured with <see cref="MeshDraws"/>.</summary>
+    public long MeshDrawChangesSerial => m_meshDrawChanges.Serial;
+
+    private readonly Puck.Abstractions.Gpu.GpuChangedRows m_meshDrawChanges = new();
 
     /// <summary>Gets the slot runs of the body-rooted registrations the last <see cref="PackTransforms"/> found
     /// straddling a portal whose counterpart stands in the same world (<see cref="WorldPortalStraddle"/>): the same list
@@ -315,8 +322,10 @@ public sealed partial class WorldCreationInstances {
         // A pack that only moved draws rewrites each at its place in the list; one that changed which entries draw, or
         // follows a reconcile, composes the list again in pool order.
         if (m_meshDrawsChanged && !m_meshDrawMembers) {
+            m_meshDrawChanges.Begin(everything: false, rows: m_meshDrawList.Count);
             foreach (var poolIndex in m_meshDrawsMoved) {
                 m_meshDrawList[m_meshDrawAt[poolIndex]] = m_meshDraws[poolIndex]!.Value;
+                m_meshDrawChanges.Owe(count: 1, start: m_meshDrawAt[poolIndex]);
             }
 
             m_meshDrawsRevision++;
@@ -349,6 +358,7 @@ public sealed partial class WorldCreationInstances {
                 }
             }
 
+            m_meshDrawChanges.Begin(everything: true, rows: m_meshDrawList.Count);
             m_meshDrawsRevision++;
             m_meshDrawsChanged = false;
         }

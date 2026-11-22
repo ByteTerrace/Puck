@@ -247,7 +247,7 @@ public sealed class SdfCompositionFrameSourceLawTests {
             slots[context.SlotBase] = new DynamicTransform(Orientation: Quaternion.Identity, Position: Vector3.Zero);
             slots[(context.SlotBase + 1)] = new DynamicTransform(Orientation: Quaternion.Identity, Position: (Vector3.UnitX * Radius));
         }
-        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, SdfMeshDrawList meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
             var changed = !ReferenceEquals(objA: program, objB: m_dressed);
 
             m_dressed = program;

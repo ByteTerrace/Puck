@@ -25,10 +25,10 @@ public sealed class SdfSlotClipLawTests {
     );
 
     private static SdfMeshDraw Draw(string identity, int? slot) => new(
-        Identity: identity,
-        Material: 0,
-        Mesh: Triangle,
-        ObjectToWorld: Matrix4x4.Identity
+        identity: identity,
+        material: 0,
+        mesh: Triangle,
+        objectToWorld: Matrix4x4.Identity
     ) { FrameSlot = slot };
 
     [Fact]

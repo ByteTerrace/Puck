@@ -494,7 +494,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         for (var i = 0; (i < count); i++) {
             var draw = draws[i];
             if (!HasComparableTransform(in draw)) { return false; }
-            (ByReference<SdfMesh>, Matrix4x4, int) key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+            (ByReference<SdfMesh>, Matrix4x4, int) key = (draw.Mesh, draw.FixedPlacement, draw.Material);
 
             counts[key] = (counts.GetValueOrDefault(key: key) + 1);
         }
@@ -505,7 +505,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             if (!draw.IsStatic) { continue; }
             if (!HasComparableTransform(in draw)) { return false; }
-            (ByReference<SdfMesh>, Matrix4x4, int) key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+            (ByReference<SdfMesh>, Matrix4x4, int) key = (draw.Mesh, draw.FixedPlacement, draw.Material);
 
             if (!counts.TryGetValue(key: key, value: out var left)) { return false; }
             if (left == 1) { counts.Remove(key: key); } else { counts[key] = (left - 1); }
@@ -1084,13 +1084,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         try {
             foreach (ref readonly var draw in before) {
                 if (!HasComparableTransform(in draw)) { return null; }
-                ref var count = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: counts, key: (draw.Mesh, draw.ObjectToWorld, draw.Material), exists: out _);
+                ref var count = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: counts, key: (draw.Mesh, draw.FixedPlacement, draw.Material), exists: out _);
 
                 count++;
             }
             foreach (ref readonly var draw in after) {
                 if (!HasComparableTransform(in draw)) { return null; }
-                ref var count = ref CollectionsMarshal.GetValueRefOrNullRef(dictionary: counts, key: (draw.Mesh, draw.ObjectToWorld, draw.Material));
+                ref var count = ref CollectionsMarshal.GetValueRefOrNullRef(dictionary: counts, key: (draw.Mesh, draw.FixedPlacement, draw.Material));
 
                 if (!System.Runtime.CompilerServices.Unsafe.IsNullRef(source: ref count) && (count > 0)) {
                     count--;
@@ -1100,7 +1100,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 changed.Add(item: box);
             }
             foreach (ref readonly var draw in before) {
-                ref var count = ref CollectionsMarshal.GetValueRefOrNullRef(dictionary: counts, key: (draw.Mesh, draw.ObjectToWorld, draw.Material));
+                ref var count = ref CollectionsMarshal.GetValueRefOrNullRef(dictionary: counts, key: (draw.Mesh, draw.FixedPlacement, draw.Material));
 
                 if (count <= 0) { continue; }
                 count--;
@@ -1115,12 +1115,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
     // Matrix4x4.Equals groups NaN entries. Invalid transforms cannot certify unchanged geometry.
     private static bool HasComparableTransform(in SdfMeshDraw draw) {
-        var transform = draw.ObjectToWorld;
-        return transform == draw.ObjectToWorld;
+        var transform = draw.FixedPlacement;
+        return transform == draw.FixedPlacement;
     }
 
     private static bool TryBox(in SdfMeshDraw draw, out Box box) {
-        if (!SdfMeshBox.TryOf(box: out var oriented, draw: in draw)) {
+        if (!SdfMeshBox.TryOfFixed(box: out var oriented, draw: in draw)) {
             box = default;
             return false;
         }
@@ -1645,8 +1645,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // it, the transform and material by their bits. Zero, which the digest's mix leaves out, stands for a row that
     // adds nothing to the scene.
     private static ulong DrawKey(in SdfMeshDraw draw) => ((draw.Trace is { } trace)
-        ? ((draw.Piece == 0) ? DrawElement(material: draw.Material, mesh: trace, objectToWorld: draw.ObjectToWorld) : 0UL)
-        : DrawElement(material: draw.Material, mesh: draw.Mesh, objectToWorld: draw.ObjectToWorld));
+        ? ((draw.Piece == 0) ? DrawElement(material: draw.Material, mesh: trace, objectToWorld: draw.FixedPlacement) : 0UL)
+        : DrawElement(material: draw.Material, mesh: draw.Mesh, objectToWorld: draw.FixedPlacement));
     private static ulong DrawElement(SdfMesh mesh, in Matrix4x4 objectToWorld, int material) {
         var hash = Fnv1aHash.Create();
 

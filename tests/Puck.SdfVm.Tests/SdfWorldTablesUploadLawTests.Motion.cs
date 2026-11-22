@@ -95,7 +95,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var second = Matrix4x4.CreateScale(xScale: 2f, yScale: 3f, zScale: 4f);
 
         SdfMeshDraw[] Draws(Matrix4x4 a, Matrix4x4 b) => [
-            new(Identity: "a", Material: 0, Mesh: mesh, ObjectToWorld: a), new(Identity: "b", Material: 0, Mesh: mesh, ObjectToWorld: b),
+            new(identity: "a", material: 0, mesh: mesh, objectToWorld: a), new(identity: "b", material: 0, mesh: mesh, objectToWorld: b),
         ];
         rig.Land(time: 0f, meshDraws: Draws(a: first, b: second));
         Assert.Equal(expected: new[] { first, second }, actual: PreviousMatrices(rig: rig, draws: 2));
@@ -170,14 +170,14 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var third = Matrix4x4.CreateTranslation(xPosition: -4f, yPosition: 0f, zPosition: 1f);
 
         rig.Land(time: 0f, meshDraws: [
-            new(Identity: "a", Material: 0, Mesh: mesh, ObjectToWorld: first), new(Identity: "b", Material: 0, Mesh: mesh, ObjectToWorld: second),
+            new(identity: "a", material: 0, mesh: mesh, objectToWorld: first), new(identity: "b", material: 0, mesh: mesh, objectToWorld: second),
         ]);
         rig.Render(time: 0f, meshDraws: [
-            new(Identity: "b", Material: 0, Mesh: mesh, ObjectToWorld: second), new(Identity: "a", Material: 0, Mesh: mesh, ObjectToWorld: first),
+            new(identity: "b", material: 0, mesh: mesh, objectToWorld: second), new(identity: "a", material: 0, mesh: mesh, objectToWorld: first),
         ]);
         Assert.Equal(expected: new[] { second, first }, actual: PreviousMatrices(rig: rig, draws: 2));
         rig.Render(time: 0f, meshDraws: [
-            new(Identity: "b", Material: 0, Mesh: mesh, ObjectToWorld: second), new(Identity: "c", Material: 0, Mesh: mesh, ObjectToWorld: third),
+            new(identity: "b", material: 0, mesh: mesh, objectToWorld: second), new(identity: "c", material: 0, mesh: mesh, objectToWorld: third),
         ]);
         Assert.Equal(expected: new[] { second, third }, actual: PreviousMatrices(rig: rig, draws: 2));
     }

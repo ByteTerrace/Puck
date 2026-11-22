@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Gpu;
 using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance;
@@ -82,8 +83,24 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // reservation WorldAdjacencyGeometry.Select's default `maximum` honors) and reused across bands and rebuilds —
     // EmitStatic consumes it synchronously and never retains the reference.
     private readonly WorldPlacement[] m_mappedPlacements = new WorldPlacement[MaxInstancesPerBand];
-    // WriteRevision's own scratch: the rebuild watch must not disturb the emitted latch it is comparing against.
-    private readonly bool[] m_polledEntities = new bool[WorldBodiesLimits.CapacityCeiling];
+    // Per band, the frame thread's view of the bodies it renders: the active bodies inside the band before suppression
+    // and the budget, ascending, kept from the neighbour's entity journal (IWorldAdjacencyNeighbour.CollectEntityChanges)
+    // so a frame visits only the bodies that changed; the cursor on that journal and the band test the set was made
+    // under; and this frame's selection of them, at most MaxEntitiesPerBand a band, ascending.
+    private readonly List<int>[] m_near;
+    private readonly GpuRowCursor[] m_nearCursors;
+    private readonly (WorldFaceFrame Frame, FixedQ4816 Depth)?[] m_nearBands;
+    private readonly GpuUploadRuns m_nearRuns = new(capacity: GpuRegion.MaxCopyRuns);
+    private readonly int[] m_selected;
+    private readonly int[] m_selectedCount;
+    // Per band, the bodies the latest emission compiled, ascending (published whole by the build that emits, read by the
+    // frame thread), and the list the frame thread last packed, whose bodies that left are unseeded.
+    private readonly int[]?[] m_emittedLists;
+    private readonly int[]?[] m_packedLists;
+    // The motion indices this frame gave a live slot range, reset to none at the next frame's start.
+    private readonly List<int> m_liveSet = [];
+    // EmitEntities' selection scratch; a build emits one band at a time.
+    private readonly List<int> m_emitting = [];
     // WriteRevision's own scratch for the reachability poll's "still present this call" set, cleared and refilled
     // every call rather than reallocated.
     private readonly HashSet<string> m_observedAdjacencies = new(comparer: StringComparer.Ordinal);
@@ -131,29 +148,101 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         m_emittedScales = new float[m_gaits.Length];
         m_emittedGaitAmplitudes = new float[m_gaits.Length];
         m_emittedEntities = new bool[m_gaits.Length];
+        m_liveSlots = new int[m_gaits.Length];
+        Array.Fill(array: m_liveSlots, value: -1);
+        m_near = new List<int>[m_bandCount];
+        m_nearCursors = new GpuRowCursor[m_bandCount];
+        for (var band = 0; (band < m_bandCount); band++) {
+            m_near[band] = [];
+            m_nearCursors[band] = new GpuRowCursor();
+        }
+        m_nearBands = new (WorldFaceFrame, FixedQ4816)?[m_bandCount];
+        m_selected = new int[(m_bandCount * MaxEntitiesPerBand)];
+        m_selectedCount = new int[m_bandCount];
+        m_emittedLists = new int[]?[m_bandCount];
+        m_packedLists = new int[]?[m_bandCount];
     }
 
-    /// <inheritdoc/>
-    private int[] m_liveSlots = [];
+    // Each body's first slot in this frame's layout, by band and body (-1 for a body the frame renders none of).
+    private readonly int[] m_liveSlots;
 
     private int m_liveSlotCount;
 
+    /// <inheritdoc/>
+    /// <remarks>Selects each band's bodies from the bodies its neighbour changed since the last frame, and lays out the
+    /// selected bodies' slots.</remarks>
     public void PrepareFrame() {
-        if (m_liveSlots.Length != m_emittedEntities.Length) { m_liveSlots = new int[m_emittedEntities.Length]; }
-        Array.Fill(m_liveSlots, -1);
+        foreach (var motion in m_liveSet) { m_liveSlots[motion] = -1; }
+        m_liveSet.Clear();
         m_liveSlotCount = 0;
         var visuals = m_source.Visuals();
 
         for (var band = 0; (band < Math.Min(visuals.Count, m_bandCount)); band++) {
-            SelectBand(visuals[band], m_polledEntities);
-            for (var body = 0; (body < m_polledEntities.Length); body++) {
-                if (!m_polledEntities[body]) { continue; }
-                m_liveSlots[((band * WorldBodiesLimits.CapacityCeiling) + body)] = m_liveSlotCount;
+            Select(band: band, projection: visuals[band]);
+            for (var at = 0; (at < m_selectedCount[band]); at++) {
+                var motion = ((band * WorldBodiesLimits.CapacityCeiling) + m_selected[((band * MaxEntitiesPerBand) + at)]);
+
+                m_liveSlots[motion] = m_liveSlotCount;
+                m_liveSet.Add(item: motion);
                 m_liveSlotCount += WorldRigCatalog.TransformSlotsPerBody;
             }
         }
+        for (var band = Math.Min(visuals.Count, m_bandCount); (band < m_bandCount); band++) { m_selectedCount[band] = 0; }
         PrepareStaticProjections(visuals);
     }
+    // Brings a band's near set up to its neighbour's latest image, reading only the bodies the neighbour's journal names
+    // changed (every active body when it cannot name them, or when the band's frame or depth moved), then selects this
+    // frame's bodies from it: the unsuppressed ones in slot order, up to MaxEntitiesPerBand. The one selection rule
+    // SelectBand applies to a whole projection, here kept from the bodies that changed.
+    private void Select(int band, WorldAdjacencyProjection projection) {
+        var neighbour = projection.Neighbour;
+        var near = m_near[band];
+        var frame = projection.Path[0].Neighbour;
+        var depth = projection.OverlapDepth;
+        var bound = Math.Min(val1: neighbour.EntityCapacity, val2: WorldBodiesLimits.CapacityCeiling);
+        var whole = (neighbour.CollectEntityChanges(cursor: m_nearCursors[band], into: m_nearRuns) || (m_nearBands[band] != (frame, depth)));
+
+        m_nearBands[band] = (frame, depth);
+        if (whole) {
+            near.Clear();
+            foreach (var index in neighbour.ActiveEntities) {
+                if ((index < bound) && Near(depth: depth, frame: frame, index: index, neighbour: neighbour)) { near.Add(item: index); }
+            }
+        } else {
+            for (var run = 0; (run < m_nearRuns.Count); run++) {
+                var end = Math.Min(val1: (m_nearRuns.Start(index: run) + m_nearRuns.Length(index: run)), val2: bound);
+
+                for (var index = m_nearRuns.Start(index: run); (index < end); index++) {
+                    var at = near.BinarySearch(item: index);
+                    var inside = (neighbour.IsEntityActive(index: index) && Near(depth: depth, frame: frame, index: index, neighbour: neighbour));
+
+                    if (inside && (at < 0)) { near.Insert(index: ~at, item: index); } else if (!inside && (at >= 0)) { near.RemoveAt(index: at); }
+                }
+            }
+        }
+        m_nearCursors[band].Commit();
+
+        var count = 0;
+
+        foreach (var index in near) {
+            if (IsSuppressed(index: index, neighbour: neighbour)) { continue; }
+            if (count == MaxEntitiesPerBand) { break; }
+            m_selected[((band * MaxEntitiesPerBand) + count)] = index;
+            count++;
+        }
+        m_selectedCount[band] = count;
+    }
+    // Whether a body stands inside a band: the band test SelectBand applies, before activity, suppression and the budget.
+    private static bool Near(IWorldAdjacencyNeighbour neighbour, WorldFaceFrame frame, FixedQ4816 depth, int index) =>
+        WorldAdjacencyGeometry.IsWithinBand(
+            frame: frame,
+            overlapDepth: ((float)depth),
+            position: neighbour.CurrentPosition(index: index),
+            reach: (WorldRigCatalog.Reach * MathF.Max(
+                x: neighbour.Look(index: index).Scale,
+                y: 1f
+            ))
+        );
 
     public int DynamicSlotCount => m_liveSlotCount;
     public IReadOnlyList<SdfMeshInstance> MeshInstances {
@@ -262,13 +351,16 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
         var noseFactor = neighbour.Definition.PlayerDefaults.NoseFactor;
         var appearanceBase = (bandIndex * WorldBodiesLimits.CapacityCeiling);
+        var emitting = m_emitting;
+
+        emitting.Clear();
         var truncated = SelectBand(
-            destination: m_emittedEntities.AsSpan(
-                length: WorldBodiesLimits.CapacityCeiling,
-                start: appearanceBase
-            ),
+            destination: emitting,
             projection: projection
         );
+
+        Array.Clear(array: m_emittedEntities, index: appearanceBase, length: WorldBodiesLimits.CapacityCeiling);
+        foreach (var index in emitting) { m_emittedEntities[(appearanceBase + index)] = true; }
 
         if (
             truncated &&
@@ -277,12 +369,8 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             WorldClientDiagnostics.Report(channel: "world.adjacency", text: $"'{projection.Name}' neighbour bodies truncated for rendering at {MaxEntitiesPerBand} bodies");
         }
 
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
+        foreach (var index in emitting) {
             var appearanceIndex = (appearanceBase + index);
-
-            if (!m_emittedEntities[appearanceIndex]) {
-                continue;
-            }
 
             WorldMirroredAvatarBand.EmitPalette(
                 accentMaterials: accentMaterials,
@@ -309,6 +397,8 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             rigFor: index => m_emittedRigs[(appearanceBase + index)],
             slotFor: index => m_liveSlots[(appearanceBase + index)]
         );
+        // Published last, so the frame thread that reads the list sees the rigs, scales and gaits written for it.
+        Volatile.Write(location: ref m_emittedLists[bandIndex], value: [.. emitting]);
     }
     private bool IsSuppressed(IWorldAdjacencyNeighbour neighbour, int index) =>
         ((m_suppressEntity is { } suppress) && suppress(neighbour.EntityAddress(index: index)));
@@ -373,50 +463,38 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     }
     // The ONE selection rule, read by emission and by the rebuild watch alike so the program and the counter that
     // decides whether to rebuild it can never disagree about which bodies a band renders.
-    private bool SelectBand(WorldAdjacencyProjection projection, Span<bool> destination) {
-        destination.Clear();
-
+    // Appends the bodies a band renders, ascending, and returns whether the budget truncated them. Read whole by
+    // emission; the frame thread keeps the same rule from the bodies that changed (Select).
+    private bool SelectBand(WorldAdjacencyProjection projection, List<int> destination) {
         var neighbour = projection.Neighbour;
         var frame = projection.Path[0].Neighbour;
-        var overlapDepth = ((float)projection.OverlapDepth);
         var bound = Math.Min(
             val1: neighbour.EntityCapacity,
-            val2: destination.Length
+            val2: WorldBodiesLimits.CapacityCeiling
         );
         var selected = 0;
-        var truncated = false;
 
-        for (var index = 0; (index < bound); index++) {
+        foreach (var index in neighbour.ActiveEntities) {
             if (
-                !neighbour.IsEntityActive(index: index) ||
+                (index >= bound) ||
                 IsSuppressed(
                 index: index,
                 neighbour: neighbour
             ) ||
-                !WorldAdjacencyGeometry.IsWithinBand(
-                frame: frame,
-                overlapDepth: overlapDepth,
-                position: neighbour.CurrentPosition(index: index),
-                reach: (WorldRigCatalog.Reach * MathF.Max(
-                    x: neighbour.Look(index: index).Scale,
-                    y: 1f
-                ))
-            )
+                !Near(depth: projection.OverlapDepth, frame: frame, index: index, neighbour: neighbour)
             ) {
                 continue;
             }
 
             if (selected >= MaxEntitiesPerBand) {
-                truncated = true;
-
-                continue;
+                return true;
             }
 
             selected++;
-            destination[index] = true;
+            destination.Add(item: index);
         }
 
-        return truncated;
+        return false;
     }
 
     /// <inheritdoc/>
@@ -565,14 +643,22 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 val1: neighbour.EntityCapacity,
                 val2: WorldBodiesLimits.CapacityCeiling
             );
+            // The emitted latch, not a fresh liveness read: the program's geometry was compiled for exactly this set, and
+            // re-deriving the set here would pack a body whose leaves this program never emitted. A body that left the
+            // set seeds afresh if it returns.
+            var emitted = (Volatile.Read(location: ref m_emittedLists[bandIndex]) ?? []);
 
-            for (var entity = 0; (entity < bound); entity++) {
+            if (!ReferenceEquals(objA: emitted, objB: m_packedLists[bandIndex])) {
+                foreach (var left in (m_packedLists[bandIndex] ?? [])) {
+                    if (Array.BinarySearch(array: emitted, value: left) < 0) { m_gaits[((bandIndex * WorldBodiesLimits.CapacityCeiling) + left)].Seeded = false; }
+                }
+                m_packedLists[bandIndex] = emitted;
+            }
+
+            foreach (var entity in emitted) {
                 var motionIndex = ((bandIndex * WorldBodiesLimits.CapacityCeiling) + entity);
 
-                // The emitted latch, not a fresh liveness read: the program's geometry was compiled for exactly this
-                // set, and re-deriving the set here would pack a body whose leaves this program never emitted.
-                if (!m_emittedEntities[motionIndex]) {
-                    m_gaits[motionIndex].Seeded = false;
+                if (entity >= bound) {
                     continue;
                 }
 
@@ -692,19 +778,10 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         );
 
         for (var bandIndex = 0; (bandIndex < bandLimit); bandIndex++) {
-            var projection = visuals[bandIndex];
-            var appearanceBase = (bandIndex * WorldBodiesLimits.CapacityCeiling);
-            var polled = m_polledEntities.AsSpan();
+            var emitted = (Volatile.Read(location: ref m_emittedLists[bandIndex]) ?? []);
+            var selected = m_selected.AsSpan(length: m_selectedCount[bandIndex], start: (bandIndex * MaxEntitiesPerBand));
 
-            _ = SelectBand(
-                destination: polled,
-                projection: projection
-            );
-
-            if (!polled.SequenceEqual(other: m_emittedEntities.AsSpan(
-                length: WorldBodiesLimits.CapacityCeiling,
-                start: appearanceBase
-            ))) {
+            if (!selected.SequenceEqual(other: emitted)) {
                 m_selectionRevision++;
             }
         }

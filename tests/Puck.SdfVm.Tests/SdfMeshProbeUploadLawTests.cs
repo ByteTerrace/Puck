@@ -57,7 +57,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     [InlineData(3)]
     public void AFirstChunkNearTheRootSuppliesTheMergedGap(int word) {
         var mesh = new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitZ }, indices: new uint[] { 0, 1, 2 });
-        SdfMeshDraw[] draws = [new(Identity: new object(), Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity)];
+        SdfMeshDraw[] draws = [new(identity: new object(), material: 0, mesh: mesh, objectToWorld: Matrix4x4.Identity)];
         using var scene = SdfMeshIrradianceScene.Build(draws);
         var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>();
         _ = SdfMeshRegion.Plan(draws, placements);
@@ -99,7 +99,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         rig.Render();
         using var volume = new SdfMeshIrradiance();
         var mesh = new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitZ }, indices: new uint[] { 0, 1, 2 });
-        SdfMeshDraw[] draws = [new(Identity: new object(), Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity)];
+        SdfMeshDraw[] draws = [new(identity: new object(), material: 0, mesh: mesh, objectToWorld: Matrix4x4.Identity)];
         using var scene = SdfMeshIrradianceScene.Build(draws);
         typeof(SdfMeshIrradiance).GetField("m_scene", Members)!.SetValue(volume, scene.Acquire());
         var client = (ISdfGpuWorkClient)Activator.CreateInstance(WorkType, Members, null, [rig.Engine, volume], null)!;
@@ -168,7 +168,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     [Fact]
     public void SceneCopiesResumeEvenAPartiallyCopiedGeometry() {
         var mesh = new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitZ }, indices: new uint[] { 0, 1, 2 });
-        SdfMeshDraw[] draws = [new(Identity: new object(), Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity)];
+        SdfMeshDraw[] draws = [new(identity: new object(), material: 0, mesh: mesh, objectToWorld: Matrix4x4.Identity)];
         using var scene = SdfMeshIrradianceScene.Build(draws);
         var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>();
         _ = SdfMeshRegion.Plan(draws, placements);

@@ -81,8 +81,8 @@ public sealed class SdfFrameDressingAllocationLawTests {
         private IReadOnlyList<SdfMeshDraw> m_draws = [];
         private bool m_primed;
 
-        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
-            m_program = program; m_transforms = transforms; m_moved = moved; m_draws = meshDraws;
+        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, SdfMeshDrawList meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+            m_program = program; m_transforms = transforms; m_moved = moved; m_draws = meshDraws.Draws;
             if (!m_primed) { return Make(); }
 
             var frame = m_pool[m_next];

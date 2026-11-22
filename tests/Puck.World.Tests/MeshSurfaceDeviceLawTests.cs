@@ -48,8 +48,8 @@ public sealed class MeshSurfaceDeviceLawTests {
         positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
     );
     private static readonly SdfMeshDraw[] Draws = [
-        new(Identity: "slanted", Material: 5, Mesh: Slanted, ObjectToWorld: Matrix4x4.CreateScale(xScale: 2f, yScale: 1f, zScale: 1f)),
-        new(Identity: "tilted", Material: 0, Mesh: Tilted, ObjectToWorld: Matrix4x4.Identity),
+        new(identity: "slanted", material: 5, mesh: Slanted, objectToWorld: Matrix4x4.CreateScale(xScale: 2f, yScale: 1f, zScale: 1f)),
+        new(identity: "tilted", material: 0, mesh: Tilted, objectToWorld: Matrix4x4.Identity),
     ];
     // The slanted triangle's centroid, (1/3, 2/3, 1/3) in object space, is (2/3, 2/3, 1/3) under the scale; the camera
     // looks at it along -(1, 2, 0). The tilted triangle is seen at its centroid along a grazing ray from its front.

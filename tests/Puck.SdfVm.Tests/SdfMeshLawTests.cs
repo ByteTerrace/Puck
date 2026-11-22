@@ -21,7 +21,7 @@ public sealed class SdfMeshLawTests {
                 new SdfMeshLevel(Error: 0.3f, Indices: Indices, TriangleMaterials: default),
             ],
         };
-        var first = new SdfMeshDraw(Identity: 0, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity);
+        var first = new SdfMeshDraw(identity: 0, material: 0, mesh: mesh, objectToWorld: Matrix4x4.Identity);
         var draws = new[] { first, first with { Identity = 1 } };
         var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>(ReferenceEqualityComparer.Instance);
         var layout = SdfMeshRegion.Plan(draws: draws, meshes: placements);
@@ -104,7 +104,7 @@ public sealed class SdfMeshLawTests {
         Assert.Equal(expected: [(0, 2), (2, 1), (3, 1), (3, 1)], actual: [mesh.LevelOf(level: 0), mesh.LevelOf(level: 1), mesh.LevelOf(level: 2), mesh.LevelOf(level: 5)]);
 
         var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);
-        var draws = new[] { new SdfMeshDraw(Identity: 0, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity) };
+        var draws = new[] { new SdfMeshDraw(identity: 0, material: 0, mesh: mesh, objectToWorld: Matrix4x4.Identity) };
         var layout = SdfMeshRegion.Plan(draws: draws, meshes: placements);
         var words = new uint[layout.Words];
 

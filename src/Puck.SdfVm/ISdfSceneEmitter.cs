@@ -142,6 +142,11 @@ public interface ISdfSceneEmitter {
     /// <summary>Gets the revision of <see cref="MeshDraws"/>' content: moved whenever the emitter rewrote its list in
     /// place. An emitter that supplies a new list instead may leave it 0.</summary>
     long MeshDrawsRevision => 0;
+    /// <summary>Gets the journal of the rows of <see cref="MeshDraws"/> that changed, or <see langword="null"/>, the
+    /// default, for an emitter that keeps none, whose whole list the host composes again whenever its revision moves.</summary>
+    Puck.Abstractions.Gpu.GpuRowChanges? MeshDrawChanges => null;
+    /// <summary>Gets the journal endpoint captured with <see cref="MeshDraws"/>; zero for an emitter that keeps none.</summary>
+    long MeshDrawChangesSerial => 0L;
     /// <summary>Gets the immutable host identity table for this emitter's latest emitted instances (program ordinals)
     /// and current mesh draws (emitter-local ordinals), or null when none are named. Reuse its reference while only
     /// poses change; replace it when identities or ordinal membership change.</summary>

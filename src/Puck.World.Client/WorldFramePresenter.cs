@@ -1912,7 +1912,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         ? SdfUpdateRates.None
         : rates);
     /// <inheritdoc/>
-    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, SdfMeshDrawList meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
@@ -2454,8 +2454,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 ScreenRateCodes = (m_settings.RateTints ? ScreenRateCodes() : ReadOnlyMemory<byte>.Empty),
                 Volumes = m_volumes,
                 // Every emitter's mesh draws: the static placements' and the stamp pool's, then the neighbour worlds'.
-                MeshDraws = meshDraws,
-                MeshDrawsRevision = meshDrawsRevision,
+                MeshDraws = meshDraws.Draws,
+                MeshDrawsRevision = meshDraws.Revision,
+                MeshDrawChanges = meshDraws.Changes,
+                MeshDrawChangesSerial = meshDraws.Serial,
                 // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at
                 // its clock's presented phase (a world.row.set render lands on the next frame).
                 Lights = lighting.Lights,

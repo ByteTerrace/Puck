@@ -685,9 +685,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         );
         var moved = Matrix4x4.CreateTranslation(xPosition: 1f, yPosition: 2f, zPosition: 3f);
         SdfMeshDraw[] draws = [
-            new(Identity: "moved", Material: 4, Mesh: quad, ObjectToWorld: moved),
-            new(Identity: "triangle", Material: 5, Mesh: triangle, ObjectToWorld: Matrix4x4.CreateScale(scale: 2f)),
-            new(Identity: "quad", Material: 6, Mesh: quad, ObjectToWorld: Matrix4x4.Identity),
+            new(identity: "moved", material: 4, mesh: quad, objectToWorld: moved),
+            new(identity: "triangle", material: 5, mesh: triangle, objectToWorld: Matrix4x4.CreateScale(scale: 2f)),
+            new(identity: "quad", material: 6, mesh: quad, objectToWorld: Matrix4x4.Identity),
         ];
         var expected = new List<uint>();
 
@@ -714,7 +714,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // box's stretch, the staged cell's generation and its coarser level count. The generation's lifecycle is tested
         // separately; this layout law reads its nonzero value before comparing every packed word.
         void Selection(in SdfMeshDraw draw, int record) {
-            var boxed = SdfMeshBox.TryOf(box: out var box, draw: in draw);
+            var boxed = SdfMeshBox.TryOfFixed(box: out var box, draw: in draw);
             var at = ((record * SdfMeshRecord.DrawWords) + SdfMeshRecord.SelectionWord);
             float[] rows = [
                 box.Center.X, box.Center.Y, box.Center.Z, 0f,
@@ -812,7 +812,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         );
         Assert.Equal(expected: stillBytes, actual: rig.Gpu.HostBytes());
 
-        SdfMeshDraw[] shifted = [draws[0], draws[1], (draws[2] with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: 0f, yPosition: 0f, zPosition: 7f) })];
+        SdfMeshDraw[] shifted = [draws[0], draws[1], (draws[2].PlacedAt(objectToWorld: Matrix4x4.CreateTranslation(xPosition: 0f, yPosition: 0f, zPosition: 7f)))];
 
         rig.Render(
             meshDraws: shifted,
@@ -844,7 +844,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         );
 
         rig.Land(
-            meshDraws: [.. shifted, new(Identity: "landed", Material: 7, Mesh: landed, ObjectToWorld: Matrix4x4.Identity)],
+            meshDraws: [.. shifted, new(identity: "landed", material: 7, mesh: landed, objectToWorld: Matrix4x4.Identity)],
             time: 0f
         );
 
@@ -873,8 +873,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             indices: new uint[] { 0, 1, 2 },
             positions: Enumerable.Range(count: BigVertices, start: 0).Select(selector: static index => new Vector3(x: index, y: index & 1, z: 0f)).ToArray()
         );
-        var small = new SdfMeshDraw(Identity: "quad", Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity);
-        var large = new SdfMeshDraw(Identity: "big", Material: 1, Mesh: big, ObjectToWorld: Matrix4x4.CreateTranslation(xPosition: 4f, yPosition: 0f, zPosition: 0f));
+        var small = new SdfMeshDraw(identity: "quad", material: 1, mesh: quad, objectToWorld: Matrix4x4.Identity);
+        var large = new SdfMeshDraw(identity: "big", material: 1, mesh: big, objectToWorld: Matrix4x4.CreateTranslation(xPosition: 4f, yPosition: 0f, zPosition: 0f));
         using var rig = new Rig(clock: clock, selector: selector, slots: 1);
 
         rig.Warm();
@@ -915,16 +915,16 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // More draws than the region reserves records for, naming none of the big mesh's words, which outnumber the
         // retained slack; a forced relocation packs every mesh the list names, the one relocation the region shrinks at.
         var many = Enumerable.Range(count: (SdfMeshRegionArena.MinimumDrawCapacity + 44), start: 0).Select(selector: index => new SdfMeshDraw(
-            Identity: index,
-            Material: 1,
-            Mesh: quad,
-            ObjectToWorld: Matrix4x4.CreateTranslation(xPosition: index, yPosition: 0f, zPosition: 0f)
+            identity: index,
+            material: 1,
+            mesh: quad,
+            objectToWorld: Matrix4x4.CreateTranslation(xPosition: index, yPosition: 0f, zPosition: 0f)
         )).ToArray();
         using var rig = new Rig(slots: 1);
         using var fresh = new Rig(slots: 1);
 
         rig.Warm();
-        rig.Land(meshDraws: [new(Identity: "big", Material: 1, Mesh: big, ObjectToWorld: Matrix4x4.Identity)], time: 0f);
+        rig.Land(meshDraws: [new(identity: "big", material: 1, mesh: big, objectToWorld: Matrix4x4.Identity)], time: 0f);
 
         var grown = rig.Engine.MeshRegionBytes;
 
@@ -933,7 +933,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // A region that never grew past the granule, planned through the same draw lists but a small first mesh, lays the
         // second list out alike.
         fresh.Warm();
-        fresh.Land(meshDraws: [new(Identity: "big", Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity)], time: 0f);
+        fresh.Land(meshDraws: [new(identity: "big", material: 1, mesh: quad, objectToWorld: Matrix4x4.Identity)], time: 0f);
         fresh.Land(meshDraws: many, time: 0f);
 
         var used = ((int)rig.Engine.MeshRegionUsedBytes);
@@ -1076,12 +1076,12 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             indices: new uint[] { 0, 1, 2, 0, 2, 3 },
             positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
         );
-        SdfMeshDraw[] one = [new(Identity: 0, Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity)];
+        SdfMeshDraw[] one = [new(identity: 0, material: 1, mesh: quad, objectToWorld: Matrix4x4.Identity)];
         var many = Enumerable.Range(count: 8, start: 0).Select(selector: index => new SdfMeshDraw(
-            Identity: index,
-            Material: index,
-            Mesh: quad,
-            ObjectToWorld: Matrix4x4.CreateTranslation(xPosition: index, yPosition: 0f, zPosition: 0f)
+            identity: index,
+            material: index,
+            mesh: quad,
+            objectToWorld: Matrix4x4.CreateTranslation(xPosition: index, yPosition: 0f, zPosition: 0f)
         )).ToArray();
 
         rig.Render(

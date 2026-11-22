@@ -407,7 +407,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         );
     }
     /// <inheritdoc/>
-    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, SdfMeshDrawList meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         var programChanged = !ReferenceEquals(
             objA: program,
             objB: m_lastProgram
@@ -477,8 +477,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 Exposure = WorldRenderSettings.Pinned(exposure: environment.Exposure, pin: Session?.ExposurePin),
                 Sky = environment.Sky,
                 // The mirrored world's static placements' meshes, then its stamp pool's.
-                MeshDraws = meshDraws,
-                MeshDrawsRevision = meshDrawsRevision,
+                MeshDraws = meshDraws.Draws,
+                MeshDrawsRevision = meshDraws.Revision,
+                MeshDrawChanges = meshDraws.Changes,
+                MeshDrawChangesSerial = meshDraws.Serial,
             },
             settings: new SdfFrameSettings {
                 // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
@@ -834,4 +836,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public IReadOnlyList<SdfMeshDraw> MeshDraws => m_meshDraws.Draws;
     /// <inheritdoc/>
     public long MeshDrawsRevision => m_meshDraws.Revision;
+    /// <inheritdoc/>
+    public Puck.Abstractions.Gpu.GpuRowChanges? MeshDrawChanges => m_meshDraws.Changes;
+    /// <inheritdoc/>
+    public long MeshDrawChangesSerial => m_meshDraws.Serial;
 }

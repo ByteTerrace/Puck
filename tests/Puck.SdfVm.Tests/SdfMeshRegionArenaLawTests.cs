@@ -101,5 +101,5 @@ public sealed class SdfMeshRegionArenaLawTests {
         indices: new uint[] { 0, 1, 2 },
         positions: new Vector3[] { new(x: offset, y: 0f, z: 0f), new(x: (offset + 1f), y: 0f, z: 0f), new(x: offset, y: 1f, z: 0f) }
     );
-    private static SdfMeshDraw Draw(SdfMesh mesh) => new(Identity: mesh, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity);
+    private static SdfMeshDraw Draw(SdfMesh mesh) => new(identity: mesh, material: 0, mesh: mesh, objectToWorld: Matrix4x4.Identity);
 }

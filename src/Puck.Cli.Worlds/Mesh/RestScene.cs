@@ -301,14 +301,16 @@ public sealed class RestScene {
         public SdfProgram? Program { get; private set; }
         public DynamicTransform[] Transforms { get; private set; } = [];
 
-        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, SdfMeshDrawList meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
             Program = program;
             Transforms = [.. transforms];
 
             return new SdfFrame(Program: program, ProgramChanged: false, Time: 0f, Views: []) {
                 DynamicTransforms = transforms,
-                MeshDraws = meshDraws,
-                MeshDrawsRevision = meshDrawsRevision,
+                MeshDraws = meshDraws.Draws,
+                MeshDrawsRevision = meshDraws.Revision,
+                MeshDrawChanges = meshDraws.Changes,
+                MeshDrawChangesSerial = meshDraws.Serial,
                 MovedTransforms = moved,
             };
         }

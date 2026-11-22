@@ -77,7 +77,7 @@ public static class MeshSceneCommand {
                 continue;
             }
             if (mesh is null) { continue; }
-            draws.Add(item: new SdfMeshDraw(Identity: group, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity));
+            draws.Add(item: new SdfMeshDraw(identity: group, material: 0, mesh: mesh, objectToWorld: Matrix4x4.Identity));
             labels.Add(item: scene.Label(group: group, owner: null));
         }
         if (draws.Count == 0) {
@@ -101,7 +101,7 @@ public static class MeshSceneCommand {
         var target = draws[changed];
         var copy = new SdfMesh(indices: target.Mesh.Indices.ToArray(), normals: target.Mesh.Normals.ToArray(), positions: target.Mesh.Positions.ToArray(), triangleMaterials: target.Mesh.TriangleMaterials.ToArray());
         var replaced = new List<SdfMeshDraw>(collection: draws) { [changed] = target with { Mesh = copy } };
-        var moved = new List<SdfMeshDraw>(collection: draws) { [changed] = target with { ObjectToWorld = (target.ObjectToWorld * Matrix4x4.CreateTranslation(position: new Vector3(x: 0f, y: 0.001f, z: 0f))) } };
+        var moved = new List<SdfMeshDraw>(collection: draws) { [changed] = target.PlacedAt(objectToWorld: (target.FixedPlacement * Matrix4x4.CreateTranslation(position: new Vector3(x: 0f, y: 0.001f, z: 0f)))) };
         var center = ((target.Mesh.PositionLow + target.Mesh.PositionHigh) * 0.5f);
         var output = Console.Out;
         var triangles = draws.Sum(selector: static draw => ((long)draw.Mesh.TriangleCount));

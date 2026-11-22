@@ -729,9 +729,13 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   (`sdfMeshPoseOf`) and derive its world box the same way (`sdfSelectionBox`), so
   a body that moves rewrites its slot's row and no record. The host judges it by
   `SdfMeshBox.Ridden`, the box's twin, held per row as last judged
-  (`SdfWorldTables.RowSelection`) and moved as its slot moves (`NoteMovedSlots`);
-  a producer that names a slot builds the draw's matrix from that slot's
-  transform in the same frame, or the CPU and the kernels place it apart. A cut
+  (`SdfWorldTables.RowSelection`) and moved as its slot moves (`NoteMovedSlots`).
+  A moving draw riding its slot (`SdfMeshDraw.PlacedBySlot`) keeps its scale and
+  no pose: every CPU reader places it through one door, `SdfMeshDraw.PlacementIn`
+  (the frame's transform rows), and `SdfMeshDraw.FixedPlacement`, which a static
+  scene reads, refuses it. Such a draw compares equal wherever its slot moves, so a
+  body that only moved writes no draw and no row (`SdfMeshDresserSlotLawTests`);
+  a moving rigid copy's pose moves no `SdfMeshInstance.Revision` either. A cut
   of a rider's pose history (`SdfMeshObservation.PoseCut`) reseats its slot's
   previous row (`ReseatRiddenSlot`). Every raster pass uploads 224 bytes of controls
   and records one counted indirect draw per phase. A draw with no
@@ -1667,7 +1671,11 @@ counts in `sdf.transforms`, never in `records.posed`.
   `FrameAccess` exposes (a group's shown mesh, its tier, the list) moves it through one of them. Rigid copies come
   through the composition source's copy journal (`SdfFrame.MeshCopyChanges`, a `GpuChangedRows` read by a
   `GpuRowCursor`), which the dresser and the bake's layout check each read. `sdf.instances.dress.groups-visited`,
-  `.groups-stood` and `.copies-visited` count it.
+  `.groups-stood` and `.copies-visited` count it. A moved slot poses only the groups that ride it, and only where its
+  scale moved (`DrawBinding.Repose`); a rigid copy's root slot is past every group's, so the walk stops before it.
+  The host draws arrive with a journal too: `SdfMeshDrawComposer` composes each producer's draws (a scene's statics
+  and stamp pool, `WorldSceneMeshDraws`; the composition's emitters) and copies and owes only the rows a producer's
+  journal names, which the dresser's host cursor reads.
 - **A pack visits only what woke.** The stamp pool, its rigid bodies (`WorldRigidAssets.Pack`) and the catalog
   avatars (`WorldCatalogAvatars.Pack`) each keep an awake set, so a frame costs the registrations something woke, never
   the pool: a body's presented inputs through the source's journal (`IWorldStampSource.BodyChanges`, which
