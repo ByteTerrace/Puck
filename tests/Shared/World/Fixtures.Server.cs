@@ -27,24 +27,33 @@ internal static partial class Fixtures {
         fixture.Step();
         return Assert.IsType<WorldSubmissionResult.Mutation>(@object: Assert.Single(collection: results)).Outcome;
     }
-    /// <summary>Starts a world with a live replica peer. The admission grants no mutation or row access.</summary>
+    /// <summary>Starts a world with a live replica peer, and room to admit three more through <see cref="AdmitPeer"/>.
+    /// The admission grants no mutation or row access.</summary>
     public static WorldFixture FreshServerWithPeer(WorldDefinition definition, out Principal peer) {
-        var entry = new WorldAdmissionEntry(Domain: "https://issuer.test", Subject: "reader",
-            Mode: WorldAdmissionTrustMode.OAuth, Disclosure: WorldDisclosureTier.Replica, Grants: []);
-        var fixture = FreshServer(definition with { Admission = [entry],
+        var fixture = FreshServer(definition with { Admission = [PeerAdmission],
             PopulationRaw = definition.Population with { CapacityRaw = 8, NetworkPlayers = 4 } });
         try {
-            var server = fixture.Server;
-            Assert.True(WorldAdmissionDoor.TryMatchOAuthEntry(server.Definition.Admission, entry.Domain, entry.Subject!, out var verdict));
-            Assert.True(server.TryAdmitPeerConnection(verdict, server.Definition.Admission, out var admitted, out var reason), reason);
-            peer = admitted.Identity;
-            Assert.True(server.IsLivePeer(peer));
+            peer = fixture.AdmitPeer();
             return fixture;
         } catch {
             fixture.Dispose();
             throw;
         }
     }
+    /// <summary>Admits one more live replica peer into a world <see cref="FreshServerWithPeer"/> started, as a socket
+    /// host admits a connection.</summary>
+    /// <param name="fixture">The running world.</param>
+    /// <returns>The admitted peer's principal.</returns>
+    public static Principal AdmitPeer(this WorldFixture fixture) {
+        var server = fixture.Server;
+        Assert.True(WorldAdmissionDoor.TryMatchOAuthEntry(server.Definition.Admission, PeerAdmission.Domain, PeerAdmission.Subject!, out var verdict));
+        Assert.True(server.TryAdmitPeerConnection(verdict, server.Definition.Admission, out var admitted, out var reason), reason);
+        Assert.True(server.IsLivePeer(admitted.Identity));
+        return admitted.Identity;
+    }
+
+    private static readonly WorldAdmissionEntry PeerAdmission = new(Domain: "https://issuer.test", Subject: "reader",
+        Mode: WorldAdmissionTrustMode.OAuth, Disclosure: WorldDisclosureTier.Replica, Grants: []);
 
     private sealed class InputFixtureState {
         public required WorldInputOwner Owner;

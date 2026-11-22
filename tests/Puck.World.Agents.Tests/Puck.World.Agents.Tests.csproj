@@ -10,6 +10,7 @@
         <ProjectReference Include="../../src/Puck.World.AgentBridge/Puck.World.AgentBridge.csproj" />
         <ProjectReference Include="../../src/Puck.World.AgentHarness/Puck.World.AgentHarness.csproj" />
         <ProjectReference Include="../../src/Puck.World.AgentHarness.Azure/Puck.World.AgentHarness.Azure.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Console/Puck.World.Console.csproj" />
         <ProjectReference Include="../../src/Puck.World.Machines/Puck.World.Machines.csproj" />
         <ProjectReference Include="../../src/Puck.World.Protocol/Puck.World.Protocol.csproj" />
         <ProjectReference Include="../../src/Puck.World.Schema/Puck.World.Schema.csproj" />
@@ -17,5 +18,11 @@
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
+        <Compile Include="../Shared/World/Fixtures.Server.cs" Link="World/Fixtures.Server.cs" />
+        <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
+        <Compile Include="../Shared/World/TestMachines.Empty.cs" Link="World/TestMachines.Empty.cs" />
     </ItemGroup>
 </Project>
