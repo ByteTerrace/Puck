@@ -86,6 +86,22 @@ public sealed class WorldLinkBoundary : IHostTickBoundary {
 
     internal void Enqueue(Action submission) => m_waiting.Enqueue(submission);
 
+    /// <summary>Runs work that writes the authority where the pump may: at once when a submission made now would mint
+    /// at once (<see cref="IsOpen"/>), and otherwise on the pump as its next settled boundary window opens, in the
+    /// order posted and ahead of that window's console lines. A caller outside the window (the frame, an input
+    /// capture) posts what it needs of the authority here and reads no answer.</summary>
+    /// <param name="work">The work.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="work"/> is <see langword="null"/>.</exception>
+    public void Post(Action work) {
+        ArgumentNullException.ThrowIfNull(argument: work);
+
+        if (IsOpen) {
+            work();
+        } else {
+            m_waiting.Enqueue(item: work);
+        }
+    }
+
     /// <summary>Marks a tick as handed to the host's step thread by the calling thread, which reads no authority of
     /// the host until <see cref="Collected"/>.</summary>
     public void HandedOver() => Volatile.Write(location: ref m_lentBy, value: Environment.CurrentManagedThreadId);
@@ -95,7 +111,7 @@ public sealed class WorldLinkBoundary : IHostTickBoundary {
     /// <summary>Registers what the pump publishes of the authority for its readers outside the window: it runs on the
     /// pump each time the window closes with no tick in flight, while the authority may still be read, and never
     /// otherwise, so what it publishes is always a settled boundary's.</summary>
-    /// <param name="publish">The publisher. It must not throw.</param>
+    /// <param name="publish">The publisher. What it throws propagates from the close, with the window closed.</param>
     /// <exception cref="ArgumentNullException"><paramref name="publish"/> is <see langword="null"/>.</exception>
     public void PublishOnClose(Action publish) {
         ArgumentNullException.ThrowIfNull(argument: publish);

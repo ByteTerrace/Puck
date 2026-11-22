@@ -66,27 +66,47 @@ public sealed class WorldDeviceProfileState {
     /// <summary>The table a selection names while its levers are being written (<see cref="Select"/>).</summary>
     public const string PendingTable = "pending";
 
-    /// <summary>Applies the profile a boot selects by its adapter once the device has named it, on the frame thread
-    /// before its first frame stages anything, unless a selection was already made, which a boot never overrides: its
-    /// memory bars and then its table, through <see cref="Select"/>, the one door <c>world.device-profile</c> takes too.
-    /// The table is written directly, never as a queued console line, so no hold on a console session can delay or drop
-    /// it.</summary>
+    /// <summary>Applies the profile a boot selects by its adapter once the device has named it, unless a selection was
+    /// already made, which a boot never overrides. Its memory bars apply in the call, on the frame thread before its
+    /// first frame stages anything. Its table's levers are writes to the authority, which the frame may not make: they
+    /// go through <see cref="Select"/>, the one door <c>world.device-profile</c> takes too, where
+    /// <paramref name="authority"/> runs them, which for a looping host is the next boundary window, ahead of that
+    /// window's console lines. They are never a queued console line, so no hold on a console session can delay or drop
+    /// them.</summary>
     /// <param name="profile">The profile the world authors for the adapter, or <see langword="null"/> for none.</param>
     /// <param name="adapter">The adapter's name.</param>
     /// <param name="render">The world's render defaults, which hold the profile's table.</param>
     /// <param name="presets">The door the table's levers are written through, or <see langword="null"/> where no renderer
     /// is composed.</param>
-    /// <returns>The <c>world.device-profile</c> echo of what applied, or <see langword="null"/> when a selection was
-    /// already made.</returns>
-    public CommandResult? ApplyAtBoot(WorldDeviceProfile? profile, string? adapter, WorldRenderDefaults render, IWorldQualityPresets? presets) {
+    /// <param name="authority">Runs the table's lever writes where the authority may be written
+    /// (<c>WorldLinkBoundary.Post</c>).</param>
+    /// <param name="report">Receives the <c>world.device-profile</c> echo of what applied, or the presets' refusal, once
+    /// it has; never called when a selection was already made.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="authority"/> or <paramref name="report"/> is
+    /// <see langword="null"/>.</exception>
+    public void ApplyAtBoot(WorldDeviceProfile? profile, string? adapter, WorldRenderDefaults render, IWorldQualityPresets? presets, Action<Action> authority, Action<CommandResult> report) {
+        ArgumentNullException.ThrowIfNull(argument: authority);
+        ArgumentNullException.ThrowIfNull(argument: report);
+
         lock (m_gate) {
-            if (m_current != Selection.None) { return null; }
-            _ = ApplyLocked(adapter: adapter, profile: profile, source: "auto", table: null);
+            if (m_current != Selection.None) { return; }
+            _ = ApplyLocked(adapter: adapter, profile: profile, source: "auto", table: (((profile is not null) && (presets is not null)) ? PendingTable : null));
         }
 
-        return ((profile is null)
-            ? new CommandResult(Output: Echo())
-            : Select(adapter: adapter, presets: presets, principal: Principal.Console, profile: profile, render: render, source: "auto"));
+        if (profile is null) {
+            report(obj: new CommandResult(Output: Echo()));
+
+            return;
+        }
+
+        authority(obj: () => {
+            // A selection made meanwhile (a command's, in an earlier window) stands: the boot never overrides one.
+            lock (m_gate) {
+                if ((m_current.Source != "auto") || (m_current.Profile != profile.Name)) { return; }
+            }
+
+            report(obj: Select(adapter: adapter, presets: presets, principal: Principal.Console, profile: profile, render: render, source: "auto"));
+        });
     }
     /// <summary>Applies a profile: its memory bars, then its quality table (its own, or the world's preset of its tier)
     /// through the presets where a renderer is composed. The selection reads <see cref="PendingTable"/> until the

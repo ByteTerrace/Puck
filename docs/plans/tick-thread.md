@@ -44,11 +44,13 @@ Three properties follow.
 The old path, in which the pump executes the tick, is deleted. No toggle
 selects it.
 
-The work lands in three stages. The first moves no behaviour: the tick's
-parts are separated and the frame thread's cheap readers are fixed. The second
-closes each place the frame reads the authority, one structural door at a
-time, while the loop still waits for every tick. The third stops the wait,
-and that is where the frame time falls.
+The work landed in three stages. The first moved no behaviour: the tick's
+parts were separated and the frame thread's cheap readers fixed. The second
+closed each place the frame read the authority, one structural door at a
+time, while the loop still waited for every tick. The third stopped the wait,
+and that is where the frame time falls. All three are built for every host
+shape; [the steps](#the-steps) name what is left (the wave, and what the lead
+measures).
 
 ## What the code does today
 
@@ -190,11 +192,11 @@ complete, keep its input, ask again.
 | The host | The pump's deadline | What the frame does meanwhile |
 |---|---|---|
 | Paced, producing frames, the last tick due this iteration | None: it polls | Produces, showing the last collected tick |
-| The same, an earlier tick of a catch-up burst | The pump's wait allowance (`HostWaits.PumpAllowance`) | Waits, because the next tick's input needs this tick's results |
-| Lockstep (`HostPacing.StepsOneTickPerFrame`), a capture's hold, the offscreen host | The allowance | Produces only once the tick is collected, as today |
-| A tick the capture schedule arms a capture on | The allowance | Produces once the tick is collected, so the capture is served on the frame it is served on today |
+| The same, an earlier tick of a catch-up burst | The pump's wait allowance (`HostWaits.PumpAllowance`) | Waits, because the next tick's input needs this tick's results; past the allowance it produces and resumes the tick next iteration |
+| Lockstep (`HostPacing.StepsOneTickPerFrame`), a capture's hold, the offscreen host | The tick's stall budget | Produces only once the tick is collected, as before |
+| A tick the capture schedule arms a capture on | The allowance | Produces once the tick is collected, so the capture is served by the first frame after its tick |
 | Headless and paced, the last tick due | None: it polls | There is no frame; the pump goes on to its pacing wait, which the finished tick wakes |
-| Headless and unpaced | The allowance | There is no frame, and the host's time is its iteration count |
+| Headless and unpaced | The stall budget | There is no frame, and the host's time is its iteration count |
 
 [The loop beside the tick](#the-loop-beside-the-tick) records which of these
 rows are built.
@@ -249,13 +251,15 @@ debug world. An optimization is open: a lender could hand over the copy only
 when it is about to overwrite memory a record still names.
 
 The outbox records while a tick of its server executes, and at any other time
-when the delivering thread is not the thread that last collected
-(`WorldOutputHub.Records`). That covers the step thread during a tick. It also
-covers a socket task that applies a grant or a session lever through
-`WorldServer.ExecuteAuthorityOperation` between two ticks, whose delivery
-would otherwise reach `WorldClient` on the socket thread while the frame is
-being produced. Step 9 replaces the test for the collecting thread with the
-window: a delivery records whenever the deliverer is not the pump inside it.
+when the delivering thread is not the pump inside its boundary window
+(`WorldOutputHub.Records`, over `WorldLinkBoundary.DeliversHere`). That covers
+the step thread during a tick. It also covers a socket task that applies a
+grant or a session lever through `WorldServer.ExecuteAuthorityOperation`
+between two ticks, whose delivery would otherwise reach `WorldClient` on the
+socket thread while the frame is being produced. Before a pump registers, a
+host boots on one thread and delivers at once; after it unregisters, only the
+thread that was the pump does. A server no host admitted has no window and
+defers only while its tick executes.
 
 The pump collects (`WorldOutputHub.Collect`) at these points, and nowhere
 inside produce: in `WorldServerStepShell.Prepare`, before a new tick's mailbox
@@ -291,12 +295,13 @@ and records in tick order. Narration stays inline too, since
 `WorldOutputHub.Narrate` already takes its own lock for lines that socket
 tasks write.
 
-The replay hands sinks the tick's completion time. `WorldClient` and
-`WorldSessionMirror` stamp a snapshot's arrival with it instead of reading the
-clock, and `WorldSessionMirror.ResolveInterpolationAlpha` then yields the
-fraction it yields today. This is not built: while the pump waits for every
-tick of a frame-producing host, the collect follows the tick at once and the
-clock reads the same. It belongs to step 10.
+The replay hands sinks the tick's completion time. The thread that executes a
+tick stamps the time it finished (`WorldExecutedTick.CompletedAt`), the
+collect states it for the length of the replay (`WorldDeliveryClock.ReplayAt`),
+and `WorldClient` and `WorldSessionMirror` stamp a snapshot's arrival from
+`WorldDeliveryClock.Arrival` instead of reading the clock, so
+`WorldSessionMirror.ResolveInterpolationAlpha` yields the fraction a frame
+that applied the tick at once would. A delivery made directly arrives now.
 
 ### What a delivered document may reach
 
@@ -333,6 +338,12 @@ snapshot's handlers, prepare and collect all run there, as they do now. The
 window is an explicit scope the loop opens and closes on the pump, held in a
 thread-static, and the pump is registered once before the loop's first
 iteration, so the first control phase is inside the rule like every other.
+It is `WorldLinkBoundary`, one for each `WorldInstanceHost`, which hands it to
+every world it admits (`WorldServer.Boundary`) and to its step thread. A tick
+handed to the step thread closes the window to the thread that handed it over
+until that thread collects it (`WorldLinkBoundary.HandedOver`,
+`WorldLinkBoundary.Collected`), wherever in the loop the collect falls, so a
+poll that finds the tick still executing reads nothing either.
 
 Outside the window the pump has one door, the link, and the link is narrow.
 
@@ -367,17 +378,20 @@ and the first is preferred wherever it can be had.
   machine outputs as a table of video outputs and clock values, not a
   reference to the machine host.
 - **A check at the server's seams, for what stays in the composition root.**
-  `WorldServer` already guards some of its state with
-  `WorldServer.ThrowIfTickPending`. That check gains the window, and every
-  member the tick mutates gains the check: `WorldServer.Grants`,
-  `WorldServer.Configuration`, `WorldServer.Tick`, `WorldServer.SolidField`,
-  `WorldServer.Input`, `WorldServer.CompletedEngineTicks`,
-  `WorldServer.DeliveryTime`, `WorldServer.DocumentVersion`,
-  `WorldServer.NextInputTick`, `WorldServer.SolidRevision`,
-  `WorldServer.Search`, `WorldServer.JournalLength` and the rest the review
-  listed. The throw does not depend on timing: produce is outside the window
-  always, so a reader throws on its first frame whether or not a tick was
-  running.
+  `WorldServer.ThrowIfTickPending` carries the window
+  (`WorldLinkBoundary.Refusal`), and every member the tick mutates passes it
+  or its window-only half (`WorldServer.ThrowIfOutsideWindow`, for a member
+  the stepping machinery reads while a tick is held across wait slices):
+  `WorldServer.Grants`, `WorldServer.Configuration`, `WorldServer.Tick`,
+  `WorldServer.SolidField`, `WorldServer.Input`,
+  `WorldServer.CompletedEngineTicks`, `WorldServer.DeliveryTime`,
+  `WorldServer.DocumentVersion`, `WorldServer.NextInputTick`,
+  `WorldServer.SolidRevision`, `WorldServer.Search`,
+  `WorldServer.JournalLength` and the rest the review listed, and the gate
+  behind `WorldServer.ExecuteAuthorityOperation`. The throw does not depend on
+  timing: produce is outside the window always, so a reader throws on its
+  first frame whether or not a tick was running, and the exception's stack
+  names it.
 
 ## The determinism invariant
 
@@ -426,6 +440,15 @@ or an order, so the same document and input give the same state.
 - The seam check covers the pump. Another thread that reads a server's
   property without `WorldServer.ExecuteAuthorityOperation` was unsafe before
   this change and still is.
+- A world another process steps delivers on its socket task
+  (`WorldRemoteAuthority`'s observation loop), outside the outbox, into a
+  `WorldSessionMirror`. The mirror is written for that: its tables publish
+  through volatile writes and whole images, and its dense sets are read under
+  its write gate. Its presentation state mirror has one writer,
+  `WorldSessionMirror.FollowState`, which does not write from inside a fork's
+  partition (`JobPool.InPartition`), so a delivery that lands while a frame's
+  fork runs waits for the next follow. What is left is a per-slot read (a
+  pose, a fact) that can see a delivery half applied, as it could before.
 - Presentation is outside the contract, as [rule 4](../../AGENTS.md#core-rules)
   says: which frame first shows a tick depends on timing.
 
@@ -505,12 +528,16 @@ Two readers are found by their effect and not by a server reference.
   in flight, the frame would present the new step against the previous tick's
   interpolation and then step backward when the tick arrives. So a seat's
   step is held as pending only while a tick that will carry it is in flight:
-  the wave handed over in this host step holds a tick of the local world the
-  seat is routed to. It is presented when that tick is collected. In every
-  other case the step is presented at once, as now: the routed world is
-  paused or stopped, it is not due in this host step, or its clock is another
-  process's (`WorldAuthorityEndpoint.ClockOwnedHere` is false). A world that
-  steps less often than the host therefore never accumulates look steps.
+  the host step being prepared hands over a tick of the local world the
+  seat is routed to (`WorldSeatViewState.CompleteTick`, asked through
+  `IWorldEmbodiedSeats.AdvanceSeatViews`). It is presented when that tick is
+  collected (`IWorldEmbodiedSeats.PresentSeatLook`, from
+  `WorldInstanceHost.TryStepAuthority`), and at the end of the host step if
+  the world took no tick after all. In every other case the step is presented
+  at once, as before: the routed world is paused or stopped, it is not due in
+  this host step, or its clock is another process's
+  (`WorldAuthorityEndpoint.ClockOwnedHere` is false). A world that steps less
+  often than the host therefore never accumulates look steps.
 - **Render poses.** `WorldClient.UpdateRenderPoses` scans
   `WorldClient.EntityCapacity` slots every frame and interpolates every
   active body, at rest or not. The pose table already keeps the dense list of
@@ -557,13 +584,15 @@ step thread and the audio thread (`JobWorkers.MachineWorkers`).
 The frame's fork puts one condition on this design. Its partitions read
 `WorldStateMirror` without a lock, so the mirror's install, refresh and apply
 must not run while a frame fork is in flight. They do not move to the step
-thread: a delivery reaches the mirror only through the outbox's replay, which
-runs on the frame thread in a collect, and a collect runs in the step
-section, after produce or inside the pacing wait, never inside produce, where
-the frame's fork is opened and joined. The replay is the one place a delivery
-writes the mirror, so the rule is checked there: it refuses to run while the
-frame class has a fork open. A frame fork held open across iterations would
-therefore hold the collect until it joins, and needs no double buffer.
+thread: a delivery reaches the client's mirror only through the outbox's
+replay, which runs on the frame thread in a collect, and a collect runs in
+the step section, after produce or inside the pacing wait, never inside
+produce, where the frame's fork is opened and joined. Nothing checks that at
+the replay: it rests on a fork joining in the call that opened it
+(`JobPool.Fork`). A frame fork held open across iterations would need the
+replay to refuse while the frame class has a fork open, which is not built.
+A session's state mirror, which a socket task's delivery can reach, is
+guarded at its one writer ([above](#the-determinism-invariant)).
 
 ## Input, and the time from input to display
 
@@ -658,8 +687,10 @@ authority the way it does now: on the pump, inside the window.
   wherever in the iteration that was, so an iteration that finished a step
   after produce is not read as a stall by the benchmark. The hint that the
   next iteration will step (`HostIteration.StepsNext`) leaves out the step
-  already open. Each iteration reports whether a tick was in flight while it
-  produced.
+  already open (`FixedStepPump.UnbegunTicks`). The frame's own step count
+  (`HostIteration.Steps`) is the steps collected since the frame before, and
+  the reading counts the iterations that produced while a step was in
+  progress (`HostFrameTimeline.NoteProducedBesideStep`).
 
 ## A hub of a dozen live worlds
 
@@ -681,10 +712,10 @@ same waves on the same thread, and T4 serves both hosts.
 
 ## The step thread as built
 
-Stage one is in the tree. Every authority tick a host steps, the boot world's
-included, executes on one step thread, and the loop waits for each tick before
-it does anything else. Nothing overlaps yet, so the same document and input
-give the same state as before.
+Every authority tick a host steps, the boot world's included, executes on one
+step thread. Stage one built that with the loop waiting for each tick;
+[the loop beside the tick](#the-loop-beside-the-tick) records where it no
+longer waits.
 
 - **Three parts.** `WorldServerStepShell.Prepare` closes the tick's input on
   the pump ([the prepared tick](#the-prepared-tick)).
@@ -711,12 +742,15 @@ give the same state as before.
   outlasts its slice still answers pending, on the step thread, and releases
   the gate. The pump runs its control phase and hands the next slice over, as
   [an incomplete tick](engine-job-system.md#an-incomplete-tick) describes.
-  Stage three replaces the slice with the wave.
+  The wave, when it is built, replaces the slice.
 - **Published host values.** `WorldHostStep.RatePerSecond` and
-  `WorldHostStep.StepInterrupted` read the boot authority only while no slice
-  is in flight (`WorldInstanceHost.StepInFlight`), and answer what they last
-  read while one is. The silo's `WorldSiloSimulation.RatePerSecond` still
-  reads its rows directly, which step 10 moves the same way.
+  `WorldHostStep.StepInterrupted` are published each time the boundary window
+  closes with no tick in flight (`WorldLinkBoundary.PublishOnClose`), so the
+  loop, which reads them outside the window, reads the values of the boundary
+  it last stood at; the console's control phase closes its window before the
+  pump compares the rate. The frame's values are collected the same way, by
+  the same hook, when no step is in progress (`WorldSimulation`). The silo's
+  rate is a value its host keeps, and reads no row.
 
 ### The prepared tick
 
@@ -762,8 +796,7 @@ closed input. That is the order [waves](#waves) already states.
 ### Two things the later stages keep
 
 Two things in a tick assumed that the thread running it was the pump. Both
-still mean the pump, and both must survive stage three, when the loop stops
-waiting.
+still mean the pump, and both hold now that the loop no longer waits.
 
 - **A held tick's owner is the thread that handed it over.** A tick held
   across wait slices names an owner: the one thread that never waits for the
@@ -780,10 +813,10 @@ waiting.
   a slice. The guarantee stops at a caller that runs `WorldTick.TryAdvance`
   itself on another thread; the synchronous doors that do
   (`WorldServer.Advance`) run on their caller's own thread and own what they
-  hold. In stage three the pump is still the thread that hands a wave over
+  hold. Beside the tick the pump is still the thread that hands a tick over
   and the thread that runs console lines, so it stays the owner. A thread
-  other than the pump that enters the gate while a wave runs waits on the
-  gate's lock as it does today.
+  other than the pump that enters the gate while a tick runs waits on the
+  gate's lock as before.
 - **The pump's wait for the step thread is its own work.** It goes through
   `HostWaits.OnDelegatedWork`, which is neither clipped to the pump's
   allowance (`HostWaits.PumpAllowance`) nor charged to it. Charged, every
@@ -797,72 +830,73 @@ waiting.
   deadline, which freezes the tick. So a slice that has not answered within
   the budget is computing, not waiting. The tick's own waits now run on the
   step thread, which is not the pump, so they are no longer charged to the
-  allowance either. In stage three the waits in
-  [the pump's waits](#the-pumps-waits) use the same form with the allowance
-  as their deadline, and stay uncharged.
+  allowance either. The waits in [the pump's waits](#the-pumps-waits) that
+  take the allowance use the same form with it as their deadline, and stay
+  uncharged.
 
 ### The loop beside the tick
 
-Stage three is built for the host shape it is safe on today: a paced host
-with no frame, which is the headless World. There the pump no longer waits
-for the last tick due.
+Stage three is built for every host that paces to the wall clock, with a
+frame or without: the windowed World and the headless one. There the pump no
+longer waits for the last tick due. A host that steps one tick per frame
+(lockstep, the offscreen host, an unpaced headless run) still waits for each
+tick, since its frame shows exactly the tick it stepped.
 
 - **The pump polls.** `FixedStepPump.Advance` hands the last step due to the
   simulation with a deadline already passed
-  (`IFixedStepSimulation.TryStep(in FixedStepContext, in CommandSnapshot, WaitDeadline)`),
-  under `FixedStepPump.RunsBesideStep`, which `HostLoop` sets each iteration.
-  The step thread executes the tick while the pump goes on to its pacing
-  wait. An earlier step of a burst is still waited for, since the next
-  step's input needs its results.
-- **The finished tick wakes the pacing wait.** The step thread calls the
-  loop's wake when a slice finishes (`JobLane.Finished`, through
-  `IFixedStepSimulation.WakeOnStepProgress`). `HostLoop` serves that wake
-  from `HostWaits.Pace` (`HostWaits.Serve`) and calls `FixedStepPump.Resume`,
-  which collects what finished and hands over what follows in the same host
-  step. It starts no new host step, so it closes no input: a new host step
-  starts only in the step section, after the iteration's input capture and
-  control phase. A step is counted in the iteration that collected it, and
-  the collect's time is charged to `simulate`.
+  (`IFixedStepSimulation.TryStep(in FixedStepContext, in CommandSnapshot, WaitDeadline)`).
+  The step thread executes the tick while the pump goes on to produce its
+  frame and to its pacing wait. An earlier step of a burst is waited for, up
+  to the pump's wait allowance, since the next step's input needs its
+  results; so is a step the pump finds still open when another is due behind
+  it, and the next begins only once it is collected. `FixedStepPump.TryStep`,
+  the one-tick-per-frame path, waits for its step up to the stall budget.
+- **The frame is produced beside the step.** `HostLoop` produces while a step
+  is in progress unless it steps one tick per frame. The frame shows the last
+  tick the pump collected: what the step writes reaches the client only at a
+  collect, and the pump reads no authority outside its window.
+- **Three places resume the open step.** The poll after produce, the pacing
+  wait's wake (`JobLane.Finished`, through
+  `IFixedStepSimulation.WakeOnStepProgress`, served from `HostWaits.Pace` by
+  `HostWaits.Serve`, in the headless loop and in the windowed host's timer
+  wait), and the next iteration's step section. Each calls
+  `FixedStepPump.Resume` or `FixedStepPump.Advance`, which collects what
+  finished and hands over what follows in the same host step. Only the step
+  section starts a new host step, after the iteration's input capture and
+  control phase, so no resume closes input. A step is counted in the
+  iteration that collected it, and the collect's time is charged to
+  `simulate`. The swap chain's own wait serves no wake, so a windowed host
+  the swap chain paces resumes after produce and in its next step section
+  only.
+- **A tick that will arm a scheduled capture is waited for.** The simulation
+  says so before the step begins (`IFixedStepSimulation.NextStepOwesFrame`,
+  from `WorldCaptureScheduler.ArmsAt`), the pump waits for that step up to its
+  allowance, and the step then ends the burst as before
+  (`IFixedStepSimulation.AwaitsFrame`), so the first frame after the tick
+  serves the capture.
+- **The run ends on a boundary.** A step still open when the loop ends is
+  waited for and completed (`FixedStepPump.Settle`) before the host tears
+  down, so every step that began ran its whole order of events.
 - **The order of events is the single-threaded loop's.** A host step is still
   a sequence of single ticks, the boot world's and then each instance's in
   name order, and the pump prepares each one only after it has collected the
   one before, with that tick's hooks, portal scan and screen-session settle
   in between. Resuming changes when the pump does that work, never its
-  order, so no state hash moves. The wave of [waves](#waves), which executes
-  every instance's tick with nothing from the pump between them, is not
-  built: it reorders five things, and the serial hand-off costs one wake of
-  the pump for each tick, which a host with a few worlds does not feel. A hub
-  of a dozen worlds does, and that is when the wave replaces it.
-- **The pump reads no authority while its tick is in flight.** Between a
-  hand-off and its collect the pump's only call into the host is the poll,
-  which reads host counters and the lane. Every guarded member of
-  `WorldServer` refuses the thread that handed a tick over until it has
-  collected it (`WorldTick.HandedOverByCallingThread`, in
-  `WorldServer.ThrowIfTickPending`), so a read that slips in throws when it
-  meets a tick in flight. That check depends on timing, which the window of
-  step 9 does not; it is the tripwire until the window lands. The host's
-  published values serve the loop's own readers
+  order, so no state hash moves (`TickBesideLoopLawTests` steps one input
+  through a waiting host and through three collect schedules of a host
+  beside its tick, and compares the state hash). The wave of
+  [waves](#waves), which executes every instance's tick with nothing from the
+  pump between them, is not built: it reorders five things, and the serial
+  hand-off costs one visit of the pump for each tick. A host whose frames the
+  swap chain paces gets two visits a frame, so with several worlds stepping
+  the pump waits in its step section for the ticks the frame did not cover.
+  That is when the wave replaces it.
+- **The pump reads no authority outside its window.** Every guarded member
+  of `WorldServer` refuses the pump there, and refuses the thread that handed
+  a tick over until it has collected it
+  ([the boundary window](#from-the-client-to-the-authority-the-boundary-window-and-the-link)).
+  The host's published values serve the loop's own readers
   (`WorldHostStep.RatePerSecond`, `WorldHostStep.StepInterrupted`).
-
-What a frame-producing host still needs before it runs beside the tick:
-
-- Nothing more from stage two's doors. The outbox, the link and the
-  presentation project are in: a delivery reaches `WorldClient` only at the
-  pump's collect, a submission outside the window queues, and the frame's
-  types cannot name the authority.
-- The window and the seam check (step 9), on the window the link built
-  (`WorldLinkBoundary`), which is what catches a read through a closure the
-  composition root wired.
-- The tick's completion time handed to the sinks at the replay, so a frame
-  that applies a tick late interpolates it as far as today.
-- In `HostLoop`: producing while a step is in flight outside lockstep, the
-  poll after produce, the wait on a tick a scheduled capture arms, the look
-  step held while its tick is in flight, the next-step hint less the open
-  step, and the in-flight mark in `host.frames`. `HostLoop` decides the mode
-  in one place, where it sets `FixedStepPump.RunsBesideStep`.
-- The rows of [the pump's waits](#the-pumps-waits) that say "the allowance"
-  still wait for the tick up to the stall budget, as before this stage. They
-  take the allowance with the frame-producing host.
 
 ### A slice that outlasts the stall budget
 
@@ -889,7 +923,7 @@ with what happens to it now that the thread is the step thread.
 | Scratch a thread reuses (`RuleExpressions`, `FixedStaticContactField`, `SdfFieldEvaluator`) | The step thread grows its own copy; the pump's stays for console work |
 | `ShardedWorkCounterSet`'s shards | Summed over threads on read |
 | A tick fork's owner (`JobPool.Fork`) | The step thread opens and resumes its tick's fork; the pool refuses a resume from another thread |
-| The frame thread's allocated bytes in `host.frames` | No longer include the tick's allocations, which no reading reports yet; step 10 adds the step thread's beside the tick lane |
+| The frame thread's allocated bytes in `host.frames` | No longer include the tick's allocations, which no reading reports yet; the lane that builds the wave adds the step thread's beside the tick lane |
 
 ## Systems considered
 
@@ -985,54 +1019,48 @@ what stages two and three must keep.
    project builds under its profile with them in it; step 9's window then
    throws on a read that reaches the authority through a wired closure.
 9. **The window and the seam check**, on every member the tick mutates.
-   Check: a law reads `WorldServer.Population` from a registered pump outside
-   the window, which throws; the windowed debug world plays the benchmark
-   route with no throw (the lead's run).
+   Built ([the boundary window](#from-the-client-to-the-authority-the-boundary-window-and-the-link)).
+   The window replaced three stand-ins: the outbox's test for the collecting
+   thread, the refusal of the thread that handed a tick over, which was a
+   mark on the tick, and `WorldHostStep`'s rate and stall flag, which now
+   publish as the window closes. Check: `TickBesideLoopLawTests` reads
+   `WorldServer.Population` and five more members from a registered pump
+   outside the window, which throws, inside it, which reads, and from another
+   thread, which the gate orders; the windowed debug world walks its gallery,
+   a portal crossing and a machine screen on both backends with no throw.
 
-   What it starts from. The window exists: `WorldLinkBoundary` registers the
-   pump before the loop (`HostLoop`) and `FixedStepPump` opens it around the
-   control phase at a tick boundary and around every step, the resume from
-   the pacing wait included. Not built: the seam. `WorldServer.ThrowIfTickPending`
-   gains the window, so the registered pump throws outside it, and the
-   members [the boundary window](#from-the-client-to-the-authority-the-boundary-window-and-the-link)
-   lists gain the check. Each server needs its host's `WorldLinkBoundary`; the
-   instance host already hands it to each world's link. Three things then
-   replace their stand-ins: the outbox's test for the collecting thread
-   (`WorldOutputHub.Records`), the handing thread's refusal
-   (`WorldTick.HandedOverByCallingThread`), and `WorldHostStep`'s published
-   rate and stall flag, which today refresh at any read with no tick in
-   flight and must refresh only inside the window, as it closes, because
-   `FixedStepPump` reads the rate right after the control phase. The step is
-   shaken out by booting: every pump-side read outside the window throws on
-   its first frame, headless first and then windowed on both backends.
+**Stage three: the wait ends.** Built for every wall-clock host
+([the loop beside the tick](#the-loop-beside-the-tick)).
 
-**Stage three: the wait ends.** Built for a host with no frame
-([the loop beside the tick](#the-loop-beside-the-tick)); a frame-producing
-host follows once step 9 and the loop's frame mechanics are built.
-
-10. **The loop stops waiting for the last due tick.** `HostLoop` produces
-    while a step is in flight outside lockstep, polls after produce only to
-    resume an open host step, waits on a tick a scheduled capture arms, and
+10. **The loop stops waiting for the last due tick.** Built: `HostLoop`
+    produces while a step is in progress outside lockstep, resumes an open
+    host step after produce, waits on a tick a scheduled capture arms, and
     counts a step in the iteration that collected it; `FixedStepPump` takes
-    the next due step after a resumed one in the step section; the two waves
-    replace the serial instance loop; the seat's look step is held while its
-    tick is in flight. The path on which the pump waits for every tick is
-    deleted. The unit handed to the step thread becomes the wave, whose
-    ticks wait out their own waits under their stall deadline, and the slice
-    protocol goes with the pump's wait. The silo's rate
-    (`WorldSiloSimulation.RatePerSecond`) is published as the desktop's is,
-    and `host.frames` reports the step thread's allocated bytes beside the
-    tick lane. The held tick's owner and the uncharged wait hold as
-    [built](#two-things-the-later-stages-keep). Check: `host.frames` shows iterations that produced while a tick
-    was in flight and the tick lane's cost apart from `simulate`; `puck test
-    --reproduce` passes at every worker count, with the scenarios the second
-    wave reorders re-recorded.
-11. **The pacing wait's wake.** A finished wave wakes `HostWaits.Pace`, which
-    resumes the open host step. Check: with a tick longer than produce, a
-    host step's two waves complete within one iteration, read from
-    `host.frames`' steps per iteration. The swap chain's own wait is not
-    serviced until [C0.6](engine-job-system.md#the-steps) puts it through the
-    door.
+    the next due step after a resumed one in the step section; the seat's
+    look step is held while its tick is in flight; a replayed snapshot
+    arrives stamped with its tick's completion time. The held tick's owner
+    and the uncharged wait hold as
+    [built](#two-things-the-later-stages-keep). Check: `host.frames` shows
+    iterations that produced beside a step and the tick lane's cost apart
+    from `simulate`; `TickBesideLoopLawTests` reaches the waiting host's
+    state hash under three collect schedules; `puck test --reproduce` passes
+    at one and four workers.
+
+    Not built, and owned by the lane that builds the wave: the two waves in
+    place of the serial instance loop, with the unit handed to the step
+    thread becoming the wave and the slice protocol going with the pump's
+    wait (the scenarios the second wave reorders are re-recorded then); and
+    `host.frames` reporting the step thread's allocated bytes beside the tick
+    lane. The path on which the pump waits for every tick stays for the hosts
+    that step one tick per frame, which show exactly the tick they stepped.
+11. **The pacing wait's wake.** Built: a finished tick wakes `HostWaits.Pace`,
+    which resumes the open host step, in the headless loop and in the
+    windowed host's timer wait. The swap chain's own wait is not serviced
+    until [C0.6](engine-job-system.md#the-steps) puts it through the door, so
+    a host the swap chain paces resumes after produce and in its next step
+    section. Check: with a tick longer than produce, a host step's ticks
+    complete within one iteration, read from `host.frames`' steps per
+    iteration.
 12. **The documents.** The hosting reference, the rendering register's
     pipelining decision and the `puck-world` skill describe the new loop; open
     question 7 and item 1 of the CPU frame are deleted.

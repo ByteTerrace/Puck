@@ -311,23 +311,28 @@ public static class WorldRenderRoot {
             }), pipelines.RetiredBuilds],
             Prepare = (in FrameContext context) => {
                 // The profile the world authors for this adapter applies once the device is up and has named its
-                // adapter, before the first frame's residencies stage anything; the device opens lazily, so it may have
-                // no identity when the root is composed. Its memory bars and then its quality table apply here, on the
-                // frame thread, through the door world.device-profile takes, so the device runs the path its table
-                // enables from its first frame; a lever command after it overrides it as usual.
+                // adapter; the device opens lazily, so it may have no identity when the root is composed. Its memory
+                // bars apply here, on the frame thread, before the first frame's residencies stage anything. Its
+                // quality table's levers are writes to the authority, which the frame may not make, so the loop makes
+                // them in its next boundary window, through the door world.device-profile takes: the device runs the
+                // path its table enables from the frame after that window; a lever command after it overrides it as
+                // usual.
                 if (!profileBound && (device.Identity is { } identity)) {
                     profileBound = true;
 
                     var render = client.Definition.Render;
+                    var window = sp.GetService<Puck.World.Protocol.WorldLinkBoundary>();
 
-                    if (profiles?.ApplyAtBoot(
+                    profiles?.ApplyAtBoot(
                         adapter: identity.AdapterName,
+                        authority: work => {
+                            if (window is null) { work(); } else { window.Post(work: work); }
+                        },
                         presets: sp.GetService<IWorldQualityPresets>(),
                         profile: WorldDeviceProfiles.Select(adapterName: identity.AdapterName, render: render),
-                        render: render
-                    ) is { } applied) {
-                        Console.Error.WriteLine(value: applied.Output);
-                    }
+                        render: render,
+                        report: static applied => Console.Error.WriteLine(value: applied.Output)
+                    );
                 }
                 display.Follow(
                     context: in context,

@@ -7,7 +7,7 @@ namespace Puck.World;
 
 /// <summary>The one fixed-step shell for every boot shape. The composition supplies its post-step and its collect.</summary>
 internal sealed class WorldSimulation(WorldHostStep step, Action afterInstances, WorldLinkBoundary boundary, Action collect) : IFixedStepSimulation {
-    private readonly CollectingBoundary m_boundary = new(collect: collect, inner: boundary, step: step);
+    private readonly WorldLinkBoundary m_boundary = Collecting(boundary: boundary, collect: collect, step: step);
 
     /// <inheritdoc/>
     public IHostTickBoundary TickBoundary => m_boundary;
@@ -15,19 +15,16 @@ internal sealed class WorldSimulation(WorldHostStep step, Action afterInstances,
     // The boundary window the loop opens around each control phase and each step call. Closing it with no step in
     // progress runs the collect first, still inside the window: whatever the window let the pump change (a console
     // grant or revoke, a load, a completed step) is copied for the frame before any frame reads it, so a withdrawn
-    // admission never shows for a frame after the authority withdrew it. While a step is in progress its tick may be
-    // executing, and the call that completes it collects.
-    private sealed class CollectingBoundary(WorldLinkBoundary inner, WorldHostStep step, Action collect) : IHostTickBoundary {
-        public void RegisterPump() => inner.RegisterPump();
-        public void UnregisterPump() => inner.UnregisterPump();
-        public void Open(bool drain) => inner.Open(drain: drain);
-        public void Close() {
-            try {
-                if (!step.StepInProgress) { collect(); }
-            } finally {
-                inner.Close();
-            }
-        }
+    // admission never shows for a frame after the authority withdrew it. That holds while a tick executes beside the
+    // frame too: the console runs only at a tick boundary, so its window closes, and collects, before the step that
+    // follows hands its tick over. While a step is in progress the frame keeps the values of the boundary before it,
+    // and the call that completes the step collects.
+    private static WorldLinkBoundary Collecting(WorldLinkBoundary boundary, WorldHostStep step, Action collect) {
+        boundary.PublishOnClose(publish: () => {
+            if (!step.StepInProgress) { collect(); }
+        });
+
+        return boundary;
     }
 
     /// <inheritdoc/>
