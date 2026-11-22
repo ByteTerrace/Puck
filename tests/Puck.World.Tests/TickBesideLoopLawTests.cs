@@ -32,8 +32,9 @@ public sealed class TickBesideLoopLawTests {
     // Steps the fixture for a fixed count of host iterations, joining a second seat from a device press captured before
     // one of them, and answers the authority's state hash with the tick it stands at. A waiting host takes each tick
     // whole (FixedStepPump.TryStep); a beside host leaves each tick executing (FixedStepPump.Advance), does a frame's
-    // worth of something else, and collects the tick wherever the schedule puts it: after that work, in its next step
-    // section, or as the run ends.
+    // worth of something else, and collects the tick wherever the schedule puts it: after that work
+    // (FixedStepPump.ContinueBurst), in its pacing wait (FixedStepPump.Resume, on each wake from the step thread, as a
+    // paced host's does while the tick costs less than its period), or in its next step section.
     private static (ulong Tick, ulong Hash, bool Joined) Run(bool beside, int resumeEvery) {
         (ulong Tick, ulong Hash, bool Joined) result = default;
 
@@ -54,7 +55,18 @@ public sealed class TickBesideLoopLawTests {
             server.Profiles.RememberPreferredController(preferred, device);
             using var router = new InputRouter(bindings: new ConfirmBinding(), registry: registry, slotResolver: roster, principalResolver: roster);
             var pump = new FixedStepPump(simulation, router, registry, captureOriginTicks: 0, holdsClock: false);
+            using var finished = new ManualResetEventSlim(initialState: false);
+            // The pacing wait: each wake from the step thread resumes the open step until it is collected. A wake can
+            // arrive after the call that collected its unit, so a resume that finds the unit still executing waits again.
+            void Pace() {
+                while (pump.StepPending) {
+                    Assert.True(finished.Wait(TimeSpan.FromSeconds(30)));
+                    finished.Reset();
+                    _ = pump.Resume();
+                }
+            }
 
+            simulation.WakeOnStepProgress(finished.Set);
             boundary.RegisterPump();
             try {
                 for (var iteration = 0; (iteration < Iterations); iteration++) {
@@ -75,13 +87,14 @@ public sealed class TickBesideLoopLawTests {
                     // The frame's place: the loop's thread is outside its window, and the tick may be in flight.
                     Assert.Throws<InvalidOperationException>(() => _ = server.Population);
                     if ((resumeEvery > 0) && ((iteration % resumeEvery) == 0)) {
-                        Thread.Sleep(millisecondsTimeout: 1);
-                        _ = pump.Resume();
+                        _ = pump.ContinueBurst(stepTicks: Fixtures.StepTicks);
                     }
+                    Pace();
                 }
 
                 Assert.True(pump.Settle());
             } finally {
+                simulation.WakeOnStepProgress(null);
                 boundary.UnregisterPump();
             }
 
@@ -99,8 +112,7 @@ public sealed class TickBesideLoopLawTests {
 
         Assert.Equal(((ulong)Iterations), waiting.Tick);
         Assert.True(waiting.Joined);
-        // Three schedules of the same input: collected only in the next step section, after every frame, and after
-        // some frames.
+        // Three schedules of the same input: collected in the pacing wait, after every frame, and after some frames.
         Assert.Equal(waiting, Run(beside: true, resumeEvery: 0));
         Assert.Equal(waiting, Run(beside: true, resumeEvery: 1));
         Assert.Equal(waiting, Run(beside: true, resumeEvery: 3));

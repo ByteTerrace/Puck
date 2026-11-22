@@ -152,12 +152,17 @@ public static class WorldServerStepShell {
                     // A fast-forwarding drive steps its burst inside one call, so the caller waits for each of its
                     // ticks whatever it was told: only how many recorded ticks a host step replays depends on it.
                     if ((tape is { WantsFastForwardStep: true }) && !pacing.StepsOneTickPerFrame) { wait = WaitDeadline.Synchronous(); }
-                    if (!thread.HandOver(server, tape, in current, deadline)) { return current.Tick; }
+                    if (thread.Prepare(server, tape, in current, deadline) < 0) { return current.Tick; }
+                    thread.HandOver();
+                } else if (!thread.Holds(server)) {
+                    throw new InvalidOperationException(message: "The step thread holds another wave than this authority's tick.");
                 }
-                if (!thread.TryCollect(server, wait, out prepared, out executed)) {
+                if (!thread.TryCollect(wait)) {
                     pending = WorldStepThread.ExecuteWait;
                     return current.Tick;
                 }
+                prepared = thread.PreparedAt(index: 0);
+                executed = thread.Result(index: 0);
             }
 
             if (executed.Pending is { } reason) {

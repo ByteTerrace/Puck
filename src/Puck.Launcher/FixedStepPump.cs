@@ -1,6 +1,7 @@
 using Puck.Abstractions.Waiting;
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.Maths;
 
 namespace Puck.Launcher;
 
@@ -21,11 +22,13 @@ namespace Puck.Launcher;
 /// at most one step whatever the interval was. Not thread-safe: driven from one pump thread per boot shape, same as the
 /// state it wraps.</para>
 /// <para>The two differ in what they do about a simulation that executes its step on a thread of its own.
-/// <see cref="TryStep"/> waits for the step, since its host shows exactly that tick. <see cref="Advance"/> leaves the
-/// last step due executing and returns, so its host goes on to produce a frame beside it, and resumes it later
-/// (<see cref="Resume"/>, or its own next call); it waits, for no longer than the pump's wait allowance, only for a
-/// step that another due step follows, whose input needs its results, and for one that will owe the host a frame
-/// (<see cref="IFixedStepSimulation.NextStepOwesFrame"/>). A step is counted by the call that collected it.</para>
+/// <see cref="TryStep"/> waits for the step, since its host shows exactly that tick. <see cref="Advance"/> waits for
+/// none: it hands a step over and returns while it executes, so its host goes on to produce a frame beside it, and the
+/// steps still due behind it follow when it is collected: after the frame (<see cref="ContinueBurst"/>, which runs the
+/// control phase before each step it begins, from the iteration's own input capture) or in the host's next call. Only
+/// a step that will owe the host a frame (<see cref="IFixedStepSimulation.NextStepOwesFrame"/>) is waited for, for no
+/// longer than the pump's wait allowance. <see cref="Resume"/> collects the step in progress and begins none, for a
+/// host's pacing wait. A step is counted by the call that collected it.</para>
 /// <para><b><see cref="Advance"/> is safe across a change of <c>stepTicks</c> between calls</b> (e.g. a portal
 /// crossing into a differently-rated world, per the four-world charter's "no restart" contract) — a design necessity
 /// once the simulation rate stops being <c>SimulationRate</c>'s compile-time constant. <see cref="ElapsedTicks"/> and
@@ -237,13 +240,14 @@ public sealed class FixedStepPump {
     /// the drain and the <c>mayStep</c> gate. A held step ends the call and discards the whole steps still due, with
     /// the capture pin rebased, exactly as a gated one does: the time spent waiting for the frame is never stepped,
     /// so the simulation neither passes the tick the frame must show nor bursts once the frame is served.</para>
-    /// <para>A pump given a wall clock also bounds the burst by the wall time it has spent: once the steps of one call
-    /// have taken one step's period of wall time, the whole steps still due are discarded and the capture pin rebased
-    /// by them, exactly as for a clamped frame. A call always takes its first due step. So while a step costs less than
-    /// its period the World catches up after a slow frame, and once a step costs more, each call takes one step: the
-    /// World runs slower than real time and the frame stays one step long, instead of every frame running the burst a
-    /// quarter second owes. What a step computes from its state and its snapshot is unchanged; only how much
-    /// simulated time a slow frame catches up is.</para></remarks>
+    /// <para>A pump given a wall clock also bounds the burst by what its steps cost: once the steps of one call have
+    /// taken one step's period of wall time on this thread, or the steps of the burst have taken one step's period to
+    /// execute on the simulation's own thread (read from the timeline's tick lane), the whole steps still due are
+    /// discarded and the capture pin rebased by them, exactly as for a clamped frame. A burst runs until the time owed
+    /// falls below a step, across calls. A call always takes its first due step. So while a step costs less than its
+    /// period the World catches up after a slow frame, and once a step costs more, a burst takes one step: the World
+    /// runs slower than real time instead of running ever further behind. What a step computes from its state and its
+    /// snapshot is unchanged; only how much simulated time a slow frame catches up is.</para></remarks>
     public int Advance(ulong deltaTicks, ulong maxFrameTicks, ulong stepTicks) {
         // The host time a clamp drops is never stepped, but a holding pump still withholds it: a capture's hold budget
         // is spent in host time, so a slow frame charges its whole interval, never only the clamped part.
@@ -285,13 +289,12 @@ public sealed class FixedStepPump {
             }
 
             var width = StepPending ? m_pendingContext.StepTicks : stepTicks;
-            // Only the last step due may be left executing: an earlier step of a burst is waited for, because the
-            // next step's input needs its results. A step this call resumes is one of them when another is due behind
-            // it, and the next begins only once it is collected.
-            var last = ((m_accumulatorTicks - Math.Min(m_accumulatorTicks, width)) < stepTicks);
 
-            if (!Step(collection: (last ? StepCollection.Polls : StepCollection.WaitsAllowance), stepTicks: width)) { break; }
+            // No step is waited for: one left executing ends the call, and the steps due behind it begin once it is
+            // collected, since the next step's input needs its results.
+            if (!Step(collection: StepCollection.Polls, stepTicks: width)) { break; }
             m_accumulatorTicks -= Math.Min(m_accumulatorTicks, width);
+            m_burstCostTicks += m_lastStepCostTicks;
             stepCount++;
 
             // A step that owes the host a frame (a capture armed for its tick) ends the burst here, keeping the
@@ -300,10 +303,11 @@ public sealed class FixedStepPump {
                 break;
             }
 
-            if (
+            if (m_accumulatorTicks < stepTicks) {
+                m_burstCostTicks = 0UL;
+            } else if (
                 (m_wallClock is { } wallClock) &&
-                (m_accumulatorTicks >= stepTicks) &&
-                ((wallClock.NowTicks - burstStartTicks) >= stepTicks)
+                (((wallClock.NowTicks - burstStartTicks) >= stepTicks) || (m_burstCostTicks >= stepTicks))
             ) {
                 var shedTicks = ((m_accumulatorTicks / stepTicks) * stepTicks);
 
@@ -311,6 +315,7 @@ public sealed class FixedStepPump {
 
                 CaptureOriginTicks += shedTicks;
                 m_accumulatorTicks -= shedTicks;
+                m_burstCostTicks = 0UL;
 
                 break;
             }
@@ -318,6 +323,14 @@ public sealed class FixedStepPump {
 
         return stepCount;
     }
+    /// <summary>Collects the step in progress and goes on with the steps the iteration's interval made due behind it,
+    /// each begun as <see cref="Advance"/> begins one: after the control phase and from the iteration's own input
+    /// capture. It samples no new interval, so it takes only steps that were already due when the iteration's step
+    /// section ran. A host calls it after it produces its frame, so a burst's later steps execute beside the next
+    /// frame instead of holding this one.</summary>
+    /// <param name="stepTicks">The step size the iteration resolved, in engine ticks.</param>
+    /// <returns>The number of whole steps collected.</returns>
+    public int ContinueBurst(ulong stepTicks) => (StepPending ? Advance(deltaTicks: 0UL, maxFrameTicks: stepTicks, stepTicks: stepTicks) : 0);
     /// <summary>Runs at most one <paramref name="stepTicks"/>-sized step — drain, snapshot, apply, step — whatever host
     /// interval preceded the call: the pacing of a host whose time is its own iteration count, never the wall clock, so
     /// a slow host iteration (a first render, a rebuild, a hitch) is followed by one step, not a catch-up burst.
@@ -407,6 +420,7 @@ public sealed class FixedStepPump {
             return false;
         }
         m_accumulatorTicks -= Math.Min(m_accumulatorTicks, width);
+        m_burstCostTicks += m_lastStepCostTicks;
 
         return true;
     }
@@ -450,6 +464,12 @@ public sealed class FixedStepPump {
         Polls,
     }
 
+    // What the steps of the open burst cost, in engine ticks: the simulation thread's execution time where it reports
+    // one, and this thread's time inside the simulation otherwise. Zero without a timeline.
+    private ulong m_burstCostTicks;
+    // What the step last completed cost, in the same unit.
+    private ulong m_lastStepCostTicks;
+
     // Apply input once, then retain the same coordinates and commands until the simulation completes. The
     // simulation's boundary window is open for the whole call, and drains deferred submissions only when the call
     // starts a step.
@@ -491,7 +511,10 @@ public sealed class FixedStepPump {
             window?.Close();
         }
         if (m_timeline is { } timeline) {
-            timeline.NoteTick(ticks: ((m_stepExecutedTicks > 0L) ? m_stepExecutedTicks : m_stepPumpTicks));
+            var cost = ((m_stepExecutedTicks > 0L) ? m_stepExecutedTicks : m_stepPumpTicks);
+
+            m_lastStepCostTicks = (ulong)Math.Max(val1: 0L, val2: (long)((cost * (double)FixedTickConversion.TicksPerSecond) / timeline.Time.TimestampFrequency));
+            timeline.NoteTick(ticks: cost);
             m_stepExecutedTicks = 0L;
             m_stepPumpTicks = 0L;
         }

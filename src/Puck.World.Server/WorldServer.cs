@@ -618,6 +618,31 @@ public sealed partial class WorldServer : IWorldServerHost {
         }
     }
 
+    // The authority whose tick the calling thread runs as one partition of a parallel wave (WorldStepThread), or null.
+    [ThreadStatic] private static WorldServer? ParallelWaveAuthority;
+
+    /// <summary>Marks the calling thread as running <paramref name="server"/>'s tick beside other authorities' ticks
+    /// until the scope is disposed: entering any other authority's gate at a tick boundary then throws, so a parallel
+    /// wave can never have two partitions share an authority or wait on one another's gates.
+    /// <see cref="WorldStepThread"/> is its one caller.</summary>
+    /// <param name="server">The authority whose tick the calling thread runs.</param>
+    /// <returns>The scope that restores the calling thread's previous reading.</returns>
+    internal static ParallelWaveScope ExecuteInParallelWave(WorldServer server) {
+        var previous = ParallelWaveAuthority;
+
+        ParallelWaveAuthority = server;
+
+        return new ParallelWaveScope(previous: previous, entered: true);
+    }
+
+    /// <summary>The span in which the calling thread runs one authority's tick in a parallel wave.</summary>
+    internal readonly ref struct ParallelWaveScope(WorldServer? previous, bool entered) {
+        /// <summary>Restores the calling thread's previous reading.</summary>
+        public void Dispose() {
+            if (entered) { ParallelWaveAuthority = previous; }
+        }
+    }
+
     // How many authority gates (of any server) the calling thread holds through EnterAtTickBoundary. A thread holding one
     // never waits at another server's boundary: the held tick it would wait for may need the gate it holds to settle.
     [ThreadStatic] private static int HeldGates;
@@ -633,7 +658,12 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// authority gate, and a wait that outlasts the tick stall enter without waiting; such a caller reads
     /// <see cref="WorldTick.BlockedDetail"/> and refuses, throws or queues for the boundary itself.</summary>
     /// <returns>The scope whose disposal exits the gate.</returns>
+    /// <exception cref="InvalidOperationException">The calling thread runs another authority's tick in a parallel wave
+    /// (<see cref="ExecuteInParallelWave"/>).</exception>
     internal AuthorityGateScope EnterAtTickBoundary() {
+        if ((ParallelWaveAuthority is { } running) && !ReferenceEquals(objA: running, objB: this)) {
+            throw new InvalidOperationException($"Authority '{running.InstanceIdentity}' reached authority '{InstanceIdentity}' from a tick its host's step thread runs in parallel with other worlds' ticks; a world's tick reaches only its own authority.");
+        }
         var nested = (HeldGates != 0) || m_authorityGate.IsHeldByCurrentThread;
         while (true) {
             if (!m_authorityGate.TryEnter()) {

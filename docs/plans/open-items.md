@@ -656,29 +656,16 @@ wait behind them.
    can run in separate lanes. All three stages are built: every authority
    tick executes on the host's step thread, the frame reads the authority
    only through what a collect delivered or published, and a host that paces
-   to the wall clock produces its frame beside its last due tick. Left: the
-   wave, which hands every other world's tick over together where the pump
-   now visits once for each, and with it a burst's earlier steps beside the
-   frame: today the pump waits for every due step but the last
-   (`FixedStepPump.Advance`'s `WaitsAllowance`), and for each instance tick
-   of a host step it resumes in its step section. A thread-time trace of the
-   moving route under load put the pump's waits for the step thread
-   (`WorldStepThread.TryCollect`) at about a tenth of the frame thread's
-   time, two thirds of it for the boot world's three instance worlds, whose
-   ticks cost tens of microseconds each. Continuing a burst at the
-   post-produce resume (after the control phase, from the iteration's own
-   capture) and collecting the instance wave in the next step section leaves
-   the frame no tick to wait for. That amends
-   [H6](tick-thread.md#the-reviews-findings)'s ruling, which keeps a new host
-   step out of every resume. Then the lead's readings of frame time and
-   input-to-display time on the route
-   ([what the lead measures](tick-thread.md#what-the-lead-measures)). Check:
-   `host.frames` shows the
-   step outside the frame's interval on the route, and
-   `puck test --reproduce` passes at every worker count. At scale: every
-   world a client runs steps on its own thread, which is the shape the silo's
-   rows as jobs (the memo's T4) need too, so a hub of a dozen live worlds
-   costs the frame nothing per world.
+   to the wall clock waits for no tick: every other world's tick goes to the
+   step thread as one wave, run in parallel on the job pool
+   ([waves](tick-thread.md#waves)), and a burst's later steps begin after
+   produce ([H6](tick-thread.md#the-reviews-findings), amended). Left: the
+   lead's readings of frame time and input-to-display time on the route
+   ([what the lead measures](tick-thread.md#what-the-lead-measures)), and
+   `host.frames` reporting the step thread's allocations beside the tick
+   lane. Check: `host.frames` shows the step outside the frame's interval on
+   the route, and `world.counters world.tick` shows `pump-waits` near zero
+   per `host-steps`.
 3. **A draw record reads its slot's transform.** A draw's record is
    `SdfMeshRecord.DrawWords` words that hold its matrix, its normal matrix and
    its world box (`SdfMesh`'s `WritePose`), and the CPU rewrites those words

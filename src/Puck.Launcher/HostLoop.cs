@@ -155,11 +155,13 @@ public sealed class HostLoop(
         // Set on the simulation's thread when a pending step can make progress, and taken by the service below.
         var progressed = 0;
         System.Runtime.ExceptionServices.ExceptionDispatchInfo? resumeFault = null;
-        // Resumes the open step where no input capture or console drain has run, after produce and from the pacing
-        // wait: it collects what finished and hands over what follows in the same step, and starts no new step, which
-        // only the step section does after the iteration's input capture and control phase. A step it completes is
-        // counted, and its time charged to simulate, in the iteration that collected it.
-        void ResumeOpenStep(HostFramePhase charged) {
+        // Resumes the open step beside the frame: it collects what finished and hands over what follows in the same
+        // step. After produce it also continues the burst (continueBurst, with the iteration's step width): each step
+        // still due from the iteration's own interval begins after a control phase, from the iteration's own input
+        // capture, as a later step of a burst does in the step section. The pacing wait begins no step, since no control
+        // phase can run inside it. A step it completes is counted, and its time charged, in the iteration that
+        // collected it.
+        void ResumeOpenStep(HostFramePhase charged, ulong continueBurst = 0UL) {
             if (!beside || (resumeFault is not null) || (pump is not { StepPending: true })) {
                 return;
             }
@@ -167,10 +169,10 @@ public sealed class HostLoop(
             timeline.Mark(phase: charged);
             try {
                 using (timeline.FrameWork.Bind()) {
-                    if (pump.Resume()) {
-                        timeline.NoteSteps(steps: 1);
-                        frameSteps++;
-                    }
+                    var collected = ((continueBurst != 0UL) ? pump.ContinueBurst(stepTicks: continueBurst) : (pump.Resume() ? 1 : 0));
+
+                    timeline.NoteSteps(steps: collected);
+                    frameSteps += collected;
                 }
             } catch (Exception exception) {
                 resumeFault = System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(source: exception);
@@ -265,8 +267,8 @@ public sealed class HostLoop(
                         tickLocked: tickLocked
                     ));
                     frameSteps = 0;
-                    // The step the frame ran beside may have finished meanwhile.
-                    ResumeOpenStep(charged: HostFramePhase.Present);
+                    // The step the frame ran beside may have finished meanwhile, and the burst goes on behind it.
+                    ResumeOpenStep(charged: HostFramePhase.Present, continueBurst: stepTicks);
                     resumeFault?.Throw();
                 }
                 if (terminal.TryConsumeExit()) {
