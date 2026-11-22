@@ -36,6 +36,11 @@ public sealed partial class WorldCreationInstances {
 
     private bool m_meshDrawsChanged;
     private long m_meshDrawsRevision;
+    // Each drawing pool entry's place in m_meshDrawList, the entries whose draw the pack in progress changed, and
+    // whether the entries that draw (or the registrations behind them) may differ from the list's.
+    private int[] m_meshDrawAt = [];
+    private readonly List<int> m_meshDrawsMoved = [];
+    private bool m_meshDrawMembers = true;
 
     /// <summary>Gets the mesh draws the last <see cref="PackTransforms"/> posed: each live registration whose creation
     /// carries a mesh (<see cref="WorldPrototype.Mesh"/>), at its packed root and scale, in pool order: always the same
@@ -142,13 +147,14 @@ public sealed partial class WorldCreationInstances {
     /// <para>
     /// A registration repacks only while restless: its root pose, pose epoch, body facts or replay cursor moved, a
     /// state mirror slot its reads hold (lanes, drivers, poses, effectors) changed, or its last repack still changed
-    /// its slots. Every live registration's volumes are appended each frame.
+    /// its slots. The pack visits only the registrations one of those woke (<see cref="VisitCount"/>), and each keeps
+    /// what its last visit found (its volumes, door clip and mesh draw) until the next.
     /// </para>
     /// <para>
-    /// The pack runs in three passes. A serial pass decides, in pool order, which registrations park, retain, hold or
-    /// pose in full; the full poses then run across <see cref="Jobs"/> as one <see cref="JobClass.Frame"/> fork, a
-    /// partition a registration, each writing only its own registration's state and slot range; a last serial pass
-    /// settles every registration in pool order. A registration whose rig reads another body
+    /// The pack runs in three passes over the registrations it visits. A serial pass decides, in pool order, which
+    /// park, retain, hold or pose in full; the full poses then run across <see cref="Jobs"/> as one
+    /// <see cref="JobClass.Frame"/> fork, a partition a registration, each writing only its own registration's state and
+    /// slot range; a last serial pass settles each in pool order. A registration whose rig reads another body
     /// (<see cref="CreationRigReadKind.Body"/>) is decided and posed in that last pass, so it reads every body it may read
     /// as this frame posed it.
     /// </para></summary>
@@ -166,22 +172,31 @@ public sealed partial class WorldCreationInstances {
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: moved);
 
+        // Every entry's slots, source or reads may have moved under it; any other pack visits only what woke.
+        var everything = (moved.Everything || m_wakeAll || (slotBase != m_packedSlotBase) || !ReferenceEquals(objA: client, objB: m_packedSource));
+
         m_packedSlotBase = slotBase;
+        m_packedSource = client;
+        m_wakeAll = false;
         var volumesNeedRebuild = (m_volumesDirty || (slotBase != m_volumesSlotBase));
         if (m_hasAnyVolumes && (m_volumeActive.Length < m_poolCount)) {
             m_volumeActive = new bool[m_poolCount];
             m_volumeScale = new float[m_poolCount];
             m_volumeHidden = new bool[]?[m_poolCount];
             volumesNeedRebuild = true;
+            // The new arrays hold no registration's volumes until it is visited.
+            everything = true;
         }
         m_packVolumesChanged = false;
         m_packPoseMoved = false;
-        m_slotClipRun.Clear();
-        m_slotClipBodies.Clear();
         m_packCount++;
         BeginRateCodes(slotBase: slotBase);
 
         var doors = WorldPortalStraddle.Doors(definition: client.Definition);
+
+        // Other doors clip other bodies.
+        everything |= !ReferenceEquals(objA: doors, objB: m_packedDoors);
+        m_packedDoors = doors;
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
@@ -190,9 +205,13 @@ public sealed partial class WorldCreationInstances {
             Array.Resize(array: ref m_poseOrder, newSize: m_poolCount);
         }
 
+        (m_packHeldBodies, m_packHeldPlacements, m_packHeldSlots) = (0, 0, 0);
+        everything = CollectVisits(client: client, everything: everything);
+
+        var visits = m_visits.AsSpan(start: 0, length: m_visitCount);
         var poses = 0;
 
-        for (var index = 0; (index < m_poolCount); index++) {
+        foreach (var index in visits) {
             if (m_pool[index] is { ReadsBodies: true }) {
                 m_steps[index].Stage = PackStage.Deferred;
 
@@ -219,7 +238,7 @@ public sealed partial class WorldCreationInstances {
         }
         WorldCreationWork.ProcessWork.Add(amount: poses, kind: WorldCreationWork.Forked);
 
-        for (var index = 0; (index < m_poolCount); index++) {
+        foreach (var index in visits) {
             if (m_steps[index].Stage == PackStage.Deferred) {
                 BeginStep(client: client, deltaSeconds: deltaSeconds, index: index, moved: moved, parkPosition: parkPosition, slotBase: slotBase, transforms: transforms);
                 if (m_steps[index].Stage == PackStage.Posed) {
@@ -229,6 +248,8 @@ public sealed partial class WorldCreationInstances {
 
             EndStep(deltaSeconds: deltaSeconds, doors: doors, index: index, moved: moved, transforms: transforms);
         }
+
+        CountUnvisitedHolds();
 
         if (volumesNeedRebuild || m_packVolumesChanged) {
             if (m_hasAnyVolumes || (m_volumes.Count > 0)) {
@@ -258,15 +279,27 @@ public sealed partial class WorldCreationInstances {
 
         var rigidPoseBefore = Rigid.PoseRevision;
 
-        Rigid.Pack(transforms, client, (slotBase + ArticulatedSlotCount), deltaSeconds);
+        Rigid.Pack(deltaSeconds: deltaSeconds, everything: moved.Everything, slotBase: (slotBase + ArticulatedSlotCount), source: client, transforms: transforms);
         if (m_packPoseMoved || (Rigid.PoseRevision != rigidPoseBefore)) {
             PoseRevision++;
         }
         PackGuess(client: client, deltaSeconds: deltaSeconds, moved: moved, parkPosition: parkPosition, slotBase: slotBase, transforms: transforms);
         WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Packs);
-        EndRateCodes();
+        PublishRates(client: client, slotBase: slotBase);
 
-        // Keep unchanged runs by value; the row writer compares them in order and visits only changed slots.
+        // The runs are composed again, in pool order, only in a pack that changed a registration's clip. Keep unchanged
+        // runs by value; the row writer compares them in order and visits only changed slots.
+        if (m_clipsChanged) {
+            m_clipsChanged = false;
+            m_slotClipRun.Clear();
+            m_slotClipBodies.Clear();
+            foreach (var index in m_clipped) {
+                if (m_pool[index] is { Clip: { } clip, BodyIndex: { } body }) {
+                    m_slotClipRun.Add(item: clip);
+                    m_slotClipBodies.Add(item: body);
+                }
+            }
+        }
         if (!SameRuns(held: SlotClips, packed: m_slotClipRun)) {
             // A body drawn clipped at a door shows only past the glass, so every change is logged: a body that vanishes
             // away from any door is a straddle test that should not have matched.
@@ -279,14 +312,27 @@ public sealed partial class WorldCreationInstances {
             );
         }
 
+        // A pack that only moved draws rewrites each at its place in the list; one that changed which entries draw, or
+        // follows a reconcile, composes the list again in pool order.
+        if (m_meshDrawsChanged && !m_meshDrawMembers) {
+            foreach (var poolIndex in m_meshDrawsMoved) {
+                m_meshDrawList[m_meshDrawAt[poolIndex]] = m_meshDraws[poolIndex]!.Value;
+            }
+
+            m_meshDrawsRevision++;
+            m_meshDrawsChanged = false;
+        }
+        m_meshDrawsMoved.Clear();
         if (m_meshDrawsChanged) {
             m_meshDrawList.Clear();
+            m_meshDrawMembers = false;
 
             var identitiesChanged = false;
             var drawIndex = 0;
 
             for (var poolIndex = 0; (poolIndex < m_poolCount); poolIndex++) {
                 if (m_meshDraws[poolIndex] is { } posed) {
+                    m_meshDrawAt[poolIndex] = drawIndex;
                     m_meshDrawList.Add(item: posed);
                     identitiesChanged |= ((drawIndex >= m_pickMeshTargets.Length) ||
                         !ReferenceEquals(objA: m_pickMeshTargets[drawIndex], objB: m_pool[poolIndex]?.PickTarget));
@@ -421,6 +467,11 @@ public sealed partial class WorldCreationInstances {
                 draw: null,
                 index: index
             );
+            Unhold(index: index);
+            m_stateWatch.Forget(holder: index);
+            if (m_clipped.Remove(item: index)) {
+                m_clipsChanged = true;
+            }
 
             if (m_owners.Vacate(
                 moved: moved,
@@ -442,6 +493,9 @@ public sealed partial class WorldCreationInstances {
         }
 
         WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Visited);
+        // The packs that skipped the registration left its clocks behind (WorldCreationInstances.Awake).
+        AdvanceClock(live: live);
+        CatchUpHold(deltaSeconds: deltaSeconds, index: index, live: live);
         var (rootPosition, rootRotation, placementScale) = RootPose(
             client: client,
             live: live
@@ -581,7 +635,7 @@ public sealed partial class WorldCreationInstances {
         }
     }
     // The last pass for one pool entry: settles a full or held pose with the moved set and its rate records, then notes
-    // the registration's tier, volumes, door straddle and mesh draw, which every live registration contributes each frame.
+    // the registration's volumes, door straddle and mesh draw, which stand until its next visit, and keeps it awake or lets it sleep.
     private void EndStep(float deltaSeconds, IReadOnlyList<WorldPortalStraddle.Door> doors, int index, SdfMovedTransforms moved, Span<DynamicTransform> transforms) {
         ref var step = ref m_steps[index];
 
@@ -604,6 +658,7 @@ public sealed partial class WorldCreationInstances {
             m_rateCounts?.Count(kind: ((live.BodyIndex is not null) ? SdfUpdateRateCounts.BodiesPosed : SdfUpdateRateCounts.PlacementsPosed));
             live.RateSeconds = 0f;
             live.RateOwed = false;
+            live.PosedPack = m_packCount;
         }
         if (step.PoseFrameChanged) {
             CarryRevision++;
@@ -624,7 +679,6 @@ public sealed partial class WorldCreationInstances {
             );
         }
 
-        NoteRate(center: step.RootPosition, live: live, packedSlots: step.PackedSlots, placementScale: step.PlacementScale, posed: posed, radius: RateReach(live: live, placementScale: step.PlacementScale), rootSlot: rootSlot);
         live.PackedRoot = transforms[rootSlot];
 
         var placementScale = transforms[rootSlot].Scale;
@@ -641,27 +695,28 @@ public sealed partial class WorldCreationInstances {
         }
 
         // A body straddling a portal whose counterpart stands in this world is drawn on both sides of it. The rest
-        // bound screens out the bodies nowhere near a door; the posed parts decide.
-        if (
-            (live.BodyIndex is { } straddler) &&
-            (doors.Count > 0) &&
-            (WorldPortalStraddle.Clip(
-                center: transforms[rootSlot].Position,
-                doors: doors,
-                firstSlot: rootSlot,
-                radius: (ReachOf(live: live) * placementScale),
-                slotCount: step.Slots
-            ) is not null) &&
-            (WorldPortalStraddle.Clip(
-                doors: doors,
-                firstSlot: rootSlot,
-                slotCount: step.Slots,
-                spheres: m_partSpheres.AsSpan(start: 0, length: PartSpheres(live: live, placementScale: placementScale, rootSlot: rootSlot, shapeCount: step.ShapeCount, transforms: transforms))
-            ) is { } clip)
-        ) {
-            m_slotClipRun.Add(item: clip);
-            m_slotClipBodies.Add(item: straddler);
-        }
+        // bound screens out the bodies nowhere near a door; the posed parts decide. The clip stands with the slots it was
+        // found over, so only a visit finds another.
+        SetClip(
+            clip: (((live.BodyIndex is not null) &&
+                (doors.Count > 0) &&
+                (WorldPortalStraddle.Clip(
+                    center: transforms[rootSlot].Position,
+                    doors: doors,
+                    firstSlot: rootSlot,
+                    radius: (ReachOf(live: live) * placementScale),
+                    slotCount: step.Slots
+                ) is not null))
+                ? WorldPortalStraddle.Clip(
+                    doors: doors,
+                    firstSlot: rootSlot,
+                    slotCount: step.Slots,
+                    spheres: m_partSpheres.AsSpan(start: 0, length: PartSpheres(live: live, placementScale: placementScale, rootSlot: rootSlot, shapeCount: step.ShapeCount, transforms: transforms))
+                )
+                : null),
+            index: index,
+            live: live
+        );
 
         // The root slot holds the pose the shapes were packed under, followers included, whether or not this frame
         // repacked it.
@@ -678,6 +733,27 @@ public sealed partial class WorldCreationInstances {
                 : null),
             index: index
         );
+
+        live.VisitPack = m_packCount;
+        m_stateWatch.Index(holder: index, lease: live.Reads);
+
+        var held = (step.Stage == PackStage.Held);
+
+        if (held) {
+            Hold(center: step.RootPosition, index: index, live: live, radius: RateReach(live: live, placementScale: step.PlacementScale));
+        } else {
+            Unhold(index: index);
+        }
+
+        // The next pack visits the registration again by itself only while its work continues: a held pose is owed
+        // whatever wakes it, so only a root follower still settling brings it back, and any other pose comes back while
+        // its slots have not come to rest or a driver still advances. One that sleeps is scheduled for its next cursor
+        // or cue change; a held one needs none until it poses.
+        if (held ? (live.HasRootDynamics && !step.Still) : (m_owners.Restless(owner: index) || live.DriverActivity.Continues)) {
+            WakeEntry(index: index);
+        } else if (!held) {
+            Schedule(index: index, live: live);
+        }
     }
 
     private static float SizeOf(Registration live, IWorldStampSource client) =>
@@ -687,8 +763,10 @@ public sealed partial class WorldCreationInstances {
     // Records one pool entry's draw, noting whether it changed.
     private void SetMeshDraw(int index, SdfMeshDraw? draw) {
         if (m_meshDraws[index] != draw) {
+            m_meshDrawMembers |= ((m_meshDraws[index] is null) != (draw is null));
             m_meshDraws[index] = draw;
             m_meshDrawsChanged = true;
+            m_meshDrawsMoved.Add(item: index);
         }
     }
     // Decides whether a live registration repacks this frame; one new to its pool entry always does.

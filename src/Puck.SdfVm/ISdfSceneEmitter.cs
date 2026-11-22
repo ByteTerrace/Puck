@@ -43,6 +43,15 @@ public interface ISdfSceneEmitter {
     IReadOnlyList<int> MeshAssetSlots => [];
     /// <summary>Gets the rigid copies posed by the latest pack.</summary>
     IReadOnlyList<SdfMeshInstance> MeshInstances => [];
+    /// <summary>Gets the indices into <see cref="MeshInstances"/> of the copies whose row the latest
+    /// <see cref="PackDynamicTransforms"/> rewrote, each at most once, so the composition reads those copies alone while
+    /// <see cref="MeshInstancesRevision"/> stands. <see langword="null"/>, the default, for an emitter that does not
+    /// report them: the composition then compares every copy each frame.</summary>
+    IReadOnlyList<int>? MeshInstanceChanges => null;
+    /// <summary>Gets a counter that moves whenever <see cref="MeshInstances"/> changes in a way
+    /// <see cref="MeshInstanceChanges"/> does not name: another membership or order, or a row rewritten outside a
+    /// pack.</summary>
+    long MeshInstancesRevision => 0L;
 
     /// <summary>Emits this source's content into <paramref name="builder"/> — the shared program under construction.
     /// Every shape/instance this call declares belongs to the composed program; a takeover (a mode that replaces the
