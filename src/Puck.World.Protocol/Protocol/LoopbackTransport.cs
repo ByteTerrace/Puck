@@ -7,11 +7,10 @@ namespace Puck.World.Protocol;
 /// <remarks>
 /// Every non-intent submission (command/grant/revoke/session/rebuild/mutation/undo/composition/lever/query/screen-
 /// op/designation) travels as one <see cref="SubmissionEnvelope"/> through <see cref="IWorldServerHost.Submit"/> — the
-/// server's single ordered domain — which this transport enqueues and drains inline, on the tick thread, before a
-/// <c>Submit*</c> call returns (the host's command-apply window immediately precedes the tick's step, so FIFO order
-/// and read-after-write are preserved — a byte transport would buffer to the same boundary instead). Per-tick
-/// intents buffer separately. The produced <see cref="WorldSnapshot"/> is pushed to every attached
-/// <see cref="IClientSink"/>. Single-threaded on the host tick. Every submission crosses <see cref="WorldFrameCodec"/>'s
+/// server's single ordered domain. At the pump's boundary, the transport submits inline. Outside it, the link queues
+/// fire-and-forget submissions before minting their envelopes and refuses calls that require an inline reply.
+/// Per-tick intents buffer separately in the authority. The produced <see cref="WorldSnapshot"/> is pushed to every
+/// attached <see cref="IClientSink"/>. Every envelope crosses <see cref="WorldFrameCodec"/>'s
 /// canonical encode-then-decode path even when no replay is armed; loopback is a transport optimization, never a
 /// second object-only protocol.
 /// <para>
@@ -26,6 +25,7 @@ namespace Puck.World.Protocol;
 /// </remarks>
 public sealed class LoopbackTransport : IServerLink {
     private readonly IWorldServerHost m_server;
+    private readonly WorldLinkBoundary? m_boundary;
 
     private long m_correlationId;
     // The local connection's per-connection monotonic Sequence and the CorrelationId every envelope mints — both
@@ -36,11 +36,13 @@ public sealed class LoopbackTransport : IServerLink {
 
     /// <summary>Initializes a new instance of the <see cref="LoopbackTransport"/> class over the server it fronts.</summary>
     /// <param name="server">The authoritative server.</param>
+    /// <param name="boundary">The local pump's shared window, or null for an independently stepped authority.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
-    public LoopbackTransport(IWorldServerHost server) {
+    public LoopbackTransport(IWorldServerHost server, WorldLinkBoundary? boundary = null) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
         m_server = server;
+        m_boundary = boundary;
     }
 
     /// <summary>Gets an optional record tap invoked with every authority command before it applies — one kind of entry in
@@ -161,7 +163,7 @@ public sealed class LoopbackTransport : IServerLink {
         ArgumentNullException.ThrowIfNull(argument: completion);
 
         // The envelope stamps the identity used for Observe and session admission.
-        _ = Mint(new WorldSubmissionPayload.Query(query), principal, Guid.Empty, result => completion(result switch {
+        _ = SubmitEnvelope(new WorldSubmissionPayload.Query(query), principal, Guid.Empty, result => completion(result switch {
             WorldSubmissionResult.Query queryResult => queryResult.Answer,
             WorldSubmissionResult.Refusal refusal => new QueryAnswer(Text: refusal.Detail, Refused: true),
             _ => throw new InvalidOperationException("unexpected loopback query completion"),
@@ -203,11 +205,32 @@ public sealed class LoopbackTransport : IServerLink {
         );
     }
 
-    internal long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion, WorldDeferredVerbRow? console) =>
-        Mint(payload, principal, operationId, completion, console);
+    internal long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion, WorldDeferredVerbRow? console) {
+        var requiresInline = payload is WorldSubmissionPayload.Query or WorldSubmissionPayload.Session;
+
+        if (m_boundary is { IsOpen: false } boundary) {
+            if (requiresInline || completion is not null || console is not null) {
+                throw new InvalidOperationException("This loopback submission requires an open tick boundary window.");
+            }
+            boundary.Enqueue(() => Mint(payload, principal, operationId, completion: null, console: null));
+            return 0L;
+        }
+
+        if (requiresInline) { m_server.RequireInlineSubmission(); }
+        return Mint(payload, principal, operationId, completion, console);
+    }
 
     /// <inheritdoc/>
     public void SubmitIntent(in IntentSubmission submission) {
+        if (m_boundary is { IsOpen: false } boundary) {
+            var queued = submission;
+            boundary.Enqueue(() => DeliverIntent(in queued));
+            return;
+        }
+        DeliverIntent(in submission);
+    }
+
+    private void DeliverIntent(in IntentSubmission submission) {
         if (InputMasked) {
             return;
         }
@@ -219,7 +242,7 @@ public sealed class LoopbackTransport : IServerLink {
     public void SubmitSession(SessionRequest request, Action<SessionReply> completion) {
         ArgumentNullException.ThrowIfNull(argument: completion);
 
-        _ = Mint(new WorldSubmissionPayload.Session(request), request.Principal, Guid.Empty, result => completion(result switch {
+        _ = SubmitEnvelope(new WorldSubmissionPayload.Session(request), request.Principal, Guid.Empty, result => completion(result switch {
             WorldSubmissionResult.Session session => session.Reply,
             WorldSubmissionResult.Refusal refusal => new SessionReply(Accepted: false, AssignedIndex: -1, Reason: refusal.Detail, RosterEcho: string.Empty),
             _ => throw new InvalidOperationException("unexpected loopback session completion"),

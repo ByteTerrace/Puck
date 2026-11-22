@@ -87,7 +87,7 @@ public sealed class MachineExtensionCatalogLawTests {
             2,
             host.InstanceState(name: "tiny")!.Value.FramesStepped
         );
-        Assert.Null(@object: host.VideoOutput(
+        Assert.Null(@object: host.CapturePresentation().VideoOutput(
             instance: "tiny",
             output: "video"
         ));

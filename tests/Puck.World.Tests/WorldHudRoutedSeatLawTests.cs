@@ -1,6 +1,5 @@
 using Puck.World.Client;
 using Puck.World.Protocol;
-using Puck.World.Server;
 
 using Xunit;
 
@@ -92,8 +91,7 @@ public sealed class WorldHudRoutedSeatLawTests {
                 new NoNeighbours()
             ),
             frameRate: new FrameRateMonitor(),
-            history: null,
-            population: new WorldPopulation(definition: home),
+            feed: new WorldPresentationFeed(),
             seatBindings: seats
         );
 

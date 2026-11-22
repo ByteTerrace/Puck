@@ -1,0 +1,118 @@
+using Puck.Commands;
+using Puck.SdfVm;
+using Puck.Shaders;
+using Puck.SignedDistance;
+using Puck.World.Client;
+using Puck.World.Protocol;
+
+namespace Puck.World;
+
+// The screens as the world's views bind them, and the instances they read. A row's producer, machine or probe source is a
+// render-graph source instance: the runtime opens it through the registered producers (and the machine upload and probe
+// producer below, of the reserved ids), renders it at its cadence, and hands each sdf.world instance that reads it its latest image, which
+// the view's passes bind to every screen whose row reads it. A camera view or a session is a view instance the runtime
+// hands a view the same way.
+public sealed partial class WorldScreenBinder : ISdfScreenSources {
+    /// <summary>Gets or sets the render-graph runtime the world renders through, whose source instances this binder reads
+    /// a screen's feed, fault and light from; <see langword="null"/> in a presentation with no render graph, which runs no
+    /// source instance.</summary>
+    public RenderGraphRuntime? Runtime { get; set; }
+    /// <inheritdoc/>
+    public IReadOnlyList<int> Screens => m_screenIndices;
+
+    /// <inheritdoc/>
+    public bool Emits(int screen) => (m_slots.TryGetValue(key: screen, value: out var slot) && (ShownOf(screen: screen) switch {
+        WorldScreenSource.Machine or WorldScreenSource.Producer or WorldScreenSource.Probe => true,
+        WorldScreenSource.Session => ((slot.Session is { } feed) && (feed.InstanceName != WorldDefinitionLoader.BootInstanceName)),
+        _ => false,
+    }));
+    /// <inheritdoc/>
+    public float LuminanceOf(int screen) => LuminanceOf(row: RowOf(screen: screen));
+
+    // A screen row's authored peak luminance, or the default display's.
+    private static float LuminanceOf(WorldScreen? row) => (row?.Luminance ?? SdfScreenEmission.DefaultLuminance);
+
+    /// <inheritdoc/>
+    public SdfScreenFace FaceOf(int screen) => FaceOf(row: RowOf(screen: screen));
+
+    // A screen row's face: a window opens onto its world, and every other row is a display.
+    private static SdfScreenFace FaceOf(WorldScreen? row) => (((row is not null) && WorldPrototypeFacets.IsOpening(source: row.Source)) ? SdfScreenFace.Opening : SdfScreenFace.Display);
+
+    /// <inheritdoc/>
+    public SdfScreenTreatment TreatmentOf(int screen) => TreatmentOf(material: WorldScreenMaterial.Find(id: RowOf(screen: screen)?.Material, materials: m_screenMaterials));
+
+    // The display treatment an authored screen material draws, or none.
+    private static SdfScreenTreatment TreatmentOf(WorldScreenMaterial? material) => ((material is null)
+        ? SdfScreenTreatment.None
+        : new SdfScreenTreatment(
+            CornerRadius: material.CornerRadius,
+            EdgeSoftness: material.EdgeSoftness,
+            Glint: material.Glint,
+            GlintPower: material.GlintPower,
+            Scanlines: material.Scanlines,
+            SubpixelStripes: material.SubpixelStripes,
+            Vignette: material.Vignette
+        ));
+
+    /// <inheritdoc/>
+    /// <remarks>A screen is drawn from the mapping <see cref="Mappings"/> last published for it.</remarks>
+    public SourceMapping? MappingOf(int screen) => (Mappings.TryGet(
+        mapping: out var mapping,
+        screen: screen
+    )
+        ? mapping
+        : null
+    );
+    /// <summary>Returns what a frame reads of the machines of a world instance this process runs (the boot world, or a
+    /// local instance a screen shows or a seat is presented in, which steps its machines on its own ticks), as the last
+    /// collect captured it: its outputs, instance revision and presentation clock.</summary>
+    /// <param name="world">The world instance's name.</param>
+    /// <returns>The presentation, or <see langword="null"/> for a world this process does not run, whose machines run on
+    /// its own authority and reach no screen here.</returns>
+    public WorldMachinePresentation? MachinesOf(string world) => m_feed.Machines.Of(world: world);
+    // The sessions, running instances and boot endpoint the last collect published.
+    private WorldObservationTable Observations => m_feed.Observations;
+    // A session's record as the last collect published it, or the record held when the authority no longer holds the
+    // session, whose last values the slot keeps until it lets the session go.
+    private WorldObservedSession? Current(WorldObservedSession? held) => ((held is null) ? null : (Observations.Current(token: held.Token) ?? held));
+    /// <inheritdoc/>
+    /// <remarks>A seat's or a camera's view of the world's residency shows the world's screens (<see cref="InstanceOf"/>); a
+    /// session of the boot world, or a camera it shows, filmed into the world's frame shows its own level's.</remarks>
+    public string? ReadOf(int view, int screen) {
+        var filmed = (view - m_hostViewCount);
+
+        return (((((uint)filmed) < ((uint)m_hostLevels.Count)) && (m_hostLevels[filmed] is { } level))
+            ? level.InstanceOf(screen: screen)
+            : InstanceOf(screen: screen));
+    }
+    /// <summary>Returns the name of the instance a screen of the boot world reads: the source it shows, its row's or the
+    /// one a live presentation verb bound over the row; the source instance of a producer, machine or probe source, and
+    /// the view instance of a camera view or a session.</summary>
+    /// <param name="screen">The screen's index.</param>
+    /// <returns>The instance's name, or <see langword="null"/> when the screen shows nothing or text.</returns>
+    public string? InstanceOf(int screen) => (Mappings.InstanceOf(screen: screen) ?? (m_slots.TryGetValue(
+        key: screen,
+        value: out var slot
+    )
+        ? slot.ViewInstance
+        : null
+    ));
+
+    // The feed a running source instance opened: an imported producer's (a probe's included) through its adapter, an
+    // uploaded producer's through its upload; null for a machine source, one the set does not run, or no runtime.
+    private IWorldImageFeed? FeedOf(string instance) => ((Runtime is { } runtime)
+        ? RunningFeedOf(
+            instance: instance,
+            runtime: runtime
+        )
+        : null);
+    // Why a screen reading a source instance shows nothing: its producer's fault (a feed that did not open or has no
+    // signal, a probe not yet live, an upload refused), or null while it shows its image. A machine's fault is
+    // Machines.State's concern.
+    private string? SourceFault(string instance) => ((Runtime is { } runtime)
+        ? RunningSourceFault(
+            instance: instance,
+            runtime: runtime
+        )
+        : null);
+}

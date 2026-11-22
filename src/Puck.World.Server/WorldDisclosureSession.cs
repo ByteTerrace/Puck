@@ -232,9 +232,9 @@ public sealed class WorldDisclosureSession : IClientSink, IDisposable {
         return new SubmissionEnvelope(ConnectionId: SubmissionEnvelope.LocalConnectionId, CorrelationId: sequence, OperationId: m_operations.Next(principal: session),
             Payload: payload, Principal: session, Sequence: sequence, SessionGeneration: 0);
     }
-    private void Query(string door, WorldQuery query) => m_server.Submit(completion: result => m_transcript.RecordText(door: door, principal: m_label,
+    private void Query(string door, WorldQuery query) => ((IWorldServerHost)m_server).Submit(completion: result => m_transcript.RecordText(door: door, principal: m_label,
         text: ((result is WorldSubmissionResult.Query { Answer: var answer }) ? Answer(answer: answer) : Outcome(result: result))), envelope: Envelope(payload: new WorldSubmissionPayload.Query(Value: query)));
-    private void Submit(string door, WorldMutation mutation) => m_server.Submit(completion: Complete(door: (OutcomeDoor + door)),
+    private void Submit(string door, WorldMutation mutation) => ((IWorldServerHost)m_server).Submit(completion: Complete(door: (OutcomeDoor + door)),
         envelope: Envelope(payload: new WorldSubmissionPayload.Mutation(Value: mutation)));
     private Action<WorldSubmissionResult> Complete(string door) => result => {
         var (kind, body) = WorldPeerWireFormat.EncodeResult(result: ((result is WorldSubmissionResult.Mutation { Outcome: var outcome })

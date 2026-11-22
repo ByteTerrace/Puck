@@ -12,8 +12,9 @@ namespace Puck.World;
 /// <see cref="WorldSessionLevers.Fold"/> folds the presentation levers. Both keep every section the session left alone
 /// as its author wrote it, so the snapshot of an untouched world is its authored document.</summary>
 internal static class WorldSaveSnapshot {
-    /// <summary>Writes the live document before compacting the journal.</summary>
-    internal static bool TryWrite(WorldDefinition snapshot, string target, WorldDefinitionSource source, WorldServer server,
+    /// <summary>Writes a save snapshot, then compacts the journal through <paramref name="compact"/> once the write
+    /// succeeded.</summary>
+    internal static bool TryWrite(WorldDefinition snapshot, string target, WorldDefinitionSource source, Action compact,
         WorldMachineCatalog catalog, string catalogFingerprint, out string result) {
         if (target.EndsWith(".puck", StringComparison.OrdinalIgnoreCase)) {
             if (!WorldSourceSave.TrySave(definition: snapshot, path: target, catalog: catalog, catalogFingerprint: catalogFingerprint,
@@ -33,7 +34,7 @@ internal static class WorldSaveSnapshot {
             Puck.Confinement.AtomicFile.WriteAllBytesDurably(composition.SavedDocument, File.ReadAllBytes(target));
             result = Puck.Abstractions.PuckPaths.Normalize(composition.SavedDocument);
         }
-        server.Compact();
+        compact();
         return true;
     }
 
@@ -47,11 +48,11 @@ internal static class WorldSaveSnapshot {
     /// <param name="editor">The live per-seat editor state, whose primary seat folds into <c>editor</c>.</param>
     /// <returns>The snapshot definition to serialize.</returns>
     public static WorldDefinition Compose(WorldServer server, ulong tick, WorldRenderSettings render, PresentPacingControl pacing, IWorldAudioLever audio, WorldBindingBarVisibility bindingBar, WorldEditorSeats editor) =>
-        server.ExecuteAuthorityOperation(() => WorldSessionLevers.Fold(
+        server.ExecuteAuthorityOperation(() => Fold(
             audio: audio,
             bindingBar: bindingBar,
             editor: editor,
-            definition: WorldSessionCapture.Capture(
+            authority: WorldSessionCapture.Capture(
                 definition: server.Definition,
                 engineTick: server.CompletedEngineTicks,
                 machines: server.Machines,
@@ -59,6 +60,23 @@ internal static class WorldSaveSnapshot {
                 tick: tick
             ),
             pacing: pacing,
-            settings: render
+            render: render
         ));
+    /// <summary>Folds the presentation levers into the authority half of a save snapshot.</summary>
+    /// <param name="authority">The authority half (<see cref="WorldSessionCapture.Capture"/>).</param>
+    /// <param name="render">The live render levers.</param>
+    /// <param name="pacing">The live present-rate control.</param>
+    /// <param name="audio">The audio director owning the master-volume lever.</param>
+    /// <param name="bindingBar">The live per-seat binding-bar visibility overrides.</param>
+    /// <param name="editor">The live per-seat editor state, whose primary seat folds into <c>editor</c>.</param>
+    /// <returns>The snapshot definition to serialize.</returns>
+    public static WorldDefinition Fold(WorldDefinition authority, WorldRenderSettings render, PresentPacingControl pacing, IWorldAudioLever audio, WorldBindingBarVisibility bindingBar, WorldEditorSeats editor) =>
+        WorldSessionLevers.Fold(
+            audio: audio,
+            bindingBar: bindingBar,
+            editor: editor,
+            definition: authority,
+            pacing: pacing,
+            settings: render
+        );
 }

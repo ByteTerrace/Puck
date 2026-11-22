@@ -178,6 +178,13 @@ public sealed class WorldSeatAuthorityRouter {
 
         return Volatile.Read(location: ref m_routes[slot]);
     }
+    /// <summary>Returns the document seat <paramref name="slot"/> currently presents from: the mirrored definition of the
+    /// endpoint its claim routes it to, or <paramref name="home"/> for a slot with no claim. Every reader of which document
+    /// frames a seat (the camera's clamps, its look feel) reads through here, never through an authority.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="home">The document an unrouted seat presents from: the boot world's delivered definition.</param>
+    /// <returns>The seat's routed definition.</returns>
+    public WorldDefinition DefinitionOf(int slot, WorldDefinition home) => (TryRoute(slot: slot)?.Endpoint.Definition ?? home);
     /// <summary>Routes a read-back query to the slot's currently claimed authority — the shared body every routed
     /// query verb reduces to. Submits <paramref name="factory"/>'s query (built from the claim's own
     /// <see cref="WorldAuthorityRoute.QueryIndex"/>) through the claim's own submission door; when

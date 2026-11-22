@@ -2,7 +2,6 @@ using System.Numerics;
 using Puck.Commands;
 using Puck.SdfVm;
 using Puck.World.Protocol;
-using Puck.World.Server;
 
 namespace Puck.World;
 

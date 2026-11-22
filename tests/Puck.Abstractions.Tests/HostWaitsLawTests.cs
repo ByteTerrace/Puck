@@ -89,6 +89,64 @@ public sealed class HostWaitsLawTests {
         });
     }
     [Fact]
+    public void APumpsWaitForWorkItHandedAConsumerIsNeitherClippedNorCharged() {
+        var monitor = new object();
+        var done = false;
+        WaitConsumer? worker = null;
+        using var claimed = new ManualResetEventSlim(initialState: false);
+        using var release = new ManualResetEventSlim(initialState: false);
+        var workerThread = new Thread(start: () => {
+            worker = HostWaits.ClaimConsumer(reason: Reason);
+            claimed.Set();
+            release.Wait();
+            lock (monitor) {
+                done = true;
+                Monitor.PulseAll(obj: monitor);
+            }
+        }) { IsBackground = true, Name = "host-waits law worker" };
+
+        workerThread.Start();
+        Assert.True(condition: claimed.Wait(cancellationToken: TestContext.Current.CancellationToken, timeout: TimeSpan.FromSeconds(value: 30)));
+        OnOwnThread(body: () => {
+            using var never = new ManualResetEventSlim(initialState: false);
+
+            HostWaits.BeginPumpIteration(allowance: TimeSpan.FromMilliseconds(value: 5));
+            try {
+                Assert.Equal(expected: WaitOutcome.DeadlinePassed, actual: HostWaits.Wait(deadline: WaitDeadline.In(budget: TimeSpan.FromMinutes(value: 5)), reason: Reason, signal: never));
+                Assert.Equal(expected: TimeSpan.Zero, actual: HostWaits.PumpAllowance);
+
+                // The allowance is spent, and the wait for the handed work still blocks until the worker finishes it.
+                using (new Timer(callback: _ => release.Set(), dueTime: TimeSpan.FromMilliseconds(value: 40), period: Timeout.InfiniteTimeSpan, state: null)) {
+                    lock (monitor) {
+                        while (!done) {
+                            Assert.Equal(expected: WaitOutcome.Completed, actual: HostWaits.OnDelegatedWork(deadline: WaitDeadline.In(budget: TimeSpan.FromSeconds(value: 20)), monitor: monitor, reason: Reason, worker: worker!));
+                        }
+                    }
+                }
+
+                // A wait for handed work that blocks to its own deadline leaves a fresh allowance whole.
+                var allowance = TimeSpan.FromSeconds(value: 10);
+
+                HostWaits.BeginPumpIteration(allowance: allowance);
+                lock (monitor) {
+                    Assert.Equal(expected: WaitOutcome.DeadlinePassed, actual: HostWaits.OnDelegatedWork(deadline: WaitDeadline.In(budget: TimeSpan.FromMilliseconds(value: 30)), monitor: monitor, reason: Reason, worker: worker!));
+                }
+                Assert.Equal(expected: allowance, actual: HostWaits.PumpAllowance);
+            } finally {
+                HostWaits.EndPump();
+            }
+        });
+        Assert.True(condition: workerThread.Join(timeout: TimeSpan.FromSeconds(value: 30)));
+        // The form is for work on another thread: a consumer cannot take it for work it runs itself.
+        OnOwnThread(body: () => {
+            var own = HostWaits.ClaimConsumer(reason: Reason);
+
+            lock (monitor) {
+                _ = Assert.Throws<InvalidOperationException>(testCode: () => HostWaits.OnDelegatedWork(deadline: WaitDeadline.In(budget: TimeSpan.FromMilliseconds(value: 1)), monitor: monitor, reason: Reason, worker: own));
+            }
+        });
+    }
+    [Fact]
     public void ASynchronousDoorThrowsOnlyWhileItsOperationIsPendingAndNamesTheExpiredWait() {
         OnOwnThread(body: () => {
             using var signal = new ManualResetEventSlim(initialState: false);

@@ -1,10 +1,35 @@
+using Puck.Abstractions.Pacing;
 using Puck.Commands;
 using Puck.Hosting;
+using Puck.World.Protocol;
 
 namespace Puck.World;
 
-/// <summary>The one fixed-step shell for every boot shape. The composition supplies its post-step.</summary>
-internal sealed class WorldSimulation(WorldHostStep step, Action afterInstances) : IFixedStepSimulation {
+/// <summary>The one fixed-step shell for every boot shape. The composition supplies its post-step and its collect.</summary>
+internal sealed class WorldSimulation(WorldHostStep step, Action afterInstances, WorldLinkBoundary boundary, Action collect) : IFixedStepSimulation {
+    private readonly CollectingBoundary m_boundary = new(collect: collect, inner: boundary, step: step);
+
+    /// <inheritdoc/>
+    public IHostTickBoundary TickBoundary => m_boundary;
+
+    // The boundary window the loop opens around each control phase and each step call. Closing it with no step in
+    // progress runs the collect first, still inside the window: whatever the window let the pump change (a console
+    // grant or revoke, a load, a completed step) is copied for the frame before any frame reads it, so a withdrawn
+    // admission never shows for a frame after the authority withdrew it. While a step is in progress its tick may be
+    // executing, and the call that completes it collects.
+    private sealed class CollectingBoundary(WorldLinkBoundary inner, WorldHostStep step, Action collect) : IHostTickBoundary {
+        public void RegisterPump() => inner.RegisterPump();
+        public void UnregisterPump() => inner.UnregisterPump();
+        public void Open(bool drain) => inner.Open(drain: drain);
+        public void Close() {
+            try {
+                if (!step.StepInProgress) { collect(); }
+            } finally {
+                inner.Close();
+            }
+        }
+    }
+
     /// <inheritdoc/>
     public bool AwaitsFrame => step.AwaitsFrame;
 
@@ -25,5 +50,12 @@ internal sealed class WorldSimulation(WorldHostStep step, Action afterInstances)
     }
 
     /// <inheritdoc/>
-    public bool TryStep(in FixedStepContext context, in CommandSnapshot commands) => step.TryStep(in context, afterInstances);
+    public bool TryStep(in FixedStepContext context, in CommandSnapshot commands) => step.TryStep(in context, afterInstances, collectBy: null);
+
+    /// <inheritdoc/>
+    public bool TryStep(in FixedStepContext context, in CommandSnapshot commands, Puck.Abstractions.Waiting.WaitDeadline collectBy) =>
+        step.TryStep(in context, afterInstances, collectBy: collectBy);
+
+    /// <inheritdoc/>
+    public void WakeOnStepProgress(Action? wake) => step.WakeOnStepProgress(wake: wake);
 }

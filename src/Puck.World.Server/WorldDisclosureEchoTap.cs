@@ -13,12 +13,13 @@ namespace Puck.World.Server;
 public sealed class WorldDisclosureEchoTap : IDisposable {
     private readonly WorldServer m_server;
     private readonly Action<WorldEditEcho>? m_previous;
-    private readonly Action<WorldEditEcho> m_tap;
+    // The routed delegate the server stored for this tap, which is what its getter returns while this tap is current.
+    private readonly Action<WorldEditEcho>? m_installed;
 
     private WorldDisclosureEchoTap(WorldServer server, WorldDisclosureTranscript transcript, IReadOnlyDictionary<Principal, string> observed, Func<ulong> tick) {
         m_server = server;
         m_previous = server.EchoTap;
-        m_tap = echo => {
+        Action<WorldEditEcho> tap = echo => {
             m_previous?.Invoke(obj: echo);
             var actor = echo.ActingPrincipal;
 
@@ -28,7 +29,8 @@ public sealed class WorldDisclosureEchoTap : IDisposable {
                 transcript.Invalidate(reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"an operator act was refused at tick {tick()}: {echo.Message}"));
             }
         };
-        server.EchoTap = m_tap;
+        server.EchoTap = tap;
+        m_installed = server.EchoTap;
     }
 
     /// <summary>Installs the tap on <paramref name="server"/>.</summary>
@@ -45,6 +47,6 @@ public sealed class WorldDisclosureEchoTap : IDisposable {
 
     /// <summary>Restores the host's tap, unless another has replaced this one since.</summary>
     public void Dispose() {
-        if (ReferenceEquals(objA: m_server.EchoTap, objB: m_tap)) { m_server.EchoTap = m_previous; }
+        if (ReferenceEquals(objA: m_server.EchoTap, objB: m_installed)) { m_server.EchoTap = m_previous; }
     }
 }

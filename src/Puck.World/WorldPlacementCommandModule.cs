@@ -520,7 +520,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             return false;
         }
 
-        return WorldArgs.TryResolveInstance(
+        return WorldInstanceArgs.TryResolveInstance(
             token: args[0],
             verb: forms.Verb,
             instances: instances,

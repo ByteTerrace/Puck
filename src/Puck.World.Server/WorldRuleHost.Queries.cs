@@ -70,18 +70,8 @@ public sealed partial class WorldRuleHost {
     }
     // The owned-world identity catalog, projected — the shape a query answer may cross a wire with (never the owned
     // document a raw WorldIdentity carries).
-    private WorldIdentityProjection[] ProjectProfileCatalog() {
-        var all = Host.Profiles.All;
-        var projected = new WorldIdentityProjection[all.Count];
-
-        for (var index = 0; (index < all.Count); index++) {
-            projected[index] = all[index].Project();
-        }
-
-        return projected;
-    }
     private QueryAnswer AnswerProfileCatalog() {
-        var projected = ProjectProfileCatalog();
+        var projected = Host.Profiles.CaptureRosterProfiles().Catalog.ToArray();
 
         return new QueryAnswer(
             Text: $"[world.profiles: {projected.Length} catalog entries]",

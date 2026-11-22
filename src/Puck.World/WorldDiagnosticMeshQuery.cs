@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.SdfVm;
-using Puck.World.Server;
 
 namespace Puck.World;
 
