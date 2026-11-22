@@ -81,10 +81,25 @@ public static class WorldTickWork {
     /// <summary>Gets the kind counting the input streams this authority restarted after refusing a batch of the
     /// current epoch.</summary>
     public static WorkKind FederatedRestarts { get; } = new(name: "world.tick.federated-restarts", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the calls the host loop's thread makes into a host step: one for each place it
+    /// begins, resumes or collects one. Read against <see cref="HostSteps"/>, it is how often the pump visits a
+    /// step.</summary>
+    public static WorkKind PumpVisits { get; } = new(name: "world.tick.pump-visits", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the host steps completed: the boot world's tick and every other world's ticks
+    /// due with it.</summary>
+    public static WorkKind HostSteps { get; } = new(name: "world.tick.host-steps", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the collects in which the stepping thread blocked on the host's step thread:
+    /// the work it handed over had not finished and the thread asked to wait for it rather than poll.</summary>
+    public static WorkKind PumpWaits { get; } = new(name: "world.tick.pump-waits", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the units handed to the host's step thread.</summary>
+    public static WorkKind Waves { get; } = new(name: "world.tick.waves", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the tick slices those units executed.</summary>
+    public static WorkKind WaveTicks { get; } = new(name: "world.tick.wave-ticks", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the ledger a host's servers count into. Declared after the kinds, which it reads as it is
     /// created.</summary>
     public static WorkCounterSet Process { get; } = new(
         kinds: [
+            PumpVisits, HostSteps, PumpWaits, Waves, WaveTicks,
             InterestCandidates, InterestBodies, InterestBytes,
             FederatedBatches, FederatedRetimed, FederatedStale, FederatedRestarts,
             FactDerives, FactSlots, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids, NearestCells, DealRedeals,

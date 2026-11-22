@@ -98,6 +98,8 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null, WorldLinkB
         m_executed = default;
         try {
             m_lane.Post(unit: this);
+            WorldTickWork.Process.Add(kind: WorldTickWork.Waves, amount: 1L);
+            WorldTickWork.Process.Add(kind: WorldTickWork.WaveTicks, amount: 1L);
         } catch {
             // The tick's input is closed and nothing will execute it: let the threads its hold keeps out back in.
             server.Tick.AbandonPrepared();
@@ -118,9 +120,11 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null, WorldLinkB
         }
 
         WaitOutcome outcome;
+        var deadline = collectBy.Earliest(other: m_prepared.Stall);
 
+        if (!deadline.HasPassed && !m_lane.Ready) { WorldTickWork.Process.Add(kind: WorldTickWork.PumpWaits, amount: 1L); }
         try {
-            outcome = m_lane.Collect(deadline: collectBy.Earliest(other: m_prepared.Stall), reason: in ExecuteWait);
+            outcome = m_lane.Collect(deadline: deadline, reason: in ExecuteWait);
         } catch {
             Settle();
             throw;
