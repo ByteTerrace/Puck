@@ -152,18 +152,6 @@ public sealed class WorldEventFeed {
     private readonly ulong[] m_collisionPairKeys;
     private readonly CollisionTransition[] m_collisionTransitions;
     private readonly int m_maximumTrackedPairs;
-    private readonly SeenCollisionBody[] m_seenCollision;
-    private readonly bool[] m_collisionMoved;
-    private readonly int[] m_movedCollisionBodies;
-    private bool m_collisionAllStale = true;
-
-    private readonly record struct SeenCollisionBody(
-        bool Active,
-        FixedWorldCollider? Collider,
-        FixedQ4816 Scale,
-        FixedVector3 Position,
-        FixedQuaternion Orientation
-    );
 
     /// <summary>Initializes a bounded event feed for one population.</summary>
     /// <param name="capacity">The population's authored body capacity.</param>
@@ -183,9 +171,6 @@ public sealed class WorldEventFeed {
         m_changedPresent = new bool[capacity];
         m_collisionIncluded = new bool[capacity];
         m_nearbySleeping = new int[capacity];
-        m_seenCollision = new SeenCollisionBody[capacity];
-        m_collisionMoved = new bool[capacity];
-        m_movedCollisionBodies = new int[capacity];
         m_collisionPairKeys = new ulong[m_maximumTrackedPairs];
         m_collisionTransitions = new CollisionTransition[checked((m_maximumTrackedPairs * 2))];
         _ = m_overlapping.EnsureCapacity(capacity: m_maximumTrackedPairs);
@@ -334,51 +319,15 @@ public sealed class WorldEventFeed {
             Now: now
         );
     }
-    private static SeenCollisionBody ReadCollisionBody(WorldPopulation population, int index) =>
-        (population.IsActive(index: index) && (population.EntryBody(index: index) is { Collider: { } collider } body))
-            ? new SeenCollisionBody(Active: true, Collider: collider, Orientation: body.FixedOrientation, Position: body.FixedPosition, Scale: body.Scale)
-            : default;
-
     private void CollectCollisions(WorldPopulation population, WorldCollisionEvents policy, ReadOnlySpan<int> changedBodies) {
+        Array.Clear(array: m_collisionDegrees);
+        Array.Clear(array: m_collisionIncluded);
         CollisionCandidates = 0;
         CollisionLimitedBodies = 0;
         CollisionOverlapTests = 0;
         var policyChanged = (m_collisionPolicy != policy);
 
         m_collisionPolicy = policy;
-        if (policyChanged) {
-            m_collisionAllStale = true;
-        }
-
-        var movedCount = 0;
-
-        if (m_collisionAllStale) {
-            Array.Fill(array: m_collisionMoved, value: true);
-            for (var index = 0; (index < population.Capacity); index++) {
-                m_seenCollision[index] = ReadCollisionBody(index: index, population: population);
-            }
-        } else {
-            Array.Clear(array: m_collisionMoved);
-            foreach (var index in changedBodies) {
-                var current = ReadCollisionBody(index: index, population: population);
-
-                if (current != m_seenCollision[index]) {
-                    m_seenCollision[index] = current;
-                    m_collisionMoved[index] = true;
-                    m_movedCollisionBodies[movedCount++] = index;
-                }
-            }
-            foreach (var index in m_collisionPending) {
-                m_collisionMoved[index] = true;
-            }
-            if ((movedCount == 0) && (m_collisionPending.Count == 0)) {
-                return;
-            }
-        }
-
-        Array.Clear(array: m_collisionDegrees);
-        Array.Clear(array: m_collisionIncluded);
-        var degreeSaturated = false;
 
         var pairCount = 0;
 
@@ -410,7 +359,7 @@ public sealed class WorldEventFeed {
                 population.IsActive(index: b) &&
                 (population.EntryBody(index: a) is { Collider: not null } bodyA) &&
                 (population.EntryBody(index: b) is { Collider: not null } bodyB) &&
-                ((!m_collisionAllStale && !m_collisionMoved[a] && !m_collisionMoved[b]) || TestOverlap(
+                ((!policyChanged && !m_bodyChanged[a] && !m_bodyChanged[b]) || TestOverlap(
                 a: bodyA,
                 b: bodyB
             ))
@@ -419,7 +368,6 @@ public sealed class WorldEventFeed {
             if (retained) {
                 m_collisionDegrees[a]++;
                 m_collisionDegrees[b]++;
-                degreeSaturated |= ((m_collisionDegrees[a] >= policy.MaxPairsPerBody) || (m_collisionDegrees[b] >= policy.MaxPairsPerBody));
             } else {
                 _ = m_overlapping.Remove(item: (a, b));
                 AddCollisionTransition(
@@ -434,21 +382,9 @@ public sealed class WorldEventFeed {
         var bodyCount = 0;
 
         if (policy.MaxPairsPerBody > 0) {
-            if (m_collisionAllStale) {
-                foreach (var index in changedBodies) { IncludeNeighbours(index: index); }
-                foreach (var index in m_collisionPending) { IncludeNeighbours(index: index); }
-                m_collisionPending.Clear();
-                // A policy edit can admit a previously budget-limited unchanged pair. Reconsider the complete image
-                // once for that edit, never on an ordinary tick.
-                if (policyChanged) {
-                    for (var index = 0; (index < population.Capacity); index++) { Include(index: index); }
-                }
-            } else {
-                for (var moved = 0; (moved < movedCount); moved++) { IncludeNeighbours(index: m_movedCollisionBodies[moved]); }
-                foreach (var index in m_collisionPending) { IncludeNeighbours(index: index); }
-                m_collisionPending.Clear();
-                foreach (var index in changedBodies) { Include(index: index); }
-            }
+            foreach (var index in changedBodies) { IncludeNeighbours(index: index); }
+            foreach (var index in m_collisionPending) { IncludeNeighbours(index: index); }
+            m_collisionPending.Clear();
 
             void IncludeNeighbours(int index) {
                 Include(index: index);
@@ -457,6 +393,11 @@ public sealed class WorldEventFeed {
 
                     for (var neighbour = 0; (neighbour < nearby); neighbour++) { Include(index: m_nearbySleeping[neighbour]); }
                 }
+            }
+            // A policy edit can admit a previously budget-limited unchanged pair. Reconsider the complete image
+            // once for that edit, never on an ordinary tick.
+            if (policyChanged) {
+                for (var index = 0; (index < population.Capacity); index++) { Include(index: index); }
             }
         }
         m_collisionGrid.Rebuild(spheres: m_collisionBodies.AsSpan(start: 0, length: bodyCount));
@@ -474,7 +415,7 @@ public sealed class WorldEventFeed {
                 Index: index,
                 Center: body.FixedPosition,
                 Radius: body.BroadphaseRadius,
-                Active: m_collisionMoved[index]
+                Active: (policyChanged || m_bodyChanged[index])
             );
         }
 
@@ -525,10 +466,9 @@ public sealed class WorldEventFeed {
                     continue;
                 }
 
-                m_overlapping.Add(item: (a, b));
+                _ = m_overlapping.Add(item: (a, b));
                 m_collisionDegrees[a]++;
                 m_collisionDegrees[b]++;
-                degreeSaturated |= ((m_collisionDegrees[a] >= policy.MaxPairsPerBody) || (m_collisionDegrees[b] >= policy.MaxPairsPerBody));
                 begins++;
                 AddCollisionTransition(
                     a: a,
@@ -552,7 +492,6 @@ public sealed class WorldEventFeed {
                 if (m_collisionDegrees[index] < policy.MaxPairsPerBody) { m_collisionPending.Add(item: index); }
             }
         }
-        m_collisionAllStale = ((CollisionLimitedBodies > 0) || ((policy.BeginBudget > 0) && (begins >= policy.BeginBudget)) || degreeSaturated);
 
         Array.Sort(
             array: m_collisionTransitions,
@@ -1049,7 +988,6 @@ public sealed class WorldEventFeed {
         m_regionFrames.Clear();
         m_regionDefinition = null;
         m_collisionPolicy = checkpoint.CollisionPolicy;
-        m_collisionAllStale = true;
         m_collisionPending.Clear();
         foreach (var index in checkpoint.CollisionPending) { m_collisionPending.Add(item: index); }
 

@@ -91,7 +91,7 @@ tape, program, motion recency, designations, route) still encode on every fold
 ```
 
 The view hands out the body's live arrays **[opened]**
-(`src/Puck.World.Server/WorldBody.Sections.cs:212`):
+(`WorldBody.Table`):
 
 ```csharp
     // A table as a section holds it: the live array for a view, a copy for a capture.
@@ -223,7 +223,7 @@ that moves on write access sees every one of them as changed, because
 | Motion | The motion program's own integration **[inference]**; `m_affectingSubject = -1` in `WorldBody.Advance` |
 
 The Action writes, as an example of the shape
-(`src/Puck.World.Server/WorldBody.Step.cs:161`):
+(`WorldBody.Advance`):
 
 ```csharp
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
@@ -231,7 +231,7 @@ The Action writes, as an example of the shape
         }
 ```
 
-And the turn budget (`src/Puck.World.Server/WorldBody.Step.cs:1300`):
+And the turn budget (`WorldBody.SteerUpToward`):
 
 ```csharp
         var budget = accumulator.Integrate(
@@ -516,8 +516,9 @@ same thing:
   sections into the step scratch and `WorldBody.RestoreMotion` runs fixup 1
   (a step can switch the program) and then assigns them back. It is the same
   body in the same process, so the scratch also keeps the process-local
-  counter raw and fixup 3 is a plain assignment. `WorldBody.MotionFacts` goes:
-  the facts it listed by hand are section fields or labelled diagnostics.
+  counter raw and fixup 3 is a plain assignment. The snapshot keeps no
+  hand-written list of motion facts: each is a section field or a labelled
+  diagnostic.
 - **A crossing.** The image a crossing carries to another authority stays a
   hand-written projection (`WorldBodyTransferState`,
   `WorldBody.ApplyTransferState`), because a crossing deliberately carries
