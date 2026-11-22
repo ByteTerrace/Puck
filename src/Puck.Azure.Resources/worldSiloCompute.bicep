@@ -40,83 +40,12 @@ var spot = configuration.compute.?spot
 resource network 'Microsoft.Network/virtualNetworks@2025-01-01' existing = {
   name: configuration.network.virtualNetworkName
 }
-resource nat 'Microsoft.Network/natGateways@2025-01-01' existing = { name: configuration.network.natGatewayName }
-resource security 'Microsoft.Network/networkSecurityGroups@2025-01-01' = {
-  name: configuration.network.securityGroupName
-  location: location
-  tags: union(tags, configuration.?tags ?? {})
-  properties: {
-    securityRules: [
-      {
-        name: 'WorldQuic'
-        properties: {
-          priority: 100
-          direction: 'Inbound'
-          access: 'Allow'
-          protocol: 'Udp'
-          sourcePortRange: '*'
-          destinationPortRange: string(configuration.port)
-          sourceAddressPrefix: '*'
-          destinationAddressPrefix: '*'
-        }
-      }
-      {
-        name: 'WorldHealth'
-        properties: {
-          priority: 110
-          direction: 'Inbound'
-          access: 'Allow'
-          protocol: 'Tcp'
-          sourcePortRange: '*'
-          destinationPortRange: string(configuration.lifecycle.healthPort)
-          sourceAddressPrefix: 'AzureLoadBalancer'
-          destinationAddressPrefix: '*'
-        }
-      }
-      ...(mcpEnabled
-        ? [
-            {
-              name: 'WorldMcp'
-              properties: {
-                priority: 120
-                direction: 'Inbound'
-                access: 'Allow'
-                protocol: 'Tcp'
-                sourcePortRange: '*'
-                destinationPortRange: '8443'
-                sourceAddressPrefix: '*'
-                destinationAddressPrefix: '*'
-              }
-            }
-          ]
-        : [])
-      {
-        name: 'DenyOtherInbound'
-        properties: {
-          priority: 200
-          direction: 'Inbound'
-          access: 'Deny'
-          protocol: '*'
-          sourcePortRange: '*'
-          destinationPortRange: '*'
-          sourceAddressPrefix: '*'
-          destinationAddressPrefix: '*'
-        }
-      }
-    ]
-  }
-}
-resource subnet 'Microsoft.Network/virtualNetworks/subnets@2025-01-01' = {
+// The platform (main.bicepparam's worldSilo subnet) is the subnet's and its security group's one owner, MCP rule
+// included: a platform reconcile writes the whole rule set, so a rule this template wrote too would vanish at every
+// reconcile until the next release applied it again. This template only places the workers in the subnet.
+resource subnet 'Microsoft.Network/virtualNetworks/subnets@2025-01-01' existing = {
   parent: network
   name: configuration.network.subnetName
-  properties: {
-    addressPrefix: configuration.network.subnetPrefix
-    defaultOutboundAccess: false
-    natGateway: { id: nat.id }
-    networkSecurityGroup: { id: security.id }
-    privateEndpointNetworkPolicies: 'Disabled'
-    privateLinkServiceNetworkPolicies: 'Enabled'
-  }
 }
 resource publicIp 'Microsoft.Network/publicIPAddresses@2025-01-01' = {
   name: configuration.network.publicIpName
@@ -146,9 +75,11 @@ resource balancer 'Microsoft.Network/loadBalancers@2025-01-01' = {
       }
       // The MCP rule judges only that Caddy listens, never /healthz. Caddy's certificate is restored from the owner's
       // store or, when none is stored, comes from ACME TLS-ALPN-01, whose validation reaches Caddy through this rule
-      // before any certificate exists, and the VM extension waits
-      // for that TLS front before the release commits, while /healthz answers 503 until the commit opens admission.
-      // The silo registers no MCP world session before admission opens, so the rule exposes nothing early.
+      // (and the platform's WorldMcp security rule) before any certificate exists. The release's worker is already in
+      // the pool: a release replaces the one worker in place and a fresh worker's NIC joins the pool when it is
+      // created, so the VM extension can wait for that TLS front before the release commits, while /healthz answers
+      // 503 until the commit opens admission. The silo registers no MCP world session before admission opens, so the
+      // rule exposes nothing early.
       ...(mcpEnabled
         ? [
             {

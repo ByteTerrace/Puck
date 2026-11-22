@@ -410,9 +410,12 @@ laws exercise that boundary.
   (`GroupTally.Offered`, into two heaps), at the ranks `Prioritize` last
   measured, the work queue runs store loads and
   lattice answers ahead of its stages (`Enqueue`, urgent) and every CPU stage of
-  the bake (`Schedule`), and `SdfWorldTables.OrderLanding`
+  the bake (`Schedule`), and `SdfWorldTables.RankLanding`
   orders owed meshes for landing in that order, the plan's or the list's order among
-  equals and a draw no host box bounds first. With no demand point (the CPU
+  equals and a draw no host box bounds first. The landing order is kept, never
+  rebuilt a staging: a staged owed mesh is ranked when it joins or one of its rows
+  changes, the head of the order every staging, and the rest in turn under a row
+  budget, so its cost follows what changed, not what is owed. With no demand point (the CPU
   laws, `puck mesh audit --cpu`) the plan's order stands. Order never changes
   a mesh. `world.residency [radius]` reads when the groups landed and became
   resident from the bake's start, near the primary seat's eye and everywhere,

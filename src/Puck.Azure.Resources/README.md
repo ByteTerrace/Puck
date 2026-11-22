@@ -141,8 +141,14 @@ The existing load balancer maps public TCP 443 to Caddy on 8443 (the image
 ACME TLS-ALPN-01 to issue, renew and hot-swap the certificate, forwarding only to
 the loopback MCP listener. That rule has its own TCP probe of 8443, not the world's
 `/healthz` probe: a worker that finds no stored certificate obtains one through the rule
-before its release commits, and `/healthz` answers 503 until then. No DNS plugin, stored Azure credential, PFX secret,
-port 80 listener or renewal restart is needed.
+before its release commits, and `/healthz` answers 503 until then. The world subnet's
+security group admits 8443 through a `WorldMcp` rule that `main.bicepparam` declares
+whenever `BICEPPARAM_WORLD_MCP` is set. The platform is the only template that writes
+that subnet and its group; [worldSiloCompute.bicep](./worldSiloCompute.bicep) only
+references them, because each platform reconcile replaces the group's whole rule set.
+Turning MCP on with `deploy-world-mcp` alone therefore opens 8443 only at the next
+platform reconcile, which every release runs first. No DNS plugin, stored Azure
+credential, PFX secret, port 80 listener or renewal restart is needed.
 
 Caddy keeps its certificate, key and ACME account in `/var/lib/puck-tls`, under a
 separate container UID, outside the World container's mounts. The TLS state keeper
@@ -154,7 +160,12 @@ certificates per exact set of names in seven days, so a worker that issued on ev
 bootstrap, Spot replacement or priority change would lock the hostname out of TLS.
 Caddy starts only after the keeper reports ready: the restored or local certificate
 is outside Caddy's renewal window (the last third of its lifetime), or this worker
-holds the lease on the `lock` blob beside the state. A second worker that finds no
+holds the lease on the `lock` blob beside the state. The keeper's systemd unit is the
+one door. Caddy's unit is `Requisite=` on it and is never enabled itself, and the
+keeper `Upholds=` Caddy, so systemd starts Caddy each time the keeper becomes ready,
+including after a failed keeper start that systemd retried. The bootstrap gives the
+host an account for Caddy's UID 1655 (`puck-tls`), because systemd refuses to start a
+unit whose numeric `User=` the host's account database lacks. A second worker that finds no
 fresh certificate waits for the holder to store one, so a hostname issues once
 however many workers start. The keeper then stores whichever certificate is newer,
 so a renewal reaches the store, and a worker that sees another's renewal loads it
