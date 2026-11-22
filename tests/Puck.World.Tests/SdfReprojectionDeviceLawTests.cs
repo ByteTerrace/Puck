@@ -106,10 +106,10 @@ public sealed class SdfReprojectionDeviceLawTests {
     }
     private static Vector4[] Run(GpuDeviceServices services, string extension, MotionCase[] cases) {
         SdfMeshDraw[] draws = [
-            new(Identity: "moving", Material: 0, Mesh: Mesh, ObjectToWorld: CurrentMesh),
-            new(Identity: "still", Material: 0, Mesh: Mesh, ObjectToWorld: StillMesh),
-            new(Identity: "behind", Material: 0, Mesh: Mesh, ObjectToWorld: BehindMesh),
-            new(Identity: "still-sliver", Material: 0, Mesh: Sliver, ObjectToWorld: StillMesh),
+            new(identity: "moving", material: 0, mesh: Mesh, objectToWorld: CurrentMesh),
+            new(identity: "still", material: 0, mesh: Mesh, objectToWorld: StillMesh),
+            new(identity: "behind", material: 0, mesh: Mesh, objectToWorld: BehindMesh),
+            new(identity: "still-sliver", material: 0, mesh: Sliver, objectToWorld: StillMesh),
         ];
         var meshes = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);
         var meshLayout = SdfMeshRegion.Plan(draws: draws, meshes: meshes);
@@ -135,7 +135,7 @@ public sealed class SdfReprojectionDeviceLawTests {
         // No draw carries a frame slot or members, so neither frame's dynamic transforms are read; each binding needs a row.
         // The previous table holds the preceding frame's draw records, at the mesh region's stride.
         SdfMeshDraw[] previousDraws = [
-            draws[0] with { ObjectToWorld = PreviousMesh },
+            draws[0].PlacedAt(objectToWorld: PreviousMesh),
             draws[1],
             draws[2],
             draws[3],

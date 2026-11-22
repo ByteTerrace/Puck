@@ -16,6 +16,12 @@ namespace Puck.Abstractions.Waiting;
 /// could only fail it. A pump thread cannot claim a consumer, and a consumer's thread cannot become a pump.
 /// </para>
 /// <para>
+/// One deadline form is neither clipped nor charged (<see cref="OnDelegatedWork"/>): the wait of a thread for work it
+/// handed to a consumer thread that exists to run it. That is the waiter's own work on another thread, not another
+/// subsystem's progress, so the work's own deadline bounds it and the allowance is left for the waits on other
+/// subsystems. It takes the worker's <see cref="WaitConsumer"/>, which only that thread can mint.
+/// </para>
+/// <para>
 /// The pacer's wait is serviced (<see cref="Pace"/>): the pump thread sleeps on its deadline and on one wake event
 /// together and runs the work registered for it (<see cref="Serve"/>, a <see cref="WaitService"/>) each time the event
 /// is set, so work that completes between two iterations is taken up then rather than at the next one. Only that form
@@ -154,6 +160,32 @@ public static class HostWaits {
         var wait = new ConditionWait(monitor: monitor);
 
         return Run(deadline: deadline, reason: in reason, wait: ref wait);
+    }
+    /// <summary>Waits for <paramref name="monitor"/> to be pulsed by <paramref name="worker"/>'s thread, which is
+    /// running work the calling thread handed to it: the caller's own work on another thread, not another subsystem's
+    /// progress. On the pump thread the wait is neither clipped to the iteration's allowance nor charged to it, since
+    /// the time is the work's, which the pump would otherwise have spent running it; <paramref name="deadline"/>, the
+    /// work's own stall deadline, is its only bound. The caller holds the monitor and re-tests its condition after the
+    /// wait, as for <see cref="OnCondition"/>.</summary>
+    /// <param name="monitor">The hand-off's monitor object, held by the calling thread.</param>
+    /// <param name="worker">The consumer role of the thread that runs the work.</param>
+    /// <param name="reason">Why the thread waits.</param>
+    /// <param name="deadline">When the wait gives up: the handed work's stall deadline.</param>
+    /// <returns>Whether the monitor was pulsed before the deadline.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="worker"/> is the calling thread's own role: a
+    /// thread cannot wait for work it runs itself.</exception>
+    /// <exception cref="SynchronizationLockException">The calling thread does not hold the monitor.</exception>
+    public static WaitOutcome OnDelegatedWork(object monitor, WaitConsumer worker, in WaitReason reason, WaitDeadline deadline) {
+        ArgumentNullException.ThrowIfNull(argument: monitor);
+        ArgumentNullException.ThrowIfNull(argument: worker);
+
+        if (worker.ThreadId == Environment.CurrentManagedThreadId) {
+            throw new InvalidOperationException(message: $"Thread {worker.ThreadId} cannot wait for work it runs itself ({reason}).");
+        }
+
+        var wait = new ConditionWait(monitor: monitor);
+
+        return Run(charged: false, deadline: deadline, reason: in reason, wait: ref wait);
     }
     /// <summary>Waits for <paramref name="thread"/> to exit.</summary>
     /// <param name="thread">The started thread.</param>
@@ -428,7 +460,9 @@ public static class HostWaits {
 
         return (CurrentSlot = slot);
     }
-    private static WaitOutcome Run<TWait>(ref TWait wait, in WaitReason reason, WaitDeadline deadline) where TWait : struct, IBlockingWait {
+    // A charged wait on the pump thread is clipped to the iteration's allowance (unless synchronous) and spends it; an
+    // uncharged one (OnDelegatedWork) does neither.
+    private static WaitOutcome Run<TWait>(ref TWait wait, in WaitReason reason, WaitDeadline deadline, bool charged = true) where TWait : struct, IBlockingWait {
         if (wait.TryNow()) {
             return WaitOutcome.Completed;
         }
@@ -437,7 +471,7 @@ public static class HostWaits {
         var start = Stopwatch.GetTimestamp();
         var end = deadline.Timestamp;
 
-        if (slot.IsPump && !deadline.IsSynchronous) {
+        if (charged && slot.IsPump && !deadline.IsSynchronous) {
             end = Math.Min(val1: end, val2: start.AddSaturating(right: slot.AllowanceTicks));
         }
 
@@ -473,7 +507,7 @@ public static class HostWaits {
             lock (slot.Gate) {
                 slot.Standing = false;
             }
-            if (slot.IsPump) {
+            if (charged && slot.IsPump) {
                 slot.AllowanceTicks = Math.Max(val1: 0L, val2: (slot.AllowanceTicks - (Stopwatch.GetTimestamp() - start)));
             }
         }

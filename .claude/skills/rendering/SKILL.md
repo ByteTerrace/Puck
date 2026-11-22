@@ -607,7 +607,7 @@ add the row you found.
 | Decide when a frame rebuilds and how it presents | `WorldSceneEmitter` (the composed revision), `WorldFramePresenter` (the `ISdfFrameSource` that delivers it) | `src/Puck.World.Client` |
 | Hand a residency a frame every frame without allocating, or keep one past its source's next capture | `SdfFrame.Writer`, the one door that changes a frame after construction: `Write` a frame of the producer's own from its `SdfFrameContent` (per frame) and `SdfFrameSettings` (per setting), or `CopyFrom` another frame. A source's frame is borrowed until its next capture; `SdfWorldResidency` renders its own copy, written into whichever of its two capture writers the tables do not hold. Never `with` a frame on a per-frame path | `src/Puck.SdfVm` |
 | Add a camera or another view of the world | the view types in `src/Puck.SdfVm/Views`, `WorldViewInstances` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
-| Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork`. A client's per-slot buffers come from the recording (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`), never the buffer factory: that door reserves them (`SdfGpuWorkHold`). A client cuts each job to the allowance its take is handed (`SdfGpuWorkAllowance`: what the charged jobs in flight leave of `SdfGpuWorkBudget.FrameAllowanceSeconds`, the share the frame leaves free, which `WorldBackgroundAllowance` feeds from every node's timestamps) at its kind's `SdfGpuWorkRate`, and while work is queued takes no job priced past it, deciding before it takes anything; never a fixed share. An arrival's bake work (a group drawing nothing yet, or the first detail over its floor) owes the frame and takes the GPU the frame leaves idle between frames, from a quarter of the period up to one period, under its own allowance (`ISdfGpuWorkClient.TryTakeOwed`, `SdfGpuWorkBudget.OwedAllowance`), outside the credit, while ordinary background work keeps the frame allowance; so do the landing of a mesh a staged draw waits for and a seen irradiance volume's first light (`SdfMeshIrradiance.OwesFirstLight`), each a client whose every job is then owed (`ISdfGpuWorkClient.OwesAll`). The residencies' services divide the budget by their display share, never by pump order: each holds a turn (`SdfGpuWorkBudget.Join`, weighed by `SdfGpuWork.Weigh` from `SdfFrame.DisplayShare`) that every budgeted step, owed or not, asks first (`SdfGpuWorkBudget.Takes`, `work-turns` and `turn-holds` on `world.residency`). The budget counts frames background work may have cost (`FramesMissedBehind`, `frames-behind` on `world.residency`) | `src/Puck.SdfVm`, `src/Puck.World/WorldBackgroundAllowance.cs`; [the bake's dispatch](#which-dispatch-owns-the-code) |
+| Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork`. A client's per-slot buffers come from the recording (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`), never the buffer factory: that door reserves them (`SdfGpuWorkHold`). A client cuts each job to the allowance its take is handed (`SdfGpuWorkAllowance`: what the charged jobs in flight leave of `SdfGpuWorkBudget.FrameAllowanceSeconds`, the share the frame leaves free, which `WorldBackgroundAllowance` feeds from every node's timestamps) at its kind's `SdfGpuWorkRate`, and while work is queued takes no job priced past it, deciding before it takes anything; never a fixed share. An arrival's bake work (a group drawing nothing yet, or the first detail over its floor) owes the frame and takes the GPU the frame leaves idle between frames, from a quarter of the period up to one period, under its own allowance (`ISdfGpuWorkClient.TryTakeOwed`, `SdfGpuWorkBudget.OwedAllowance`), outside the credit, while ordinary background work keeps the frame allowance; so do the landing of a mesh a staged draw waits for and a seen irradiance volume's first light (`SdfMeshIrradiance.OwesFirstLight`), each a client whose every job is then owed (`ISdfGpuWorkClient.OwesAll`). The residencies' services divide the budget by their display share, never by pump order: each holds a turn (`SdfGpuWorkBudget.Join`, weighed by `SdfGpuWork.Weigh` from `SdfFrame.DisplayShare`) that every budgeted step, owed or not, asks first (`SdfGpuWorkBudget.Takes`, `work-turns` and `turn-holds` on `world.residency`). The budget counts frames background work may have cost (`FramesMissedBehind`, `frames-behind` on `world.residency`) | `src/Puck.SdfVm`, `src/Puck.World.Presentation/WorldBackgroundAllowance.cs`; [the bake's dispatch](#which-dispatch-owns-the-code) |
 | Have the frame thread take work up while it waits between frames, or wake it for a GPU completion | `HostWaits.Serve` (a `WaitService`, served by `HostWaits.Pace`) and `IGpuSubmissionFence.SignalOnCompletion`; never a poll loop or a thread of your own that records. A wait inside the frame's open batch (a residency's staging, `SdfGpuWork.Drive`) hands its submissions off first (`IGpuSubmissionFence.HandOff`), or the completion it sleeps on never comes before the flush | `src/Puck.Abstractions/Waiting`, `src/Puck.Abstractions/Gpu/Device` |
 | Compute irradiance, and check it on the CPU | `SdfMeshIrradiance`, whose CPU reference shares one probe lookup with the relight and the views shader | `src/Puck.SdfVm`; [mesh GI](references/mesh-gi.md) |
 | Meter a view's picture for its exposure (histogram, percentiles, dead band, cut snap) | the composite's histogram (`passes/sdf-composite.comp.hlsl`), read back by `SdfSkyRecorder`, reduced by `SdfExposure.Meter`, followed by `SdfViewExposures` | `src/Puck.SdfVm`, `src/Puck.SignedDistance`; [the decision](../../../docs/decisions/rendering.md#lights-screens-and-the-camera-are-photometric) |
@@ -729,9 +729,13 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   (`sdfMeshPoseOf`) and derive its world box the same way (`sdfSelectionBox`), so
   a body that moves rewrites its slot's row and no record. The host judges it by
   `SdfMeshBox.Ridden`, the box's twin, held per row as last judged
-  (`SdfWorldTables.RowSelection`) and moved as its slot moves (`NoteMovedSlots`);
-  a producer that names a slot builds the draw's matrix from that slot's
-  transform in the same frame, or the CPU and the kernels place it apart. A cut
+  (`SdfWorldTables.RowSelection`) and moved as its slot moves (`NoteMovedSlots`).
+  A moving draw riding its slot (`SdfMeshDraw.PlacedBySlot`) keeps its scale and
+  no pose: every CPU reader places it through one door, `SdfMeshDraw.PlacementIn`
+  (the frame's transform rows), and `SdfMeshDraw.FixedPlacement`, which a static
+  scene reads, refuses it. Such a draw compares equal wherever its slot moves, so a
+  body that only moved writes no draw and no row (`SdfMeshDresserSlotLawTests`);
+  a moving rigid copy's pose moves no `SdfMeshInstance.Revision` either. A cut
   of a rider's pose history (`SdfMeshObservation.PoseCut`) reseats its slot's
   previous row (`ReseatRiddenSlot`). Every raster pass uploads 224 bytes of controls
   and records one counted indirect draw per phase. A draw with no
@@ -1667,7 +1671,11 @@ counts in `sdf.transforms`, never in `records.posed`.
   `FrameAccess` exposes (a group's shown mesh, its tier, the list) moves it through one of them. Rigid copies come
   through the composition source's copy journal (`SdfFrame.MeshCopyChanges`, a `GpuChangedRows` read by a
   `GpuRowCursor`), which the dresser and the bake's layout check each read. `sdf.instances.dress.groups-visited`,
-  `.groups-stood` and `.copies-visited` count it.
+  `.groups-stood` and `.copies-visited` count it. A moved slot poses only the groups that ride it, and only where its
+  scale moved (`DrawBinding.Repose`); a rigid copy's root slot is past every group's, so the walk stops before it.
+  The host draws arrive with a journal too: `SdfMeshDrawComposer` composes each producer's draws (a scene's statics
+  and stamp pool, `WorldSceneMeshDraws`; the composition's emitters) and copies and owes only the rows a producer's
+  journal names, which the dresser's host cursor reads.
 - **A pack visits only what woke.** The stamp pool, its rigid bodies (`WorldRigidAssets.Pack`) and the catalog
   avatars (`WorldCatalogAvatars.Pack`) each keep an awake set, so a frame costs the registrations something woke, never
   the pool: a body's presented inputs through the source's journal (`IWorldStampSource.BodyChanges`, which
@@ -1728,8 +1736,8 @@ counts in `sdf.transforms`, never in `records.posed`.
   inspect the live schedule and completed build as well.
 - Screen-light reproduction must compare source bytes, not just graph publication
   numbers. `MachineVideoSourceUpload` numbers uploads, while a queued machine's
-  video read takes the native frame due at the position its machine host
-  presents (`IWorldMachineHost.PresentedTicks`), which outside lockstep follows
+  video read takes the native frame due at the position its world's machines
+  present (`WorldMachinePresentation.PresentedTicks`), which outside lockstep follows
   host time. Equal publications can therefore feed different images to
   `ScreenEmission`. Lockstep uses the existing
   synchronous machine advance before rendering. A fence wait, readback or GPU

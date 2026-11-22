@@ -48,10 +48,10 @@ public sealed class SdfMeshStagingCauseLawTests {
             // whose meshes are owed, and stage them as they land.
             LandRootCut(rig, run.Dresser.Dress(frame: Input(draws: draws, revision: 1)));
             // A pose: the dresser journals the moved row and the tables take the journal.
-            draws[0] = draws[0] with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: 5f, yPosition: 0f, zPosition: 0f) };
+            draws[0] = draws[0].PlacedAt(objectToWorld: Matrix4x4.CreateTranslation(xPosition: 5f, yPosition: 0f, zPosition: 0f));
             RenderRootCut(rig, run.Dresser.Dress(frame: Input(draws: draws, revision: 2)));
             // A publication that throws partway, and its retry from the inputs, which owes every row.
-            var faulty = Input(draws: new ThrowOnceDraws(draws: [draws[0] with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: 6f, yPosition: 0f, zPosition: 0f) }, draws[1]]), revision: 3);
+            var faulty = Input(draws: new ThrowOnceDraws(draws: [draws[0].PlacedAt(objectToWorld: Matrix4x4.CreateTranslation(xPosition: 6f, yPosition: 0f, zPosition: 0f)), draws[1]]), revision: 3);
 
             Assert.Throws<InvalidOperationException>(testCode: () => run.Dresser.Dress(frame: faulty));
             RenderRootCut(rig, run.Dresser.Dress(frame: faulty));
@@ -87,7 +87,7 @@ public sealed class SdfMeshStagingCauseLawTests {
         var before = work.Read(kind: SdfMeshHistory.RowsPackedOf(cause: SdfMeshStagingCause.Rebuild));
         var cursorBefore = work.Read(kind: SdfMeshHistory.RowsPackedOf(cause: SdfMeshStagingCause.Cursor));
 
-        draws[0] = draws[0] with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: 5, yPosition: 0, zPosition: 0) };
+        draws[0] = draws[0].PlacedAt(objectToWorld: Matrix4x4.CreateTranslation(xPosition: 5, yPosition: 0, zPosition: 0));
         var replacement = second.Dresser.Dress(frame: input);
 
         Assert.Equal(original.MeshRows!.Serial, replacement.MeshRows!.Serial);
@@ -117,14 +117,14 @@ public sealed class SdfMeshStagingCauseLawTests {
         var overBefore = work.Read(kind: SdfMeshHistory.FramesOverChunkOf(cause: pose));
 
         for (var index = 0; (index < SdfMeshHistory.ChunkRecords); index++) {
-            draws[index] = draw with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: 2, yPosition: 0, zPosition: 0) };
+            draws[index] = draw.PlacedAt(objectToWorld: Matrix4x4.CreateTranslation(xPosition: 2, yPosition: 0, zPosition: 0));
         }
         RenderRootCut(rig, run.Dresser.Dress(frame: input with { MeshDrawsRevision = 1 }));
         Assert.Equal(SdfMeshHistory.ChunkRecords, work.Read(kind: SdfMeshHistory.PeakRowsPackedOf(cause: pose)));
         Assert.Equal(overBefore, work.Read(kind: SdfMeshHistory.FramesOverChunkOf(cause: pose)));
 
         for (var index = 0; (index < draws.Count); index++) {
-            draws[index] = draw with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: 3, yPosition: 0, zPosition: 0) };
+            draws[index] = draw.PlacedAt(objectToWorld: Matrix4x4.CreateTranslation(xPosition: 3, yPosition: 0, zPosition: 0));
         }
         var settled = run.Dresser.Dress(frame: input with { MeshDrawsRevision = 2 });
 

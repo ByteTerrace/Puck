@@ -1033,7 +1033,12 @@ Only the stall deadline declares a device lost or an authority stalled.
   iteration's allowance has left, and the time a wait took is charged to it, so
   sequential waits cannot each spend a full budget. A synchronous deadline
   (`WaitDeadline.Synchronous`), which a door that completes its operation or
-  throws mints because it cannot resume the wait, is charged and never clipped. The door keeps the standing
+  throws mints because it cannot resume the wait, is charged and never clipped.
+  One form is neither: `HostWaits.OnDelegatedWork`, the wait of a thread for
+  work it handed to a consumer thread that exists to run it (the pump's wait
+  for a tick on the step thread, through `JobLane.Collect`). That time is the
+  waiter's own work, so the work's stall deadline bounds it, and the form
+  takes the worker's `WaitConsumer` so no other wait can use it. The door keeps the standing
   waits and the latest expired ones (reason, thread, start, budget), which is
   what `world.wait` and `host.frames` read. A wait that finds its object
   already complete records nothing and allocates nothing.

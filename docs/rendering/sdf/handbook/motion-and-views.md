@@ -392,4 +392,4 @@ screen source is pure shading fed by a wire. A booted machine's screen is a
 - Source: `src/Puck.SdfVm/SdfAnchor.cs`, `src/Puck.SdfVm/Views/SdfCameraRig.cs`,
   `src/Puck.SdfVm/Views/ViewTransition.cs`,
   `src/Puck.World.Client/Sources/WorldViewInstances.cs`,
-  `src/Puck.World/WorldScreenBinder.{CameraViews,Session,Views}.cs` and their device work,
+  `src/Puck.World.Presentation/WorldScreenBinder.{CameraViews,Session,Views}.cs` and their device work,

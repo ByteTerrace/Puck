@@ -6,9 +6,8 @@ namespace Puck.World.Protocol;
 /// live world edits, and reads back query answers. Every non-intent submission travels as one
 /// <see cref="SubmissionEnvelope"/> through the server's single ordered domain (<c>Server.WorldServer.Submit</c>) —
 /// never split by kind, so a grant and the command that follows it in the same script are guaranteed to apply in
-/// submission order regardless of transport. A loopback transport enqueues and drains that domain inline, on the tick
-/// thread, before a <c>Submit*</c> call returns (so FIFO order and read-after-write are preserved exactly); a future
-/// byte transport buffers to the same coordinate. No submission returns a value directly; every envelope
+/// submission order regardless of transport. Loopback submits inline in the host's boundary window and queues
+/// fire-and-forget work from outside the window. Every envelope
 /// resolves to a typed <see cref="WorldSubmissionResult"/>, delivered to a local caller as an inline completion
 /// callback (see <see cref="SubmitSession"/>/<see cref="Query"/>) and, once a wire exists, to a remote caller as a
 /// Completion frame. Definition swaps and world mutations still buffer on the server and drain at the tick boundary
@@ -32,7 +31,7 @@ public interface IServerLink {
     /// <param name="principal">The acting identity.</param>
     /// <returns>The correlation id the submission's envelope minted — the coordinate a deferred verdict's
     /// <c>WorldEditEcho</c> carries back — or <c>0</c> when none exists (a codec refusal, a link whose envelope is
-    /// minted remotely).</returns>
+    /// minted remotely or at a later boundary).</returns>
     long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal);
     /// <summary>Submits one payload while carrying a caller-preserved operation id for a mutation. Implementations
     /// that predate operation metadata retain the two-argument path for non-mutations; a mutation with an empty id is
@@ -68,10 +67,10 @@ public interface IServerLink {
         return correlation;
     }
     /// <summary>Submits a session/identity request. <paramref name="completion"/> receives the server's reply (assigned
-    /// index / rejection / roster echo) — for a local submitter it fires inline, before this call returns, so a
+    /// index / rejection / roster echo) — in the local boundary window it fires inline, before this call returns, so a
     /// caller may format its console echo entirely inside the callback with no observable difference from a
     /// synchronous return. Format every console result line from the reply the callback
-    /// receives — never from a live read taken after this call returns.</summary>
+    /// receives — never from a live read taken after this call returns. Loopback refuses the call outside the window.</summary>
     /// <param name="request">The session request.</param>
     /// <param name="completion">Invoked once with the server's reply.</param>
     void SubmitSession(SessionRequest request, Action<SessionReply> completion);
@@ -79,7 +78,7 @@ public interface IServerLink {
     /// door (<c>Server.WorldRuleHost.AnswerSubmittedQuery</c>) a wire peer's query crosses: the principal's
     /// <see cref="WorldCapability.Observe"/> grant and, for a session, its live observation decide the answer.
     /// <paramref name="completion"/> receives the composed answer string (printed verbatim by the client) — fires inline
-    /// for a local submitter, before this call returns.</summary>
+    /// in the local boundary window, before this call returns. Loopback refuses the call outside the window.</summary>
     /// <remarks>Every query names whom it answers: a console verb passes its invocation's stamped principal
     /// (<see cref="CommandContext.Principal"/>), and only the operator's own presentation names
     /// <see cref="Principal.Console"/>. A link whose remote authority identifies its submitter by credential (a

@@ -10,14 +10,55 @@ namespace Puck.Cli.Automation;
 /// Bootstrap publishes each world's exact release definition through an unowned authority root and creates no
 /// gameplay state; the marker is published last.</summary>
 public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldReleaseArchive releases, WorldReleaseFixtureArchive fixtures) {
-    public async Task BuildAsync(WorldReleaseManifest release, Guid owner, WorldReleaseFixtureManifest? snapshot,
-        string directory, CancellationToken token) {
+    /// <summary>Builds the qualification fixture for <paramref name="release"/> from <paramref name="snapshot"/>, or a
+    /// bootstrap fixture without gameplay when <paramref name="snapshot"/> is <see langword="null"/>. A snapshot whose
+    /// state this build cannot decode (<see cref="WorldReleaseCoordinator.FindStateReset"/>) builds
+    /// <paramref name="successor"/>'s bootstrap fixture instead, so a deployment resets rather than refuses; with no
+    /// successor it refuses. Nothing is written before that decision.</summary>
+    /// <param name="release">The release whose definitions the fixture holds: the deployment's source when a snapshot is
+    /// given, else the release being bootstrapped.</param>
+    /// <param name="owner">The owner of every world in the release.</param>
+    /// <param name="snapshot">The source's retained capture, or <see langword="null"/> for a bootstrap fixture.</param>
+    /// <param name="directory">The fresh directory the fixture is written to.</param>
+    /// <param name="token">The token that cancels reads and writes.</param>
+    /// <param name="successor">The release a deployment starts fresh when the snapshot's state cannot be decoded, or
+    /// <see langword="null"/> to refuse such a snapshot.</param>
+    /// <returns>Why the snapshot's state was reset and the successor's bootstrap fixture built, or
+    /// <see langword="null"/> when the fixture holds what was asked for.</returns>
+    /// <exception cref="InvalidDataException">The snapshot does not match the release's inventory, or its state cannot
+    /// be decoded and no successor was given.</exception>
+    /// <exception cref="IOException"><paramref name="directory"/> already exists, or a fixture write is refused.</exception>
+    public async Task<string?> BuildAsync(WorldReleaseManifest release, Guid owner, WorldReleaseFixtureManifest? snapshot,
+        string directory, CancellationToken token, WorldReleaseManifest? successor = null) {
         directory = Path.GetFullPath(path: directory);
         if (
             Directory.Exists(path: directory) ||
             File.Exists(path: directory)
         ) { throw new IOException(message: "qualification export requires a fresh output directory"); }
         _ = CliWorldVocabulary.EnsureInstalled();
+        var checkpoints = new SortedDictionary<string, ReadOnlyMemory<byte>>(comparer: StringComparer.Ordinal);
+        string? reset = null;
+
+        if (snapshot is not null) {
+            foreach (var world in snapshot.Worlds.Keys) {
+                checkpoints.Add(
+                    key: world,
+                    value: await fixtures.ReadCheckpointAsync(
+                        snapshot,
+                        world,
+                        token
+                    ).ConfigureAwait(continueOnCapturedContext: false)
+                );
+            }
+            reset = WorldReleaseCoordinator.FindStateReset(checkpoints: checkpoints);
+            if (reset is not null) {
+                if (successor is null) {
+                    throw new InvalidDataException(message: $"qualification snapshot checkpoint refused — {reset}. Capture a new release fixture with the current authority.");
+                }
+                release = successor;
+                snapshot = null;
+            }
+        }
         var worlds = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
 
         foreach (var row in release.DefinitionFiles) {
@@ -93,18 +134,14 @@ public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRele
 
                 if (!published.Ok) { throw new IOException(message: ("bootstrap fixture definition could not be published: " + published.Detail)); }
             } else {
-                var checkpointBytes = await fixtures.ReadCheckpointAsync(
-                    snapshot,
-                    world.Key,
-                    token
-                ).ConfigureAwait(continueOnCapturedContext: false);
+                var checkpointBytes = checkpoints[world.Key];
 
                 if (!WorldAuthorityCheckpointCodec.TryDecode(
                     bytes: checkpointBytes.Span,
                     checkpoint: out var captured,
                     reason: out var reason
                 )) {
-                    throw new InvalidDataException(message: $"qualification snapshot checkpoint refused — {reason}. Capture a new release fixture with the current authority.");
+                    throw new InvalidDataException(message: $"qualification snapshot checkpoint refused — {reason}");
                 }
                 if (captured!.Server.LastCompletedTick != snapshot.Worlds[world.Key].Tick) { throw new InvalidDataException(message: "qualification checkpoint tick differs from its inventory"); }
                 var receipts = await fixtures.ReadReceiptsAsync(
@@ -189,5 +226,6 @@ public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRele
             WorldReleaseQualificationRunner.MarkerFileContent,
             token
         ).ConfigureAwait(continueOnCapturedContext: false);
+        return reset;
     }
 }

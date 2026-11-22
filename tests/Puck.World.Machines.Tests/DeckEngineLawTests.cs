@@ -89,7 +89,7 @@ public sealed class DeckEngineLawTests {
             expected: MachineRuntimeStatus.Running,
             actual: host.InstanceState(name: "deck")!.Value.Status
         );
-        var video = host.VideoOutput(
+        var video = host.CapturePresentation().VideoOutput(
             instance: "deck",
             output: "video"
         );

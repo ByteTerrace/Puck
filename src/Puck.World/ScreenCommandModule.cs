@@ -21,6 +21,27 @@ namespace Puck.World;
 /// views' cadence (<c>ScreenCommandModule.Listing.cs</c>); this module is core, so every boot shape answers both. The
 /// world speaks the engine-neutral machine vocabulary.
 /// </summary>
+/// <summary>One diegetic screen's live state for the <c>screen.state</c> verb — whether a machine is assigned, the engine
+/// that hosts it, the current source handle (nonzero = bound this frame), the stepped-frame count, and the boot fault (a
+/// declared machine whose content file was missing, a webcam that would not open, a captured window not found), if any:
+/// the machine host's half beside the screen binder's (<see cref="WorldScreenBinder.TryPresentedState"/>).</summary>
+/// <param name="Assigned">Whether a machine is booted on the screen.</param>
+/// <param name="Engine">The screen-machine engine id hosting the machine (meaningful only when <paramref name="Assigned"/>).</param>
+/// <param name="Handle">The current source image-view handle (0 = unbound, dark glass).</param>
+/// <param name="FramesStepped">How many frames the machine has stepped since it booted.</param>
+/// <param name="PendingSteps">Accepted queued-machine steps not yet completed; zero for synchronous machines.</param>
+/// <param name="MaximumPendingSteps">The queued machine's finite pending-segment capacity; zero for synchronous
+/// machines.</param>
+/// <param name="BackpressureEvents">How many queued submissions waited for capacity since the current content was
+/// loaded; zero for synchronous machines.</param>
+/// <param name="Fault">A slot's live fault (a missing content file, no camera device, a window not found), or <see langword="null"/>.</param>
+/// <param name="Cartridge">The cartridge document the machine's content was compiled from, or <see langword="null"/>
+/// for content booted as read.</param>
+/// <param name="Content">The content path the machine mounted, or <see langword="null"/> when it runs with no cartridge
+/// or no machine is assigned.</param>
+public readonly record struct WorldScreenState(bool Assigned, string? Engine, nint Handle, long FramesStepped,
+    long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault, WorldMachineCartridge? Cartridge = null,
+    string? Content = null);
 internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, WorldServer server, IServerLink link, WorldMachineCatalog machines) : ICommandModule {
     private const string CameraSourceForm = "<index> camera [color|infrared] [seat N]";
     private const string IndexForm = "<index>";
@@ -30,6 +51,38 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
     private readonly WorldScreenBinder m_binder = binder;
     private readonly WorldEngagement m_engagement = server.Engagement;
     private readonly WorldServer m_server = server;
+
+    // A screen's state: the machine host's half (the boot authority's machines, read in the control phase) beside the
+    // binder's (the bound image and the source's fault).
+    private WorldScreenState? StateOf(int index) {
+        if (!m_binder.TryPresentedState(fault: out var fault, handle: out var handle, index: index)) {
+            return null;
+        }
+
+        return ((m_server.Machines.State(index: index) is { Assigned: true } machine)
+            ? new WorldScreenState(
+                Assigned: true,
+                BackpressureEvents: machine.BackpressureEvents,
+                Cartridge: machine.Cartridge,
+                Content: machine.Content,
+                Engine: machine.Engine,
+                Fault: machine.Fault,
+                FramesStepped: machine.FramesStepped,
+                Handle: handle,
+                MaximumPendingSteps: machine.MaximumPendingSteps,
+                PendingSteps: machine.PendingSteps
+            )
+            : new WorldScreenState(
+                Assigned: false,
+                BackpressureEvents: 0,
+                Engine: null,
+                Fault: fault,
+                FramesStepped: 0,
+                Handle: handle,
+                MaximumPendingSteps: 0,
+                PendingSteps: 0
+            ));
+    }
     private readonly IServerLink m_link = link;
     private static readonly CommandForms ScreenEjectForms = CommandForms.Of(verb: "screen.eject", IndexForm);
     private static readonly CommandForms ScreenInsertForms = CommandForms.Of(verb: "screen.insert", "<index> <contentPath>");
@@ -245,7 +298,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             return refusal;
         }
 
-        return new CommandResult(Output: $"[screen.links: {m_binder.DescribeLinks()}]");
+        return new CommandResult(Output: $"[screen.links: {m_server.Machines.DescribeLinks()}]");
     }
     private CommandResult MachinesHandler(CommandContext context, WireArgs args) {
         if (CommandResult.RequireNoArguments(
@@ -312,7 +365,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             return CommandResult.Error(output: $"[screen.peek: addr '{args[1].ToString()}' must be a 0x-prefixed hex address or recognized symbol]");
         }
 
-        var (ok, message) = m_binder.TryPeek(
+        var (ok, message) = m_server.Machines.TryPeekMessage(
             address: address,
             index: index,
             value: out var value
@@ -671,7 +724,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             return CommandResult.Error(output: $"[screen.state: index '{args[0].ToString()}' must be an integer]");
         }
 
-        if (m_binder.State(index: index) is not { } state) {
+        if (StateOf(index: index) is not { } state) {
             return CommandResult.Error(output: $"[screen.state: no screen {index} declared]");
         }
 
@@ -734,7 +787,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         }
 
         // The magazine selector and cable link, when present — one query answers the whole arc.
-        if (m_binder.TryMagazine(
+        if (m_server.Machines.TryMagazine(
             index: index,
             magazine: out var magazine,
             selected: out var selected
@@ -745,7 +798,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             );
         }
 
-        if (m_binder.LinkOf(index: index) is { } link) {
+        if (m_server.Machines.LinkOf(index: index) is { } link) {
             _ = builder.Append(
                 provider: CultureInfo.InvariantCulture,
                 handler: $" link={link}"

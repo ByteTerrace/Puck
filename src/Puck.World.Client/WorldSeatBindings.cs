@@ -61,7 +61,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // poll) is what notices a gated overlay's activation flip.
     private readonly ulong[] m_overlayGateSignature;
     // Per-seat: a seat's binding vocabulary composes from whichever document currently frames it
-    // (WorldInstanceHost.ResolveRoutedDefinition's own routed lookup — the same per-seat source
+    // (WorldSeatAuthorityRouter.DefinitionOf's own routed lookup — the same per-seat source
     // WorldSeatViewInput already reads for the pitch clamp), never one world shared by every seat. Every seat
     // starts seeded from the boot definition; SyncSeat re-points one seat's own entries the instant its resolved
     // definition changes reference.

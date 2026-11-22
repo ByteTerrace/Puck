@@ -182,7 +182,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         if (m_registeredReadings || readings is null) { return; }
         m_registeredReadings = true;
         readings.Register("benchmark.visible", () => new(PresentationReadingState.Present, OverlayVisible ? 1 : 0));
-        readings.Register("benchmark.tick", () => new(PresentationReadingState.Present, script.CompletedTick));
+        readings.Register("benchmark.tick", () => new(PresentationReadingState.Present, script.PublishedTick));
         readings.Register("benchmark.budget", () => new(PresentationReadingState.Present, m_budget));
         readings.Register("benchmark.chapter", () => CurrentChapter is var index && index >= 0
             ? new(PresentationReadingState.Present, Text: m_chapters[index].Name)
@@ -553,7 +553,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
                     return ((pacing?.TickLocked == true) ? LockstepFlag : 0);
                 },
-                Ticks = () => script.CompletedTick,
+                Ticks = () => script.PublishedTick,
             };
             m_deadline = (frames.Time.GetTimestamp() + (timeout * frames.Time.TimestampFrequency));
         }

@@ -57,7 +57,7 @@ public sealed class SdfMeshRowsLawTests(ITestOutputHelper output) {
             Assert.Equal(serial, rows.Serial);
             for (var i = 0; (i < owners.Length); i++) { Assert.Equal((clipped[i] + 1), work.Read(kind: SdfMeshHistory.RowsClippedOf(owner: owners[i]))); }
             packed = work.Read(kind: SdfMeshHistory.RecordsPacked);
-            authored[1] = authored[1] with { ObjectToWorld = Matrix4x4.CreateTranslation(Vector3.One), Glass = true };
+            authored[1] = authored[1].PlacedAt(objectToWorld: Matrix4x4.CreateTranslation(Vector3.One)) with { Glass = true };
             writer.Set(owned, 1, authored[1], owners[1]); writer.Publish(); RenderRootCut(frame: FrameNow(), rig: rig);
             Assert.Equal(2, (work.Read(kind: SdfMeshHistory.RecordsPacked) - packed));
             Assert.Equal(2, rows.GlassCount);

@@ -54,13 +54,12 @@ public sealed class WorldInfinityViewScene : ISdfFrameDresser {
     public Action<List<SdfViewSnapshot>, SdfSky, uint, uint>? FitSkyViews { get; set; }
 
     /// <inheritdoc/>
-    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, SdfMeshDrawList meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         var dressed = m_inner.Dress(
             deltaSeconds: deltaSeconds,
             height: height,
             interpolationAlpha: interpolationAlpha,
             meshDraws: meshDraws,
-            meshDrawsRevision: meshDrawsRevision,
             moved: moved,
             program: program,
             transforms: transforms,

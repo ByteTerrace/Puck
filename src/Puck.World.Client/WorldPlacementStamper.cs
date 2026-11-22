@@ -322,10 +322,10 @@ public static partial class WorldPlacementStamper {
         }
 
         return new SdfMeshDraw(
-            Identity: identity,
-            Material: material,
-            Mesh: (((reflectionNormal is not null) && mesh.Encloses) ? Mirrored(mesh: mesh) : mesh),
-            ObjectToWorld: ((local * Matrix4x4.CreateFromQuaternion(quaternion: rotation)) * Matrix4x4.CreateTranslation(position: origin))
+            identity: identity,
+            material: material,
+            mesh: (((reflectionNormal is not null) && mesh.Encloses) ? Mirrored(mesh: mesh) : mesh),
+            objectToWorld: ((local * Matrix4x4.CreateFromQuaternion(quaternion: rotation)) * Matrix4x4.CreateTranslation(position: origin))
         );
     }
     /// <summary>The engine-frame <see cref="SdfMesh"/> of an inline prototype mesh, converted once: prototype rows are

@@ -148,6 +148,87 @@ public sealed class WorldAdjacencyBorderColorLawTests {
         Assert.NotEqual(expected: baked, actual: Revision(emitter: emitter));
     }
 
+    /// <summary>THE LAW: a border selects its bodies from the bodies its neighbour's journal names changed
+    /// (<see cref="IWorldAdjacencyNeighbour.CollectEntityChanges"/>), so a frame in which no neighbour body moved reads no
+    /// body, and one in which a body moved reads that body alone.</summary>
+    [Fact]
+    public void ANeighbourWithNoMovedBodySelectsNothing() {
+        var neighbour = new CountingNeighbour(definition: Neighbour(bump: "#3FAF6F"), counterpartFrame: Seam(), positions: [
+            new Vector3(x: 0f, y: 0f, z: (SeamZ - 2f)),
+            new Vector3(x: 0f, y: 0f, z: -400f),
+        ]);
+        var home = Fixtures.BuildDocument() with {
+            References = [new WorldReference(SafeName.Parse(candidate: "east"), "east.world.json")],
+            Destinations = [new WorldDestination(SafeName.Parse(candidate: "east"), "east", WorldDestinationDurability.Persisted)],
+            Adjacencies = [new WorldAdjacency(SafeName.Parse(candidate: "seam"), "east", "seam", new WorldAdjacencyBoundary(Vector3.Zero, 0f, 0f, 8f, 8f))],
+        };
+        var emitter = new WorldAdjacencySceneEmitter(client: Client(definition: home), source: new SeamSource(neighbour: neighbour, frame: Seam()));
+
+        // The first frame reads every active body, and selects the one inside the band.
+        emitter.PrepareFrame();
+        Assert.Equal(expected: WorldRigCatalog.TransformSlotsPerBody, actual: emitter.DynamicSlotCount);
+        Assert.NotEqual(expected: 0, actual: neighbour.Reads.Sum());
+
+        // A frame in which no body moved reads none, and keeps the selection.
+        Array.Clear(array: neighbour.Reads);
+        emitter.PrepareFrame();
+        Assert.Equal(expected: 0, actual: neighbour.Reads.Sum());
+        Assert.Equal(expected: WorldRigCatalog.TransformSlotsPerBody, actual: emitter.DynamicSlotCount);
+
+        // A body that moved into the band is read alone, and selected.
+        neighbour.Move(index: 1, position: new Vector3(x: 1f, y: 0f, z: (SeamZ - 2f)));
+        emitter.PrepareFrame();
+        Assert.Equal(expected: 0, actual: neighbour.Reads[0]);
+        Assert.NotEqual(expected: 0, actual: neighbour.Reads[1]);
+        Assert.Equal(expected: (2 * WorldRigCatalog.TransformSlotsPerBody), actual: emitter.DynamicSlotCount);
+    }
+
+    // A neighbour of always-active bodies whose journal names the bodies the law moves, counting each body's reads.
+    private sealed class CountingNeighbour(WorldDefinition definition, WorldFaceFrame counterpartFrame, Vector3[] positions) : IWorldAdjacencyNeighbour {
+        private readonly Puck.Abstractions.Gpu.GpuChangedRows m_journal = Delivered(rows: positions.Length);
+
+        public int[] Reads { get; } = new int[positions.Length];
+
+        // The journal as a delivered image leaves it: one frame that owes every body.
+        private static Puck.Abstractions.Gpu.GpuChangedRows Delivered(int rows) {
+            var journal = new Puck.Abstractions.Gpu.GpuChangedRows(stableRows: true);
+
+            journal.Begin(everything: true, rows: rows);
+            return journal;
+        }
+
+        public string Authority => "neighbour";
+        public WorldFaceFrame CounterpartFrame { get; } = counterpartFrame;
+        public WorldDefinition Definition { get; } = definition;
+        public int DefinitionRevision => 0;
+        public int EntityCapacity => positions.Length;
+        public float InterpolationAlpha => 0f;
+        public int SnapshotRevision => 0;
+        public ulong SnapshotTick => 0;
+        public IReadOnlyList<int> ActiveEntities => Enumerable.Range(start: 0, count: positions.Length).ToArray();
+
+        public void Move(int index, Vector3 position) {
+            positions[index] = position;
+            m_journal.Begin(everything: false, rows: positions.Length);
+            m_journal.Owe(count: 1, start: index);
+        }
+        public bool CollectEntityChanges(Puck.Abstractions.Gpu.GpuRowCursor cursor, Puck.Abstractions.Gpu.GpuUploadRuns into) =>
+            cursor.Collect(into: into, reader: m_journal.Reader, revision: 0L, rows: positions.Length, table: m_journal, through: m_journal.Serial);
+
+        public Vector3 BodyColor(int index) => Vector3.Zero;
+        public WorldBodyContactMode BodyContact(int index) => WorldBodyContactMode.Overlap;
+        public byte CatalogRig(int index) => 0;
+        public FixedWorldCollider? Collider(int index) => null;
+        public Quaternion CurrentOrientation(int index) => Quaternion.Identity;
+        public Vector3 CurrentPosition(int index) { Reads[index]++; return positions[index]; }
+        public WorldEntityAddress EntityAddress(int index) => default;
+        public int PoseEpoch(int index) => 0;
+        public string? PlacementId(int index) => null;
+        public bool IsEntityActive(int index) { Reads[index]++; return true; }
+        public WorldLook Look(int index) { Reads[index]++; return WorldLook.Implicit; }
+        public Quaternion PreviousOrientation(int index) => Quaternion.Identity;
+        public Vector3 PreviousPosition(int index) => positions[index];
+    }
     // One seam from the source to a pinned neighbour.
     private sealed class SeamSource(IWorldAdjacencyNeighbour neighbour, WorldFaceFrame frame) : IWorldAdjacencySource {
         private readonly WorldAdjacencyProjection[] m_projections = [new WorldAdjacencyProjection(

@@ -239,13 +239,15 @@ public sealed class SdfMeshDemand {
     /// <param name="index">The point, below <see cref="Count"/>.</param>
     /// <returns><see langword="true"/> for a point bounded to its view's frustum.</returns>
     public bool WithinView(int index) => m_within[index];
-    /// <summary>Returns the world-axis box about a draw's host box (<see cref="SdfMeshBox.TryOf"/>).</summary>
+    /// <summary>Returns the world-axis box about a draw's host box where a frame places it
+    /// (<see cref="SdfMeshBox.TryOf"/>).</summary>
     /// <param name="draw">The draw.</param>
+    /// <param name="transforms">The frame's dynamic transforms.</param>
     /// <param name="center">The box's center; the origin for a draw no host box bounds.</param>
     /// <param name="half">The box's half extents along the world axes; zero for a draw no host box bounds.</param>
     /// <returns><see langword="false"/> for a draw no host box bounds (a skinned body's).</returns>
-    public static bool BoxOf(in SdfMeshDraw draw, out Vector3 center, out Vector3 half) {
-        var boxed = SdfMeshBox.TryOf(box: out var box, draw: in draw);
+    public static bool BoxOf(in SdfMeshDraw draw, IReadOnlyList<DynamicTransform> transforms, out Vector3 center, out Vector3 half) {
+        var boxed = SdfMeshBox.TryOf(box: out var box, draw: in draw, transforms: transforms);
 
         center = box.Center;
         half = box.AxisHalf;

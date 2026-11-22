@@ -74,7 +74,7 @@ public sealed partial class SdfWorldTables {
             for (var index = m_rowsByMesh.First(key: mesh); (index >= 0); index = m_rowsByMesh.Next(row: index)) {
                 var draw = draws[index];
 
-                m_owedOrder.Add(item: (((demand is null) ? 0f : (SdfMeshDemand.BoxOf(center: out var center, draw: in draw, half: out var half) ? demand.Priority(center: center, half: half) : float.PositiveInfinity)), index));
+                m_owedOrder.Add(item: (((demand is null) ? 0f : (SdfMeshDemand.BoxOf(center: out var center, draw: in draw, half: out var half, transforms: m_motionTransforms) ? demand.Priority(center: center, half: half) : float.PositiveInfinity)), index));
             }
         }
         System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_owedOrder).Sort(comparer: new SdfMeshPriorityOrder());

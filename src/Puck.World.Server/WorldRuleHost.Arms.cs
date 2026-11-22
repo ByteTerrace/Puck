@@ -767,7 +767,7 @@ public sealed partial class WorldRuleHost {
                 return true;
             }
             if (Host.SaveEffectTap is { } save) {
-                save(firing.Tick);
+                save(Host.CaptureSave(tick: firing.Tick));
 
                 return true;
             }

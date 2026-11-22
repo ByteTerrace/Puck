@@ -73,9 +73,9 @@ public sealed class WorldComposedPickMapLawTests {
             m_instance = builder.InstanceCount;
             _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 2).Sphere(radius: 1, material: Material).EndInstance();
             m_meshes.Clear();
-            m_meshes.Add(item: new SdfMeshDraw(Material: Material,
-                Mesh: new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY }, indices: new uint[] { 0, 1, 2 }),
-                ObjectToWorld: Matrix4x4.Identity, Identity: name));
+            m_meshes.Add(item: new SdfMeshDraw(material: Material,
+                mesh: new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY }, indices: new uint[] { 0, 1, 2 }),
+                objectToWorld: Matrix4x4.Identity, identity: name));
             Replace(name: name);
         }
         public void Replace(string name) {
@@ -87,7 +87,7 @@ public sealed class WorldComposedPickMapLawTests {
             m_map.Materials(prototype: name, ids: [Material]);
         }
         public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved,
-            IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height,
-            float deltaSeconds, float interpolationAlpha) => new(Program: program, ProgramChanged: false, Time: 0, Views: []) { MeshDraws = meshDraws, MeshDrawsRevision = meshDrawsRevision };
+            SdfMeshDrawList meshDraws, uint width, uint height,
+            float deltaSeconds, float interpolationAlpha) => new(Program: program, ProgramChanged: false, Time: 0, Views: []) { MeshDraws = meshDraws.Draws, MeshDrawsRevision = meshDraws.Revision };
     }
 }

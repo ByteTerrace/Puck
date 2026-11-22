@@ -159,7 +159,7 @@ public sealed partial class WorldTick {
     private readonly WorldServer m_host;
 
     /// <summary>Gets the exact engine-time boundary completed by the latest authoritative step.</summary>
-    internal ulong CompletedEngineTicks => (m_tickBlock is { } block && !ResumingOnOwner) ? block.PreviousEngineTicks : m_lastCompletedEngineTicks;
+    internal ulong CompletedEngineTicks => (m_tickBlock is { Prepared: false } block && !ResumingOnOwner) ? block.PreviousEngineTicks : m_lastCompletedEngineTicks;
     /// <summary>Gets the tick the latest authoritative step completed, or zero before the first step.</summary>
     internal ulong CompletedTick => m_lastCompletedTick;
     /// <summary>Gets the authoritative tick whose engine tick <see cref="CompletedEngineTicks"/> is: the tick the step

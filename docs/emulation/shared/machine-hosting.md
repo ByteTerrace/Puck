@@ -219,8 +219,13 @@ time it has run a whole frame ahead and skips none. A display that has fallen
 more than that behind gets the newest frame due.
 
 In a World, `WorldMachineHost` stamps every machine's segments with one clock,
-the sum of the steps it advanced, and answers `PresentedTicks`: a position that
-runs from the latest step's start to its end over the host time one step takes.
+the sum of the steps it advanced. At each host step's collect it captures that
+clock, with its running instances' outputs and faults, as one immutable record
+(`WorldMachinePresentation`, through `IWorldMachineHost.CapturePresentation`),
+and the frame reads only that record, from the machine table the collect
+publishes (`WorldMachineTable`), never the host. The record answers
+`WorldMachinePresentation.PresentedTicks`: a position that runs from the latest
+step's start to its end over the host time one step takes.
 `MachineVideoSourceUpload` reads it, declares the output's own rate, and tells
 the render graph whether the frame due is one its region does not hold
 (`IRenderGraphSourceUpload.HasNewImage`), so the source is converted on exactly

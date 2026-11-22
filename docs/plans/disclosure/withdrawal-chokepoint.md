@@ -96,13 +96,13 @@ The same session's own stream is filtered by more than that. Its document comes
 from the cursor's disclosed images, and each snapshot's fields, solid sizes and
 inputs and input answers are filtered for the recipient:
 
-`src/Puck.World.Server/WorldSessionSink.cs:484-487`
+`src/Puck.World.Server/WorldSessionSink.cs:508-511`
 
 ```csharp
                 FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica),
                 SolidScales = m_scales.Filter(m_view, redacted.SolidScales),
-                Inputs = WorldOwnedRecords.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
-                InputAnswers = WorldOwnedRecords.ForOwner(redacted.InputAnswers, observation.Session, ref m_answerDisclosure),
+                Inputs = WorldOwnedRecords.ForOwner(redacted.Inputs, m_observation.Session, ref m_inputDisclosure),
+                InputAnswers = WorldOwnedRecords.ForOwner(redacted.InputAnswers, m_observation.Session, ref m_answerDisclosure),
 ```
 
 The scene the window joins is fed by the unfiltered attach
@@ -158,7 +158,7 @@ keeps showing it.
 Confirmed in the code. The epoch moves when the observation object changes, but
 the residency's guard is not told about the observation at all:
 
-`src/Puck.World/WorldScreenBinder.Availability.cs:268`
+`src/Puck.World.Presentation/WorldScreenBinder.Availability.cs:268`
 
 ```csharp
             return ((access != WorldSessionAccess.None) && (access < Source));
@@ -198,14 +198,14 @@ its next render. The SDF views restart their own temporal resolve through
 Confirmed, three ways.
 
 - An infinity layer's frame source is made when the layer is made
-  (`src/Puck.World/WorldScreenBinder.Device.Infinity.cs:192-194`) and the
+  (`src/Puck.World.Presentation/WorldScreenBinder.Device.Infinity.cs:192-194`) and the
   release drops only the residency
-  (`src/Puck.World/WorldScreenBinder.Device.Session.cs:145-150`). The settle
+  (`src/Puck.World.Presentation/WorldScreenBinder.Device.Session.cs:145-150`). The settle
   then reports that nothing is held
-  (`src/Puck.World/WorldScreenBinder.Device.Session.cs:95` passes
+  (`src/Puck.World.Presentation/WorldScreenBinder.Device.Session.cs:95` passes
   `entry.Residency is not null`), so the guard forgets what the source holds.
 - A view's export ring keeps the image a completed frame wrote
-  (`src/Puck.World/WorldScreenBinder.Device.Probes.cs:271-275`), and nothing
+  (`src/Puck.World.Presentation/WorldScreenBinder.Device.Probes.cs:271-275`), and nothing
   in a withdrawal reaches it. A probe that reads the ring holds its own
   acquisition and feeds its result back into the graph as a screen source.
 - A comparison hold is a CPU copy of a captured display frame
@@ -313,7 +313,7 @@ Not reachable for a session screen on this tree. A session is only ever
 admitted by a world this process hosts, hosted worlds step on the pump thread,
 and frames are produced on that same thread:
 
-`src/Puck.Launcher/HostLoop.cs:123`
+`src/Puck.Launcher/HostLoop.cs:129`
 
 ```csharp
     /// <summary>Runs inline on the hosted service's existing pump thread. No simulation thread is started here.</summary>

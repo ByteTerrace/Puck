@@ -156,8 +156,14 @@ Fixed on `lead/rendering` since, and not yet deployed:
   ([CI](../development/ci.md#world-maintenance-and-recovery)): it accepts an
   admitted release in the write that claims the group, admits a committed one
   first, and abandons or recovers an unfinished one, so no failed release needs
-  a hand-run resume. The deploy after this push meets the admitted operation
-  the last release left and accepts it.
+  a hand-run resume. Run 44971428829 showed it working: it began over the
+  admitted operation, then refused at qualification because the hosted
+  checkpoints predate the irradiance budget's rename.
+- A source whose exported state this build cannot decode is reset rather than
+  refused (hosted data is scratch): the deploy qualifies and starts the new
+  release fresh and records the reset and its reason in the operation's history
+  ([CI](../development/ci.md#world-maintenance-and-recovery)). The next push's
+  deploy resets the hosted world this way.
 
 - Template Specs `world-silo` 0.0.7 and `public-flex-api` 0.0.6 are published.
   The lead publishes and republishes them in place (AGENTS.md), and
@@ -653,7 +659,11 @@ wait behind them.
    [its steps](tick-thread.md#the-steps) come in three stages, and the second
    stage's steps (the outbox, a delivered document bound to its sink's values,
    adjacency in prepare, the link, presentation out of the composition root)
-   can run in separate lanes. Next: stage one. Check: `host.frames` shows the
+   can run in separate lanes. Stage one is built: every authority tick
+   executes on the host's step thread while the loop waits for it. Of stage
+   two, a delivered document bound to its sink's values and adjacency in
+   prepare are built. Next: the rest of
+   stage two's doors, then stage three. Check: `host.frames` shows the
    step outside the frame's interval on the route, and
    `puck test --reproduce` passes at every worker count. At scale: every
    world a client runs steps on its own thread, which is the shape the silo's
@@ -667,19 +677,6 @@ wait behind them.
    client's body journal, the mirror's change log, a due cursor or their own
    continuation woke, and held poses out of every view's sight are culled a
    cell at a time. Left:
-   - The mesh dresser still rebuilds the draw and its row for each moved
-     slot-riding copy and group (`SdfMeshDresser.DressHeld`), for the CPU
-     readers of `SdfMeshDraw.ObjectToWorld`, though the kernels place such a
-     draw from its slot's row. Deriving the CPU placement from the slot
-     leaves a moving body no dress work.
-   - The adjacency emitter asks every index of each neighbour's capacity each
-     frame (`WorldAdjacencySceneEmitter.SelectBand`, from its `PrepareFrame`,
-     `WriteRevision` and pack). A neighbour needs an active list and a body
-     journal of its own, as a stamp source has
-     (`IWorldStampSource.CopyActiveBodies`, `IWorldStampSource.BodyChanges`).
-   - A session scene's source keeps no body journal
-     (`WorldSessionStampSource`), so its pool and avatars read every body
-     they draw each pack.
    - Recording in dependency waves
      ([the memo's R1](engine-job-system.md#6-build-order)) waits on its
      admission reading, taken with four seats' views (M2) beside one.

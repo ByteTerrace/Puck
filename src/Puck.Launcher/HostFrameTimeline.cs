@@ -250,7 +250,14 @@ public sealed class HostFrameTimeline {
     /// <summary>Records the fixed steps the iteration ran.</summary>
     /// <param name="steps">The step count.</param>
     public void NoteSteps(int steps) => m_openSteps += steps;
-    /// <summary>Records one completed pump step's cost on the independent tick lane.</summary>
+    // Takes the tick execution a step thread reported into this iteration's work (HostFrameWork.Fold), converted from
+    // stopwatch ticks to this timeline's clock ticks; zero when the simulation ran its tick on the pump thread.
+    internal long TakeExecutedTicks() => ((long)(FrameWork.TakeExecuted() * (((double)m_frequency) / Stopwatch.Frequency)));
+
+    /// <summary>Records one completed pump step's cost on the independent tick lane: the time a step thread spent
+    /// executing the step's ticks, or, for a simulation that runs its tick on the pump thread, the time that thread
+    /// spent in the step.</summary>
+    /// <param name="ticks">The cost, in ticks of <see cref="Time"/>.</param>
     public void NoteTick(long ticks) {
         m_tickCosts[((int)(m_tickCount % Capacity))] = ticks;
         Interlocked.Increment(location: ref m_tickCount);

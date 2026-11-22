@@ -191,13 +191,12 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     /// <remarks>The session emitter dresses first, so its stamp pool advances and its dressed definition is retained
     /// exactly as a session screen's; the frame then takes the seats' views and the windows' after them, the host frame's
     /// presentation clock and cadence. The sky, its clock and the environment stay the emitter's: this world's own.</remarks>
-    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, SdfMeshDrawList meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         var frame = m_emitter.Dress(
             deltaSeconds: deltaSeconds,
             height: height,
             interpolationAlpha: interpolationAlpha,
             meshDraws: meshDraws,
-            meshDrawsRevision: meshDrawsRevision,
             moved: moved,
             program: program,
             transforms: transforms,

@@ -124,6 +124,8 @@ public sealed class HostLoop(
         }
         m_minted = m_controlPhases;
     }
+    private static readonly WaitReason ResumeReason = new(Subsystem: "host", WaitsFor: "resuming the step in progress");
+
     /// <summary>Runs inline on the hosted service's existing pump thread. No simulation thread is started here.</summary>
     public void Run(CancellationToken stoppingToken, Func<bool>? isOpen = null,
         Action<ulong>? captureInput = null,
@@ -142,7 +144,42 @@ public sealed class HostLoop(
         var frame = 0UL;
         var holding = false;
         Exception? fault = null;
+        // Whether this iteration goes on while its last due step executes on the simulation's own thread, instead of
+        // waiting for it. Only a host with no frame does yet: a frame reads state the step writes.
+        var beside = false;
+        // Set on the simulation's thread when a pending step can make progress, and taken by the service below.
+        var progressed = 0;
+        System.Runtime.ExceptionServices.ExceptionDispatchInfo? resumeFault = null;
+        // Resumes the open step from the pacing wait when the simulation reports progress: it collects what finished
+        // and hands over what follows in the same step, and starts no new step, which only the step section does after
+        // the iteration's input capture and control phase.
+        var resume = ((pump is null) ? null : HostWaits.Serve(reason: in ResumeReason, service: _ => {
+            if (!beside || (resumeFault is not null) || (Interlocked.Exchange(location1: ref progressed, value: 0) == 0)) {
+                return null;
+            }
 
+            timeline.Mark(phase: HostFramePhase.Wait);
+            try {
+                using (timeline.FrameWork.Bind()) {
+                    if (pump!.Resume()) { timeline.NoteSteps(steps: 1); }
+                }
+            } catch (Exception exception) {
+                resumeFault = System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(source: exception);
+            }
+            timeline.Mark(phase: HostFramePhase.Simulate);
+
+            return null;
+        }));
+
+        if (resume is not null) {
+            m_simulation!.WakeOnStepProgress(wake: () => {
+                _ = Interlocked.Exchange(location1: ref progressed, value: 1);
+                resume.Wake();
+            });
+        }
+
+        var boundary = m_simulation?.TickBoundary;
+        boundary?.RegisterPump();
         try {
             while (!stoppingToken.IsCancellationRequested && (isOpen?.Invoke() ?? true)) {
                 timeline.BeginIteration();
@@ -175,6 +212,9 @@ public sealed class HostLoop(
                 var stepTicks = FixedTickConversion.PerRate(ratePerSecond: m_ratePerSecond);
                 var interval = clock.Sample();
                 var steps = 0;
+
+                beside = (!tickLocked && (produce is null));
+                if (pump is not null) { pump.RunsBesideStep = beside; }
 
                 using (timeline.FrameWork.Bind()) {
                     if (!tickLocked) {
@@ -222,6 +262,7 @@ public sealed class HostLoop(
                         nextDeadline = now;
                     } else {
                         HostWaits.Pace(deadlineTimestamp: nextDeadline, precisionWaiter: m_waiter, time: time);
+                        resumeFault?.Throw();
                         timeline.NoteLate(ticks: Math.Max(val1: 0L, val2: (time.GetTimestamp() - nextDeadline)));
                     }
                     timeline.Mark(phase: HostFramePhase.Wait);
@@ -231,6 +272,9 @@ public sealed class HostLoop(
             fault = exception;
             throw;
         } finally {
+            m_simulation?.WakeOnStepProgress(wake: null);
+            resume?.Dispose();
+            boundary?.UnregisterPump();
             HostWaits.EndPump();
             try {
                 LauncherHostRun.RunTeardown(fault, logger, ("flush output", output.Drain));

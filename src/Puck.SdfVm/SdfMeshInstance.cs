@@ -12,7 +12,9 @@ public readonly record struct SdfMeshTemplateRange(int FirstInstance, int Instan
 /// <summary>A copy of one local baked geometry asset: a row its producer keeps for as long as the copy lives and rewrites
 /// in place when anything about the copy changes (<see cref="Update"/>), so a moving body's pose allocates nothing. Its
 /// pose and host identity never enter the field program. A consumer that remembers a copy remembers its
-/// <see cref="Revision"/> beside the reference: the same row at another revision is a changed copy.</summary>
+/// <see cref="Revision"/> beside the reference: the same row at another revision is a changed copy. A moving copy's pose
+/// reaches its draws through its frame slot's row alone (<see cref="SdfMeshDraw.PlacedBySlot"/>), so it moves no
+/// revision.</summary>
 /// <param name="AssetSlot">The local template's dynamic slot in the program.</param>
 /// <param name="Identity">The host's picking identity for this copy.</param>
 /// <param name="Transform">The copy's root pose.</param>
@@ -32,8 +34,9 @@ public sealed class SdfMeshInstance(int AssetSlot, object Identity, DynamicTrans
     private int m_material;
     private SdfSlotClip? m_clip;
 
-    /// <summary>Gets the count of rewrites that changed the copy, zero for one never rewritten: a consumer that compares a
-    /// copy by reference compares this too.</summary>
+    /// <summary>Gets the count of rewrites that changed what the copy's draws hold, zero for one never rewritten: every
+    /// change but a dynamic copy's <see cref="Transform"/>, which its frame slot's row carries to its draws. A consumer
+    /// that compares a copy by reference compares this too, and reads a dynamic copy's pose from its slot's row.</summary>
     public long Revision { get; private set; }
     /// <summary>Gets the local template's dynamic slot in the program.</summary>
     public int AssetSlot { get => m_assetSlot; init => m_assetSlot = value; }
@@ -65,7 +68,7 @@ public sealed class SdfMeshInstance(int AssetSlot, object Identity, DynamicTrans
     public SdfSlotClip? Clip { get => m_clip; init => m_clip = value; }
     /// <summary>Gets the frame's root slot, assigned after the program's articulated slots.</summary>
     public int FrameSlot { get; internal set; }
-    /// <summary>Gets the copy's root matrix.</summary>
+    /// <summary>Gets the copy's root matrix at its current <see cref="Transform"/>.</summary>
     public Matrix4x4 Matrix => ((Matrix4x4.CreateScale(scale: Scale) * Matrix4x4.CreateFromQuaternion(quaternion: Transform.Orientation)) * Matrix4x4.CreateTranslation(position: Transform.Position));
 
     /// <summary>Rewrites the copy in place, moving <see cref="Revision"/> when any value differs from the one it holds;
@@ -84,9 +87,16 @@ public sealed class SdfMeshInstance(int AssetSlot, object Identity, DynamicTrans
     /// <param name="otherAssetSlots">The asset's additional local surfaces, compared by value and kept by reference.</param>
     /// <param name="usesRootMaterialFrame">Whether material layers use the copy root rather than the world frame.</param>
     /// <param name="templateRange">The static instance range that supplies local geometry, or <see langword="null"/>.</param>
-    /// <returns>Whether the copy changed.</returns>
+    /// <returns>Whether the copy changed, its pose included.</returns>
     public bool Update(int assetSlot, object identity, object? motionIdentity, DynamicTransform transform, float scale, bool isDynamic, SdfSlotClip? clip, SdfMesh? mesh, int material, IReadOnlyList<int> otherAssetSlots, bool usesRootMaterialFrame = true, SdfMeshTemplateRange? templateRange = null) {
-        if (Holds(assetSlot, identity, motionIdentity, transform, scale, isDynamic, clip, mesh, material, otherAssetSlots, usesRootMaterialFrame, templateRange)) { return false; }
+        var moved = (m_transform != transform);
+
+        if (Holds(assetSlot, identity, motionIdentity, scale, isDynamic, clip, mesh, material, otherAssetSlots, usesRootMaterialFrame, templateRange)) {
+            if (!moved) { return false; }
+            m_transform = transform;
+            if (!isDynamic) { Revision++; }
+            return true;
+        }
         m_assetSlot = assetSlot;
         m_identity = identity;
         m_motionIdentity = motionIdentity;
@@ -102,8 +112,8 @@ public sealed class SdfMeshInstance(int AssetSlot, object Identity, DynamicTrans
         Revision++;
         return true;
     }
-    private bool Holds(int assetSlot, object identity, object? motionIdentity, DynamicTransform transform, float scale, bool isDynamic, SdfSlotClip? clip, SdfMesh? mesh, int material, IReadOnlyList<int> otherAssetSlots, bool usesRootMaterialFrame, SdfMeshTemplateRange? templateRange) {
-        if ((AssetSlot != assetSlot) || !Equals(objA: Identity, objB: identity) || !Equals(objA: MotionIdentity, objB: motionIdentity) || (Transform != transform) || (Scale != scale) || (IsDynamic != isDynamic) || (Clip != clip) || !ReferenceEquals(objA: Mesh, objB: mesh) || (Material != material) || (OtherAssetSlots.Count != otherAssetSlots.Count) || (UsesRootMaterialFrame != usesRootMaterialFrame) || (TemplateRange != templateRange)) { return false; }
+    private bool Holds(int assetSlot, object identity, object? motionIdentity, float scale, bool isDynamic, SdfSlotClip? clip, SdfMesh? mesh, int material, IReadOnlyList<int> otherAssetSlots, bool usesRootMaterialFrame, SdfMeshTemplateRange? templateRange) {
+        if ((AssetSlot != assetSlot) || !Equals(objA: Identity, objB: identity) || !Equals(objA: MotionIdentity, objB: motionIdentity) || (Scale != scale) || (IsDynamic != isDynamic) || (Clip != clip) || !ReferenceEquals(objA: Mesh, objB: mesh) || (Material != material) || (OtherAssetSlots.Count != otherAssetSlots.Count) || (UsesRootMaterialFrame != usesRootMaterialFrame) || (TemplateRange != templateRange)) { return false; }
         for (var index = 0; (index < OtherAssetSlots.Count); index++) {
             if (OtherAssetSlots[index] != otherAssetSlots[index]) { return false; }
         }

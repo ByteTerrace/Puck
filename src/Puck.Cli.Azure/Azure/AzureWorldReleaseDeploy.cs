@@ -150,17 +150,19 @@ public static partial class AzureCommand {
                 var operation = (operationId ?? Guid.NewGuid());
 
                 Console.WriteLine(value: $"Release operation: {operation:D}");
-                var fixtureDirectory = await PrepareWorldReleaseFixtureAsync(
+                var (fixtureDirectory, reset) = await PrepareWorldReleaseFixtureAsync(
                     bootstrap: manifest,
                     context: context,
                     requestId: operation,
                     source: source,
+                    successor: manifest,
                     token: token
                 ).ConfigureAwait(continueOnCapturedContext: false);
+                // A reset qualifies the candidate alone from its own fresh state, as a bootstrap does.
                 var runner = new WorldReleaseQualificationRunner(
                     fixtureDirectory,
                     Path.GetFullPath(path: "artifacts/world-release-qualification"),
-                    (source?.Image ?? candidate.Image),
+                    (((source is null) || (reset is not null)) ? candidate.Image : source.Image),
                     candidate.Image,
                     archive: context.Archive,
                     clock: context.Clock
@@ -174,14 +176,24 @@ public static partial class AzureCommand {
                         qualificationRunner: runner,
                         target: manifest
                     ).ConfigureAwait(continueOnCapturedContext: false)
-                    : await coordinator.BeginDeploymentAsync(
-                        state,
-                        source.Manifest,
-                        manifest,
-                        runner,
-                        operation,
-                        token
-                    ).ConfigureAwait(continueOnCapturedContext: false)
+                    : (reset is not null)
+                        ? await coordinator.BeginResetAsync(
+                            state,
+                            source.Manifest,
+                            manifest,
+                            runner,
+                            operation,
+                            reset,
+                            token
+                        ).ConfigureAwait(continueOnCapturedContext: false)
+                        : await coordinator.BeginDeploymentAsync(
+                            state,
+                            source.Manifest,
+                            manifest,
+                            runner,
+                            operation,
+                            token
+                        ).ConfigureAwait(continueOnCapturedContext: false)
                 );
 
                 if (!begun.Ok) { throw new InvalidOperationException(message: begun.Detail); }

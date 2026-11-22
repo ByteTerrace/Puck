@@ -246,30 +246,12 @@ public sealed class WorldReleaseCoordinator {
         ) {
             return Refused(reason: "bootstrap requires a closed group with no active release");
         }
-        if (qualificationRunner is null) {
-            return Refused(reason: "bootstrap requires a qualification runner for the candidate release");
-        }
-        var qualification = await qualificationRunner.RunAsync(
+        if (await QualifyFreshAsync(
             cancellationToken: cancellationToken,
+            qualificationRunner: qualificationRunner,
             target: target
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
-        if (qualification.Failure is { } failure) {
-            return Refused(reason: $"bootstrap qualification failed: {failure}");
-        }
-        var receipt = qualification.Receipt;
-
-        if (
-            (receipt is null) ||
-            (receipt.SourceRelease is not null) ||
-            !string.Equals(
-            a: receipt.TargetRelease,
-            b: target.Identity,
-            comparisonType: StringComparison.Ordinal
-        ) ||
-            !ValidQualificationHashes(evidence: receipt)
-        ) {
-            return Refused(reason: "bootstrap qualification did not produce a verified candidate receipt");
+        ).ConfigureAwait(continueOnCapturedContext: false) is { } refusal) {
+            return Refused(reason: $"bootstrap {refusal}");
         }
         return await m_groups.BeginAsync(
             current,
@@ -277,6 +259,99 @@ public sealed class WorldReleaseCoordinator {
             target.Identity,
             cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false);
+    }
+    /// <summary>Returns why the active source's captured state cannot be carried into this build, or
+    /// <see langword="null"/> when it can. This is the one place a deployment decides to reset: a world whose checkpoint
+    /// this build cannot decode means the hosted state predates a format change, and hosted data is scratch until its
+    /// owner says otherwise, so the deployment starts its target fresh (<see cref="BeginResetAsync"/>) instead of
+    /// refusing. State that decodes is carried, and any later qualification failure still refuses.</summary>
+    /// <param name="checkpoints">The source's captured checkpoint bytes, by world name.</param>
+    /// <returns>The reset's reason, naming the first world that does not decode and why, or <see langword="null"/>.</returns>
+    public static string? FindStateReset(IEnumerable<KeyValuePair<string, ReadOnlyMemory<byte>>> checkpoints) {
+        ArgumentNullException.ThrowIfNull(checkpoints);
+        foreach (var row in checkpoints.OrderBy(
+            keySelector: static row => row.Key,
+            comparer: StringComparer.Ordinal
+        )) {
+            if (!WorldAuthorityCheckpointCodec.TryDecode(
+                bytes: row.Value.Span,
+                checkpoint: out _,
+                reason: out var reason
+            )) {
+                return $"the source's '{row.Key}' state does not decode under this build: {reason}";
+            }
+        }
+        return null;
+    }
+    /// <summary>Claims the group for a deployment that discards the active source's unreadable state
+    /// (<see cref="FindStateReset"/>): the target qualifies alone from its own fresh state, as a first deployment does,
+    /// and the claiming write records the reset in the operation's history. The source still drains and its protected
+    /// roots still permit pre-commit recovery; Activate replaces every drained root with the target's fresh one.</summary>
+    /// <param name="current">The group state, whose active release is <paramref name="source"/>.</param>
+    /// <param name="source">The active release whose state is discarded.</param>
+    /// <param name="target">The release that starts fresh.</param>
+    /// <param name="qualificationRunner">The runner that qualifies <paramref name="target"/> from a fixture without
+    /// gameplay.</param>
+    /// <param name="operationId">The new operation's identifier.</param>
+    /// <param name="reason">Why the source's state is discarded, as <see cref="FindStateReset"/> named it.</param>
+    /// <param name="cancellationToken">The token that cancels qualification and the guarded write.</param>
+    /// <returns>The claimed group, or a conflict naming why it was not claimed.</returns>
+    public async Task<WorldReleaseGroupOutcome> BeginResetAsync(
+        WorldReleaseGroupSnapshot current,
+        WorldReleaseManifest source,
+        WorldReleaseManifest target,
+        IWorldReleaseBootstrapQualificationRunner? qualificationRunner,
+        Guid operationId,
+        string reason,
+        CancellationToken cancellationToken = default) {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (!string.Equals(
+            a: current.Record.ActiveRelease,
+            b: source.Identity,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return Refused(reason: "the durable active release does not match the reset's source manifest");
+        }
+        if (await QualifyFreshAsync(
+            cancellationToken: cancellationToken,
+            qualificationRunner: qualificationRunner,
+            target: target
+        ).ConfigureAwait(continueOnCapturedContext: false) is { } refusal) {
+            return Refused(reason: $"reset {refusal}");
+        }
+        return await m_groups.BeginAsync(
+            current,
+            operationId,
+            target.Identity,
+            cancellationToken,
+            reason
+        ).ConfigureAwait(continueOnCapturedContext: false);
+    }
+    // Qualifies a target from its own fresh state, as a first deployment or a reset starts it; returns why it did not
+    // qualify, or null.
+    private static async Task<string?> QualifyFreshAsync(IWorldReleaseBootstrapQualificationRunner? qualificationRunner, WorldReleaseManifest target,
+        CancellationToken cancellationToken) {
+        if (qualificationRunner is null) { return "requires a qualification runner for the candidate release"; }
+        var qualification = await qualificationRunner.RunAsync(
+            cancellationToken: cancellationToken,
+            target: target
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (qualification.Failure is { } failure) { return $"qualification failed: {failure}"; }
+        var receipt = qualification.Receipt;
+
+        return (((receipt is null) ||
+            (receipt.SourceRelease is not null) ||
+            !string.Equals(
+                a: receipt.TargetRelease,
+                b: target.Identity,
+                comparisonType: StringComparison.Ordinal
+            ) ||
+            !ValidQualificationHashes(evidence: receipt))
+            ? "qualification did not produce a verified candidate receipt"
+            : null);
     }
     /// <summary>Validates an engine-only pair and qualification receipt before claiming the group.</summary>
     public async Task<WorldReleaseGroupOutcome> BeginDeploymentAsync(

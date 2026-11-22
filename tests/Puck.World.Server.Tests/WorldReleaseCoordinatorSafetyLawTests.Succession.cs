@@ -273,9 +273,160 @@ public sealed partial class WorldReleaseCoordinatorSafetyLawTests {
         );
     }
 
-    // A deployment as the release host runs one: the shared succession decision, then the coordinator's own doors.
+    // A source whose exported state this build cannot decode (a checkpoint written before a schema rename) is scratch: the
+    // deployment records the reset and its reason in the operation's history, qualifies and starts the target fresh, and
+    // commits. State that decodes is carried and never resets.
+    [Fact]
+    public async Task ADeploymentOverUnreadableSourceStateResetsAndCommits() {
+        var owner = Guid.NewGuid();
+        var groups = new WorldReleaseGroupStore(
+            new FakeObjectBlobStore(),
+            Target,
+            owner
+        );
+        var source = Manifest(image: 'a');
+        var target = Manifest(image: 'b');
+
+        Required(result: await groups.CreateAsync(
+            "primary",
+            source.Identity,
+            Token
+        ));
+        var host = new HostRuntime(
+            groups: groups,
+            owner: owner
+        ) { Running = source.Identity };
+        var result = await DeployAsync(
+            exported: UnreadableExport(),
+            groups: groups,
+            host: host,
+            manifests: [source, target],
+            release: target
+        );
+
+        Assert.True(
+            condition: result.Completed,
+            userMessage: result.Detail
+        );
+        var durable = (await groups.LoadAsync(
+            "primary",
+            Token
+        ))!.Value.Record;
+
+        Assert.Equal(
+            target.Identity,
+            durable.ActiveRelease
+        );
+        Assert.Equal(
+            WorldReleaseAdmissionState.Open,
+            durable.Admission
+        );
+        Assert.Equal(
+            target.Identity,
+            host.Running
+        );
+        Assert.NotNull(@object: host.ActivatedReset);
+        Assert.Contains(
+            actualString: host.ActivatedReset,
+            expectedSubstring: "'row' state does not decode"
+        );
+        Assert.Equal(
+            host.ActivatedReset,
+            durable.PendingStateReset
+        );
+        var entry = Assert.Single(collection: durable.History);
+
+        Assert.Equal(
+            durable.PendingOperationId,
+            entry.OperationId
+        );
+        Assert.Equal(
+            (WorldReleaseGroupHistoryEntry.ResetResult + host.ActivatedReset),
+            entry.Result
+        );
+        Assert.Null(@object: WorldReleaseCoordinator.FindStateReset(checkpoints: ReadableExport()));
+    }
+    // A reset operation that fails before its commit recovers the source exactly as any other: the reset entry stays in
+    // history beside the recovery, and the recovered group no longer reports a pending reset.
+    [Fact]
+    public async Task AResetThatFailsBeforeCommitRecoversTheSource() {
+        var owner = Guid.NewGuid();
+        var groups = new WorldReleaseGroupStore(
+            new FakeObjectBlobStore(),
+            Target,
+            owner
+        );
+        var source = Manifest(image: 'a');
+        var target = Manifest(image: 'b');
+
+        Required(result: await groups.CreateAsync(
+            "primary",
+            source.Identity,
+            Token
+        ));
+        var host = new HostRuntime(
+            groups: groups,
+            owner: owner
+        ) { Running = source.Identity, VerifyFailure = "the candidate failed private health" };
+        var result = await DeployAsync(
+            exported: UnreadableExport(),
+            groups: groups,
+            host: host,
+            manifests: [source, target],
+            release: target
+        );
+
+        Assert.False(condition: result.Completed);
+        Assert.True(condition: result.SourceRecovered);
+        var durable = (await groups.LoadAsync(
+            "primary",
+            Token
+        ))!.Value.Record;
+
+        Assert.Equal(
+            source.Identity,
+            durable.ActiveRelease
+        );
+        Assert.Null(@object: durable.PendingStateReset);
+        Assert.Equal(
+            2,
+            durable.History.Count
+        );
+        Assert.StartsWith(
+            actualString: durable.History[0].Result,
+            expectedStartString: WorldReleaseGroupHistoryEntry.ResetResult
+        );
+        Assert.StartsWith(
+            actualString: durable.History[1].Result,
+            expectedStartString: WorldReleaseGroupHistoryEntry.RecoveredResult
+        );
+        Assert.Equal(
+            source.Identity,
+            host.Running
+        );
+    }
+
+    // One world's export in a shape this build does not decode, standing for a checkpoint an earlier build wrote.
+    private static Dictionary<string, ReadOnlyMemory<byte>> UnreadableExport() => new() { ["row"] = "{\"relightPerSecond\":4}"u8.ToArray() };
+    // One world's export as this build writes it.
+    private static Dictionary<string, ReadOnlyMemory<byte>> ReadableExport() {
+        using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument());
+
+        fixture.Step();
+        Assert.True(
+            condition: fixture.Server.TryCaptureCheckpoint(
+                WorldAuthorityHostRowCheckpoint.Empty,
+                out var checkpoint,
+                out var reason
+            ),
+            userMessage: reason
+        );
+        return new() { ["row"] = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!) };
+    }
+    // A deployment as the release host runs one: the shared succession decision, then the coordinator's own doors. With
+    // an export, the source's state is decided exactly where the host decides it (WorldReleaseCoordinator.FindStateReset).
     private static async Task<WorldReleaseRunResult> DeployAsync(WorldReleaseGroupStore groups, HostRuntime host,
-        WorldReleaseManifest[] manifests, WorldReleaseManifest release) {
+        WorldReleaseManifest[] manifests, WorldReleaseManifest release, IReadOnlyDictionary<string, ReadOnlyMemory<byte>>? exported = null) {
         var coordinator = new WorldReleaseCoordinator(groups: groups);
         var state = (await groups.LoadAsync(
             "primary",
@@ -309,15 +460,26 @@ public sealed partial class WorldReleaseCoordinatorSafetyLawTests {
                 state = ended;
                 break;
         }
+        var reset = ((exported is null) ? null : WorldReleaseCoordinator.FindStateReset(checkpoints: exported));
         var begun = ((state.Record.ActiveRelease is { } active)
-            ? await coordinator.BeginDeploymentAsync(
-                state,
-                Find(identity: active),
-                release,
-                new QualifyingRunner(),
-                Guid.NewGuid(),
-                Token
-            )
+            ? ((reset is null)
+                ? await coordinator.BeginDeploymentAsync(
+                    state,
+                    Find(identity: active),
+                    release,
+                    new QualifyingRunner(),
+                    Guid.NewGuid(),
+                    Token
+                )
+                : await coordinator.BeginResetAsync(
+                    state,
+                    Find(identity: active),
+                    release,
+                    new QualifyingRunner(),
+                    Guid.NewGuid(),
+                    reset,
+                    Token
+                ))
             : await coordinator.BeginBootstrapAsync(
                 state,
                 release,
@@ -426,6 +588,9 @@ public sealed partial class WorldReleaseCoordinatorSafetyLawTests {
     // group's admission, and publishing a recovered source completes its recovery under a fresh lease. Running names the
     // release whose process is up.
     private sealed class HostRuntime(WorldReleaseGroupStore groups, Guid owner) : IWorldReleaseRuntime {
+        // The reset the last private activation followed, where the Azure host replaces every drained root
+        // (WorldAuthorityBlobStore.PrepareReleaseResetAsync), or null when it carried the state.
+        public string? ActivatedReset { get; private set; }
         public int Drains { get; private set; }
         public string? Running { get; set; }
         public string? VerifyFailure { get; init; }
@@ -487,6 +652,7 @@ public sealed partial class WorldReleaseCoordinatorSafetyLawTests {
             Task.FromResult(result: Fences(owner: owner));
         public Task<WorldReleaseRuntimeResult> RecoverSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) => Done(detail: "roots restored");
         public Task<WorldReleaseRuntimeResult> StartCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
+            if (operation.PendingPhase == WorldReleaseOperationPhase.Activate) { ActivatedReset = operation.PendingStateReset; }
             Running = operation.PendingTargetRelease;
             return Done(detail: "candidate running");
         }

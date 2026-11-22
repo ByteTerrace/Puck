@@ -24,6 +24,7 @@ public sealed class WorldSeatContextSyncTabletopLawTests {
         var roster = new PlayerRoster(
             definition: definition,
             link: new LoopbackTransport(server: fixture.Server),
+            profiles: fixture.Server.CaptureRosterProfiles(),
             seatBindings: bindings
         );
         var anchor = new WorldPerceptionAnchor();

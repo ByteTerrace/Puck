@@ -275,6 +275,7 @@ internal sealed partial class PlayerCommandModule {
         var actingPrincipal = context.Principal;
 
         if (profileName is not null) {
+            m_roster.PublishProfiles(m_server.CaptureRosterProfiles());
             if (m_roster.FindProfile(name: profileName) is not { } profile) {
                 return CommandResult.Error(output: $"[player.join: no identity named '{profileName}' — see identity.list]");
             }
@@ -422,6 +423,7 @@ internal sealed partial class PlayerCommandModule {
 
         var profileName = args[0].ToString();
 
+        m_roster.PublishProfiles(m_server.CaptureRosterProfiles());
         if (m_roster.FindProfile(name: profileName) is not { } profile) {
             return CommandResult.Error(output: $"[player.identity: no identity named '{profileName}' — see identity.list]");
         }

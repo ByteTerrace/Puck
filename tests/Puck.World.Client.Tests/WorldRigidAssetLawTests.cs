@@ -88,7 +88,7 @@ public sealed class WorldRigidAssetLawTests {
 
                 Assert.Equal(index, Assert.IsType<WorldPickTarget>(@object: picked).BodyIndex);
                 Assert.Equal((index + 1), draws[index].FrameSlot);
-                Assert.Equal(index, draws[index].ObjectToWorld.M41);
+                Assert.Equal(index, draws[index].PlacementIn(transforms: drawn.DynamicTransforms).M41);
             }
 
             emitter.Count = 1;
@@ -142,8 +142,8 @@ public sealed class WorldRigidAssetLawTests {
     }
     private sealed class Dresser : ISdfFrameDresser {
         public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved,
-            IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
-            new(Program: program, ProgramChanged: false, Time: 0, Views: []) { DynamicTransforms = transforms, MeshDraws = meshDraws, MeshDrawsRevision = meshDrawsRevision, MovedTransforms = moved };
+            SdfMeshDrawList meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) =>
+            new(Program: program, ProgramChanged: false, Time: 0, Views: []) { DynamicTransforms = transforms, MeshDraws = meshDraws.Draws, MeshDrawsRevision = meshDraws.Revision, MovedTransforms = moved };
     }
     private sealed class StampSource : IWorldStampSource {
         public float? SolidScale(string placementId) => null;

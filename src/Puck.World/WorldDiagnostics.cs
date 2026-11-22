@@ -59,6 +59,45 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
     public WorldDiagnosticFinding? Find(string id) => m_reports.Values.SelectMany(selector: r => r.Findings).FirstOrDefault(predicate: f => (f.Id == id));
     public void Retain(WorldDiagnosticReport report) => m_reports[report.View] = report;
 
+    // What Collect last read: the solid revision, the completed tick, whether the drawn meshes matched the document, and
+    // the drawn rows' revision; and the copy it last made.
+    private long m_collectedRevision = -1;
+    private ulong m_collectedTick;
+    private bool m_collectedDrawn;
+    private long m_collectedMesh = -1;
+    private WorldDiagnosticCopy m_copy = WorldDiagnosticCopy.Off;
+
+    // Copies what the overlay draws, at a host step's collect on the pump inside the boundary window. While a view is on
+    // over a drawn frame it keeps the report the overlay drew (its findings marked with their visibility) when that is
+    // still the latest, and starts or polls the view's report when the colliders, the drawn meshes or, for contacts,
+    // the tick moved. Off, or with no frame drawn, it copies nothing.
+    public WorldDiagnosticCopy Collect(Func<WorldDiagnosticReport?> drawn) {
+        if ((Mode is not ("colliders" or "contacts")) || (render?.Residency?.Frame is not { } frame)) {
+            return m_copy = WorldDiagnosticCopy.Off;
+        }
+        if ((drawn() is { } shown) && (Latest is { } latest) && (latest.View == shown.View) && (latest.Snapshot == shown.Snapshot)) {
+            Retain(report: shown);
+        }
+
+        var report = Latest;
+        var revision = Revision;
+        var drawnReady = DrawnReady;
+        var tick = Tick;
+
+        if ((report is null) || HasPending(view: Mode) || (revision != m_collectedRevision) || (drawnReady != m_collectedDrawn) ||
+            (frame.DrawRowsRevision != m_collectedMesh) || ((Mode == "contacts") && (tick != m_collectedTick))) {
+            report = Report(view: Mode);
+            m_collectedRevision = revision;
+            m_collectedDrawn = drawnReady;
+            m_collectedMesh = frame.DrawRowsRevision;
+            m_collectedTick = tick;
+        }
+
+        return ((ReferenceEquals(objA: m_copy.Report, objB: report) &&(m_copy.Mode == Mode) && (m_copy.Presentation == Presentation) && (m_copy.Amber == Amber))
+            ? m_copy
+            : (m_copy = new WorldDiagnosticCopy(Amber: Amber, Mode: Mode, Presentation: Presentation, Report: report)));
+    }
+
     private sealed record ContactInput(int Index, ContactSupportWitness? DiagnosticSupport, bool IsRigid,
         double DiagnosticSnapReach, bool DiagnosticSettled);
 
@@ -101,7 +140,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
         var scene = (((frame is not null) && Equals(objA: frame.DiagnosticSource, objB: server.DocumentVersion) &&
             (render?.Residency?.MeshPathBake.Pending == false)) ? render.Residency.MeshIrradiance.DiagnosticScene(frame: frame) : null);
         var bakeError = ((scene is null) ? 0 : frame!.MeshDraws.Where(predicate: static d => d.IsStatic)
-            .Select(selector: static d => (Vector3.TransformNormal(d.Mesh.BakeCell, d.ObjectToWorld).Length() * 0.5)).DefaultIfEmpty(defaultValue: 0).Max());
+            .Select(selector: static d => (Vector3.TransformNormal(d.Mesh.BakeCell, d.FixedPlacement).Length() * 0.5)).DefaultIfEmpty(defaultValue: 0).Max());
         var frameNumber = render?.Root?.FramesProduced;
         var meshRevision = frame?.DrawRowsRevision;
         var exactPose = ((frame is not null) && (frame.Clock.Whole == server.CompletedEngineTicks) && (frame.Clock.Fraction == 0));

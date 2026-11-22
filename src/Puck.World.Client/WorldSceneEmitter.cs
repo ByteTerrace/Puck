@@ -591,4 +591,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     public IReadOnlyList<SdfSlotClip> SlotClips => m_animator.SlotClips;
     /// <inheritdoc/>
     public long MeshDrawsRevision => m_meshDraws.Revision;
+    /// <inheritdoc/>
+    public Puck.Abstractions.Gpu.GpuRowChanges? MeshDrawChanges => m_meshDraws.Changes;
+    /// <inheritdoc/>
+    public long MeshDrawChangesSerial => m_meshDraws.Serial;
 }

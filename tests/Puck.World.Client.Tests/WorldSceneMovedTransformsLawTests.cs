@@ -223,7 +223,7 @@ public sealed class WorldSceneMovedTransformsLawTests {
     }
     // Dresses nothing: the law reads the table's moved set, not a rendered view.
     private sealed class BareDresser : ISdfFrameDresser {
-        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) => new(
+        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, SdfMeshDrawList meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) => new(
             Program: program,
             ProgramChanged: false,
             Time: 0f,

@@ -567,16 +567,8 @@ receipt's contract is "whether it applied", not whether it is recoverable
             Accepted: true,
 ```
 
-where `Persist` narrates a failed save and returns (`src/Puck.World.Server/WorldOwnedWorlds.cs:1198-1201`):
-
-```csharp
-    private void Persist(WorldIdentity identity) {
-        if (
-            !TrySave(
-                identity: identity,
-```
-
-and the receipt says (`src/Puck.World.Protocol/Protocol/WorldDocumentSubmission.cs:29`):
+`WorldOwnedWorlds.Persist` narrates a failed save and returns. The receipt says
+(`src/Puck.World.Protocol/Protocol/WorldDocumentSubmission.cs:29`):
 
 ```csharp
 /// <param name="Accepted">Whether it applied.</param>

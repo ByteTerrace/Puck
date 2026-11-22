@@ -190,6 +190,11 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     public static WorkKind SessionCellsDelivered { get; } = Registry.Declare("world.boot.session-cells-delivered", "count", WorkClass.Pacing);
     /// <summary>Gets the kind counting the body entries every snapshot handed a session observer carried.</summary>
     public static WorkKind SessionEntriesDelivered { get; } = Registry.Declare("world.boot.session-entries-delivered", "count", WorkClass.Pacing);
+    /// <summary>Gets the kind counting the hand-offs an authority's outbox recorded for its collect instead of making:
+    /// deliveries to sinks that receive on the host loop, and the callbacks routed through it.</summary>
+    public static WorkKind OutboxRecords { get; } = Registry.Declare("world.boot.outbox-records", "count", WorkClass.Pacing);
+    /// <summary>Gets the kind counting the bytes the outbox copied out of the memory recorded deliveries lent.</summary>
+    public static WorkKind OutboxBytesCopied { get; } = Registry.Declare("world.boot.outbox-bytes-copied", "bytes", WorkClass.Pacing);
     /// <summary>Gets the kind counting the installs that judged the compiled products against the parts of the
     /// document they were built from: a full install of a mutation or a reload, an undo, and a presentation install
     /// fitting the render envelope.</summary>

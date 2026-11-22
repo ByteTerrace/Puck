@@ -536,7 +536,7 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
 
         return new SdfMesh(indices: indices, positions: positions);
     }
-    private static SdfMeshDraw Draw(SdfMesh mesh) => new(Identity: new object(), Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity);
+    private static SdfMeshDraw Draw(SdfMesh mesh) => new(identity: new object(), material: 0, mesh: mesh, objectToWorld: Matrix4x4.Identity);
     // Two rooms 20 m square: a floor under the lower one, a slab between them from y = 4 to 4.3, and a ceiling over the
     // upper one; a static 20,000-candela point light in the upper room, 1 m over the slab, and no other light.
     private static SdfFrame Frame() {

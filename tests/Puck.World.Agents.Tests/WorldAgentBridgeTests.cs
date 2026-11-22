@@ -4,9 +4,8 @@ using Microsoft.Extensions.AI;
 using Puck.Maths;
 using Puck.Testing;
 using Puck.World.Agents.Harness;
-using Puck.World.Machines;
 using Puck.World.Protocol;
-using Puck.World.Server;
+using Puck.World.Testing;
 using Xunit;
 
 namespace Puck.World.Agents.Tests;
@@ -299,27 +298,15 @@ public sealed class WorldAgentBridgeTests {
             Name: CellName.Parse(candidate: "events"),
             Space: "lore"
         );
-        var definition = new WorldDefinition(
-            StateRaw: new WorldStateSection(
-                Spaces: [space],
-                World: [eventsRow]
-            )
+        // Each agent acts as a peer the server admitted: a peer principal no connection holds is a stale session,
+        // refused before any grant is read.
+        using var fixture = Fixtures.FreshServerWithPeer(
+            definition: Fixtures.BuildDocument() with { StateRaw = new WorldStateSection(Spaces: [space], World: [eventsRow]) },
+            peer: out var grantedPeer
         );
-        var population = new WorldPopulation(definition: definition);
-        using var stateDirectory = new TemporaryDirectory(prefix: "puck-agents-test-");
-        var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory.RootPath, machineId: Guid.NewGuid());
-        using var machines = new WorldMachineHost(screens: definition.Screens, catalog: new WorldMachineCatalog([]));
-        var server = new WorldServer(
-            definition: definition,
-            population: population,
-            profiles: profiles,
-            envelope: new WorldRenderEnvelope(),
-            machines: machines
-        );
-
+        var ungrantedPeer = fixture.AdmitPeer();
+        var server = fixture.Server;
         var transport = new LoopbackTransport(server: server);
-        var grantedPeer = Principal.Peer(generation: 1, index: 1);
-        var ungrantedPeer = Principal.Peer(generation: 1, index: 2);
 
         Assert.True(condition: WorldMutationKindCatalog.TryParseMask(mask: out var kindMask, text: "UpsertStateCell", unknown: out _));
         server.Grant(
@@ -356,14 +343,14 @@ public sealed class WorldAgentBridgeTests {
         );
 
         var grantedBridge = new WorldAgentBridge(
-            bodyIndex: 1,
+            bodyIndex: grantedPeer.Index,
             channels: Channels,
             dispatcher: InlineDispatcher.Instance,
             link: transport,
             principal: grantedPeer
         );
         var ungrantedBridge = new WorldAgentBridge(
-            bodyIndex: 2,
+            bodyIndex: ungrantedPeer.Index,
             channels: Channels,
             dispatcher: InlineDispatcher.Instance,
             link: transport,
@@ -904,6 +891,8 @@ public sealed class WorldAgentBridgeTests {
         public SubmissionEnvelope? LastEnvelope { get; private set; }
 
         public IDisposable AttachSink(IClientSink sink) => new NoopDisposable();
+        // A fake holds no tick, so every inline reply is admitted.
+        public void RequireInlineSubmission() { }
         public void EnqueueIntent(in IntentSubmission submission) => throw new NotSupportedException();
         public void Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) {
             LastEnvelope = envelope;

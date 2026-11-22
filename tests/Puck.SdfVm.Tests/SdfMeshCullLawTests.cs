@@ -25,9 +25,9 @@ public sealed class SdfMeshCullLawTests {
     );
 
     private static SdfMeshDraw At(Vector3 position, SdfMesh? mesh = null) =>
-        new(Identity: "draw", Material: 0, Mesh: (mesh ?? Cube), ObjectToWorld: Matrix4x4.CreateTranslation(position: position));
+        new(identity: "draw", material: 0, mesh: (mesh ?? Cube), objectToWorld: Matrix4x4.CreateTranslation(position: position));
     private static bool Keeps(in SdfMeshCull cull, in SdfMeshDraw draw) =>
-        cull.Keeps(box: (SdfMeshBox.TryOf(box: out var box, draw: in draw) ? box : null));
+        cull.Keeps(box: (SdfMeshBox.TryOfFixed(box: out var box, draw: in draw) ? box : null));
 
     [Fact]
     public void AViewKeepsADrawItsFrustumMayShowBeforeTheFarDistance() {
@@ -53,9 +53,9 @@ public sealed class SdfMeshCullLawTests {
     public void ADrawsBoxFollowsItsMatrixAndCarry() {
         var view = SdfMeshCull.Of(camera: in Camera, far: 40f, height: 900u, width: 900u);
         // Scaled long along x, the box reaches into the frustum from far to its right.
-        var stretched = (At(position: new Vector3(x: 30f, y: 0f, z: -10f)) with {
-            ObjectToWorld = (Matrix4x4.CreateScale(scales: new Vector3(x: 25f, y: 1f, z: 1f)) * Matrix4x4.CreateTranslation(position: new Vector3(x: 30f, y: 0f, z: -10f))),
-        });
+        var stretched = At(position: new Vector3(x: 30f, y: 0f, z: -10f)).PlacedAt(
+            objectToWorld: (Matrix4x4.CreateScale(scales: new Vector3(x: 25f, y: 1f, z: 1f)) * Matrix4x4.CreateTranslation(position: new Vector3(x: 30f, y: 0f, z: -10f)))
+        );
         // Carried a half turn about up from behind the camera into front of it.
         var carried = (At(position: new Vector3(x: 0f, y: 0f, z: 10f)) with {
             CarryRotation = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: MathF.PI),
@@ -80,7 +80,7 @@ public sealed class SdfMeshCullLawTests {
         );
         var draw = At(mesh: skinned, position: new Vector3(x: 0f, y: 0f, z: 10f));
 
-        Assert.False(condition: SdfMeshBox.TryOf(box: out _, draw: in draw));
+        Assert.False(condition: SdfMeshBox.TryOfFixed(box: out _, draw: in draw));
         Assert.True(condition: Keeps(cull: SdfMeshCull.Of(camera: in Camera, far: 40f, height: 900u, width: 900u), draw: in draw));
     }
     [Fact]

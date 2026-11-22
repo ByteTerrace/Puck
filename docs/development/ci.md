@@ -1054,6 +1054,21 @@ committed release is admitted first, an operation that had no effect is abandone
 and every other pre-commit operation recovers its source. Nothing an Azure
 operation already did is retracted outside that recovery.
 
+Hosted data is scratch until its owner says otherwise (AGENTS.md rule 5), so a
+deploy whose source state predates a format change resets it rather than
+refusing or migrating it. The decision has one home,
+`WorldReleaseCoordinator.FindStateReset`, which the fixture builder calls on the
+source's export: a checkpoint this build cannot decode makes the deploy build the
+new release's fresh fixture, qualify it alone as a first deployment, and claim
+the group with `BeginResetAsync`, which records a `reset:` entry and its reason
+in the operation's history. The source still drains and its protected roots
+still permit pre-commit recovery; at Activate,
+`WorldAuthorityBlobStore.PrepareReleaseResetAsync` replaces each drained root
+with the new release's definition and no gameplay, without reading the old
+state. State that decodes is carried as before, and a qualification that fails
+on it still refuses. The reset lives in history rather than a member of its own
+because the draining source, an earlier build, reads the group record.
+
 Release Azure prepares the package before deploying it. Deploy automatically
 exports a coherent capture from the active source, preserving admission while
 all hosted rows are captured at one simulation boundary. Immutable fixture

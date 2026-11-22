@@ -79,6 +79,7 @@ public sealed class HostFrameWork {
     private int m_world = -1;
     private long m_stamp;
     private long m_blocked;
+    private long m_executed;
 
     /// <summary>The named work of this iteration.</summary>
     public HostFrameWorkTimes Times => m_times;
@@ -93,6 +94,55 @@ public sealed class HostFrameWork {
         m_worlds.Clear();
         m_worldWork.Clear();
         ScheduledRenders = 0;
+        m_executed = 0L;
+    }
+
+    /// <summary>Adds the stopwatch ticks a step thread spent executing authority ticks to the calling thread's
+    /// measurement: the tick's own cost, apart from what the frame thread spent preparing and collecting it.</summary>
+    /// <param name="ticks">The stopwatch ticks the execution took.</param>
+    public static void NoteExecuted(long ticks) {
+        if (Active is { } work) { work.m_executed += ticks; }
+    }
+    /// <summary>Takes the stopwatch ticks of tick execution noted or folded in since the last take.</summary>
+    /// <returns>The ticks, or zero when no step thread reported any.</returns>
+    public long TakeExecuted() {
+        var executed = m_executed;
+
+        m_executed = 0L;
+
+        return executed;
+    }
+    /// <summary>Adds the work another thread measured on the calling thread's behalf to the calling thread's
+    /// measurement, world by world and part by part, then clears <paramref name="source"/>. The other thread must have
+    /// finished: neither measurement is synchronized. With nothing bound on the calling thread the source is only
+    /// cleared.</summary>
+    /// <param name="source">The measurement the other thread bound while it worked.</param>
+    public static void Fold(HostFrameWork source) {
+        ArgumentNullException.ThrowIfNull(source);
+
+        if ((Active is { } work) && !ReferenceEquals(work, source)) {
+            for (var part = 0; (part < (int)HostFrameWorkPart.Count); part++) {
+                work.m_times[part] += source.m_times[part];
+            }
+            foreach (ref readonly var row in CollectionsMarshal.AsSpan(source.m_worldWork)) {
+                if (!work.m_worlds.TryGetValue(row.World, out var index)) {
+                    index = work.m_worldWork.Count;
+                    work.m_worlds.Add(row.World, index);
+                    work.m_worldWork.Add(new HostWorldWork(row.World, 0, 0));
+                }
+
+                ref var target = ref CollectionsMarshal.AsSpan(work.m_worldWork)[index];
+
+                target.Steps += row.Steps;
+                target.Ticks += row.Ticks;
+                for (var part = 0; (part < (int)HostFrameWorkPart.Count); part++) {
+                    target.Parts[part] += row.Parts[part];
+                }
+            }
+            work.m_executed += source.m_executed;
+            work.ScheduledRenders += source.ScheduledRenders;
+        }
+        source.Clear();
     }
 
     /// <summary>Enables measurements on the calling thread for the duration of a host phase.</summary>
