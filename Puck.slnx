@@ -87,6 +87,7 @@
         <Project Path="src/Puck.Mcp/Puck.Mcp.csproj" />
         <Project Path="src/Puck.Mcp.Azure/Puck.Mcp.Azure.csproj" />
         <Project Path="src/Puck.World.Machines/Puck.World.Machines.csproj" />
+        <Project Path="src/Puck.World.Presentation/Puck.World.Presentation.csproj" />
         <Project Path="src/Puck.World.Protocol/Puck.World.Protocol.csproj" />
         <Project Path="src/Puck.World.Schema/Puck.World.Schema.csproj" />
         <Project Path="src/Puck.World.Server/Puck.World.Server.csproj" />

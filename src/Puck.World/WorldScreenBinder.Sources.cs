@@ -3,7 +3,7 @@ using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.World.Client;
-using Puck.World.Server;
+using Puck.World.Protocol;
 
 namespace Puck.World;
 
@@ -63,27 +63,13 @@ public sealed partial class WorldScreenBinder : ISdfScreenSources {
         ? mapping
         : null
     );
-    /// <summary>Returns the machine host of a world instance this process runs: the boot world's own, or the host of a
-    /// local instance a screen shows or a seat is presented in, which steps that world's machines on its own ticks.</summary>
+    /// <summary>Returns what a frame reads of the machines of a world instance this process runs (the boot world, or a
+    /// local instance a screen shows or a seat is presented in, which steps its machines on its own ticks), as the last
+    /// collect captured it: its outputs, instance revision and presentation clock.</summary>
     /// <param name="world">The world instance's name.</param>
-    /// <returns>The host, or <see langword="null"/> for a world this process does not run, whose machines run on its own
-    /// authority and reach no screen here.</returns>
-    public IWorldMachineHost? MachinesOf(string world) {
-        if (string.Equals(
-            a: world,
-            b: WorldInstanceHost.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            return m_machines;
-        }
-
-        return ((m_instanceHost.TryGet(
-            instance: out var instance,
-            name: world
-        ) && (instance is not null))
-            ? instance.Server.Machines
-            : null);
-    }
+    /// <returns>The presentation, or <see langword="null"/> for a world this process does not run, whose machines run on
+    /// its own authority and reach no screen here.</returns>
+    public WorldMachinePresentation? MachinesOf(string world) => m_feed.Machines.Of(world: world);
     /// <inheritdoc/>
     /// <remarks>A seat's or a camera's view of the world's residency shows the world's screens (<see cref="InstanceOf"/>); a
     /// session of the boot world, or a camera it shows, filmed into the world's frame shows its own level's.</remarks>

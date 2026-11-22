@@ -10,7 +10,7 @@ namespace Puck.World;
 /// surgery every instance-addressed verb shares lives in
 /// <see cref="Puck.Commands.CommandEcho.SpliceTag(string, string, string)"/>.
 /// </summary>
-internal static class WorldArgs {
+public static class WorldArgs {
     /// <summary>Whether <paramref name="token"/> opens with <see cref="InstanceTokenPrefix"/> — the test every
     /// instance-addressed verb uses to decide whether a positional slot IS the trailing instance token before
     /// parsing it further.</summary>
@@ -52,9 +52,9 @@ internal static class WorldArgs {
     /// <summary>Parses the name out of a token already confirmed by <see cref="IsInstanceToken"/>: decodes the echo's
     /// escapes (see the remarks), refuses an empty name, and refuses the literal boot-instance name as redundant
     /// addressing (the boot world is already the default — omit the token to address it). Does not check whether a
-    /// running instance answers to the resolved name; a caller that needs the resolved <see cref="WorldInstance"/>
+    /// running instance answers to the resolved name; a caller that needs the resolved <c>WorldInstance</c>
     /// follows up with
-    /// <see cref="TryResolveInstance(ReadOnlySpan{char}, string, WorldInstanceHost, out WorldInstance?, out CommandResult?)"/>,
+    /// <c>WorldInstanceArgs.TryResolveInstance</c>,
     /// and a caller that defers existence to its own downstream refusal (e.g. <c>world.rate</c>'s <c>TryPause</c>/
     /// <c>TryResume</c>/<c>TryDescribeRate</c>) stops here.</summary>
     /// <param name="token">The token, prefix included.</param>
@@ -81,55 +81,16 @@ internal static class WorldArgs {
 
         if (string.Equals(
             a: candidate,
-            b: WorldInstanceHost.BootInstanceName,
+            b: WorldDefinitionLoader.BootInstanceName,
             comparisonType: StringComparison.Ordinal
         )) {
             name = string.Empty;
-            error = CommandResult.Error(output: $"[{verb}: '{WorldInstanceHost.BootInstanceName}' is the world this process booted with — omit instance: to address it]");
+            error = CommandResult.Error(output: $"[{verb}: '{WorldDefinitionLoader.BootInstanceName}' is the world this process booted with — omit instance: to address it]");
 
             return false;
         }
 
         name = candidate;
-        error = null;
-
-        return true;
-    }
-    /// <summary>Parses and resolves a trailing instance token to its running instance, layering the "no instance
-    /// named '…'" refusal over <see cref="TryParseInstanceName"/> — the form every instance-addressed read-back
-    /// that needs the instance object itself (not just its name) shares.</summary>
-    /// <param name="token">The token, prefix included.</param>
-    /// <param name="verb">The verb name the refusal text is scoped to.</param>
-    /// <param name="instances">The host to resolve the name against.</param>
-    /// <param name="instance">The resolved instance on success.</param>
-    /// <param name="error">The refusal, on failure.</param>
-    /// <returns>Whether the token resolved to a running instance.</returns>
-    public static bool TryResolveInstance(ReadOnlySpan<char> token, string verb, WorldInstanceHost instances, out WorldInstance? instance, out CommandResult? error) {
-        if (!TryParseInstanceName(
-            error: out error,
-            name: out var name,
-            token: token,
-            verb: verb
-        )) {
-            instance = null;
-
-            return false;
-        }
-
-        if (
-            !instances.TryGet(
-            instance: out var resolved,
-            name: name
-        ) ||
-            (resolved is null)
-        ) {
-            instance = null;
-            error = CommandResult.Error(output: $"[{verb}: no instance named '{name}' — see world.instance.status]");
-
-            return false;
-        }
-
-        instance = resolved;
         error = null;
 
         return true;

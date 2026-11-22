@@ -124,7 +124,8 @@ public sealed partial class WorldScreenBinder {
     public WorldScreenSource.Text? TextSourceAt(int index) {
         if (!m_slots.TryGetValue(index, out var slot)) { return null; }
         if (slot.Text is { } text) { return text; }
-        if (slot.DeclaredSource is not WorldScreenSource.Machine || m_machines.FaultOf(index) is not { } fault) {
+        if ((slot.DeclaredSource is not WorldScreenSource.Machine machine) ||
+            (MachinesOf(world: WorldInstanceHost.BootInstanceName)?.Faults.GetValueOrDefault(key: machine.Instance) is not { } fault)) {
             slot.FaultText = null;
             return null;
         }

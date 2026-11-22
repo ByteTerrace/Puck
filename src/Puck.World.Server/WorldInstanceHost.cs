@@ -629,17 +629,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         return authority;
     }
 
-    /// <summary>Resolves the world definition local seat <paramref name="slot"/> currently presents from, per its
-    /// live <c>WorldSeatAuthorityRouter</c> route — the one structure source every drag-time/read-back
-    /// consumer reads through, so seats never derive "which document currently frames me" two
-    /// different ways. <c>WorldSeatViewInput</c> (the live drag clamp) and <c>WorldViewCommandModule</c>'s
-    /// <c>world.view.camera</c> echo are today's two callers.</summary>
-    /// <param name="slot">The 0-based local roster slot.</param>
-    /// <returns>The routed instance's own definition, or the boot row's own definition for a boot-routed seat, an
-    /// out-of-range slot, or a route naming an instance that has since stopped — the same defensive fallback
-    /// <see cref="LeaveRosterSeat"/> already applies to a stale route.</returns>
-    public WorldDefinition ResolveRoutedDefinition(int slot) =>
-        (m_seats.RoutedEndpoint(slot: slot)?.Definition ?? Boot!.Server.Definition);
     /// <summary>Scans the boot instance's document for portal faces (a <see cref="WorldPlacementFace"/> carrying a
     /// <see cref="WorldPlacementPortal"/> facet) against its own active local seats, and enqueues a transfer for each
     /// edge — a seat whose body was outside the face's enterable volume last scan and is inside it now (see

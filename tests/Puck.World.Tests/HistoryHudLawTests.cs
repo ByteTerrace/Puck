@@ -12,12 +12,15 @@ public sealed class HistoryHudLawTests {
         using var harness = new WorldHistoryHarness(seats: 0);
         var definition = harness.Fixture.Server.Definition;
         var client = ClientFixtures.Client(definition: definition);
+        var feed = new WorldPresentationFeed();
+        // The collect's copy of the history window, published as a host step's collect publishes it.
+        void Publish() => feed.Publish(diagnostics: WorldDiagnosticCopy.Off, machines: WorldMachineTable.Empty,
+            tick: WorldTickRecord.Empty with { History = WorldPresentationCopy.HistoryWindow(history: harness.History) });
         var resolver = new WorldHudBindingResolver(
             client: client,
             continuum: new WorldContinuum(client, new WorldSeatAuthorityRouter(), new NoNeighbours()),
             frameRate: new FrameRateMonitor(),
-            history: harness.History,
-            population: harness.Fixture.Server.Population,
+            feed: feed,
             seatBindings: new WorldSeatBindings(definition: definition)
         );
         var source = new HudStore();
@@ -60,6 +63,7 @@ public sealed class HistoryHudLawTests {
             builder.EndChannel();
         }
         harness.Steps(count: 400);
+        Publish();
         for (var warm = 0; (warm < 20); warm++) {
             Draw();
         }
@@ -67,6 +71,7 @@ public sealed class HistoryHudLawTests {
 
         for (var tick = 0; (tick < 30); tick++) {
             harness.StepWithoutInput();
+            Publish();
             var before = GC.GetAllocatedBytesForCurrentThread();
 
             Draw();

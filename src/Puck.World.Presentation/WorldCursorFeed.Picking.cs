@@ -5,7 +5,7 @@ using Puck.World.Client;
 
 namespace Puck.World;
 
-internal sealed partial class WorldCursorFeed : IDisposable {
+public sealed partial class WorldCursorFeed : IDisposable {
     private SdfWorldPicker? m_hoverPicker;
     private SdfWorldPicker? m_pointerPicker;
     private int m_pointerSlot;

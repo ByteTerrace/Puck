@@ -5,7 +5,7 @@ namespace Puck.World;
 /// GPU has completed a frame of every instance that has rendered, and the host has produced a frame since all of that
 /// held (<see cref="WorldReadinessLatch"/>). It
 /// is the one readiness fact the console waits on (<c>world.wait ready</c>) and a scheduled capture's hold reads
-/// (<see cref="WorldCaptureScheduler"/>), and it answers whether the captures <c>world.screenshot</c> armed have landed
+/// (<c>WorldCaptureScheduler</c>), and it answers whether the captures <c>world.screenshot</c> armed have landed
 /// (<c>world.wait captures</c>). A host that composes no renderer registers none. Members are read on the host pump.
 /// </summary>
 public interface IWorldEngineReadiness {

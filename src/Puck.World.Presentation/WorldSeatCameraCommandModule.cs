@@ -9,7 +9,7 @@ namespace Puck.World;
 /// <summary>The seat-owned camera read-back. Camera yaw and pitch participate in camera-relative simulation input,
 /// so their observability belongs to the authoritative client/seat core and is available in every executable shape,
 /// including a headless federation canary.</summary>
-internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter, WorldSeatBindings seatBindings) : ICommandModule {
+public sealed class WorldSeatCameraCommandModule(WorldClient client, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter, WorldSeatBindings seatBindings) : ICommandModule {
     private static readonly CommandForms WorldViewCameraForms = CommandForms.Of(verb: "world.view.camera", "[<player>] [full|compact|<key>,<key>...]");
     private static readonly CommandForms ViewRecenterForms = CommandForms.Of(verb: "view.recenter", "[player]");
     private static readonly CommandForms PlayerCameraViewForms = CommandForms.Of(verb: "player.camera.view", "[first|third|toggle|auto]");
@@ -86,7 +86,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         _ = route.Endpoint.TryEntityHeading(heading: out var heading, index: route.EntityIndex);
         seat.View.Recenter(
             heading: heading,
-            views: instances.ResolveRoutedDefinition(slot: slot).Views
+            views: seatRouter.DefinitionOf(home: client.Definition, slot: slot).Views
         );
     }
     private string Describe(int slot) => Frame(fields: Compact(fields: Fields(slot: slot)));
@@ -94,7 +94,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
     // Every field the seat reports, in reading order, as structured pairs: a value that holds a space (an authority
     // named `side room`) stays one value.
     private List<KeyValuePair<string, string>> Fields(int slot) {
-        var definition = instances.ResolveRoutedDefinition(slot: slot);
+        var definition = seatRouter.DefinitionOf(home: client.Definition, slot: slot);
         var seat = roster.Seat(slot: slot);
         var seatLook = (seat?.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
         var gyro = seatLook.Gyro;
@@ -187,7 +187,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
                 var seat = roster.Seat(slot: context.Slot);
 
                 if (seat is null) { return CommandResult.Error(output: "[player.camera.boom: no occupied seat]"); }
-                seat.View.MoveBoom(units: context.Value.AsAxis2D.Y, views: instances.ResolveRoutedDefinition(slot: context.Slot).Views);
+                seat.View.MoveBoom(units: context.Value.AsAxis2D.Y, views: seatRouter.DefinitionOf(home: client.Definition, slot: context.Slot).Views);
                 return CommandResult.None;
             },
             routing: CommandRouting.Immediate
@@ -270,7 +270,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
                 if (seat is null) {
                     return CommandResult.Error(output: "[player.camera.automatic: no occupied seat]");
                 }
-                var definition = instances.ResolveRoutedDefinition(slot: context.Slot);
+                var definition = seatRouter.DefinitionOf(home: client.Definition, slot: context.Slot);
                 var feel = (seat.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
                 var token = ((args.Count == 0) ? "toggle" : args[0].ToString().ToLowerInvariant());
 

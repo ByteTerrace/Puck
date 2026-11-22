@@ -21,7 +21,7 @@ public interface IWorldPointerConsumer {
 /// its behalf. <see cref="WorldWheelFeed"/> is the one implementation — the radial action menu's ring cycling is
 /// what the wheel drives; a second drainer would starve it, which is exactly what this marker exists to make
 /// structural.</summary>
-internal interface IWorldWheelConsumer : IWorldPointerConsumer {
+public interface IWorldWheelConsumer : IWorldPointerConsumer {
 }
 
 /// <summary>

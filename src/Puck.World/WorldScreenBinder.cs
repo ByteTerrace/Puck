@@ -83,6 +83,9 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     // (Handle/Light/MachineAt) and facades several of its read-only members. Never mutated through here — see this
     // type's own remarks.
     private readonly WorldMachineHost m_machines;
+    // The values the authority published at the last collect, whose machine table every screen's output and clock is
+    // read from: a frame never reads a machine host.
+    private readonly WorldPresentationFeed m_feed;
     private readonly WorldCreationInstances m_stamps;
     private readonly WorldPerceptionAnchor m_perception;
     // Resolved lazily: the facts read the input router, which the composition root registers after this binder.
@@ -227,13 +230,16 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     /// <param name="domains">The guard that holds the last valid value of a session view's bound value and reports its
     /// transitions.</param>
     /// <param name="screenMaterials">The boot definition's screen materials, which the screens name; absent is none.</param>
+    /// <param name="feed">The published values whose machine table every screen's machine output and clock is read
+    /// from.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldCreationInstances stamps, WorldPerceptionAnchor perception, Func<IOverlayPredicateEvaluator> facts, WorldSpeechClock speech, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits, IReadOnlyList<WorldScreenMaterial>? screenMaterials = null) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, WorldPresentationFeed feed, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldCreationInstances stamps, WorldPerceptionAnchor perception, Func<IOverlayPredicateEvaluator> facts, WorldSpeechClock speech, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits, IReadOnlyList<WorldScreenMaterial>? screenMaterials = null) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: screens);
         m_domains = domains;
         m_renderProbe = renderProbe;
         ArgumentNullException.ThrowIfNull(argument: machines);
+        ArgumentNullException.ThrowIfNull(argument: feed);
         ArgumentNullException.ThrowIfNull(argument: cameraCapture);
         ArgumentNullException.ThrowIfNull(argument: windowCapture);
         ArgumentNullException.ThrowIfNull(argument: probeKernels);
@@ -247,6 +253,7 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
         ArgumentNullException.ThrowIfNull(argument: roster);
 
         m_machines = machines;
+        m_feed = feed;
         m_machines.MachinesChanged += OnMachinesChanged;
         m_cameraCapture = cameraCapture;
         m_cameraDeviceScanner = new CameraDeviceScanner(

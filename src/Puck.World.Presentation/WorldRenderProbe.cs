@@ -12,7 +12,7 @@ namespace Puck.World;
 /// is <see langword="null"/> until the renderer is built on the first frame. It is also the
 /// <see cref="IGpuWorkRegistry"/> whose nodes the <c>gpu</c> section of <c>world.counters</c> reports: each graph
 /// instance the render graph renders by its instance name, the world's residency's uploads as <c>sdf:world</c>, and
-/// each camera and session view's as <c>sdf:&lt;name&gt;</c>, which <see cref="WorldScreenBinder"/> registers. It is the
+/// each camera and session view's as <c>sdf:&lt;name&gt;</c>, which <c>WorldScreenBinder</c> registers. It is the
 /// host's <see cref="IWorldEngineReadiness"/> too: ready once the world's residency has built its tables, the graph's
 /// root has a completed output rendered over it, and every instance that has rendered has a frame completed on the GPU
 /// (<see cref="RenderGraphRuntime.FirstFramesCompleted"/>), so a GPU readback asked for after readiness waits on no

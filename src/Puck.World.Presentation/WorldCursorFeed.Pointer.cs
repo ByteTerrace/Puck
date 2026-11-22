@@ -3,7 +3,7 @@ using Puck.Maths;
 
 namespace Puck.World;
 
-internal sealed partial class WorldCursorFeed {
+public sealed partial class WorldCursorFeed {
     private Vector2? m_pointerOverride;
 
     // A console automation point affects this presentation feed alone. Clearing returns to the real pointer store.

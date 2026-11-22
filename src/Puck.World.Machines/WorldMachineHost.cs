@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Abstractions.Machines;
 using Puck.Abstractions.Waiting;
 using Puck.World.Machines;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -514,6 +515,11 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     private ulong m_presentClock;
     private ulong m_presentStep;
     private long m_presentTimestamp;
+    // What CapturePresentation last handed out, and the running instances' outputs it read at m_presentedRevision; an
+    // instance map change (NotifyMachinesChanged, or a revision an operation moved) reads them again.
+    private WorldMachinePresentation? m_presentation;
+    private IReadOnlyDictionary<string, IReadOnlyDictionary<string, IMachineVideoOutput>>? m_presentedOutputs;
+    private ulong m_presentedRevision;
     private ulong m_stepBarrier;
     private ulong m_stepWidth;
     private bool m_stepsLinks;
@@ -565,24 +571,70 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         m_stepInstances = m_instances.Values.GetEnumerator();
         _ = m_stepInstances.MoveNext();
     }
-    /// <inheritdoc/>
-    public ulong PresentedTicks {
-        get {
-            if (
-                m_drainsMachines ||
-                (m_presentStep == 0UL)
-            ) {
-                return m_presentClock;
-            }
-
-            var fraction = Math.Clamp(
-                max: 1d,
-                min: 0d,
-                value: (System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: m_presentTimestamp).TotalSeconds / Puck.Maths.FixedTickConversion.ToSeconds(ticks: m_presentStep))
-            );
-
-            return ((m_presentClock - m_presentStep) + ((ulong)(fraction * m_presentStep)));
+    // Each running instance's video outputs by provider-owned name, keyed by instance name: read again only after the
+    // instance map changed, so a step that moved nothing reads none.
+    private IReadOnlyDictionary<string, IReadOnlyDictionary<string, IMachineVideoOutput>> RunningOutputs() {
+        if ((m_presentedOutputs is { } held) && (m_presentedRevision == m_instanceRevision)) {
+            return held;
         }
+
+        var running = new Dictionary<string, IReadOnlyDictionary<string, IMachineVideoOutput>>(comparer: StringComparer.Ordinal);
+
+        foreach (var (name, instance) in m_instances) {
+            if (instance.Declaration.Running && (instance.Lease.Runtime is IMachineVideoOutputs videoOutputs)) {
+                running[name] = videoOutputs.VideoOutputs;
+            }
+        }
+        m_presentedRevision = m_instanceRevision;
+
+        return m_presentedOutputs = running;
+    }
+    // Whether every instance's fault is the one a presentation holds, allocation-free.
+    private bool SameFaults(IReadOnlyDictionary<string, string> held) {
+        var count = 0;
+
+        foreach (var (name, instance) in m_instances) {
+            if (instance.Lease.Fault is not { } fault) {
+                continue;
+            }
+            count++;
+            if (!held.TryGetValue(key: name, value: out var was) || !string.Equals(a: was, b: fault, comparisonType: StringComparison.Ordinal)) {
+                return false;
+            }
+        }
+
+        return (count == held.Count);
+    }
+    private Dictionary<string, string> CaptureFaults() {
+        var faults = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+        foreach (var (name, instance) in m_instances) {
+            if (instance.Lease.Fault is { } fault) {
+                faults[name] = fault;
+            }
+        }
+
+        return faults;
+    }
+    /// <inheritdoc/>
+    public WorldMachinePresentation CapturePresentation() {
+        var outputs = RunningOutputs();
+        var sameFaults = ((m_presentation is { } previous) && SameFaults(held: previous.Faults));
+
+        if (sameFaults && (m_presentation is { } held) && (held.InstanceRevision == m_instanceRevision) && (held.Clock == m_presentClock) &&
+            (held.Step == m_presentStep) && (held.StepTimestamp == m_presentTimestamp) && (held.Synchronous == m_drainsMachines)) {
+            return held;
+        }
+
+        return m_presentation = new WorldMachinePresentation(
+            clock: m_presentClock,
+            faults: (sameFaults ? m_presentation!.Faults : CaptureFaults()),
+            instanceRevision: m_instanceRevision,
+            outputs: outputs,
+            step: m_presentStep,
+            stepTimestamp: m_presentTimestamp,
+            synchronous: m_drainsMachines
+        );
     }
     /// <inheritdoc/>
     public IAudioMachine? AudioMachine(int index) =>
@@ -647,11 +699,9 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         )) {
             return null;
         }
-        return ((slot.DeclaredSource is WorldScreenSource.Machine source)
-            ? VideoOutput(
-                instance: source.Instance,
-                output: source.Output
-            )
+        return (((slot.DeclaredSource is WorldScreenSource.Machine source) && RunningOutputs().TryGetValue(key: source.Instance, value: out var outputs) &&
+            outputs.TryGetValue(key: source.Output, value: out var selected))
+            ? selected
             : null
         );
     }
@@ -870,19 +920,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
 
         return [.. m_reconcileRemovals];
     }
-    /// <inheritdoc/>
-    public string? FaultOf(int index) =>
-        (m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        ) &&
-        (slot.DeclaredSource is WorldScreenSource.Machine source) &&
-        m_instances.TryGetValue(
-            key: source.Instance,
-            value: out var instance
-        ))
-            ? instance.Lease.Fault
-            : null;
     /// <inheritdoc/>
     public WorldMachineState? State(int index) {
         if (m_slots.TryGetValue(

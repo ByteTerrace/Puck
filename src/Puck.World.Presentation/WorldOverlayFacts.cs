@@ -14,7 +14,7 @@ namespace Puck.World;
 /// distance to seconds only when resolving a fade. Subject-bearing predicates (<see cref="OverlayPredicate.Speaking"/>,
 /// <see cref="OverlayPredicate.Near"/>) resolve their subject to a body through <see cref="WorldPerceptionAnchor"/>
 /// so possession follows, and to a position off the client's render poses or the stamp pool.</summary>
-internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
+public sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
     private static readonly int FactCount = Enum.GetValues<OverlayFact>().Length;
     // The enclosing seat scope, and each joined seat as a numbered subject: shared, since a subject is immutable and an
     // evaluation per seat every frame would otherwise allocate one per seat.

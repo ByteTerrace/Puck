@@ -1007,7 +1007,7 @@ cites correct lines whose conclusion this lane's reading narrows.
 | 1.1 items | line 390 | moved | `docs/architecture/worlds.md:407` |
 | 1.1 desktop log | lines 1278-1279 | moved | `docs/architecture/worlds.md:1295-1296` |
 | 1.1 co-location | lines 1384-1397 and 1444 | moved | `docs/architecture/worlds.md:1401-1414`, `:1461` |
-| 1.1 cluster search | "finds one unrelated comment" | count off | four unrelated hits in two files (`src/Puck.World.Server/WorldDiagnosticReport.cs:37`, `:86`, `:129`; `src/Puck.World.Server/WorldPopulation.Query.cs:109`) |
+| 1.1 cluster search | "finds one unrelated comment" | count off | four unrelated hits in two files (`src/Puck.World.Protocol/WorldDiagnosticReport.cs:37`, `:86`, `:129`; `src/Puck.World.Server/WorldPopulation.Query.cs:109`) |
 | 1.2 generations | lines 1281-1284 | moved | `docs/architecture/worlds.md:1298-1301` |
 | 1.2 remote evidence | lines 739-741 | wrong lines (off before the move too) | `docs/architecture/worlds.md:760-762` |
 | 1.2 domain | line 403 | moved | `docs/architecture/worlds.md:420` |

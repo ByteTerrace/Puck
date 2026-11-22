@@ -26,7 +26,7 @@ namespace Puck.World;
 /// <param name="Buttons">The seat's held pointer buttons as a fixed word (<c>-</c> for none, else up to
 /// <c>LRM</c> in that order) — the store's live non-destructive button state, echoed so an injected press is
 /// pipe-assertable before anything acts on it.</param>
-internal readonly record struct WorldCursorStatus(
+public readonly record struct WorldCursorStatus(
     int Slot,
     Vector2 Position,
     Vector2 Frame,
@@ -49,7 +49,7 @@ internal readonly record struct WorldCursorStatus(
 /// presentation/session state: nothing rides a <see cref="Puck.Commands.CommandSnapshot"/>, touches the binding
 /// vocabulary, or reaches the simulation.
 /// </summary>
-internal sealed partial class WorldCursorFeed {
+public sealed partial class WorldCursorFeed {
     // The eight held-button words, indexed by the L|R|M bit mask — interned so the per-frame status never
     // allocates a string for a state with only eight values.
     private static readonly string[] ButtonWords = ["-", "L", "R", "LR", "M", "LM", "RM", "LRM"];

@@ -20,7 +20,11 @@ public sealed partial class WorldMachineHost {
     /// <inheritdoc/>
     public event Action? MachinesChanged;
 
-    internal void NotifyMachinesChanged() => MachinesChanged?.Invoke();
+    internal void NotifyMachinesChanged() {
+        m_presentedOutputs = null;
+        m_presentation = null;
+        MachinesChanged?.Invoke();
+    }
 
     /// <inheritdoc/>
     public WorldMachineInstanceState? InstanceState(string name) {
@@ -80,19 +84,6 @@ public sealed partial class WorldMachineHost {
         return null;
     }
 
-    /// <inheritdoc/>
-    public IMachineVideoOutput? VideoOutput(string instance, string output) =>
-        ((m_instances.TryGetValue(
-            key: instance,
-            value: out var entry
-        ) && entry.Declaration.Running && (entry.Lease.Runtime is IMachineVideoOutputs outputs) &&
-        outputs.VideoOutputs.TryGetValue(
-            key: output,
-            value: out var selected
-        ))
-            ? selected
-            : null
-        );
     /// <inheritdoc/>
     public IAudioMachine? AudioOutput(string instance, string output) =>
         ((m_instances.TryGetValue(

@@ -1682,8 +1682,8 @@ counts in `sdf.transforms`, never in `records.posed`.
   inspect the live schedule and completed build as well.
 - Screen-light reproduction must compare source bytes, not just graph publication
   numbers. `MachineVideoSourceUpload` numbers uploads, while a queued machine's
-  video read takes the native frame due at the position its machine host
-  presents (`IWorldMachineHost.PresentedTicks`), which outside lockstep follows
+  video read takes the native frame due at the position its world's machines
+  present (`WorldMachinePresentation.PresentedTicks`), which outside lockstep follows
   host time. Equal publications can therefore feed different images to
   `ScreenEmission`. Lockstep uses the existing
   synchronous machine advance before rendering. A fence wait, readback or GPU

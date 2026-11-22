@@ -318,7 +318,7 @@ public static class WorldRenderRoot {
                 if (!profileBound && (device.Identity is { } identity)) {
                     profileBound = true;
 
-                    var render = sp.GetRequiredService<Puck.World.Server.WorldServer>().Definition.Render;
+                    var render = client.Definition.Render;
 
                     if (profiles?.ApplyAtBoot(
                         adapter: identity.AdapterName,

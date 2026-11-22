@@ -29,7 +29,7 @@ namespace Puck.World;
 /// <param name="SelectionGraceSeconds">The authored neutral dwell, in seconds, before an empty commit cancels.</param>
 /// <param name="Center">The radial hub in frame pixels (meaningful while open).</param>
 /// <param name="CenterKnown">Whether the hub is anchored.</param>
-internal readonly record struct WorldWheelStatus(
+public readonly record struct WorldWheelStatus(
     int Slot,
     bool Open,
     string Id,
@@ -57,7 +57,7 @@ internal readonly record struct WorldWheelStatus(
 /// sector returns its compiler-minted <see cref="BindingActivation"/> to <see cref="InputRouter"/>, so it keeps the
 /// seat's principal, command maps, value kind, phase, and deterministic snapshot path.
 /// </summary>
-internal sealed class WorldWheelFeed : IWorldWheelConsumer {
+public sealed class WorldWheelFeed : IWorldWheelConsumer {
     // How many CLOSED frames an armed commit decision survives. The release edge closes the radial in the same
     // input fold that queues the commit, and on a frame the simulation accumulator owes zero ticks the closing
     // FeedTick can run BEFORE the dispatch's tick applies — a decision dropped at first close-observation would
@@ -137,7 +137,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     /// <param name="viewports">The per-seat viewport publication the pixel geometry derives from.</param>
     /// <param name="store">The wheel store the overlay reads.</param>
     /// <param name="router">The input router a committed sector's activation enters — lazy, because the command
-    /// registry aggregates <see cref="WorldWheelCommandModule"/>, which consumes this feed; a direct dependency
+    /// registry aggregates <c>WorldWheelCommandModule</c>, which consumes this feed; a direct dependency
     /// would cycle the container.</param>
     /// <param name="icons">The world's icon table, resolving a sector's icon name to atlas content.</param>
     /// <param name="clock">The engine-tick capture clock the selection-grace window is counted on — the process's
