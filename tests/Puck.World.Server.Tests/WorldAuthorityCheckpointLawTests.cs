@@ -48,6 +48,143 @@ public sealed class WorldAuthorityCheckpointLawTests {
         Assert.Equal(WorldStateHashComposition.HashAuthoritative(baseline, 1UL), WorldStateHashComposition.HashAuthoritative(server, 1UL));
     }
 
+    // A tick executed on a host's step thread and held across wait slices still names the thread that handed it over as
+    // its owner: that thread brings the boundary by handing over the next slice, so it must refuse at once rather than
+    // wait for it, and the step thread resumes the same tick to the state an inline step reaches.
+    [Fact]
+    public void ATickHeldOnTheStepThreadKeepsTheThreadThatHandedItOverAsItsOwner() {
+        using var fixture = Fixtures.FreshServer();
+        var baseline = fixture.Server;
+        var machines = System.Reflection.DispatchProxy.Create<IWorldMachineHost, NonDurableMachines>();
+        var proxy = (NonDurableMachines)machines;
+        proxy.Inner = baseline.Machines;
+        proxy.Hold = true;
+        var server = new WorldServer(baseline.Definition, new WorldPopulation(baseline.Definition),
+            baseline.Profiles, new WorldRenderEnvelope(), machines);
+        var context = new FixedStepContext(0, Fixtures.StepTicks, Fixtures.StepTicks);
+        var published = 0UL;
+        var publishedOn = 0;
+        Action<ulong> publish = tick => {
+            published = tick;
+            publishedOn = Environment.CurrentManagedThreadId;
+        };
+        using var thread = new WorldStepThread();
+
+        var first = WorldServerStepShell.TryStep(server, null, publish, in context, HostPacing.OneTickPerFrame,
+            default, out var pending, thread);
+        Assert.Equal(0UL, first);
+        Assert.Equal(proxy.Wait, pending);
+        Assert.False(thread.InFlight);
+        Assert.False(server.Tick.AwaitsBoundary);
+
+        var anotherThreadWaits = false;
+        var another = new Thread(() => anotherThreadWaits = server.Tick.AwaitsBoundary);
+        another.Start();
+        another.Join();
+        Assert.True(anotherThreadWaits);
+        Assert.Contains(proxy.Wait.ToString(), Assert.Throws<InvalidOperationException>(() => server.ReadView(default(CommandContext))).Message);
+
+        proxy.Hold = false;
+        var final = WorldServerStepShell.TryStep(server, null, publish, in context, HostPacing.OneTickPerFrame,
+            WaitDeadline.In(TimeSpan.FromSeconds(10)), out pending, thread);
+        Assert.Null(pending);
+        Assert.Equal(1UL, final);
+        Assert.Equal(1UL, published);
+        Assert.Equal(Environment.CurrentManagedThreadId, publishedOn);
+        Assert.Equal(2, proxy.Attempts);
+        Assert.False(server.Tick.AwaitsBoundary);
+        baseline.Advance(Fixtures.StepTicks);
+        Assert.Equal(WorldStateHashComposition.HashAuthoritative(baseline, 1UL), WorldStateHashComposition.HashAuthoritative(server, 1UL));
+
+        // A thread that holds the authority gate cannot hand a tick over: the tick takes the gate on the step thread.
+        var next = new FixedStepContext(1, 2 * Fixtures.StepTicks, Fixtures.StepTicks);
+        _ = Assert.Throws<InvalidOperationException>(() => server.ExecuteAuthorityOperation(() => _ = WorldServerStepShell.TryStep(
+            server, null, publish, in next, HostPacing.OneTickPerFrame, WaitDeadline.In(TimeSpan.FromSeconds(10)), out _, thread)));
+        Assert.False(thread.InFlight);
+    }
+
+    // Between a tick's prepare, which applies its ordered submissions and samples its neighbours, and its execute, the
+    // authority gate is free while another thread is about to run the tick. The tick is held for the preparing thread
+    // over that span, so another thread waits for the boundary instead of applying something no replay could place.
+    [Fact]
+    public void APreparedTickIsHeldForItsPreparingThreadUntilItExecutes() {
+        using var fixture = Fixtures.FreshServer();
+        var server = fixture.Server;
+        var context = new FixedStepContext(0, Fixtures.StepTicks, Fixtures.StepTicks);
+        static bool OnAnotherThread(Func<bool> read) {
+            var answer = false;
+            var thread = new Thread(() => answer = read());
+            thread.Start();
+            thread.Join();
+            return answer;
+        }
+
+        Assert.False(OnAnotherThread(() => server.Tick.AwaitsBoundary));
+
+        var prepared = WorldServerStepShell.Prepare(server, null, in context, WaitDeadline.In(TimeSpan.FromSeconds(10)));
+
+        Assert.False(server.Tick.AwaitsBoundary);
+        Assert.True(OnAnotherThread(() => server.Tick.AwaitsBoundary));
+        Assert.Contains("the prepared tick's execution", Assert.Throws<InvalidOperationException>(() => _ = server.Population).Message);
+
+        var executed = WorldServerStepShell.Execute(in prepared);
+
+        Assert.True(executed.Completed);
+        Assert.False(OnAnotherThread(() => server.Tick.AwaitsBoundary));
+        Assert.Equal(1UL, server.CompletedTick);
+        _ = server.Population;
+    }
+
+    // A caller that polls leaves its tick executing on the step thread. Until it collects the tick it reads none of the
+    // authority: a read then would see whatever part of the tick had run. The caller's next call collects the same tick.
+    [Fact]
+    public void AThreadThatLeftItsTickInFlightReadsNoAuthorityUntilItCollectsIt() {
+        using var fixture = Fixtures.FreshServer();
+        var baseline = fixture.Server;
+        var machines = System.Reflection.DispatchProxy.Create<IWorldMachineHost, NonDurableMachines>();
+        var proxy = (NonDurableMachines)machines;
+        using var reached = new ManualResetEventSlim(false);
+        using var leave = new ManualResetEventSlim(false);
+        proxy.Inner = baseline.Machines;
+        proxy.Reached = reached;
+        proxy.Leave = leave;
+        var server = new WorldServer(baseline.Definition, new WorldPopulation(baseline.Definition),
+            baseline.Profiles, new WorldRenderEnvelope(), machines);
+        var context = new FixedStepContext(0, Fixtures.StepTicks, Fixtures.StepTicks);
+        var published = 0UL;
+        var woken = 0;
+        Action<ulong> publish = tick => published = tick;
+        using var thread = new WorldStepThread { Progressed = () => Interlocked.Increment(ref woken) };
+        var slice = WaitDeadline.In(TimeSpan.FromSeconds(20));
+
+        var first = WorldServerStepShell.TryStep(server, null, publish, in context, HostPacing.OneTickPerFrame,
+            slice, out var pending, thread, collectBy: default(WaitDeadline));
+        Assert.Equal(0UL, first);
+        Assert.Equal(WorldStepThread.ExecuteWait, pending);
+        Assert.True(thread.InFlight);
+        Assert.True(reached.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+        _ = Assert.Throws<InvalidOperationException>(() => _ = server.Population);
+        Assert.Equal(0UL, published);
+
+        // A second poll finds the tick still executing and prepares nothing again.
+        _ = WorldServerStepShell.TryStep(server, null, publish, in context, HostPacing.OneTickPerFrame,
+            slice, out pending, thread, collectBy: default(WaitDeadline));
+        Assert.Equal(WorldStepThread.ExecuteWait, pending);
+        Assert.Equal(1, proxy.Attempts);
+
+        leave.Set();
+        var final = WorldServerStepShell.TryStep(server, null, publish, in context, HostPacing.OneTickPerFrame,
+            slice, out pending, thread);
+        Assert.Null(pending);
+        Assert.Equal(1UL, final);
+        Assert.Equal(1UL, published);
+        // The step thread reports the finished slice after it is ready to collect, so the report may trail the collect.
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref woken) == 1, TimeSpan.FromSeconds(10)));
+        _ = server.Population;
+        baseline.Advance(Fixtures.StepTicks);
+        Assert.Equal(WorldStateHashComposition.HashAuthoritative(baseline, 1UL), WorldStateHashComposition.HashAuthoritative(server, 1UL));
+    }
+
     [Fact]
     public void AHostWithoutDurableCheckpointsNamesOnlyItsSteppedMachine() {
         using var fixture = Fixtures.FreshServer();
@@ -68,12 +205,18 @@ public sealed class WorldAuthorityCheckpointLawTests {
         public WaitReason Wait { get; } = new("machines", "held fixture segment");
         public bool Hold { get; set; }
         public int Attempts { get; private set; }
+        // Set when a tick reaches its machines, which then stay there until Leave is set: a tick that is still
+        // executing for as long as a law needs.
+        public ManualResetEventSlim? Reached { get; set; }
+        public ManualResetEventSlim? Leave { get; set; }
         private bool m_stepped;
         protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? arguments) {
             if (method!.Name == "get_AnyEverPumped") { return m_stepped; }
             if (method.Name == nameof(IWorldMachineHost.Advance)) { m_stepped = true; }
             if (method.Name == nameof(IWorldMachineHost.TryAdvance)) {
                 Attempts++;
+                Reached?.Set();
+                _ = Leave?.Wait(TimeSpan.FromSeconds(30));
                 if (Hold) { return Wait; }
             }
             return method.Invoke(Inner, arguments);

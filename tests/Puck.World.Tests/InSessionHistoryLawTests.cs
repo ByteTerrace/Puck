@@ -463,6 +463,10 @@ public sealed class InSessionHistoryLawTests {
         );
         var definition = harness.Fixture.Server.Definition;
         var client = ClientFixtures.Client(definition: definition);
+        var feed = new WorldPresentationFeed();
+        // The collect's copy of the history window, published as a host step's collect publishes it.
+        void Publish() => feed.Publish(diagnostics: WorldDiagnosticCopy.Off, machines: WorldMachineTable.Empty, observations: WorldObservationTable.Empty,
+            tick: WorldTickRecord.Empty with { History = WorldPresentationCopy.HistoryWindow(history: harness.History) });
         var resolver = new WorldHudBindingResolver(
             client: client,
             continuum: new WorldContinuum(
@@ -471,12 +475,12 @@ public sealed class InSessionHistoryLawTests {
                 new NoNeighbours()
             ),
             frameRate: new FrameRateMonitor(),
-            history: harness.History,
-            population: harness.Fixture.Server.Population,
+            feed: feed,
             seatBindings: new WorldSeatBindings(definition: definition)
         );
 
         (float Fraction, string Text) Read(string token) {
+            Publish();
             Assert.True(condition: resolver.TryResolve(binding: token, fraction: out var fraction, seat: -1, text: out var text));
 
             return (fraction, text.ToString());

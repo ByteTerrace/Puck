@@ -198,7 +198,7 @@ public sealed class MachineCartridgeLawTests {
             Puck.Abstractions.Machines.MachineRuntimeStatus.Running,
             state.Value.Status
         );
-        Assert.NotNull(@object: fixture.Server.Machines.VideoOutput(
+        Assert.NotNull(@object: fixture.Server.Machines.CapturePresentation().VideoOutput(
             instance: "cabinet",
             output: "video"
         ));

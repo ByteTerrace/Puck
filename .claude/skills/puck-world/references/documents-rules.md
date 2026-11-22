@@ -176,11 +176,15 @@ same snapshot `world.save` does to the world's own loaded file
 because every boot shape is file-backed), composing no candidate and journaling
 nothing, so the sim state after a tick that fires it is bit-identical to a tick
 that does not — a replay hash cannot see it. It rides `WorldServer.
-FireWorldRuleEffect` directly through a NEW `WorldServer.SaveEffectTap` (mirroring
-`EchoTap`) that the composition root wires to the identical `WorldSaveSnapshot.
-Compose` `world.save` itself runs, since `Puck.World.Server` folds only its own half
-(`WorldSessionCapture.Capture`) and cannot reach the render/audio/pacing levers the
-other half (`WorldSessionLevers.Fold`) needs. No throttle beyond the ordinary
+FireWorldRuleEffect` directly through `WorldServer.SaveEffectTap` (mirroring
+`EchoTap`). The rule captures the authority half where it fires
+(`WorldServer.CaptureSave`, a `WorldSaveCapture` holding
+`WorldSessionCapture.Capture` and the journal as it stood), and the tap, routed
+through the server's outbox, runs when the outbox collects: the composition root
+folds the render/audio/pacing levers (`WorldSaveSnapshot.Fold`, the same fold
+`world.save` runs), writes the file and, on success, compacts the journal
+through the entries the capture saw (`WorldSaveCapture.CompactSaved`), so entries
+made later in the same tick stay undoable and a refused write compacts nothing. No throttle beyond the ordinary
 `Level`/`Edge` vocabulary — a `Level` gate fires it every tick held, the same
 footgun a level-triggered `addState` already carries (see `WorldRule.Mode`'s own
 remarks); a write failure is caught at the tap and narrated on stderr by name,

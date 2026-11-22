@@ -450,7 +450,7 @@ Each leading option can be proved in `worlds/debug` with a small, concrete scena
 - `src/Puck.World.Server/WorldAdjacencyContactField.cs:1-353`
 - `src/Puck.World.Server/WorldAdjacencyFields.cs`
 - `src/Puck.World.Server/WorldCrossAuthoritySettlement.cs:1-54`
-- `src/Puck.World.Server/WorldInstanceHost.cs:1-1820`
+- `src/Puck.World.Server/WorldInstanceHost.cs`
 - `src/Puck.World.Server/WorldInstanceHost.Transfers.cs:1-400`
 - `src/Puck.World.Server/WorldOutputHub.cs`
 - `src/Puck.World.Server/WorldSessionSink.cs:1-300`

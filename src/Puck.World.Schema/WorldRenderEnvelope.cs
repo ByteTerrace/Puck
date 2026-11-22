@@ -40,17 +40,20 @@ public readonly record struct WorldRenderCost(int Instances, int Materials) {
 /// views register theirs on the instance they show; <c>Puck.World.Server.WorldServer</c> reads their conjunction while
 /// draining its mutation queue.
 /// </summary>
-/// <remarks>Single-threaded: configured during startup and by views on the window-pump thread, read on the same thread
-/// while the server drains its pre-tick queue, so no lock guards it. Unconfigured, a candidate reads as fitting.</remarks>
+/// <remarks>The registered measurers are one immutable array, replaced whole under a lock by each registration and
+/// removal, so a view may configure the envelope from the frame while a tick on another thread fits a candidate against
+/// the array it read. Unconfigured, a candidate reads as fitting.</remarks>
 public sealed class WorldRenderEnvelope {
-    private readonly Dictionary<long, Func<WorldDefinition, WorldRenderCost>> m_measurers = [];
+    private readonly Lock m_gate = new();
+    private volatile KeyValuePair<long, Func<WorldDefinition, WorldRenderCost>>[] m_measurers = [];
 
     private long m_nextId;
+    private long m_revision;
 
     /// <summary>Gets a count that moves whenever a measurer is registered. What a fit read is recorded against it,
     /// because a fit made before a measurer registered says nothing about the parts that measurer reads. Removing a
     /// measurer leaves it, since the parts the rest read are among those recorded.</summary>
-    public long Revision { get; private set; }
+    public long Revision => Interlocked.Read(location: ref m_revision);
 
     /// <summary>Registers one render consumer's measurer.</summary>
     /// <param name="measure">Counts a candidate definition's render scene as this consumer would draw it. It runs once
@@ -61,13 +64,13 @@ public sealed class WorldRenderEnvelope {
     public IDisposable Configure(Func<WorldDefinition, WorldRenderCost> measure) {
         ArgumentNullException.ThrowIfNull(argument: measure);
 
-        var id = m_nextId++;
+        long id;
 
-        Revision++;
-        m_measurers.Add(
-            key: id,
-            value: measure
-        );
+        lock (m_gate) {
+            id = m_nextId++;
+            m_measurers = [.. m_measurers, new(key: id, value: measure)];
+            _ = Interlocked.Increment(location: ref m_revision);
+        }
 
         return new Registration(
             id: id,
@@ -79,7 +82,7 @@ public sealed class WorldRenderEnvelope {
     /// <param name="reason">On a miss, the ceiling the candidate exceeds; empty otherwise.</param>
     /// <returns><see langword="true"/> when the candidate fits every registration (or none exists).</returns>
     public bool TryFit(WorldDefinition candidate, out string reason) {
-        foreach (var measure in m_measurers.Values) {
+        foreach (var (_, measure) in m_measurers) {
             WorldRenderCost cost;
 
             try {
@@ -111,7 +114,9 @@ public sealed class WorldRenderEnvelope {
             }
 
             m_owner = null;
-            _ = current.m_measurers.Remove(key: id);
+            lock (current.m_gate) {
+                current.m_measurers = Array.FindAll(array: current.m_measurers, match: entry => (entry.Key != id));
+            }
         }
     }
 }

@@ -18,13 +18,15 @@ public sealed class WorldBootCompositionLawTests {
         }
     });
 
-    private static void WithHeadlessRegistry(Action<CommandRegistry> inspect) {
+    private static void WithHeadlessRegistry(Action<CommandRegistry> inspect) => WithHeadlessHost(Fixtures.BuildDocument(), services =>
+        inspect(new CommandRegistry(modules: services.GetServices<ICommandModule>())));
+
+    internal static void WithHeadlessHost(WorldDefinition definition, Action<IServiceProvider> inspect, Action<IServiceCollection>? configure = null) {
         using var scratch = new Puck.Testing.TemporaryDirectory(
             bestEffortDelete: true,
             prefix: "puck-headless-boot-"
         );
         var extensions = Puck.Abstractions.PuckExtensionSet.Compose(extensions: []);
-        var definition = Fixtures.BuildDocument();
         // The host builder supplies what a boot reads from its host (logging, the application lifetime), as Program's does.
         var builder = Microsoft.Extensions.Hosting.Host.CreateEmptyApplicationBuilder(settings: new());
 
@@ -55,11 +57,10 @@ public sealed class WorldBootCompositionLawTests {
             StateRoot: new Puck.World.Server.WorldStateRoot(path: Path.Join(path1: scratch.RootPath, path2: "state"))
         ));
 
+        configure?.Invoke(builder.Services);
         using var host = builder.Build();
 
-        var registry = new Puck.Commands.CommandRegistry(modules: host.Services.GetServices<Puck.Commands.ICommandModule>());
-
-        inspect(registry);
+        inspect(host.Services);
     }
 
     [Theory]

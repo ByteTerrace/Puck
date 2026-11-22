@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Abstractions.Machines;
 using Puck.Abstractions.Waiting;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -65,11 +66,6 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="name">The authored instance name.</param>
     /// <returns>The pace, or <see langword="null"/> when no instance has the name.</returns>
     WorldMachinePace? Pace(string name);
-    /// <summary>Resolves one running named instance's video output without creating or advancing it; a stopped instance
-    /// has no output for the tick.</summary>
-    /// <param name="instance">The authored instance name.</param>
-    /// <param name="output">The provider's output name.</param>
-    IMachineVideoOutput? VideoOutput(string instance, string output);
     /// <summary>Resolves one named audio stream; consumers of that stream share a single drain.</summary>
     /// <param name="instance">The authored instance name.</param>
     /// <param name="output">The provider's output name.</param>
@@ -129,14 +125,11 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     void Advance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads);
     /// <summary>Advances the same tick until it settles, returning the dependency still outstanding after a slice.</summary>
     WaitReason? TryAdvance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads, WaitDeadline deadline);
-    /// <summary>Gets the position, on the clock this host stamps its machines' segments with, that a frame rendered now
-    /// presents: the frames a machine completed up to it are due (<see cref="IMachineVideoOutput.FrameDue"/>). The clock
-    /// is the sum of the steps advanced, in engine ticks, and the position runs from the latest step's start to its end
-    /// over the host time one step takes, so a machine's frames are shown at the rate it completes them however few
-    /// steps a second the world runs. While the world completes each tick's machine work before a screen reads it
-    /// (lockstep), the position is the step's end. Presentation only: it reads the host's clock and never reaches a
-    /// machine.</summary>
-    ulong PresentedTicks { get; }
+    /// <summary>Captures what a frame reads of this host's machines: its running instances' video outputs, its instance
+    /// revision and its presentation clock, whole (<see cref="WorldMachinePresentation"/>). Call on the pump inside the
+    /// boundary window, at a host step's collect; the record is reused while nothing it holds has moved.</summary>
+    /// <returns>The presentation; never <see langword="null"/>.</returns>
+    WorldMachinePresentation CapturePresentation();
     /// <summary>Returns the live named machine a screen shows as its audio drain seam,
     /// or <see langword="null"/> when no machine (or no capability) is available.</summary>
     /// <param name="index">The engine screen-surface index.</param>
@@ -204,11 +197,6 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// the index is not a declared screen.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     WorldMachineState? State(int index);
-    /// <summary>Returns the fault of a declared screen's machine, or <see langword="null"/> when the screen has no
-    /// machine or its machine runs cleanly: <see cref="State"/>'s <see cref="WorldMachineState.Fault"/> without
-    /// building the rest of the state, for the per-frame fault-decal poll.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    string? FaultOf(int index);
     /// <summary>Establishes (or reports dormant) a runtime cable link over two or more declared screens.</summary>
     /// <param name="name">The link's stable name.</param>
     /// <param name="members">The engine screen indices in cable order.</param>

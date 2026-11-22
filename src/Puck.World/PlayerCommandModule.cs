@@ -533,7 +533,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScre
             return true;
         }
 
-        if (!WorldArgs.TryResolveInstance(
+        if (!WorldInstanceArgs.TryResolveInstance(
             token: args[(count - 1)],
             verb: verb,
             instances: m_instances,

@@ -93,6 +93,12 @@ public sealed partial class WorldInstanceHost {
 
     private volatile PublishedObservations m_publishedScreenSessions = new(Screens: new Dictionary<(string Owner, int Screen), WorldObservationSession>(), InfinityLayers: new Dictionary<(string Owner, string Layer), WorldObservationSession>());
 
+    /// <summary>Gets every session a world's screen observes its destination through, by owning instance and screen,
+    /// as the host last published them. Safe from any thread.</summary>
+    public IReadOnlyDictionary<(string Owner, int Screen), WorldObservationSession> ScreenSessions => m_publishedScreenSessions.Screens;
+    /// <summary>Gets every session a named infinity layer observes its destination through, by owning instance and layer,
+    /// as the host last published them. Safe from any thread.</summary>
+    public IReadOnlyDictionary<(string Owner, string Layer), WorldObservationSession> InfinitySessions => m_publishedScreenSessions.InfinityLayers;
     /// <summary>Reads the session a world's screen observes its destination through. Safe from any thread.</summary>
     /// <param name="instanceName">The owning instance.</param>
     /// <param name="screenIndex">The screen index.</param>

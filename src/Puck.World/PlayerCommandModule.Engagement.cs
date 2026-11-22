@@ -157,8 +157,8 @@ internal sealed partial class PlayerCommandModule {
             // two lines below observes its effect immediately, exactly like the pre-inversion direct binder call did.
             if (
                 screen.Route.AutoInsert &&
-                !m_screens.HasMachine(index: screenIndex) &&
-                m_screens.TryMagazine(
+                !m_server.Machines.HasMachine(index: screenIndex) &&
+                m_server.Machines.TryMagazine(
                 index: screenIndex,
                 magazine: out _,
                 selected: out var selected
@@ -173,7 +173,7 @@ internal sealed partial class PlayerCommandModule {
                 );
             }
 
-            if (!Server.WorldTick.ShowsEngageTarget(hasMachine: m_screens.HasMachine(index: screenIndex), screen: screen)) {
+            if (!Server.WorldTick.ShowsEngageTarget(hasMachine: m_server.Machines.HasMachine(index: screenIndex), screen: screen)) {
                 return CommandResult.Error(output: $"[body.engage: screen {screenIndex} has no machine to control and shows no producer — screen.insert a cart first]");
             }
 

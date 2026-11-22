@@ -459,6 +459,8 @@ public sealed class DeferredVerbEchoLawTests {
         private long m_last;
 
         public IDisposable AttachSink(IClientSink sink) => throw new NotSupportedException();
+        // A fake holds no tick, so every inline reply is admitted.
+        public void RequireInlineSubmission() { }
         public void EchoLast(bool grantTable, bool rejected) => Echo(
             echoes: echoes,
             grantTable: grantTable,
@@ -483,6 +485,8 @@ public sealed class DeferredVerbEchoLawTests {
         public bool RefuseInline { get; init; }
 
         public IDisposable AttachSink(IClientSink sink) => throw new NotSupportedException();
+        // A fake holds no tick, so every inline reply is admitted.
+        public void RequireInlineSubmission() { }
         public void EnqueueIntent(in IntentSubmission submission) => throw new NotSupportedException();
         public void Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) {
             Envelope = envelope;

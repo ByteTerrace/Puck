@@ -422,6 +422,7 @@ rule. Grammar, units and the compile/lint verbs belong to `puck-dsl`.
 | `src/Puck.World.Addons` | The scripting-guest addon host |
 | `src/Puck.World.Machines` | The engine-neutral screen-machine host (`WorldMachineHost`, `WorldMachineCatalog`) |
 | `src/Puck.World.Client` | The presentation seam: `WorldClient`, `SeatController`, `WorldSeatBindings` (over `Puck.World.Vocabulary`'s `WorldAffordances`), `WorldCameraRigCompiler`, `WorldFramePresenter`, the stamp pool. References Protocol, never Server |
+| `src/Puck.World.Presentation` | The frame's side: the types a produced frame runs (the screen binder, the render root, the audio director, `WorldIterationClock`, `WorldHudBindingResolver`, `WorldRenderProbe`, `WorldDiagnosticOverlay`, the pointer and overlay feeds) and the values the authority publishes for them at each collect (`WorldPresentationFeed`: `WorldTickRecord`, `WorldMachineTable`, `WorldObservationTable`, `WorldDiagnosticCopy`). References Client, never Server, Machines or a backend |
 | `src/Puck.World.Vocabulary` | The input vocabulary a world document is validated against (`WorldAffordances`), below Client |
 | `src/Puck.World.Transpiler` | The world `.puck` vocabulary: `WorldCompileSession` (the one door into `WorldCompiler`), `Vocabulary/` |
 | `src/Puck.World.Authoring` | The embedded content families (`puck.creation.v1` `CreationDocument`/`CreationCanonicalizer`) and the sculpting library |
@@ -432,7 +433,19 @@ rule. Grammar, units and the compile/lint verbs belong to `puck-dsl`.
 
 `build/Architecture.props` enforces the layering (`PUCKARCH` diagnostics):
 Schema never references Protocol or Server, Server knows nothing about
-rendering or input, Client never references Server.
+rendering or input, Client never references Server, and Presentation
+references neither Server nor Machines.
+
+**The frame reads what the collect published.** A frame-side type goes in
+`Puck.World.Presentation`, where naming `WorldServer`, `WorldPopulation`,
+`WorldBody` or a machine host fails the build. What it needs of the authority
+is copied once a host step by `WorldPresentationCollect` (the seat post-step
+runs it, inside the boundary window) into `WorldPresentationFeed`, and read
+from there; a new value a frame needs is a field of `WorldTickRecord`, a
+member of `WorldMachinePresentation`, `WorldObservedSession` or
+`WorldDiagnosticCopy`, never a closure over the authority wired into
+presentation. A console verb that reads machine state reads the boot server's
+machine host in the control phase, never through the binder.
 
 ## Contracts that bite
 

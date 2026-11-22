@@ -58,6 +58,7 @@ public sealed class WorldPointerRayCaptureLawTests {
             Roster = new PlayerRoster(
                 definition: definition,
                 link: new LoopbackTransport(server: m_fixture.Server),
+                profiles: m_fixture.Server.CaptureRosterProfiles(),
                 seatBindings: new WorldSeatBindings(definition: definition)
             );
             Registry = new CommandRegistry(modules: [new PointerModule()]);

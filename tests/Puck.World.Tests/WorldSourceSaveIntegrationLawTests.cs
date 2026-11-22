@@ -87,7 +87,7 @@ public sealed class WorldSourceSaveIntegrationLawTests {
         ));
         server.Advance(stepTicks: Fixtures.StepTicks);
         Assert.NotNull(@object: server.SaveEffectTap);
-        server.SaveEffectTap!(obj: (server.NextInputTick - 1UL));
+        server.SaveEffectTap!(obj: server.CaptureSave(tick: (server.NextInputTick - 1UL)));
 
         var saved = File.ReadAllText(path: path);
 

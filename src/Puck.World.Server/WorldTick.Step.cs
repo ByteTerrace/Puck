@@ -939,9 +939,87 @@ public sealed partial class WorldTick {
     private PendingTick m_pendingTick;
     private bool m_resumingTick;
     private volatile TickBlock? m_tickBlock;
-    // Owner is the thread that ran the slice the tick went pending on: the one thread that resumes it, and so the one
-    // thread that must never wait for its boundary.
-    private sealed record TickBlock(WaitReason Reason, ulong PreviousEngineTicks, string Detail, int Owner);
+    // Owner is the thread that handed over the slice the tick went pending on (SliceOwner): the one thread that brings
+    // the tick's boundary by handing over its next slice, and so the one thread that must never wait for it. Prepared
+    // marks a tick whose input is closed and whose execution has not begun (HoldPrepared): it is held the same way, but
+    // it is not a tick pending mid-step.
+    private sealed record TickBlock(WaitReason Reason, ulong PreviousEngineTicks, string Detail, int Owner, bool Prepared = false);
+    private static readonly WaitReason PreparedWait = new(Subsystem: "authority", WaitsFor: "the prepared tick's execution");
+    // The prepared hold last minted, reused while the same thread prepares: a tick allocates none.
+    private TickBlock? m_preparedHold;
+
+    /// <summary>Holds the tick whose input <see cref="PrepareAdvance(ulong)"/> just closed until <see cref="TryAdvance"/>
+    /// takes it, for the calling thread, which holds the authority gate. Between the two the gate is free when another
+    /// thread executes the tick, and nothing may reach the authority there: its ordered submissions are applied and its
+    /// neighbour projections sampled, so an entry applied in between would land where no replay can put it. The hold
+    /// makes that span a held tick: another thread entering the gate waits for the boundary
+    /// (<see cref="AwaitsBoundary"/>), and a submission from a thread that cannot wait queues for it
+    /// (<see cref="BlockedReason"/>).</summary>
+    internal void HoldPrepared() {
+        if ((m_tickBlock is not null) || ExecutionInterrupted) {
+            return;
+        }
+
+        var owner = SliceOwner;
+
+        if (m_preparedHold?.Owner != owner) {
+            m_preparedHold = new TickBlock(Detail: PreparedWait.ToString(), Owner: owner, Prepared: true, PreviousEngineTicks: 0UL, Reason: PreparedWait);
+        }
+        m_tickBlock = m_preparedHold;
+    }
+    // The managed id of the thread whose handed-over slice the step thread holds, from the hand-off until that thread
+    // collects it; zero otherwise.
+    private volatile int m_handedOverBy;
+
+    /// <summary>Gets whether the calling thread handed a slice of this tick to a step thread and has not collected it.
+    /// Every guarded member of the server refuses such a thread (<see cref="WorldServer.ThrowIfTickPending"/>): it
+    /// reads the authority only between a collect and the next hand-off.</summary>
+    internal bool HandedOverByCallingThread => (m_handedOverBy == Environment.CurrentManagedThreadId);
+    /// <summary>Marks a slice of this tick as handed to a step thread by the calling thread, or as collected.</summary>
+    /// <param name="handedOver">Whether the slice is being handed over; <see langword="false"/> once it is
+    /// collected.</param>
+    internal void NoteHandOver(bool handedOver) => m_handedOverBy = (handedOver ? Environment.CurrentManagedThreadId : 0);
+
+    /// <summary>Releases a prepared hold whose tick will not execute, because its hand-off failed.</summary>
+    internal void AbandonPrepared() {
+        lock (Host.AuthorityGate) { ReleasePrepared(); }
+    }
+    // The caller holds the authority gate, which from here on is what keeps other threads out.
+    private void ReleasePrepared() {
+        if (m_tickBlock is { Prepared: true }) {
+            m_tickBlock = null;
+            SignalBoundary();
+        }
+    }
+
+    // The thread the calling thread runs a tick slice for when that is not itself; zero otherwise. Only ExecuteFor
+    // writes it, for the duration of one slice.
+    [ThreadStatic] private static int ExecutesFor;
+
+    /// <summary>Gets the thread a tick slice run now belongs to: the thread that handed the slice over
+    /// (<see cref="ExecuteFor"/>), or the calling thread when it runs its own. A held tick names this thread as its
+    /// owner, and a thread entering the authority gate is compared with the owner under the same reading, so a step
+    /// thread that runs a slice neither becomes the tick's owner nor waits for a boundary its own owner must
+    /// bring.</summary>
+    internal static int SliceOwner => ((ExecutesFor != 0) ? ExecutesFor : Environment.CurrentManagedThreadId);
+
+    /// <summary>Marks the calling thread as running a tick slice for <paramref name="owner"/> until the scope is
+    /// disposed. <see cref="WorldServerStepShell.Execute"/> is its one caller.</summary>
+    /// <param name="owner">The managed id of the thread that handed the slice over.</param>
+    /// <returns>The scope that restores the calling thread's previous reading.</returns>
+    internal static SliceOwnerScope ExecuteFor(int owner) {
+        var previous = ExecutesFor;
+
+        ExecutesFor = ((owner == Environment.CurrentManagedThreadId) ? 0 : owner);
+
+        return new SliceOwnerScope(previous: previous);
+    }
+
+    /// <summary>The span in which the calling thread runs a tick slice for another thread.</summary>
+    internal readonly ref struct SliceOwnerScope(int previous) {
+        /// <summary>Restores the calling thread's previous reading.</summary>
+        public void Dispose() => ExecutesFor = previous;
+    }
     private static readonly WaitReason BoundaryWait = new(Subsystem: "authority", WaitsFor: "the pending tick's boundary");
     // Pulsed whenever a held tick settles or freezes; waited on by AwaitBoundary without the authority gate.
     private readonly object m_boundary = new();
@@ -962,13 +1040,16 @@ public sealed partial class WorldTick {
     /// freezes the authority, whose recovery delivers a whole document and primer.</summary>
     internal bool SnapshotFollows => (m_resumingTick && !m_pendingTick.Delivered && Host.Output.HasTypedSubscribers && !Host.Output.WithholdsTimeline);
 
-    internal WaitReason? PendingReason => m_tickBlock?.Reason;
+    /// <summary>Gets what a tick held mid-step waits for across wait slices, or <see langword="null"/> when none is: a
+    /// tick that is only prepared has not begun and is not pending.</summary>
+    internal WaitReason? PendingReason => m_tickBlock is { Prepared: false } block ? block.Reason : null;
     private bool ResumingOnOwner => Host.AuthorityGate.IsHeldByCurrentThread && m_resumingTick;
-    internal WaitReason? BlockedReason => PendingReason is { } reason && !ResumingOnOwner ? reason : null;
+    internal WaitReason? BlockedReason => m_tickBlock is { } block && !ResumingOnOwner ? block.Reason : null;
     internal string? BlockedDetail => m_tickBlock is { } block && !ResumingOnOwner ? block.Detail : null;
     /// <summary>Gets whether the calling thread, entering the authority gate, waits for the held tick's boundary: a tick
-    /// is held across wait slices, it can still settle, and the calling thread is not the one that resumes it.</summary>
-    internal bool AwaitsBoundary => m_tickBlock is { } block && !ExecutionInterrupted && (block.Owner != Environment.CurrentManagedThreadId);
+    /// is held across wait slices, it can still settle, and the calling thread is neither the one that hands over its
+    /// next slice nor a thread running a slice for that one (<see cref="SliceOwner"/>).</summary>
+    public bool AwaitsBoundary => m_tickBlock is { } block && !ExecutionInterrupted && (block.Owner != SliceOwner);
 
     /// <summary>Blocks the calling thread, which must not hold the authority gate, until the held tick settles or
     /// freezes, for at most <see cref="WaitDeadline.SynchronousBudget"/>.</summary>
@@ -1030,6 +1111,7 @@ public sealed partial class WorldTick {
         m_resumingTick = true;
         var held = false;
         var scopes = Host.ScopedReplaySpan;
+        Host.Output.BeginExecute();
         try {
             if (PendingReason is null) {
                 StepCore(in context, adjacency);
@@ -1043,7 +1125,7 @@ public sealed partial class WorldTick {
                 if (PendingReason != reason) {
                     var partitions = (reason == Puck.Hosting.Jobs.JobPool.JoinWait) ? Host.Jobs?.DescribeHeldPartitions(Puck.Hosting.Jobs.JobClass.Tick) : null;
                     var detail = string.IsNullOrEmpty(partitions) ? reason.ToString() : $"{reason} (held partitions {partitions})";
-                    m_tickBlock = new TickBlock(reason, m_pendingTick.PreviousEngineTicks, detail, Environment.CurrentManagedThreadId);
+                    m_tickBlock = new TickBlock(reason, m_pendingTick.PreviousEngineTicks, detail, SliceOwner);
                 }
                 if (m_pendingTick.Stall.HasPassed) { FreezeStalledTick(reason); }
                 return pending;
@@ -1051,6 +1133,7 @@ public sealed partial class WorldTick {
             foreach (var scope in Host.ScopedReplaySpan) { scope.AfterTick(); }
             return null;
         } finally {
+            Host.Output.EndExecute();
             m_resumingTick = false;
             if (!held) {
                 var settled = m_tickBlock is not null;
@@ -1110,16 +1193,21 @@ public sealed partial class WorldTick {
         }
     }
 
+    // The caller holds the authority gate.
     internal WaitReason? TryAdvance(in PreparedAdvance prepared, WaitDeadline deadline) {
         var context = prepared.Context;
+
+        ReleasePrepared();
         return RunTick(in context, prepared.Adjacency, deadline);
     }
 
     internal void Advance(ulong stepTicks, FixedStepContext? explicitContext = null) {
+        Host.Output.Collect();
         lock (Host.AuthorityGate) {
             var prepared = explicitContext is { } context ? PrepareAdvance(in context) : PrepareAdvance(stepTicks);
             HostWaits.ThrowIfPending(TryAdvance(in prepared, WaitDeadline.Synchronous()));
         }
+        Host.Output.Collect();
     }
     /// <summary>Submits one envelope into the ordered domain — the single front door every non-intent submission kind
     /// drains through (see <see cref="IWorldServerHost.Submit"/>'s own remarks). Enqueues, then immediately drains

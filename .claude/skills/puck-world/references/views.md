@@ -30,7 +30,7 @@ Primary code:
   table (`Declared`, `Find`) that the validator, the rig compiler and the
   reference census share, and the seat's default-path framing
   (`SeatFraming`, `SeatOrbit`).
-- `Puck.World/WorldSeatViewInput.cs` — the pointer adapter that turns the seat camera; `WorldDragMotion.cs` decides what each pointer event's motion does to a drag (counted from the press, cut at the release).
+- `Puck.World.Presentation/WorldSeatViewInput.cs` — the pointer adapter that turns the seat camera; `WorldDragMotion.cs` decides what each pointer event's motion does to a drag (counted from the press, cut at the release).
 - `Puck.World.Client/WorldFramePresenter.cs`, `WorldAdjacencySceneEmitter.cs`, and
   `WorldContinuum.cs` — local and neighbouring-authority render callers of the
   same seat state and generation-addressed continuum.

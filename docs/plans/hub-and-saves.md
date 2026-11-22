@@ -134,7 +134,7 @@ is at the hub's character place (gap 3), where the player renames and dresses
 it. After that, a joining seat is `Pending` and its stick cycles the account's
 identities, as the picker already does (`PlayerRoster.cs:662-680`,
 `:1219-1250`), preselecting by the identity's controller memory rows. The
-stand-in projection (`PlayerRoster.cs:2162-2182`) is deleted: every seated
+stand-in projection in `PlayerRoster.RehydrateProfiles` is deleted: every seated
 identity is an owned document, so every save door has somewhere to land. A
 world that authors `playerDefaults.identities` (a test cast) still seeds them.
 
