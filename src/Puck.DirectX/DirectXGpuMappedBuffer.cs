@@ -209,14 +209,13 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
-        // A queued update may still name the resource and its tiles' heaps: the release waits for it on the fence, which a
-        // removed device completes at once.
-        if ((m_returning.Count > 0) && (DirectXSharedFence.ReadCompletedValue(fence: ((ID3D12Fence*)m_fence)) < m_fenceValue)) {
-            try {
+        // A queued update may still name the resource and its tiles' heaps: the release waits for it on the fence. A removed
+        // device runs nothing further, so its tiles go back with it, and a loss's teardown disposes the buffer through here.
+        try {
+            if ((m_returning.Count > 0) && (DirectXSharedFence.ReadCompletedValue(fence: ((ID3D12Fence*)m_fence)) < m_fenceValue)) {
                 ((ID3D12Fence*)m_fence)->SetEventOnCompletion(Value: m_fenceValue, hEvent: default);
-            } catch (System.Runtime.InteropServices.COMException) {
-                // A removed device runs nothing further; its tiles go back with it.
             }
+        } catch (Exception exception) when (exception is DeviceLostException or System.Runtime.InteropServices.COMException) {
         }
         if (m_resource != 0) {
             // The one release door every buffer passes, so a clear descriptor keyed by the resource goes with it. The

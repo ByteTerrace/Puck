@@ -522,8 +522,8 @@ public static class WorldPlayerCommand {
                     before = after;
                     if (landed) { continue; }
 
-                    // The answer without the residency report a not-settled answer appends after its reason.
-                    var report = answer.Text.IndexOf(value: ": [sdf.mesh-bake]", comparisonType: StringComparison.Ordinal);
+                    // The answer, with what holds each bake, without the residency reports it appends after them.
+                    var report = answer.Text.IndexOf(value: " [sdf.mesh-bake]", comparisonType: StringComparison.Ordinal);
 
                     unsettled.Add(item: $"{place} ({((report > 0) ? answer.Text[..report] : answer.Text).Trim(trimChars: ['[', ']'])})");
                     return false;

@@ -375,6 +375,10 @@ selector leaves no replacement room for it (`SdfResidencyGrant.Mapped`). Its buf
 never map a region a kernel sizes with `GetDimensions` (the irradiance feedback). `SdfWorldTables.CoverMeshRegion` is
 the one place the mesh region's interior backing follows the arena: a chunk no placement or draw record covers is
 unmapped behind its readers, and one a placement needs again is mapped before any landing leases it.
+It gives chunks back before it backs any, and a chunk the device refuses makes it forget the meshes no draw names
+and try again every prepared frame (`SdfWorldTables.CoverRefusedBacking`) as the given-back chunks retire. A mesh named ahead that lies in a
+refused chunk is refused ahead (`SdfWorldTables.RefusesAhead`), so it takes the draws and the mesh it replaces gives
+up its memory; a product waiting on words the device will not back would otherwise hold the bake pending for good.
 The region's limit (`SdfResidencyGrant.ReserveGrowth`, stored as `LimitBytes`) is the one number both the arena
 refuses by and the bake's budget is held under (`SdfResidencyGrant.Budget`, at most `SdfMeshTier.BudgetEighths` of
 it), and a refused mesh presses `Retier` on its own, so pressure raises the detail bias before it leaves a hole. The
