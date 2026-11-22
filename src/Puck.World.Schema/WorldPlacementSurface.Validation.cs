@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions;
 using Puck.Maths;
 using Puck.World.Authoring;
 
@@ -7,11 +8,43 @@ namespace Puck.World;
 public static partial class WorldPlacementStamp {
     private sealed record SurfaceSource(WorldPlacement Row, CreationDocument Document, float Margin);
     private sealed record SurfaceDescriptor(WorldPlacementSurface Policy, SurfaceSource[] Sources);
-    private sealed record SurfaceValidation(SurfaceDescriptor? Descriptor, string Reason);
+    // One lookup of a row by id that a validation read, and the row it found (null for none).
+    private readonly record struct RowRead(string Id, WorldPlacement? Row);
+    // A validation's answer and every row lookup it read, its nested validations' included. The answer is a function of
+    // the row, the creations and those lookups alone, so a context whose index answers each read with the same row
+    // under the same creations answers the same (Reads).
+    private sealed record SurfaceValidation(SurfaceDescriptor? Descriptor, string Reason, RowRead[] Reads);
+    private sealed record ParentValidation(string Reason, RowRead[] Reads);
+    // The validation a row last had in any context, with the creations it was made under: a new section that keeps the
+    // row object, the rows its validation read and the creations validates it no further.
+    private sealed class DescriptorMemo(IReadOnlyList<WorldPrototype> creations, SurfaceValidation validation) {
+        public IReadOnlyList<WorldPrototype> Creations { get; } = creations;
+        public SurfaceValidation Validation { get; } = validation;
+    }
+    private static readonly CodeDerivedTable<WorldPlacement, DescriptorMemo> Descriptors = new();
 
     private sealed partial class CompilationContext {
         private readonly Dictionary<WorldPlacement, SurfaceValidation> m_descriptors = new(ReferenceEqualityComparer.Instance);
-        private readonly Dictionary<WorldPlacement, string> m_parentValidation = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<WorldPlacement, ParentValidation> m_parentValidation = new(ReferenceEqualityComparer.Instance);
+        // The lookups the validations running now have read; each validation keeps those after its own start.
+        private readonly List<RowRead> m_reads = [];
+
+        // The one door a validation looks a row up by id through, so every lookup it reads is recorded.
+        private bool Lookup(string id, out WorldPlacement row) {
+            var found = m_rows.TryGetValue(id, out row!);
+
+            m_reads.Add(new RowRead(Id: id, Row: (found ? row : null)));
+            return found;
+        }
+        private bool Holds(RowRead[] reads) {
+            foreach (var read in reads) {
+                var found = m_rows.TryGetValue(read.Id, out var row);
+
+                if (!ReferenceEquals(objA: (found ? row : null), objB: read.Row)) { return false; }
+            }
+            return true;
+        }
+        private RowRead[] ReadsSince(int start) => ((m_reads.Count == start) ? [] : m_reads.GetRange(index: start, count: (m_reads.Count - start)).ToArray());
         private readonly HashSet<WorldPlacement> m_validatingStamps = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<WorldPlacement> m_validatingFrames = new(ReferenceEqualityComparer.Instance);
 
@@ -26,17 +59,34 @@ public static partial class WorldPlacementStamp {
             descriptor = null; reason = string.Empty;
             if (row.Surface is not { } surface) { return true; }
             var owned = Owned(row);
-            if (owned && m_descriptors.TryGetValue(row, out var cached)) {
+            if (owned && (m_descriptors.TryGetValue(row, out var cached) || TryRemembered(row, out cached))) {
+                m_reads.AddRange(cached.Reads);
                 descriptor = cached.Descriptor; reason = cached.Reason; return reason.Length == 0;
             }
             if (!m_validatingStamps.Add(row)) {
                 return Invalid(out descriptor, out reason, $"placement '{row.Id}' has a cyclic surface/frame dependency.");
             }
             try {
+                var start = m_reads.Count;
                 var valid = BuildDescriptor(row, surface, out descriptor, out reason);
-                if (owned) { m_descriptors[row] = new SurfaceValidation(descriptor, reason); }
+                if (owned) {
+                    var validation = new SurfaceValidation(descriptor, reason, ReadsSince(start: start));
+
+                    m_descriptors[row] = validation;
+                    if (CodeRevision.Current == m_revision) { Descriptors.AddOrUpdate(row, new DescriptorMemo(m_creations, validation)); }
+                }
                 return valid;
             } finally { m_validatingStamps.Remove(row); }
+        }
+        // The validation another context made of this row object, when this context's index and creations answer
+        // everything it read as they did there.
+        private bool TryRemembered(WorldPlacement row, out SurfaceValidation validation) {
+            validation = null!;
+            if (!Descriptors.TryGetValue(row, out var memo) || !ReferenceEquals(objA: memo.Creations, objB: m_creations) || !Holds(memo.Validation.Reads)) { return false; }
+            validation = memo.Validation;
+            m_descriptors[row] = validation;
+            WorldBootWork.Count(WorldBootWork.SurfaceDescriptorsCarried);
+            return true;
         }
         private bool BuildDescriptor(WorldPlacement row, WorldPlacementSurface surface,
             out SurfaceDescriptor? descriptor, out string reason) {
@@ -59,7 +109,7 @@ public static partial class WorldPlacementStamp {
             var sources = new SurfaceSource[surface.Targets.Count];
             for (var i = 0; i < surface.Targets.Count; i++) {
                 var id = surface.Targets[i];
-                if (id == row.Id || !seen.Add(id) || !m_rows.TryGetValue(id, out var target) ||
+                if (id == row.Id || !seen.Add(id) || !Lookup(id, out var target) ||
                     (CreationOf(target.ShownPrototypeId) is not { } creation) || target.Solid is null ||
                     target.Deal is not null || target.Attach is not null || target.Inhabit is not null || !LiteralRoot(target) ||
                     CreationRig.Of(document: creation.Document).Animates || WorldStateDocumentValues.HasReference(creation.Document) ||
@@ -80,18 +130,19 @@ public static partial class WorldPlacementStamp {
         private bool TryParentFrame(WorldPlacement row, out string reason) {
             reason = string.Empty;
             var owned = Owned(row);
-            if (owned && m_parentValidation.TryGetValue(row, out var cached)) { reason = cached; return reason.Length == 0; }
+            if (owned && m_parentValidation.TryGetValue(row, out var cached)) { m_reads.AddRange(cached.Reads); reason = cached.Reason; return reason.Length == 0; }
             if (!m_validatingFrames.Add(row)) { reason = $"placement '{row.Id}' has a cyclic parent frame."; return false; }
+            var start = m_reads.Count;
             try {
                 if (row.Parent is { Length: > 0 } parentId) {
-                    if (!m_rows.TryGetValue(parentId, out var parent) || parent.Attach is not null || parent.Inhabit is not null ||
+                    if (!Lookup(parentId, out var parent) || parent.Attach is not null || parent.Inhabit is not null ||
                         !LiteralRoot(parent)) {
                         reason = $"placement '{row.Id}' requires a declared literal static parent frame '{parentId}'.";
                     } else if (parent.Surface is not null && SingleRoot(parent)) {
                         _ = TryDescriptor(parent, out _, out reason);
                     } else { _ = TryParentFrame(parent, out reason); }
                 }
-                if (owned) { m_parentValidation[row] = reason; }
+                if (owned) { m_parentValidation[row] = new ParentValidation(reason, ReadsSince(start: start)); }
                 return reason.Length == 0;
             } finally { m_validatingFrames.Remove(row); }
         }

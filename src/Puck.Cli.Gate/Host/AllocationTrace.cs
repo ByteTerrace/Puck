@@ -53,9 +53,9 @@ public static class AllocationTrace {
 
         using var log = new TraceLog(etlxFilePath: etlx);
         var source = log.Events.GetSource();
-        var threads = new Dictionary<int, ThreadShare>();
+        var threads = new Dictionary<int, Share>();
         var types = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
-        var sites = new Dictionary<string, SiteShare>(comparer: StringComparer.Ordinal);
+        var sites = new Dictionary<string, Share>(comparer: StringComparer.Ordinal);
         var frames = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
         var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
         var paths = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
@@ -70,14 +70,13 @@ public static class AllocationTrace {
             if (at < fromMs || at > toMs) { return; }
             if (double.IsNaN(first)) { first = at; }
             last = at;
-            if (!threads.TryGetValue(key: data.ThreadID, value: out var share)) { threads[data.ThreadID] = share = new ThreadShare(); }
+            if (!threads.TryGetValue(key: data.ThreadID, value: out var share)) { threads[data.ThreadID] = share = new Share(); }
 
             var amount = data.AllocationAmount64;
             var stack = data.CallStack();
             var root = Root(stack: stack);
 
-            share.Bytes += amount;
-            if (root is not null) { share.Roots[root] = share.Roots.GetValueOrDefault(key: root) + amount; }
+            share.Add(bytes: amount, part: root);
             if (thread is { } only && only != data.ThreadID) { return; }
             if (focus is not null) {
                 if (FocusPath(focus: focus, stack: stack) is not { } path) { return; }
@@ -93,9 +92,8 @@ public static class AllocationTrace {
 
             var site = Site(stack: stack);
 
-            if (!sites.TryGetValue(key: site, value: out var siteShare)) { sites[site] = siteShare = new SiteShare(); }
-            siteShare.Bytes += amount;
-            siteShare.Types[type] = siteShare.Types.GetValueOrDefault(key: type) + amount;
+            if (!sites.TryGetValue(key: site, value: out var siteShare)) { sites[site] = siteShare = new Share(); }
+            siteShare.Add(bytes: amount, part: type);
             seen.Clear();
             for (var frame = stack; frame is not null; frame = frame.Caller) {
                 var method = frame.CodeAddress.FullMethodName;
@@ -126,9 +124,9 @@ public static class AllocationTrace {
             Bytes: bytes,
             LargeBytes: large,
             Seconds: (double.IsNaN(first) ? 0 : (last - first) / 1000),
-            Threads: [.. threads.OrderByDescending(static pair => pair.Value.Bytes).Select(static pair => new AllocationThread(Id: pair.Key, Bytes: pair.Value.Bytes, Root: pair.Value.Roots.OrderByDescending(static root => root.Value).Select(static root => root.Key).FirstOrDefault() ?? "?"))],
+            Threads: [.. threads.OrderByDescending(static pair => pair.Value.Bytes).Select(static pair => new AllocationThread(Id: pair.Key, Bytes: pair.Value.Bytes, Root: pair.Value.Parts.OrderByDescending(static root => root.Value).Select(static root => root.Key).FirstOrDefault() ?? "?"))],
             Types: Ranked(totals: types),
-            Sites: [.. sites.OrderByDescending(static pair => pair.Value.Bytes).Select(static pair => new AllocationSite(Method: pair.Key, Bytes: pair.Value.Bytes, Types: Ranked(totals: pair.Value.Types)))],
+            Sites: [.. sites.OrderByDescending(static pair => pair.Value.Bytes).Select(static pair => new AllocationSite(Method: pair.Key, Bytes: pair.Value.Bytes, Types: Ranked(totals: pair.Value.Parts)))],
             Frames: Ranked(totals: frames),
             Collections: collections,
             Paths: Ranked(totals: paths)
@@ -183,13 +181,15 @@ public static class AllocationTrace {
         return outer;
     }
 
-    private sealed class ThreadShare {
+    // One thread's or site's bytes, and the same bytes by a name within it (a thread's roots, a site's types).
+    private sealed class Share {
         public long Bytes;
-        public Dictionary<string, long> Roots { get; } = new(comparer: StringComparer.Ordinal);
-    }
-    private sealed class SiteShare {
-        public long Bytes;
-        public Dictionary<string, long> Types { get; } = new(comparer: StringComparer.Ordinal);
+        public Dictionary<string, long> Parts { get; } = new(comparer: StringComparer.Ordinal);
+
+        public void Add(string? part, long bytes) {
+            Bytes += bytes;
+            if (part is not null) { Parts[part] = Parts.GetValueOrDefault(key: part) + bytes; }
+        }
     }
 }
 /// <summary>A trace's allocation, as its ticks sampled it.</summary>
