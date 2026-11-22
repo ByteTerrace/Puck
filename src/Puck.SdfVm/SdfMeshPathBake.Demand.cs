@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 
 namespace Puck.SdfVm;
 
@@ -12,15 +13,20 @@ namespace Puck.SdfVm;
 //     (a fixed copy through the copy journal, a moving one through its root slot in the moved transforms, since its pose
 //     moves no revision), each found through the list's owner index (GroupList.FirstOf). A moved slot's group is
 //     measured only when its world box moved, with the clocks since its measure, by as much as its bands leave (Moved);
-//   - the groups a clock made due. SdfMeshDemand keeps four clocks no observation turns back: the points' travel and
-//     scale bound how far any pixel moves, and the frustum-bound points' shift and turn how far any box's distance to
-//     their frustums' planes moves. A measure leaves its group due on each clock at half the band it may spend there
-//     (DemandWatch.Dues): its tier band's slack for travel and scale, its distance to the frustums for shift and turn;
+//   - the groups a clock made due. SdfMeshDemand keeps two clocks no observation turns back, the points' travel and
+//     scale, which bound how far any pixel moves. A measure leaves its group due on each at half its tier band's slack
+//     (DemandWatch.Dues);
+//   - the groups a frustum could have turned to hold or let go. A frustum bounded to its view answers whether it may
+//     hold a box, and a measure keeps, for each such frustum whose answer could move the group's tier, how far the box
+//     stood from the other answer and how far it reaches from that eye (SdfMeshDemand.Watch). Each frame reads every
+//     watched group against each frustum's own shift and turn since (SdfMeshDemand.Moves): one frustum's sweep makes
+//     due only the boxes near its own planes, never the boxes another, faster frustum passes far from;
 //   - the groups a change of the points could reach (SdfMeshDemand.Changes: a point came, went, jumped or changed kind).
 //     A box keeps its answer unless the changed point's distance alone puts its pixel under the box's band, so only the
 //     boxes either side of the change reaches are measured, whatever the point set's size: at once where the new side
 //     reaches (the pixel may fall), and a share a frame where only the old side does (it can only rise, asking a coarser
-//     tier, which no decision takes before its hold);
+//     tier, which no decision takes before its hold). A new point bounded to its view demands nothing of a box its
+//     frustum refuses, so such a box only begins watching that frustum (Unseen) and is measured once it may turn to it;
 //   - and every group once, spread over SdfMeshTier.MeasureFrames frames, only when the points' changes overflowed their
 //     list or before the first observation. A change of the bias recomputes every band from the pixels it holds, a lost
 //     transform window reads every dynamic group's drift, and a lost copy window or a new copy layout measures the
@@ -36,14 +42,15 @@ namespace Puck.SdfVm;
 // replacement in flight, has nothing a decision can do until its demanded or its drawn tier moves, and both pass
 // through a measure, a rebias or a Set.
 public sealed partial class SdfMeshPathBake {
-    // The clocks a group falls due by, in SdfMeshDemand's order: Travel, Scale, Shift, Turn.
-    private const int DemandClocks = 4;
+    // The clocks a group falls due by, in SdfMeshDemand's order: Travel, Scale.
+    private const int DemandClocks = 2;
 
     // What a group's latest measure stood on: the prepared frame it was taken at (zero for never), each clock as it read
     // then, the pixel its bounds are taken about and the band that pixel leaves, in the group's own units, and the units
     // it was read in (the fewest of a shared geometry's copies), the one world box it read (none for copies), the band's
-    // top and how its boxes stood toward the points that could move its pixel past it (SdfMeshDemand.Bounds), and the
-    // clock reading each clock makes it due at, with the epoch of the queue that holds that due. The pixel
+    // top and how its boxes stood toward the points that could move its pixel past it (SdfMeshDemand.Bounds; the
+    // frustums' part is the group's frustum watch), and the clock reading each clock makes it due at, with the epoch of
+    // the queue that holds that due. The pixel
     // is the group's own (DemandPixel) where any point demands it; where none does, it is the least pixel a frustum-bound
     // point's distance puts it at, and its band the way down to the pixel that would move its tier
     // (SdfMeshTier.CoarsestEdge): only such a point turning to hold it could.
@@ -59,8 +66,6 @@ public sealed partial class SdfMeshPathBake {
         public float Top;
         public float Focal;
         public float Clearance;
-        public float FrustumSlack;
-        public float Reach;
         public long DeferredAt;
         public DemandReadings Dues;
         public DemandEpochs Epochs;
@@ -75,7 +80,102 @@ public sealed partial class SdfMeshPathBake {
     // The groups due on each clock, each at the reading it falls due at; an entry whose group was measured since (its
     // due moved) or left the list is passed over. Each clearing starts an epoch of that queue, and a group's due counts as
     // queued only when it was queued in the current one.
-    private readonly PriorityQueue<Group, double>[] m_demandDue = [new(), new(), new(), new()];
+    private readonly PriorityQueue<Group, double>[] m_demandDue = [new(), new()];
+    // The frustum watches of the groups whose tier a frustum bounded to its view could move, read each frame; the groups
+    // a frustum's move made due this frame, or whose watch the lanes' layout left behind.
+    private readonly FrustumWatches m_watches = new();
+    private readonly List<Group> m_framedDue = [];
+
+    // The frustum watches (SdfMeshDemand.Watch), one record of SdfMeshDemand.WatchLength values a watched group, end to
+    // end so a frame's read of them all streams through memory without touching the groups: each record's group (null
+    // for a free record) and the prepared frame that group was last measured at, the free records, and the layout of
+    // frustum lanes the records stand at (SdfMeshDemand.Layout). Group.FrustumWatch names a group's record.
+    private sealed class FrustumWatches {
+        private float[] m_values = [];
+        private Group?[] m_owners = [];
+        private long[] m_stamps = [];
+        private readonly Stack<int> m_free = new();
+        private int m_prune;
+
+        // The values a record holds, the records ever taken (free ones among them), and the records held.
+        public int Length { get; private set; }
+        public int Count { get; private set; }
+        public int Watched => (Count - m_free.Count);
+        public long Layout { get; private set; } = -1;
+
+        public Group? OwnerOf(int record) => m_owners[record];
+        public long StampOf(int record) => m_stamps[record];
+        public Span<float> Of(int record) => m_values.AsSpan(start: (record * Length), length: Length);
+
+        // The record of a group measured at a stamp, taken for it when it holds none.
+        public Span<float> Take(Group group, long stamp) {
+            if (group.FrustumWatch < 0) { group.FrustumWatch = ((m_free.Count > 0) ? m_free.Pop() : Grow()); }
+
+            var record = group.FrustumWatch;
+
+            m_owners[record] = group;
+            m_stamps[record] = stamp;
+            return Of(record: record);
+        }
+        // Lists the groups whose watch some lane's move since may have spent (SdfMeshDemand.Moves), the records of groups
+        // measured at the stamp passed over; returns the records read.
+        public int Trip(SdfMeshDemand demand, List<Group> due, long stamp) {
+            var read = 0;
+
+            due.Clear();
+            for (var record = 0; (record < Count); record++) {
+                if ((m_owners[record] is not { } owner) || (m_stamps[record] == stamp)) { continue; }
+                read++;
+                if (demand.Moves(metres: 0f, watch: m_values.AsSpan(start: (record * Length), length: Length))) { due.Add(item: owner); }
+            }
+
+            return read;
+        }
+        // Frees a group's record, when it holds one.
+        public void Release(Group group) {
+            if (group.FrustumWatch < 0) { return; }
+            m_owners[group.FrustumWatch] = null;
+            m_free.Push(item: group.FrustumWatch);
+            group.FrustumWatch = -1;
+        }
+        // Frees the records of a share of groups that left the list or retired, a turn of the records at a time.
+        public void Prune(int share) {
+            for (var visited = 0; ((visited < share) && (Count > 0)); visited++) {
+                m_prune = ((m_prune + 1) % Count);
+                if ((m_owners[m_prune] is { } owner) && (!owner.Listed || owner.Retired)) { Release(group: owner); }
+            }
+        }
+        // Brings every record to the demand's layout: carried from the layout before, freed where no lane is watched any
+        // more, and freed with its group listed for a measure where the layout moved further than one change.
+        public void Follow(SdfMeshDemand demand, List<Group> lost) {
+            if (demand.Layout == Layout) { return; }
+
+            var length = demand.WatchLength;
+            var carries = (demand.Layout == (Layout + 1));
+            var values = new float[(m_owners.Length * length)];
+
+            for (var record = 0; (record < Count); record++) {
+                if (m_owners[record] is not { } owner) { continue; }
+                if (carries && demand.Carry(after: values.AsSpan(start: (record * length), length: length), before: Of(record: record))) { continue; }
+                if (!carries) { lost.Add(item: owner); }
+                Release(group: owner);
+            }
+            m_values = values;
+            Length = length;
+            Layout = demand.Layout;
+        }
+        private int Grow() {
+            if (Count == m_owners.Length) {
+                var capacity = Math.Max(val1: 64, val2: (2 * m_owners.Length));
+
+                Array.Resize(array: ref m_owners, newSize: capacity);
+                Array.Resize(array: ref m_stamps, newSize: capacity);
+                Array.Resize(array: ref m_values, newSize: (capacity * Length));
+            }
+
+            return Count++;
+        }
+    }
     private readonly long[] m_demandEpochs = new long[DemandClocks];
     // The bias the watch measured under.
     private int m_demandBias = -1;
@@ -93,8 +193,8 @@ public sealed partial class SdfMeshPathBake {
     // tier would name (Retier's finer figure) are cached against.
     private long m_finerDemandRevision;
     // This bake's measures since it began, by route, for its residency's report: every group measured, and those a moved
-    // slot, a clock, a change of the points and a moved copy made.
-    private (long Groups, long Moved, long Due, long Changed, long Copied) m_demandMeasured;
+    // slot, a clock or a frustum, a frustum alone, a change of the points and a moved copy made.
+    private (long Groups, long Moved, long Due, long Framed, long Changed, long Copied) m_demandMeasured;
     // The groups a change of the points could only coarsen, measured a share a frame (MeasureDemands).
     private readonly MarkedGroups m_demandDeferred = new(mark: GroupMarks.Deferred);
     // How a change of the points reaches a group (Reaches): not at all, only through points that left its reach (its
@@ -102,6 +202,30 @@ public sealed partial class SdfMeshPathBake {
     private enum ChangeReach : byte { None, Coarser, Finer }
     // The groups the tier decisions read (Attend).
     private readonly MarkedGroups m_attention = new(mark: GroupMarks.Attended);
+    // The groups the frame's routes chose to measure, each once (MeasureDemands' Measure), with each one's readings and
+    // frustum watch as MeasureChosen takes them before it keeps them; the bias and watch length they are taken under.
+    private readonly List<Group> m_chosen = [];
+    private DemandReading[] m_readings = [];
+    private float[] m_chosenWatches = [];
+    private int m_chosenBias;
+    private int m_chosenLength;
+
+
+    // What one measure read of a group (MeasureDemands' Measure): its pixel, its band's slack and the pixel that band is
+    // taken about, the units and boxes read, the one world box it read, its band's top and how its boxes stood toward the
+    // points (its frustums' part in the frustum watch beside it).
+    private struct DemandReading {
+        public float Pixel;
+        public float Slack;
+        public float Anchor;
+        public float Units;
+        public float Top;
+        public int Boxes;
+        public bool Boxed;
+        public Vector3 Center;
+        public Vector3 Half;
+        public SdfMeshDemand.Bounds Bounds;
+    }
 
     // Measures again the groups whose demand may have moved since the last frame, as the header says. Under the gate,
     // on the frame's thread.
@@ -113,6 +237,8 @@ public sealed partial class SdfMeshPathBake {
             frame.DynamicTransforms.Count, 0, m_demandSlots);
 
         m_demandSlotCursor.Commit();
+        m_framedDue.Clear();
+        m_watches.Follow(demand: Demand, lost: m_framedDue);
         if (overflowed) {
             m_demandSweepLeft = m_groups.Count;
             m_demandResetAt = m_preparedFrames;
@@ -121,9 +247,14 @@ public sealed partial class SdfMeshPathBake {
         }
 
         var stamp = m_preparedFrames;
+        Span<int> dueBy = stackalloc int[DemandClocks];
         var groups = 0;
         var boxes = 0L;
         var due = 0;
+        var watched = 0;
+        var framed = 0;
+        var renewed = 0;
+        var slots = 0L;
         var stood = 0;
         var moved = 0;
         var copied = 0;
@@ -135,6 +266,7 @@ public sealed partial class SdfMeshPathBake {
             Rebias(bias: bias);
         }
         foreach (var group in m_groups.TakeFresh()) { _ = Measure(group: group); }
+        foreach (var group in m_framedDue) { _ = Measure(group: group); }
         // The copies' root slots follow the program's in copy order (SdfCompositionFrameSource seats each at its place), so
         // a moved slot past the first copy's root names that copy.
         var firstRoot = ((m_demandCopies.Count > 0) ? m_demandCopies[0].FrameSlot : int.MaxValue);
@@ -150,6 +282,7 @@ public sealed partial class SdfMeshPathBake {
             for (var run = 0; (run < m_demandSlots.Count); run++) {
                 var end = (m_demandSlots.Start(index: run) + m_demandSlots.Length(index: run));
 
+                slots += (end - m_demandSlots.Start(index: run));
                 for (var slot = m_demandSlots.Start(index: run); (slot < end); slot++) {
                     for (var index = m_groups.FirstOf(dynamic: true, key: slot); (index >= 0); index = m_groups.NextOf(index: index)) {
                         var group = m_groups[index];
@@ -202,8 +335,24 @@ public sealed partial class SdfMeshPathBake {
             while (queue.TryPeek(element: out var group, priority: out var at) && (at < clocks[clock])) {
                 _ = queue.Dequeue();
                 if ((group.Watch.Dues[clock] != at) || (group.Watch.Epochs[clock] != m_demandEpochs[clock])) { continue; }
-                if (Measure(group: group)) { due++; }
+                if (Measure(group: group)) { due++; dueBy[clock]++; }
             }
+        }
+        // Every watched group against each of its frustums' own moves since its measure, the groups measured this frame
+        // passed over; a group no frustum can move any more leaves the watch.
+        if (m_watches.Watched > 0) {
+            watched += m_watches.Trip(demand: Demand, due: m_framedDue, stamp: stamp);
+            foreach (var group in m_framedDue) {
+                if (!group.Listed || group.Retired) {
+                    m_watches.Release(group: group);
+                } else if ((group.Watch.Stamp != stamp) && (CopiesOf(group: group) is null) && Renewed(group: group)) {
+                    renewed++;
+                } else if (Measure(group: group)) {
+                    due++;
+                    framed++;
+                }
+            }
+            m_watches.Prune(share: 64);
         }
         // The groups a change could only coarsen, a share a frame: a pixel that only rises asks a coarser tier, which the
         // decisions act on only past their hold, so a measure a few frames late moves no tier later than a reset's sweep
@@ -246,14 +395,23 @@ public sealed partial class SdfMeshPathBake {
                 if (!group.Retired) { Queue(clock: clock, group: group); }
             }
         }
+        MeasureChosen(groups: ref groups, boxes: ref boxes, bias: bias, clocks: in clocks, stamp: stamp);
         m_demandMeasured.Groups += groups;
         m_demandMeasured.Moved += moved;
         m_demandMeasured.Due += due;
+        m_demandMeasured.Framed += framed;
         m_demandMeasured.Changed += changed;
         m_demandMeasured.Copied += copied;
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandGroups, amount: groups);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandBoxes, amount: boxes);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandDue, amount: due);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandDueTravel, amount: dueBy[0]);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandDueScale, amount: dueBy[1]);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandWatched, amount: watched);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandFramed, amount: framed);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandRenewed, amount: renewed);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandSlots, amount: slots);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandViews, amount: (boxes * Demand.Count));
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandStood, amount: stood);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandMoved, amount: moved);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandCopied, amount: copied);
@@ -289,16 +447,55 @@ public sealed partial class SdfMeshPathBake {
             for (var index = 0; (index < changes.Count); index++) {
                 var change = changes[index];
 
-                if (change.HasAfter && (ReachOf(group: group, point: change.After) < top)) { return ChangeReach.Finer; }
+                if (change.HasAfter && (ReachOf(group: group, point: change.After) < top) && !Unseen(change: in change, group: group)) { return ChangeReach.Finer; }
                 if (change.HadBefore && (ReachOf(group: group, point: change.Before) < top)) { reach = ChangeReach.Coarser; }
             }
 
             return reach;
         }
+        // Whether a new point bounded to its view refuses every box of a group, so it demands nothing of it: the group then
+        // watches the point's frustum from now on, as a measure would have it (SdfMeshDemand.WatchLane), and counts the
+        // point's pixels a metre among those its box's moves are read by.
+        bool Unseen(in SdfMeshDemand.Change change, Group group) {
+            var point = change.After;
+
+            if (!point.Within || !point.Framed || (change.Point < 0) || (Demand.LaneOf(point: change.Point) is not (>= 0 and var lane))) { return false; }
+
+            var slack = float.PositiveInfinity;
+            var reach = 0f;
+
+            if (CopiesOf(group: group) is not { } copies) {
+                var (center, half) = WorldBox(group: group);
+
+                if (!FrustumRefuses(center: center, half: half, point: in point, reach: ref reach, slack: ref slack)) { return false; }
+            } else {
+                foreach (var copy in copies) {
+                    var (center, half, _) = CopyBox(center: group.DemandCenter, copy: copy, half: group.DemandHalf);
+
+                    if (!FrustumRefuses(center: center, half: half, point: in point, reach: ref reach, slack: ref slack)) { return false; }
+                }
+            }
+
+            var fresh = (group.FrustumWatch < 0);
+            var kept = m_watches.Take(group: group, stamp: group.Watch.Stamp);
+
+            if (fresh) { SdfMeshDemand.Unwatched(watch: kept); }
+            Demand.WatchLane(lane: lane, reach: reach, slack: slack, watch: kept);
+            group.Watch.Focal = MathF.Min(x: group.Watch.Focal, y: point.Focal);
+            return true;
+        }
+        // Whether a point's widened frustum refuses a box, and if so the box's slack toward it and reach from its eye,
+        // each joined into the tightest so far.
+        static bool FrustumRefuses(Vector3 center, Vector3 half, in SdfMeshDemand.Viewpoint point, ref float slack, ref float reach) {
+            if (!point.Refuses(center: center, half: half, slack: out var away)) { return false; }
+            slack = MathF.Min(x: slack, y: away);
+            reach = MathF.Max(x: reach, y: (Vector3.Distance(value1: center, value2: point.Eye) + ((half.X + half.Y) + half.Z)));
+            return true;
+        }
         // Whether a group whose slot moved may demand another tier: its box moved by no more than the distance between the
         // world box its latest measure read and the one it stands at now, so its pixel moved by no more than that over the
-        // points' fewest pixels a metre, with the points' own travel and scale since; and under frustum-bound points its
-        // distance to their planes moved by no more than that with their shift and turn. A group not measured since the
+        // points' fewest pixels a metre, with the points' own travel and scale since; and under its watched frustums its
+        // distance to their planes moved by no more than that with each one's shift and turn. A group not measured since the
         // latest reset says it may. A shared geometry is measured where its copies stand, which the copy journal and their
         // root slots move, so its own slot moving says nothing.
         bool Moved(Group group) {
@@ -313,11 +510,7 @@ public sealed partial class SdfMeshPathBake {
 
             // A point that did not count could come to: the box moved as far as the nearest of them stood past the top.
             if (metres >= watch.Clearance) { return true; }
-            if (float.IsFinite(f: watch.FrustumSlack)) {
-                var shift = (clocks[2] - watch.At[2]);
-
-                if ((metres + shift + ((clocks[3] - watch.At[3]) * (watch.Reach + shift + metres))) >= watch.FrustumSlack) { return true; }
-            }
+            if ((group.FrustumWatch >= 0) && Demand.Moves(metres: metres, watch: m_watches.Of(record: group.FrustumWatch))) { return true; }
             if (!float.IsFinite(f: watch.Slack)) { return false; }
 
             // In the group's own units: the world pixel moves by the travel and the box's drift over its new units, the
@@ -329,56 +522,131 @@ public sealed partial class SdfMeshPathBake {
 
             return ((((pixel + travel) * Math.Exp(d: (clocks[1] - watch.At[1]))) - pixel) >= watch.Slack);
         }
-        // Measures one listed group, once a frame, and leaves it due on each clock at half what its bands leave there. A
-        // group whose demanded tier stands is not read by the next decision for it.
+        // Whether a group's moved frustums all still answer as they did at its box as it stands, renewing their watch
+        // (SdfMeshDemand.Renew), so it needs no measure.
+        bool Renewed(Group group) {
+            var (center, half) = WorldBox(group: group);
+
+            return Demand.Renew(center: center, half: half, watch: m_watches.Of(record: group.FrustumWatch));
+        }
+        // Chooses one listed group to measure this frame, once: its readings are taken with the rest of the frame's after
+        // every route has chosen (MeasureChosen), and from now on the frame's routes read it as measured.
         bool Measure(Group group) {
             if (!group.Listed || group.Retired || !group.HasDemandBox || (group.Watch.Stamp == stamp)) { return false; }
-
-            var before = group.DemandPixel;
-            var pixel = MeasurePixel(boxes: out var read, group: group, point: out _, units: out var units, box: out var box);
-            var slack = DemandSlack(bias: bias, group: group, pixel: pixel);
-            var anchor = pixel;
-            ref var watch = ref group.Watch;
-            // Only the points whose distance alone could put the group under its band's top (for a group no point demands,
-            // under the pixel that would move its tier) bound it; a tier held at one rung moves for no point.
-            var pinned = (float.IsFinite(f: pixel) && !float.IsFinite(f: slack));
-            var top = (float.IsFinite(f: pixel) ? (pixel + slack) : CoarsestEdgeOf(bias: bias, group: group));
-            var bounds = (pinned ? SdfMeshDemand.Bounds.None : BoundsOf(group: group, top: top));
-
-            if (!float.IsFinite(f: pixel) && float.IsFinite(f: top) && float.IsFinite(f: bounds.Beyond)) { (anchor, slack) = (bounds.Beyond, (MathF.Max(x: 0f, y: (bounds.Beyond - top)) * 0.999f)); }
-            group.DemandPixel = pixel;
-            watch.Stamp = stamp;
-            watch.Pixel = anchor;
-            watch.Slack = slack;
-            watch.Units = units;
-            watch.Boxed = (box is not null);
-            (watch.Center, watch.Half) = (box ?? default);
-            for (var clock = 0; (clock < DemandClocks); clock++) { watch.At[clock] = clocks[clock]; }
-            (watch.Top, watch.Focal, watch.Clearance, watch.FrustumSlack, watch.Reach) = (top, bounds.Focal, bounds.Clearance, bounds.FrustumSlack, bounds.FrustumReach);
-            Schedule(group: group, clocks: in clocks);
-            if ((bias > 0) && (float.IsNaN(f: before) || (FinerTierOf(bias: bias, group: group, pixel: before) != FinerTierOf(bias: bias, group: group, pixel: pixel)))) { m_finerDemandRevision++; }
-            if (float.IsNaN(f: before) || (DemandedTierOf(group: group, pixel: before) != DemandedTierOf(group: group, pixel: pixel))) { Attend(group: group); }
-            groups++;
-            boxes += read;
+            group.Watch.Stamp = stamp;
+            m_chosen.Add(item: group);
             return true;
         }
     }
-    // Leaves a measured group due on each clock at half what its bands leave there, from the readings its measure took:
-    // travel at half its tier band's slack in travel units; scale where a pixel half that far past its band's top would
-    // be scaled (with the travel's half, the two reach the slack together); shift at half its distance to the frustums;
-    // and turn where a turn through the rest would carry its farthest corner a quarter of that distance. An entry already
+    // Measures the groups the frame's routes chose: each one's readings first (ReadChosen), which read only its own group,
+    // the points and the frame's boxes and write only its own reading, then each kept in order (KeepReading).
+    private void MeasureChosen(ref int groups, ref long boxes, int bias, in DemandReadings clocks, long stamp) {
+        var count = m_chosen.Count;
+
+        if (count == 0) { return; }
+
+        var length = Demand.WatchLength;
+
+        if (m_readings.Length < count) {
+            m_readings = new DemandReading[ArrayCapacity.Grown(m_readings.Length, count)];
+        }
+        if (m_chosenWatches.Length < (m_readings.Length * length)) { m_chosenWatches = new float[(m_readings.Length * length)]; }
+        (m_chosenBias, m_chosenLength) = (bias, length);
+        for (var index = 0; (index < count); index++) { ReadChosen(index: index); }
+        for (var index = 0; (index < count); index++) {
+            KeepReading(clocks: in clocks, group: m_chosen[index], index: index, stamp: stamp);
+            boxes += m_readings[index].Boxes;
+        }
+        groups += count;
+        m_chosen.Clear();
+    }
+    // Takes one chosen group's readings: its pixel, the band it leaves under the bias, and how its boxes stand toward the
+    // points that could move it past the band's top. Only the points whose distance alone could put the group under its
+    // band's top (for a group no point demands, under the pixel that would move its tier) bound it; a tier held at one
+    // rung moves for no point.
+    private void ReadChosen(int index) {
+        var group = m_chosen[index];
+        var bias = m_chosenBias;
+        ref var reading = ref m_readings[index];
+        var copies = CopiesOf(group: group);
+        (Vector3 Center, Vector3 Half)? box = null;
+        float pixel;
+
+        if (copies is null) {
+            var (center, half) = WorldBox(group: group);
+
+            box = (center, half);
+            (reading.Boxes, reading.Units) = (1, UnitsOf(group: group));
+            pixel = (Demand.PixelAt(center: center, half: half) / reading.Units);
+        } else {
+            reading.Boxes = Math.Max(val1: 1, val2: copies.Count);
+            pixel = CopiesPixel(center: group.DemandCenter, copies: copies, half: group.DemandHalf, point: out _, units: out reading.Units);
+        }
+
+        var slack = DemandSlack(bias: bias, group: group, pixel: pixel);
+        var pinned = (float.IsFinite(f: pixel) && !float.IsFinite(f: slack));
+        var top = (float.IsFinite(f: pixel) ? (pixel + slack) : CoarsestEdgeOf(bias: bias, group: group));
+        var watch = m_chosenWatches.AsSpan(start: (index * m_chosenLength), length: m_chosenLength);
+        var bounds = SdfMeshDemand.Bounds.None;
+
+        SdfMeshDemand.Unwatched(watch: watch);
+        if (!pinned && (box is { } one)) {
+            bounds = Demand.BoundsOf(center: one.Center, half: one.Half, top: top, units: reading.Units, watch: watch);
+        } else if (!pinned && (copies is not null)) {
+            // The copies CopiesPixel read and held, each in its own scale.
+            for (var copy = 0; (copy < copies.Count); copy++) { bounds = bounds.Join(other: Demand.HeldBoundsOf(box: copy, top: top, units: m_copyScales[copy], watch: watch)); }
+        }
+        reading.Anchor = pixel;
+        if (!float.IsFinite(f: pixel) && float.IsFinite(f: top) && float.IsFinite(f: bounds.Beyond)) { (reading.Anchor, slack) = (bounds.Beyond, (MathF.Max(x: 0f, y: (bounds.Beyond - top)) * 0.999f)); }
+        reading.Pixel = pixel;
+        reading.Slack = slack;
+        reading.Top = top;
+        reading.Boxed = (box is not null);
+        (reading.Center, reading.Half) = (box ?? default);
+        reading.Bounds = bounds;
+    }
+    // Keeps one chosen group's readings, on the frame's thread: its watch stands on them, it falls due on each clock at
+    // half what its band leaves there, its frustums are watched, and a group whose demanded tier stands is not read by
+    // the next decision for it.
+    private void KeepReading(Group group, int index, in DemandReadings clocks, long stamp) {
+        ref readonly var reading = ref m_readings[index];
+        ref var watch = ref group.Watch;
+        var bias = m_chosenBias;
+        var before = group.DemandPixel;
+        var pixel = reading.Pixel;
+
+        group.DemandPixel = pixel;
+        watch.Pixel = reading.Anchor;
+        watch.Slack = reading.Slack;
+        watch.Units = reading.Units;
+        watch.Boxed = reading.Boxed;
+        (watch.Center, watch.Half) = (reading.Center, reading.Half);
+        for (var clock = 0; (clock < DemandClocks); clock++) { watch.At[clock] = clocks[clock]; }
+        (watch.Top, watch.Focal, watch.Clearance) = (reading.Top, reading.Bounds.Focal, reading.Bounds.Clearance);
+        if (reading.Bounds.Framed) {
+            var kept = m_watches.Take(group: group, stamp: stamp);
+
+            m_chosenWatches.AsSpan(start: (index * m_chosenLength), length: m_chosenLength).CopyTo(destination: kept);
+            Demand.Watch(watch: kept);
+        } else {
+            m_watches.Release(group: group);
+        }
+        Schedule(group: group, clocks: in clocks);
+        if ((bias > 0) && (float.IsNaN(f: before) || (FinerTierOf(bias: bias, group: group, pixel: before) != FinerTierOf(bias: bias, group: group, pixel: pixel)))) { m_finerDemandRevision++; }
+        if (float.IsNaN(f: before) || (DemandedTierOf(group: group, pixel: before) != DemandedTierOf(group: group, pixel: pixel))) { Attend(group: group); }
+    }
+    // Leaves a measured group due on each clock at half what its band leaves there, from the readings its measure took:
+    // travel at half its tier band's slack in travel units, and scale where a pixel half that far past its band's top
+    // would be scaled (with the travel's half, the two reach the slack together). An entry already
     // queued no later than the new due, in the current epoch and not yet passed, stays: popped, it measures again sooner
     // than needed.
     private void Schedule(Group group, in DemandReadings clocks) {
         ref var watch = ref group.Watch;
         var slack = watch.Slack;
         var pixel = watch.Pixel;
-        var frustum = watch.FrustumSlack;
         Span<double> dues = [
             (float.IsFinite(f: slack) ? (watch.At[0] + (0.5 * slack * watch.Units)) : double.PositiveInfinity),
             ((float.IsFinite(f: slack) && float.IsFinite(f: pixel)) ? (watch.At[1] + Math.Log(d: (1.0 + (slack / ((2.0 * pixel) + slack))))) : double.PositiveInfinity),
-            (float.IsFinite(f: frustum) ? (watch.At[2] + (0.5 * frustum)) : double.PositiveInfinity),
-            (float.IsFinite(f: frustum) ? (watch.At[3] + ((0.25 * frustum) / (watch.Reach + (0.5 * frustum)))) : double.PositiveInfinity),
         ];
 
         for (var clock = 0; (clock < DemandClocks); clock++) {
@@ -430,25 +698,6 @@ public sealed partial class SdfMeshPathBake {
 
         return finest;
     }
-    // How a group's boxes stand toward the points that could move its pixel past a top (SdfMeshDemand.BoundsOf): its world
-    // box's, or the tighter of each over a shared geometry's copies, each read in its own units.
-    private SdfMeshDemand.Bounds BoundsOf(Group group, float top) {
-        if (CopiesOf(group: group) is not { } copies) {
-            var (center, half) = WorldBox(group: group);
-
-            return Demand.BoundsOf(center: center, half: half, top: top, units: UnitsOf(group: group));
-        }
-
-        var bounds = SdfMeshDemand.Bounds.None;
-
-        foreach (var index in copies) {
-            var (center, half, scale) = CopyBox(center: group.DemandCenter, copy: index, half: group.DemandHalf);
-
-            bounds = bounds.Join(other: Demand.BoundsOf(center: center, half: half, top: top, units: scale));
-        }
-
-        return bounds;
-    }
     // A shared geometry's box, given in its own frame, where one of the frame's copies carries it: the world-axis box about
     // the carried one, and the copy's scale, the units its pixels are read in.
     private (Vector3 Center, Vector3 Half, float Units) CopyBox(Vector3 center, Vector3 half, int copy) {
@@ -476,8 +725,6 @@ public sealed partial class SdfMeshPathBake {
 
         clocks[0] = Demand.Travel;
         clocks[1] = Demand.Scale;
-        clocks[2] = Demand.Shift;
-        clocks[3] = Demand.Turn;
         return clocks;
     }
     // The least pixel that still demands a group's coarsest held tier under the bias, or the tier half a rung finer while

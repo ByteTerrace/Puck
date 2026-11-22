@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -174,16 +175,29 @@ public sealed partial class SdfMeshPathBake {
     // The metres one display pixel covers at a shared geometry's box, given in the geometry's own frame, from the demand
     // point that sees one of its copies finest, in the geometry's units; infinity, and no point, with no copy. Also the
     // fewest units a copy is measured in.
+    // Each copy's box is read once and held on this thread (SdfMeshDemand.ReadBoxes), with the copies' scales, for the
+    // bounds a measure then reads at each (SdfMeshDemand.HeldBoundsOf).
     private float CopiesPixel(IReadOnlyList<int> copies, Vector3 center, Vector3 half, out int point, out float units) {
+        var count = copies.Count;
+
+        if (m_copyCenters.Length < count) {
+            var capacity = ArrayCapacity.Grown(m_copyCenters.Length, count);
+
+            m_copyCenters = new Vector3[capacity];
+            m_copyHalves = new Vector3[capacity];
+            m_copyScales = new float[capacity];
+        }
+        for (var copy = 0; (copy < count); copy++) { (m_copyCenters[copy], m_copyHalves[copy], m_copyScales[copy]) = CopyBox(center: center, copy: copies[copy], half: half); }
+        Demand.ReadBoxes(centers: m_copyCenters.AsSpan(start: 0, length: count), halves: m_copyHalves.AsSpan(start: 0, length: count));
+
         var finest = float.PositiveInfinity;
 
         point = -1;
         units = float.PositiveInfinity;
-        foreach (var index in copies) {
-            var (boxCenter, boxHalf, scale) = CopyBox(center: center, copy: index, half: half);
-            var pixel = (Demand.PixelAt(center: boxCenter, half: boxHalf, point: out var seen) / scale);
+        for (var copy = 0; (copy < count); copy++) {
+            var pixel = (Demand.HeldPixelAt(box: copy, point: out var seen) / m_copyScales[copy]);
 
-            units = MathF.Min(x: units, y: scale);
+            units = MathF.Min(x: units, y: m_copyScales[copy]);
             if (pixel < finest) {
                 finest = pixel;
                 point = seen;
@@ -193,6 +207,10 @@ public sealed partial class SdfMeshPathBake {
 
         return finest;
     }
+    // The copies' boxes and scales the latest CopiesPixel read.
+    private Vector3[] m_copyCenters = [];
+    private Vector3[] m_copyHalves = [];
+    private float[] m_copyScales = [];
     // Retires each replaced group whose replacement has landed and taken the draws (Group.Ahead), and hands back one
     // whose replacement meshed nothing: the one step every tier's replacement (Retier) ends in. Under the gate.
     private void FinishReplacements() {

@@ -721,19 +721,28 @@ laws exercise that boundary.
   place, groups whose slot or copy moved (the frame's transform and copy
   journals, through the list's owner index), groups a clock made due, and
   groups a change of the points reaches. `SdfMeshDemand` matches each view to
-  the point it held by its source and cut and keeps four clocks: travel and
-  scale bound how far any pixel moves, and the frustum-bound points' shift
-  and turn (`CameraSnapshot.FrustumTurn`) how far a box's distance to their
-  frustums moves. Each measure leaves its group due on each clock at half
-  what its bands leave there (`SdfMeshTier.Slack`,
-  `CameraSnapshot.FrustumSlack`). A moved slot's group is measured only once
-  its world box has moved, with the clocks since, by that much. A view that
-  comes, goes, jumps past `SdfMeshDemand.JumpMetres` or changes kind is a
-  change: only groups whose distance from either side puts their pixel under
-  their band's top are measured, at once where the new side reaches and a
-  share a frame where only the old side does (their pixel can only rise).
-  Frustum and distance bounds count only the points that could reach under
-  a group's band (`SdfMeshDemand.BoundsOf`). A bias change recomputes the bands from the
+  the point it held by its source and cut and keeps two clocks, travel and
+  scale, which bound how far any pixel moves; each measure leaves its group
+  due on each at half its band (`SdfMeshTier.Slack`). Frustums are watched
+  per view, never by one clock: each view bounded to its frustum has a lane
+  (`SdfMeshDemand.LaneOf`) with its own shift and turn odometers
+  (`CameraSnapshot.FrustumTurn`), and a measure keeps, for each lane whose
+  answer could move the group's tier, the box's slack toward that frustum
+  and reach from its eye (`SdfMeshDemand.BoundsOf`, `Watch`) in one arena of
+  records (`FrustumWatches`). Every frame streams the records against each
+  lane's moves since (`SdfMeshDemand.Moves`), so one fast window's sweep
+  makes due only the boxes near its own planes; a change of lanes carries
+  the records over (`SdfMeshDemand.Carry`). A box is read against every
+  point at once, eyes and frustum planes in vector lanes
+  (`CameraSnapshot.BoundingPlanes`), and the read is kept per thread for the
+  next question about the same box. A moved slot's group is measured only
+  once its world box has moved, with the clocks and its lanes since, by that
+  much. A view that comes, goes, jumps past `SdfMeshDemand.JumpMetres` or
+  changes kind is a change: only groups whose distance from either side puts
+  their pixel under their band's top are measured, at once where the new
+  side reaches and a share a frame where only the old side does (their pixel
+  can only rise); a new view bounded to its frustum that refuses a group's
+  boxes only adds its lane to the group's watch. A bias change recomputes the bands from the
   pixels held, and only an overflowing change list
   (`SdfMeshDemand.MostChanges`) measures every group over
   `SdfMeshTier.MeasureFrames` frames.

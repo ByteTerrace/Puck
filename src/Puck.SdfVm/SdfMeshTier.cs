@@ -71,7 +71,7 @@ public static class SdfMeshTier {
     /// <param name="pixel">The metres one display pixel covers at the group's box.</param>
     /// <param name="halfRungs">The bias, from zero to <see cref="MaxBias"/>.</param>
     /// <returns>The biased pixel.</returns>
-    public static float Biased(float pixel, int halfRungs) => (pixel * MathF.Pow(x: 2f, y: (0.5f * halfRungs)));
+    public static float Biased(float pixel, int halfRungs) => (pixel * BiasScale(halfRungs: halfRungs));
     /// <summary>Returns the bytes a mesh is expected to take at another tier of its geometry: a rung doubles the cell,
     /// and a surface's triangles go with the inverse square of it.</summary>
     /// <param name="bytes">The bytes at <paramref name="from"/>.</param>
@@ -121,7 +121,7 @@ public static class SdfMeshTier {
         var top = Math.Max(val1: finest, val2: coarsest);
         var tier = Clamp(coarsest: coarsest, finest: finest, tier: Of(pixel: Biased(halfRungs: halfRungs, pixel: pixel)));
         // The pixel at which the raw tier reaches a rung: its cell over the pixel share, unbiased.
-        var scale = (1f / (PixelShare * MathF.Pow(x: 2f, y: (0.5f * halfRungs))));
+        var scale = (1f / (PixelShare * BiasScale(halfRungs: halfRungs)));
         var below = ((tier > finest) ? (pixel - (Cell(tier: tier) * scale)) : float.PositiveInfinity);
         var above = ((tier < top) ? ((Cell(tier: (tier + 1)) * scale) - pixel) : float.PositiveInfinity);
 
@@ -136,7 +136,7 @@ public static class SdfMeshTier {
     /// <param name="coarsest">The group's coarsest tier (<see cref="Coarsest"/>).</param>
     /// <returns>The pixel, in the group's units.</returns>
     public static float CoarsestEdge(int halfRungs, int finest, int coarsest) =>
-        ((coarsest <= finest) ? float.PositiveInfinity : (Cell(tier: coarsest) / (PixelShare * MathF.Pow(x: 2f, y: (0.5f * halfRungs)))));
+        ((coarsest <= finest) ? float.PositiveInfinity : (Cell(tier: coarsest) / (PixelShare * BiasScale(halfRungs: halfRungs))));
     /// <summary>Returns a demanded tier held to the rungs that change a group's mesh.</summary>
     /// <param name="tier">The demanded tier.</param>
     /// <param name="finest">The group's finest tier (<see cref="Finest"/>).</param>
@@ -144,7 +144,11 @@ public static class SdfMeshTier {
     /// <returns>The tier, between the two; the finest where the finest is past the coarsest.</returns>
     public static int Clamp(int tier, int finest, int coarsest) => Math.Clamp(value: tier, min: finest, max: Math.Max(val1: finest, val2: coarsest));
 
-    // The coarsest tier whose cell is at most a spacing; zero for a spacing under the base cell or none.
+    // The coarsest tier whose cell is at most a spacing (the exponent of its ratio to the base cell, exact where a
+    // rounded logarithm can land on the rung above); zero for a spacing under the base cell or none.
     private static int Floor(float spacing) =>
-        (((spacing > 0f) && float.IsFinite(f: spacing)) ? Math.Clamp(value: ((int)MathF.Floor(x: MathF.Log2(x: (spacing / BaseCell)))), min: 0, max: Last) : 0);
+        (((spacing > 0f) && float.IsFinite(f: spacing)) ? Math.Clamp(value: MathF.ILogB(x: (spacing / BaseCell)), min: 0, max: Last) : 0);
+    // The square root of two to a bias, from zero to MaxBias half rungs: what a bias scales a pixel by (Biased).
+    private static readonly float[] BiasScales = [.. Enumerable.Range(start: 0, count: (MaxBias + 1)).Select(selector: static halfRungs => MathF.Pow(x: 2f, y: (0.5f * halfRungs)))];
+    private static float BiasScale(int halfRungs) => (((uint)halfRungs <= MaxBias) ? BiasScales[halfRungs] : MathF.Pow(x: 2f, y: (0.5f * halfRungs)));
 }
