@@ -823,10 +823,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         destination[3] = m_catalog.Revision;
         if (m_bodyColors is { } colors) {
-            for (var index = 0; (index < colors.Length); index++) {
-                if (!m_mirror.IsActive(index: index)) {
-                    continue;
-                }
+            // The avatars the program draws are the only bodies whose colour it bakes.
+            foreach (var index in m_catalog.Bodies) {
                 var color = m_bodyColor(arg: index);
 
                 if (colors[index] != color) {

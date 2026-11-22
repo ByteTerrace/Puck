@@ -1424,7 +1424,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         var nearest = FixedQ4816.MaxValue;
         var found = -1;
 
-        for (var index = 0; (index < EntityCapacity); index++) {
+        // The live bodies in ascending order, so the nearest of two equally near candidates is the lower index.
+        foreach (var index in LiveBodies) {
             if (
                 (index == sourceBody) ||
                 !m_poses.IsActive(index: index)
@@ -1577,15 +1578,35 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public void CopyActiveBodies(List<int> bodies) {
         ArgumentNullException.ThrowIfNull(argument: bodies);
 
-        var first = bodies.Count;
-
-        foreach (var index in m_poses.Live) {
+        foreach (var index in LiveBodies) {
             if (m_poses.IsActive(index: index)) {
                 bodies.Add(item: index);
             }
         }
+    }
 
-        bodies.Sort(comparer: null, count: (bodies.Count - first), index: first);
+    // The pose table's live set in ascending order, sorted again only when a delivery changed which bodies are live.
+    private readonly List<int> m_liveBodies = [];
+    private long m_liveBodiesRevision = -1L;
+
+    /// <summary>Gets the index of every body that may be active, in ascending order: the pose table's live set
+    /// (<see cref="WorldPoseTable.Live"/>), which a body a snapshot carried inactive stays in, so a reader still asks
+    /// <see cref="IsActive"/>. What a walk of the active bodies visits in place of every index of
+    /// <see cref="EntityCapacity"/>; valid until the next delivery.</summary>
+    public ReadOnlySpan<int> LiveBodies {
+        get {
+            if (m_liveBodiesRevision != m_activeRevision) {
+                m_liveBodiesRevision = m_activeRevision;
+                m_liveBodies.Clear();
+                foreach (var index in m_poses.Live) {
+                    m_liveBodies.Add(item: index);
+                }
+
+                m_liveBodies.Sort();
+            }
+
+            return System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_liveBodies);
+        }
     }
 
     // The live bodies whose two tick poses differ in the latest delivery (the only ones a frame between two deliveries
