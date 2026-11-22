@@ -423,9 +423,7 @@ public sealed partial class SdfMeshPathBake {
         var finest = float.PositiveInfinity;
 
         foreach (var index in copies) {
-            var matrix = m_demandCopies[index].Matrix;
-            var (center, half) = TransformBox(center: group.DemandCenter, half: group.DemandHalf, matrix: matrix);
-            var scale = MathF.Max(x: 1.0e-6f, y: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length());
+            var (center, half, scale) = CopyBox(center: group.DemandCenter, copy: index, half: group.DemandHalf);
 
             finest = MathF.Min(x: finest, y: (point.ReachAt(center: center, half: half) / scale));
         }
@@ -444,14 +442,20 @@ public sealed partial class SdfMeshPathBake {
         var bounds = SdfMeshDemand.Bounds.None;
 
         foreach (var index in copies) {
-            var matrix = m_demandCopies[index].Matrix;
-            var (center, half) = TransformBox(center: group.DemandCenter, half: group.DemandHalf, matrix: matrix);
-            var scale = MathF.Max(x: 1.0e-6f, y: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length());
+            var (center, half, scale) = CopyBox(center: group.DemandCenter, copy: index, half: group.DemandHalf);
 
             bounds = bounds.Join(other: Demand.BoundsOf(center: center, half: half, top: top, units: scale));
         }
 
         return bounds;
+    }
+    // A shared geometry's box, given in its own frame, where one of the frame's copies carries it: the world-axis box about
+    // the carried one, and the copy's scale, the units its pixels are read in.
+    private (Vector3 Center, Vector3 Half, float Units) CopyBox(Vector3 center, Vector3 half, int copy) {
+        var matrix = m_demandCopies[copy].Matrix;
+        var (boxCenter, boxHalf) = TransformBox(center: center, half: half, matrix: matrix);
+
+        return (boxCenter, boxHalf, MathF.Max(x: 1.0e-6f, y: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length()));
     }
     // Queues a group at its due on a clock, in that queue's epoch, when any reading can make it due.
     private void Queue(int clock, Group group) {
