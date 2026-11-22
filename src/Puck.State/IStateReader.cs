@@ -137,4 +137,23 @@ public interface IStateReader {
 
         return true;
     }
+    /// <summary>Returns the number that names a row's content (<see cref="StateArena.RowContent"/>): equal numbers
+    /// prove equal content, and a row whose numbers return to what they recently were answers the number it answered
+    /// then, so a scheduler's captured verdict stands across a change that was undone.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <param name="content">The content's number, when the ordinal names a row.</param>
+    /// <returns><see langword="true"/> when the ordinal names a row.</returns>
+    bool TryRowContent(int rowOrdinal, out ulong content) {
+        var arena = Arena;
+
+        if (((uint)rowOrdinal) >= ((uint)arena.Layout.RowCount)) {
+            content = 0UL;
+
+            return false;
+        }
+
+        content = arena.RowContent(rowOrdinal: rowOrdinal);
+
+        return true;
+    }
 }

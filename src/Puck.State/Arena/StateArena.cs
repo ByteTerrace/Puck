@@ -859,13 +859,29 @@ public sealed partial class StateArena {
             differs[slot] = Differs(entry: entry);
         }
 
+        // Every row that took a change to anything but a number cell is marked before any version moves, so the
+        // door the versions move through knows which rows changed in their numbers alone (SettleContent).
+        EnsureContentRoom();
         for (var index = 0; (index < m_touchedCount); index++) {
             if (m_changeDiffers[m_touchedColumn[index]]![m_touchedIndex[index]]) {
-                MarkVersion(
+                MarkContentOpaque(
                     column: ((ArenaColumn)m_touchedColumn[index]),
                     index: m_touchedIndex[index]
                 );
             }
+        }
+        m_valueSettleEpoch = epoch;
+        try {
+            for (var index = 0; (index < m_touchedCount); index++) {
+                if (m_changeDiffers[m_touchedColumn[index]]![m_touchedIndex[index]]) {
+                    MarkVersion(
+                        column: ((ArenaColumn)m_touchedColumn[index]),
+                        index: m_touchedIndex[index]
+                    );
+                }
+            }
+        } finally {
+            m_valueSettleEpoch = -1L;
         }
 
         m_touchedCount = 0;

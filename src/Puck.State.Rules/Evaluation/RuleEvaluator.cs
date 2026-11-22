@@ -327,7 +327,8 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     }
     // The one door every elision and reuse passes: whether every dependency a schedule names — each row, then each
     // host fact, read for the body bound now where the fact is read for $each — reports the version it did when the
-    // cache was captured. A volatile schedule, a mismatch, or a dependency the host cannot answer for all count as
+    // cache was captured. A row answers the number that names its content (StateArena.RowContent), which is its
+    // version unless a commit put its numbers back as they recently stood. A volatile schedule, a mismatch, or a dependency the host cannot answer for all count as
     // unproven, which is the safe default.
     private bool VersionsMatch(RuleSchedule schedule, ulong[]? cached) {
         if (
@@ -340,9 +341,9 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         for (var index = 0; (index < schedule.Rows.Length); index++) {
             if (
-                !m_host.TryRowVersion(
-                rowOrdinal: schedule.Rows[index],
-                version: out var version
+                !m_host.TryRowContent(
+                content: out var version,
+                rowOrdinal: schedule.Rows[index]
             ) ||
                 (version != cached[index])
             ) {
@@ -366,9 +367,9 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         }
 
         for (var index = 0; (index < schedule.Rows.Length); index++) {
-            cache[index] = (m_host.TryRowVersion(
-                rowOrdinal: schedule.Rows[index],
-                version: out var version
+            cache[index] = (m_host.TryRowContent(
+                content: out var version,
+                rowOrdinal: schedule.Rows[index]
             )
                 ? version
                 : 0UL
