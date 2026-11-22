@@ -26,14 +26,16 @@ public sealed partial class SdfMeshPathBake {
     // The groups due by travel, each at the travel it falls due; an entry whose group was measured since (its due moved)
     // or left the list is passed over.
     private readonly PriorityQueue<Group, double> m_demandDue = new();
-    // The travel and revision the watch last read of the demand points, and the bias it measured under.
+    // The revision the watch last read of the demand points, and the bias it measured under.
     private long m_demandRevision = -1L;
     private int m_demandBias = -1;
-    // Whether a change no travel bounds asks every group to be measured again (IndexCopies), and how many groups the
-    // sweep doing so still owes.
+    // Whether a change no travel bounds asks every group to be measured again (IndexCopies); how many groups the sweep
+    // doing so still owes, and where it stands; and the prepared frame the latest reset began at, since which a group
+    // another route measured needs no measure from the sweep.
     private bool m_demandReset = true;
     private int m_demandSweepLeft;
     private GroupSweep m_demandSweep;
+    private long m_demandResetAt;
     // The moved transforms the watch last read, and the slots they named.
     private readonly GpuRowCursor m_demandSlotCursor = new();
     private readonly GpuUploadRuns m_demandSlots = new(GpuRegion.MaxCopyRuns);
@@ -57,6 +59,7 @@ public sealed partial class SdfMeshPathBake {
             m_demandRevision = Demand.Revision;
             m_demandBias = bias;
             m_demandSweepLeft = m_groups.Count;
+            m_demandResetAt = m_preparedFrames;
             m_demandDue.Clear();
             SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.DemandResets);
         }
@@ -103,7 +106,8 @@ public sealed partial class SdfMeshPathBake {
 
             for (var visited = 0; ((visited < count) && (spent < share) && (m_demandSweepLeft > 0)); visited++) {
                 var group = m_groups[at];
-                var read = (Measure(group: group) ? Math.Max(val1: 1, val2: (CopiesOf(group: group)?.Count ?? 1)) : 1);
+                // A group another route measured since the reset began stands on the shape the reset asked for.
+                var read = (((group.DemandMeasuredAt < m_demandResetAt) && Measure(group: group)) ? Math.Max(val1: 1, val2: (CopiesOf(group: group)?.Count ?? 1)) : 1);
 
                 spent += read;
                 m_demandSweepLeft--;
