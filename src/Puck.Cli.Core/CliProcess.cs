@@ -11,7 +11,8 @@ namespace Puck.Cli;
 // continuation handshake, and reports a timeout as data for the proof to judge. A synchronous caller waits on
 // RunAsync. Both runners own the pipe lifecycle, because waiting for a child before draining both streams can
 // deadlock, and returning before the pumps finish loses the tail that often names a crash. Both end their reads
-// through ChildProcess.DrainAfterExitAsync, so a process that inherited the pipes cannot hold a run open.
+// through ChildProcess.DrainAfterExitAsync, so a process that inherited the pipes cannot hold a run open. Both take
+// CliCheckoutBuildLock around an MSBuild child, before its timeout starts, so builds of one checkout never overlap.
 public static class CliProcess {
     // At most three UTF-8 bytes a character, so the head stays inside the smallest default pipe buffer (4 KiB).
     private const int InputHeadCharacters = 1024;
@@ -48,6 +49,7 @@ public static class CliProcess {
     public static async Task<ChildProcessResult> RunAsync(string fileName, IEnumerable<string> arguments, string? workingDirectory = null, bool capture = true, string? input = null, TimeSpan? timeout = null, TimeProvider? clock = null, CancellationToken cancellationToken = default) {
         cancellationToken.ThrowIfCancellationRequested();
         var command = arguments.ToList();
+        using var build = await CliCheckoutBuildLock.AcquireAsync(arguments: command, cancellationToken: cancellationToken, fileName: fileName, workingDirectory: workingDirectory).ConfigureAwait(continueOnCapturedContext: false);
 
         // The cmd.exe launchers behind az and npm re-parse their arguments; their interpreters take a clean vector.
         if (
@@ -127,6 +129,7 @@ public static class CliProcess {
         clock ??= TimeProvider.System;
         cancellationToken.ThrowIfCancellationRequested();
 
+        using var build = await CliCheckoutBuildLock.AcquireAsync(arguments: arguments, cancellationToken: cancellationToken, fileName: fileName, workingDirectory: workingDirectory).ConfigureAwait(continueOnCapturedContext: false);
         var startedAt = Stopwatch.GetTimestamp();
         using var process = ChildProcess.StartRedirected(
             arguments: arguments,

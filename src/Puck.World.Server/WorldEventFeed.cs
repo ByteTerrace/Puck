@@ -126,6 +126,28 @@ public sealed class WorldEventFeed {
     // m_regionDefinition's sensing placements in placement order (their region ordinals), so a tick visits its regions
     // and never every placement.
     private WorldPlaces m_places = WorldPlaces.None;
+    // m_places' rows as the tick reads them, by region ordinal, filled as each row is first collected under
+    // m_regionDefinition: the row's record in m_regionOccupancy, the frame it was last sensed in (m_regionFrames holds
+    // the same frame by id for PlacesAt), and that frame's bounds grown by its slack. A body is tested against a region
+    // only inside those bounds or while it is an occupant, so a tick's region work follows the bodies near each region
+    // and not the product of regions and moved bodies. The grown bounds must hold every point the shape's own Contains
+    // accepts: the slack, a sixty-fourth of the widest extent on every axis and a few thousandths of a unit, is far past the rounding by
+    // which an oriented box's containment and its world extent can disagree. Restore replaces the occupancy records,
+    // and drops m_regionDefinition so the rows are filled again.
+    private RegionRow[] m_regionRows = [];
+    private readonly FixedVector3[] m_changedPoints;
+    private readonly bool[] m_changedPresent;
+
+    private const int RegionBoundsShift = 6;
+    private const long RegionBoundsSlackRaws = 256L;
+
+    private struct RegionRow {
+        public RegionOccupancy? Occupancy;
+        public FixedSpatialShape Shape;
+        public FixedAabb Bounds;
+        public bool HasCenter;
+        public bool Framed;
+    }
 
     private readonly ulong[] m_collisionPairKeys;
     private readonly CollisionTransition[] m_collisionTransitions;
@@ -145,6 +167,8 @@ public sealed class WorldEventFeed {
         m_collisionGrid = new FixedSweepGrid(capacity: capacity);
         m_collisionDegrees = new byte[capacity];
         m_bodyChanged = new bool[capacity];
+        m_changedPoints = new FixedVector3[capacity];
+        m_changedPresent = new bool[capacity];
         m_collisionIncluded = new bool[capacity];
         m_nearbySleeping = new int[capacity];
         m_collisionPairKeys = new ulong[m_maximumTrackedPairs];
@@ -160,7 +184,8 @@ public sealed class WorldEventFeed {
     public int CollisionTrackedPairs => m_overlapping.Count;
     /// <summary>Exact collision overlap tests performed by this tick's collection.</summary>
     public int CollisionOverlapTests { get; private set; }
-    /// <summary>Body/region containment tests performed by this tick's collection.</summary>
+    /// <summary>Gets the exact body/region containment tests this tick's collection performed: every body against a
+    /// region whose frame changed, and otherwise each changed body inside a region's bounds or leaving it.</summary>
     public int RegionBodyTests { get; private set; }
 
     internal void AppendDiscoveryHash(ref Fnv1aHash hash) {
@@ -569,20 +594,35 @@ public sealed class WorldEventFeed {
             m_regionFrames.Clear();
             m_regionDefinition = definition;
             m_places = WorldPlaces.Of(definition: definition);
+            m_regionRows = new RegionRow[m_places.Rows.Length];
             Array.Fill(array: m_seatPlacesStale, value: true);
         }
 
         var rows = m_places.Rows;
+        var regionRows = m_regionRows;
+
+        // Each changed body's point, read once for every region.
+        for (var changed = 0; (changed < changedBodies.Length); changed++) {
+            var body = changedBodies[changed];
+
+            m_changedPresent[changed] = (population.IsActive(index: body) && (population.EntryBody(index: body) is not null));
+            m_changedPoints[changed] = (m_changedPresent[changed] ? population.EntryBody(index: body)!.FixedPosition : default);
+        }
 
         for (var thisOrdinal = 0; (thisOrdinal < rows.Length); thisOrdinal++) {
             var (placement, region, staticShape) = rows[thisOrdinal];
+            ref var row = ref regionRows[thisOrdinal];
 
-            if (!m_regionOccupancy.TryGetValue(
-                key: placement.Id,
-                value: out var occupancy
-            )) {
-                occupancy = new RegionOccupancy(new bool[population.Capacity]);
-                m_regionOccupancy[placement.Id] = occupancy;
+            if (row.Occupancy is not { } occupancy) {
+                if (!m_regionOccupancy.TryGetValue(
+                    key: placement.Id,
+                    value: out occupancy
+                )) {
+                    occupancy = new RegionOccupancy(new bool[population.Capacity]);
+                    m_regionOccupancy[placement.Id] = occupancy;
+                }
+
+                row.Occupancy = occupancy;
             }
 
             // An ATTACHED region's sensing volume stands in the resolved live pose (the SAME fixed-point resolve
@@ -603,22 +643,46 @@ public sealed class WorldEventFeed {
                 shape = region.ShapeAt(origin: center, yawRadians: yawRadians);
             }
 
-            var frame = (shape, hasCenter);
-            var frameChanged = (!m_regionFrames.TryGetValue(key: placement.Id, value: out var previous) || (previous != frame));
+            var frameChanged = (!row.Framed || (row.HasCenter != hasCenter) || (row.Shape != shape));
 
-            m_regionFrames[placement.Id] = frame;
+            if (frameChanged) {
+                var bounds = shape.Bounds;
+                var extent = bounds.Extent;
+
+                m_regionFrames[placement.Id] = (shape, hasCenter);
+                row.Framed = true;
+                row.HasCenter = hasCenter;
+                row.Shape = shape;
+                // Every axis grows by the widest extent's share: a long box's stored axes round across axes, so the
+                // slack a thin axis needs follows the long one.
+                row.Bounds = bounds.Grow(margin: FixedQ4816.FromRawBits(value: ((Math.Max(val1: extent.X.Value, val2: Math.Max(val1: extent.Y.Value, val2: extent.Z.Value)) >> RegionBoundsShift) + RegionBoundsSlackRaws)));
+            }
+
             var bodyCount = (frameChanged ? population.Capacity : changedBodies.Length);
 
             for (var bodyOrdinal = 0; (bodyOrdinal < bodyCount); bodyOrdinal++) {
                 var body = (frameChanged ? bodyOrdinal : changedBodies[bodyOrdinal]);
+                bool inside;
 
-                RegionBodyTests++;
-                var inside = (
-                    hasCenter &&
-                    population.IsActive(index: body) &&
-                    (population.EntryBody(index: body) is { } entry) &&
-                    shape.Contains(point: entry.FixedPosition)
-                );
+                if (frameChanged) {
+                    RegionBodyTests++;
+                    inside = (
+                        hasCenter &&
+                        population.IsActive(index: body) &&
+                        (population.EntryBody(index: body) is { } entry) &&
+                        shape.Contains(point: entry.FixedPosition)
+                    );
+                } else {
+                    // A changed body outside the region's bounds that was not an occupant has no edge to raise.
+                    var near = (hasCenter && m_changedPresent[bodyOrdinal] && row.Bounds.Contains(point: m_changedPoints[bodyOrdinal]));
+
+                    if (!near && !occupancy.Bodies[body]) {
+                        continue;
+                    }
+
+                    RegionBodyTests++;
+                    inside = (near && shape.Contains(point: m_changedPoints[bodyOrdinal]));
+                }
 
                 if (EmitTransition(
                     latch: ref occupancy.Bodies[body],
@@ -922,6 +986,7 @@ public sealed class WorldEventFeed {
     public void Restore(WorldEventFeedCheckpoint checkpoint) {
         ValidateCheckpoint(checkpoint: checkpoint);
         m_regionFrames.Clear();
+        m_regionDefinition = null;
         m_collisionPolicy = checkpoint.CollisionPolicy;
         m_collisionPending.Clear();
         foreach (var index in checkpoint.CollisionPending) { m_collisionPending.Add(item: index); }

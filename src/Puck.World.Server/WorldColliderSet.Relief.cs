@@ -184,7 +184,8 @@ public sealed partial class WorldColliderSet {
     }
     // The relieved program of one copy, its frame origin at offset from the copy's stamp origin, read as contact reads it;
     // its evaluator's own box bounds prove a body clear, an identical box reusing its answer (a body at rest asks the same
-    // box every tick).
+    // box every tick). The evaluator indexes regions, so a body's query walks the shapes near the body and not the whole
+    // creation: a query's cost follows what stands beside the body, whatever the creation's size.
     private static FixedColliderField ReliefField(CreationDocument document, in FixedCreationStampTransform transform, float margin, bool bounded,
         IReadOnlyList<FixedStaticCollider> bases, FixedFieldPartition? partition) {
         var relieved = Relieves(document: document);
@@ -198,7 +199,7 @@ public sealed partial class WorldColliderSet {
         var wavelength = ((finest > 0f) ? (((float)transform.Scale) / finest) : float.PositiveInfinity);
         var step = Math.Max(val1: ReliefGradientFloor, val2: Math.Min(val1: ((float)FixedColliderField.DefaultGradientStep), val2: (wavelength / 16f)));
 
-        var evaluator = new SdfFieldEvaluator(program: ReliefProgram(document: document, margin: margin, relieved: relieved, transform: transform));
+        var evaluator = new SdfFieldEvaluator(program: ReliefProgram(document: document, margin: margin, relieved: relieved, transform: transform), reading: SdfFieldReading.Contact, regional: true, recordsRegions: true);
 
         return new FixedColliderField(
             field: evaluator,

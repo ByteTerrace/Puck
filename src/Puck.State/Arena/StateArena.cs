@@ -796,8 +796,11 @@ public sealed partial class StateArena {
                 ArenaColumn.ClockV0 or ArenaColumn.ClockSubstepTicks or ArenaColumn.ClockSet or
                 ArenaColumn.Behavior or ArenaColumn.Observation);
 
-            ChangedKeys.Mark(row, (keyed ? KeyAtSlot(layout: m_layout[row], slot: index).Ordinal : -1));
-            if (!keyed) { DisclosureRevision++; }
+            if (keyed) {
+                ChangedKeys.Mark(row, KeyAtSlot(layout: m_layout[row], slot: index).Ordinal);
+            } else {
+                MarkDisclosureRow(row: row);
+            }
         }
     }
     private void MarkRowVersion(int rowOrdinal, bool changesRecorded = false) {
@@ -808,7 +811,26 @@ public sealed partial class StateArena {
             BumpRowVersion(changesRecorded: true, rowOrdinal: rowOrdinal);
         }
     }
-    private void MarkDisclosureRow(int row) { ChangedKeys.Mark(row); DisclosureRevision++; }
+    // The one door for a commit that changes a row beyond a held cell's value, clock, behaviour or observation stamp:
+    // the window's carrier names the whole row, the disclosure index is owed a rebuild, and the row's structure
+    // version takes a value no row has held.
+    private void MarkDisclosureRow(int row) {
+        ChangedKeys.Mark(row);
+        DisclosureRevision++;
+        if (row >= m_rowStructures.Length) { Array.Resize(array: ref m_rowStructures, newSize: Math.Max(val1: (row + 1), val2: m_layout.RowCount)); }
+        m_rowStructures[row] = ++m_structureClock;
+    }
+
+    private ulong[] m_rowStructures = [];
+    private ulong m_structureClock;
+
+    /// <summary>Returns a row's structure version: a value that changes on every commit that leaves the row different
+    /// in anything but a held cell's value, clock, behaviour or observation stamp (its members, their order, a cursor,
+    /// a drawn mask, a cell's audience), and whenever every version restarts at once. While it stands the row holds
+    /// the same cells in the same order. No two moves, of any row, give the same value.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <returns>The structure version; zero for a row no such commit has reached.</returns>
+    public ulong RowStructureVersion(int rowOrdinal) => ((((uint)rowOrdinal) < ((uint)m_rowStructures.Length)) ? m_rowStructures[rowOrdinal] : 0UL);
 
     private bool[] m_deliveryRows = [];
 

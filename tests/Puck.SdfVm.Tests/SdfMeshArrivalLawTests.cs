@@ -231,7 +231,7 @@ public sealed class SdfMeshArrivalLawTests(ITestOutputHelper output) {
             var newDraw = HostDraw(identity: "c", x: 3);
 
             draws[0] = newDraw;
-            draws[17] = other with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: 9, yPosition: 0, zPosition: 0) };
+            draws[17] = other.PlacedAt(objectToWorld: Matrix4x4.CreateTranslation(xPosition: 9, yPosition: 0, zPosition: 0));
             revision++;
             journal.Begin(everything: false, rows: draws.Count);
             journal.Owe(0, 1); journal.Owe(17, 1);
@@ -239,7 +239,7 @@ public sealed class SdfMeshArrivalLawTests(ITestOutputHelper output) {
             rig.Engine.Pack(frame: frame);
             journal.Begin(everything: false, rows: draws.Count);
             journal.Owe(17, 1);
-            draws[17] = draws[17] with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: 10, yPosition: 0, zPosition: 0) };
+            draws[17] = draws[17].PlacedAt(objectToWorld: Matrix4x4.CreateTranslation(xPosition: 10, yPosition: 0, zPosition: 0));
             frame = frame with { MeshDrawsRevision = ++revision, MeshDrawChangesSerial = journal.Serial };
             var journalPacked = work.Read(kind: SdfMeshHistory.RecordsPacked);
 

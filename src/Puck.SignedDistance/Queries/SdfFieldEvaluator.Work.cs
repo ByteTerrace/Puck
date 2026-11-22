@@ -12,6 +12,13 @@ public sealed partial class SdfFieldEvaluator {
     public static WorkKind PointInstructions { get; } = new(name: "sdf.point.instructions", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets cheap instance-bound ranks computed before the point instruction walk, including unprimed walks.</summary>
     public static WorkKind PointPrepassBounds { get; } = new(name: "sdf.point.prepass-bounds", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the instructions visited by the point evaluations of an evaluator that marks a
+    /// region before recording it: which tape such a walk reads depends on the walks before it, so the count does
+    /// not repeat between runs and stays out of <see cref="PointInstructions"/>.</summary>
+    public static WorkKind PointMarkedInstructions { get; } = new(name: "sdf.point.marked.instructions", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the instance-bound ranks of those evaluations, kept out of <see cref="PointPrepassBounds"/> for
+    /// the same reason.</summary>
+    public static WorkKind PointMarkedPrepassBounds { get; } = new(name: "sdf.point.marked.prepass-bounds", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets reach-scratch arrays created by the point allocation door, including zero-length requests.</summary>
     public static WorkKind PointScratchArraysCreated { get; } = new(name: "sdf.point.reach-scratch-arrays-created", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets cumulative point reach-scratch element payload created; excludes array headers and is not live or physical memory.</summary>
@@ -40,7 +47,7 @@ public sealed partial class SdfFieldEvaluator {
     public static WorkKind PowerMemoAllocatedBytes { get; } = new(name: "sdf.point.power.memo-allocated", unit: "bytes", workClass: WorkClass.Pacing);
     /// <summary>Gets the process-wide point-evaluation and logical culling-construction work of every evaluator, the interval walk's peer
     /// (<see cref="SdfBoundsCache.ProcessWork"/>). A monotonic total; a reader takes a window by reading twice.</summary>
-    public static WorkCounterSet PointWork { get; } = new(name: "sdf.point", kinds: [PointEvaluations, PointInstructions, PointPrepassBounds,
+    public static WorkCounterSet PointWork { get; } = new(name: "sdf.point", kinds: [PointEvaluations, PointInstructions, PointPrepassBounds, PointMarkedInstructions, PointMarkedPrepassBounds,
         PointScratchArraysCreated, PointScratchPayloadCreated, CertificateArraysCreated, CertificatePayloadCreated,
         CullTableBuilds, CullArraysCreated, CullPayloadCreated,
         PowerMemoHits, PowerMemoMisses, PowerMemoFallbacks, PowerMemoBypasses, PowerMemoAllocations, PowerMemoAllocatedBytes]);

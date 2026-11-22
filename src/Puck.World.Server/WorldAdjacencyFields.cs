@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Numerics;
+using Puck.Abstractions.Gpu;
 using Puck.Maths;
 using Puck.Physics;
 using Puck.World.Client;
@@ -253,20 +254,38 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         private bool m_frameResolved;
         private WorldSolidField? m_field;
         private string m_fieldReason = string.Empty;
+        // The link's entity journal across the images it pins (IWorldAdjacencyNeighbour.CollectEntityChanges), which the
+        // host publishes as it pins and a presentation collects on its own thread, and the departed set the last pinned
+        // image was read under.
+        private readonly GpuSharedChangedRows m_entities = new(stableRows: true);
+        private ImmutableHashSet<Protocol.WorldEntityAddress> m_departed = ImmutableHashSet<Protocol.WorldEntityAddress>.Empty;
 
         public PinnedNeighbour? Read(WorldDefinition source, ImmutableHashSet<Protocol.WorldEntityAddress> departed, bool pin) {
             if (!pin && m_pinned is { } previous) { return previous; }
 
-            var image = mirror.CaptureBodyImage(m_image);
+            var held = m_image;
+            var image = mirror.CaptureBodyImage(held);
             if (!ReferenceEquals(source, m_builtSource) || !ReferenceEquals(image.Definition, m_builtDefinition)) {
                 Refresh(source, image.Definition);
                 m_builtSource = source;
                 m_builtDefinition = image.Definition;
             }
 
+            var serial = m_entities.Serial;
+            var departures = !departed.SetEquals(other: m_departed);
+
+            if (!ReferenceEquals(image, held) || departures) {
+                // An image captured over the one held names the slots it changed; any other, or a departure, which moves
+                // an entity's activity outside its entry, owes every slot.
+                var whole = (departures || (held is null) || image.Changed.IsDefault || (!image.Changed.IsEmpty && (image.Changed[^1] >= image.Entries.Length)));
+
+                serial = m_entities.Publish(everything: whole, owed: (whole ? [] : image.Changed.AsSpan()), rows: image.Entries.Length);
+            }
+            m_departed = departed;
+
             m_image = image;
             m_pinned = (m_frameResolved && authority.Settle(image.Authority))
-                ? new PinnedNeighbour(authority.Value, image, m_frame, m_field, m_fieldReason, departed)
+                ? new PinnedNeighbour(authority.Value, image, m_frame, m_field, m_fieldReason, departed, m_entities, serial)
                 : null;
             return m_pinned;
         }
@@ -324,7 +343,15 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
     }
 
     private sealed class PinnedNeighbour(string authority, WorldSessionMirror.BodyImage image, WorldFaceFrame frame,
-        WorldSolidField? solids, string fieldReason, ImmutableHashSet<Protocol.WorldEntityAddress> departed) : IWorldAdjacencyNeighbourContact {
+        WorldSolidField? solids, string fieldReason, ImmutableHashSet<Protocol.WorldEntityAddress> departed,
+        GpuSharedChangedRows entities, long entitiesSerial) : IWorldAdjacencyNeighbourContact {
+        private IReadOnlyList<int>? m_active;
+
+        public IReadOnlyList<int> ActiveEntities => (m_active ??= (departed.IsEmpty
+            ? image.Active
+            : image.Active.Where(predicate: index => !departed.Contains(image.Entries.ItemRef(index).Address)).ToArray()));
+        public bool CollectEntityChanges(GpuRowCursor cursor, GpuUploadRuns into) =>
+            entities.Collect(cursor: cursor, into: into, rows: EntityCapacity, through: entitiesSerial);
         public string Authority => authority;
         public WorldDefinition Definition => image.Definition;
         public int DefinitionRevision => image.DefinitionRevision;

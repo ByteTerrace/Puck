@@ -175,7 +175,7 @@ public sealed class SdfMeshIrradianceSceneLawTests {
         return new SdfMesh(indices: indices, positions: positions);
     }
     private static SdfMeshDraw Draw(SdfMesh mesh, Matrix4x4 matrix, int material, bool dynamic = false) =>
-        new(Identity: new object(), Material: material, Mesh: mesh, ObjectToWorld: matrix) { IsDynamic = dynamic };
+        new(identity: new object(), material: material, mesh: mesh, objectToWorld: matrix) { IsDynamic = dynamic };
     private static SdfMeshDraw[] Draws(SdfMesh sheet, SdfMesh cube) => [
         Draw(material: 0, matrix: Matrix4x4.Identity, mesh: sheet),
         Draw(material: 10, matrix: (Matrix4x4.CreateScale(scale: 4f) * Matrix4x4.CreateFromYawPitchRoll(yaw: 0.6f, pitch: 0.2f, roll: -0.3f) * Matrix4x4.CreateTranslation(xPosition: 1f, yPosition: 1.5f, zPosition: -0.5f)), mesh: sheet),
@@ -192,7 +192,7 @@ public sealed class SdfMeshIrradianceSceneLawTests {
         var triangles = new List<World>();
 
         foreach (var draw in draws) {
-            if (draw.IsDynamic || !Matrix4x4.Invert(matrix: draw.ObjectToWorld, result: out _)) { continue; }
+            if (draw.IsDynamic || !Matrix4x4.Invert(matrix: draw.FixedPlacement, result: out _)) { continue; }
 
             var positions = draw.Mesh.Positions.Span;
             var indices = draw.Mesh.Indices.Span;
@@ -200,9 +200,9 @@ public sealed class SdfMeshIrradianceSceneLawTests {
 
             for (var triangle = 0; (triangle < draw.Mesh.TriangleCount); triangle++) {
                 triangles.Add(item: new World(
-                    A: Vector3.Transform(matrix: draw.ObjectToWorld, position: positions[(int)indices[3 * triangle]]),
-                    B: Vector3.Transform(matrix: draw.ObjectToWorld, position: positions[(int)indices[(3 * triangle) + 1]]),
-                    C: Vector3.Transform(matrix: draw.ObjectToWorld, position: positions[(int)indices[(3 * triangle) + 2]]),
+                    A: Vector3.Transform(matrix: draw.FixedPlacement, position: positions[(int)indices[3 * triangle]]),
+                    B: Vector3.Transform(matrix: draw.FixedPlacement, position: positions[(int)indices[(3 * triangle) + 1]]),
+                    C: Vector3.Transform(matrix: draw.FixedPlacement, position: positions[(int)indices[(3 * triangle) + 2]]),
                     Material: (draw.Material + (materials.IsEmpty ? 0 : (int)materials[triangle]))
                 ));
             }
@@ -342,7 +342,7 @@ public sealed class SdfMeshIrradianceSceneLawTests {
 
         // A move and a renumbered mesh (the same buffers, other triangle materials) build nothing.
         var renumbered = new SdfMesh(indices: sheet.Indices, positions: sheet.Positions, triangleMaterials: sheet.TriangleMaterials.ToArray().Select(selector: static material => (material + 5u)).ToArray());
-        var moved = replaced.Select(selector: (draw, index) => (index == 0) ? draw with { Mesh = renumbered, ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: 0f, yPosition: -0.25f, zPosition: 0f) } : draw).ToArray();
+        var moved = replaced.Select(selector: (draw, index) => (index == 0) ? draw.PlacedAt(objectToWorld: Matrix4x4.CreateTranslation(xPosition: 0f, yPosition: -0.25f, zPosition: 0f)) with { Mesh = renumbered } : draw).ToArray();
         var shifted = SdfMeshIrradianceScene.Build(draws: moved, previous: swapped)!;
 
         Assert.Equal(expected: (0, 0L), actual: (shifted.GeometriesBuilt, shifted.TrianglesBuilt));

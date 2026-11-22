@@ -50,6 +50,18 @@ public sealed record WorldReleaseGroupRecord {
     [JsonIgnore]
     public bool HasRecoveredBootstrap => ((ActiveRelease is null) && History.Any(predicate: static entry => entry.IsRecoveredBootstrap));
 
+    /// <summary>Gets why the pending operation discards its source's state and starts its target fresh, from the reset
+    /// entry its claiming write recorded (<see cref="WorldReleaseGroupHistoryEntry.ResetResult"/>), or
+    /// <see langword="null"/> when it carries the state across. The reset lives in history rather than in a member of its
+    /// own because a draining source of an earlier build reads this record, and every build reads history entries.</summary>
+    [JsonIgnore]
+    public string? PendingStateReset => ((PendingOperationId is { } operation)
+        ? History.LastOrDefault(predicate: entry => ((entry.OperationId == operation) && entry.Result.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: WorldReleaseGroupHistoryEntry.ResetResult
+        )))?.Result[WorldReleaseGroupHistoryEntry.ResetResult.Length..]
+        : null);
+
     /// <summary>Whether an identifier already owns pending or retained work. New operations must never reuse
     /// an identifier because immutable recovery roots are addressed by that identifier.</summary>
     public bool ContainsOperation(Guid operationId) => ((PendingOperationId == operationId) || History.Any(predicate: entry => (entry.OperationId == operationId)));
@@ -62,6 +74,10 @@ public sealed record WorldReleaseGroupHistoryEntry {
     /// <summary>The <see cref="Result"/> of an admitted operation whose release was accepted, by finalization or by the
     /// next operation that claimed the group.</summary>
     public const string CommittedResult = "committed";
+    /// <summary>The prefix of <see cref="Result"/> for a deployment that discards its source's state and starts its target
+    /// from the target's own fresh state; the reason follows it. The claiming write records it as the operation's first
+    /// entry, so it is durable before any effect, and the operation's outcome follows it under the same identifier.</summary>
+    public const string ResetResult = "reset: ";
     /// <summary>The prefix of <see cref="Result"/> for a pre-commit operation whose protected roots were restored
     /// (<see cref="WorldReleaseGroupStore.CompleteRecoveryAsync"/>); the failure that began recovery follows it.</summary>
     public const string RecoveredResult = "recovered: ";
@@ -243,7 +259,17 @@ public sealed partial class WorldReleaseGroupStore {
     /// rollback window closes in the same guarded write that claims the group, so a deployment needs no separate
     /// finalize, and the new operation's commit makes the active release its own rollback target. Only an unfinished
     /// operation (<see cref="WorldReleaseGroupRecord.HasUnfinishedOperation"/>) refuses.</summary>
-    public async Task<WorldReleaseGroupOutcome> BeginAsync(WorldReleaseGroupSnapshot current, Guid operationId, string targetRelease, CancellationToken cancellationToken = default) {
+    /// <param name="current">The group state the operation claims.</param>
+    /// <param name="operationId">The new operation's identifier, never used by pending or retained work.</param>
+    /// <param name="targetRelease">The release the operation activates.</param>
+    /// <param name="cancellationToken">The token that cancels the guarded write.</param>
+    /// <param name="stateReset">Why the active release's state cannot be carried into the target, or
+    /// <see langword="null"/> to carry it. The claiming write records a reset as the operation's first history entry
+    /// (<see cref="WorldReleaseGroupHistoryEntry.ResetResult"/>), and the operation then starts the target from its own
+    /// fresh state (<see cref="WorldReleaseGroupRecord.PendingStateReset"/>).</param>
+    /// <returns>The written state, or a conflict naming why the group cannot be claimed.</returns>
+    public async Task<WorldReleaseGroupOutcome> BeginAsync(WorldReleaseGroupSnapshot current, Guid operationId, string targetRelease,
+        CancellationToken cancellationToken = default, string? stateReset = null) {
         ArgumentNullException.ThrowIfNull(current.Record);
         ValidateIdentity(
             group: current.Record.DeploymentGroup,
@@ -271,6 +297,15 @@ public sealed partial class WorldReleaseGroupStore {
             );
         }
         if (
+            (stateReset is not null) &&
+            (string.IsNullOrWhiteSpace(value: stateReset) || (current.Record.ActiveRelease is null))
+        ) {
+            return new(
+                WorldReleaseOperationOutcomeKind.Conflict,
+                "a state reset names its reason and replaces an active release's state"
+            );
+        }
+        if (
             (current.Record.ActiveRelease is null) ||
             !string.Equals(
             a: current.Record.ActiveRelease,
@@ -278,10 +313,20 @@ public sealed partial class WorldReleaseGroupStore {
             comparisonType: StringComparison.Ordinal
         )
         ) {
-            var next = CloseRetained(
+            var accepted = CloseRetained(
                 old: current.Record,
                 result: WorldReleaseGroupHistoryEntry.CommittedResult
-            ) with {
+            );
+            var next = accepted with {
+                History = ((stateReset is null)
+                    ? accepted.History
+                    : accepted.History.Append(element: new WorldReleaseGroupHistoryEntry {
+                        OperationId = operationId,
+                        Result = (WorldReleaseGroupHistoryEntry.ResetResult + stateReset),
+                        Revision = accepted.Revision,
+                        SourceRelease = current.Record.ActiveRelease,
+                        TargetRelease = targetRelease,
+                    }).ToArray()),
                 PendingOperationId = operationId,
                 PendingSourceRelease = current.Record.ActiveRelease,
                 PendingTargetRelease = targetRelease,

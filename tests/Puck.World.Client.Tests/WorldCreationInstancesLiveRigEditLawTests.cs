@@ -250,7 +250,7 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
     private sealed class RecordingDresser : ISdfFrameDresser {
         public DynamicTransform[] Transforms { get; private set; } = [];
 
-        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, SdfMeshDrawList meshDraws, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
             Transforms = transforms;
 
             return new SdfFrame(
@@ -260,8 +260,8 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
                 Views: []
             ) {
                 DynamicTransforms = transforms,
-                MeshDraws = meshDraws,
-                MeshDrawsRevision = meshDrawsRevision,
+                MeshDraws = meshDraws.Draws,
+                MeshDrawsRevision = meshDraws.Revision,
                 MovedTransforms = moved,
             };
         }

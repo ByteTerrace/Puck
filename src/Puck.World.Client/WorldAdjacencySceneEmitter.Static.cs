@@ -13,6 +13,7 @@ public sealed partial class WorldAdjacencySceneEmitter {
         public WorldPlacement[] Original = [];
         public WorldPlacement[] Rows = [];
         public WorldAdjacencyFramePair[] Path = [];
+        public Puck.Maths.FixedQ4816 Depth;
         public ulong Seed;
     }
     private readonly Dictionary<string, StaticProjection> m_staticProjections = new(comparer: StringComparer.Ordinal);
@@ -27,15 +28,20 @@ public sealed partial class WorldAdjacencySceneEmitter {
         for (var band = 0; band < Math.Min(projections.Count, m_bandCount); band++) {
             var projection = projections[band];
             var image = projection.Neighbour.Definition;
-            var selected = WorldAdjacencyGeometry.Select(image, projection.Path[0].Neighbour, projection.OverlapDepth).Placements;
             if (!m_staticProjections.TryGetValue(projection.Name, out var prepared)) {
                 prepared = new StaticProjection();
                 m_staticProjections.Add(projection.Name, prepared);
             }
             m_staticNames.Add(projection.Name);
             var seed = (image.Generation?.WorldSeed ?? 0UL);
-            if (!ReferenceEquals(prepared.Source, image) || !ReferenceEquals(prepared.Creations, image.Creations) || !prepared.Original.SequenceEqual(selected) ||
-                !prepared.Path.SequenceEqual(projection.Path) || (prepared.Seed != seed)) {
+            // The selection is a function of the image, the band's frame and its depth: a band whose inputs stand keeps it
+            // without selecting again.
+            var stands = (ReferenceEquals(prepared.Source, image) && ReferenceEquals(prepared.Creations, image.Creations) &&
+                prepared.Path.SequenceEqual(projection.Path) && (prepared.Depth == projection.OverlapDepth) && (prepared.Seed == seed));
+            var selected = (stands ? null : WorldAdjacencyGeometry.Select(image, projection.Path[0].Neighbour, projection.OverlapDepth).Placements);
+            if ((selected is not null) && (!ReferenceEquals(prepared.Source, image) || !ReferenceEquals(prepared.Creations, image.Creations) || !prepared.Original.SequenceEqual(selected) ||
+                !prepared.Path.SequenceEqual(projection.Path) || (prepared.Seed != seed) || (prepared.Depth != projection.OverlapDepth))) {
+                prepared.Depth = projection.OverlapDepth;
                 prepared.Source = image;
                 prepared.Creations = image.Creations;
                 prepared.Original = selected.ToArray();

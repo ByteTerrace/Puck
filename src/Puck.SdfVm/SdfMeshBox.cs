@@ -84,21 +84,38 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
     public static float MarginOf(uint width, uint height) =>
         MathF.Max(x: ViewMargin, y: ((2f * ViewMarginPixels) / Math.Max(val1: 1u, val2: Math.Min(val1: width, val2: height))));
 
-    /// <summary>Returns the box a draw's triangles lie in, when its triangles have one the host knows.</summary>
-    /// <param name="draw">The draw.</param>
+    /// <summary>Returns the box a draw's triangles lie in, when its triangles have one the host knows, for a draw a frame
+    /// does not place (<see cref="SdfMeshDraw.FixedPlacement"/>): the static scene's and an offline tool's.</summary>
+    /// <param name="draw">The draw, not placed by its slot (<see cref="SdfMeshDraw.PlacedBySlot"/>).</param>
     /// <param name="box">The box, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="false"/> for a draw whose mesh has members (<see cref="SdfMesh.Members"/>): those vertices
     /// ride dynamic-transform slots, so the record's box is the one a residency's tables derive from the slots
     /// (<see cref="TryOfSkin"/>) whenever they move, not the draw's. A displaced
     /// draw's box spans its displacement's band of heights (<see cref="SdfMeshDraw.Displacement"/>) as well as its
     /// mesh's.</returns>
-    public static bool TryOf(in SdfMeshDraw draw, out SdfMeshBox box) {
+    /// <exception cref="InvalidOperationException"><paramref name="draw"/> is placed by its slot.</exception>
+    public static bool TryOfFixed(in SdfMeshDraw draw, out SdfMeshBox box) => TryAt(draw: in draw, matrix: (draw.Mesh.Members.IsEmpty ? draw.FixedPlacement : default), box: out box);
+    /// <summary>Returns the box a draw's triangles lie in within a frame, when its triangles have one the host knows: the
+    /// box <see cref="TryOfFixed"/> returns, placed where the frame's transforms place the draw
+    /// (<see cref="SdfMeshDraw.PlacementIn"/>), so a draw riding its slot is boxed where its slot's row stands.</summary>
+    /// <param name="draw">The draw.</param>
+    /// <param name="transforms">The frame's dynamic transforms.</param>
+    /// <param name="box">The box, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="false"/> for a draw whose mesh has members.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="transforms"/> is <see langword="null"/>.</exception>
+    public static bool TryOf(in SdfMeshDraw draw, IReadOnlyList<DynamicTransform> transforms, out SdfMeshBox box) {
+        ArgumentNullException.ThrowIfNull(argument: transforms);
+
+        return TryAt(draw: in draw, matrix: draw.PlacementIn(transforms: transforms), box: out box);
+    }
+    // The box a draw's object-space box becomes at a matrix and then the draw's carry, for a draw the host can box.
+    private static bool TryAt(in SdfMeshDraw draw, in Matrix4x4 matrix, out SdfMeshBox box) {
         if (!TryOfObject(draw: in draw, center: out var center, half: out var half)) {
             box = default;
 
             return false;
         }
-        box = Placed(center: center, draw: in draw, half: half);
+        box = Placed(center: center, draw: in draw, half: half, matrix: in matrix);
 
         return true;
     }
@@ -248,9 +265,7 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
     }
 
     // The box an object-space box of a draw's mesh becomes under the draw's matrix and then its carry.
-    private static SdfMeshBox Placed(in SdfMeshDraw draw, Vector3 center, Vector3 half) {
-        var matrix = draw.ObjectToWorld;
-
+    private static SdfMeshBox Placed(in SdfMeshDraw draw, Vector3 center, Vector3 half, in Matrix4x4 matrix) {
         return Placed(
             carryRotation: draw.CarryRotation,
             carryScale: draw.CarryScale,

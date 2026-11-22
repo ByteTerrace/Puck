@@ -96,6 +96,10 @@ var bridge = new WorldAgentBridge(
     channels: () => WorldChannelTable.Compile(server.Definition.Channels));
 ```
 
+A peer principal is one the server admitted (`WorldServer.TryAdmitPeerConnection`
+answers it): the authority refuses every submission from a peer no live
+connection holds as `world.session.stale`, before it reads a grant.
+
 A hosted participant receives its row's link and a live channel source from
 its host's `WorldParticipantContext` and drains its own mailbox when the host
 pumps it. The example shows the ownership shape, not a requirement to recompile

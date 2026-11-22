@@ -474,6 +474,23 @@ public static partial class AzureCommand {
                         operation: operation,
                         token: cancellationToken
                     ).ConfigureAwait(continueOnCapturedContext: false);
+                } else if (operation.PendingStateReset is not null) {
+                    foreach (var identity in m_identities) {
+                        var reset = await authority.PrepareReleaseResetAsync(
+                            identity,
+                            operation,
+                            target.Manifest,
+                            archive,
+                            cancellationToken
+                        ).ConfigureAwait(continueOnCapturedContext: false);
+
+                        if (!reset.Ok) {
+                            return new(
+                                false,
+                                $"'{identity.World}' release reset refused: {reset.Detail}"
+                            );
+                        }
+                    }
                 } else {
                     foreach (var identity in m_identities) {
                         var key = identity.RootKey;

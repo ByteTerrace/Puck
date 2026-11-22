@@ -50,7 +50,7 @@ public static partial class AzureCommand {
                 var operation = (operationId ?? Guid.NewGuid());
 
                 Console.WriteLine(value: $"Rollback operation: {operation:D}");
-                var fixture = await PrepareWorldReleaseFixtureAsync(
+                var (fixture, _) = await PrepareWorldReleaseFixtureAsync(
                     context,
                     active,
                     previous.Manifest,

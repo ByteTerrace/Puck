@@ -596,7 +596,7 @@ add the row you found.
 | Compute or check a lane the builder derives from others (a scale's correction, a repeat's reciprocal, a noise relief's normalization), or ask how the program door classes a lane | `SdfDerivedLanes` (the one function per derived lane, called by the builder and the door), `SdfNoiseDisplacement` (the decoded noise relief), `SdfProgram.LaneContractOf` | `src/Puck.SignedDistance`; [Lipschitz reference](../../../docs/rendering/sdf/reference/lipschitz-and-field-correctness.md#procedural-detail) |
 | Weight a relief by regions (no relief over a bowl, a pad, a path) | `SdfReliefMask` (a band, `SdfReliefBand`, over listed region shapes, `SdfReliefRegion`), carried as `SdfOp.ReliefRow` rows before the relief and decoded once by the program's door (`SdfProgram.ReliefMasksAt`); a document's masks compile through `CreationStampEmitter.ReliefMasks` | `src/Puck.SignedDistance`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters) |
 | Evaluate the field on the CPU, deterministically (contact, picking, bounds, cull certificates) | `SdfFieldEvaluator`; its GPU partner is `mapCore` | `src/Puck.SignedDistance/Queries`; [sync pairs](references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters) |
-| Make a point query of a world-sized program cost what stands near the point, or prune a program per region | A regional `SdfFieldEvaluator` (`regional: true`, `IndexesRegions`): a tape per cube of the world, recorded by the interval walk, answering what the plain evaluator answers to the bit. A new drop rule belongs in that walk, proved against its enclosing interval, never in a pruner of its own or on a Lipschitz bound, which holds for no single candidate | `SdfFieldEvaluator.Regions.cs`; [region tapes](../../../docs/rendering/sdf/handbook/queries-and-determinism.md#region-tapes) |
+| Make a point or box query of a large program cost what stands near it, or prune a program per region | A regional `SdfFieldEvaluator` (`regional: true`, `IndexesRegions`): a tape per cube of the world, recorded by the interval walk. A point query answers what the plain evaluator answers to the bit; a box query (`TryDistanceBounds`, which contact's clearance proofs read) is cut along region faces and answers the hull of its parts, as certain an enclosure but not the same interval, and records the regions it reads so its interval never depends on earlier queries. The server's per-collider fields are regional. A new drop rule belongs in that walk, proved against its enclosing interval, never in a pruner of its own or on a Lipschitz bound, which holds for no single candidate | `SdfFieldEvaluator.Regions.cs`; [region tapes](../../../docs/rendering/sdf/handbook/queries-and-determinism.md#region-tapes) |
 | Write or change a primitive's or blend's distance arithmetic, an op's point map or field edit, a scope pop or a material winner once for every reader (fixed-point C#, precise HLSL, the wide C# for normals) | `SdfFieldFormulas` in the closed expression language of `SdfFormula`, named by the catalogue entry's `Formula`, `DistanceFormula`, `Winner` or `Operand` | `src/Puck.SignedDistance/Formulas`; [changing the instruction set](#changing-the-instruction-set) |
 | Bake a mesh from the field, or find the one already baked | `SdfMeshPathBake` (the path), `SdfSampledLattice` and `SdfDualContouring` (the sampling and contouring), `SdfMeshStore` (the shared on-disk cache of baked meshes, one set per bake identity) | `src/Puck.SdfVm`, `src/Puck.SignedDistance/Baking`; [mesh bake](references/mesh-bake.md) |
 | Judge which way a contour's triangle faces, or hold a vertex move to it | `SdfContourFacing` (the lattice edge a quad crosses, then its corners' patches), read through `SdfContour.QuadAxes` and `Patches`; never vertex normals or a triangle's earlier facing | `src/Puck.SignedDistance/Baking`; [mesh bake](references/mesh-bake.md#contouring) |
@@ -729,9 +729,13 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   (`sdfMeshPoseOf`) and derive its world box the same way (`sdfSelectionBox`), so
   a body that moves rewrites its slot's row and no record. The host judges it by
   `SdfMeshBox.Ridden`, the box's twin, held per row as last judged
-  (`SdfWorldTables.RowSelection`) and moved as its slot moves (`NoteMovedSlots`);
-  a producer that names a slot builds the draw's matrix from that slot's
-  transform in the same frame, or the CPU and the kernels place it apart. A cut
+  (`SdfWorldTables.RowSelection`) and moved as its slot moves (`NoteMovedSlots`).
+  A moving draw riding its slot (`SdfMeshDraw.PlacedBySlot`) keeps its scale and
+  no pose: every CPU reader places it through one door, `SdfMeshDraw.PlacementIn`
+  (the frame's transform rows), and `SdfMeshDraw.FixedPlacement`, which a static
+  scene reads, refuses it. Such a draw compares equal wherever its slot moves, so a
+  body that only moved writes no draw and no row (`SdfMeshDresserSlotLawTests`);
+  a moving rigid copy's pose moves no `SdfMeshInstance.Revision` either. A cut
   of a rider's pose history (`SdfMeshObservation.PoseCut`) reseats its slot's
   previous row (`ReseatRiddenSlot`). Every raster pass uploads 224 bytes of controls
   and records one counted indirect draw per phase. A draw with no
@@ -1667,7 +1671,11 @@ counts in `sdf.transforms`, never in `records.posed`.
   `FrameAccess` exposes (a group's shown mesh, its tier, the list) moves it through one of them. Rigid copies come
   through the composition source's copy journal (`SdfFrame.MeshCopyChanges`, a `GpuChangedRows` read by a
   `GpuRowCursor`), which the dresser and the bake's layout check each read. `sdf.instances.dress.groups-visited`,
-  `.groups-stood` and `.copies-visited` count it.
+  `.groups-stood` and `.copies-visited` count it. A moved slot poses only the groups that ride it, and only where its
+  scale moved (`DrawBinding.Repose`); a rigid copy's root slot is past every group's, so the walk stops before it.
+  The host draws arrive with a journal too: `SdfMeshDrawComposer` composes each producer's draws (a scene's statics
+  and stamp pool, `WorldSceneMeshDraws`; the composition's emitters) and copies and owes only the rows a producer's
+  journal names, which the dresser's host cursor reads.
 - **A pack visits only what woke.** The stamp pool, its rigid bodies (`WorldRigidAssets.Pack`) and the catalog
   avatars (`WorldCatalogAvatars.Pack`) each keep an awake set, so a frame costs the registrations something woke, never
   the pool: a body's presented inputs through the source's journal (`IWorldStampSource.BodyChanges`, which

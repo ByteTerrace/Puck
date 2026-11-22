@@ -77,10 +77,10 @@ public static class CanonicalBinaryWriterExtensions {
     public static void WriteText(this IBufferWriter<byte> writer, string value) {
         ArgumentNullException.ThrowIfNull(argument: value);
 
-        byte[] bytes;
+        int byteCount;
 
         try {
-            bytes = StrictUtf8.GetBytes(s: value);
+            byteCount = StrictUtf8.GetByteCount(chars: value);
         } catch (EncoderFallbackException exception) {
             throw new ArgumentException(
                 innerException: exception,
@@ -89,8 +89,29 @@ public static class CanonicalBinaryWriterExtensions {
             );
         }
 
-        writer.WriteVarUInt(value: checked((uint)bytes.Length));
-        writer.WriteBytes(value: bytes);
+        writer.WriteVarUInt(value: checked((uint)byteCount));
+        writer.Advance(count: StrictUtf8.GetBytes(bytes: writer.GetSpan(sizeHint: byteCount), chars: value));
+    }
+    /// <summary>Writes text as a variable-width count of UTF-16 code units followed by the units, two little-endian
+    /// bytes each. Every string has this spelling, an unpaired surrogate included, so it suits text that is only
+    /// hashed or compared.</summary>
+    /// <param name="writer">The destination.</param>
+    /// <param name="value">The text to write.</param>
+    public static void WriteCodeUnits(this IBufferWriter<byte> writer, ReadOnlySpan<char> value) {
+        writer.WriteVarUInt(value: checked((uint)value.Length));
+
+        if (BitConverter.IsLittleEndian) {
+            writer.WriteBytes(value: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: value));
+
+            return;
+        }
+
+        var destination = writer.GetSpan(sizeHint: (value.Length * sizeof(char)));
+
+        for (var index = 0; (index < value.Length); index++) {
+            BinaryPrimitives.WriteUInt16LittleEndian(destination: destination[(index * sizeof(char))..], value: value[index]);
+        }
+        writer.Advance(count: (value.Length * sizeof(char)));
     }
     /// <summary>Writes a 64-bit word as eight little-endian bytes.</summary>
     /// <param name="writer">The destination.</param>

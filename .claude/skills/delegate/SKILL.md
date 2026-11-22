@@ -134,7 +134,11 @@ orders, verifying a change by building and running it, and fixing a defect at it
   the lead runs the full suites once per batch.
 - A build takes no lease beyond the build lease a `puck` verb takes itself: `puck lease heavy` is
   for the memory-heavy test assemblies and reproduce replicas, and a build queued behind them waits
-  for nothing.
+  for nothing. The World build store builds in your checkout's own `bin`/`obj`, and every build a
+  `puck` verb starts there queues on the checkout's `obj/puck-build.lock`; a hand `dotnet build`
+  does not, so never run one while a `puck test`, `puck canary` or `puck_world_start` of the same
+  checkout is building, or run it as `puck lease build -- dotnet build …`. Two builds writing one
+  checkout at once leave a half-written reference assembly (`CS0009`).
 - Code first (AGENTS.md, "Code first, verification after"). Write the change properly, build what
   you touched, boot the debug world once, and hand back. Windowed runs, benchmarks, look critics and
   broad testing are the lead's batched passes after landing, not your gate: ask for them under

@@ -39,7 +39,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     public void GeometryLandsThroughBackgroundWorkAndWaitsForItsOwnSubmissionButNotLaterPoseOrLightingUploads() {
         using var rig = new Rig(holdFences: true, distinctBuffers: true);
         var mesh = ResidencyTriangle();
-        var draw = new SdfMeshDraw(Identity: "geometry", Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity);
+        var draw = new SdfMeshDraw(identity: "geometry", material: 0, mesh: mesh, objectToWorld: Matrix4x4.Identity);
         var frame = rig.Frame with { MeshDraws = [draw], MeshDrawsRevision = 1 };
 
         rig.Engine.Pack(frame: frame);
@@ -55,7 +55,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
 
         for (var revision = 2; (revision <= 5); revision++) {
             frame = frame with {
-                MeshDraws = [draw with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: revision, yPosition: 0f, zPosition: 0f) }],
+                MeshDraws = [draw.PlacedAt(objectToWorld: Matrix4x4.CreateTranslation(xPosition: revision, yPosition: 0f, zPosition: 0f))],
                 MeshDrawsRevision = revision,
             };
             rig.Engine.Pack(frame: frame);
@@ -86,9 +86,9 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         const int BigVertices = ((40 << 20) / (SdfMeshRecord.VertexWords * sizeof(uint)));
         var big = new SdfMesh(positions: new Vector3[BigVertices], indices: new uint[] { 0, 1, 2 });
         var small = ResidencyTriangle();
-        var smallDraw = new SdfMeshDraw(Identity: "small", Material: 0, Mesh: small, ObjectToWorld: Matrix4x4.Identity);
+        var smallDraw = new SdfMeshDraw(identity: "small", material: 0, mesh: small, objectToWorld: Matrix4x4.Identity);
         var frame = rig.Frame with {
-            MeshDraws = [new SdfMeshDraw(Identity: "big", Material: 0, Mesh: big, ObjectToWorld: Matrix4x4.Identity), smallDraw],
+            MeshDraws = [new SdfMeshDraw(identity: "big", material: 0, mesh: big, objectToWorld: Matrix4x4.Identity), smallDraw],
             MeshDrawsRevision = 1,
         };
 

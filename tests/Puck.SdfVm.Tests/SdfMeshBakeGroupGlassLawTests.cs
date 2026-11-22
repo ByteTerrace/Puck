@@ -75,8 +75,8 @@ public sealed class SdfMeshBakeGroupGlassLawTests {
 
         var mesh = new SdfMesh(indices: new uint[] { 0, 1, 2 }, positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY });
 
-        Assert.False(condition: (new SdfMeshDraw(Identity: 1, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity) { Glass = true }).IsStatic);
-        Assert.True(condition: (new SdfMeshDraw(Identity: 1, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity)).IsStatic);
-        Assert.Equal(expected: 0, actual: SdfMeshIrradianceScene.Build(draws: [new SdfMeshDraw(Identity: 1, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity) { Glass = true }]).TriangleCount);
+        Assert.False(condition: (new SdfMeshDraw(identity: 1, material: 0, mesh: mesh, objectToWorld: Matrix4x4.Identity) { Glass = true }).IsStatic);
+        Assert.True(condition: (new SdfMeshDraw(identity: 1, material: 0, mesh: mesh, objectToWorld: Matrix4x4.Identity)).IsStatic);
+        Assert.Equal(expected: 0, actual: SdfMeshIrradianceScene.Build(draws: [new SdfMeshDraw(identity: 1, material: 0, mesh: mesh, objectToWorld: Matrix4x4.Identity) { Glass = true }]).TriangleCount);
     }
 }

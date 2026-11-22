@@ -429,7 +429,7 @@ public sealed class SdfMeshFieldLevels {
         budget = MathF.Max(x: budget, y: m_tolerance);
 
         var (toSurface, lower, lowerOver, refused, interior) = MeshToSurface(budget: budget, cell: cell, level: level, members: members, pieces: pieces);
-        using var scene = SdfMeshIrradianceScene.Build(draws: [new SdfMeshDraw(Identity: level, Material: 0, Mesh: level, ObjectToWorld: Matrix4x4.Identity)]);
+        using var scene = SdfMeshIrradianceScene.Build(draws: [new SdfMeshDraw(identity: level, material: 0, mesh: level, objectToWorld: Matrix4x4.Identity)]);
         var vanishReach = ((2f * budget) + cell);
         var radius = (4f * vanishReach);
         var count = m_surface.Length;
@@ -443,7 +443,7 @@ public sealed class SdfMeshFieldLevels {
         // A surface witness nearest a vanished triangle of the level as contoured lies on a part the level vanished: it
         // counts in that part's extent, not in a distance to whatever surface remains.
         if ((whole is not null) && (vanished is not null) && vanished.Contains(value: true)) {
-            using var contoured = SdfMeshIrradianceScene.Build(draws: [new SdfMeshDraw(Identity: whole, Material: 0, Mesh: whole, ObjectToWorld: Matrix4x4.Identity)]);
+            using var contoured = SdfMeshIrradianceScene.Build(draws: [new SdfMeshDraw(identity: whole, material: 0, mesh: whole, objectToWorld: Matrix4x4.Identity)]);
 
             for (var witness = 0; (witness < count); witness++) {
                 excused[witness] = (contoured.TryNearestSurface(accept: null, instance: out _, point: m_surface[witness], radius: radius, surface: out _, triangle: out var triangle) && vanished[triangle]);

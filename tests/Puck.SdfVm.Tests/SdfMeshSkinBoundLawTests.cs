@@ -33,7 +33,7 @@ public sealed class SdfMeshSkinBoundLawTests {
             var scale = (0.5f + (2f * random.NextSingle()));
             var transforms = Transforms(poses: poses, rootPosition: rootPosition, rootTurn: rootTurn, scale: scale);
             var matrix = ((Matrix4x4.CreateScale(scale: scale) * Matrix4x4.CreateFromQuaternion(quaternion: rootTurn)) * Matrix4x4.CreateTranslation(position: rootPosition));
-            var draw = new SdfMeshDraw(Identity: new object(), Material: 0, Mesh: mesh, ObjectToWorld: matrix) { FrameSlot = Root };
+            var draw = new SdfMeshDraw(identity: new object(), material: 0, mesh: mesh, objectToWorld: matrix) { FrameSlot = Root };
 
             Assert.True(condition: SdfMeshBox.TryOfSkin(box: out var box, draw: in draw, transforms: transforms));
             Assert.True(condition: Matrix4x4.Invert(matrix: new Matrix4x4(

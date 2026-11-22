@@ -6,8 +6,10 @@ using Puck.World.Authoring;
 namespace Puck.World;
 
 public sealed partial class WorldDisclosureImages {
-    // One audience's scene identity (SceneIdentity), kept while nothing it was computed from can have moved: the same
-    // source document, arena, policy revision and move sequence, and the same frame identity.
+    // One audience's scene identity (SceneIdentity) and the parts it digests. While nothing it was computed from can
+    // have moved (the same source document, arena, policy revision and move sequence, and the same frame identity) it
+    // is answered without reading a row; after that the parts are read again and the pin is spelled again only when
+    // they differ, so a tick that moved no scene input spells none.
     private sealed class SceneEntry {
         public WorldDefinition? Source;
         public StateArena? Arena;
@@ -15,6 +17,8 @@ public sealed partial class WorldDisclosureImages {
         public long Moves = -1L;
         public ContentPin Frame;
         public ContentPin Identity;
+        public byte[] Parts = [];
+        public int PartsLength = -1;
         public int[] Rows = [];
         public object? RowsOf;
     }
@@ -35,15 +39,21 @@ public sealed partial class WorldDisclosureImages {
     // per audience while nothing it reads has moved, so the sessions of one audience share it.
     internal ContentPin SceneIdentity(WorldRecipientView view) {
         var audience = Audience(view);
-        var frame = FrameIdentity(view);
+        var definition = Framed(audience);
+        var frame = definition.Frame;
         var arena = view.Arena;
         var source = view.Source;
-        if (m_scenes.TryGetValue(audience, out var held) && ReferenceEquals(held.Source, source) && ReferenceEquals(held.Arena, arena) &&
+        // Inside an open scope the identity is read from the store as it stands and no entry is read or kept.
+        var settled = Settled(arena);
+        var held = (settled ? m_scenes.GetValueOrDefault(audience.Text) : null);
+
+        if ((held is not null) && ReferenceEquals(held.Source, source) && ReferenceEquals(held.Arena, arena) &&
             (held.Revision == arena.DisclosureRevision) && (held.Moves == arena.MoveSequence) && (held.Frame == frame)) {
             return held.Identity;
         }
-        var entry = held ?? (m_scenes[audience] = new SceneEntry());
-        var definition = m_definitions[audience];
+        var entry = (held ?? new SceneEntry());
+
+        if (settled) { m_scenes[audience.Text] = entry; }
         // The rows follow the source and the placements' reads, which only a recomposed definition changes.
         if (!ReferenceEquals(entry.RowsOf, definition) || !ReferenceEquals(entry.Source, source)) { entry.Rows = SceneRows(view, definition); entry.RowsOf = definition; }
         // Each row takes a marker byte and a digest slot, left zero for a row read whole.
@@ -56,11 +66,16 @@ public sealed partial class WorldDisclosureImages {
         foreach (var row in entry.Rows) {
             if (view.ReadsWhole(row)) { parts[at] = WholeMarker; at += 1 + SHA256.HashSizeInBytes; continue; }
             at += 1;
-            Image(view, row, audience).Digest.CopyTo(parts[at..]); at += SHA256.HashSizeInBytes;
+            RowDigest(audience, row).CopyTo(parts[at..]); at += SHA256.HashSizeInBytes;
         }
         entry.Source = source; entry.Arena = arena; entry.Revision = arena.DisclosureRevision; entry.Moves = arena.MoveSequence;
         entry.Frame = frame;
-        entry.Identity = ContentPin.Compute(parts);
+        if ((entry.PartsLength != length) || !parts.SequenceEqual(entry.Parts.AsSpan(0, length))) {
+            ArrayCapacity.EnsureLength(ref entry.Parts, length);
+            parts.CopyTo(entry.Parts);
+            entry.PartsLength = length;
+            entry.Identity = ContentPin.Compute(parts);
+        }
         return entry.Identity;
     }
     // SceneIdentity's scratch, reused across audiences and ticks.
@@ -68,9 +83,7 @@ public sealed partial class WorldDisclosureImages {
     // The first row the scene reads that this view does not read whole, by name, or null when it reads every one whole;
     // for an operator's read-back of why a view's scene differs from a whole reader's.
     internal string? FirstSceneRowWithheld(WorldRecipientView view) {
-        var audience = Audience(view);
-        _ = FrameIdentity(view);
-        foreach (var row in SceneRows(view, m_definitions[audience])) {
+        foreach (var row in SceneRows(view, Framed(Audience(view)))) {
             if (!view.ReadsWhole(row)) { return view.Arena.Rows[row].Name.Value; }
         }
         return null;

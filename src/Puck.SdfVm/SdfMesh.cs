@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Puck.SignedDistance;
 using Puck.Maths;
@@ -318,15 +319,105 @@ public readonly record struct SdfMeshDisplacement(int Handle, float Low, float H
     }
 }
 /// <summary>One placement of an <see cref="SdfMesh"/> in a frame.</summary>
-/// <param name="Mesh">The triangles to draw.</param>
-/// <param name="ObjectToWorld">The object-to-world transform, in the row-vector convention of
-/// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>.</param>
-/// <param name="Material">The material-table index the triangles shade with, as an SDF hit's material does; a mesh
-/// with <see cref="SdfMesh.TriangleMaterials"/> adds each triangle's entry to it.</param>
-/// <param name="Identity">The host's picking identity, also the fallback motion key when <see cref="MotionIdentity"/>
-/// is absent. <see cref="SdfMeshHistory"/> observes the stable key and mesh at each staged index to seed previous
-/// matrices and invalidate GPU visibility/detail history together.</param>
-public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material, object Identity) {
+/// <remarks>A draw's placement is read through one door, <see cref="PlacementIn"/>: a draw placed by its slot
+/// (<see cref="PlacedBySlot"/>) carries its scale and no pose, since its frame slot's row in the frame's dynamic
+/// transforms places it on the CPU as the kernels place it on the GPU (<c>sdfMeshPoseOf</c>). Such a draw compares
+/// equal, and stages the same content, wherever its slot moves, so a body that only moved changes no draw.</remarks>
+public readonly record struct SdfMeshDraw {
+    /// <summary>Initializes a new instance of the <see cref="SdfMeshDraw"/> struct.</summary>
+    /// <param name="mesh">The triangles to draw.</param>
+    /// <param name="objectToWorld">The object-to-world transform, in the row-vector convention of
+    /// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>. A draw placed by its slot (<see cref="PlacedBySlot"/>) keeps
+    /// only its scale, the length of its first row; its pose is its slot's row.</param>
+    /// <param name="material">The material-table index the triangles shade with, as an SDF hit's material does; a mesh
+    /// with <see cref="SdfMesh.TriangleMaterials"/> adds each triangle's entry to it.</param>
+    /// <param name="identity">The host's picking identity, also the fallback motion key when <see cref="MotionIdentity"/>
+    /// is absent. <see cref="SdfMeshHistory"/> observes the stable key and mesh at each staged index to seed previous
+    /// matrices and invalidate GPU visibility/detail history together.</param>
+    public SdfMeshDraw(SdfMesh mesh, Matrix4x4 objectToWorld, int material, object identity) {
+        Mesh = mesh;
+        Matrix = objectToWorld;
+        Material = material;
+        Identity = identity;
+    }
+
+    /// <summary>Gets the triangles to draw.</summary>
+    public SdfMesh Mesh { get; init; }
+    /// <summary>Gets the material-table index the triangles shade with.</summary>
+    public int Material { get; init; }
+    /// <summary>Gets the host's picking identity, also the fallback motion key when <see cref="MotionIdentity"/> is
+    /// absent.</summary>
+    public object Identity { get; init; }
+    // The matrix the producer gave: the placement of a draw not placed by its slot, and only the scale of one that is.
+    // Read through PlacementIn, FixedPlacement or SlotScale alone.
+    private Matrix4x4 Matrix { get; init; }
+
+    /// <summary>Gets whether the draw is placed by its slot: it rides its frame slot (<see cref="RidesSlot"/>) and moves
+    /// (<see cref="IsDynamic"/>), so its slot's row is its placement and no pose of its own is kept or compared. A static
+    /// draw riding a slot keeps its placement, which the static scene reads (<see cref="FixedPlacement"/>), and the
+    /// producer moves the draw when it moves.</summary>
+    public bool PlacedBySlot => (RidesSlot && IsDynamic);
+
+    /// <summary>Returns the draw's object-to-world matrix in a frame: for a draw riding its frame slot, the slot's row
+    /// at the draw's scale (the scale first, then the row's orientation and position, as <c>sdfMeshPoseOf</c> poses it
+    /// and <see cref="SdfMeshBox.Ridden"/> places its box); for any other, the matrix it was given. This is the one door a
+    /// CPU reader of a draw's placement goes through.</summary>
+    /// <param name="transforms">The frame's dynamic transforms, as the region's transform rows hold them.</param>
+    /// <returns>The matrix, in the row-vector convention of <see cref="Puck.Abstractions.Cameras.ViewProjection"/>. A slot
+    /// outside <paramref name="transforms"/> places a draw riding it at the origin at its scale, which no kernel reads.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="transforms"/> is <see langword="null"/>.</exception>
+    public Matrix4x4 PlacementIn(IReadOnlyList<DynamicTransform> transforms) {
+        ArgumentNullException.ThrowIfNull(argument: transforms);
+
+        if (FrameSlot is not { } slot || (slot < 0)) {
+            return Matrix;
+        }
+
+        var scale = Matrix4x4.CreateScale(scale: SlotScale);
+
+        if (slot >= transforms.Count) {
+            return scale;
+        }
+
+        var row = transforms[slot];
+
+        return ((scale * Matrix4x4.CreateFromQuaternion(quaternion: row.Orientation)) * Matrix4x4.CreateTranslation(position: row.Position));
+    }
+    /// <summary>Gets the matrix of a draw not placed by its slot, which needs no frame to place it: a fixed placement,
+    /// a static draw riding a slot (whose producer moves the draw when it moves), or an animated placement whose producer
+    /// writes its matrix each frame. A static scene and an offline tool read it.</summary>
+    /// <exception cref="InvalidOperationException">The draw is placed by its slot (<see cref="PlacedBySlot"/>): its
+    /// placement is its slot's row, read through <see cref="PlacementIn"/>.</exception>
+    public Matrix4x4 FixedPlacement => (PlacedBySlot
+        ? throw new InvalidOperationException(message: "A draw placed by its slot is placed by its slot's row: read its placement through PlacementIn.")
+        : Matrix);
+    /// <summary>Returns the draw at another matrix: for a draw placed by its slot, at that matrix's scale.</summary>
+    /// <param name="objectToWorld">The object-to-world transform.</param>
+    /// <returns>The draw.</returns>
+    public SdfMeshDraw PlacedAt(Matrix4x4 objectToWorld) => (this with { Matrix = objectToWorld });
+
+    /// <summary>Returns whether two draws are the same placement of the same content: every field, except that a draw
+    /// placed by its slot compares only its scale, its pose being its slot's row.</summary>
+    /// <param name="other">The draw to compare.</param>
+    /// <returns>Whether the draws are equal.</returns>
+    public bool Equals(SdfMeshDraw other) =>
+        ReferenceEquals(objA: Mesh, objB: other.Mesh) && (Material == other.Material) && Equals(objA: Identity, objB: other.Identity) &&
+        Equals(objA: MotionIdentity, objB: other.MotionIdentity) && (IsDynamic == other.IsDynamic) && (Tier == other.Tier) &&
+        ReferenceEquals(objA: Trace, objB: other.Trace) && (Piece == other.Piece) && (Glass == other.Glass) && (FrameSlot == other.FrameSlot) &&
+        (UsesRootMaterialFrame == other.UsesRootMaterialFrame) && CarryRotation.Equals(other: other.CarryRotation) &&
+        CarryTranslation.Equals(other: other.CarryTranslation) && CarryScale.Equals(obj: other.CarryScale) && ClipPlane.Equals(other: other.ClipPlane) &&
+        (Displacement == other.Displacement) && (PlacedBySlot ? SlotScale.Equals(obj: other.SlotScale) : Matrix.Equals(other: other.Matrix));
+    /// <summary>Returns a hash of the fields <see cref="Equals(SdfMeshDraw)"/> compares.</summary>
+    /// <returns>The hash.</returns>
+    public override int GetHashCode() =>
+        HashCode.Combine(
+            HashCode.Combine(RuntimeHelpers.GetHashCode(o: Mesh), Material, Identity, MotionIdentity, IsDynamic, FrameSlot, Glass, Piece),
+            (PlacedBySlot ? SlotScale.GetHashCode() : Matrix.GetHashCode()),
+            CarryTranslation,
+            CarryScale,
+            ClipPlane
+        );
+
     /// <summary>Gets a stable surface identity for motion history when the picking identity also carries changing pose metadata.</summary>
     public object? MotionIdentity { get; init; }
     /// <summary>Gets whether the draw's placement moves (a moving body or an animated placement), which the static scene
@@ -360,10 +451,9 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     public bool Glass { get; init; }
     /// <summary>Gets the dynamic-transform slot whose frame the mesh's object space is, or <see langword="null"/> for a
     /// mesh in no slot's frame: the shading places a material's layers in that frame and reads its lanes, as it does for
-    /// a field hit of a shape riding the slot. A draw with a frame slot rides it (<see cref="RidesSlot"/>): its
-    /// <see cref="ObjectToWorld"/> is the slot's pose in the frame at <see cref="SlotScale"/>, scale first, then the
-    /// slot's orientation and position, which is what its staged record keeps instead of the matrix, so a producer that
-    /// names a slot builds the matrix from that slot's transform in the same frame.</summary>
+    /// a field hit of a shape riding the slot. A draw with a frame slot rides it (<see cref="RidesSlot"/>): it is placed
+    /// at the slot's pose in the frame at <see cref="SlotScale"/>, scale first, then the slot's orientation and position
+    /// (<see cref="PlacementIn"/>), which is what its staged record keeps instead of a matrix.</summary>
     public int? FrameSlot { get; init; }
     /// <summary>Gets whether the draw rides its frame slot (<see cref="FrameSlot"/>): its record holds its scale and
     /// not its matrix, and the kernels pose it from the slot's row, so the draw moving with its slot changes no
@@ -371,7 +461,7 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     public bool RidesSlot => (FrameSlot is >= 0);
     /// <summary>Gets the uniform scale of the draw's matrix, its first row's length: for a draw riding its slot, the
     /// scale its record holds and its slot's pose is taken at.</summary>
-    public float SlotScale => new Vector3(x: ObjectToWorld.M11, y: ObjectToWorld.M12, z: ObjectToWorld.M13).Length();
+    public float SlotScale => new Vector3(x: Matrix.M11, y: Matrix.M12, z: Matrix.M13).Length();
 
     /// <summary>Gets whether materials use the root/member frame. False keeps material coordinates in world space,
     /// independently of the root slot used by skinning and portal membership.</summary>
@@ -409,20 +499,16 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// <param name="other">The draw to compare.</param>
     /// <returns>Whether either draw places the same caster.</returns>
     public bool SameCaster(in SdfMeshDraw other) => Same(other: in other, groupMesh: true);
-    /// <summary>Returns how a draw's staged content differs from another's: not at all, in its
-    /// <see cref="ObjectToWorld"/> alone, in the pose of a slot both ride at one scale, or elsewhere, comparing exact bits
-    /// as <see cref="SameStagedContent"/> does.</summary>
+    /// <summary>Returns how a draw's staged content differs from another's: not at all, in its matrix alone, in the pose
+    /// of a slot a static draw rides at one scale, or elsewhere, comparing exact bits as <see cref="SameStagedContent"/>
+    /// does. A draw placed by its slot (<see cref="PlacedBySlot"/>) differs in its matrix only where its scale does.</summary>
     /// <param name="other">The draw to compare, usually the one staged before.</param>
     /// <returns>The difference.</returns>
     public SdfMeshDrawDifference StagedDifference(in SdfMeshDraw other) {
         if (!SameExceptMatrix(other: in other, groupMesh: false)) {
             return SdfMeshDrawDifference.Content;
         }
-
-        var leftMatrix = this.ObjectToWorld;
-        var rightMatrix = other.ObjectToWorld;
-
-        if (Bitwise.Equal(left: in leftMatrix, right: in rightMatrix)) {
+        if (SamePlacement(other: in other)) {
             return SdfMeshDrawDifference.None;
         }
 
@@ -431,11 +517,18 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
             : SdfMeshDrawDifference.Matrix);
     }
 
-    private bool Same(in SdfMeshDraw other, bool groupMesh) {
-        var leftMatrix = this.ObjectToWorld;
-        var rightMatrix = other.ObjectToWorld;
+    private bool Same(in SdfMeshDraw other, bool groupMesh) => (SameExceptMatrix(other: in other, groupMesh: groupMesh) && SamePlacement(other: in other));
+    // Whether two draws that agree in everything but their matrix place alike, by exact bits: a draw placed by its slot
+    // by its scale alone (both draws are or are not, since SameExceptMatrix compares the slot and IsDynamic).
+    private bool SamePlacement(in SdfMeshDraw other) {
+        if (PlacedBySlot) {
+            return (BitConverter.SingleToUInt32Bits(value: SlotScale) == BitConverter.SingleToUInt32Bits(value: other.SlotScale));
+        }
 
-        return (SameExceptMatrix(other: in other, groupMesh: groupMesh) && Bitwise.Equal(left: in leftMatrix, right: in rightMatrix));
+        var leftMatrix = this.Matrix;
+        var rightMatrix = other.Matrix;
+
+        return Bitwise.Equal(left: in leftMatrix, right: in rightMatrix);
     }
     private bool SameExceptMatrix(in SdfMeshDraw other, bool groupMesh) {
         if (
@@ -471,10 +564,7 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// encloses (<see cref="SdfMesh.Encloses"/>), no clip plane cuts it open, and its matrix keeps its winding. A shadow
     /// cascade's exit layer draws such a draw's faces turned from the light alone and every other draw whole, as a thin
     /// caster.</summary>
-    public bool EnclosesSolid => (Mesh.Encloses && (ClipPlane == Vector4.Zero) &&
-        ((((ObjectToWorld.M11 * ((ObjectToWorld.M22 * ObjectToWorld.M33) - (ObjectToWorld.M23 * ObjectToWorld.M32))) -
-          (ObjectToWorld.M12 * ((ObjectToWorld.M21 * ObjectToWorld.M33) - (ObjectToWorld.M23 * ObjectToWorld.M31)))) +
-          (ObjectToWorld.M13 * ((ObjectToWorld.M21 * ObjectToWorld.M32) - (ObjectToWorld.M22 * ObjectToWorld.M31)))) > 0f));
+    public bool EnclosesSolid => (Mesh.Encloses && (ClipPlane == Vector4.Zero) && (RidesSlot ? (SlotScale > 0f) : (Matrix.GetDeterminant() > 0f)));
 }
 /// <summary>How a draw's staged content differs from the draw staged before it (<see cref="SdfMeshDraw.StagedDifference"/>).</summary>
 public enum SdfMeshDrawDifference : byte {
@@ -528,7 +618,7 @@ public static class SdfMeshRegion {
     }
     /// <summary>Reads back what a packed record's selection words say of its draw: whether a pass may draw it at all,
     /// the world box it is selected by, and whether it is glass. The box is the one <see cref="WriteDraw"/> wrote
-    /// (<see cref="SdfMeshBox.TryOf"/>), or, for a draw riding its frame slot (<see cref="SdfMeshRecord.SlotBoxFlag"/>),
+    /// (<see cref="SdfMeshBox.TryOfFixed"/>), or, for a draw riding its frame slot (<see cref="SdfMeshRecord.SlotBoxFlag"/>),
     /// the box the kernels derive from the slot's row (<see cref="SdfMeshBox.Ridden"/>), so a reader judges a draw by the
     /// same box every pass selects it by under the same transforms.</summary>
     /// <param name="record">The record, <see cref="SdfMeshRecord.DrawWords"/> words that a write of this type packed.</param>
@@ -850,7 +940,7 @@ public static class SdfMeshRegion {
     /// (<see cref="SdfMeshDrawDifference.Slot"/>) changes no word.</summary>
     /// <param name="draw">The current draw.</param>
     /// <param name="previous">The draw whose complete record is retained; it differs from <paramref name="draw"/> only
-    /// in <see cref="SdfMeshDraw.ObjectToWorld"/>.</param>
+    /// in its matrix.</param>
     /// <param name="record">The retained record, updated in place.</param>
     /// <returns>The CPU words assigned and the expensive field derivations performed.</returns>
     public static SdfMeshDrawPacking WriteDrawPose(in SdfMeshDraw draw, in SdfMeshDraw previous, Span<uint> record) {
@@ -863,7 +953,7 @@ public static class SdfMeshRegion {
     // Full and retained packing share every field writer. Exact input bits are the dependency key: numeric equality
     // would forget signed zero and NaN payload changes that the packed record preserves.
     private static SdfMeshDrawPacking WriteDrawCore(in SdfMeshDraw draw, in SdfMeshDraw previous, SdfMeshRegionMesh placement, uint generation, Span<uint> record, bool retained) {
-        var (mesh, _, material, _) = draw;
+        var (mesh, material) = (draw.Mesh, draw.Material);
 
         if (generation == 0) { throw new ArgumentOutOfRangeException(paramName: nameof(generation), message: "A staged instance generation is nonzero."); }
         if (mesh.Levels.Count >= (1 << (32 - SdfKernelInterfaces.MeshLevelShift))) {
@@ -913,8 +1003,8 @@ public static class SdfMeshRegion {
     private static bool WritePose(in SdfMeshDraw draw, in SdfMeshDraw previous, Span<uint> record, bool retained, bool meshChanged, ref DrawRecordWriter writer) {
         var rides = draw.RidesSlot;
         var modeChanged = (!retained || (rides != previous.RidesSlot));
-        var matrix = draw.ObjectToWorld;
-        var previousMatrix = previous.ObjectToWorld;
+        var matrix = (rides ? default : draw.FixedPlacement);
+        var previousMatrix = (previous.RidesSlot ? default : previous.FixedPlacement);
         var scale = draw.SlotScale;
         var carry = draw.CarryRotation;
         var previousCarry = previous.CarryRotation;
@@ -952,7 +1042,7 @@ public static class SdfMeshRegion {
             WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 8), value: new Vector3(x: 0f, y: half.Y, z: 0f));
             WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 12), value: new Vector3(x: 0f, y: 0f, z: half.Z));
         } else if (boxChanged) {
-            boxed = SdfMeshBox.TryOf(box: out var box, draw: in draw);
+            boxed = SdfMeshBox.TryOfFixed(box: out var box, draw: in draw);
             WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 0), value: box.Center);
             WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 4), value: box.HalfX);
             writer[(SdfMeshRecord.SelectionWord + 7)] = BitConverter.SingleToUInt32Bits(value: box.Stretch);

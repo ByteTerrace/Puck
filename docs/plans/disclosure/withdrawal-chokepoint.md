@@ -392,7 +392,7 @@ The first draft compared policy answers instead, and that misses a real loss.
 A cell is unreadable when it is a member of a zone whose policy denies the
 recipient, and that changes while every policy and every answer stays fixed:
 
-`src/Puck.World.Schema/WorldStateDisclosure.cs:794-809`
+`src/Puck.World.Schema/WorldStateDisclosure.cs:817-832`
 
 ```csharp
                 if (!m_arena.TryCellSlot(
@@ -919,9 +919,10 @@ for the display. The second and third kinds are GPU legs the lead schedules.
    ever bound, and no stream that closed on it binds it again. A row restricted
    only by a containing zone is imaged at the presentation tier like any other
    restricted row, so a presentation stream re-composes and cuts when a dealt
-   card it was shown moves into a zone it cannot read. The cursor holds an image
-   of every row, whole or not, so a row that turns withholding cuts only when a
-   cell the stream read is unreadable now. Both sinks observe the body policy on document
+   card it was shown moves into a zone it cannot read. The cursor holds every
+   row, the image of one it reads cell by cell and the keys of one it reads
+   whole, so a row that turns withholding cuts only when a cell the stream read
+   is unreadable now. Both sinks observe the body policy on document
    deliveries and on every tick ahead of the cadence, prime a cut with a
    snapshot whatever the cadence, and advance a cut snapshot's rows again
    against the new document. A world that stops ends every session observing

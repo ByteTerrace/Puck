@@ -156,8 +156,14 @@ Fixed on `lead/rendering` since, and not yet deployed:
   ([CI](../development/ci.md#world-maintenance-and-recovery)): it accepts an
   admitted release in the write that claims the group, admits a committed one
   first, and abandons or recovers an unfinished one, so no failed release needs
-  a hand-run resume. The deploy after this push meets the admitted operation
-  the last release left and accepts it.
+  a hand-run resume. Run 44971428829 showed it working: it began over the
+  admitted operation, then refused at qualification because the hosted
+  checkpoints predate the irradiance budget's rename.
+- A source whose exported state this build cannot decode is reset rather than
+  refused (hosted data is scratch): the deploy qualifies and starts the new
+  release fresh and records the reset and its reason in the operation's history
+  ([CI](../development/ci.md#world-maintenance-and-recovery)). The next push's
+  deploy resets the hosted world this way.
 
 - Template Specs `world-silo` 0.0.7 and `public-flex-api` 0.0.6 are published.
   The lead publishes and republishes them in place (AGENTS.md), and
@@ -675,19 +681,6 @@ wait behind them.
    client's body journal, the mirror's change log, a due cursor or their own
    continuation woke, and held poses out of every view's sight are culled a
    cell at a time. Left:
-   - The mesh dresser still rebuilds the draw and its row for each moved
-     slot-riding copy and group (`SdfMeshDresser.DressHeld`), for the CPU
-     readers of `SdfMeshDraw.ObjectToWorld`, though the kernels place such a
-     draw from its slot's row. Deriving the CPU placement from the slot
-     leaves a moving body no dress work.
-   - The adjacency emitter asks every index of each neighbour's capacity each
-     frame (`WorldAdjacencySceneEmitter.SelectBand`, from its `PrepareFrame`,
-     `WriteRevision` and pack). A neighbour needs an active list and a body
-     journal of its own, as a stamp source has
-     (`IWorldStampSource.CopyActiveBodies`, `IWorldStampSource.BodyChanges`).
-   - A session scene's source keeps no body journal
-     (`WorldSessionStampSource`), so its pool and avatars read every body
-     they draw each pack.
    - Recording in dependency waves
      ([the memo's R1](engine-job-system.md#6-build-order)) waits on its
      admission reading, taken with four seats' views (M2) beside one.
@@ -3844,14 +3837,20 @@ State across an install:
   after `world.load` into a same-capacity fixture, or a full `world.reload`,
   authored state-writing rules refuse with `the live edit grant refuses
   state:blink`. The cause is not confirmed.
-- [medium · frame allocation] Every delivered snapshot brings its stream's
-  definition identity current (`WorldDeliveryCursor.DeliveredRows` calls
-  `WorldDisclosureImages.DefinitionIdentity`), so each row whose version moved
-  is imaged again for its audience every tick, most of the debug world's
-  headless tick allocation, though only a definition install and the
-  federation sink read it. Keep the identity eager only for a stream that
-  reads it, or pin a lazy one to an arena-wide version epoch; the audience a
-  lazy read uses must be the one delivered.
+- [medium · frame allocation] A row whose structure moves (a ring push, a
+  draw cursor, a member added or removed) still exports itself and serializes
+  its skeleton for every audience's definition on that tick
+  (`WorldDisclosureImages.Refresh` through `WorldStateDisclosure.DiscloseRow`),
+  which allocates. A value write no longer does. Take the skeleton's digest
+  from the store as the row images' is taken, and build the skeleton row only
+  when `WorldDisclosureImages.Definition` is asked for.
+- [medium · scale] Every delivered snapshot hashes its audience's whole digest
+  table to identify the stream's document (`WorldDisclosureImages.DefinitionIdentity`):
+  work in the world's rows for each audience on each tick, however few rows
+  moved. Digest the table in segments, as `StateArena.ComputeHash` does, so a
+  tick rehashes the segments its moved rows fall in. A row is likewise written
+  and digested whole when one of its cells moves; a per-cell digest tree would
+  bound that for a large row.
 - [medium · determinism · unconfirmed] Latches over pools may fire again after
   an edit: a `forEach` over a pool binds `LatchKey.LeftGeneration` to the pool
   handle's generation, and an edit in a pool-declaring world seeds its

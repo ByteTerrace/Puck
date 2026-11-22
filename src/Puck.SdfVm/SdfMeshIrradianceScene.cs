@@ -763,7 +763,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
         // A draw whose transform has no inverse (a zero scale) draws nothing a ray can meet.
         public static bool TryCreate(in SdfMeshDraw draw, Geometry geometry, out Instance instance) {
-            var matrix = draw.ObjectToWorld;
+            var matrix = draw.FixedPlacement;
 
             instance = default;
             if (!Matrix4x4.Invert(matrix: matrix, result: out var inverse)) { return false; }

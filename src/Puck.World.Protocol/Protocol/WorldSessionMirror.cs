@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Numerics;
 using Puck.Abstractions;
 using Puck.Abstractions.Collections;
+using Puck.Abstractions.Gpu;
 using Puck.Maths;
 using Puck.Commands;
 using Puck.Physics.Motion;
@@ -493,7 +494,11 @@ public sealed class WorldSessionMirror : IClientSink {
             : null
         );
     }
-    /// <summary>Copies the latest complete body image out of the mirror's reusable publication storage.</summary>
+    /// <summary>Copies the latest complete body image out of the mirror's reusable publication storage, with its active
+    /// slots and the slots whose body differs from <paramref name="previous"/>'s (<see cref="BodyImage.Changed"/>).</summary>
+    /// <param name="previous">The image the caller holds, returned again while the publication and document stand, and
+    /// compared against otherwise; <see langword="null"/> for none.</param>
+    /// <returns>The image.</returns>
     public BodyImage CaptureBodyImage(BodyImage? previous = null) => m_images.Read(
         state: (Mirror: this, Previous: previous),
         read: static (in SnapshotImage image, long version, (WorldSessionMirror Mirror, BodyImage? Previous) state) => {
@@ -506,10 +511,15 @@ public sealed class WorldSessionMirror : IClientSink {
             }
 
             var bodies = ImmutableArray.CreateBuilder<Body>(image.Extent);
+            var active = ImmutableArray.CreateBuilder<int>();
+            // A previous image of another authority names every body at another address, so it is no base.
+            var basis = ((state.Previous is { } held) && string.Equals(a: held.Authority, b: image.Authority, comparisonType: StringComparison.Ordinal)) ? state.Previous : null;
+            var changed = ((basis is null) ? null : ImmutableArray.CreateBuilder<int>());
             var kitColliders = Volatile.Read(ref mirror.m_kitColliders);
             var kitContacts = Volatile.Read(ref mirror.m_kitBodyContacts);
             for (var index = 0; index < image.Extent; index++) {
                 var entry = image.Entries[index];
+                if (entry.Active) { active.Add(item: index); }
                 bodies.Add(new Body(
                     Active: entry.Active,
                     Address: new WorldEntityAddress(Authority: image.Authority, Generation: entry.Generation, Index: index),
@@ -525,15 +535,30 @@ public sealed class WorldSessionMirror : IClientSink {
                     Collider: (entry.Kit < kitColliders.Length) ? kitColliders[entry.Kit] : null,
                     Contact: (entry.Kit < kitContacts.Length) ? kitContacts[entry.Kit] : WorldBodyContactMode.Overlap
                 ));
+                if ((changed is not null) && ((index >= basis!.Entries.Length) || (basis.Entries[index] != bodies[index]))) { changed.Add(item: index); }
+            }
+            // A slot past this image's extent that the base held active is a body that left.
+            for (var index = image.Extent; (changed is not null) && (index < basis!.Entries.Length); index++) {
+                if (basis.Entries[index].Active) { changed.Add(item: index); }
             }
 
             return new BodyImage(definition, revision, image.Authority, image.Tick, image.Revision, image.StepSeconds,
-                image.ArrivalTimestamp, bodies.MoveToImmutable(), version);
+                image.ArrivalTimestamp, bodies.MoveToImmutable(), version) {
+                Active = active.ToImmutable(),
+                Changed = (changed?.ToImmutable() ?? default),
+            };
         });
 
     /// <summary>A retained delivery for an adjacency. Entries are indexed by the destination's entity slot.</summary>
     public sealed record BodyImage(WorldDefinition Definition, int DefinitionRevision, string Authority, ulong Tick,
-        int Revision, float StepSeconds, long ArrivalTimestamp, ImmutableArray<Body> Entries, long Version);
+        int Revision, float StepSeconds, long ArrivalTimestamp, ImmutableArray<Body> Entries, long Version) {
+        /// <summary>Gets the slots whose body is active, in ascending order.</summary>
+        public ImmutableArray<int> Active { get; init; } = [];
+        /// <summary>Gets the slots whose body differs from the image this one was captured over
+        /// (<see cref="CaptureBodyImage"/>'s previous image), in ascending order, or the default array when it was
+        /// captured over none, or over another authority's, so every slot may differ.</summary>
+        public ImmutableArray<int> Changed { get; init; }
+    }
 
     /// <summary>One slot from a retained body image, with its look and collider resolved against the delivered document.</summary>
     public readonly record struct Body(bool Active, WorldEntityAddress Address, int PoseEpoch, string? PlacementId,
@@ -802,6 +827,8 @@ public sealed class WorldSessionMirror : IClientSink {
             }
 
             m_poses.Begin();
+            // Another authority's snapshot moves every entity's address.
+            m_deliveredWhole |= !string.Equals(a: Volatile.Read(location: ref m_authority), b: snapshot.Authority, comparisonType: StringComparison.Ordinal);
 
             foreach (ref readonly var entry in snapshot.Entries.Span) {
                 var index = entry.Index;
@@ -819,6 +846,17 @@ public sealed class WorldSessionMirror : IClientSink {
                 }
 
                 Extend(index: index);
+                // What a body's presented inputs read besides its look (BodyChanges), as they stood before the entry.
+                var moved = (
+                    (m_poses.IsActive(index: index) != entry.Active) ||
+                    (m_facts[index] != entry.Facts) ||
+                    (m_generation[index] != entry.Generation) ||
+                    (m_poses.CurrentPosition(index: index) != entry.Position) ||
+                    (m_poses.CurrentOrientation(index: index) != entry.Orientation) ||
+                    (m_poses.PreviousPosition(index: index) != m_poses.CurrentPosition(index: index)) ||
+                    (m_poses.PreviousOrientation(index: index) != m_poses.CurrentOrientation(index: index))
+                );
+
                 m_bodyColor[index] = entry.BodyColor;
                 m_kit[index] = entry.Kit;
                 m_look[index] = entry.Look;
@@ -832,17 +870,22 @@ public sealed class WorldSessionMirror : IClientSink {
                 // The pose table publishes the entry's active flag last, after every field above, so a reader on
                 // another thread (a federated observer delivers on its socket task) that acquires IsActive sees the
                 // completed record.
-                _ = m_poses.TryAdmit(
-                    admission: out _,
+                if (m_poses.TryAdmit(
+                    admission: out var admission,
                     easeCorrections: false,
                     entry: in entry
-                );
+                ) && (moved || (admission.Step != WorldPoseStep.Interpolated))) {
+                    _ = m_deliveredChanges.Add(index: index);
+                }
             }
 
             m_poses.Complete(preserved: ((preserveSeed && (seeded is { } kept))
                 ? kept.Index
                 : -1
             ));
+            // A body that left is in no entry, so a delivery that changed which bodies are active owes every body.
+            m_deliveredWhole |= m_poses.ActiveChanged;
+            PublishBodyChanges();
 
             _ = Interlocked.Exchange(
                 location1: ref m_tickBits,
@@ -1092,6 +1135,54 @@ public sealed class WorldSessionMirror : IClientSink {
 
         bodies.Sort(comparer: null, count: (bodies.Count - first), index: first);
     }
+    /// <summary>Collects the entities a delivery changed since a cursor's last commit, as a stamp source's body journal
+    /// reads them (<c>IWorldStampSource.BodyChanges</c>): one journal frame per delivery names each entity whose active
+    /// flag, facts, generation, endpoints or pose epoch it moved, or whose interpolated pose it moved by stopping it, and
+    /// a delivery that changed which entities are active, another authority's, or a seeded route owes every entity. A
+    /// moving entity's interpolated pose also moves between deliveries as the presentation alpha does
+    /// (<see cref="CopyMovingBodies"/>). The caller commits the cursor once it has consumed the runs.</summary>
+    /// <param name="cursor">The consumer's cursor, used on one thread.</param>
+    /// <param name="into">The runs of entity indices, cleared first.</param>
+    /// <returns><see langword="true"/> when the answer owes every entity.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cursor"/> or <paramref name="into"/> is
+    /// <see langword="null"/>.</exception>
+    public bool CollectBodyChanges(GpuRowCursor cursor, GpuUploadRuns into) {
+        // Deliveries publish the journal, possibly on a socket task; it holds its own lock.
+        return m_bodyJournal.Collect(cursor: cursor, into: into, rows: EntityCapacity, through: -1L);
+    }
+    /// <summary>Appends the index of every entity whose interpolation endpoints differ in the latest delivery, the
+    /// entities whose interpolated pose moves with the presentation alpha between deliveries.</summary>
+    /// <param name="bodies">The list the indices are appended to.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="bodies"/> is <see langword="null"/>.</exception>
+    public void CopyMovingBodies(List<int> bodies) {
+        ArgumentNullException.ThrowIfNull(argument: bodies);
+
+        lock (m_snapshotWriteGate) {
+            bodies.AddRange(collection: m_moving);
+        }
+    }
+    // Closes one journal frame over the delivery just applied and finds the entities it left moving. Under
+    // m_snapshotWriteGate.
+    private void PublishBodyChanges() {
+        _ = m_bodyJournal.Publish(everything: m_deliveredWhole, owed: m_deliveredChanges.Members, rows: EntityCapacity);
+        m_deliveredChanges.Clear();
+        m_deliveredWhole = false;
+        m_moving.Clear();
+        foreach (var index in m_poses.Live) {
+            if ((m_poses.PreviousPosition(index: index) != m_poses.CurrentPosition(index: index)) ||
+                (m_poses.PreviousOrientation(index: index) != m_poses.CurrentOrientation(index: index))) {
+                m_moving.Add(item: index);
+            }
+        }
+    }
+
+    // The delivery journal (CollectBodyChanges): the entities the delivery in progress changed and whether it owes every
+    // entity, the journal, and the entities the latest delivery left moving. Under m_snapshotWriteGate.
+    private readonly MarkedIndexSet m_deliveredChanges = new();
+    private bool m_deliveredWhole = true;
+    private readonly GpuSharedChangedRows m_bodyJournal = new(stableRows: true);
+    private readonly List<int> m_moving = [];
+
     /// <summary>Gets the placement an entity inhabits (<see cref="EntitySnapshot.PlacementId"/>).</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The placement id, or <see langword="null"/> when the entity inhabits none.</returns>
@@ -1234,6 +1325,8 @@ public sealed class WorldSessionMirror : IClientSink {
                 orientation: orientation,
                 position: position
             );
+            m_deliveredWhole = true;
+            PublishBodyChanges();
             m_seededRouteEntity = route.Entity;
             m_seededRouteTick = route.Tick;
             Extend(index: index);

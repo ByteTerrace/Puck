@@ -414,12 +414,10 @@ public sealed partial class WorldRigidAssets {
         var material = ((asset < m_materials.Count) ? m_materials[asset] : 0);
         var clip = WorldPortalStraddle.Clip(doors: doors, center: position, radius: (m_reaches[asset] * body.Scale), firstSlot: 0, slotCount: 1);
 
-        // The body's row is rewritten in place: a moving body allocates nothing, and its revision tells consumers it moved.
-        var previousRevision = previous.Revision;
-
-        _ = previous.Update(firstSlot, target, motionIdentity, transform, body.Scale, true, clip, mesh, material, otherSlots);
-
-        var changed = (previous.Revision != previousRevision);
+        // The body's row is rewritten in place: a moving body allocates nothing. Its pose reaches its draws through its
+        // root slot's row, which the composition seats from the copies this names, so a body that only moved names its
+        // copy without moving the copy's revision (SdfMeshInstance.Revision).
+        var changed = previous.Update(firstSlot, target, motionIdentity, transform, body.Scale, true, clip, mesh, material, otherSlots);
 
         if (changed) { m_changedCopies.Add(item: index); }
         m_stateWatch.Index(holder: index, lease: motion.Reads);
