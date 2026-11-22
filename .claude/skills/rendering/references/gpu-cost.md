@@ -276,6 +276,30 @@ evaluation: inside the views light walk that was PIX's 21 million local-memory
 sectors a frame. Pick the component with `sdfComponent`
 ([`field/sdf-component.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-component.hlsli)).
 
+## Keep one copy of each heavy call
+
+HLSL inlines every call, so a heavy function called at N sites, or inside an
+unrolled loop, is N copies of its code in the kernel. The driver's `Binary
+Size` on the `[pipeline-statistics]` line (Vulkan) is the native kernel; `dxc
+-dumpbin` of the DXIL and a count of its instruction lines reads the same
+growth without a GPU, in seconds, and is the instrument for this rule.
+
+- **Measured here.** The resolve's tile read (`sdfResolveSampleAt`) carried a
+  fallback that loaded a sample and evaluated its atmosphere, and the feature
+  test called it for every neighbour of every tap: 89,000 DXIL instruction
+  lines and a 641 KB native kernel. Proving the tile holds every sample a group
+  reads (the render grid is never larger than the output) and reading the tile
+  alone took it to 15,000 lines and 188 KB, with each sample's feature computed
+  once into the tile. The views kernels carried the irradiance gather
+  (`sdfMeshProbesAt`) for the pixels the probe lookup's representative could
+  not serve, half their code; it now runs in the probe lookup
+  ([SKILL](../SKILL.md#which-dispatch-owns-the-code)).
+- **Static size is not the cost by itself.** Compiling the views gather behind a
+  branch no pixel takes kept views' size and registers and cost little; the
+  gathers it executed, a quarter of foliage pixels with each warp holding one
+  paying a whole gather, were the cost. Read size to find the copies; judge the
+  change by the work that runs.
+
 ## Keep a wave on one path
 
 A wave runs both sides of a branch its lanes disagree on, with the inactive
@@ -522,10 +546,10 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
 
 ## Puck's open cases
 
-- **Register-limited pixel passes.** On Vulkan (RTX 4070) the plain views,
-  binned views and glass kernels and every specialization of them run at 168
-  registers (12 of the SM's 48 warps), so a specialized set adds no registers
-  over the kernels that run no program; the interpreter's views, binned views
+- **Register-limited pixel passes.** On Vulkan (RTX 4070) the plain views
+  kernel, the binned specializations and the glass kernels run at 168 registers
+  (12 of the SM's 48 warps) and the binned plain views kernel at 128 (16 warps),
+  so a specialized set adds registers only over the binned plain kernel; the interpreter's views, binned views
   and glass run at 255 (8 warps), the probe lookup at 128 and the views filter
   at 40, and the specialized and plain glass keep 96 and 16 bytes of local
   memory. The interpreter costs tens of times the specialized kernels where a

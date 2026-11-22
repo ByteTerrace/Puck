@@ -860,6 +860,21 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
   boots do not establish a cause; retain fresh fault and validation logs. A
   Direct3D 12 device removal on the integration branch is under diagnosis in
   a lane.
+- Make the irradiance gather (`sdfMeshProbesAt`) cheaper or rarer. The probe
+  lookup runs every gather views needs, the representative's and each
+  incompatible pixel's (a quarter of foliage pixels), and is the main view's
+  second-largest pass; the corners' depth visibility
+  (`sdfMeshProbeDepthVisibility`) dominates each gather. Owned by the GI work:
+  any cheaper visibility or a reuse looser than `sdfViewsProbesCompatible`
+  changes the CPU twin's contract (`SdfMeshIrradiance.Gather`). Check: the probe
+  lookup's counted gathers and `sdf.world$views-probes` at the valley.
+- Bring the main view under its share of the frame at 2560 by 1440 on the RTX
+  4070. The largest passes are views'
+  material and light stages at 168 registers (Direct3D 12 still spills there),
+  the probe lookup, the resolve at 168 registers, the surface pass and the mesh
+  pass, all at native resolution under the `high` table's `renderScale: 1`.
+  Check: the route's per-chapter `world` node GPU means, without shadows and
+  secondary views, read in the lead's quiet window.
 - Measure geometry instancing in the indirect records rather than repeating
   the slower one-draw vertex-search experiment.
 - Measure front-to-back order or a depth prepass against mesh overdraw,

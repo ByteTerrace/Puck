@@ -11,10 +11,8 @@
 // checkout's own tree restores the shipped kernels. Only the views kernels and the probe lookup include this file, so a
 // reload recompiles them alone.
 //
-// SDF_VIEWS_OMIT_PROBES        the irradiance volume's lookup: no gather in the probe lookup or views, every hit reads
-//                              the camera sample's light (sdfMeshIndirectSeen's unmeasured path).
-// SDF_VIEWS_OMIT_PROBE_SHARING views gathers every pixel's probes itself, as if the lookup's rate were one, reading
-//                              none of the probe lookup's records.
+// SDF_VIEWS_OMIT_PROBES        the irradiance volume's lookup: no gather in the probe lookup and no record read in
+//                              views, every hit reads the camera sample's light (sdfMeshIndirectSeen's unmeasured path).
 // SDF_VIEWS_OMIT_LIGHTS        the light walk and its tiles: no light of the table or screen adds anything.
 // SDF_VIEWS_OMIT_LIGHT_TILES   the light tiles alone (sdf-views-lights.hlsli): every pixel walks the view's whole light
 //                              mask, so the difference is what the tiles save net of their own cost. This one shades
