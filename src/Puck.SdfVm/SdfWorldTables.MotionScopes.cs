@@ -326,7 +326,7 @@ public sealed partial class SdfWorldTables {
     }
     // Notes one change for judgement against every open scope: what changed as it stood before and as it stands after,
     // each a box and whether it is glass, and null for one no box bounds. A side that draws nothing is not live. Shading
-    // names a change only shading reads, which no cascade's scope shows. Judged with its batch (FlushMotion).
+    // names a change only shading reads, which no shadow layer shows. Judged with its batch (FlushMotion).
     private void NoteMotion(SdfMotionCause cause, int row, bool wasLive, in SdfMeshBox? before, bool wasGlass, bool isLive, in SdfMeshBox? after, bool isGlass, bool shading = false) {
         // The world's shadows redraw where a caster was and where it is, whatever scope the change meets.
         if (!shading && (wasLive || isLive)) {
