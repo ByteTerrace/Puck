@@ -29,8 +29,6 @@ public sealed partial class SdfMeshPathBake {
     private int m_firstDetailsOwed;
     private int m_floorsRaised;
 
-    // The measure of every group's demand in pixels, spread over SdfMeshTier.MeasureFrames frames (MeasureDemands).
-    private GroupSweep m_demandSweep;
     // The frames since Retier last decided the tiers, which it does once a measure (SdfMeshTier.MeasureFrames).
     private int m_decideFrames;
     // The frames in a row Retier has left the detail alone, counted up to SdfMeshTier.SettleFrames; read off the
@@ -131,12 +129,12 @@ public sealed partial class SdfMeshPathBake {
         (SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: tiers(arg: group)) != group.Tier);
     // The metres one display pixel covers at a group's demand box, in the group's own units, from the demand point that
     // sees it finest: a shared geometry where its copies stand, as its priority is measured (MeasureDemand).
-    private float MeasurePixel(Group group, out int point) => MeasurePixel(boxes: out _, group: group, point: out point);
+    private float MeasurePixel(Group group, out int point) => MeasurePixel(boxes: out _, group: group, point: out point, units: out _);
     // The metres one display pixel covers at a group's planned box while a plan is choosing its tier, in the group's own
     // units: a shared geometry's where the frame's copies of it stand, and any other group's at its planned box. On the
     // frame's thread, with the copy index at the planned program's frame (PrepareFrame indexes before it plans).
     private float PlannedPixel(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) => ((CopiesOf(group: group) is { } copies)
-        ? CopiesPixel(center: ((group.Low + group.High) * 0.5f), copies: copies, half: Vector3.Abs(value: ((group.High - group.Low) * 0.5f)), point: out _)
+        ? CopiesPixel(center: ((group.Low + group.High) * 0.5f), copies: copies, half: Vector3.Abs(value: ((group.High - group.Low) * 0.5f)), point: out _, units: out _)
         : Demand.PixelAt(group: group, transforms: transforms));
     // Whether a view may see a group while a plan is choosing its tier: a shared geometry where one of the frame's copies
     // of it stands, any other group at its planned box (SdfMeshDemand.Sees). On the frame's thread, as PlannedPixel.
@@ -152,62 +150,44 @@ public sealed partial class SdfMeshPathBake {
         }
         return false;
     }
-    // MeasurePixel, the demand point that sees the group finest, -1 with none, and the boxes the measure read: one,
-    // or a shared geometry's copies.
-    private float MeasurePixel(Group group, out int point, out int boxes) {
+    // MeasurePixel, the demand point that sees the group finest, -1 with none, the boxes the measure read (one, or a
+    // shared geometry's copies) and the fewest units any of them is measured in, which bounds how far the pixel moves
+    // as the demand points travel (SdfMeshDemand.Travel).
+    private float MeasurePixel(Group group, out int point, out int boxes, out float units) {
         boxes = 1;
         if (CopiesOf(group: group) is not { } copies) {
             var (center, half) = WorldBox(group: group);
-            var units = ((group.Dynamic && (group.Slot < m_demandTransforms.Count)) ? SdfMeshGeometryBuilder.UnitsOf(transform: m_demandTransforms[group.Slot]) : 1f);
+
+            units = ((group.Dynamic && (group.Slot < m_demandTransforms.Count)) ? SdfMeshGeometryBuilder.UnitsOf(transform: m_demandTransforms[group.Slot]) : 1f);
 
             return (Demand.PixelAt(center: center, half: half, point: out point) / units);
         }
 
         boxes = Math.Max(val1: 1, val2: copies.Count);
-        return CopiesPixel(center: group.DemandCenter, copies: copies, half: group.DemandHalf, point: out point);
-    }
-    // Measures a frame's share of the groups' demand (Group.DemandPixel), from the group the last frame's share
-    // ended at: the boxes one whole sweep reads, spread over SdfMeshTier.MeasureFrames frames, so the measure costs a
-    // frame that share of the resident world whatever its size, and every group is measured again within that many
-    // frames. Retier reads the tiers from the measured pixels once a measure, so a change of the bias shows within
-    // one, and measures a group it has no pixel of where it meets it. Under the gate, on the frame's thread.
-    private void MeasureDemands() {
-        var count = m_groups.Count;
-
-        if (count == 0) { return; }
-
-        var share = m_demandSweep.Share;
-        var at = m_demandSweep.Start(count: count);
-        var spent = 0L;
-
-        for (var visited = 0; ((visited < count) && (spent < share)); visited++) {
-            var group = m_groups[at];
-            var boxes = 1;
-
-            if (!group.Retired && group.HasDemandBox) { group.DemandPixel = MeasurePixel(boxes: out boxes, group: group, point: out _); }
-            spent += boxes;
-            at = m_demandSweep.Visited(at: at, boxes: boxes, count: count);
-        }
-        m_demandSweep.Stop(at: at);
+        return CopiesPixel(center: group.DemandCenter, copies: copies, half: group.DemandHalf, point: out point, units: out units);
     }
     // The metres one display pixel covers at a shared geometry's box, given in the geometry's own frame, from the demand
-    // point that sees one of its copies finest, in the geometry's units; infinity, and no point, with no copy.
-    private float CopiesPixel(IReadOnlyList<int> copies, Vector3 center, Vector3 half, out int point) {
+    // point that sees one of its copies finest, in the geometry's units; infinity, and no point, with no copy. Also the
+    // fewest units a copy is measured in.
+    private float CopiesPixel(IReadOnlyList<int> copies, Vector3 center, Vector3 half, out int point, out float units) {
         var finest = float.PositiveInfinity;
 
         point = -1;
+        units = float.PositiveInfinity;
         foreach (var index in copies) {
             var matrix = m_demandCopies[index].Matrix;
 
             var (boxCenter, boxHalf) = TransformBox(center: center, half: half, matrix: matrix);
-            var units = MathF.Max(x: 1.0e-6f, y: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length());
-            var pixel = (Demand.PixelAt(center: boxCenter, half: boxHalf, point: out var seen) / units);
+            var scale = MathF.Max(x: 1.0e-6f, y: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length());
+            var pixel = (Demand.PixelAt(center: boxCenter, half: boxHalf, point: out var seen) / scale);
 
+            units = MathF.Min(x: units, y: scale);
             if (pixel < finest) {
                 finest = pixel;
                 point = seen;
             }
         }
+        if (!float.IsFinite(f: units)) { units = 1f; }
 
         return finest;
     }
@@ -257,11 +237,10 @@ public sealed partial class SdfMeshPathBake {
             group.OwedFrames = 0;
         }
     }
-    // Measures a frame's share of the demand (MeasureDemands), and once a measure (SdfMeshTier.MeasureFrames frames,
-    // since no group's pixel moves faster) decides the tiers: every count of frames below then advances by the
-    // frames since the last decision, so a frame between decisions pays the measure's share alone. A decision
-    // reads every group's demanded tier, from the pixel its demand was last measured at,
-    // against the one it draws, counts the debt, and plans again at the demanded tier each
+    // Measures the groups whose demand may have moved (MeasureDemands), and once every SdfMeshTier.MeasureFrames frames
+    // decides the tiers: every count of frames below then advances by the frames since the last decision. A decision
+    // reads the demanded tier of each group the demand watch attends (Attend), from the pixel its demand was last
+    // measured at, against the one it draws, counts the debt, and plans again at the demanded tier each
     // landed group that has owed a finer one for SdfMeshTier.HoldFrames frames, the finest demand first, at most
     // SdfMeshTier.MaxInFlight at once: the replacement bakes (or lands from the library) while the coarser mesh draws.
     // Detail is budgeted by demand inside the budget the presentation's selector grants this residency
@@ -282,7 +261,7 @@ public sealed partial class SdfMeshPathBake {
     // demanded changes nothing: the finer mesh stays, so a viewer who comes back finds it. Under the gate, on the
     // frame's thread.
     private void Retier(SdfFrame frame) {
-        MeasureDemands();
+        MeasureDemands(frame: frame);
         if (++m_decideFrames < SdfMeshTier.MeasureFrames) {
             _ = StartFirsts(frame: frame, inFlight: out _);
             return;
@@ -346,8 +325,6 @@ public sealed partial class SdfMeshPathBake {
         // still coarsen: with a replacement started or in flight, what keeps the detail from settled.
         var owedWaiting = 0;
         var pressing = false;
-        // The bytes the draws would name with every demand half a rung finer and every spare group coarsened.
-        var finer = 0L;
 
         var firsts = m_firstCandidates;
         var firstsOwed = 0;
@@ -355,15 +332,41 @@ public sealed partial class SdfMeshPathBake {
         candidates.Clear();
         spare.Clear();
         firsts.Clear();
-        for (var index = 0; (index < m_groups.Count); index++) {
-            var group = m_groups[index];
 
-            if (group.Retired || !group.HasDemandBox) { continue; }
+        // Only the groups the demand watch measured or the list set since they last stood (Attend): every other group
+        // demands the tier it draws, with nothing owed and nothing in flight, so it adds nothing below.
+        var attention = m_attention;
+        var kept = 0;
+
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.TierGroups, amount: attention.Count);
+        for (var at = 0; (at < attention.Count); at++) {
+            var group = attention[at];
+
+            if (group.Retired || !group.Listed || !group.HasDemandBox) {
+                group.Attended = false;
+                continue;
+            }
             if (float.IsNaN(f: group.DemandPixel)) { group.DemandPixel = MeasurePixel(group: group, point: out _); }
 
+            var index = group.Index;
             var pixel = group.DemandPixel;
             var demanded = SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: TierOf(pixel: pixel));
+            // The tier a frame draws is the replaced group's while a replacement is still to land.
+            var resident = (group.Replaces ?? group).Tier;
 
+            Decide(group: group, index: index, pixel: pixel, demanded: demanded, resident: resident);
+            if ((demanded == resident) && !group.FirstDetailOwed && (group.Replaces is null)) {
+                group.Attended = false;
+                continue;
+            }
+            attention[kept++] = group;
+        }
+        attention.RemoveRange(index: kept, count: (attention.Count - kept));
+        SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.TierDecisions);
+
+        // Reads one group's demanded tier against the one it draws: a first detail it owes, a finer tier it owes or a
+        // coarser one it could give back, each counted and, past its hold, a candidate.
+        void Decide(Group group, int index, float pixel, int demanded, int resident) {
             if (demanded != group.DemandedTier) {
                 group.DemandedTier = demanded;
                 group.RetierRefused = false;
@@ -376,48 +379,37 @@ public sealed partial class SdfMeshPathBake {
                 } else {
                     firstsOwed++;
                     if (group.Done && (group.Replaces is null) && !group.Ahead) { firsts.Add(item: (pixel, index, demanded, group)); }
-                    continue;
+                    return;
                 }
-            }
-            // The tier a frame draws is the replaced group's while a replacement is still to land.
-            var shown = (group.Replaces ?? group);
-            var resident = shown.Tier;
-
-            if ((bias > 0) && (shown.Mesh is { } mesh)) {
-                finer = finer.AddSaturating(right: SdfMeshTier.BytesAt(
-                    bytes: SdfMeshRegion.PlacedBytesOf(mesh: mesh),
-                    from: resident,
-                    to: SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: SdfMeshTier.Of(pixel: SdfMeshTier.Biased(halfRungs: (bias - 1), pixel: pixel)))
-                ));
             }
             if (demanded >= resident) {
                 group.OwedFrames = 0;
                 if ((demanded == resident) || (group.Mesh is not { } drawn)) {
                     group.SpareFrames = 0;
-                    continue;
+                    return;
                 }
                 spares++;
                 group.SpareFrames += elapsed;
-                if (!group.Done || (group.Replaces is not null) || group.RetierRefused || group.Ahead) { continue; }
+                if (!group.Done || (group.Replaces is not null) || group.RetierRefused || group.Ahead) { return; }
                 if (group.SpareFrames < SdfMeshTier.HoldFrames) {
                     sparesWaiting++;
-                    continue;
+                    return;
                 }
 
                 var bytes = SdfMeshRegion.PlacedBytesOf(mesh: drawn);
 
                 spare.Add(item: ((bytes - SdfMeshTier.BytesAt(bytes: bytes, from: resident, to: demanded)), index, demanded));
-                continue;
+                return;
             }
             group.SpareFrames = 0;
             group.OwedFrames += elapsed;
             owed++;
             error = MathF.Max(x: error, y: (SdfMeshTier.Cell(tier: resident) / pixel));
             frames = Math.Max(val1: frames, val2: group.OwedFrames);
-            if (!group.Done || (group.Mesh is null) || (group.Replaces is not null) || group.RetierRefused || group.Ahead) { continue; }
+            if (!group.Done || (group.Mesh is null) || (group.Replaces is not null) || group.RetierRefused || group.Ahead) { return; }
             if (group.OwedFrames < SdfMeshTier.HoldFrames) {
                 owedWaiting++;
-                continue;
+                return;
             }
             candidates.Add(item: (pixel, index, demanded));
         }
@@ -488,7 +480,7 @@ public sealed partial class SdfMeshPathBake {
         if (m_detail is { } detail) {
             Volatile.Write(location: ref m_bias, value: detail.Decide(report: new SdfDetailReport(
                 AnySpare: anySpare,
-                CanLower: (!over && (owed == 0) && (inFlight == 0) && (landing == 0) && (firstsInFlight == 0) && (firstsOwed == 0) && (finer <= target)),
+                CanLower: (!over && (owed == 0) && (inFlight == 0) && (landing == 0) && (firstsInFlight == 0) && (firstsOwed == 0) && ((bias == 0) || (FinerBytes(bias: bias) <= target))),
                 Elapsed: elapsed,
                 Over: over
             )));
@@ -540,6 +532,36 @@ public sealed partial class SdfMeshPathBake {
 
     // The latest tier decision's hold. Under the gate.
     private DetailHold m_detailHold;
+
+    // The bytes the draws would name with every demand half a rung finer than the bias asks and every spare group
+    // coarsened, and what it was summed at: the product revision (every change of a drawn mesh or its tier, Touch), the
+    // demand revision of the finer tiers (MeasureDemands) and the bias.
+    private (long Product, long Demand, int Bias, long Bytes) m_finer = (-1L, -1L, -1, 0L);
+
+    // The bytes the draws would name half a rung finer (above), summed over every group with a drawn mesh only when an
+    // input moved since the last sum. A floor that still owes its first detail adds nothing, as its decision reads none
+    // of it. Under the gate.
+    private long FinerBytes(int bias) {
+        if ((m_finer.Product == m_productRevision) && (m_finer.Demand == m_finerDemandRevision) && (m_finer.Bias == bias)) { return m_finer.Bytes; }
+
+        var finer = 0L;
+
+        foreach (var group in m_groups) {
+            if (group.Retired || !group.HasDemandBox || float.IsNaN(f: group.DemandPixel)) { continue; }
+
+            var pixel = group.DemandPixel;
+
+            if (group.FirstDetailOwed && (SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: TierOf(pixel: pixel)) < group.Tier)) { continue; }
+
+            var shown = (group.Replaces ?? group);
+
+            if (shown.Mesh is not { } mesh) { continue; }
+            finer = finer.AddSaturating(right: SdfMeshTier.BytesAt(bytes: SdfMeshRegion.PlacedBytesOf(mesh: mesh), from: shown.Tier, to: FinerTierOf(bias: bias, group: group, pixel: pixel)));
+        }
+        m_finer = (m_productRevision, m_finerDemandRevision, bias, finer);
+
+        return finer;
+    }
     // Starts the first details the latest decision found owed (m_firstCandidates), finest demand first, at most
     // SdfMeshTier.FirstsPerFrame a frame, so an arrival's wave of landed floors is replanned over a few frames rather than
     // in one frame holding the gate; a floor replaced, retired or no longer owing since the decision is passed over. Returns
@@ -623,6 +645,7 @@ public sealed partial class SdfMeshPathBake {
             group.Retired = true;
             return TierStart.None;
         }
+        SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.TierStarts);
         group.TakeDemandBox();
         group.Replaces = old;
         Replace(group: group, index: index);

@@ -40,6 +40,18 @@ public sealed class SdfMeshDemand {
     /// <summary>Gets how many demand points the latest frame named.</summary>
     public int Count { get; private set; }
 
+    /// <summary>Gets the revision of the demand points' shape: one more each time an observation changes them in a way
+    /// <see cref="Travel"/> does not bound (a point came or went, a point's pixels a metre changed, a point that demands
+    /// inside its view moved or turned at all, or a point was placed with no frame). A measure taken under an older
+    /// revision may stand on any answer.</summary>
+    public long Revision { get; private set; }
+    /// <summary>Gets the demand points' travel since the bake began, in metres a display pixel covers: each observation
+    /// that keeps <see cref="Revision"/> adds the most any point moved over that point's pixels a metre. No
+    /// <see cref="PixelAt(Vector3, Vector3)"/> answer changes by more than the travel between two observations of one
+    /// revision, divided by the units the box is measured in, since a box's distance from a point moves no more than the
+    /// point does and the near clamp keeps that bound.</summary>
+    public double Travel { get; private set; }
+
     /// <summary>Reads the demand points from a frame's views: each view's eye, and its pixels a metre one metre in front of
     /// it, from the height its sizes are measured in (<see cref="SdfViewSnapshot.DemandHeight"/>) or else its share of
     /// the output's height, and its field of view. A view that demands only inside its frustum
@@ -54,6 +66,8 @@ public sealed class SdfMeshDemand {
 
         var views = frame.Views;
         var count = 0;
+        var reshaped = false;
+        var travel = 0f;
 
         EnsureCapacity(views.Count);
         for (var index = 0; (index < views.Count); index++) {
@@ -62,12 +76,29 @@ public sealed class SdfMeshDemand {
             var tan = camera.TanHalfFieldOfView;
 
             if (view.Elsewhere || !(view.Region.Height > 0f) || !(tan > 0f) || !float.IsFinite(f: camera.Position.X)) { continue; }
+
+            var focal = ((((view.DemandHeight > 0f) ? view.DemandHeight : MathF.Max(x: 1f, y: (view.Region.Height * height))) * 0.5f) / tan);
+            var within = view.DemandWithinView;
+            var held = (within ? (camera with { Near = (camera.Near * SdfMeshCull.NearKeeps) }) : camera);
+
+            // A point held at this index before keeps the revision while only its eye moved: a distance moves no more
+            // than the eye does. A point bounded to its view moves its frustum with it, which no distance bounds.
+            if ((count >= Count) || !m_framed[count] || (m_within[count] != within) || (m_focal[count] != focal) || (within && (m_cameras[count] != held))) {
+                reshaped = true;
+            } else {
+                travel = MathF.Max(x: travel, y: (Vector3.Distance(value1: m_points[count], value2: camera.Position) / focal));
+            }
             m_points[count] = camera.Position;
-            m_focal[count] = ((((view.DemandHeight > 0f) ? view.DemandHeight : MathF.Max(x: 1f, y: (view.Region.Height * height))) * 0.5f) / tan);
-            m_within[count] = view.DemandWithinView;
+            m_focal[count] = focal;
+            m_within[count] = within;
             m_framed[count] = true;
-            m_cameras[count] = (view.DemandWithinView ? (camera with { Near = (camera.Near * SdfMeshCull.NearKeeps) }) : camera);
+            m_cameras[count] = held;
             count++;
+        }
+        if (reshaped || (count != Count)) {
+            Revision++;
+        } else {
+            Travel += travel;
         }
         Count = count;
     }
@@ -95,6 +126,7 @@ public sealed class SdfMeshDemand {
         m_framed[Count] = false;
         m_focal[Count] = ((Math.Max(val1: height, val2: 1u) * 0.5f) / tanHalfFieldOfView);
         Count++;
+        Revision++;
     }
     /// <summary>Returns the metres one display pixel covers at a box from the demand point that sees it finest: the
     /// distance from the eye to the box, no nearer than <see cref="NearDistance"/>, over the point's pixels a metre; what

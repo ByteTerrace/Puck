@@ -380,24 +380,27 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         return (table + blocks);
     }
-    // Every level's probe cache: its table bytes, block bytes, capacity and probes, summed.
+    // Every level's probe cache: its table bytes, capacity and probes, summed, and the bytes of the hit and light blocks
+    // the volume holds (ProbeStorage.Charge): every block not yet returned, named by an entry, a batch in flight or a
+    // retired table a reader may still hold.
     private (long Table, long Blocks, int Capacity, int Count) CacheFigures() {
-        long table = 0, blocks = 0;
+        long table = 0;
         int capacity = 0, count = 0;
 
         lock (m_gate) {
             foreach (var level in m_levels) {
-                var (levelTable, levelBlocks, levelCapacity) = level.Cache.Bytes();
+                var (levelTable, levelCapacity) = level.Cache.Bytes();
 
                 table += levelTable;
-                blocks += levelBlocks;
                 capacity += levelCapacity;
                 count += level.Cache.Count;
             }
         }
 
-        return (table, blocks, capacity, count);
+        return (table, Interlocked.Read(location: ref m_blockBytes), capacity, count);
     }
+    // The bytes of the hit and light blocks the volume holds, kept as they are charged and returned (ProbeStorage).
+    private long m_blockBytes;
 
     // The worker's candidates and a batch's results, kept across batches: one worker runs at a time.
     private readonly List<Candidate> m_candidates = [];
@@ -2571,6 +2574,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         if (borrowed) { ArrayCapacity.EnsureScratch(ref m_gpuHits, (blockProbes * SdfMeshProbeDepth.HitWords)); }
         var hits = blocks.Hits = (traces ? new ProbeBlock(count: blockProbes, hits: (borrowed ? m_gpuHits : null)) : null);
         var lights = blocks.Lights = new LightBlock(count: count, inputs: lighting.Inputs);
+
+        hits?.Charge(volume: this);
+        lights.Charge(volume: this);
         var feedback = (lighting.Feedback && snapshot.Layout.Bounce && (pass != 0));
         var layout = snapshot.Layout;
         var lows = snapshot.Lows;
@@ -3372,6 +3378,22 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
 
         protected float[] m_floats;
+        // The volume whose block bytes this block is counted in (Charge), until it returns its words.
+        private SdfMeshIrradiance? m_volume;
+
+        // The bytes the block holds: its object, its words and any hit words it owns.
+        public abstract long Bytes { get; }
+
+        // Counts the block's bytes in the volume's running figure (CacheFigures) until it returns its words, so no
+        // figure walks the caches' entries.
+        public void Charge(SdfMeshIrradiance volume) {
+            m_volume = volume;
+            _ = Interlocked.Add(location1: ref volume.m_blockBytes, value: Bytes);
+        }
+        // Moves the volume's figure by a change of the block's bytes made after it was charged.
+        protected void Recharge(long change) {
+            if (m_volume is { } volume) { _ = Interlocked.Add(location1: ref volume.m_blockBytes, value: change); }
+        }
 
         // Names the block from one more entry; false once it has been retired, when nothing may name it again.
         public bool TryAddReference() {
@@ -3386,6 +3408,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
         // Returns the words to the pool; the reader epochs call it once no hold can still read them.
         public override void Reclaim() {
+            Recharge(change: -Bytes);
+            m_volume = null;
             RentedArrays.Return(array: m_floats);
             m_floats = [];
         }
@@ -3414,11 +3438,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         private readonly bool m_borrowed = (hits is not null);
         private uint[]? m_hits = (hits ?? RentedArrays.Rent<uint>(minimumLength: (count * SdfMeshProbeDepth.HitWords)));
 
-        public long Bytes => (((32L + 24L) + (((long)m_floats.Length) * sizeof(float))) + ((m_hits is { } hits) ? (24L + (hits.LongLength * sizeof(uint))) : 0L));
+        public override long Bytes => (((32L + 24L) + (((long)m_floats.Length) * sizeof(float))) + ((m_hits is { } hits) ? (24L + (hits.LongLength * sizeof(uint))) : 0L));
 
         public void ReleaseHits() {
+            var before = Bytes;
+
             if (!m_borrowed && (m_hits is { } own)) { RentedArrays.Return(array: own); }
             m_hits = null;
+            Recharge(change: (Bytes - before));
         }
         public override void Reclaim() {
             ReleaseHits();
@@ -3435,7 +3462,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public LightInputs Inputs { get; } = inputs;
         public const int FloatsPerProbe = (54 + SdfMeshIrradianceProbe.LightWords);
 
-        public long Bytes => ((24L + 24L) + (((long)m_floats.Length) * sizeof(float)));
+        public override long Bytes => ((24L + 24L) + (((long)m_floats.Length) * sizeof(float)));
 
         public Span<Vector3> Radiance(int index) => MemoryMarshal.Cast<float, Vector3>(span: m_floats.AsSpan(length: 18, start: (index * FloatsPerProbe)));
         public Span<Vector3> Local(int index) => MemoryMarshal.Cast<float, Vector3>(span: m_floats.AsSpan(length: 18, start: ((index * FloatsPerProbe) + 18)));
@@ -3474,26 +3501,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The probes cached.
         public int Count => (Volatile.Read(location: ref m_table)?.Count ?? 0);
 
-        // Current cache-owned tables, arena machinery and every referenced block, including held retired values.
-        // The volume gate is held; detached tables belong only to readers already using them, not to this cache.
-        public (long Table, long Blocks, int Capacity) Bytes() {
-            if (m_table is not { } table) { return (32, 0, 0); }
-            var blocks = new HashSet<object>(comparer: ReferenceEqualityComparer.Instance);
-
-            table.Values.VisitRetained(state: blocks, visit: static (in ProbeData entry, long version, HashSet<object> found) => {
-                if (entry.Hits is { } hits) { found.Add(item: hits); }
-                if (entry.Shading is { } shading) { found.Add(item: shading); }
-                return 0;
-            });
-            var blockBytes = 0L;
-
-            foreach (var block in blocks) {
-                blockBytes += block switch { ProbeBlock hits => hits.Bytes, LightBlock shading => shading.Bytes, _ => 0L };
-            }
+        // The current table's bytes: its arena machinery, keys and inline storage. The blocks its entries name are the
+        // volume's running figure (ProbeStorage.Charge). The volume gate is held.
+        public (long Table, int Capacity) Bytes() {
+            if (m_table is not { } table) { return (32, 0); }
             // x64: cache 32, table 56, three array headers 72, plus each key, used flag and dense-entry index.
             var hashStride = (System.Runtime.CompilerServices.Unsafe.SizeOf<(int, int, int)>() + (2 * sizeof(int)));
 
-            return (((((32L + 56L) + 72L) + (table.Keys.LongLength * hashStride)) + table.Values.InlineStorageBytes), blockBytes, table.Keys.Length);
+            return (((((32L + 56L) + 72L) + (table.Keys.LongLength * hashStride)) + table.Values.InlineStorageBytes), table.Keys.Length);
         }
         // Forgets every probe; the next write starts a table of the capacity the cache last reached.
         public void Clear() {
