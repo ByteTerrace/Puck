@@ -317,6 +317,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         var entry = Refresh(instance: instance);
 
         entry.Convergence = convergence;
+        m_convergenceRunning = true;
         // An ordinary capture observes the next normal temporal sample. Explicit convergence starts a new sequence,
         // and retained tainted history must be discarded before a filled source can serve any capture.
         if (convergence.IsActive) {

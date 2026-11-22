@@ -5,11 +5,22 @@ using Puck.Shaders;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldPasses {
+    // Whether an entry may hold a convergence still running: set as one begins (BeginConvergence), cleared by a scan that
+    // finds none, so the frames between convergences ask no entry, though Begin asks for every pass a frame prepares.
+    private bool m_convergenceRunning;
+
     private RenderGraphConvergence? ConvergenceOf(SdfWorldResidency residency) {
+        if (!m_convergenceRunning) { return null; }
+
+        var running = false;
+
         foreach (var entry in m_entries.Values) {
-            if ((entry.Convergence is { Request.Completion.IsCompleted: false } convergence) &&
-                ReferenceEquals(objA: entry.Residency, objB: residency)) { return convergence; }
+            if (entry.Convergence is { Request.Completion.IsCompleted: false } convergence) {
+                if (ReferenceEquals(objA: entry.Residency, objB: residency)) { return convergence; }
+                running = true;
+            }
         }
+        m_convergenceRunning = running;
         return null;
     }
 
