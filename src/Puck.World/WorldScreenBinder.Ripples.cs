@@ -8,6 +8,7 @@ public sealed partial class WorldScreenBinder {
     // The contacts the rippling openings show, and the presentation clock they and the idle waves run on.
     private readonly WorldOpeningRipples m_ripples = new();
     private readonly Stopwatch m_rippleClock = Stopwatch.StartNew();
+    private readonly List<int> m_rippleBodies = [];
 
     /// <inheritdoc/>
     /// <remarks>An opening ripples while it shows a session whose source authors <c>ripple</c>: its contacts are the bodies
@@ -24,7 +25,18 @@ public sealed partial class WorldScreenBinder {
             return false;
         }
 
+        // The world's active bodies, never every index of its capacity.
+        m_rippleBodies.Clear();
+        if (m_anchors is IWorldStampSource source) {
+            source.CopyActiveBodies(bodies: m_rippleBodies);
+        } else {
+            for (var body = 0; (body < WorldClient.EntityCapacity); body++) {
+                m_rippleBodies.Add(item: body);
+            }
+        }
+
         ripple = m_ripples.Advance(
+            active: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_rippleBodies),
             bodies: m_anchors,
             capacity: WorldClient.EntityCapacity,
             halfHeight: row.HalfHeight,

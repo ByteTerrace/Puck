@@ -477,6 +477,36 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
         ? m_slots[slot].Changed
         : 0
     );
+    /// <summary>The number of latest slot changes <see cref="TryChangedSince"/> can name.</summary>
+    public const int ChangeLogLength = 1024;
+
+    // The slot each of the latest ChangeLogLength changes moved, addressed by the revision the change moved to.
+    private readonly int[] m_changeLog = new int[ChangeLogLength];
+
+    /// <summary>Lists the slots whose sample changed after a revision, one entry a change (a slot that changed twice is
+    /// listed twice), so a consumer that indexes its holders by slot wakes only the holders of what moved rather than
+    /// asking every holder for <see cref="Changed"/>.</summary>
+    /// <param name="revision">The <see cref="Revision"/> the consumer last read through.</param>
+    /// <param name="changed">The changed slots, appended in change order.</param>
+    /// <returns><see langword="false"/> when more changes happened since <paramref name="revision"/> than the log
+    /// holds (<see cref="ChangeLogLength"/>) or the revision is ahead of this mirror's; nothing is appended and the
+    /// consumer treats every slot as changed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="changed"/> is <see langword="null"/>.</exception>
+    public bool TryChangedSince(int revision, List<int> changed) {
+        ArgumentNullException.ThrowIfNull(argument: changed);
+
+        var count = (m_revision - revision);
+
+        if ((revision < 0) || (count < 0) || (count > ChangeLogLength)) {
+            return false;
+        }
+
+        for (var at = (revision + 1); (at <= m_revision); at++) {
+            changed.Add(item: m_changeLog[(at & (ChangeLogLength - 1))]);
+        }
+
+        return true;
+    }
     /// <summary>Reads a slot's presented number.</summary>
     /// <param name="slot">The slot's index, or -1, which reads nothing.</param>
     /// <param name="value">The presented number, or zero when the cell reads none.</param>
@@ -1186,6 +1216,15 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
         m_moving[m_movingCount++] = slot;
     }
     private void Read(int slot) {
+        var revision = m_revision;
+
+        ReadSlot(slot: slot);
+        // Each change moves the revision by exactly one, so the revision itself addresses the log.
+        if (m_revision != revision) {
+            m_changeLog[(m_revision & (ChangeLogLength - 1))] = slot;
+        }
+    }
+    private void ReadSlot(int slot) {
         ref var entry = ref m_slots[slot];
 
         if (entry.Conversion == WorldStateConversion.Row) {
