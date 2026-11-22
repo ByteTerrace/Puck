@@ -73,6 +73,15 @@ public sealed class JobLane : IDisposable {
             }
         }
     }
+    /// <summary>Gets whether the unit in flight has finished and waits to be collected, so a <see cref="Collect"/> made
+    /// now returns without blocking.</summary>
+    public bool Ready {
+        get {
+            lock (m_gate) {
+                return (m_stage == Stage.Finished);
+            }
+        }
+    }
     /// <summary>Gets or sets what the lane's thread calls each time a unit finishes, after the unit is ready to
     /// collect: the wake of an owner that went on with other work instead of waiting. It runs on the lane's thread,
     /// outside the lane's gate, and must not throw.</summary>

@@ -164,6 +164,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     /// <returns><see langword="false"/> while the step is pending.</returns>
     public bool TryStep(in FixedStepContext context, Action? afterInstances, WaitDeadline? collectBy) {
         var deadline = WaitDeadline.In(HostWaits.PumpAllowance ?? TimeSpan.FromSeconds(30));
+        WorldTickWork.Process.Add(kind: WorldTickWork.PumpVisits, amount: 1L);
         if (m_phase == StepPhase.Prepare) {
             PrepareStep(in context);
             m_phase = StepPhase.Boot;
@@ -179,6 +180,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         m_instances.FinishSeatIntents();
         extensions.Pump(tick: Tick);
         m_phase = StepPhase.Prepare;
+        WorldTickWork.Process.Add(kind: WorldTickWork.HostSteps, amount: 1L);
         return true;
     }
 
