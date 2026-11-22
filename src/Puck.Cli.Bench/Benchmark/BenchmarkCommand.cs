@@ -26,6 +26,9 @@ public static partial class BenchmarkCommand {
     private const int DefaultTimeoutSeconds = 600;
     // The most loops world.benchmark plays; the World refuses more.
     private const int MaxLoops = 16;
+    // What world.benchmark answers while a route waits for the navigation it plans over, and while a run plays.
+    private const string PreparingPrefix = "[world.benchmark: preparing";
+    private const string PlayingPrefix = "[world.benchmark: playing";
     private static readonly TimeSpan BootTimeout = TimeSpan.FromSeconds(seconds: 120);
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(seconds: 1);
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromSeconds(seconds: 15);
@@ -44,7 +47,7 @@ public static partial class BenchmarkCommand {
         public readonly Option<string> Profile = new("--profile") { DefaultValueFactory = _ => "auto", Description = "The device profile the run plays under, applied before the first chapter (`world.device-profile`): a name of the world's render.devices, auto (the one matching the adapter, the default) or none. Its quality table and memory bars are the run's conditions, and the report names them." };
         public readonly Option<bool> Uncapped = new("--uncapped") { Description = "Boot with the present mode that does not wait for the display (immediate), for a throughput trend; never a frame bar. The report says it ran uncapped and a comparison refuses to set it beside a paced run." };
         public readonly Option<double?> Budget = CliOptions.Amount("--budget", "The host work, in milliseconds, past which an iteration is over (default 16.667, one 60 Hz period).", 0.1);
-        public readonly Option<int> Timeout = CliOptions.Count("--timeout-seconds", $"The run's wall-time limit (1..7200, default {DefaultTimeoutSeconds}): a run that passes it ends itself and keeps a partial report. The verb waits a further {BudgetGraceSeconds} s for the boot and collection.", 1, DefaultTimeoutSeconds, 7200);
+        public readonly Option<int> Timeout = CliOptions.Count("--timeout-seconds", $"The run's wall-time limit (1..7200, default {DefaultTimeoutSeconds}): a run that passes it ends itself and keeps a partial report, and a route whose navigation is still baking after as long reports it never started and fails the verb. The verb waits a further {BudgetGraceSeconds} s for the boot and collection.", 1, DefaultTimeoutSeconds, 7200);
         public readonly Option<int> Width = CliOptions.Count("--width", "Window width (default 2560, the frame bar's size on the RTX 4070).", 1, 2560, 16384);
         public readonly Option<int> Height = CliOptions.Count("--height", "Window height (default 1440).", 1, 1440, 16384);
         public readonly Option<string?> Cache = new("--cache-dir") { Description = "The mesh cache directory the World uses." };
@@ -70,7 +73,9 @@ public static partial class BenchmarkCommand {
         options.Command.Detail("""
             Boots a fresh World paused before its first tick, waits for the renderer with authority held, arms the route at the
             named tick and resumes, so every line of a fresh run lands on the same absolute tick from the boot image. The World
-            plays the route itself in real time and records every host iteration; nothing in the run pauses, settles or waits.
+            plays the route itself in real time and records every host iteration; nothing in the run pauses, settles or waits. A
+            route whose paths need navigation baked waits for it first, with the World still paused, and the wait is reported
+            as the run's preparation, outside every frame.
             Each --backend gets a World of its own, one after another, under the GPU lease. A report.json (puck.bench.v1) holds,
             for each run, every loop's chapters: arrival, end state hash, frame statistics (interval and work as mean, median,
             95th, 99th and 99.9th percentile and maximum), the hitch list with each hitch's tick, last sampled position and phase
@@ -175,7 +180,7 @@ public static partial class BenchmarkCommand {
             var conditions = Conditions(options: options, parse: parse, backend: name, headless: headless, world: PuckPaths.Normalize(path: world));
 
             try {
-                using var budget = new SuiteBudget(TimeSpan.FromSeconds(seconds: (parse.GetValue(options.Timeout) + BudgetGraceSeconds)), token);
+                using var budget = new SuiteBudget(TimeSpan.FromSeconds(seconds: Allowance(timeout: parse.GetValue(options.Timeout))), token);
                 var played = Play(options: options, parse: parse, build: build, directory: Path.Combine(path1: directory, path2: name), backend: backend, shape: shape, world: world, route: route, prefix: prefix, budget: budget, print: print.Write);
 
                 runs.Add(item: Fold(world: played, conditions: conditions, backend: name, routeName: (prefix.Length == 0 ? routeName : $"{routeName}#{prefix}")));
@@ -249,6 +254,10 @@ public static partial class BenchmarkCommand {
         return backends;
     }
 
+    // The seconds one backend's World may take: the wall-time limit twice, for a route's wait for its navigation and then
+    // the run, and the grace for the boot and the collection.
+    private static int Allowance(int timeout) => ((2 * timeout) + BudgetGraceSeconds);
+
     // The route's name in a report: its path from the repository root when it lies within it, so two checkouts of one
     // route name it alike, and otherwise its file name.
     private static string RouteName(string root, string path) => (PuckPaths.IsWithin(path: path, root: root) ? PuckPaths.Relative(path: path, relativeTo: root) : Path.GetFileName(path: path));
@@ -263,7 +272,7 @@ public static partial class BenchmarkCommand {
                 .. (parse.GetValue(options.Cache) is { } cache ? new[] { "--cache-dir", Path.GetFullPath(cache) } : []),
                 .. ((parse.GetValue(options.Uncapped) && (shape == WorldShape.Windowed)) ? new[] { "--present-mode", "immediate" } : [])],
             Backend = backend,
-            ExitAfterSeconds = WorldLaunch.Backstop(TimeSpan.FromSeconds(timeout + BudgetGraceSeconds)),
+            ExitAfterSeconds = WorldLaunch.Backstop(TimeSpan.FromSeconds(Allowance(timeout))),
             Shape = shape,
             StateDirectory = Path.Combine(directory, "state"),
             Timing = true,
@@ -296,6 +305,30 @@ public static partial class BenchmarkCommand {
             throw new InvalidOperationException($"the World refused the route: {armed.Output}");
         }
         print($"{Verb}: {armed.Output}\n");
+
+        // A route that needs navigation baked waits for it with the World still paused, so the run arms from the boot image
+        // as one that needs none does; the World reports it never started once the run's own limit passes.
+        var waited = Stopwatch.StartNew();
+        var told = TimeSpan.Zero;
+
+        while (armed.Output.StartsWith(PreparingPrefix, StringComparison.Ordinal)) {
+            if (budget.Expired) {
+                throw new TimeoutException($"{budget.Reason}; the World was still preparing the route");
+            }
+            _ = budget.Token.WaitHandle.WaitOne(PollInterval);
+            armed = live.Run("world.benchmark", 30);
+            if (!armed.Ok) {
+                throw new InvalidOperationException($"the World stopped answering: {armed.Output}");
+            }
+            if (armed.Output.StartsWith(PreparingPrefix, StringComparison.Ordinal)) {
+                if ((waited.Elapsed - told) >= ProgressInterval) {
+                    told = waited.Elapsed;
+                    print($"{Verb}: {armed.Output}\n");
+                }
+            } else if (!armed.Output.StartsWith(PlayingPrefix, StringComparison.Ordinal)) {
+                throw new InvalidOperationException($"the World never started the route: {armed.Output}");
+            }
+        }
         if (!live.Run("world.rate resume", 30).Ok) {
             throw new InvalidOperationException("the World would not resume");
         }
@@ -314,7 +347,7 @@ public static partial class BenchmarkCommand {
             if (!status.Ok) {
                 throw new InvalidOperationException($"the World stopped answering: {status.Output}");
             }
-            if (!status.Output.StartsWith("[world.benchmark: playing", StringComparison.Ordinal)) {
+            if (!status.Output.StartsWith(PlayingPrefix, StringComparison.Ordinal)) {
                 summary = status.Output;
             } else if ((clock.Elapsed - announced) >= ProgressInterval) {
                 announced = clock.Elapsed;

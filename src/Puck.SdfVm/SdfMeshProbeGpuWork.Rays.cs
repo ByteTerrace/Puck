@@ -24,8 +24,11 @@ internal sealed partial class SdfMeshProbeGpuWork {
     private readonly IGpuAccelerationStructures? m_structures;
     private readonly nint m_raysPool;
     private readonly Dictionary<SdfMeshIrradianceScene.Geometry, Bottom> m_bottoms = new(ReferenceEqualityComparer.Instance);
-    // TryTakeStructures' scratch: the bottoms one pass has already taken into its build or compaction.
+    // TryTakeStructures' scratch: the bottoms one pass has already taken into its build or compaction, and the builds and
+    // compactions it takes, which a job copies out.
     private readonly HashSet<Bottom> m_takenBottoms = new(ReferenceEqualityComparer.Instance);
+    private readonly List<(Bottom Bottom, SdfMesh Mesh)> m_takenBuilds = [];
+    private readonly List<Bottom> m_takenCompactions = [];
     private readonly GpuRetirementQueue<IGpuAccelerationStructure> m_retired = new();
     private readonly List<long> m_flying = [];
     // Seconds a structure job takes a unit, by its kind (StructureKind): a triangle of a bottom's build or of its
@@ -151,8 +154,11 @@ internal sealed partial class SdfMeshProbeGpuWork {
 
         if (count > (int)GpuAccelerationStructureInstance.MaxIndex) { return false; }
 
-        var build = new List<(Bottom Bottom, SdfMesh Mesh)>();
-        var compact = new List<Bottom>();
+        var build = m_takenBuilds;
+        var compact = m_takenCompactions;
+
+        build.Clear();
+        compact.Clear();
         var buildRate = m_structureRates[(int)StructureKind.Bottoms];
         var compactRate = m_structureRates[(int)StructureKind.Compaction];
         var topRate = m_structureRates[(int)StructureKind.Top];

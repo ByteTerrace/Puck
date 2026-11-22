@@ -391,9 +391,9 @@ public sealed class SdfMeshStoreLawTests {
 
         // Nothing recorded: the store names no earlier identity, then records this one.
         Assert.Contains(expectedSubstring: "records no earlier identity", actualString: store.ExplainMisses(identity: first));
-        Assert.Contains(expectedSubstring: "unchanged: its set was evicted, or it never stored one (0 entries in 0 sets", actualString: store.ExplainMisses(identity: first));
+        Assert.Contains(expectedSubstring: "unchanged: its set was evicted, or it never stored one (a store of", actualString: store.ExplainMisses(identity: first));
         Assert.True(condition: store.Write(geometry: Geometry, identity: first.Value, materials: [], mesh: Mesh()));
-        Assert.Contains(expectedSubstring: "unchanged: geometry new to its set of 1 entries (1 entries in 1 sets", actualString: store.ExplainMisses(identity: first));
+        Assert.Contains(expectedSubstring: "unchanged: geometry new to its set of 1 entries (a store of", actualString: store.ExplainMisses(identity: first));
         Assert.Contains(expectedSubstring: "parts unknown", actualString: store.ExplainMisses(identity: new SdfMeshBakeIdentity(value: 5)));
         store.Record(identity: new SdfMeshBakeIdentity(value: 5));
         Assert.Single(collection: Directory.GetFiles(path: store.Directory, searchPattern: ("*" + SdfMeshStore.IdentityExtension)));

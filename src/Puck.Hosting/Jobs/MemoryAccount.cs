@@ -124,6 +124,11 @@ public sealed class MemoryAccount {
 
     private readonly Func<long?> m_readAvailable;
     private readonly Func<long> m_clock;
+    // Reads the process's private resident bytes beside the account's callers (ReadBeyond), one read at a time: the read
+    // walks the process's working set, milliseconds in a large process, and the frame thread is among the callers. One
+    // while a read is queued or running, so a refresh never queues a second.
+    private readonly BoundedWorkQueue<MemoryAccount> m_beyondReads = new(concurrency: 1, run: static account => account.ReadBeyond());
+    private int m_beyondReading;
 
     // Pulsed when a pool may have gained room: what an owner waiting for room sleeps on (Owner.TryReserveWithin). Never
     // held while the account's lock is taken.
@@ -603,26 +608,37 @@ public sealed class MemoryAccount {
         lock (m_availableGate) {
             if ((m_availableAt != 0) && ((now - m_availableAt) < AvailableInterval)) { return; }
             long heldBefore;
-            long hostOwnersBefore;
-            lock (m_gate) {
-                heldBefore = HeldOf(PhysicalMemory.Host);
-                hostOwnersBefore = m_bytes.Sum();
-            }
+            lock (m_gate) { heldBefore = HeldOf(PhysicalMemory.Host); }
             var available = m_readAvailable();
-            var process = m_hostBar is null ? null : HostMemory.PrivateResidentBytes(processId: Environment.ProcessId);
             lock (m_gate) {
                 m_available = available;
                 // Do not credit an allocation that raced the sample as if it were already in that reading.
                 m_availableHeld = Math.Min(heldBefore, HeldOf(PhysicalMemory.Host));
-                // The process's private resident pages (HostMemory.PrivateResidentBytes): commit no page backs yet, such
-                // as a driver's mirror of device memory or a collector's committed reserve, occupies no host memory and is
-                // left out. The host-placed device blocks lie in it (the driver's write-combined views of upload and
-                // readback heaps are resident private pages, as a walk's driver-mapped resident figure shows) and the pool
-                // already holds them, so they are taken out with the owners rather than counted twice.
-                if (process is { } bytes) { RecordBeyond(beyond: Math.Max(0L, ((bytes - Math.Min(hostOwnersBefore, m_bytes.Sum())) - m_deviceBlocks[((int)PhysicalMemory.Host)]))); }
                 Volatile.Write(location: ref m_availableAt, value: Math.Max(val1: 1L, val2: now));
                 NotePressure(pool: PhysicalMemory.Host);
             }
+            if ((m_hostBar is not null) && (Interlocked.Exchange(location1: ref m_beyondReading, value: 1) == 0)) { m_beyondReads.Enqueue(item: this); }
+        }
+    }
+    // Reads the process's private resident pages (HostMemory.PrivateResidentBytes) on the host's pool and records what
+    // lies beyond the pool's holdings: commit no page backs yet, such as a driver's mirror of device memory or a
+    // collector's committed reserve, occupies no host memory and is left out. The host-placed device blocks lie in it (the
+    // driver's write-combined views of upload and readback heaps are resident private pages, as a walk's driver-mapped
+    // resident figure shows) and the pool already holds them, so they are taken out with the owners rather than counted
+    // twice. The beyond figure is at most one read and one interval behind the walk, as the free memory is.
+    private void ReadBeyond() {
+        try {
+            long hostOwnersBefore;
+            lock (m_gate) { hostOwnersBefore = m_bytes.Sum(); }
+            if (HostMemory.PrivateResidentBytes(processId: Environment.ProcessId) is not { } bytes) { return; }
+            lock (m_gate) {
+                // A bar lifted while the read ran leaves nothing to record against (SetHostBar cleared it).
+                if (m_hostBar is null) { return; }
+                RecordBeyond(beyond: Math.Max(0L, ((bytes - Math.Min(hostOwnersBefore, m_bytes.Sum())) - m_deviceBlocks[((int)PhysicalMemory.Host)])));
+                NotePressure(pool: PhysicalMemory.Host);
+            }
+        } finally {
+            Volatile.Write(location: ref m_beyondReading, value: 0);
         }
     }
     // Under m_gate: records the private bytes beyond the pool's holdings and play's part of them (m_playBeyondHeld).

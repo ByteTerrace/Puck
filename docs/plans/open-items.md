@@ -1244,21 +1244,40 @@ static copies by row identity (`sdf.creations.static.copies-rebuilt` +77 over
 manifest parts it met (`world.boot.manifest.parts-walked` +275, `.replayed`
 +660k). What remains is in proportion to the document, not the change:
 
-- [high] Each new placements section (a response change in a disclosed
-  document; about 110 compiles over the chapter) builds a new
-  `WorldPlacementStamp` compilation context, which validates every surface
-  descriptor again (`world.boot.surface.descriptors` +117k over the chapter),
-  and the frame table and the manifest still visit every row to find it
-  unchanged. Carry a context's descriptors and frames across a section whose
-  rows are reused, and derive the frame table and manifest of a section from
-  the section it replaced by its changed rows, so a disclosure costs the rows
-  that moved. Check: those counters per delivery.
-- [high] The frame thread still allocated 1054 MiB in the lift chapter (647
-  iterations, `frames.csv` `frameThreadAllocatedBytes`), and the longest frames
-  were gen2 collections (pauses of 350 to 700 ms) on a machine short of memory.
-  Attribute the frame thread's allocations with a `gc-verbose` trace read by
-  allocation tick, not a speedscope conversion (which weights by time), and
-  remove the largest sources.
+- [high] A response change still rebuilds whole products on background
+  threads, and their garbage stops the frame thread: every gen1 collection
+  suspends it, and the stalls at the garden painting and the lift were frames
+  holding several gen1 pauses beside the frame's own work. Per rebuild, read by
+  allocation tick (`puck host allocations --focus`): the composition's program
+  (`SdfProgram`'s word arrays, about 150 MB a build on the large object heap,
+  `SdfCompositionFrameSource.StartBuild`), and the presentation field
+  (`WorldFramePresenter.RebuildStaticField`, about 280 MB: a whole static
+  program and its field evaluator, `SdfFieldEvaluator.BuildRotationBounds` and
+  `SdfBoundsCache` among it). Build each from the one it replaces by the rows
+  that changed, or keep their storage owned and reused. Check: allocation by
+  site over the lift chapter, and no frame with more than one collection.
+- [high] Each delivery that replaces a placements section still builds a new
+  `WorldPlacementStamp` compilation context; frames now resolve on demand and
+  a surface descriptor is carried from any context whose rows and creations it
+  read stand (`world.boot.surface.descriptors-carried`), but the context's row
+  index and caches are rebuilt per section, and `WorldFaceCatalog.DeriveFrame`
+  (from `WorldNestedScreens.Reconcile`, every nested screen each delivery) asks
+  for a fresh one. Derive a section's index and context from the section it
+  replaced by its changed rows. Check: `world.boot.surface.descriptors` per
+  delivery near zero, and the placement sites gone from the frame thread's
+  allocation.
+- [high] The frame thread still allocates 150 to 600 KB a frame on average in
+  steady chapters (median 30 to 140 KB). The largest remaining sites, by
+  allocation tick: the irradiance volume replaced whole on resize
+  (`SdfMeshIrradiance.TryReplaceVolume`, `MemoryAccount.Owner.AllocateArray`),
+  render-graph reconfiguration (`ShaderPipelineRenderNode.InstallPass`,
+  `GpuGroupLayoutDescription`, `DirectXGpuBindings.PlaceGroupSet`,
+  `SdfWorldPassRecorder`), `SdfMeshOcclusion`'s sighting arrays, route labels
+  (`DeliveryLabel.Of` from `WorldScreenBinder.ResolveInstanceView`), the
+  document rebind (`WorldDocumentWalker.Cursor.RewriteItems`' object arrays) and
+  `FixedQ4816.FromDegreesExact`'s `BigInteger` work, and
+  `WorldScreenBinder.SharedSceneOf`'s name, built a feed a frame. Each is a per-change
+  rebuild of something derivable from what changed.
 - [medium] A mesh region whose growth is refused holds its limit to what it
   holds (`SdfWorldTables.HoldsRefusedGrowth`, `sdf.rows.check.region.refusal-holds`)
   until the region's size, a release, the pool's room or a trim moves, or a
@@ -1267,10 +1286,6 @@ manifest parts it met (`world.boot.manifest.parts-walked` +275, `.replayed`
   then refuses, and memory another owner gives back reaches the region by no
   event. Make the two ledgers agree, so the reservation that admits a growth
   is the one the device admission honours, and drop the plan-count fallback.
-- [low] `MemoryAccount.RefreshAvailable` samples the process's resident memory
-  on whichever thread first asks after its interval, the frame thread among
-  them (a `DeviceReservation.TryReserve` from the mesh region). Sample it off
-  the frame thread.
 
 What an arrival and a hand-over still cost the frame:
 
@@ -1326,6 +1341,26 @@ What an arrival and a hand-over still cost the frame:
   machine should cost Vulkan's pacer more than Direct3D 12's is not found.
 
 The frame thread's CPU work, largest first:
+
+- [high] The world residency's bake prepares on the frame thread inside its
+  capture (`SdfMeshPathBake.PrepareFrame`, through `SdfMeshDresser.Dress`),
+  and its demand measure (`MeasureDemands`, `MeasureChosen`) is its largest
+  part on the benchmark route: the moved-slot route judges every group on a
+  moved slot (`sdf.residency.demand.stood`), each frame reads every frustum
+  watch (`demand.watched`), and each measure reads every box against every
+  demand point (`demand.views`). The measure decides only the tier a group
+  asks for, which no frame's draws read until a replacement lands, so it can
+  run beside the frame on a worker once its inputs (the frame's transforms,
+  copies and demand points, which the source rewrites at its next capture) are
+  its own and the frame thread's later reads of the bake (`Pending`,
+  `ServeAhead`, `ObserveResidency`) no longer wait on its gate. Check:
+  `sdf.residency.demand.*` unchanged per frame, and the frame thread's
+  `PrepareFrame` share in a sampled trace of the route.
+- [medium] `SdfWorldTables.NoteMovedSlots` judges each row riding a moved slot
+  (`sdf.residency.motion.rows`), decoding its record's box. Rows riding one
+  slot move rigidly, as its readers do (`ReachBySlot`), but each row's held box
+  (`m_slotBoxes`) is what a later restage judges from; judging a slot once
+  needs that held box derived from the slot's last judged pose instead.
 
 - [high] The tick runs on the frame thread (`HostLoop.Run` through
   `FixedStepPump.Step`), so a frame that steps carries a whole tick. The move

@@ -427,7 +427,8 @@ laws exercise that boundary.
   order, then the stages by group priority. A pool per residency oversubscribes
   the processors three times over on the debug world, and workers below normal
   priority lose them to the irradiance trace and the machines, more than doubling a
-  cold bake. The workers are threads of the pool's own at normal priority
+  cold bake. The workers are threads of the pool's own at normal priority, below
+  the frame's and the ticks' fork workers (`JobPool.WorkerPriority`)
   (`SdfMeshPathBake.StartWorkers`), blocking on an operating-system semaphore
   while idle: held as `Task.Run` items for a whole bake, they kept the process's
   other thread-pool work (timers, `Parallel.For`, the store's account) waiting

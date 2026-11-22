@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions;
 using Puck.Maths;
 using Puck.World.Authoring;
 
@@ -7,11 +8,49 @@ namespace Puck.World;
 public static partial class WorldPlacementStamp {
     private sealed record SurfaceSource(WorldPlacement Row, CreationDocument Document, float Margin);
     private sealed record SurfaceDescriptor(WorldPlacementSurface Policy, SurfaceSource[] Sources);
-    private sealed record SurfaceValidation(SurfaceDescriptor? Descriptor, string Reason);
+    // One lookup by id that a validation read, of a placement row or (Creation) of a creation, and what it found (null
+    // for none).
+    private readonly record struct RowRead(string Id, object? Row, bool Creation = false);
+    // A validation's answer and every lookup it read, its nested validations' included. The answer is a function of the
+    // row and those lookups alone, so a context whose index and creations answer each read with the same object answers
+    // the same (Reads).
+    private sealed record SurfaceValidation(SurfaceDescriptor? Descriptor, string Reason, RowRead[] Reads);
+    private sealed record ParentValidation(string Reason, RowRead[] Reads);
+    // The validation a row last had in any context: a new section that keeps the row object and every row and creation
+    // its validation read validates it no further.
+    private static readonly CodeDerivedTable<WorldPlacement, SurfaceValidation> Descriptors = new();
 
     private sealed partial class CompilationContext {
         private readonly Dictionary<WorldPlacement, SurfaceValidation> m_descriptors = new(ReferenceEqualityComparer.Instance);
-        private readonly Dictionary<WorldPlacement, string> m_parentValidation = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<WorldPlacement, ParentValidation> m_parentValidation = new(ReferenceEqualityComparer.Instance);
+        // The lookups the validations running now have read; each validation keeps those after its own start, and the
+        // log empties when the outermost one ends, so a context's log holds one validation's reads at most.
+        private readonly List<RowRead> m_reads = [];
+        private int m_recording;
+
+        // The one door a validation looks a row up by id through, so every lookup it reads is recorded.
+        private bool Lookup(string id, out WorldPlacement row) {
+            var found = m_rows.TryGetValue(id, out row!);
+
+            m_reads.Add(new RowRead(Id: id, Row: (found ? row : null)));
+            return found;
+        }
+        // The one door a validation looks a creation up by id through, recorded as Lookup records a row.
+        private WorldPrototype? CreationRead(string id) {
+            var creation = CreationOf(id: id);
+
+            m_reads.Add(new RowRead(Creation: true, Id: id, Row: creation));
+            return creation;
+        }
+        private bool Holds(RowRead[] reads) {
+            foreach (var read in reads) {
+                object? now = (read.Creation ? CreationOf(id: read.Id) : (m_rows.TryGetValue(read.Id, out var row) ? row : null));
+
+                if (!ReferenceEquals(objA: now, objB: read.Row)) { return false; }
+            }
+            return true;
+        }
+        private RowRead[] ReadsSince(int start) => ((m_reads.Count == start) ? [] : m_reads.GetRange(index: start, count: (m_reads.Count - start)).ToArray());
         private readonly HashSet<WorldPlacement> m_validatingStamps = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<WorldPlacement> m_validatingFrames = new(ReferenceEqualityComparer.Instance);
 
@@ -26,23 +65,44 @@ public static partial class WorldPlacementStamp {
             descriptor = null; reason = string.Empty;
             if (row.Surface is not { } surface) { return true; }
             var owned = Owned(row);
-            if (owned && m_descriptors.TryGetValue(row, out var cached)) {
+            if (owned && (m_descriptors.TryGetValue(row, out var cached) || TryRemembered(row, out cached))) {
+                if (m_recording > 0) { m_reads.AddRange(cached.Reads); }
                 descriptor = cached.Descriptor; reason = cached.Reason; return reason.Length == 0;
             }
             if (!m_validatingStamps.Add(row)) {
                 return Invalid(out descriptor, out reason, $"placement '{row.Id}' has a cyclic surface/frame dependency.");
             }
+            var start = m_reads.Count;
+            m_recording++;
             try {
                 var valid = BuildDescriptor(row, surface, out descriptor, out reason);
-                if (owned) { m_descriptors[row] = new SurfaceValidation(descriptor, reason); }
+                if (owned) {
+                    var validation = new SurfaceValidation(descriptor, reason, ReadsSince(start: start));
+
+                    m_descriptors[row] = validation;
+                    if (CodeRevision.Current == m_revision) { Descriptors.AddOrUpdate(row, validation); }
+                }
                 return valid;
-            } finally { m_validatingStamps.Remove(row); }
+            } finally {
+                m_validatingStamps.Remove(row);
+                if (--m_recording == 0) { m_reads.Clear(); }
+            }
+        }
+        // The validation another context made of this row object, when this context's index and creations answer
+        // everything it read as they did there.
+        private bool TryRemembered(WorldPlacement row, out SurfaceValidation validation) {
+            validation = null!;
+            if (!Descriptors.TryGetValue(row, out var remembered) || !Holds(remembered.Reads)) { return false; }
+            validation = remembered;
+            m_descriptors[row] = validation;
+            WorldBootWork.Count(WorldBootWork.SurfaceDescriptorsCarried);
+            return true;
         }
         private bool BuildDescriptor(WorldPlacement row, WorldPlacementSurface surface,
             out SurfaceDescriptor? descriptor, out string reason) {
             descriptor = null; reason = string.Empty;
             var prefix = new Prefix(row.Id);
-            if (row.Attach is not null || row.Inhabit is not null || !LiteralRoot(row) || (CreationOf(row.ShownPrototypeId) is null)) {
+            if (row.Attach is not null || row.Inhabit is not null || !LiteralRoot(row) || (CreationRead(row.ShownPrototypeId) is null)) {
                 return Invalid(out descriptor, out reason, $"{prefix} requires a literal static root, without live root attachment or inhabitance.");
             }
             if (surface.Targets is not { Count: > 0 }) {
@@ -59,8 +119,8 @@ public static partial class WorldPlacementStamp {
             var sources = new SurfaceSource[surface.Targets.Count];
             for (var i = 0; i < surface.Targets.Count; i++) {
                 var id = surface.Targets[i];
-                if (id == row.Id || !seen.Add(id) || !m_rows.TryGetValue(id, out var target) ||
-                    (CreationOf(target.ShownPrototypeId) is not { } creation) || target.Solid is null ||
+                if (id == row.Id || !seen.Add(id) || !Lookup(id, out var target) ||
+                    (CreationRead(target.ShownPrototypeId) is not { } creation) || target.Solid is null ||
                     target.Deal is not null || target.Attach is not null || target.Inhabit is not null || !LiteralRoot(target) ||
                     CreationRig.Of(document: creation.Document).Animates || WorldStateDocumentValues.HasReference(creation.Document) ||
                     !CreationStampEmitter.EmitsContact(creation.EngineDocument)) {
@@ -80,20 +140,28 @@ public static partial class WorldPlacementStamp {
         private bool TryParentFrame(WorldPlacement row, out string reason) {
             reason = string.Empty;
             var owned = Owned(row);
-            if (owned && m_parentValidation.TryGetValue(row, out var cached)) { reason = cached; return reason.Length == 0; }
+            if (owned && m_parentValidation.TryGetValue(row, out var cached)) {
+                if (m_recording > 0) { m_reads.AddRange(cached.Reads); }
+                reason = cached.Reason; return reason.Length == 0;
+            }
             if (!m_validatingFrames.Add(row)) { reason = $"placement '{row.Id}' has a cyclic parent frame."; return false; }
+            var start = m_reads.Count;
+            m_recording++;
             try {
                 if (row.Parent is { Length: > 0 } parentId) {
-                    if (!m_rows.TryGetValue(parentId, out var parent) || parent.Attach is not null || parent.Inhabit is not null ||
+                    if (!Lookup(parentId, out var parent) || parent.Attach is not null || parent.Inhabit is not null ||
                         !LiteralRoot(parent)) {
                         reason = $"placement '{row.Id}' requires a declared literal static parent frame '{parentId}'.";
                     } else if (parent.Surface is not null && SingleRoot(parent)) {
                         _ = TryDescriptor(parent, out _, out reason);
                     } else { _ = TryParentFrame(parent, out reason); }
                 }
-                if (owned) { m_parentValidation[row] = reason; }
+                if (owned) { m_parentValidation[row] = new ParentValidation(reason, ReadsSince(start: start)); }
                 return reason.Length == 0;
-            } finally { m_validatingFrames.Remove(row); }
+            } finally {
+                m_validatingFrames.Remove(row);
+                if (--m_recording == 0) { m_reads.Clear(); }
+            }
         }
     }
 }

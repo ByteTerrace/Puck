@@ -188,7 +188,10 @@ worker counts do during a cold bake.
 The pool's foreground part exists: `JobPool` (`Puck.Hosting.Jobs`, a
 container singleton `AddWorldBoot` registers, which every authority's server
 and the presentation's stamp pools receive) holds `JobWorkers.Count - 1`
-threads at normal priority, idle on an operating-system semaphore. Its `Fork`
+threads at `JobPool.WorkerPriority`, above the background work's normal priority
+and below the frame thread's, so a partition the frame or a tick joins never
+queues behind a bake on a loaded machine; idle, they wait on an operating-system
+semaphore. Its `Fork`
 takes a `JobClass` (`Frame`, then `Tick`) and hands out partition indices from
 that fork's own counter to those threads and the forking thread, which drains
 only its own fork and then waits on the fork's event for the partitions others

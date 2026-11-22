@@ -214,9 +214,11 @@ outside this contract and takes the references as written.
   readiness. The [CLI reference](../../../docs/reference/cli.md#puck-benchthe-puckmaths-microscope)
   owns options, report fields and measurement hygiene.
 - Profile a running World's frame thread with `dotnet-trace collect -p <pid>
-  --profile dotnet-sampled-thread-time` (frame cost) or `--profile gc-verbose`
-  (allocation ticks with stacks, GC heap stats), then `dotnet-trace convert
-  --format speedscope` and aggregate the frame thread's stacks yourself; read
+  --profile dotnet-sampled-thread-time` (frame cost), then `dotnet-trace convert
+  --format speedscope` and aggregate the frame thread's stacks yourself. Read
+  allocation with `puck host allocations`, which sums the allocation ticks by
+  thread, type, call site and caller path; a speedscope conversion of a
+  `gc-verbose` trace weighs stacks by time, not bytes. Read
   `host.frames` beside it for produce (split into `produce-work` and
   `produce-fence`, the device back-pressure), simulate and the frame thread's
   allocated bytes per iteration. Without a trace, `host.frames`' frame thread
