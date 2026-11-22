@@ -2,7 +2,6 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
-using Puck.Hosting.Jobs;
 
 namespace Puck.SdfVm;
 
@@ -190,26 +189,13 @@ public sealed partial class SdfMeshPathBake {
     // The groups the tier decisions read (Attend).
     private readonly MarkedGroups m_attention = new(mark: GroupMarks.Attended);
     // The groups the frame's routes chose to measure, each once (MeasureDemands' Measure), with each one's readings and
-    // frustum watch as MeasureChosen takes them, on whichever thread, before the frame's thread keeps them; the bias and
-    // watch length they are taken under.
+    // frustum watch as MeasureChosen takes them before it keeps them; the bias and watch length they are taken under.
     private readonly List<Group> m_chosen = [];
     private DemandReading[] m_readings = [];
     private float[] m_chosenWatches = [];
     private int m_chosenBias;
     private int m_chosenLength;
-    private ReadingPartitions? m_readingPartitions;
-    // The fewest chosen groups the readings are forked over the frame's job pool for, and the groups a partition holds.
-    private const int ParallelReadings = 96;
-    private const int ReadingShare = 32;
 
-    // The chosen groups' readings as a fork of the frame's job pool runs them, a share of groups a partition.
-    private sealed class ReadingPartitions(SdfMeshPathBake bake) : IJobPartitions {
-        public void Run(int partition) {
-            var end = Math.Min(val1: bake.m_chosen.Count, val2: ((partition + 1) * ReadingShare));
-
-            for (var index = (partition * ReadingShare); (index < end); index++) { bake.ReadChosen(index: index); }
-        }
-    }
 
     // What one measure read of a group (MeasureDemands' Measure): its pixel, its band's slack and the pixel that band is
     // taken about, the units and boxes read, the one world box it read, its band's top and how its boxes stood toward the
@@ -529,9 +515,8 @@ public sealed partial class SdfMeshPathBake {
             return true;
         }
     }
-    // Measures the groups the frame's routes chose: each one's readings first (ReadChosen), forked over the frame's job
-    // pool when there are many, since each reads only its own group, the points and the frame's boxes, and writes only
-    // its own reading; then, on the frame's thread, each kept in order (KeepReading).
+    // Measures the groups the frame's routes chose: each one's readings first (ReadChosen), which read only its own group,
+    // the points and the frame's boxes and write only its own reading, then each kept in order (KeepReading).
     private void MeasureChosen(ref int groups, ref long boxes, int bias, in DemandReadings clocks, long stamp) {
         var count = m_chosen.Count;
 
@@ -544,11 +529,7 @@ public sealed partial class SdfMeshPathBake {
         }
         if (m_chosenWatches.Length < (m_readings.Length * length)) { m_chosenWatches = new float[(m_readings.Length * length)]; }
         (m_chosenBias, m_chosenLength) = (bias, length);
-        if ((count < ParallelReadings) || (Jobs is not { Serial: false } jobs) || JobPool.InPartition) {
-            for (var index = 0; (index < count); index++) { ReadChosen(index: index); }
-        } else {
-            jobs.Fork(body: (m_readingPartitions ??= new ReadingPartitions(bake: this)), jobClass: JobClass.Frame, partitions: (((count + ReadingShare) - 1) / ReadingShare));
-        }
+        for (var index = 0; (index < count); index++) { ReadChosen(index: index); }
         for (var index = 0; (index < count); index++) {
             KeepReading(clocks: in clocks, group: m_chosen[index], index: index, stamp: stamp);
             boxes += m_readings[index].Boxes;

@@ -536,7 +536,6 @@ public static class WorldBootComposition {
             var definition = sp.GetRequiredService<WorldDefinition>();
             var probe = sp.GetService<WorldRenderProbe>();
             var binder = new WorldScreenBinder(
-                jobs: sp.GetService<Puck.Hosting.Jobs.JobPool>(),
                 client: sp.GetRequiredService<WorldClient>(),
                 feed: sp.GetRequiredService<WorldPresentationFeed>(),
                 renderProbe: probe,

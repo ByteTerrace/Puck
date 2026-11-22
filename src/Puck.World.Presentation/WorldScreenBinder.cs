@@ -68,8 +68,6 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     // The factory is non-null only on the D3D12 host, and the render adapter LUID is resolved once from the render device
     // context at the first publish (the device does not exist at construction), so capture feeds open on the render GPU.
     private readonly bool m_hostsOnDirectX;
-    // The job pool the residencies this binder builds fork their frame's parallel work across; none runs it serially.
-    private readonly Puck.Hosting.Jobs.JobPool? m_jobs;
     // The host's paper-white level, which an HDR capture's room glow is measured against.
     private readonly double m_paperWhiteNits;
     private readonly WorldValueDomainGuard m_domains;
@@ -241,13 +239,11 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     /// <param name="screenMaterials">The boot definition's screen materials, which the screens name; absent is none.</param>
     /// <param name="surfaceExports">The host's shared-surface exporters, which the camera, capture and view-export GPU
     /// routes allocate through, or <see langword="null"/> on a platform with none.</param>
-    /// <param name="jobs">The job pool the residencies the binder builds fork their frame's parallel work across, or
-    /// <see langword="null"/> to run it on the frame's thread.</param>
     /// <param name="feed">The published values every screen's machine output and clock, and every session a screen or an
     /// infinity layer observes, are read from.</param>
     /// <param name="client">The client whose delivered definition is the boot world's.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldPresentationFeed feed, WorldClient client, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldCreationInstances stamps, WorldPerceptionAnchor perception, Func<IOverlayPredicateEvaluator> facts, WorldSpeechClock speech, bool hostsOnDirectX, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits, IReadOnlyList<WorldScreenMaterial>? screenMaterials = null, IGpuSurfaceExportProvider? surfaceExports = null, Puck.Hosting.Jobs.JobPool? jobs = null) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldPresentationFeed feed, WorldClient client, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldCreationInstances stamps, WorldPerceptionAnchor perception, Func<IOverlayPredicateEvaluator> facts, WorldSpeechClock speech, bool hostsOnDirectX, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits, IReadOnlyList<WorldScreenMaterial>? screenMaterials = null, IGpuSurfaceExportProvider? surfaceExports = null) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: screens);
         m_domains = domains;
@@ -282,7 +278,6 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
         m_facts = facts;
         m_speech = speech;
         m_hostsOnDirectX = hostsOnDirectX;
-        m_jobs = jobs;
         m_paperWhiteNits = DisplayOutput.RequirePaperWhite(nits: paperWhiteNits);
         m_roster = roster;
         m_surfaceExports = surfaceExports;

@@ -133,7 +133,6 @@ public sealed partial class WorldScreenBinder {
         var source = scene.FrameSource;
         var name = RoutedViewName(scene: scene);
         var residency = new SdfWorldResidency(
-            jobs: m_jobs,
             dynamicTransformCapacity: Math.Max(
                 val1: source.DynamicTransformCapacity,
                 val2: m_viewDynamicTransformCapacity

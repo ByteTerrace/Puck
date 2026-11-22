@@ -114,7 +114,6 @@ public static class WorldRenderRoot {
         }
 
         var residency = SdfWorldRenderBuilder.Build(
-            jobs: sp.GetService<Puck.Hosting.Jobs.JobPool>(),
             pipelines: pipelines,
             spec: new SdfWorldRenderSpec(
                 FrameSource: frameSource,
