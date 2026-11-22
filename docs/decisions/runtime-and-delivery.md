@@ -364,6 +364,43 @@ Every such component is an authored or distributor's choice with a working
 fallback, like any per-target capability. Before a commercial release, each
 licence is read in full again.
 
+## The hosted MCP front's certificate
+
+**The certificate is a cache in the owner's store, never world state.** Caddy's
+certificate, key and ACME account live under `private/puck/hosted/tls/<hostname>/`,
+beside the worlds' authority prefixes and outside them, so a hosted state reset,
+which replaces only each world's authority root
+(`WorldAuthorityBlobStore.PrepareReleaseResetAsync`), never touches it. A fresh
+worker restores it; one hostname issues once (`build/Keep-WorldTls.py`).
+
+**First issuance uses ACME TLS-ALPN-01 through the load balancer's own rule.** A
+release replaces its one worker in place, and a fresh worker's NIC joins the
+load balancer's pool when the scale set creates it, so the worker that needs a
+certificate is the one the 443 rule reaches. The VM extension waits for the
+certificate before the release commits, so the commit means the MCP front
+answers. This needs only two things: the rule's probe judges that Caddy listens
+(not `/healthz`), and every network resource on that path has one owner. The
+platform (`main.bicepparam`'s world subnet) owns the subnet and its security
+group, the MCP rule included, and the world compute template only references
+them. A second owner undoes the first without an error: a platform reconcile
+writes the group's whole rule set, so a rule another template adds is gone
+until that template is applied again, and a worker that needs a certificate in
+between cannot be validated.
+
+Options weighed:
+- DNS-01. Caddy would need a DNS-provider module, which means a custom build
+  in place of the pinned official image. The worker would also need a write
+  grant on the zone, and the provider's name would sit in Caddy's
+  configuration, behind no Puck abstraction.
+- Issuing from the deploying runner and seeding the store. That needs an ACME
+  client in the CLI and a DNS write grant for the runner. It duplicates what
+  Caddy already does, and every renewal still has to happen on the worker.
+- Committing without the certificate. This would keep a release from
+  depending on the CA's availability. It was not needed: the stored
+  certificate makes issuance rare, and the front is reachable before the commit
+  once one template owns the rule. A CA outage during a first issuance still
+  rolls the release back, and the extension's tail names it.
+
 ## The runtime
 
 **Bare-metal Puck runs on Puck's own host (the owner's ruling).** The

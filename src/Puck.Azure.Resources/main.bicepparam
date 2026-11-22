@@ -14,13 +14,17 @@ var partitionCount = int(readEnvironmentVariable('BICEPPARAM_PARTITION_COUNT', '
 var prefix = readEnvironmentVariable('BICEPPARAM_PREFIX', 'bytrc')
 // PUCK on a telephone keypad; shared by the listener and its network rule.
 var worldQuicPort = 7825
+// The world silo's health listener; shared by its lifecycle configuration and the load balancer's network rule.
+var worldHealthPort = 8081
+// Null disables MCP. The world subnet's rules admit the MCP TLS front only while MCP is configured.
+var worldMcpSettings = json(readEnvironmentVariable('BICEPPARAM_WORLD_MCP', 'null'))
 
 param enableCustomerManagedKey = false
 param enableZoneRedundancy = false
 param ephemeral = false
 param forcePrivateNetworking = false
 param gitHubApplicationPrivateKey = null
-param worldMcp = json(readEnvironmentVariable('BICEPPARAM_WORLD_MCP', 'null'))
+param worldMcp = worldMcpSettings
 // Empty objectId = "the deploying principal" (pipeline default). For human-run deployments set
 // BICEPPARAM_OWNER_OBJECT_ID to your object id and BICEPPARAM_OWNER_PRINCIPAL_TYPE=User.
 param owner = {
@@ -465,6 +469,9 @@ param resources = {
         natGatewayResourceId: '${prefix}ngp000'
         privateEndpointNetworkPolicies: 'Disabled'
         privateLinkServiceNetworkPolicies: 'Enabled'
+        // The platform is this subnet's and its security group's one owner; the world compute template only references
+        // them. Every platform reconcile writes the whole rule set, so a rule declared anywhere else would be removed by
+        // the next reconcile, closing what it admits (the MCP TLS front and its ACME validation) until reapplied.
         securityRules: [
           {
             name: 'WorldQuic'
@@ -487,11 +494,30 @@ param resources = {
               access: 'Allow'
               protocol: 'Tcp'
               sourcePortRange: '*'
-              destinationPortRange: '8081'
+              destinationPortRange: string(worldHealthPort)
               sourceAddressPrefix: 'AzureLoadBalancer'
               destinationAddressPrefix: '*'
             }
           }
+          // The load balancer's WorldMcp rule forwards public 443 to Caddy on 8443 (worldSiloCompute.bicep): MCP
+          // clients, ACME TLS-ALPN-01 validation and the rule's TCP probe all arrive here.
+          ...(worldMcpSettings == null
+            ? []
+            : [
+                {
+                  name: 'WorldMcp'
+                  properties: {
+                    priority: 120
+                    direction: 'Inbound'
+                    access: 'Allow'
+                    protocol: 'Tcp'
+                    sourcePortRange: '*'
+                    destinationPortRange: '8443'
+                    sourceAddressPrefix: '*'
+                    destinationAddressPrefix: '*'
+                  }
+                }
+              ])
           {
             name: 'DenyOtherInbound'
             properties: {
@@ -632,7 +658,7 @@ param resources = {
     }
     lifecycle: {
       azureScheduledEvents: true
-      healthPort: 8081
+      healthPort: worldHealthPort
       pollSeconds: 1
       shutdownSeconds: 120
       progressTimeoutSeconds: 30
