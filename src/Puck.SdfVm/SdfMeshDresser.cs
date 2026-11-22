@@ -31,6 +31,10 @@ public sealed class SdfMeshDresser : IDisposable {
     private DrawBinding?[] m_bindings = [];
     // The rows whose owner moved this dress, visited in row order so their writes coalesce (SdfMeshRows.Writer.Set).
     private readonly MarkedIndexSet m_candidates = new();
+    // Each slot's units (SdfMeshGeometryBuilder.UnitsOf) as every binding riding it was last posed at, NaN once a row is
+    // bound to it (ForgetSlotUnits) until its next walk: a slot's rows read the slot's units alone, so a slot that moved
+    // at the recorded units reposes nothing and is never walked.
+    private float[] m_slotUnits = [];
     private readonly GpuUploadRuns m_slots = new(GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_hostChanges = new(GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_copyRuns = new(GpuRegion.MaxCopyRuns);
@@ -69,7 +73,7 @@ public sealed class SdfMeshDresser : IDisposable {
     }
 
     /// <summary>Gets logical retained scratch and index bytes.</summary>
-    public long ScratchBytes => ((((((m_rows.ClipIndexBytes + m_bindingsByOwner.StorageBytes) + m_candidates.StorageBytes) + m_slots.StorageBytes) + m_hostChanges.StorageBytes + m_copyRuns.StorageBytes) + (((long)m_bindings.Length) * IntPtr.Size)) + (((long)m_copies.Length) * (IntPtr.Size + sizeof(int) + sizeof(long))));
+    public long ScratchBytes => ((((((m_rows.ClipIndexBytes + m_bindingsByOwner.StorageBytes) + m_candidates.StorageBytes + (((long)m_slotUnits.Length) * sizeof(float))) + m_slots.StorageBytes) + m_hostChanges.StorageBytes + m_copyRuns.StorageBytes) + (((long)m_bindings.Length) * IntPtr.Size)) + (((long)m_copies.Length) * (IntPtr.Size + sizeof(int) + sizeof(long))));
 
     /// <summary>Reconciles products, copy membership and poses without moving unrelated owners.</summary>
     public SdfFrame Dress(SdfFrame frame) {
@@ -169,10 +173,23 @@ public sealed class SdfMeshDresser : IDisposable {
         if (programChanged) {
             for (var row = 0; (row < m_bindings.Length); row++) { if (m_bindings[row] is not null) { _ = m_candidates.Add(index: row); } }
         }
+        var slotsSpared = 0;
+
         for (var run = 0; (run < m_slots.Count); run++) {
             var end = Math.Min(val1: (m_slots.Start(index: run) + m_slots.Length(index: run)), val2: m_slotEnd);
 
-            for (var slot = m_slots.Start(index: run); (slot < end); slot++) { AddCandidates(key: (false, slot)); }
+            for (var slot = m_slots.Start(index: run); (slot < end); slot++) {
+                // A row placed by its slot reads the slot's units and nothing else of it (DrawBinding.Repose): a slot that
+                // moved at the units its bindings were posed at leaves every one of them standing.
+                var units = ((slot < frame.DynamicTransforms.Count) ? SdfMeshGeometryBuilder.UnitsOf(transform: frame.DynamicTransforms[slot]) : float.NaN);
+
+                if (!programChanged && !startOver && (m_slotUnits[slot] == units)) {
+                    slotsSpared++;
+                    continue;
+                }
+                m_slotUnits[slot] = units;
+                AddCandidates(key: (false, slot));
+            }
         }
         for (var run = 0; (run < m_copyRuns.Count); run++) {
             for (var i = m_copyRuns.Start(index: run); (i < (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run))); i++) {
@@ -185,10 +202,10 @@ public sealed class SdfMeshDresser : IDisposable {
             visited++;
             // A draw placed by its slot whose slot only moved poses as it did: its row stands, and the kernels and
             // every CPU reader place it from the slot's row (SdfMeshDraw.PlacementIn).
-            if (!binding.Repose(frame: frame, matrices: ref matrices, draw: out var draw) && !programChanged) { continue; }
+            if (!binding.Repose(frame: frame, matrices: ref matrices) && !programChanged) { continue; }
 
             var (run, offset) = BindingRun(row: row);
-            Write(run, offset, draw, OwnerOf(binding: binding));
+            Write(run, offset, in binding.Draw, OwnerOf(binding: binding));
         }
         m_writer.SetClips(clips: frame.SlotClips);
         // If clip-copy reconciliation allocated or freed
@@ -226,6 +243,7 @@ public sealed class SdfMeshDresser : IDisposable {
         SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressedRecordsUpdated, updated);
         SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressGroupsVisited, groupsVisited);
         SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressCopiesVisited, copiesVisited);
+        SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressSlotsSpared, slotsSpared);
         return frame;
     }
     // Reconciles every group the bake lists with the mesh it draws, its copies and the tier its mesh was baked at,
@@ -331,13 +349,24 @@ public sealed class SdfMeshDresser : IDisposable {
         m_bindings[row] = binding;
         binding.Run = run;
         IndexBinding(binding: binding, row: row);
-        _ = binding.Repose(frame: frame, matrices: ref matrices, draw: out var draw);
-        Write(run, offset, draw, OwnerOf(binding: binding));
+        _ = binding.Repose(frame: frame, matrices: ref matrices);
+        Write(run, offset, in binding.Draw, OwnerOf(binding: binding));
     }
     private static SdfMeshRows.Owner OwnerOf(DrawBinding binding) => new(Instance: binding.FirstInstance, RigidCopy: (binding.CopyIndex >= 0));
     private void IndexBinding(int row, DrawBinding binding) {
         m_bindingsByOwner.Remove(row: row);
-        if (binding.CopyIndex >= 0) { m_bindingsByOwner.Set(row, (true, binding.CopyIndex)); } else if (binding.Slot is { } slot) { m_bindingsByOwner.Set(key: (false, slot), row: row); m_slotEnd = Math.Max(val1: m_slotEnd, val2: (slot + 1)); }
+        if (binding.CopyIndex >= 0) { m_bindingsByOwner.Set(row, (true, binding.CopyIndex)); } else if (binding.Slot is { } slot) { m_bindingsByOwner.Set(key: (false, slot), row: row); m_slotEnd = Math.Max(val1: m_slotEnd, val2: (slot + 1)); ForgetSlotUnits(slot: slot); }
+    }
+    // A row bound to a slot is posed at the slot's units as they are now, which the slot's record (m_slotUnits) may not
+    // hold: the record is forgotten, so the slot's next move walks its rows once and records its units again.
+    private void ForgetSlotUnits(int slot) {
+        if (slot >= m_slotUnits.Length) {
+            var grown = m_slotUnits.Length;
+
+            Array.Resize(array: ref m_slotUnits, newSize: ArrayCapacity.Grown(grown, (slot + 1)));
+            m_slotUnits.AsSpan(start: grown).Fill(value: float.NaN);
+        }
+        m_slotUnits[slot] = float.NaN;
     }
     private void AddCandidates((bool Copy, int Index) key) {
         for (var row = m_bindingsByOwner.First(key: key); (row >= 0); row = m_bindingsByOwner.Next(row: row)) { _ = m_candidates.Add(index: row); }
@@ -354,10 +383,10 @@ public sealed class SdfMeshDresser : IDisposable {
             var copies = access.CopiesOf(group: group);
 
             for (var c = 0; (c < (copies?.Count ?? 1)); c++) {
-                for (var p = 0; (p < mesh.PieceCount); p++) { _ = new DrawBinding(mesh.Piece(index: p), group, ((copies is null) ? -1 : copies[c]), ((copies is null) && (mesh.Chunks.Count > 0)), access.TierOf(group: group), access.TraceOf(group: group), p).Repose(frame: frame, matrices: ref matrices, draw: out var draw); expected.Add(item: draw); }
+                for (var p = 0; (p < mesh.PieceCount); p++) { var binding = new DrawBinding(mesh.Piece(index: p), group, ((copies is null) ? -1 : copies[c]), ((copies is null) && (mesh.Chunks.Count > 0)), access.TierOf(group: group), access.TraceOf(group: group), p); _ = binding.Repose(frame: frame, matrices: ref matrices); expected.Add(item: binding.Draw); }
             }
         }
-        for (var i = 0; (i < frame.MeshInstances.Count); i++) { if (frame.MeshInstances[i].Mesh is { } mesh) { _ = new DrawBinding(mesh, null, i).Repose(frame: frame, matrices: ref matrices, draw: out var draw); expected.Add(item: draw); } }
+        for (var i = 0; (i < frame.MeshInstances.Count); i++) { if (frame.MeshInstances[i].Mesh is { } mesh) { var binding = new DrawBinding(mesh, null, i); _ = binding.Repose(frame: frame, matrices: ref matrices); expected.Add(item: binding.Draw); } }
         SdfSlotClip.Apply(expected, frame.SlotClips);
         foreach (var (row, draw) in m_rows.Live()) {
             var at = expected.FindIndex(match: candidate => candidate.SameStagedContent(other: in draw));
@@ -391,16 +420,18 @@ public sealed class SdfMeshDresser : IDisposable {
         public int FirstInstance => (group?.FirstInstance ?? -1);
         public int? Slot => ((group is { Dynamic: true }) ? group.Slot : null);
 
+        // The draw the row holds as last posed (Repose); read in place, since an unchanged draw is never copied out.
+        public ref readonly SdfMeshDraw Draw => ref m_draw;
+
         // Poses the row's draw for the frame, answering whether it differs from the draw last posed. A copy's draw changes
         // only with the copy's revision, which a moving copy's pose leaves standing (SdfMeshInstance.Revision), and a
         // moving group's only with its slot's scale.
-        public bool Repose(SdfFrame frame, ref int matrices, out SdfMeshDraw draw) {
+        public bool Repose(SdfFrame frame, ref int matrices) {
             if (copyIndex >= 0) {
                 var copy = frame.MeshInstances[copyIndex];
                 var firstInstance = (group?.FirstInstance ?? -1);
 
                 if (ReferenceEquals(objA: copy, objB: m_copy) && (m_copyRevision == copy.Revision) && (m_draw.FrameSlot == copy.FrameSlot) && (m_pickIdentity?.FirstInstance == firstInstance)) {
-                    draw = m_draw;
                     return false;
                 }
                 m_copy = copy;
@@ -415,7 +446,7 @@ public sealed class SdfMeshDresser : IDisposable {
                     m_motionIdentity = ((source, (((object?)group?.Selector) ?? "mesh")));
                 }
                 matrices++;
-                draw = m_draw = new SdfMeshDraw(identity: m_pickIdentity, material: ((group is null) ? copy.Material : 0),
+                m_draw = new SdfMeshDraw(identity: m_pickIdentity, material: ((group is null) ? copy.Material : 0),
                     mesh: ((group is null) ? copy.Mesh! : mesh), objectToWorld: copy.Matrix) {
                     FrameSlot = copy.FrameSlot,
                     Glass = (group?.Glass ?? false),
@@ -431,14 +462,13 @@ public sealed class SdfMeshDresser : IDisposable {
             var scale = (((group!.Dynamic) && (group.Slot < frame.DynamicTransforms.Count)) ? SdfMeshGeometryBuilder.UnitsOf(transform: frame.DynamicTransforms[group.Slot]) : m_scale);
 
             if (m_posed && (m_scale == scale) && (m_draw.FrameSlot == (group.Dynamic ? group.Slot : null)) && (m_draw.Glass == group.Glass) && (m_draw.Displacement == group.Displacement)) {
-                draw = m_draw;
                 return false;
             }
             m_scale = scale;
             m_posed = true;
             if (group.Dynamic) { matrices++; }
 
-            draw = m_draw = new SdfMeshDraw(identity: (chunked ? mesh : group), material: 0, mesh: mesh,
+            m_draw = new SdfMeshDraw(identity: (chunked ? mesh : group), material: 0, mesh: mesh,
                 objectToWorld: (group.Dynamic ? Matrix4x4.CreateScale(scale: scale) : Matrix4x4.Identity)) {
                 FrameSlot = (group.Dynamic ? group.Slot : null),
                 Glass = group.Glass,

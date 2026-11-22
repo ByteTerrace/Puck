@@ -389,7 +389,7 @@ public sealed partial class SdfMeshPathBake {
             }
             if (demanded >= resident) {
                 group.OwedFrames = 0;
-                if ((demanded == resident) || (group.Mesh is not { } drawn)) {
+                if ((demanded == resident) || (group.Mesh is null)) {
                     group.SpareFrames = 0;
                     return;
                 }
@@ -401,7 +401,7 @@ public sealed partial class SdfMeshPathBake {
                     return;
                 }
 
-                var bytes = SdfMeshRegion.PlacedBytesOf(mesh: drawn);
+                var bytes = group.PlacedBytes;
 
                 spare.Add(item: ((bytes - SdfMeshTier.BytesAt(bytes: bytes, from: resident, to: demanded)), index, demanded));
                 return;
@@ -438,7 +438,7 @@ public sealed partial class SdfMeshPathBake {
 
         foreach (var (_, index, tier) in candidates) {
             var old = m_groups[index];
-            var bytes = SdfMeshRegion.PlacedBytesOf(mesh: old.Mesh!);
+            var bytes = old.PlacedBytes;
             var delta = Math.Min(val1: replacement, val2: (SdfMeshTier.BytesAt(bytes: bytes, from: old.Tier, to: tier) - bytes));
 
             // A finer tier the budget has no room for waits, the finest demand first in line for what is freed.
@@ -560,8 +560,8 @@ public sealed partial class SdfMeshPathBake {
 
             var shown = (group.Replaces ?? group);
 
-            if (shown.Mesh is not { } mesh) { continue; }
-            finer = finer.AddSaturating(right: SdfMeshTier.BytesAt(bytes: SdfMeshRegion.PlacedBytesOf(mesh: mesh), from: shown.Tier, to: FinerTierOf(bias: bias, group: group, pixel: pixel)));
+            if (shown.Mesh is null) { continue; }
+            finer = finer.AddSaturating(right: SdfMeshTier.BytesAt(bytes: shown.PlacedBytes, from: shown.Tier, to: FinerTierOf(bias: bias, group: group, pixel: pixel)));
         }
         m_finer = (m_productRevision, m_finerDemandRevision, bias, finer);
 

@@ -7,8 +7,9 @@ namespace Puck.SdfVm;
 // its demand pixel (MeasurePixel) under the bias, and the pixel moves only when a demand point moves, the point set
 // changes shape, or the group's box moves. So a frame measures:
 //   - the groups set into a place since the last frame (GroupList.TakeFresh), which the watch has never measured;
-//   - the groups whose box moved: a dynamic group whose slot's transform moved, and a group one of whose copies moved,
-//     each found through the list's owner index (GroupList.FirstOf). A moved slot's group is measured only when its
+//   - the groups whose box moved: a dynamic group whose slot's transform moved, and a group one of whose copies moved
+//     (a fixed copy through the copy journal, a moving one through its root slot in the moved transforms, since its pose
+//     moves no revision), each found through the list's owner index (GroupList.FirstOf). A moved slot's group is measured only when its
 //     world box moved, with the points' travel since its measure, by as much as its tier band leaves: a box's distance
 //     from a point moves no more than its center and half extents do (Moved);
 //   - the groups the demand points' travel made due: SdfMeshDemand.Travel bounds how far any pixel moves between two
@@ -79,6 +80,10 @@ public sealed partial class SdfMeshPathBake {
         var copied = 0;
 
         foreach (var group in m_groups.TakeFresh()) { Measure(group: group); }
+        // The copies' root slots follow the program's in copy order (SdfCompositionFrameSource seats each at its place), so
+        // a moved slot past the first copy's root names that copy.
+        var firstRoot = ((m_demandCopies.Count > 0) ? m_demandCopies[0].FrameSlot : int.MaxValue);
+
         if (!slotsWhole) {
             for (var run = 0; (run < m_demandSlots.Count); run++) {
                 var end = (m_demandSlots.Start(index: run) + m_demandSlots.Length(index: run));
@@ -90,6 +95,11 @@ public sealed partial class SdfMeshPathBake {
                         if (!Moved(group: group)) { stood++; continue; }
                         if (Measure(group: group)) { moved++; }
                     }
+                    // A moving copy's pose moves its root slot and no revision, so the copy journal never names it: the
+                    // shared geometry it carries is measured where it now stands.
+                    if ((slot >= firstRoot) && ((slot - firstRoot) < m_demandCopies.Count) && (m_demandCopies[slot - firstRoot] is { IsDynamic: true } moving) && (moving.FrameSlot == slot)) {
+                        MeasureCopy(copy: moving);
+                    }
                 }
             }
         }
@@ -97,16 +107,7 @@ public sealed partial class SdfMeshPathBake {
             for (var run = 0; (run < m_copyRuns.Count); run++) {
                 var end = Math.Min(val1: (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run)), val2: m_demandCopies.Count);
 
-                for (var index = m_copyRuns.Start(index: run); (index < end); index++) {
-                    var copy = m_demandCopies[index];
-
-                    if (copy.TemplateRange is { } range) {
-                        for (var instance = 0; (instance < range.InstanceCount); instance++) { MeasureOwners(dynamic: false, key: (range.FirstInstance + instance)); }
-                        continue;
-                    }
-                    MeasureOwners(dynamic: true, key: copy.AssetSlot);
-                    foreach (var slot in copy.OtherAssetSlots) { MeasureOwners(dynamic: true, key: slot); }
-                }
+                for (var index = m_copyRuns.Start(index: run); (index < end); index++) { MeasureCopy(copy: m_demandCopies[index]); }
             }
         }
         while (m_demandDue.TryPeek(element: out var group, priority: out var at) && (at < travel)) {
@@ -146,6 +147,15 @@ public sealed partial class SdfMeshPathBake {
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandMoved, amount: moved);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandCopied, amount: copied);
 
+        // Measures the groups that carry a copy's geometry: its template range's, or its asset slots'.
+        void MeasureCopy(SdfMeshInstance copy) {
+            if (copy.TemplateRange is { } range) {
+                for (var instance = 0; (instance < range.InstanceCount); instance++) { MeasureOwners(dynamic: false, key: (range.FirstInstance + instance)); }
+                return;
+            }
+            MeasureOwners(dynamic: true, key: copy.AssetSlot);
+            foreach (var slot in copy.OtherAssetSlots) { MeasureOwners(dynamic: true, key: slot); }
+        }
         void MeasureOwners(bool dynamic, int key) {
             for (var index = m_groups.FirstOf(dynamic: dynamic, key: key); (index >= 0); index = m_groups.NextOf(index: index)) {
                 if (Measure(group: m_groups[index])) { copied++; }
@@ -155,7 +165,8 @@ public sealed partial class SdfMeshPathBake {
         // world box its latest measure read and the one it stands at now, so its pixel moved by no more than that over the
         // points' fewest pixels a metre, with the points' own travel since, and while no frustum-bound point's frustum is
         // crossed. A changed scale, or a group not measured since the latest reset, says it may. A shared geometry is
-        // measured where its copies stand, which move through the copy journal alone, so its slot moving says nothing.
+        // measured where its copies stand, which the copy journal and their root slots move, so its own slot moving says
+        // nothing.
         bool Moved(Group group) {
             if (!group.Listed || group.Retired || !group.HasDemandBox || (group.DemandMeasuredAt == stamp) || double.IsNaN(d: group.DemandDueAt) ||
                 (group.DemandMeasuredAt < m_demandResetAt)) { return true; }
