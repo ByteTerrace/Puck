@@ -1102,9 +1102,12 @@ laws exercise that boundary.
   GPU-share budgets, each a rate of wall time and never a count a pump: a
   per-pump budget lands only as fast as frames come, and a window the
   compositor throttles to a few frames a second would take many times
-  longer to land the debug world's mesh region. Jobs take the meshes nearest the views first, each staged into the job's own slot
-  of the region (`MeshLandingSlot`, past the upload ring's) and copied in the
-  job's command buffer. A mesh leaves `m_meshesOwed` only when every job carrying
+  longer to land the debug world's mesh region. Jobs take the meshes nearest the views first. A worker packs a job's
+  words from the meshes' own arrays into a host-visible buffer of the landing's own before the job is taken
+  (`SdfWorldTables.TryTakePackedLanding`, one job packing while the one before it records), so the frame thread writes
+  no mesh word; the job's recording gathers them into the region (`GpuRegion.TryOweGather`) in the job's slot
+  (`MeshLandingSlot`, past the upload ring's), after any move the region owes. A packed buffer is free again only once
+  the job that read it completed. A mesh leaves `m_meshesOwed` only when every job carrying
   its current placement has completed, and the landing filter in
   `SdfWorldTables.StageMeshDraw` writes its rows absent until then; a
   relocation, a moved mesh or a trim drops that mesh's progress, so a job still in
@@ -1114,8 +1117,18 @@ laws exercise that boundary.
   landing line reads the frame uploads' staged mesh bytes (`frame-staged-most`)
   and the landing jobs. A grown region takes the words it held. A
   list past the draw reserve doubles it and moves only the meshes the grown
-  reserve takes (`SdfMeshRegionArena.Moved`), written that frame: relocating
-  every mesh for it rewrote and compared the whole region in one frame. The
+  reserve takes (`SdfMeshRegionArena.Moved`): relocating
+  every mesh for it rewrote and compared the whole region in one frame. A moved
+  mesh that stood is copied from its old words on the GPU (`GpuRegion.TryOweMove`,
+  `SdfWorldTables.MoveMesh`) in the next recorded copy, before any staged or
+  gathered word, so it never leaves the frame; one the region cannot move is
+  written that frame from its arrays. A refused mesh that would fit packed
+  compacts the arena instead of relocating it (`SdfMeshRegionArena.Compact`): the
+  highest meshes take lower free runs, at most `MostCompactionWords` a plan, and
+  their old words stay counted as held until the copies are submitted
+  (`ReleaseMoveSources`), so no later move takes them and a mapped region keeps
+  them backed. A relocation (every mesh owed again) is left for the first plan,
+  `force relocate` and a compaction that can move nothing. The
   region's host copy holds the draw reserve alone: a placed mesh's words are
   owed and the flush writes them from the mesh's own arrays
   (`SdfWorldTables.WriteSourcedMeshWords`), zeros in words no placed mesh holds.

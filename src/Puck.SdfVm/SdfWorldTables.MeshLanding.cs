@@ -391,7 +391,12 @@ public sealed partial class SdfWorldTables {
     // the landing's own, from the meshes' own arrays. Each slice's mesh is claimed until the packing ends, so its storage
     // stays while the worker reads it; a mesh whose storage was already released lands nothing and is taken again.
     private void StartPackingLanding(int uploadBytes) {
-        if ((m_landingPacking is not null) || m_disposed || !TryTakeLanding(job: out var job, uploadBytes: uploadBytes)) { return; }
+        if ((m_landingPacking is not null) || m_disposed) { return; }
+        if (!TryTakeLanding(job: out var job, uploadBytes: uploadBytes)) {
+            // A landing with nothing owed keeps no packed buffer: the region holds no word it could land.
+            if (m_meshesOwed.Count == 0) { while (m_landingFree.TryPop(result: out var free)) { _ = m_landingBuffers.Remove(item: free); free.Dispose(); } }
+            return;
+        }
 
         job.PackedSlices = new bool[job.Slices.Count];
         for (var index = 0; (index < job.Slices.Count); index++) {

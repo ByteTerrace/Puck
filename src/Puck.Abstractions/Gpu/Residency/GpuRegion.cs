@@ -1654,7 +1654,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         var name = (m_name.IsEmpty ? default : new GpuObjectName(owner: m_name.Owner!, part: m_name.Part!, detail: detail));
 
         return new GpuRegionRunCopy(bindings: m_bindings, buffers: m_buffers, pipeline: m_copyPipeline!, recorder: m_recorder, name: in name,
-            requestName: in m_stagingName, usage: m_usage, slotCount: SlotCount, mode: mode);
+            slotCount: SlotCount, mode: mode);
     }
     /// <summary>Gets whether the region owes moves its next copy records (<see cref="TryOweMove"/>).</summary>
     public bool OwesMoves => (m_moves?.Runs.Count > 0);
@@ -1859,6 +1859,16 @@ public sealed unsafe class GpuRegion : IDisposable {
         return true;
     }
 
+    // Writes a copy set's three bindings (CopyBindings), each read as uints: the one door every region-copy set is
+    // written through.
+    internal static void WriteCopySet(IGpuBindings bindings, nint set, IGpuBuffer request, IGpuBuffer source, IGpuBuffer destination) {
+        bindings.WriteBuffer(binding: CopyRequestBinding, bufferHandle: request.BufferHandle, bufferSize: request.SizeBytes,
+            descriptorSetHandle: set, elementStride: sizeof(uint), kind: GpuBindingKind.ReadOnlyBuffer);
+        bindings.WriteBuffer(binding: CopySourceBinding, bufferHandle: source.BufferHandle, bufferSize: source.SizeBytes,
+            descriptorSetHandle: set, elementStride: sizeof(uint), kind: GpuBindingKind.ReadOnlyBuffer);
+        bindings.WriteBuffer(binding: CopyDestinationBinding, bufferHandle: destination.BufferHandle, bufferSize: destination.SizeBytes,
+            descriptorSetHandle: set, elementStride: sizeof(uint), kind: GpuBindingKind.ReadWriteBuffer);
+    }
     // The one dispatch door for packed-region uploads and generic strided buffer copies.
     internal static void RecordCopyDispatch(IGpuRecorder recorder, nint commandBuffer, IGpuComputePipeline pipeline, nint set, uint words, bool pipelineBound = false) {
         if (!pipelineBound) {
@@ -2110,32 +2120,8 @@ public sealed unsafe class GpuRegion : IDisposable {
     // the destination into the slot's copy set.
     private void WriteCopySet(int slot) {
         var set = m_copySets!.SetOf(slot: slot);
-        var ring = m_blocks[slot].Ring!;
 
-        m_bindings.WriteBuffer(
-            binding: CopyRequestBinding,
-            bufferHandle: m_hostBuffers[slot].BufferHandle,
-            bufferSize: m_hostBuffers[slot].SizeBytes,
-            descriptorSetHandle: set,
-            elementStride: sizeof(uint),
-            kind: GpuBindingKind.ReadOnlyBuffer
-        );
-        m_bindings.WriteBuffer(
-            binding: CopySourceBinding,
-            bufferHandle: ring.BufferHandle,
-            bufferSize: ring.SizeBytes,
-            descriptorSetHandle: set,
-            elementStride: sizeof(uint),
-            kind: GpuBindingKind.ReadOnlyBuffer
-        );
-        m_bindings.WriteBuffer(
-            binding: CopyDestinationBinding,
-            bufferHandle: m_destination!.BufferHandle,
-            bufferSize: m_destination.SizeBytes,
-            descriptorSetHandle: set,
-            elementStride: sizeof(uint),
-            kind: GpuBindingKind.ReadWriteBuffer
-        );
+        WriteCopySet(bindings: m_bindings, destination: m_destination!, request: m_hostBuffers[slot], set: set, source: m_blocks[slot].Ring!);
         m_copySets.WrittenBy(
             region: this,
             slot: slot
@@ -2294,8 +2280,8 @@ public sealed unsafe class GpuRegion : IDisposable {
     // destination word, then per run its region word and first thread, which is also where its words start in the block.
     // The slot's previous block is released first: its last submission has retired.
     private void StageOwed(int slot) {
-        m_moves?.Stage(destinationWord: m_destinationWord, slot: slot);
-        m_gathers?.Stage(destinationWord: m_destinationWord, slot: slot);
+        m_moves?.Stage(destinationWord: m_destinationWord);
+        m_gathers?.Stage(destinationWord: m_destinationWord);
 
         var owed = m_owed[0];
 
