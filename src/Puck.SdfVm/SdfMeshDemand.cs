@@ -150,7 +150,7 @@ public sealed class SdfMeshDemand {
     public int FrustumLanes => m_frustumLanes;
     /// <summary>Gets the length of one field of a frustum watch: the frustum lanes, padded to whole vectors. A watch
     /// holds five fields (<see cref="Watch"/>).</summary>
-    public int FrustumStride => ((m_frustumLanes + (Vector256<float>.Count - 1)) & ~(Vector256<float>.Count - 1));
+    public int FrustumStride => m_frustumLanes.AlignUp(alignment: Vector256<float>.Count);
     /// <summary>Gets the length of a frustum watch at this layout: five fields of <see cref="FrustumStride"/>.</summary>
     public int WatchLength => (WatchFields * FrustumStride);
     /// <summary>Gets the layout of the frustum lanes: one more each time a lane's point came, went, jumped or took another
@@ -287,7 +287,7 @@ public sealed class SdfMeshDemand {
             return;
         }
 
-        var stride = ((lanes + (Vector256<float>.Count - 1)) & ~(Vector256<float>.Count - 1));
+        var stride = lanes.AlignUp(alignment: Vector256<float>.Count);
 
         if (m_layoutMap.Length < m_frustumLanes) {
             m_layoutMap = new int[m_laneShift.Length];
@@ -376,7 +376,7 @@ public sealed class SdfMeshDemand {
         Array.Resize(ref m_movedShift, capacity);
         Array.Resize(ref m_movedTurn, capacity);
         if (m_laneShift.Length < capacity) {
-            var lanes = ((capacity + (Vector256<float>.Count - 1)) & ~(Vector256<float>.Count - 1));
+            var lanes = capacity.AlignUp(alignment: Vector256<float>.Count);
 
             Array.Resize(ref m_laneShift, lanes);
             Array.Resize(ref m_laneTurn, lanes);
@@ -886,7 +886,7 @@ public sealed class SdfMeshDemand {
             if (m_laneOf[index] < 0) { rest++; }
         }
 
-        var stride = (framedStride + ((rest + (Vector256<float>.Count - 1)) & ~(Vector256<float>.Count - 1)));
+        var stride = (framedStride + rest.AlignUp(alignment: Vector256<float>.Count));
         var lanes = m_lanes;
 
         if (lanes.Capacity < stride) { lanes = new PointLanes(capacity: ArrayCapacity.Grown(lanes.Capacity, stride)); }
