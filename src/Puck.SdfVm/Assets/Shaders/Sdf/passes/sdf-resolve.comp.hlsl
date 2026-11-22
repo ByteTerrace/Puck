@@ -113,16 +113,23 @@ struct SdfResolveSample {
     float4 air;
 };
 // The render samples an output group's footprints read, loaded once for the group (sdfResolveTileFill): the samples from
-// sdfResolveTileOrigin, SdfResolveTileEdge a side. A group whose footprints span more samples than the tile holds (an
-// output smaller than its render grid) reads the samples outside it directly (sdfResolveSampleAt), so the tile changes
-// how often a sample is read, never what is read.
+// sdfResolveTileOrigin, SdfResolveTileEdge a side. The tile holds every sample any footprint of the group reads, each
+// tap's eight feature neighbours included, whenever the render grid is no larger than the output on either axis: the
+// group's centers span at most eight samples from floor(low), its taps reach two samples before and two after that span,
+// and the tile holds two before and four after it. The host never renders above the output (RenderGraphExtent.Quantize
+// caps every render fraction at one), so the resolve reads its samples from the tile alone and never from their
+// resources, which keeps one copy of the sample load in the kernel rather than one a tap.
 static const int SdfResolveTileEdge = 13;
 groupshared uint2 sdfResolveTileColor[SdfResolveTileEdge * SdfResolveTileEdge];
 groupshared float4 sdfResolveTileAir[SdfResolveTileEdge * SdfResolveTileEdge];
 groupshared uint4 sdfResolveTileSurface[SdfResolveTileEdge * SdfResolveTileEdge];
 groupshared float sdfResolveTileReactive[SdfResolveTileEdge * SdfResolveTileEdge];
+// Each tile sample's luma, and its sub-pixel feature contrast (sdfResolveFeature) where all eight of its neighbours lie in
+// the tile: the contrast for a feature, negative for a sample that is none. Computed once a sample for the group, so a
+// pixel's nine taps read their features rather than each reading its eight neighbours.
+groupshared float sdfResolveTileLuma[SdfResolveTileEdge * SdfResolveTileEdge];
+groupshared float sdfResolveTileFeature[SdfResolveTileEdge * SdfResolveTileEdge];
 static int2 sdfResolveTileOrigin = int2(0, 0);
-static bool sdfResolveTiled = false;
 
 // Reads one render sample from its own resources.
 SdfResolveSample sdfResolveSampleLoad(int2 position, uint2 render) {
@@ -147,8 +154,32 @@ SdfResolveSample sdfResolveSampleLoad(int2 position, uint2 render) {
     }
     return sample;
 }
+// The feature test (SdfResolveFeatureContrast) of a sample of luma `center` over its four pairs of neighbour lumas: across,
+// down and the two diagonals, `a` one side of it and `b` the other. A dot is a feature in all four directions, a line
+// thinner than a sample in the three its own direction is not; the corner of an edge keeps a neighbour on its own side in
+// at least two, so an edge never counts. `contrast` is its luma against the eight neighbours' mean.
+bool sdfResolveFeatureTest(float center, float4 a, float4 b, out float contrast) {
+    float4 high = max(a, b);
+    float4 low = min(a, b);
+    uint above = dot(uint4((center - high) > (SdfResolveFeatureContrast * center)), uint4(1u, 1u, 1u, 1u));
+    uint below = dot(uint4((low - center) > (SdfResolveFeatureContrast * low)), uint4(1u, 1u, 1u, 1u));
+
+    contrast = abs(center - (dot((a + b), float4(1.0, 1.0, 1.0, 1.0)) * 0.125));
+
+    return ((above >= 3u) || (below >= 3u));
+}
+// The feature test of the tile sample at `local`, whose eight neighbours all lie in the tile, from the tile's lumas.
+bool sdfResolveFeatureOf(float center, int2 local, out float contrast) {
+    int at = ((local.y * SdfResolveTileEdge) + local.x);
+    float4 a = float4(sdfResolveTileLuma[at + 1], sdfResolveTileLuma[at + SdfResolveTileEdge],
+        sdfResolveTileLuma[(at + SdfResolveTileEdge) + 1], sdfResolveTileLuma[(at + SdfResolveTileEdge) - 1]);
+    float4 b = float4(sdfResolveTileLuma[at - 1], sdfResolveTileLuma[at - SdfResolveTileEdge],
+        sdfResolveTileLuma[(at - SdfResolveTileEdge) - 1], sdfResolveTileLuma[(at - SdfResolveTileEdge) + 1]);
+
+    return sdfResolveFeatureTest(center, a, b, contrast);
+}
 // Loads the group's tile. Every lane of the group calls it before any lane reads the tile, and it ends with the group
-// barrier that publishes the tile. `first` is the group's first output pixel.
+// barrier that publishes the tile and the features it computes from it. `first` is the group's first output pixel.
 void sdfResolveTileFill(uint2 first, uint lane, uint2 extent, uint2 render) {
     // The footprints of the group's pixels at any jitter: the 3x3 taps and their 5x5 feature windows about the nearest
     // sample, floor(center - jitter), and the spatial path's 4x4 taps from floor(position) - 1, position = center - 0.5
@@ -165,26 +196,39 @@ void sdfResolveTileFill(uint2 first, uint lane, uint2 extent, uint2 render) {
         sdfResolveTileAir[entry] = sample.air;
         sdfResolveTileSurface[entry] = uint4(sample.identity, asuint(sample.t), sample.normal, (sample.hit ? 1u : 0u));
         sdfResolveTileReactive[entry] = sample.reactive;
+        sdfResolveTileLuma[entry] = sample.luma;
     }
     GroupMemoryBarrierWithGroupSync();
-    sdfResolveTiled = true;
-}
-// One render sample at a render-grid position: from the group's tile where it holds the position, otherwise loaded. The
-// lit image is half-float (RenderGraphPackageCatalog.WorkingFormat), so the tile's packed color is the color loaded.
-SdfResolveSample sdfResolveSampleAt(int2 position, uint2 render) {
-    int2 local = (position - sdfResolveTileOrigin);
+    [loop] for (uint entry = lane; entry < (uint)(SdfResolveTileEdge * SdfResolveTileEdge); entry += 64u) {
+        int2 local = int2((int)(entry % (uint)SdfResolveTileEdge), (int)(entry / (uint)SdfResolveTileEdge));
+        float feature = -1.0;
 
-    if (!sdfResolveTiled || any(local < 0) || any(local >= SdfResolveTileEdge)) {
-        return sdfResolveSampleLoad(position, render);
+        if (all(local >= 1) && all(local < (SdfResolveTileEdge - 1))) {
+            float contrast;
+
+            feature = (sdfResolveFeatureOf(sdfResolveTileLuma[entry], local, contrast) ? contrast : -1.0);
+        }
+        sdfResolveTileFeature[entry] = feature;
     }
+    GroupMemoryBarrierWithGroupSync();
+}
+// The tile entry of a render-grid position. The tile holds every position the group reads; the clamp keeps an index in
+// the tile whatever a caller passes.
+uint sdfResolveTileEntry(int2 position) {
+    int2 local = clamp((position - sdfResolveTileOrigin), int2(0, 0), int2((SdfResolveTileEdge - 1), (SdfResolveTileEdge - 1)));
 
-    uint entry = (uint)((local.y * SdfResolveTileEdge) + local.x);
+    return (uint)((local.y * SdfResolveTileEdge) + local.x);
+}
+// One render sample at a render-grid position, from the group's tile. The lit image is half-float
+// (RenderGraphPackageCatalog.WorkingFormat), so the tile's packed color is the color loaded.
+SdfResolveSample sdfResolveSampleAt(int2 position) {
+    uint entry = sdfResolveTileEntry(position);
     uint2 color = sdfResolveTileColor[entry];
     uint4 surface = sdfResolveTileSurface[entry];
     SdfResolveSample sample;
 
     sample.color = float4(f16tof32(color.x & 0xFFFFu), f16tof32(color.x >> 16u), f16tof32(color.y & 0xFFFFu), f16tof32(color.y >> 16u));
-    sample.luma = sdfToYCoCg(sample.color.rgb).x;
+    sample.luma = sdfResolveTileLuma[entry];
     sample.reactive = sdfResolveTileReactive[entry];
     sample.identity = surface.x;
     sample.t = asfloat(surface.y);
@@ -199,31 +243,18 @@ float4 sdfResolveSampleTransport(SdfResolveSample sample, float coverage) {
     return (((coverage > 0.0) && sample.hit && (sample.t > 0.0)) ? (coverage * sample.air) : float4(0.0, 0.0, 0.0, 0.0));
 }
 // Whether the render sample at a position is a sub-pixel feature (SdfResolveFeatureContrast) against its eight
-// neighbours, and its contrast against their mean. `center` is its luma.
-bool sdfResolveFeature(int2 position, float center, uint2 render, out float contrast) {
-    uint above = 0u;
-    uint below = 0u;
-    float neighbours = 0.0;
-    // The four directions through the sample: across, down, and the two diagonals.
-    const int2 steps[4] = { int2(1, 0), int2(0, 1), int2(1, 1), int2(-1, 1) };
+// neighbours, and its contrast against their mean, as the tile computed it (sdfResolveTileFill): every tap the group
+// reads lies within the tile's border, so its neighbours do too.
+bool sdfResolveFeature(int2 position, out float contrast) {
+    float stored = sdfResolveTileFeature[sdfResolveTileEntry(position)];
 
-    [unroll] for (uint direction = 0u; direction < 4u; direction++) {
-        float a = sdfResolveSampleAt((position + steps[direction]), render).luma;
-        float b = sdfResolveSampleAt((position - steps[direction]), render).luma;
-        float high = max(a, b);
-        float low = min(a, b);
-
-        neighbours += (a + b);
-        above += (((center - high) > (SdfResolveFeatureContrast * center)) ? 1u : 0u);
-        below += (((low - center) > (SdfResolveFeatureContrast * low)) ? 1u : 0u);
-    }
-    contrast = abs(center - (neighbours * 0.125));
-
-    return ((above >= 3u) || (below >= 3u));
+    contrast = max(stored, 0.0);
+    return (stored >= 0.0);
 }
-// The history at a continuous output position, the first texel's center at zero: Catmull-Rom over the sixteen nearest
-// texels, each clamped to the image, the color from the history color and the transport from the history surface with
-// one set of weights.
+// The history at a continuous output position, the first texel's center at zero, each texel clamped to the image: the
+// color Catmull-Rom over the sixteen nearest texels of the history color, the transport bilinear over the four nearest
+// of the history surface. The transport (each atmosphere kind's weight and the inverse distance) is smooth across a
+// surface and is clipped to this frame's box after, so it takes no sharpening filter.
 void sdfHistoryAt(float2 position, uint2 dims, out float4 color, out float4 transport) {
     float2 origin = floor(position);
     float2 f = (position - origin);
@@ -235,18 +266,20 @@ void sdfHistoryAt(float2 position, uint2 dims, out float4 color, out float4 tran
     transport = float4(0.0, 0.0, 0.0, 0.0);
     [unroll] for (int y = 0; y < 4; y++) {
         float4 rowColor = float4(0.0, 0.0, 0.0, 0.0);
-        float4 rowTransport = float4(0.0, 0.0, 0.0, 0.0);
 
         [unroll] for (int x = 0; x < 4; x++) {
-            uint2 texel = sdfResolveClamp((corner + int2(x, y)), dims);
-
-            rowColor += (wx[x] * historyColor.Load(int3(texel, 0)));
-            uint pixel = ((texel.y * dims.x) + texel.x);
-
-            rowTransport += (wx[x] * sdfUnpackTransport(uint2(historySurface[sdfHistoryWord(pixel, 2u, dims)], historySurface[sdfHistoryWord(pixel, 3u, dims)])));
+            rowColor += (wx[x] * historyColor.Load(int3(sdfResolveClamp((corner + int2(x, y)), dims), 0)));
         }
         color += (wy[y] * rowColor);
-        transport += (wy[y] * rowTransport);
+    }
+    [unroll] for (int y = 0; y < 2; y++) {
+        [unroll] for (int x = 0; x < 2; x++) {
+            uint2 texel = sdfResolveClamp((int2(origin) + int2(x, y)), dims);
+            uint pixel = ((texel.y * dims.x) + texel.x);
+            float weight = (((x == 0) ? (1.0 - f.x) : f.x) * ((y == 0) ? (1.0 - f.y) : f.y));
+
+            transport += (weight * sdfUnpackTransport(uint2(historySurface[sdfHistoryWord(pixel, 2u, dims)], historySurface[sdfHistoryWord(pixel, 3u, dims)])));
+        }
     }
 }
 // The view's own camera rows, unjittered, as sdfProjectView reads a view.
@@ -296,7 +329,7 @@ void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, f
             int2 at = (footprint.origin + puckReconstructionTapOffset(tap));
 
             // The whole grid is current, so the tap's color is its clamped sample's (puckReconstructionTapWithin).
-            SdfResolveSample sample = sdfResolveSampleAt(at, render);
+            SdfResolveSample sample = sdfResolveSampleAt(at);
 
             tapColor = sample.color;
             tapTransport = sdfResolveSampleTransport(sample, tapColor.a);
@@ -366,17 +399,17 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             int2 position = (nearest + int2(dx, dy));
             uint2 pixel = sdfResolveClamp(position, render);
             uint tap = ((uint)((dy + 1) * 3) + (uint)(dx + 1));
-            SdfResolveSample sample = sdfResolveSampleAt(position, render);
+            SdfResolveSample sample = sdfResolveSampleAt(position);
             float4 color = sample.color;
             float2 offset = (((float2(pixel) + 0.5 + jitter) - center) * scale);
             float weight = exp(-SdfResolveFilterFalloff * dot(offset, offset));
             float3 ycocg = sdfToYCoCg(color.rgb);
             float4 transport = float4(0.0, 0.0, 0.0, 0.0);
             float contrast;
-            bool feature = sdfResolveFeature(position, sample.luma, render, contrast);
+            bool feature = sdfResolveFeature(position, contrast);
             if (passGroup.viewsRate.x > 1u) {
-                axisContrast = max(axisContrast, abs(sample.luma - float2(sdfResolveSampleAt((position + int2(1, 0)), render).luma,
-                    sdfResolveSampleAt((position + int2(0, 1)), render).luma)));
+                axisContrast = max(axisContrast, abs(sample.luma - float2(sdfResolveTileLuma[sdfResolveTileEntry(position + int2(1, 0))],
+                    sdfResolveTileLuma[sdfResolveTileEntry(position + int2(0, 1))])));
             }
 
             float tapReactive = sample.reactive;
@@ -521,18 +554,20 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     // The ordinary receiver check already covers the interior. Only a rejected footprint needs the more expensive
     // proof that every tap is stationary before retaining a window across a phase's different receiver selection.
     footprintStill = (footprintStill && !accepted);
+    // A tap stands still when its draw has not moved since the preceding frame (sdfMeshDrawUnmoved), which proves its
+    // previous point is its current one without reading the triangle: a moved draw counts as moving even where one of
+    // its triangles held still, which only declines the window there.
     [branch] if (footprintStill) {
-        [unroll] for (int dy = -1; dy <= 1; dy++) {
-            [unroll] for (int dx = -1; dx <= 1; dx++) {
-                uint2 pixel = sdfResolveClamp((nearest + int2(dx, dy)), render);
-                uint record = sdfVisibilityRecord(pixel, 0u, render);
-                SdfVisibility visibility = sdfLoadVisibility(record);
-                if (sdfVisibilityHit(visibility)) {
-                    float3 direction = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(render)));
-                    float3 surfacePoint = (view.position.xyz + (direction * visibility.t));
-                    float3 previousPoint;
-                    footprintStill = (footprintStill && sdfPreviousPoint(record, visibility, surfacePoint, previousPoint) && all(previousPoint == surfacePoint));
-                }
+        [loop] for (uint tap = 0u; tap < 9u; tap++) {
+            uint2 pixel = sdfResolveClamp((nearest + int2((int)(tap % 3u) - 1, (int)(tap / 3u) - 1)), render);
+            uint record = sdfVisibilityRecord(pixel, 0u, render);
+            SdfVisibility visibility = sdfLoadVisibility(record);
+            SdfMeshHit tapHit;
+
+            if (sdfVisibilityHit(visibility)) {
+                footprintStill = (footprintStill &&
+                    sdfMeshResolveHit(sdfVisibilitySource(visibility.identity), sdfVisibilityRecordBuffer[record + SdfVisibilityTriangleWord], tapHit) &&
+                    sdfMeshDrawUnmoved(tapHit.record));
             }
         }
     }
