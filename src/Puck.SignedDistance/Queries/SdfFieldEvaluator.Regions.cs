@@ -69,7 +69,8 @@ public sealed partial class SdfFieldEvaluator {
     public static WorkCounterSet RegionWork { get; } = new(name: "sdf.regions", kinds: [RegionsBuilt, RegionBuildInstructions, RegionTapeInstructions, RegionResets]);
 
     /// <summary>Gets whether the evaluator indexes its program by region: a point query walks the chains that can
-    /// change the field in the region its point lies in, in place of the whole program, to the same answer.</summary>
+    /// change the field in the region its point lies in, in place of the whole program, to the same answer, and a box
+    /// query walks them over each region the box meets, to an enclosure of every point answer in the box.</summary>
     public bool IndexesRegions => (m_regions is not null);
 
     // Whether a walk has an instruction to read: inside the range it stands in, or in a later range of its tape, entered
@@ -89,10 +90,13 @@ public sealed partial class SdfFieldEvaluator {
         return true;
     }
 
-    // The tape of the region a point of the frame lies in, recording the regions on the way to it that no walk has.
-    private ReadOnlySpan<int> RegionTape(FixedVector3 point) {
+    // The tape of the region a point of the frame lies in.
+    private ReadOnlySpan<int> RegionTape(FixedVector3 point) =>
+        RegionAt(least: RegionLeafShift, x: point.X.Value, y: point.Y.Value, z: point.Z.Value).Tape;
+    // The region a raw point of the frame lies in whose edge is no less than the least asked for: the smallest such
+    // region that does not divide further, recording the regions on the way to it that no walk has.
+    private RegionNode RegionAt(long x, long y, long z, int least) {
         var regions = m_regions!;
-        var (x, y, z) = (point.X.Value, point.Y.Value, point.Z.Value);
         var shift = RegionRootShift;
         var key = new RegionKey(X: (x >> shift), Y: (y >> shift), Z: (z >> shift));
 
@@ -101,7 +105,7 @@ public sealed partial class SdfFieldEvaluator {
             regions.Admit();
         }
 
-        while ((shift > RegionLeafShift) && (node.Instructions > RegionShortTape)) {
+        while ((shift > least) && (node.Instructions > RegionShortTape)) {
             shift--;
 
             var children = (node.Children ?? (Interlocked.CompareExchange(comparand: null, location1: ref node.Children, value: new RegionNode?[8]) ?? node.Children!));
@@ -118,7 +122,89 @@ public sealed partial class SdfFieldEvaluator {
             node = child;
         }
 
-        return node.Tape;
+        return node;
+    }
+    // The bounds over a box of a regional evaluator: the box is cut along the faces of the regions it meets, each part is
+    // walked over its own region's tape, and the answer is the hull of the parts' intervals.
+    //
+    // The invariant this rests on is the region index's own: at every point of a region's cube, a point walk over the
+    // region's tape answers what a walk over the whole stream answers. A part lies inside its region's cube, so the
+    // interval walk over the tape (the walk that records a child region over its parent's tape, here without a record,
+    // making the box skips of any culling box walk) encloses every answer the whole stream gives at a point of the part.
+    // The parts cover every raw point of the box, so their hull encloses the box. The interval is a function of the
+    // program and the box alone: a tape is a function of the program and its cube, however many walks have built or
+    // dropped it. It is not the interval the whole stream's walk answers: each part is walked on its own, and a walk
+    // over a smaller box answers tighter.
+    //
+    // The parts are taken at the least region edge that is at least twice the box's widest side, so a box meets at most
+    // two regions an axis and seldom more than one; a box wider than half a root region is walked over the whole stream.
+    private FixedInterval BoundsOverRegions(IntervalVector3 world, out int instructionsWalked, out int rotationsExpanded) {
+        var widest = Math.Max(val1: Side(side: world.X), val2: Math.Max(val1: Side(side: world.Y), val2: Side(side: world.Z)));
+
+        if (widest > (1UL << (RegionRootShift - 1))) {
+            return BoundsOver(instructionsWalked: out instructionsWalked, rotationsExpanded: out rotationsExpanded, world: world);
+        }
+
+        var shift = RegionLeafShift;
+
+        while ((1UL << (shift - 1)) < widest) {
+            shift++;
+        }
+
+        var result = FixedInterval.Entire;
+        var walked = 0;
+        var expanded = 0;
+        var first = true;
+
+        for (var x = (world.X.Lower.Value >> shift); (x <= (world.X.Upper.Value >> shift)); x++) {
+            for (var y = (world.Y.Lower.Value >> shift); (y <= (world.Y.Upper.Value >> shift)); y++) {
+                for (var z = (world.Z.Lower.Value >> shift); (z <= (world.Z.Upper.Value >> shift)); z++) {
+                    var part = new IntervalVector3(X: Within(cell: x, shift: shift, side: world.X), Y: Within(cell: y, shift: shift, side: world.Y), Z: Within(cell: z, shift: shift, side: world.Z));
+                    var region = RegionAt(least: shift, x: part.X.Lower.Value, y: part.Y.Lower.Value, z: part.Z.Lower.Value);
+                    var query = new BoxQuery(box: part);
+                    var reaches = BoxReaches();
+                    var primer = BoxPrimer.None;
+
+                    SdfBoundsCache.ProcessWork.Add(amount: region.Bounds.Length, kind: SdfBoundsCache.PrepassBounds);
+
+                    foreach (var bound in region.Bounds) {
+                        RankBoxReach(bound: bound, primer: ref primer, query: in query, reaches: reaches);
+                    }
+
+                    var bounds = WalkBounds(
+                        cull: true,
+                        end: m_instructions.Length,
+                        first: 0,
+                        primer: ref primer,
+                        query: in query,
+                        reaches: reaches.AsSpan(start: 0, length: m_cullBounds.Length),
+                        rotationsExpanded: ref expanded,
+                        tape: region.Tape,
+                        walked: ref walked,
+                        world: part
+                    );
+
+                    result = (first ? bounds : FixedInterval.Union(first: result, second: bounds));
+                    first = false;
+                }
+            }
+        }
+
+        instructionsWalked = walked;
+        rotationsExpanded = expanded;
+
+        return result;
+    }
+    // A side's width in raws: its ends lie inside the frame, so their difference fits unsigned.
+    private static ulong Side(FixedInterval side) => unchecked((ulong)(side.Upper.Value - side.Lower.Value));
+    // The part of a box's side inside one region cell of an axis.
+    private static FixedInterval Within(FixedInterval side, long cell, int shift) {
+        var lower = (cell << shift);
+
+        return new FixedInterval(
+            lower: FixedQ4816.FromRawBits(value: Math.Max(val1: lower, val2: side.Lower.Value)),
+            upper: FixedQ4816.FromRawBits(value: Math.Min(val1: (lower + ((1L << shift) - 1L)), val2: side.Upper.Value))
+        );
     }
     // Records one region: the culling box walk over its box, over the whole stream for a root and over the parent's tape
     // for a child, with the primer chosen among the instances that walk can meet.
@@ -129,9 +215,7 @@ public sealed partial class SdfFieldEvaluator {
             Y: RegionSide(cell: y, frame: m_frameRaw, shift: shift),
             Z: RegionSide(cell: z, frame: m_frameRaw, shift: shift)
         ));
-        var reaches = (((BoxReachScratch is { } scratch) && (scratch.Length >= cullBounds.Length))
-            ? scratch
-            : (BoxReachScratch = CreateReachScratch(length: cullBounds.Length, work: SdfBoundsCache.ProcessWork, arrays: SdfBoundsCache.ScratchArraysCreated, bytes: SdfBoundsCache.ScratchPayloadCreated)));
+        var reaches = BoxReaches();
         var primer = BoxPrimer.None;
         var record = (RegionRecord ??= []);
         var walked = 0;

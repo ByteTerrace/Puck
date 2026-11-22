@@ -68,7 +68,10 @@ public sealed partial class SdfFieldEvaluator {
     /// axis.</exception>
     /// <remarks>The walk skips an instance or chain of shapes only where a certificate proves the lower end of every
     /// interval it could join lies at or beyond the running interval's upper end, or the nearest instance's, so the skip
-    /// leaves the interval exactly as walking every instruction answers it.</remarks>
+    /// leaves the interval exactly as walking every instruction answers it. An evaluator that indexes regions
+    /// (<see cref="IndexesRegions"/>) walks the box in parts, each over its own region's part of the program, and answers
+    /// the hull of the parts: an enclosure as certain and a function of the program and the box alone, which need not be
+    /// the interval an evaluator without the index answers.</remarks>
     public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance, out int instructionsWalked) =>
         TryDistanceBounds(distance: out distance, instructionsWalked: out instructionsWalked, lower: lower, rotationsExpanded: out _, upper: upper);
     /// <summary>Encloses the box and counts visited instructions and full interval rotation expansions.</summary>
@@ -100,15 +103,16 @@ public sealed partial class SdfFieldEvaluator {
             return false;
         }
 
-        distance = BoundsOver(
-            instructionsWalked: out instructionsWalked,
-            rotationsExpanded: out rotationsExpanded,
-            world: new IntervalVector3(
-                X: new FixedInterval(lower: lowerPoint.X, upper: upperPoint.X),
-                Y: new FixedInterval(lower: lowerPoint.Y, upper: upperPoint.Y),
-                Z: new FixedInterval(lower: lowerPoint.Z, upper: upperPoint.Z)
-            )
+        var world = new IntervalVector3(
+            X: new FixedInterval(lower: lowerPoint.X, upper: upperPoint.X),
+            Y: new FixedInterval(lower: lowerPoint.Y, upper: upperPoint.Y),
+            Z: new FixedInterval(lower: lowerPoint.Z, upper: upperPoint.Z)
         );
+
+        // A stream too short to divide a region has nothing an index could drop.
+        distance = (((m_regions is null) || (m_instructions.Length <= RegionShortTape))
+            ? BoundsOver(instructionsWalked: out instructionsWalked, rotationsExpanded: out rotationsExpanded, world: world)
+            : BoundsOverRegions(instructionsWalked: out instructionsWalked, rotationsExpanded: out rotationsExpanded, world: world));
 
         return true;
     }
@@ -169,14 +173,16 @@ public sealed partial class SdfFieldEvaluator {
 
         return frame;
     }
+    // This thread's reach scratch, long enough to hold a reach for every cullable instance of this evaluator.
+    private FixedQ4816[] BoxReaches() => (((BoxReachScratch is { } scratch) && (scratch.Length >= m_cullBounds.Length))
+        ? scratch
+        : (BoxReachScratch = CreateReachScratch(length: m_cullBounds.Length, work: SdfBoundsCache.ProcessWork, arrays: SdfBoundsCache.ScratchArraysCreated, bytes: SdfBoundsCache.ScratchPayloadCreated)));
     // The bounds over a box whose every point the frame holds, and the instructions the walk visited. A culling walk
     // skips what the cull tables prove cannot change its interval (SdfFieldEvaluator.Cull.cs); the frame's own walks
     // skip nothing, so a frame rests on every instruction.
     private FixedInterval BoundsOver(IntervalVector3 world, out int instructionsWalked, out int rotationsExpanded, bool cull = true) {
         var cullBounds = m_cullBounds;
-        var reaches = (((BoxReachScratch is { } scratch) && (scratch.Length >= cullBounds.Length))
-            ? scratch
-            : (BoxReachScratch = CreateReachScratch(length: cullBounds.Length, work: SdfBoundsCache.ProcessWork, arrays: SdfBoundsCache.ScratchArraysCreated, bytes: SdfBoundsCache.ScratchPayloadCreated)));
+        var reaches = BoxReaches();
         var primer = BoxPrimer.None;
         var walked = 0;
         var query = new BoxQuery(box: world);

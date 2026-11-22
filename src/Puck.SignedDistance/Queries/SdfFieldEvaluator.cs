@@ -134,11 +134,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     /// <see cref="RenderWarpOps"/>, answering the field the renderer's interpreter samples.</summary>
     /// <param name="program">The program to wrap.</param>
     /// <param name="reading">What the program is read as.</param>
-    /// <param name="regional">Whether the evaluator keeps, for each region of the world a point query touches, the
+    /// <param name="regional">Whether the evaluator keeps, for each region of the world a query touches, the
     /// chains of the program that can change the field there, and walks those alone
-    /// (<see cref="IndexesRegions"/>). Every answer is the one the evaluator gives without it, to the bit; it pays for a
-    /// program large enough that a walk of the whole of it is the cost of a query, and holds the regions it has
-    /// built.</param>
+    /// (<see cref="IndexesRegions"/>). Every point answer is the one the evaluator gives without it, to the bit, and
+    /// every box answer is as certain an enclosure (<see cref="TryDistanceBounds(FixedPosition, FixedPosition, out FixedInterval, out int)"/>);
+    /// it pays for a program large enough that a walk of the whole of it is the cost of a query, and holds the regions
+    /// it has built.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="program"/> contains an op or shape the reading cannot
     /// interpret, or, read for contact, a <see cref="SdfOp.Scale"/> whose axes differ in magnitude.</exception>

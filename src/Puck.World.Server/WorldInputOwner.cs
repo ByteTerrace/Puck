@@ -250,7 +250,8 @@ public sealed partial class WorldInputOwner {
             if (address < 0) { continue; }
             if (shape is ChannelShape.Relative or ChannelShape.Bipolar or ChannelShape.Binary) { m_sum[address] += raw; } else { m_maximum[address] = Math.Max(val1: m_maximum[address], val2: raw); }
         }
-        var folded = new PlayerIntent(Channels: default, SourceRay: batch.Image.SourceRay);
+        // The fold writes one bank in place: an intent rebuilt per channel copies the whole bank twice for each.
+        var bank = default(ChannelValues);
 
         foreach (var channel in Mapping.Live) {
             var address = Mapping.Address(logicalId: channel);
@@ -258,13 +259,15 @@ public sealed partial class WorldInputOwner {
             if (address < 0) { continue; }
             var shape = m_catalog.Channels[channel].Shape;
 
-            if (shape == ChannelShape.Relative) { folded = folded.WithRelative(ordinal: address, value: Mapping.Channels.ClampRelative(ordinal: address, raw: m_sum[address])); } else {
+            if (shape == ChannelShape.Relative) { bank.SetRelative(ordinal: address, value: Mapping.Channels.ClampRelative(ordinal: address, raw: m_sum[address])); } else {
                 var raw = ((shape == ChannelShape.Unipolar) ? m_maximum[address] :
                     (long)Int128.Clamp(m_sum[address], ((shape == ChannelShape.Bipolar) ? -FixedQ4816.One.Value : 0), FixedQ4816.One.Value));
 
-                folded = folded.WithChannel(ordinal: address, value: Mapping.Channels.Quantize(ordinal: address, value: FixedQ4816.FromRawBits(value: raw)));
+                bank[address] = Mapping.Channels.Quantize(ordinal: address, value: FixedQ4816.FromRawBits(value: raw));
             }
         }
+        var folded = new PlayerIntent(Channels: bank, SourceRay: batch.Image.SourceRay);
+
         if (folded != batch.Image) { reason = "input.image: complete source fold differs from final image"; return false; }
         if ((Epoch > 1) && (LastSwitch.Tick == admission.Tick)) {
             if (!batch.Events.IsEmpty || (batch.Image != Image)) {
