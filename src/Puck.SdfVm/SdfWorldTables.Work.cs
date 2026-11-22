@@ -4,15 +4,16 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldTables {
-    // The passes an upload counts, in recording order: the fillers' first transitions and clears, the regions' copies and
-    // the sky's CPU environment candidate projection. The graph counts the device map and reduction in their own passes.
+    // The passes an upload counts, in recording order: the fillers' first transitions and clears, the regions' copies, the
+    // sky's CPU environment candidate projection and the world's shadow layers. The graph counts the device map and
+    // reduction in their own passes.
     private const int FillersPass = 0;
     private const int UploadPass = 1;
     private const int EnvironmentPass = 2;
     private const int ShadowsPass = 3;
 
     private static readonly string[] PassLabelTable = ["fillers", "upload", "environment", "shadows"];
-    private static readonly WorkClass[] PassClassTable = [WorkClass.Deterministic, WorkClass.PerBackendDeterministic, WorkClass.Deterministic, WorkClass.Pacing];
+    private static readonly WorkClass[] PassClassTable = [WorkClass.Deterministic, WorkClass.PerBackendDeterministic, WorkClass.Deterministic, WorkClass.PerBackendDeterministic];
 
     // The ledger every wrapped GPU service counts into: the owner's (a residency that outlives device-loss rebuilds) or
     // the tables' own.
@@ -23,15 +24,15 @@ public sealed partial class SdfWorldTables {
     private long m_workRevision;
 
     /// <summary>Gets the labels of an upload's passes, in submission order: <c>fillers</c>, the fillers' first transitions
-    /// and clears, on the first upload alone; <c>upload</c>, the region copies; <c>shadows</c>, the world's shadow layers
-    /// (<see cref="SdfWorldShadows"/>); and <c>environment</c>, the CPU projection deciding whether a procedural sky owes a
-    /// device refresh. An upload skips a pass it has no work for, which then reads skipped.</summary>
+    /// and clears, on the first upload alone; <c>upload</c>, the region copies; <c>environment</c>, the CPU projection
+    /// deciding whether a procedural sky owes a device refresh; and <c>shadows</c>, the world's shadow layers
+    /// (<see cref="SdfWorldShadows"/>). An upload skips a pass it has no work for, which then reads skipped.</summary>
     public static ReadOnlySpan<string> PassLabels => PassLabelTable;
     /// <summary>Gets what two runs of each pass may be held to agree on, in <see cref="PassLabels"/> order:
     /// <c>fillers</c> and <c>environment</c> are <see cref="WorkClass.Deterministic"/>; <c>upload</c> is
     /// <see cref="WorkClass.PerBackendDeterministic"/>, because what it writes and copies follows the residency policy
-    /// each device's memory profile selects; <c>shadows</c> is <see cref="WorkClass.Pacing"/>, because which layers an
-    /// upload redraws follows the light's turn and the eye's cells as presented.</summary>
+    /// each device's memory profile selects; <c>shadows</c> is <see cref="WorkClass.PerBackendDeterministic"/> too, since
+    /// the layers it draws follow the frames the residency packs on that device.</summary>
     public static ReadOnlySpan<WorkClass> PassClasses => PassClassTable;
     /// <summary>Gets the GPU work the tables' uploads recorded, for the newest upload known to have completed.</summary>
     public IGpuWorkSource Work =>

@@ -293,6 +293,11 @@ public sealed partial class SdfWorldTables {
     // each a box and whether it is glass, and null for one no box bounds. A side that draws nothing is not live. Shading
     // names a change only shading reads, which no cascade's scope shows. Judged with its batch (FlushMotion).
     private void NoteMotion(SdfMotionCause cause, int row, bool wasLive, in SdfMeshBox? before, bool wasGlass, bool isLive, in SdfMeshBox? after, bool isGlass, bool shading = false) {
+        // The world's shadows redraw where a caster was and where it is, whatever scope the change meets.
+        if (!shading && (m_shadows is { } shadows)) {
+            if (wasLive) { shadows.Moved(box: in before); }
+            if (isLive) { shadows.Moved(box: in after); }
+        }
         if ((m_motionOpen == 0) || !(wasLive || isLive)) { return; }
         m_pendingMotion[m_pendingMotionCount++] = new(After: after, Before: before, Cause: cause, IsGlass: isGlass, IsLive: isLive, Row: row, Shading: shading, WasGlass: wasGlass, WasLive: wasLive);
         if (m_pendingMotionCount == MotionBatch) { FlushMotion(); }
@@ -588,7 +593,11 @@ public sealed partial class SdfWorldTables {
     // A previous table seeded whole moves every scope, since every draw's motion then reads as none.
     private void EndMotionStaging() {
         FlushMotion();
-        if (m_seedDynamicHistory || m_seedMeshHistory) { MeetEveryScope(cause: SdfMotionCause.Seed, detail: 0); }
+        if (m_seedDynamicHistory || m_seedMeshHistory) {
+            MeetEveryScope(cause: SdfMotionCause.Seed, detail: 0);
+            // A seeded history names no box, so the shadows that follow motion redraw whole.
+            m_shadows?.Moved(box: null);
+        }
         NoteSkinnedRows();
         FlushMotion();
         NoteMovedReaders();
