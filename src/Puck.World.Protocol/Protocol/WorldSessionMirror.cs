@@ -1196,6 +1196,23 @@ public sealed class WorldSessionMirror : IClientSink {
             m_kit[index] = route.Kit;
             m_look[index] = route.Look;
             m_catalogRig[index] = route.CatalogRig;
+            // A route describes no action state, so a new occupant of the slot reads none until its first snapshot
+            // entry, and a reader takes its own default (a body's scale reads one) in place of a stale or zero value.
+            if (m_generation[index] != route.Entity.Generation) {
+                lock (m_followGate) {
+                    m_stateView.ForgetBodyState(body: index);
+
+                    var forgotten = m_stateView.TakeMovedBodyState(moved: m_movedBodyState);
+
+                    if (forgotten > 0) {
+                        lock (m_stampGate) {
+                            for (var moved = 0; (moved < forgotten); moved++) {
+                                NoteRow(ordinal: m_movedBodyState[moved]);
+                            }
+                        }
+                    }
+                }
+            }
             Volatile.Write(
                 location: ref m_generation[index],
                 value: route.Entity.Generation
