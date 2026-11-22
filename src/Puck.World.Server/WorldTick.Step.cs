@@ -967,19 +967,6 @@ public sealed partial class WorldTick {
         }
         m_tickBlock = m_preparedHold;
     }
-    // The managed id of the thread whose handed-over slice the step thread holds, from the hand-off until that thread
-    // collects it; zero otherwise.
-    private volatile int m_handedOverBy;
-
-    /// <summary>Gets whether the calling thread handed a slice of this tick to a step thread and has not collected it.
-    /// Every guarded member of the server refuses such a thread (<see cref="WorldServer.ThrowIfTickPending"/>): it
-    /// reads the authority only between a collect and the next hand-off.</summary>
-    internal bool HandedOverByCallingThread => (m_handedOverBy == Environment.CurrentManagedThreadId);
-    /// <summary>Marks a slice of this tick as handed to a step thread by the calling thread, or as collected.</summary>
-    /// <param name="handedOver">Whether the slice is being handed over; <see langword="false"/> once it is
-    /// collected.</param>
-    internal void NoteHandOver(bool handedOver) => m_handedOverBy = (handedOver ? Environment.CurrentManagedThreadId : 0);
-
     /// <summary>Releases a prepared hold whose tick will not execute, because its hand-off failed.</summary>
     internal void AbandonPrepared() {
         lock (Host.AuthorityGate) { ReleasePrepared(); }

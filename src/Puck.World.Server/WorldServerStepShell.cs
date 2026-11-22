@@ -42,7 +42,13 @@ public readonly struct WorldExecutedTick {
     private WorldExecutedTick(bool completed, WaitReason? pending) {
         Completed = completed;
         Pending = pending;
+        CompletedAt = (completed ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L);
     }
+
+    /// <summary>Gets the stopwatch timestamp the tick finished executing at, on the thread that executed it, or zero
+    /// for a slice that did not complete a tick: the arrival time its deliveries carry when they are replayed
+    /// later.</summary>
+    public long CompletedAt { get; }
 
     /// <summary>Gets whether the tick finished: its journal is folded and its tape group closed, and it is ready to
     /// publish.</summary>
@@ -164,7 +170,7 @@ public static class WorldServerStepShell {
 
             var tick = (current.Tick + 1UL);
 
-            Collect(server, tick, publishTick);
+            Collect(server, tick, publishTick, executed.CompletedAt);
 
             if (
                 collecting || prepared.Resuming || pacing.StepsOneTickPerFrame ||
@@ -289,7 +295,10 @@ public static class WorldServerStepShell {
     /// <param name="server">The server whose tick completed.</param>
     /// <param name="tick">The completed host work count.</param>
     /// <param name="publishTick">The caller's tick-clock sink.</param>
-    public static void Collect(WorldServer server, ulong tick, Action<ulong> publishTick) {
+    /// <param name="completedAt">The stopwatch timestamp the tick finished executing at
+    /// (<see cref="WorldExecutedTick.CompletedAt"/>), which its replayed snapshots arrive stamped with; zero stamps the
+    /// time of the collect.</param>
+    public static void Collect(WorldServer server, ulong tick, Action<ulong> publishTick, long completedAt = 0L) {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(publishTick);
 
@@ -297,7 +306,7 @@ public static class WorldServerStepShell {
 
         // The tick's recorded deliveries and callbacks reach the host loop's sinks, in order, before any hook reads the
         // completed tick.
-        server.Output.Collect();
+        server.Output.Collect(completedAt: completedAt);
         publishTick(tick);
         work.Complete();
     }

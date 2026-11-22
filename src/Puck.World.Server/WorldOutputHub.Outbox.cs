@@ -12,12 +12,13 @@ namespace Puck.World.Server;
 // the edit echo, a rule's save), is recorded in order instead of made, and Collect replays the records on the
 // collecting thread.
 //
-// The invariant: no non-inline sink and no routed callback runs while a tick of this hub's server executes, or on any
-// thread other than the collector once one has collected. Enforced by the types: the hub, the attach primer and a
-// session sink reach a receiving sink only through a WorldSinkRoute, which only this hub mints, and a routed callback
-// is the delegate the server stores, so no call site can reach the target around it. Where it stops: a sink reached
-// by a path that holds the raw IClientSink (WorldRemoteAuthority's own receive loop, which delivers another process's
-// stream) is outside it.
+// The invariant: no non-inline sink and no routed callback runs while a tick of this hub's server executes, or, once a
+// host has admitted the server, anywhere but on the host loop's thread inside its boundary window
+// (WorldLinkBoundary.DeliversHere). Enforced by the types: the hub, the attach primer and a session sink reach a
+// receiving sink only through a WorldSinkRoute, which only this hub mints, and a routed callback is the delegate the
+// server stores, so no call site can reach the target around it. Where it stops: a sink reached by a path that holds
+// the raw IClientSink (WorldRemoteAuthority's own receive loop, which delivers another process's stream) is outside
+// it, and a server no host admitted defers only while its tick executes.
 public sealed partial class WorldOutputHub {
     private enum RecordKind : byte {
         Snapshot,
@@ -143,20 +144,16 @@ public sealed partial class WorldOutputHub {
     // Nonzero while a tick of this hub's server executes. Only the thread running the tick changes it, under the
     // authority gate, so a delivery from any thread (each holds that gate) reads it settled.
     private int m_executing;
-    // The managed thread id of the thread that last collected, or zero before the first collect: the one thread a
-    // non-inline sink and a routed callback run on once the host has started collecting.
-    private int m_collector;
     private bool m_collecting;
 
+    /// <summary>Gets or sets the boundary window of the host that steps this hub's server, or <see langword="null"/>
+    /// for a server no host admitted.</summary>
+    internal WorldLinkBoundary? Boundary { get; set; }
+
     /// <summary>Gets whether a hand-off made now on the calling thread is recorded for the collect: a tick of this
-    /// hub's server is executing, or a collector exists and the calling thread is another.</summary>
-    internal bool Records {
-        get {
-            if (Volatile.Read(location: ref m_executing) != 0) { return true; }
-            var collector = Volatile.Read(location: ref m_collector);
-            return ((collector != 0) && (collector != Environment.CurrentManagedThreadId));
-        }
-    }
+    /// hub's server is executing, or the calling thread is not the host loop's thread inside its boundary
+    /// window.</summary>
+    internal bool Records => ((Volatile.Read(location: ref m_executing) != 0) || (Boundary is { DeliversHere: false }));
 
     /// <summary>Gets the number of hand-offs recorded and not yet replayed.</summary>
     public int PendingRecords {
@@ -169,14 +166,18 @@ public sealed partial class WorldOutputHub {
     /// <summary>Marks the end of a tick's execution begun by <see cref="BeginExecute"/>.</summary>
     internal void EndExecute() => Interlocked.Decrement(location: ref m_executing);
 
-    /// <summary>Replays every recorded hand-off, in the order it was made, on the calling thread, which becomes this
-    /// hub's collector. A sink that throws on a replayed delivery is handed to its route's fault handler; a routed
-    /// callback that throws propagates, as it would have from the tick. Returns at once while a tick executes, since
-    /// its records belong to its own collect, and inside a replay, whose loop takes what the replay records.</summary>
-    internal void Collect() {
+    /// <summary>Replays every recorded hand-off, in the order it was made, on the calling thread: the host loop's,
+    /// inside its boundary window. A sink that throws on a replayed delivery is handed to its route's fault handler; a
+    /// routed callback that throws propagates, as it would have from the tick. Returns at once while a tick executes,
+    /// since its records belong to its own collect, and inside a replay, whose loop takes what the replay
+    /// records.</summary>
+    /// <param name="completedAt">The stopwatch timestamp the tick whose records these are finished executing at, which
+    /// a replayed snapshot's receiver stamps as its arrival (<see cref="WorldDeliveryClock"/>); zero stamps the time
+    /// of the replay.</param>
+    internal void Collect(long completedAt = 0L) {
         if ((Volatile.Read(location: ref m_executing) != 0) || m_collecting) { return; }
-        Volatile.Write(location: ref m_collector, value: Environment.CurrentManagedThreadId);
         m_collecting = true;
+        using var arrival = WorldDeliveryClock.ReplayAt(timestamp: completedAt);
         try {
             while (true) {
                 List<Record> batch;

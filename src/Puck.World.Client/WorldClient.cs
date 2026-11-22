@@ -857,7 +857,13 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// higher priority and wins that frame. Each seat's view records the tick's whole step, which a frame between
     /// ticks interpolates across (<see cref="WorldSeatViewState.PresentedLook"/>).</summary>
     /// <param name="deltaSeconds">The fixed tick's length, in seconds.</param>
-    public void AdvanceSeatViews(float deltaSeconds) {
+    /// <param name="carried">Whether a tick of the authority behind an endpoint is about to execute beside the frame
+    /// and carry this step: a seat routed to such an endpoint holds its step until <see cref="PresentSeatLook"/>
+    /// names the endpoint (<see cref="WorldSeatViewState.CompleteTick"/>).</param>
+    /// <exception cref="ArgumentNullException"><paramref name="carried"/> is <see langword="null"/>.</exception>
+    public void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried) {
+        ArgumentNullException.ThrowIfNull(argument: carried);
+
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (m_roster.Seat(slot: slot) is not { } seat) {
                 continue;
@@ -869,7 +875,20 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 seat: seat,
                 slot: slot
             );
-            seat.View.CompleteTick();
+            seat.View.CompleteTick(held: ((m_seatRouter.TryRoute(slot: slot)?.Endpoint is { } endpoint) && carried(arg: endpoint)));
+        }
+    }
+    /// <summary>Presents the look step each seat routed to an endpoint holds, once that endpoint's tick has been
+    /// collected (<see cref="WorldSeatViewState.PresentHeldStep"/>).</summary>
+    /// <param name="endpoint">The endpoint whose tick was collected, or <see langword="null"/> for every seat.</param>
+    public void PresentSeatLook(WorldAuthorityEndpoint? endpoint) {
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (
+                (m_roster.Seat(slot: slot) is { } seat) &&
+                ((endpoint is null) || ReferenceEquals(objA: m_seatRouter.TryRoute(slot: slot)?.Endpoint, objB: endpoint))
+            ) {
+                seat.View.PresentHeldStep();
+            }
         }
     }
 
@@ -1187,7 +1206,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_tick = snapshot.Tick;
         m_engineTick = snapshot.EngineTick;
         StepTicks = snapshot.StepTicks;
-        m_arrivalTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+        m_arrivalTimestamp = WorldDeliveryClock.Arrival;
         m_authority = snapshot.Authority;
         if (m_pendingStateInstall) {
             m_pendingStateInstall = false;

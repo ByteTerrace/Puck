@@ -12,7 +12,7 @@ public sealed partial class WorldServer {
     /// the activation has frozen for retirement — which is what a read-back answering during a freeze needs.</remarks>
     public Lock AuthorityGate => m_authorityGate;
     /// <summary>Gets the tick the latest authoritative step completed, or zero before the first step.</summary>
-    public ulong CompletedTick => m_tick.CompletedTick;
+    public ulong CompletedTick { get { ThrowIfOutsideWindow(); return m_tick.CompletedTick; } }
     /// <inheritdoc cref="WorldRuleHost.DecisionWork"/>
     public WorldDecisionWork DecisionWork => m_ruleHost.DecisionWork;
     /// <summary>Gets the input-hold runtime the hold reads and the pad fold consult.</summary>

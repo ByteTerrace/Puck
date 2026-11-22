@@ -32,6 +32,11 @@ public interface IFixedStepSimulation {
     /// takes the rest of its burst on its next iteration. The offscreen host composes a frame after every step, so for it
     /// this decides only whether the frame is composed again while it stays owed.</summary>
     bool AwaitsFrame { get; }
+    /// <summary>Gets whether the step about to begin will owe the host a frame when it completes
+    /// (<see cref="AwaitsFrame"/> after it), known before it runs. Read inside the boundary window as a step begins, by a
+    /// host that would otherwise go on while the simulation executes the step on another thread: it waits for such a
+    /// step, so the frame of the iteration that began the step shows it.</summary>
+    bool NextStepOwesFrame => false;
 
     /// <summary>Asked before every step by windowed and offscreen hosts that hold their clock for owed frames:
     /// whether to withhold that step because a frame the last step owes has not been

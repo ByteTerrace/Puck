@@ -640,7 +640,8 @@ public sealed class InPlacePortalCrossingLawTests {
         public int SeatCount => 1;
         public List<(int Slot, FixedQ4816 Turn)> Turns { get; } = [];
 
-        public void AdvanceSeatViews(float deltaSeconds) { }
+        public void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried) { }
+        public void PresentSeatLook(WorldAuthorityEndpoint? endpoint) { }
         public void ClearAnalog() { }
         public void ClearHeld(int slot) { }
         public void ConfigureLeave(Func<int, Principal, bool> leave) { }

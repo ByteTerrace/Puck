@@ -120,7 +120,16 @@ public sealed partial class WorldServer : IWorldServerHost {
     private readonly WorldTick m_tick;
 
     /// <summary>Authoritative semantic input owners, modes and timed histories.</summary>
-    public WorldInputRuntime Input { get; internal set; }
+    public WorldInputRuntime Input {
+        get {
+            ThrowIfOutsideWindow();
+
+            return m_input;
+        }
+        internal set => m_input = value;
+    }
+
+    private WorldInputRuntime m_input;
 
     // The persistence facade: journal undo, the authority checkpoint, the state hash, and the replay gate. It owns
     // no state — it walks the others.
@@ -206,7 +215,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <summary>Gets the attached addon runtime's mount receipts, in mount order — empty when no runtime is attached (a
     /// world that enables no addon, or an offline re-drive read before its own mount). The record side of the replay
     /// tape reads this at record-start so a saved tape pins the guests it will re-run.</summary>
-    public IReadOnlyList<WorldAddonReceipt> AddonReceipts => (m_addons?.Receipts ?? Array.Empty<WorldAddonReceipt>());
+    public IReadOnlyList<WorldAddonReceipt> AddonReceipts { get { ThrowIfOutsideWindow(); return (m_addons?.Receipts ?? Array.Empty<WorldAddonReceipt>()); } }
     /// <summary>Gets a value indicating whether any mounted addon has ever had an admitted execution attempted (a real
     /// <c>TickAddons</c> pump, not merely mounting).
     /// <c>false</c> for a world that mounts no addon, or one whose mounted addons never reached their first tick.
@@ -251,14 +260,20 @@ public sealed partial class WorldServer : IWorldServerHost {
     }
 
     /// <summary>Gets the exact engine-time boundary completed by the latest authoritative step.</summary>
-    public ulong CompletedEngineTicks => m_tick.CompletedEngineTicks;
+    public ulong CompletedEngineTicks { get { ThrowIfOutsideWindow(); return m_tick.CompletedEngineTicks; } }
     /// <summary>Gets the authoritative tick a delivery stands at: the tick and engine tick the step in progress
     /// produces, which its snapshot will carry, while one runs, and the completed ones between steps. A delivery
     /// composed mid-step (a drained mutation's, a rule's) reads values as of it, never as of the tick before.</summary>
-    public ArenaTime DeliveryTime => (Time with {
-        EngineTick = m_tick.CompletedEngineTicks,
-        Tick = m_tick.DeliveryTick,
-    });
+    public ArenaTime DeliveryTime {
+        get {
+            ThrowIfOutsideWindow();
+
+            return (Time with {
+                EngineTick = m_tick.CompletedEngineTicks,
+                Tick = m_tick.DeliveryTick,
+            });
+        }
+    }
     /// <summary>Gets the live world definition this server runs — swapped in place as buffered edits apply.</summary>
     public WorldDefinition Definition { get { ThrowIfTickPending(); return m_document.Definition; } }
 
@@ -269,16 +284,22 @@ public sealed partial class WorldServer : IWorldServerHost {
 
     /// <summary>Gets installed declarations without exporting tick values. State reads use the arena or
     /// <see cref="Definition"/>; scheduling and other declaration-only work use this view.</summary>
-    public WorldDefinition Configuration => m_document.Definition;
+    public WorldDefinition Configuration { get { ThrowIfOutsideWindow(); return m_document.Definition; } }
     /// <summary>Gets the revision of the world's source this authority last took: what a reload's delta is cut from
     /// and the live document's own edits are merged against.</summary>
-    public WorldSourceRevision SourceRevision => m_document.Revision;
+    public WorldSourceRevision SourceRevision { get { ThrowIfOutsideWindow(); return m_document.Revision; } }
     /// <summary>Gets the version of <see cref="Definition"/>: this server's activation, minted once at construction,
     /// and the install ordinal within it. Every delivered document and every mutation verdict carries it.</summary>
-    public WorldDocumentVersion DocumentVersion => new(
-        Activation: m_activation,
-        Sequence: m_document.Sequence
-    );
+    public WorldDocumentVersion DocumentVersion {
+        get {
+            ThrowIfOutsideWindow();
+
+            return new(
+                Activation: m_activation,
+                Sequence: m_document.Sequence
+            );
+        }
+    }
     /// <summary>Observes each visiting-world durable-state verdict for a tape.</summary>
     public Action<WorldDocumentSubmissionReceipt>? DocumentSubmissionTap { get; set; }
     /// <summary>Gets the optional host sink for the player-keyed durable writes emitted by each completed tick.</summary>
@@ -324,7 +345,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// the concrete <see cref="WorldGrants"/>: its <see cref="WorldGrants.TryGrant"/>/<see cref="WorldGrants.Revoke"/>
     /// authority doors stay reachable only through <see cref="Grant"/>/<see cref="Revoke"/> below, which run the actor
     /// check those two methods do not — a caller that only holds this property can never skip it.</summary>
-    public IWorldGrantsView Grants => m_grants;
+    public IWorldGrantsView Grants { get { ThrowIfOutsideWindow(); return m_grants; } }
     /// <summary>Gets this server's own running-instance identity — the draw seed ladder's instance rung (see
     /// <c>GeneratorEngine.ComputeSeedState</c>). A live redraw folds the same value the boot/first-fill resolver
     /// used, so a site's first fill and its later redraws share one deterministic stream per instance.</summary>
@@ -341,15 +362,19 @@ public sealed partial class WorldServer : IWorldServerHost {
     public bool PreparesRebuildsOffTick { get; set; }
     /// <summary>Gets the journal length — the number of applied mutations over the base (the <c>world.status</c> dirty
     /// count).</summary>
-    public int JournalLength => m_document.JournalLength;
+    public int JournalLength { get { ThrowIfOutsideWindow(); return m_document.JournalLength; } }
     /// <summary>Returns how many of a principal's own edits the journal holds that <c>world.undo</c> can still take
     /// back, and how many of its undone edits <c>world.redo</c> can still restore. Another principal's edits and the
     /// World's own entries count toward neither.</summary>
     /// <param name="principal">The principal whose edits are counted.</param>
     /// <returns>The principal's undo and redo depths.</returns>
-    public (int Undoable, int Redoable) JournalDepths(Principal principal) => m_document.JournalDepths(principal: principal);
+    public (int Undoable, int Redoable) JournalDepths(Principal principal) {
+        ThrowIfOutsideWindow();
+
+        return m_document.JournalDepths(principal: principal);
+    }
     /// <summary>Gets the width of the latest authoritative step, or zero before the first step.</summary>
-    public ulong LastStepTicks => m_tick.LastStepTicks;
+    public ulong LastStepTicks { get { ThrowIfOutsideWindow(); return m_tick.LastStepTicks; } }
     /// <summary>Gets the authoritative screen-machine host — owns every booted <c>IMachineRuntime</c>, its memory-peek
     /// surface (<see cref="IWorldMachineHost"/> extends <see cref="IWorldMachineMemoryPeek"/> directly), and the
     /// screen-op verb surface's runtime target. Always present (never null): machines are booted and stepped in
@@ -424,11 +449,11 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// reachable transport and means an authored adjacency refuses by name for want of proof.</summary>
     public IWorldNeighbourResolver? Neighbours { get; set; }
     /// <summary>Gets the tick a durable input submitted during the current command window must name.</summary>
-    public ulong NextInputTick => (m_tick.CompletedTick + 1UL);
+    public ulong NextInputTick { get { ThrowIfOutsideWindow(); return (m_tick.CompletedTick + 1UL); } }
     /// <summary>Gets the entity table this server advances.</summary>
     public WorldPopulation Population { get { ThrowIfTickPending(); return m_population; } }
     /// <summary>Gets the profile catalog (the routed store persists through it).</summary>
-    public WorldOwnedWorlds Profiles => m_profiles;
+    public WorldOwnedWorlds Profiles { get { ThrowIfOutsideWindow(); return m_profiles; } }
     /// <summary>Gets or sets the composition-owned factory for proving a replacement document relative to that
     /// candidate's own origin rather than the currently loaded document. The path is the candidate's full path.</summary>
     public Func<string, IWorldNeighbourResolver?>? RebuildNeighbours { get; set; }
@@ -482,10 +507,10 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <summary>Gets the live SDF contact field under the field provider, or <see langword="null"/> under the analytic
     /// provider — the <c>world.collision.probe</c>/<c>world.collision.status</c> reads' window onto the
     /// surface the simulation itself solves against.</summary>
-    public WorldSolidField? SolidField => m_document.SolidField;
+    public WorldSolidField? SolidField { get { ThrowIfOutsideWindow(); return m_document.SolidField; } }
     /// <summary>Gets the solid-field revision — bumped each time the field is rebuilt (a solid-affecting edit under the field
     /// provider). The <c>world.collision.status</c> read-back.</summary>
-    public int SolidRevision => m_document.SolidRevision;
+    public int SolidRevision { get { ThrowIfOutsideWindow(); return m_document.SolidRevision; } }
     /// <summary>Gets or sets the composition-root route for a federated peer that subsequently leaves this
     /// authority. Null when this server is not hosted by a multi-authority composition.</summary>
     public IWorldTransferForwarder? TransferForwarder { get; set; }
@@ -556,14 +581,39 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <inheritdoc cref="WorldTick.SnapshotFollows"/>
     internal bool SnapshotFollows => m_tick.SnapshotFollows;
 
+    /// <summary>Gets the boundary window of the host that steps this server, or <see langword="null"/> for a server no
+    /// host has admitted (a law's, a replay's shadow). The host sets it when it admits the server
+    /// (<see cref="WorldInstanceHost.Admit"/>): from then on every guarded member refuses the host loop's thread
+    /// outside the window, and the server's deliveries reach a receiving sink at once only on that thread inside
+    /// it.</summary>
+    public WorldLinkBoundary? Boundary {
+        get => m_boundary;
+        internal set {
+            m_boundary = value;
+            m_output.Boundary = value;
+        }
+    }
+
+    private WorldLinkBoundary? m_boundary;
+
+    // The seam every member the tick mutates passes. It refuses a tick held across wait slices, and it refuses the
+    // host loop's thread wherever that thread is outside its boundary window or has a tick in flight on the step
+    // thread (ThrowIfOutsideWindow): there a read would see whatever part of the tick had run by then. The second
+    // refusal does not depend on whether a tick is executing, so a reader outside the window throws on its first call.
     internal void ThrowIfTickPending() {
         if (m_tick?.BlockedDetail is { } reason) {
             throw new InvalidOperationException($"Authority tick is incomplete while waiting for {reason}.");
         }
-        // The thread that handed a tick to the step thread reads the authority again only once it has collected the
-        // tick: before that the read would see whatever part of the tick had run by then.
-        if (m_tick is { HandedOverByCallingThread: true }) {
-            throw new InvalidOperationException("The thread that handed this authority's tick to the step thread read the authority before it collected the tick.");
+        ThrowIfOutsideWindow();
+    }
+
+    // The window's half of the seam, for a member that stays readable while a tick is held across wait slices (the
+    // stepping machinery reads it between slices).
+    internal void ThrowIfOutsideWindow() {
+        if (m_boundary is { Refusal: not WorldBoundaryRefusal.None and var refusal }) {
+            throw new InvalidOperationException((refusal == WorldBoundaryRefusal.TickInFlight)
+                ? $"The thread that handed a tick to the step thread read authority '{InstanceIdentity}' before it collected the tick."
+                : $"The host loop's thread read authority '{InstanceIdentity}' outside its boundary window: the reader belongs in the control phase or the step, or reads what the collect published.");
         }
     }
 
@@ -746,8 +796,8 @@ public sealed partial class WorldServer : IWorldServerHost {
         }
         // Assigned before the arena is built: the build binds the population's action-state slot lanes.
         m_population = population;
-        Input = new WorldInputRuntime(definition: definition, host: this);
-        m_population.ActionStateLane.Input = Input;
+        m_input = new WorldInputRuntime(definition: definition, host: this);
+        m_population.ActionStateLane.Input = m_input;
         m_events = new WorldEventFeed(capacity: population.Capacity);
         m_tick = new WorldTick(
             definition: definition,

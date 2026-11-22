@@ -11,6 +11,8 @@ public sealed class WorldSiloSimulation(WorldSiloHost host) : IFixedStepSimulati
     private bool m_resumingRows;
 
     /// <inheritdoc/>
+    public Puck.Abstractions.Pacing.IHostTickBoundary TickBoundary => host.Instances.Boundary;
+    /// <inheritdoc/>
     public uint RatePerSecond => host.MasterRateHz;
     /// <inheritdoc/>
     public bool AwaitsFrame => false;

@@ -875,7 +875,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 location: ref m_stepSecondsBits,
                 value: BitConverter.SingleToInt32Bits(value: ((float)FixedTickConversion.ToSeconds(ticks: snapshot.StepTicks)))
             );
-            var arrival = Stopwatch.GetTimestamp();
+            var arrival = WorldDeliveryClock.Arrival;
 
             _ = Interlocked.Exchange(
                 location1: ref m_snapshotArrivalTimestamp,

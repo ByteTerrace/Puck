@@ -8,16 +8,16 @@ public sealed partial class WorldServer {
     /// <summary>Gets the tick facade — the ordered domain and the intent queue, the step clock, the contribution
     /// fold and its read-back, and the per-tick engagement, transfer, field, music, response, placement-deal and
     /// board-enforcement work.</summary>
-    public WorldTick Tick => m_tick;
+    public WorldTick Tick { get { ThrowIfOutsideWindow(); return m_tick; } }
     internal IDisposable? PendingReplayInputs { get; set; }
     /// <summary>Gets whether this activation has frozen for retirement, without taking the authority gate — the
     /// raw read a caller already holding it needs.</summary>
     public bool AuthorityRetiring => m_authorityRetiring;
     /// <summary>Gets the search jobs over the arena, rebuilt with the rules on every install.</summary>
-    public ArenaSearch Search => m_search;
+    public ArenaSearch Search { get { ThrowIfOutsideWindow(); return m_search; } }
     /// <summary>Gets the transfer escrow — bounded transfer transactions, mobility credentials and in-flight
     /// leases.</summary>
-    public WorldTransferEscrow TransferEscrow => m_transferEscrow;
+    public WorldTransferEscrow TransferEscrow { get { ThrowIfOutsideWindow(); return m_transferEscrow; } }
 
     /// <inheritdoc cref="WorldTick.AbortTransfer"/>
     public void AbortTransfer(string sourceAuthority, ulong transferId) =>

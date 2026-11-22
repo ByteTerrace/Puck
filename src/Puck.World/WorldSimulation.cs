@@ -12,6 +12,8 @@ internal sealed class WorldSimulation(WorldHostStep step, Action afterInstances,
 
     /// <inheritdoc/>
     public bool AwaitsFrame => step.AwaitsFrame;
+    /// <inheritdoc/>
+    public bool NextStepOwesFrame => step.NextStepOwesFrame;
 
     /// <inheritdoc/>
     public bool HoldsClock(ulong withheldTicks) => step.HoldsClock(withheldTicks: withheldTicks);

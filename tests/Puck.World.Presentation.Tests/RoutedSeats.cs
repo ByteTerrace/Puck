@@ -40,7 +40,8 @@ internal sealed class RoutedSeats : IWorldEmbodiedSeats {
     public int SeatCount => WorldSeatBindings.SeatCount;
 
     /// <inheritdoc/>
-    public void AdvanceSeatViews(float deltaSeconds) { }
+    public void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried) { }
+    public void PresentSeatLook(WorldAuthorityEndpoint? endpoint) { }
     /// <inheritdoc/>
     public void ClearAnalog() { }
     /// <inheritdoc/>

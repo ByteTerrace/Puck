@@ -8,7 +8,7 @@ public sealed partial class WorldServer {
     /// ops, the compose and apply pipeline, the solid field, and the per-tick delivery decision.</summary>
     public WorldDocument Document { get { ThrowIfTickPending(); return m_document; } }
     /// <summary>Gets the entity indices an allowed intent has already written this tick.</summary>
-    public int[] TickWrittenEntity => m_tick.TickWrittenEntity;
+    public int[] TickWrittenEntity { get { ThrowIfOutsideWindow(); return m_tick.TickWrittenEntity; } }
 
     /// <summary>Adopts a widened contention-tracking trio in one step, so the three arrays can never disagree on
     /// length.</summary>

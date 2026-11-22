@@ -71,6 +71,11 @@ public sealed class WorldSeatViewState {
 
     // What the last fixed tick's view advance moved the live look by, and where it started, so a frame between ticks
     // can present the look where the body it frames is drawn (see PresentedLook).
+    // The step of a tick still executing beside the frame (CompleteTick's held form), taken back whole from the
+    // presented look until the tick is collected (PresentHeldStep).
+    private float m_heldPitchStep;
+    private float m_heldYawStep;
+    private bool m_holdsStep;
     private float m_tickPitchStep;
     private float m_tickStartPitch;
     private float m_tickStartYaw;
@@ -214,20 +219,55 @@ public sealed class WorldSeatViewState {
             m_yaw = VectorFunctions.WrapAngle(radians: (m_yaw + (delta * fraction)));
         }
     }
-    /// <summary>Opens a fixed tick's view advance: the look as it stands now is where this tick's step starts.</summary>
+    /// <summary>Opens a fixed tick's view advance: the look as it stands now is where this tick's step starts. A step
+    /// still held from the tick before is presented first.</summary>
     public void BeginTick() {
         lock (m_gate) {
+            PresentHeld();
             m_tickStartYaw = m_yaw;
             m_tickStartPitch = m_pitch;
         }
     }
     /// <summary>Closes a fixed tick's view advance: whatever the tick moved the look by (stick and gyro nudges, a
     /// follow, a held recenter) is the step a frame between this tick and the next interpolates across.</summary>
-    public void CompleteTick() {
+    /// <param name="held">Whether the tick that carries this step is about to execute beside the frame. The step is
+    /// then held: a frame keeps presenting the look across the previous tick's step, as the body it frames is still
+    /// drawn between the previous tick's poses, until the tick is collected (<see cref="PresentHeldStep"/>).
+    /// <see langword="false"/> presents the step at once, for a seat whose world takes no tick now (paused, not due,
+    /// or clocked by another process).</param>
+    public void CompleteTick(bool held = false) {
         lock (m_gate) {
-            m_tickYawStep = VectorFunctions.WrapAngle(radians: (m_yaw - m_tickStartYaw));
-            m_tickPitchStep = (m_pitch - m_tickStartPitch);
+            var yawStep = VectorFunctions.WrapAngle(radians: (m_yaw - m_tickStartYaw));
+            var pitchStep = (m_pitch - m_tickStartPitch);
+
+            if (held) {
+                m_heldYawStep = yawStep;
+                m_heldPitchStep = pitchStep;
+                m_holdsStep = true;
+            } else {
+                m_tickYawStep = yawStep;
+                m_tickPitchStep = pitchStep;
+            }
         }
+    }
+    /// <summary>Presents the step <see cref="CompleteTick"/> held, once the tick that carried it has been collected
+    /// and its poses delivered: from here a frame interpolates across it. A no-op when no step is held.</summary>
+    public void PresentHeldStep() {
+        lock (m_gate) {
+            PresentHeld();
+        }
+    }
+
+    private void PresentHeld() {
+        if (!m_holdsStep) {
+            return;
+        }
+
+        m_tickYawStep = m_heldYawStep;
+        m_tickPitchStep = m_heldPitchStep;
+        m_heldYawStep = 0f;
+        m_heldPitchStep = 0f;
+        m_holdsStep = false;
     }
     /// <summary>
     /// <para>Returns the live look a frame presents at <paramref name="interpolationAlpha"/> of the way from the
@@ -249,7 +289,7 @@ public sealed class WorldSeatViewState {
         ));
 
         lock (m_gate) {
-            return (VectorFunctions.WrapAngle(radians: (m_yaw - (m_tickYawStep * lag))), (m_pitch - (m_tickPitchStep * lag)));
+            return (VectorFunctions.WrapAngle(radians: ((m_yaw - m_heldYawStep) - (m_tickYawStep * lag))), ((m_pitch - m_heldPitchStep) - (m_tickPitchStep * lag)));
         }
     }
 
@@ -257,6 +297,9 @@ public sealed class WorldSeatViewState {
     private void CutTickStep() {
         m_tickYawStep = 0f;
         m_tickPitchStep = 0f;
+        m_heldYawStep = 0f;
+        m_heldPitchStep = 0f;
+        m_holdsStep = false;
     }
 
     /// <summary>The chase boom's second-order ease: eases <paramref name="eye"/> toward <paramref name="target"/> by

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Puck.Abstractions.Waiting;
 using Puck.Hosting;
 using Puck.Hosting.Jobs;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -27,10 +28,15 @@ namespace Puck.World.Server;
 /// </summary>
 /// <param name="narration">The hub a slice that outlasts the stall budget is reported on, or
 /// <see langword="null"/> to report nothing.</param>
-public sealed class WorldStepThread(WorldOutputHub? narration = null) : IJobLaneUnit, IDisposable {
+/// <param name="boundary">The host's boundary window, closed to the handing thread from each hand-off until it
+/// collects the slice (<see cref="WorldLinkBoundary.HandedOver"/>), or <see langword="null"/> for a step thread no
+/// host owns, which keeps one of its own. An authority no host admitted takes the step thread's boundary with its
+/// first slice, so every authority a step thread executes refuses the thread that left its tick in flight.</param>
+public sealed class WorldStepThread(WorldOutputHub? narration = null, WorldLinkBoundary? boundary = null) : IJobLaneUnit, IDisposable {
     /// <summary>What a thread waits for while the step thread executes the slice it handed over.</summary>
     public static readonly WaitReason ExecuteWait = new(Subsystem: "authority", WaitsFor: "the step thread's tick");
 
+    private readonly WorldLinkBoundary m_boundary = (boundary ?? new WorldLinkBoundary());
     private readonly JobLane m_lane = new(name: "Puck world step");
     private readonly HostFrameWork m_work = new();
 
@@ -52,9 +58,18 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null) : IJobLane
     /// <param name="deadline">How long to wait for the thread to end.</param>
     /// <returns><see langword="false"/> when a slice is still executing at the deadline: its authority is still in use
     /// and must not be disposed.</returns>
-    public bool Stop(WaitDeadline deadline) => m_lane.Stop(deadline: deadline);
+    public bool Stop(WaitDeadline deadline) {
+        if (!m_lane.Stop(deadline: deadline)) {
+            return false;
+        }
+
+        // Nothing executes any more: a slice handed over and never collected no longer keeps its handing thread out.
+        m_boundary.Collected();
+
+        return true;
+    }
     /// <summary>Stops the step thread under the synchronous budget.</summary>
-    public void Dispose() => m_lane.Dispose();
+    public void Dispose() => _ = Stop(deadline: WaitDeadline.Synchronous());
 
     // Prepares one slice of server's tick on the calling thread and hands it to the step thread; false when preparing
     // cancelled a replay drive and left nothing to execute. The calling thread must hold no authority gate: the slice
@@ -67,6 +82,11 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null) : IJobLane
         if (m_lane.InFlight) {
             throw new InvalidOperationException(message: "The step thread already holds a tick slice; collect it before handing over the next.");
         }
+        if (server.Boundary is null) {
+            server.Boundary = m_boundary;
+        } else if (!ReferenceEquals(objA: server.Boundary, objB: m_boundary)) {
+            throw new InvalidOperationException(message: $"Authority '{server.InstanceIdentity}' belongs to another host's boundary window than the step thread it was handed to.");
+        }
 
         var prepared = WorldServerStepShell.Prepare(server, tape, in context, deadline);
 
@@ -76,16 +96,16 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null) : IJobLane
 
         m_prepared = prepared;
         m_executed = default;
-        server.Tick.NoteHandOver(handedOver: true);
         try {
             m_lane.Post(unit: this);
         } catch {
             // The tick's input is closed and nothing will execute it: let the threads its hold keeps out back in.
-            server.Tick.NoteHandOver(handedOver: false);
             server.Tick.AbandonPrepared();
             m_prepared = default;
             throw;
         }
+        // From here until the collect the authority is the step thread's: the window is closed to this thread.
+        m_boundary.HandedOver();
 
         return true;
     }
@@ -127,7 +147,7 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null) : IJobLane
 
     // Folds what the step thread measured into the collecting thread's iteration and frees the slice's record.
     private void Settle() {
-        m_prepared.Server?.Tick.NoteHandOver(handedOver: false);
+        m_boundary.Collected();
         HostFrameWork.Fold(source: m_work);
         m_prepared = default;
         m_executed = default;
