@@ -3298,9 +3298,11 @@ public sealed partial class SdfMeshPathBake {
         public long DemandQueuedEpoch { get; set; } = -1L;
         // What the latest measure stood on, which a moved slot's bound reads (MeasureDemands): the travel it was taken at,
         // the travel its tier band leaves (in travel units, its pixel slack times its units), and the world box and units
-        // it read; units of zero for a measure that read no single box (a shared geometry's copies).
+        // it read, units of zero for a measure that read no single box (a shared geometry's copies); and how far the box
+        // may move before a frustum-bound point answers otherwise for it (SdfMeshDemand.FrustumSlack).
         public double DemandMeasuredTravel { get; set; }
         public float DemandSlack { get; set; }
+        public float DemandFrustumSlack { get; set; } = float.PositiveInfinity;
         public Vector3 DemandWorldCenter { get; set; }
         public Vector3 DemandWorldHalf { get; set; }
         public float DemandUnits { get; set; }

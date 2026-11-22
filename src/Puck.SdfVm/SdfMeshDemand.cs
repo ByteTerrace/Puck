@@ -307,6 +307,29 @@ public sealed class SdfMeshDemand {
         return boxed;
     }
 
+    /// <summary>Returns how far a world-axis box may move before some point that demands only inside its view
+    /// (<see cref="AnyWithinView"/>) answers otherwise whether its widened frustum may hold it
+    /// (<see cref="CameraSnapshot.FrustumSlack"/>): the least over those points; infinity with none.</summary>
+    /// <param name="center">The box's center, in world space.</param>
+    /// <param name="half">The box's half extents along the world axes, none negative.</param>
+    /// <returns>The distance in metres.</returns>
+    public float FrustumSlack(Vector3 center, Vector3 half) {
+        var slack = float.PositiveInfinity;
+
+        for (var index = 0; (index < Count); index++) {
+            if (!m_within[index]) { continue; }
+            slack = MathF.Min(x: slack, y: m_cameras[index].FrustumSlack(
+                center: center,
+                halfX: new Vector3(x: half.X, y: 0f, z: 0f),
+                halfY: new Vector3(x: 0f, y: half.Y, z: 0f),
+                halfZ: new Vector3(x: 0f, y: 0f, z: half.Z),
+                margin: WithinViewMargin
+            ));
+        }
+
+        return slack;
+    }
+
     // Whether a point demands a world-axis box at all: always for a point that demands by distance alone, and only a
     // box its widened frustum may hold for one that demands inside its view.
     private bool Demands(int index, Vector3 center, Vector3 half) => (!m_within[index] || SeesFrom(index: index, center: center, half: half));

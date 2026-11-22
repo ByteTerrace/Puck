@@ -147,17 +147,26 @@ public sealed partial class SdfMeshPathBake {
         }
         // Whether a group whose slot moved may demand another tier: its box moved by no more than the distance between the
         // world box its latest measure read and the one it stands at now, so its pixel moved by no more than that over the
-        // points' fewest pixels a metre, with the points' own travel since. A shared geometry's copies, a changed scale,
-        // a point bounded to its view (whose frustum a box crosses) or a group never measured say it may.
+        // points' fewest pixels a metre, with the points' own travel since, and while no frustum-bound point's frustum is
+        // crossed. A changed scale, or a group not measured since the latest reset, says it may. A shared geometry is
+        // measured where its copies stand, which move through the copy journal alone, so its slot moving says nothing.
         bool Moved(Group group) {
-            if (!group.Listed || group.Retired || !group.HasDemandBox || (group.DemandMeasuredAt == stamp) || double.IsNaN(d: group.DemandDueAt)) { return true; }
-            if (!float.IsFinite(f: group.DemandSlack)) { return false; }
-            if ((group.DemandUnits == 0f) || Demand.AnyWithinView || (UnitsOf(group: group) != group.DemandUnits)) { return true; }
+            if (!group.Listed || group.Retired || !group.HasDemandBox || (group.DemandMeasuredAt == stamp) || double.IsNaN(d: group.DemandDueAt) ||
+                (group.DemandMeasuredAt < m_demandResetAt)) { return true; }
+
+            var within = Demand.AnyWithinView;
+
+            if (group.DemandUnits == 0f) { return false; }
+            if (!float.IsFinite(f: group.DemandSlack) && !within) { return false; }
+            if (UnitsOf(group: group) != group.DemandUnits) { return true; }
 
             var (center, half) = WorldBox(group: group);
-            var drift = ((Vector3.Distance(value1: center, value2: group.DemandWorldCenter) + Vector3.Distance(value1: half, value2: group.DemandWorldHalf)) / Demand.LeastPixelsPerMetre);
+            var delta = Vector3.Abs(value: (half - group.DemandWorldHalf));
+            var metres = (Vector3.Distance(value1: center, value2: group.DemandWorldCenter) + ((delta.X + delta.Y) + delta.Z));
 
-            return (((travel - group.DemandMeasuredTravel) + drift) >= group.DemandSlack);
+            // A box crossing a frustum-bound point's frustum moves its answer by any amount (SdfMeshDemand.FrustumSlack).
+            if (within && (metres >= group.DemandFrustumSlack)) { return true; }
+            return (((travel - group.DemandMeasuredTravel) + (metres / Demand.LeastPixelsPerMetre)) >= group.DemandSlack);
         }
         // Measures one listed group, once a frame, and queues it at the travel its tier may next move at. A group whose
         // demanded tier stands is not read by the next decision for it, and keeps the earlier of its queued dues.
@@ -175,6 +184,7 @@ public sealed partial class SdfMeshPathBake {
             group.DemandMeasuredTravel = travel;
             group.DemandSlack = slack;
             (group.DemandWorldCenter, group.DemandWorldHalf, group.DemandUnits) = ((box is { } held) ? (held.Center, held.Half, units) : (default, default, 0f));
+            group.DemandFrustumSlack = (((box is { } framed) && Demand.AnyWithinView) ? Demand.FrustumSlack(center: framed.Center, half: framed.Half) : float.PositiveInfinity);
             // An entry already queued earlier than the new due stays valid: popped, it measures again sooner than needed.
             if ((group.DemandQueuedEpoch != m_demandEpoch) || double.IsNaN(d: queued) || !(queued <= dueAt) || (queued < travel)) {
                 group.DemandDueAt = dueAt;
