@@ -40,6 +40,54 @@ public static partial class WorldPlacementStamp {
             m_creations = creations;
             FrameTable = (projected ? new LazyFrames(owner: this) : m_authored);
         }
+        // A successor of the previous context. Surface descriptors and parent validation read only the rows' literal
+        // structure (a surface row, its targets and its parents are literal static roots), never a holding mask or a
+        // bound value, so they always carry. A holding-only replacement also carries frames and stamps, each to the row
+        // that replaced its row; a move of the section's bound values (moved) resolves the frames again and derives
+        // each stamp again through the per-row stamp table, which keeps a stamp whose frame did not move. Ground fields
+        // are not carried: they are only read when a stamp derives again, and an evaluator is not shared between two
+        // contexts' gates.
+        private CompilationContext(CompilationContext previous, WorldPlacementsSection section, IReadOnlyDictionary<WorldPlacement, WorldPlacement> replaced, bool moved) {
+            m_seed = previous.m_seed; m_revision = previous.m_revision;
+            m_authored = (moved ? WorldPlacementFrameCompilation.Resolve(section: section, worldSeed: m_seed) : previous.m_authored);
+            m_rows = WorldPlacementIndex.ById(placements: (section.Rows ?? []));
+            m_creations = previous.m_creations;
+            FrameTable = (previous.FrameTable is LazyFrames ? new LazyFrames(owner: this) : m_authored);
+
+            WorldPlacement Row(WorldPlacement row) => replaced.GetValueOrDefault(key: row, defaultValue: row);
+            SurfaceValidation Validation(SurfaceValidation held) {
+                if (held.Descriptor is not { } descriptor) { return held; }
+
+                var sources = descriptor.Sources;
+
+                foreach (var source in sources) {
+                    if (replaced.ContainsKey(key: source.Row)) {
+                        sources = [.. sources.Select(each => each with { Row = Row(row: each.Row) })];
+                        break;
+                    }
+                }
+                return (ReferenceEquals(objA: sources, objB: descriptor.Sources) ? held : held with { Descriptor = descriptor with { Sources = sources } });
+            }
+
+            if (!moved) {
+                foreach (var (row, frame) in previous.m_frames) { m_frames[Row(row: row)] = frame; }
+                foreach (var (row, stamp) in previous.m_stamps) { m_stamps[Row(row: row)] = stamp; }
+            }
+            foreach (var (row, validation) in previous.m_descriptors) { m_descriptors[Row(row: row)] = Validation(held: validation); }
+            foreach (var (row, reason) in previous.m_parentValidation) { m_parentValidation[Row(row: row)] = reason; }
+        }
+        // The context for a holding-only replacement of this context's section; see the constructor.
+        public CompilationContext Rebase(WorldPlacementsSection section, IReadOnlyDictionary<WorldPlacement, WorldPlacement> replaced) {
+            lock (Gate) { return new CompilationContext(moved: false, previous: this, replaced: replaced, section: section); }
+        }
+        // The context for this context's own section once the bound values its frames read have moved.
+        public CompilationContext Moved(WorldPlacementsSection section) {
+            lock (Gate) { return new CompilationContext(moved: true, previous: this, replaced: NoReplacements, section: section); }
+        }
+        private static readonly IReadOnlyDictionary<WorldPlacement, WorldPlacement> NoReplacements = new Dictionary<WorldPlacement, WorldPlacement>();
+        public int Revision => m_revision;
+        public IReadOnlyList<WorldPrototype> Creations => m_creations;
+        public ulong Seed => m_seed;
         private WorldPrototype? CreationOf(string id) => WorldDefinitionRows.FindCreation(creations: m_creations, id: id);
         private static bool SingleRoot(WorldPlacement row) => row.Distribution is null && row.Mirror is null && row.Deal is null;
         private bool Owned(WorldPlacement row) => m_rows.TryGetValue(row.Id, out var declared) && ReferenceEquals(row, declared);

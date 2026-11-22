@@ -5,6 +5,7 @@ namespace Puck.Cli.Host;
 /// <summary><c>puck host</c> — the verbs about the machine an agent runs on: <c>load</c> reports CPU, memory, disk and
 /// GPU busyness as admission lines (see <see cref="HostLoadMonitor"/>).</summary>
 public static class HostCommand {
+    private const string AllocationsVerb = "host allocations";
     private const string HeapVerb = "host heap";
     private const string LoadVerb = "host load";
 
@@ -241,11 +242,87 @@ public static class HostCommand {
         return command;
     }
 
+    private static async Task<int> Allocations(int? processId, int seconds, string? trace, string? output, int? thread, int top, double fromSeconds, double toSeconds, string? focus, CancellationToken cancellationToken) {
+        if ((processId is null) == (trace is null)) { return CliExit.Refuse(verb: AllocationsVerb, what: "the trace", why: "name exactly one of --pid and --trace."); }
+
+        var path = trace ?? Path.GetFullPath(path: (output ?? Path.Combine(path1: Path.GetTempPath(), path2: FormattableString.Invariant($"puck-allocations-{processId}-{Environment.TickCount64}.nettrace"))));
+        AllocationReport report;
+
+        try {
+            if (processId is { } pid) { await AllocationTrace.CollectAsync(cancellationToken: cancellationToken, duration: TimeSpan.FromSeconds(seconds: seconds), path: path, processId: pid); }
+            report = AllocationTrace.Read(focus: focus, fromMs: (fromSeconds * 1000), path: path, thread: thread, toMs: (toSeconds * 1000));
+        } catch (Exception exception) when (exception is Microsoft.Diagnostics.NETCore.Client.ServerNotAvailableException or InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException) {
+            return CliExit.Refuse(verb: AllocationsVerb, what: (processId is { } id ? FormattableString.Invariant($"--pid {id}") : path), why: exception.Message);
+        }
+
+        static string Mib(long bytes) => FormattableString.Invariant($"{bytes / 1048576.0:0.0}MiB");
+        static string Quote(string text) => string.Concat(str0: "\"", str1: text, str2: "\"");
+        var pauses = report.Collections.Where(static collection => collection.PauseMs > 0).ToArray();
+
+        Console.Out.WriteLine(value: FormattableString.Invariant($"[host allocations: trace={Quote(path)} thread={(thread is { } t ? t.ToString(System.Globalization.CultureInfo.InvariantCulture) : "all")} ticks={report.Ticks} sampled={Mib(report.Bytes)} large={Mib(report.LargeBytes)} seconds={report.Seconds:0.0} | collections gen0={report.Collections.Count(static c => c.Generation == 0)} gen1={report.Collections.Count(static c => c.Generation == 1)} gen2={report.Collections.Count(static c => c.Generation == 2)} pause-ms={pauses.Sum(static c => c.PauseMs):0.0} longest-ms={(pauses.Length == 0 ? 0 : pauses.Max(static c => c.PauseMs)):0.0}"));
+        foreach (var each in report.Threads.Take(count: top)) { Console.Out.WriteLine(value: FormattableString.Invariant($"thread {each.Id} {Mib(each.Bytes)} root={Quote(each.Root)}")); }
+        foreach (var collection in report.Collections.Where(static c => (c.Generation > 1) || (c.PauseMs >= 50))) {
+            Console.Out.WriteLine(value: FormattableString.Invariant($"collection #{collection.Index} gen{collection.Generation} {collection.Type} reason={collection.Reason} at-ms={collection.AtMs:0} pause-ms={collection.PauseMs:0.0}"));
+        }
+        foreach (var (type, bytes) in report.Types.Take(count: top)) { Console.Out.WriteLine(value: FormattableString.Invariant($"type {Mib(bytes)} {Quote(type)}")); }
+        foreach (var site in report.Sites.Take(count: top)) {
+            Console.Out.WriteLine(value: FormattableString.Invariant($"site {Mib(site.Bytes)} {Quote(site.Method)} types={string.Join(separator: ", ", values: site.Types.Take(count: 3).Select(pair => FormattableString.Invariant($"{pair.Key} {Mib(pair.Value)}")))}"));
+        }
+        foreach (var (pathText, bytes) in report.Paths.Take(count: top)) { Console.Out.WriteLine(value: FormattableString.Invariant($"path {Mib(bytes)} {pathText}")); }
+        foreach (var (frame, bytes) in report.Frames.Take(count: (top * 2))) { Console.Out.WriteLine(value: FormattableString.Invariant($"beneath {Mib(bytes)} {Quote(frame)}")); }
+        Console.Out.WriteLine(value: "The runtime raises a tick each time a thread's allocations cross about 100 KB; a site is the innermost engine frame of the tick's stack, and beneath counts each engine frame once a stack.]");
+
+        return CliExit.Success;
+    }
+    private static Command CreateAllocations() {
+        var pidOption = new Option<int?>(name: "--pid") { Description = "The .NET process to record, such as a World's process id from puck_world_start." };
+        var traceOption = new Option<string?>(name: "--trace") { Description = "Read this .nettrace instead of recording one (a dotnet-trace gc-verbose trace, or one --output kept)." };
+        var secondsOption = CliOptions.Count(defaultValue: 20, description: "Seconds to record with --pid.", minimum: 1, name: "--seconds");
+        var outputOption = new Option<string?>(name: "--output") { Description = "Where to keep the recorded .nettrace; a temporary file by default." };
+        var threadOption = new Option<int?>(name: "--thread") { Description = "Read only this thread's ticks (an id the report's thread lines name)." };
+        var topOption = CliOptions.Count(defaultValue: 25, description: "How many threads, types and sites to list; twice as many frames.", minimum: 1, name: "--top");
+        var fromOption = CliOptions.Amount(defaultValue: 0, description: "Read the trace from this second (the collection lines' at-ms over 1000), to look at one stall.", minimum: 0, name: "--from");
+        var toOption = CliOptions.Amount(defaultValue: double.MaxValue, description: "Read the trace up to this second.", minimum: 0, name: "--to");
+        var focusOption = new Option<string?>(name: "--focus") { Description = "Read only the ticks beneath an engine frame naming this text, and list the paths of callers from it outward." };
+        var command = new Command(
+            description: "Attribute another .NET process's allocation to threads, types and call sites by the runtime's allocation ticks.",
+            name: "allocations"
+        ) { pidOption, traceOption, secondsOption, outputOption, threadOption, topOption, fromOption, toOption, focusOption };
+
+        command.Detail(detail: """
+            Records an EventPipe session on the process's diagnostics port with the runtime provider's GC keyword at
+            verbose level (and loader, JIT and rundown events to name the code), or reads a trace already taken. The
+            runtime raises an allocation tick each time a thread's allocations cross about 100 KB, with the type,
+            the heap and the allocating stack; the report sums them by thread (each named by its outermost engine
+            frame), by type, by call site (the innermost engine frame, so a collection's growth is charged to the
+            code that added to it) and beneath each engine frame, and lists every gen2 collection and every pause of
+            50 ms or more with its reason. --focus keeps the ticks beneath a named frame and lists the paths of
+            callers above it. Ticks sample: a site under about 100 KB in the window may not appear. The target pays
+            only the sampling, so a recording can run during a route, but its numbers are counts, not timings.
+
+            Exit codes: 0 done; 2 refused (no diagnostics port, or the trace could not be read).
+            """);
+        command.SetAction(action: (parseResult, cancellationToken) => Allocations(
+            cancellationToken: cancellationToken,
+            focus: parseResult.GetValue(option: focusOption),
+            fromSeconds: parseResult.GetValue(option: fromOption) ?? 0,
+            output: parseResult.GetValue(option: outputOption),
+            processId: parseResult.GetValue(option: pidOption),
+            seconds: parseResult.GetValue(option: secondsOption),
+            thread: parseResult.GetValue(option: threadOption),
+            toSeconds: parseResult.GetValue(option: toOption) ?? double.MaxValue,
+            top: parseResult.GetValue(option: topOption),
+            trace: parseResult.GetValue(option: traceOption)
+        ));
+
+        return command;
+    }
+
     /// <summary>Creates <c>puck host</c>.</summary>
     /// <returns>The command.</returns>
     public static Command Create() =>
         new(
             description: "Verbs about the machine an agent runs on.",
             name: "host"
-        ) { CreateLoad(), CreateHeap() };
+        ) { CreateLoad(), CreateHeap(), CreateAllocations() };
 }

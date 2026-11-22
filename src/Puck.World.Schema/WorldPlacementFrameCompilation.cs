@@ -40,14 +40,37 @@ public static class WorldPlacementFrameCompilation {
 
     private static readonly CodeDerivedTable<WorldPlacementsSection, FrameTable> Cache = new();
 
-    private sealed record FrameInputs(bool Live);
+    private sealed record FrameInputs(WorldPlacement[] Live);
 
     private static readonly CodeDerivedTable<WorldPlacementsSection, FrameInputs> Inputs = new();
 
     // Reference spellings are immutable even when the values they read move. Share this derivation across every
     // section cache that otherwise retains a resolved frame, without walking all placements on every lookup.
-    internal static bool HasLiveInputs(WorldPlacementsSection section) => Inputs.GetValue(section, static rows =>
-        new FrameInputs(Live: (rows.Rows ?? []).Any(predicate: IsLive))).Live;
+    private static WorldPlacement[] LiveRows(WorldPlacementsSection section) => Inputs.GetValue(section, static rows =>
+        new FrameInputs(Live: [.. (rows.Rows ?? []).Where(predicate: IsLive)])).Live;
+    internal static bool HasLiveInputs(WorldPlacementsSection section) => (LiveRows(section: section).Length != 0);
+
+    /// <summary>What one live row's bindings read: its translation and its lattice steps.</summary>
+    internal readonly record struct LiveReading(FixedVector3 Position, bool Finite, Vector3 StepA, Vector3 StepB);
+
+    // Reads the bound values a section's live rows hold now, as LocalFrame and the lattice read them, into held; returns
+    // whether held already held them. A frame of the section is a function of these readings and the literal rows.
+    internal static bool ReadLive(WorldPlacementsSection section, ref LiveReading[]? held) {
+        var live = LiveRows(section: section);
+        var standing = ((held is { } known) && (known.Length == live.Length));
+
+        if (!standing) { held = new LiveReading[live.Length]; }
+        for (var index = 0; (index < live.Length); index++) {
+            var row = live[index];
+            var finite = row.Position.IsFinite;
+            var lattice = (row.Distribution?.Region as WorldDistributionRegion.Lattice);
+            var reading = new LiveReading(Position: (finite ? row.Position.FixedValue : default), Finite: finite,
+                StepA: (lattice?.StepA.Value ?? default), StepB: (lattice?.StepB.Value ?? default));
+
+            if (!held![index].Equals(other: reading)) { held[index] = reading; standing = false; }
+        }
+        return standing;
+    }
 
     // Whether a row's frame, or a dealt child's slot offset over it, reads a bound value that moves without the row.
     private static bool IsLive(WorldPlacement row) => ((row.Position.Reference is not null) ||

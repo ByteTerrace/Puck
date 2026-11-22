@@ -58,6 +58,8 @@ public static partial class WorldPlacementStamp {
         public IReadOnlyList<WorldPrototype>? Creations;
         public ulong Seed;
         public CompilationContext? Context;
+        // The bound values a live section's frames read when Context was made (WorldPlacementFrameCompilation.ReadLive).
+        public WorldPlacementFrameCompilation.LiveReading[]? Live;
     }
     private readonly record struct GroundInput(CreationDocument Document, CompiledPlacementStamp Stamp, FixedQ4816 Scale, float Margin) {
         public bool Same(in GroundInput other) => ReferenceEquals(Document, other.Document) &&
@@ -78,15 +80,20 @@ public static partial class WorldPlacementStamp {
         for (var i = 0; i < a.Length; i++) { if (!a[i].Same(b[i])) { return false; } }
         return true;
     }
+    // A section's context is kept for its creations and seed. A section with bound translations or lattice steps
+    // (WorldPlacementFrameCompilation.HasLiveInputs) keeps it while the values those bindings read stand: the context's
+    // frames are a function of the section, the creations, the seed and those values, which ReadLive reads exactly as
+    // frame compilation does, so an equal reading answers with the held context and a moved one makes its successor.
     private static CompilationContext ContextFor(WorldDefinition definition, ulong seed, int revision) {
         var section = (definition.PlacementRowsSection ?? EmptySection);
-
-        if (WorldPlacementFrameCompilation.HasLiveInputs(section: section)) { return new CompilationContext(section, definition.Creations, seed, revision); }
         var entry = Contexts.GetValue(section, static _ => new ContextEntry());
 
         lock (entry.Gate) {
-            if ((entry.Context is { } held) && ReferenceEquals(objA: entry.Creations, objB: definition.Creations) && (entry.Seed == seed)) { return held; }
-            var context = new CompilationContext(section, definition.Creations, seed, revision);
+            var standing = (!WorldPlacementFrameCompilation.HasLiveInputs(section: section) || WorldPlacementFrameCompilation.ReadLive(section: section, held: ref entry.Live));
+            var same = ((entry.Context is { } held) && ReferenceEquals(objA: entry.Creations, objB: definition.Creations) && (entry.Seed == seed) && (held.Revision == revision));
+
+            if (same && standing) { return entry.Context!; }
+            var context = (same ? entry.Context!.Moved(section: section) : new CompilationContext(section, definition.Creations, seed, revision));
 
             if (CodeRevision.Current == revision) {
                 entry.Creations = definition.Creations; entry.Seed = seed; entry.Context = context;
@@ -122,5 +129,23 @@ public static partial class WorldPlacementStamp {
     }
     internal static void CarryAcrossHolding(WorldPlacement before, WorldPlacement after) {
         if (Stamps.TryGetValue(before, out var entry)) { Stamps.AddOrUpdate(after, entry); }
+    }
+    // A holding-only replacement section keeps the source section's context, rebased onto the replacing rows, so a
+    // response selection neither re-validates a surface descriptor nor resolves a frame or stamp again.
+    internal static void CarryAcrossHolding(WorldPlacementsSection source, WorldPlacementsSection target, IReadOnlyDictionary<WorldPlacement, WorldPlacement> replaced) {
+        if (!Contexts.TryGetValue(source, out var held)) { return; }
+        CompilationContext? context;
+        IReadOnlyList<WorldPrototype>? creations;
+        ulong seed;
+
+        lock (held.Gate) { context = held.Context; creations = held.Creations; seed = held.Seed; }
+        if ((context is null) || (context.Revision != CodeRevision.Current)) { return; }
+
+        var rebased = context.Rebase(replaced: replaced, section: target);
+        var entry = Contexts.GetValue(target, static _ => new ContextEntry());
+
+        lock (entry.Gate) {
+            if (entry.Context is null) { entry.Creations = creations; entry.Seed = seed; entry.Context = rebased; }
+        }
     }
 }
