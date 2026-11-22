@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Security.Cryptography;
 
 namespace Puck.Abstractions;
 
@@ -14,7 +13,7 @@ namespace Puck.Abstractions;
 /// <param name="D">The digest's bytes 24 to 31, little-endian.</param>
 public readonly record struct Sha256Digest(ulong A, ulong B, ulong C, ulong D) {
     /// <summary>The length, in bytes, of the digest.</summary>
-    public const int SizeInBytes = SHA256.HashSizeInBytes;
+    public const int SizeInBytes = ContentDigest.SizeInBytes;
 
     /// <summary>Hashes bytes.</summary>
     /// <param name="content">The bytes to hash.</param>
@@ -22,7 +21,7 @@ public readonly record struct Sha256Digest(ulong A, ulong B, ulong C, ulong D) {
     public static Sha256Digest Compute(ReadOnlySpan<byte> content) {
         Span<byte> digest = stackalloc byte[SizeInBytes];
 
-        _ = SHA256.HashData(destination: digest, source: content);
+        ContentDigest.Hash(content: content, digest: digest);
 
         return Of(digest: digest);
     }

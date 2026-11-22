@@ -392,7 +392,7 @@ The first draft compared policy answers instead, and that misses a real loss.
 A cell is unreadable when it is a member of a zone whose policy denies the
 recipient, and that changes while every policy and every answer stays fixed:
 
-`src/Puck.World.Schema/WorldStateDisclosure.cs:794-809`
+`src/Puck.World.Schema/WorldStateDisclosure.cs:817-832`
 
 ```csharp
                 if (!m_arena.TryCellSlot(
