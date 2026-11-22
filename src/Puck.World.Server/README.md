@@ -2185,9 +2185,12 @@ observation, and consumer disconnect detaches the server subscription even when
 the world is paused.
 
 Each session or federation sink owns a `WorldDeliveryCursor` over a live
-`WorldRecipientView`. The world's `WorldDisclosureImages` shares immutable row
-images by content and audience, copying vector bytes before hashing. A cursor
-holds delivered hashes and a recipient sequence; reads cannot advance it.
+`WorldRecipientView`. The world's `WorldDisclosureImages` reads each row for an
+audience through one writer, from the store and the audience's disclosure mask
+alone, and shares a row's image between audiences whose masks are equal. A
+steady tick takes only the row's digest and builds no image. A cursor holds
+the image of each row it reads cell by cell, the keys of each row it reads
+whole and a recipient sequence; reads cannot advance it.
 Definitions seed the cursor, snapshots replace only changed observable images,
 and resuming Observe uses the same path. Snapshot row headers carry hidden-count
 and placeholder metadata. Key bits skip hidden value writes; structural changes
