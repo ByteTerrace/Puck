@@ -1578,9 +1578,15 @@ already compiled compile nothing; only the published files go into the store,
 and the Worlds run from there. The publish is ReadyToRun-precompiled for the
 machine's runtime, one image per assembly (each made again only when its
 assembly changed), so a boot runs precompiled code rather than compiling every
-method it calls. A World started from the checkout's `bin` (`dotnet run`) holds
-those assemblies open, so a store build of the same checkout fails while it
-runs. A run that finds another run building the same key waits for that build
+method it calls. Every MSBuild run the CLI starts in a checkout (`dotnet build`,
+`publish`, `pack`, `restore` or `msbuild`, whichever verb starts it) first takes
+that checkout's `obj/puck-build.lock` (`CliCheckoutBuildLock`) and holds it
+until the run exits, so two builds never write one checkout's outputs at once;
+a run that waits says so on standard error. A `dotnet build` started by hand
+takes no lock: run it through `puck lease build -- dotnet build …` when a tool
+may build the same checkout meanwhile. A World started from the checkout's
+`bin` (`dotnet run`) holds those assemblies open, so a store build of the same
+checkout fails while it runs. A run that finds another run building the same key waits for that build
 and uses it. The progress line
 (`<verb>: building and publishing Puck.World once (Release, ReadyToRun) for source state <key>.` or
 `<verb>: reusing the Puck.World build of source state <key>.`) goes to standard
