@@ -77,7 +77,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private uint[] m_readWords = [];
 
     private sealed class ReadbackSlot {
-        internal readonly SdfPortalSight.Sighting?[] Sightings = new SdfPortalSight.Sighting?[SdfPortalSight.Capacity];
+        // Taken by the first capture of portal sight, so an occlusion without it holds none.
+        internal SdfPortalSight.Sighting?[] Sightings => (m_sightings ??= new SdfPortalSight.Sighting?[SdfPortalSight.Capacity]);
+        private SdfPortalSight.Sighting?[]? m_sightings;
         internal required GpuFittedBuffer Buffer;
         internal long Epoch;
         internal bool Sight;
