@@ -121,6 +121,8 @@ public sealed partial class SdfMeshPathBake {
         }
 
         var stamp = m_preparedFrames;
+        var reads = Demand.PointReads;
+        Span<int> dueBy = stackalloc int[DemandClocks];
         var groups = 0;
         var boxes = 0L;
         var due = 0;
@@ -202,7 +204,7 @@ public sealed partial class SdfMeshPathBake {
             while (queue.TryPeek(element: out var group, priority: out var at) && (at < clocks[clock])) {
                 _ = queue.Dequeue();
                 if ((group.Watch.Dues[clock] != at) || (group.Watch.Epochs[clock] != m_demandEpochs[clock])) { continue; }
-                if (Measure(group: group)) { due++; }
+                if (Measure(group: group)) { due++; dueBy[clock]++; }
             }
         }
         // The groups a change could only coarsen, a share a frame: a pixel that only rises asks a coarser tier, which the
@@ -254,6 +256,11 @@ public sealed partial class SdfMeshPathBake {
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandGroups, amount: groups);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandBoxes, amount: boxes);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandDue, amount: due);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandDueTravel, amount: dueBy[0]);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandDueScale, amount: dueBy[1]);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandDueShift, amount: dueBy[2]);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandDueTurn, amount: dueBy[3]);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandViews, amount: (Demand.PointReads - reads));
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandStood, amount: stood);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandMoved, amount: moved);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandCopied, amount: copied);
@@ -343,7 +350,7 @@ public sealed partial class SdfMeshPathBake {
             // under the pixel that would move its tier) bound it; a tier held at one rung moves for no point.
             var pinned = (float.IsFinite(f: pixel) && !float.IsFinite(f: slack));
             var top = (float.IsFinite(f: pixel) ? (pixel + slack) : CoarsestEdgeOf(bias: bias, group: group));
-            var bounds = (pinned ? SdfMeshDemand.Bounds.None : BoundsOf(group: group, top: top));
+            var bounds = (pinned ? SdfMeshDemand.Bounds.None : BoundsOf(group: group, top: top, pixel: pixel));
 
             if (!float.IsFinite(f: pixel) && float.IsFinite(f: top) && float.IsFinite(f: bounds.Beyond)) { (anchor, slack) = (bounds.Beyond, (MathF.Max(x: 0f, y: (bounds.Beyond - top)) * 0.999f)); }
             group.DemandPixel = pixel;
@@ -430,13 +437,14 @@ public sealed partial class SdfMeshPathBake {
 
         return finest;
     }
-    // How a group's boxes stand toward the points that could move its pixel past a top (SdfMeshDemand.BoundsOf): its world
-    // box's, or the tighter of each over a shared geometry's copies, each read in its own units.
-    private SdfMeshDemand.Bounds BoundsOf(Group group, float top) {
+    // How a group's boxes stand toward the points that could move its pixel past a top (SdfMeshDemand.BoundsOf), the group
+    // standing at a pixel: its world box's, or the tighter of each over a shared geometry's copies, each read in its own
+    // units.
+    private SdfMeshDemand.Bounds BoundsOf(Group group, float top, float pixel) {
         if (CopiesOf(group: group) is not { } copies) {
             var (center, half) = WorldBox(group: group);
 
-            return Demand.BoundsOf(center: center, half: half, top: top, units: UnitsOf(group: group));
+            return Demand.BoundsOf(center: center, half: half, pixel: pixel, top: top, units: UnitsOf(group: group));
         }
 
         var bounds = SdfMeshDemand.Bounds.None;
@@ -444,7 +452,7 @@ public sealed partial class SdfMeshPathBake {
         foreach (var index in copies) {
             var (center, half, scale) = CopyBox(center: group.DemandCenter, copy: index, half: group.DemandHalf);
 
-            bounds = bounds.Join(other: Demand.BoundsOf(center: center, half: half, top: top, units: scale));
+            bounds = bounds.Join(other: Demand.BoundsOf(center: center, half: half, pixel: pixel, top: top, units: scale));
         }
 
         return bounds;

@@ -18,8 +18,20 @@ public static class SdfResidencyWork {
     public static readonly WorkKind DemandGroups = new(name: "sdf.residency.demand.groups", unit: "groups", workClass: WorkClass.Pacing);
     /// <summary>Counts the boxes those measures read: one a group, or each copy of a shared geometry.</summary>
     public static readonly WorkKind DemandBoxes = new(name: "sdf.residency.demand.boxes", unit: "boxes", workClass: WorkClass.Pacing);
-    /// <summary>Counts the measures the demand points' movement made due, a part of <see cref="DemandGroups"/>.</summary>
+    /// <summary>Counts the demand points those measures read their boxes against, one a point and box, its eye and
+    /// frustum together (<see cref="SdfMeshDemand.PointReads"/>).</summary>
+    public static readonly WorkKind DemandViews = new(name: "sdf.residency.demand.views", unit: "views", workClass: WorkClass.Pacing);
+    /// <summary>Counts the measures the demand points' movement made due, a part of <see cref="DemandGroups"/>; the four
+    /// counts after it divide it by the clock that made each due.</summary>
     public static readonly WorkKind DemandDue = new(name: "sdf.residency.demand.due", unit: "groups", workClass: WorkClass.Pacing);
+    /// <summary>Counts the measures the points' travel made due (<see cref="SdfMeshDemand.Travel"/>).</summary>
+    public static readonly WorkKind DemandDueTravel = new(name: "sdf.residency.demand.due.travel", unit: "groups", workClass: WorkClass.Pacing);
+    /// <summary>Counts the measures the points' change of scale made due (<see cref="SdfMeshDemand.Scale"/>).</summary>
+    public static readonly WorkKind DemandDueScale = new(name: "sdf.residency.demand.due.scale", unit: "groups", workClass: WorkClass.Pacing);
+    /// <summary>Counts the measures the frustum-bound points' shift made due (<see cref="SdfMeshDemand.Shift"/>).</summary>
+    public static readonly WorkKind DemandDueShift = new(name: "sdf.residency.demand.due.shift", unit: "groups", workClass: WorkClass.Pacing);
+    /// <summary>Counts the measures the frustum-bound points' turn made due (<see cref="SdfMeshDemand.Turn"/>).</summary>
+    public static readonly WorkKind DemandDueTurn = new(name: "sdf.residency.demand.due.turn", unit: "groups", workClass: WorkClass.Pacing);
     /// <summary>Counts the groups whose slot moved by less than their tier band leaves, so the bakes measured nothing for
     /// them.</summary>
     public static readonly WorkKind DemandStood = new(name: "sdf.residency.demand.stood", unit: "groups", workClass: WorkClass.Pacing);
@@ -57,5 +69,5 @@ public static class SdfResidencyWork {
     public static readonly WorkKind MarkMeshes = new(name: "sdf.residency.marks.meshes", unit: "meshes", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the process's residency counts.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.residency", kinds: [Prepared, DemandGroups, DemandBoxes, DemandDue, DemandStood, DemandMoved, DemandCopied, DemandChanges, DemandReached, DemandChanged, DemandRebiased, DemandResets, TierGroups, TierDecisions, TierStarts, MotionRows, MotionReaders, MarkMeshes]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.residency", kinds: [Prepared, DemandGroups, DemandBoxes, DemandViews, DemandDue, DemandDueTravel, DemandDueScale, DemandDueShift, DemandDueTurn, DemandStood, DemandMoved, DemandCopied, DemandChanges, DemandReached, DemandChanged, DemandRebiased, DemandResets, TierGroups, TierDecisions, TierStarts, MotionRows, MotionReaders, MarkMeshes]);
 }

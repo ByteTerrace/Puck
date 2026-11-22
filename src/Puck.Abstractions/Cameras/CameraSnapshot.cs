@@ -292,6 +292,38 @@ public readonly record struct CameraSnapshot {
         return turn;
     }
 
+    /// <summary>The planes <see cref="BoundingPlanes"/> writes: the near plane and the four sides.</summary>
+    public const int BoundingPlaneCount = 5;
+
+    /// <summary>Writes the planes <see cref="MaySee"/> and <see cref="FrustumSlack"/> test with no far plane, sweep or
+    /// reach, in world space and at unit length, for a reader that tests many boxes against one frustum: each plane's
+    /// normal points out of the frustum, and its <c>W</c> is the offset from the world origin, so a point's signed
+    /// distance past it is <c>dot(normal, point) + W</c>. A box whose center is <c>c</c> and whose half extents along
+    /// the world axes are <c>h</c> lies wholly past a plane when <c>dot(normal, c) + W - dot(abs(normal), h)</c> is at
+    /// or past zero, and that figure is the distance <see cref="FrustumSlack"/> reads for the plane.</summary>
+    /// <param name="margin">The fraction the frustum's sides are widened by, as <see cref="MaySee"/> takes it.</param>
+    /// <param name="planes">Receives <see cref="BoundingPlaneCount"/> planes: the near plane, then the four sides.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="planes"/> holds fewer than
+    /// <see cref="BoundingPlaneCount"/> planes.</exception>
+    public void BoundingPlanes(float margin, Span<Vector4> planes) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(value: planes.Length, other: BoundingPlaneCount, paramName: nameof(planes));
+
+        Span<(Vector3 Normal, float Offset)> all = stackalloc (Vector3, float)[FrustumPlanes];
+        var written = 0;
+
+        Planes(far: float.PositiveInfinity, margin: margin, planes: all);
+        for (var plane = 0; (plane < FrustumPlanes); plane++) {
+            // The far plane stands at infinity and refuses nothing.
+            if (plane == 1) { continue; }
+
+            var (normal, offset) = all[plane];
+            var length = normal.Length();
+            var unit = (normal / length);
+
+            planes[written++] = new Vector4(value: unit, w: ((offset / length) - Vector3.Dot(vector1: unit, vector2: Position)));
+        }
+    }
+
     // The planes MaySee tests, in its order.
     private const int FrustumPlanes = 6;
 

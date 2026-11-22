@@ -1,4 +1,7 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Memory;
 using Puck.SignedDistance;
@@ -17,7 +20,8 @@ namespace Puck.SdfVm;
 /// baked or loaded in. A view another residency renders (<see cref="SdfViewSnapshot.Elsewhere"/>) or a hidden one demands
 /// nothing here; a frame with no demand point gives everything priority zero, which leaves the plan's order.</para>
 /// <para>Written on the frame's thread; a read from another thread, as a diagnostic's, can see a frame's points
-/// mid-update.</para>
+/// mid-update. A box is read against every point at once, its frustums included, and the read is kept for the next
+/// question about the same box on the same thread, so a measure's pixel and bounds read it once.</para>
 /// </summary>
 public sealed class SdfMeshDemand {
     /// <summary>The nearest a demand point is counted to a box, in metres: one it stands inside, or nearer than this, ranks
@@ -125,6 +129,14 @@ public sealed class SdfMeshDemand {
     }
 
     private readonly List<Change> m_taken = [];
+    // The points in lanes (Lanes), and one more each time they change, which a kept read (BoxRead) is keyed by.
+    private PointLanes m_lanes = new(capacity: 0);
+    private long m_version;
+
+    /// <summary>Gets how many point and box pairs this demand has read: each box once against every point, eye and
+    /// frustum, however many of <see cref="PixelAt(Vector3, Vector3)"/>, <see cref="BoundsOf"/>, <see cref="Priority"/>
+    /// and <see cref="Sees(Vector3, Vector3)"/> ask about it in a row. A count of work, for the residency's report.</summary>
+    public long PointReads { get; private set; }
 
     /// <summary>Reads the demand points from a frame's views: each view's eye, and its pixels a metre one metre in front of
     /// it, from the height its sizes are measured in (<see cref="SdfViewSnapshot.DemandHeight"/>) or else its share of
@@ -199,6 +211,7 @@ public sealed class SdfMeshDemand {
         Shift += shift;
         Turn += turn;
         Count = count;
+        Lanes();
     }
     // Keeps the points the latest observation held, for the next one to match its views against.
     private void Hold() {
@@ -271,6 +284,7 @@ public sealed class SdfMeshDemand {
         m_cuts[Count] = 0L;
         Changed(before: default, hadBefore: false, after: PointAt(index: Count), hasAfter: true);
         Count++;
+        Lanes();
     }
     /// <summary>Returns the metres one display pixel covers at a box from the demand point that sees it finest: the
     /// distance from the eye to the box, no nearer than <see cref="NearDistance"/>, over the point's pixels a metre; what
@@ -290,12 +304,14 @@ public sealed class SdfMeshDemand {
         var finest = float.PositiveInfinity;
 
         point = -1;
-        for (var index = 0; (index < Count); index++) {
-            var pixel = (MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])) / m_focal[index]);
+        if (Count == 0) { return finest; }
 
-            // The distance is the cheap test and the view the costly one: only a point that would be the finest is
-            // asked whether its view holds the box.
-            if ((pixel < finest) && Demands(index: index, center: center, half: half)) {
+        var read = Read(center: center, half: half);
+
+        for (var index = 0; (index < Count); index++) {
+            var pixel = read.Pixel[index];
+
+            if ((pixel < finest) && (!m_within[index] || !read.Refuses(index: index))) {
                 finest = pixel;
                 point = index;
             }
@@ -329,13 +345,16 @@ public sealed class SdfMeshDemand {
         var diagonal = (2f * half.Length());
         var best = 0f;
 
+        if (Count == 0) { return best; }
+
+        var read = Read(center: center, half: half);
+
         for (var index = 0; (index < Count); index++) {
-            var density = (m_focal[index] / MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])));
+            var density = (1f / read.Pixel[index]);
             var size = (diagonal * density);
             var priority = ((size >= 1f) ? (1f + density) : size);
 
-            // As PixelAt: the view is asked only of a point that would rank the box highest.
-            if ((priority > best) && Demands(index: index, center: center, half: half)) { best = priority; }
+            if ((priority > best) && (!m_within[index] || !read.Refuses(index: index))) { best = priority; }
         }
 
         return best;
@@ -349,8 +368,12 @@ public sealed class SdfMeshDemand {
     /// <returns><see langword="true"/> when the box is in view.</returns>
     public bool Sees(Vector3 center, Vector3 half) {
         if (Count == 0) { return true; }
+
+        // An unframed point's planes hold every box.
+        var read = Read(center: center, half: half);
+
         for (var index = 0; (index < Count); index++) {
-            if (!m_framed[index] || SeesFrom(index: index, center: center, half: half)) { return true; }
+            if (!read.Refuses(index: index)) { return true; }
         }
         return false;
     }
@@ -437,12 +460,16 @@ public sealed class SdfMeshDemand {
     /// pixel by at most that distance over this; infinity with none counted.</param>
     /// <param name="Clearance">The least distance, in metres, the box may move before a point not counted could put its
     /// pixel under the top; infinity with none uncounted.</param>
-    /// <param name="FrustumSlack">The least distance, in metres, the box may move before a counted point bounded to its
-    /// view answers otherwise whether its widened frustum may hold it (<see cref="CameraSnapshot.FrustumSlack"/>);
-    /// infinity with none.</param>
-    /// <param name="FrustumReach">The most the box reaches from a counted point bounded to its view, in metres: the
-    /// distance to its center plus its half extents' sum, which that frustum's <see cref="Turn"/> multiplies into the most
-    /// the box's distance to a plane moves; zero with none.</param>
+    /// <param name="FrustumSlack">The least distance, in metres, the box may move before a frustum that could move its
+    /// tier answers otherwise whether it may hold the box (<see cref="CameraSnapshot.FrustumSlack"/>); infinity with
+    /// none. A counted point bounded to its view has such a frustum when it does not hold the box and its distance puts
+    /// the box finer than the pixel (holding it would make the box finer), and when it holds the box while no point
+    /// demanding by distance alone puts the box at the pixel (letting it go could leave the box past the top). Any other
+    /// such point's answer moves no tier: holding the box it is not the finest, and letting it go leaves a point that
+    /// demands by distance alone at the pixel.</param>
+    /// <param name="FrustumReach">The most the box reaches from a point with such a frustum, in metres: the distance to
+    /// its center plus its half extents' sum, which that frustum's <see cref="Turn"/> multiplies into the most the box's
+    /// distance to a plane moves; zero with none.</param>
     /// <param name="Beyond">The least pixel an uncounted point's distance puts the box at; infinity with none.</param>
     public readonly record struct Bounds(float Focal, float Clearance, float FrustumSlack, float FrustumReach, float Beyond) {
         /// <summary>Gets the bounds of no box: nothing counted and nothing uncounted.</summary>
@@ -465,45 +492,174 @@ public sealed class SdfMeshDemand {
     /// <param name="half">The box's half extents along the world axes, none negative.</param>
     /// <param name="units">The units the box's pixels are read in; positive.</param>
     /// <param name="top">The pixel, in those units, a point must reach to count.</param>
+    /// <param name="pixel">The pixel the box's group stands at, in its own units: the finest over every box it is read
+    /// at (<see cref="PixelAt(Vector3, Vector3)"/> over its units); infinity where no point demands it.</param>
     /// <returns>The bounds.</returns>
-    public Bounds BoundsOf(Vector3 center, Vector3 half, float units, float top) {
+    public Bounds BoundsOf(Vector3 center, Vector3 half, float units, float top, float pixel) {
         var bounds = Bounds.None;
+
+        if (Count == 0) { return bounds; }
+
         var (focal, clearance, slack, reach, beyond) = (bounds.Focal, bounds.Clearance, bounds.FrustumSlack, bounds.FrustumReach, bounds.Beyond);
+        var read = Read(center: center, half: half);
+        // The finest pixel a point demanding by distance alone puts the box at.
+        var always = float.PositiveInfinity;
 
         for (var index = 0; (index < Count); index++) {
-            var pixel = (MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])) / (m_focal[index] * units));
+            if (!m_within[index]) { always = MathF.Min(x: always, y: (read.Pixel[index] / units)); }
+        }
+        for (var index = 0; (index < Count); index++) {
+            var at = (read.Pixel[index] / units);
 
-            if (pixel > top) {
-                beyond = MathF.Min(x: beyond, y: pixel);
-                clearance = MathF.Min(x: clearance, y: ((pixel - top) * m_focal[index] * units));
+            if (at > top) {
+                beyond = MathF.Min(x: beyond, y: at);
+                clearance = MathF.Min(x: clearance, y: ((at - top) * m_focal[index] * units));
                 continue;
             }
             focal = MathF.Min(x: focal, y: m_focal[index]);
-            if (!m_within[index]) { continue; }
-            slack = MathF.Min(x: slack, y: m_cameras[index].FrustumSlack(
-                center: center,
-                halfX: new Vector3(x: half.X, y: 0f, z: 0f),
-                halfY: new Vector3(x: 0f, y: half.Y, z: 0f),
-                halfZ: new Vector3(x: 0f, y: 0f, z: half.Z),
-                margin: WithinViewMargin
-            ));
+            if (!m_within[index] || (read.Refuses(index: index) ? !(at < pixel) : !(always > pixel))) { continue; }
+            slack = MathF.Min(x: slack, y: read.Slack[index]);
             reach = MathF.Max(x: reach, y: (Vector3.Distance(value1: center, value2: m_points[index]) + ((half.X + half.Y) + half.Z)));
         }
 
         return new Bounds(Beyond: beyond, Clearance: clearance, Focal: focal, FrustumReach: reach, FrustumSlack: slack);
     }
 
-    // Whether a point demands a world-axis box at all: always for a point that demands by distance alone, and only a
-    // box its widened frustum may hold for one that demands inside its view.
-    private bool Demands(int index, Vector3 center, Vector3 half) => (!m_within[index] || SeesFrom(index: index, center: center, half: half));
-    // Whether a framed point's widened frustum may hold a world-axis box.
-    private bool SeesFrom(int index, Vector3 center, Vector3 half) => m_cameras[index].MaySee(
-        center: center,
-        halfX: new Vector3(x: half.X, y: 0f, z: 0f),
-        halfY: new Vector3(x: 0f, y: half.Y, z: 0f),
-        halfZ: new Vector3(x: 0f, y: 0f, z: half.Z),
-        margin: WithinViewMargin
-    );
+    // The points in lanes, a vector's worth at a time: each point's eye and pixels a metre, and its frustum's near plane
+    // and four sides widened by WithinViewMargin (CameraSnapshot.BoundingPlanes), PlaneLanes lanes a plane in their
+    // order (the unit normal's three, its offset, and the normal's three magnitudes). An unframed point's planes hold
+    // every box. Built whole each time the points change, into new arrays when they outgrow the old, so a reader on
+    // another thread indexes only arrays as long as the stride it read.
+    private const int PlaneLanes = 7;
+    private sealed class PointLanes(int capacity) {
+        public readonly float[] X = new float[capacity];
+        public readonly float[] Y = new float[capacity];
+        public readonly float[] Z = new float[capacity];
+        public readonly float[] Focal = new float[capacity];
+        public readonly float[] Planes = new float[(capacity * CameraSnapshot.BoundingPlaneCount * PlaneLanes)];
+        public int Stride;
+
+        public int Capacity => X.Length;
+    }
+    // Lays the points out in lanes after they change.
+    private void Lanes() {
+        var stride = ((Count + (Vector256<float>.Count - 1)) & ~(Vector256<float>.Count - 1));
+        var lanes = m_lanes;
+
+        if (lanes.Capacity < stride) { lanes = new PointLanes(capacity: ArrayCapacity.Grown(lanes.Capacity, stride)); }
+
+        Span<Vector4> planes = stackalloc Vector4[CameraSnapshot.BoundingPlaneCount];
+        var width = lanes.Capacity;
+
+        for (var index = 0; (index < stride); index++) {
+            var point = (index < Count);
+
+            lanes.X[index] = (point ? m_points[index].X : 0f);
+            lanes.Y[index] = (point ? m_points[index].Y : 0f);
+            lanes.Z[index] = (point ? m_points[index].Z : 0f);
+            lanes.Focal[index] = (point ? m_focal[index] : 1f);
+            if (point && m_framed[index]) {
+                m_cameras[index].BoundingPlanes(margin: WithinViewMargin, planes: planes);
+            } else {
+                planes.Fill(value: new Vector4(x: 0f, y: 0f, z: 0f, w: -1f));
+            }
+            for (var plane = 0; (plane < CameraSnapshot.BoundingPlaneCount); plane++) {
+                var at = ((plane * PlaneLanes * width) + index);
+                var (normal, offset) = (new Vector3(x: planes[plane].X, y: planes[plane].Y, z: planes[plane].Z), planes[plane].W);
+
+                lanes.Planes[at] = normal.X;
+                lanes.Planes[(at + width)] = normal.Y;
+                lanes.Planes[(at + (2 * width))] = normal.Z;
+                lanes.Planes[(at + (3 * width))] = offset;
+                lanes.Planes[(at + (4 * width))] = MathF.Abs(x: normal.X);
+                lanes.Planes[(at + (5 * width))] = MathF.Abs(x: normal.Y);
+                lanes.Planes[(at + (6 * width))] = MathF.Abs(x: normal.Z);
+            }
+        }
+        lanes.Stride = stride;
+        m_lanes = lanes;
+        m_version++;
+    }
+
+    // One box read against every point (Read): each point's pixel there, as PixelAt measures it, and its frustum's answer,
+    // whether it refuses the box and how far the box may move before the answer changes (CameraSnapshot.FrustumSlack),
+    // with the demand, its points' version and the box it was read for. One a thread, so a diagnostic reading on its own
+    // thread keeps no measure's read from it.
+    private sealed class BoxRead {
+        public float[] Pixel = [];
+        public float[] Slack = [];
+        public int[] Refused = [];
+        public SdfMeshDemand? Demand;
+        public long Version;
+        public Vector3 Center;
+        public Vector3 Half;
+
+        public bool Refuses(int index) => (Refused[index] != 0);
+    }
+    [ThreadStatic] private static BoxRead? ThreadRead;
+
+    // Reads a box against every point, a vector of points at a time, or keeps this thread's latest read where it was of
+    // the same box at the same points.
+    private BoxRead Read(Vector3 center, Vector3 half) {
+        var read = (ThreadRead ??= new BoxRead());
+
+        if (ReferenceEquals(objA: read.Demand, objB: this) && (read.Version == m_version) && (read.Center == center) && (read.Half == half)) { return read; }
+
+        var version = m_version;
+        var lanes = m_lanes;
+        var stride = lanes.Stride;
+        var width = lanes.Capacity;
+
+        if (read.Pixel.Length < stride) {
+            read.Pixel = new float[width];
+            read.Slack = new float[width];
+            read.Refused = new int[width];
+        }
+
+        var (cx, cy, cz) = (Vector256.Create(value: center.X), Vector256.Create(value: center.Y), Vector256.Create(value: center.Z));
+        var (hx, hy, hz) = (Vector256.Create(value: half.X), Vector256.Create(value: half.Y), Vector256.Create(value: half.Z));
+        var near = Vector256.Create(value: NearDistance);
+        var infinity = Vector256.Create(value: float.PositiveInfinity);
+        ref var x = ref MemoryMarshal.GetArrayDataReference(array: lanes.X);
+        ref var y = ref MemoryMarshal.GetArrayDataReference(array: lanes.Y);
+        ref var z = ref MemoryMarshal.GetArrayDataReference(array: lanes.Z);
+        ref var focal = ref MemoryMarshal.GetArrayDataReference(array: lanes.Focal);
+        ref var planes = ref MemoryMarshal.GetArrayDataReference(array: lanes.Planes);
+        ref var pixels = ref MemoryMarshal.GetArrayDataReference(array: read.Pixel);
+        ref var slacks = ref MemoryMarshal.GetArrayDataReference(array: read.Slack);
+        ref var refusals = ref MemoryMarshal.GetArrayDataReference(array: read.Refused);
+
+        for (var at = 0; (at < stride); at += Vector256<float>.Count) {
+            var offset = ((nuint)at);
+            var dx = Vector256.Max(left: (Vector256.Abs(vector: (Vector256.LoadUnsafe(elementOffset: offset, source: ref x) - cx)) - hx), right: Vector256<float>.Zero);
+            var dy = Vector256.Max(left: (Vector256.Abs(vector: (Vector256.LoadUnsafe(elementOffset: offset, source: ref y) - cy)) - hy), right: Vector256<float>.Zero);
+            var dz = Vector256.Max(left: (Vector256.Abs(vector: (Vector256.LoadUnsafe(elementOffset: offset, source: ref z) - cz)) - hz), right: Vector256<float>.Zero);
+            var distance = Vector256.Sqrt(vector: (((dx * dx) + (dy * dy)) + (dz * dz)));
+            var refused = Vector256<float>.Zero;
+            var inside = infinity;
+            var outside = Vector256<float>.Zero;
+
+            (Vector256.Max(left: near, right: distance) / Vector256.LoadUnsafe(elementOffset: offset, source: ref focal)).StoreUnsafe(destination: ref pixels, elementOffset: offset);
+            for (var plane = 0; (plane < CameraSnapshot.BoundingPlaneCount); plane++) {
+                ref var lane = ref Unsafe.Add(source: ref planes, elementOffset: ((nuint)((plane * PlaneLanes * width) + at)));
+                var centerSide = ((((Vector256.LoadUnsafe(source: ref lane) * cx) + (Vector256.LoadUnsafe(elementOffset: ((nuint)width), source: ref lane) * cy)) + (Vector256.LoadUnsafe(elementOffset: ((nuint)(2 * width)), source: ref lane) * cz)) + Vector256.LoadUnsafe(elementOffset: ((nuint)(3 * width)), source: ref lane));
+                var extent = (((Vector256.LoadUnsafe(elementOffset: ((nuint)(4 * width)), source: ref lane) * hx) + (Vector256.LoadUnsafe(elementOffset: ((nuint)(5 * width)), source: ref lane) * hy)) + (Vector256.LoadUnsafe(elementOffset: ((nuint)(6 * width)), source: ref lane) * hz));
+                // The box's nearest point's distance past the plane: at or past zero the whole box lies past it.
+                var nearest = (centerSide - extent);
+                var past = Vector256.GreaterThanOrEqual(left: nearest, right: Vector256<float>.Zero);
+
+                refused |= past;
+                outside = Vector256.Max(left: outside, right: Vector256.ConditionalSelect(condition: past, left: nearest, right: Vector256<float>.Zero));
+                inside = Vector256.Min(left: inside, right: Vector256.ConditionalSelect(condition: past, left: infinity, right: -nearest));
+            }
+            // A refused box is held again once it lies past no plane; a held one is refused once it lies past any.
+            Vector256.ConditionalSelect(condition: refused, left: outside, right: inside).StoreUnsafe(destination: ref slacks, elementOffset: offset);
+            refused.AsInt32().StoreUnsafe(destination: ref refusals, elementOffset: offset);
+        }
+        (read.Demand, read.Version, read.Center, read.Half) = (this, version, center, half);
+        PointReads += Count;
+        return read;
+    }
     // The distance from a point to a box, zero inside it.
     private static float DistanceTo(Vector3 center, Vector3 half, Vector3 point) =>
         Vector3.Max(value1: (Vector3.Abs(value: (point - center)) - half), value2: Vector3.Zero).Length();
