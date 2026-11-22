@@ -24,7 +24,8 @@ namespace Puck.SdfVm;
 //     A box keeps its answer unless the changed point's distance alone puts its pixel under the box's band, so only the
 //     boxes either side of the change reaches are measured, whatever the point set's size: at once where the new side
 //     reaches (the pixel may fall), and a share a frame where only the old side does (it can only rise, asking a coarser
-//     tier, which no decision takes before its hold);
+//     tier, which no decision takes before its hold). A new point bounded to its view demands nothing of a box its
+//     frustum refuses, so such a box only begins watching that frustum (Unseen) and is measured once it may turn to it;
 //   - and every group once, spread over SdfMeshTier.MeasureFrames frames, only when the points' changes overflowed their
 //     list or before the first observation. A change of the bias recomputes every band from the pixels it holds, a lost
 //     transform window reads every dynamic group's drift, and a lost copy window or a new copy layout measures the
@@ -79,10 +80,89 @@ public sealed partial class SdfMeshPathBake {
     // due moved) or left the list is passed over. Each clearing starts an epoch of that queue, and a group's due counts as
     // queued only when it was queued in the current one.
     private readonly PriorityQueue<Group, double>[] m_demandDue = [new(), new()];
-    // The groups whose tier a frustum bounded to its view could move (Group.Framed), read each frame, and those a
-    // frustum's move made due this frame.
-    private readonly MarkedGroups m_framed = new(mark: GroupMarks.Framed);
+    // The frustum watches of the groups whose tier a frustum bounded to its view could move, read each frame; the groups
+    // a frustum's move made due this frame, or whose watch the lanes' layout left behind; and the watch a measure writes
+    // before it keeps it.
+    private readonly FrustumWatches m_watches = new();
     private readonly List<Group> m_framedDue = [];
+    private float[] m_watchScratch = [];
+
+    // The frustum watches (SdfMeshDemand.Watch), one record of SdfMeshDemand.WatchLength values a watched group, end to
+    // end so a frame's read of them all streams through memory without touching the groups: each record's group (null
+    // for a free record) and the prepared frame that group was last measured at, the free records, and the layout of
+    // frustum lanes the records stand at (SdfMeshDemand.Layout). Group.FrustumWatch names a group's record.
+    private sealed class FrustumWatches {
+        private float[] m_values = [];
+        private Group?[] m_owners = [];
+        private long[] m_stamps = [];
+        private readonly Stack<int> m_free = new();
+        private int m_prune;
+
+        // The values a record holds, the records ever taken (free ones among them), and the records held.
+        public int Length { get; private set; }
+        public int Count { get; private set; }
+        public int Watched => (Count - m_free.Count);
+        public long Layout { get; private set; } = -1;
+
+        public Group? OwnerOf(int record) => m_owners[record];
+        public long StampOf(int record) => m_stamps[record];
+        public Span<float> Of(int record) => m_values.AsSpan(start: (record * Length), length: Length);
+
+        // The record of a group measured at a stamp, taken for it when it holds none.
+        public Span<float> Take(Group group, long stamp) {
+            if (group.FrustumWatch < 0) { group.FrustumWatch = ((m_free.Count > 0) ? m_free.Pop() : Grow()); }
+
+            var record = group.FrustumWatch;
+
+            m_owners[record] = group;
+            m_stamps[record] = stamp;
+            return Of(record: record);
+        }
+        // Frees a group's record, when it holds one.
+        public void Release(Group group) {
+            if (group.FrustumWatch < 0) { return; }
+            m_owners[group.FrustumWatch] = null;
+            m_free.Push(item: group.FrustumWatch);
+            group.FrustumWatch = -1;
+        }
+        // Frees the records of a share of groups that left the list or retired, a turn of the records at a time.
+        public void Prune(int share) {
+            for (var visited = 0; ((visited < share) && (Count > 0)); visited++) {
+                m_prune = ((m_prune + 1) % Count);
+                if ((m_owners[m_prune] is { } owner) && (!owner.Listed || owner.Retired)) { Release(group: owner); }
+            }
+        }
+        // Brings every record to the demand's layout: carried from the layout before, freed where no lane is watched any
+        // more, and freed with its group listed for a measure where the layout moved further than one change.
+        public void Follow(SdfMeshDemand demand, List<Group> lost) {
+            if (demand.Layout == Layout) { return; }
+
+            var length = demand.WatchLength;
+            var carries = (demand.Layout == (Layout + 1));
+            var values = new float[(m_owners.Length * length)];
+
+            for (var record = 0; (record < Count); record++) {
+                if (m_owners[record] is not { } owner) { continue; }
+                if (carries && demand.Carry(after: values.AsSpan(start: (record * length), length: length), before: Of(record: record))) { continue; }
+                if (!carries) { lost.Add(item: owner); }
+                Release(group: owner);
+            }
+            m_values = values;
+            Length = length;
+            Layout = demand.Layout;
+        }
+        private int Grow() {
+            if (Count == m_owners.Length) {
+                var capacity = Math.Max(val1: 64, val2: (2 * m_owners.Length));
+
+                Array.Resize(array: ref m_owners, newSize: capacity);
+                Array.Resize(array: ref m_stamps, newSize: capacity);
+                Array.Resize(array: ref m_values, newSize: (capacity * Length));
+            }
+
+            return Count++;
+        }
+    }
     private readonly long[] m_demandEpochs = new long[DemandClocks];
     // The bias the watch measured under.
     private int m_demandBias = -1;
@@ -120,6 +200,8 @@ public sealed partial class SdfMeshPathBake {
             frame.DynamicTransforms.Count, 0, m_demandSlots);
 
         m_demandSlotCursor.Commit();
+        m_framedDue.Clear();
+        m_watches.Follow(demand: Demand, lost: m_framedDue);
         if (overflowed) {
             m_demandSweepLeft = m_groups.Count;
             m_demandResetAt = m_preparedFrames;
@@ -146,6 +228,7 @@ public sealed partial class SdfMeshPathBake {
             Rebias(bias: bias);
         }
         foreach (var group in m_groups.TakeFresh()) { _ = Measure(group: group); }
+        foreach (var group in m_framedDue) { _ = Measure(group: group); }
         // The copies' root slots follow the program's in copy order (SdfCompositionFrameSource seats each at its place), so
         // a moved slot past the first copy's root names that copy.
         var firstRoot = ((m_demandCopies.Count > 0) ? m_demandCopies[0].FrameSlot : int.MaxValue);
@@ -218,29 +301,22 @@ public sealed partial class SdfMeshPathBake {
         }
         // Every watched group against each of its frustums' own moves since its measure, the groups measured this frame
         // passed over; a group no frustum can move any more leaves the watch.
-        if (m_framed.Count > 0) {
-            var kept = 0;
-
+        if (m_watches.Watched > 0) {
             m_framedDue.Clear();
-            for (var at = 0; (at < m_framed.Count); at++) {
-                var group = m_framed[at];
-
-                if (!group.Listed || group.Retired || !group.Framed) {
-                    m_framed.Drop(group: group);
-                    continue;
-                }
-                m_framed.Keep(at: kept++, group: group);
-                if (group.Watch.Stamp == stamp) { continue; }
+            for (var record = 0; (record < m_watches.Count); record++) {
+                if ((m_watches.OwnerOf(record: record) is not { } owner) || (m_watches.StampOf(record: record) == stamp)) { continue; }
                 watched++;
-                if (!Demand.Carry(layout: ref group.FrustumLayout, watch: ref group.Frustum) || Demand.Moves(metres: 0f, watch: group.Frustum)) { m_framedDue.Add(item: group); }
+                if (Demand.Moves(metres: 0f, watch: m_watches.Of(record: record))) { m_framedDue.Add(item: owner); }
             }
-            m_framed.Truncate(count: kept);
             foreach (var group in m_framedDue) {
-                if (Measure(group: group)) {
+                if (!group.Listed || group.Retired) {
+                    m_watches.Release(group: group);
+                } else if (Measure(group: group)) {
                     due++;
                     framed++;
                 }
             }
+            m_watches.Prune(share: 64);
         }
         // The groups a change could only coarsen, a share a frame: a pixel that only rises asks a coarser tier, which the
         // decisions act on only past their hold, so a measure a few frames late moves no tier later than a reset's sweep
@@ -332,11 +408,50 @@ public sealed partial class SdfMeshPathBake {
             for (var index = 0; (index < changes.Count); index++) {
                 var change = changes[index];
 
-                if (change.HasAfter && (ReachOf(group: group, point: change.After) < top)) { return ChangeReach.Finer; }
+                if (change.HasAfter && (ReachOf(group: group, point: change.After) < top) && !Unseen(change: in change, group: group)) { return ChangeReach.Finer; }
                 if (change.HadBefore && (ReachOf(group: group, point: change.Before) < top)) { reach = ChangeReach.Coarser; }
             }
 
             return reach;
+        }
+        // Whether a new point bounded to its view refuses every box of a group, so it demands nothing of it: the group then
+        // watches the point's frustum from now on, as a measure would have it (SdfMeshDemand.WatchLane), and counts the
+        // point's pixels a metre among those its box's moves are read by.
+        bool Unseen(in SdfMeshDemand.Change change, Group group) {
+            var point = change.After;
+
+            if (!point.Within || !point.Framed || (change.Point < 0) || (Demand.LaneOf(point: change.Point) is not (>= 0 and var lane))) { return false; }
+
+            var slack = float.PositiveInfinity;
+            var reach = 0f;
+
+            if (CopiesOf(group: group) is not { } copies) {
+                var (center, half) = WorldBox(group: group);
+
+                if (!FrustumRefuses(center: center, half: half, point: in point, reach: ref reach, slack: ref slack)) { return false; }
+            } else {
+                foreach (var copy in copies) {
+                    var (center, half, _) = CopyBox(center: group.DemandCenter, copy: copy, half: group.DemandHalf);
+
+                    if (!FrustumRefuses(center: center, half: half, point: in point, reach: ref reach, slack: ref slack)) { return false; }
+                }
+            }
+
+            var fresh = (group.FrustumWatch < 0);
+            var kept = m_watches.Take(group: group, stamp: group.Watch.Stamp);
+
+            if (fresh) { SdfMeshDemand.Unwatched(watch: kept); }
+            Demand.WatchLane(lane: lane, reach: reach, slack: slack, watch: kept);
+            group.Watch.Focal = MathF.Min(x: group.Watch.Focal, y: point.Focal);
+            return true;
+        }
+        // Whether a point's widened frustum refuses a box, and if so the box's slack toward it and reach from its eye,
+        // each joined into the tightest so far.
+        static bool FrustumRefuses(Vector3 center, Vector3 half, in SdfMeshDemand.Viewpoint point, ref float slack, ref float reach) {
+            if (!point.Refuses(center: center, half: half, slack: out var away)) { return false; }
+            slack = MathF.Min(x: slack, y: away);
+            reach = MathF.Max(x: reach, y: (Vector3.Distance(value1: center, value2: point.Eye) + ((half.X + half.Y) + half.Z)));
+            return true;
         }
         // Whether a group whose slot moved may demand another tier: its box moved by no more than the distance between the
         // world box its latest measure read and the one it stands at now, so its pixel moved by no more than that over the
@@ -356,7 +471,7 @@ public sealed partial class SdfMeshPathBake {
 
             // A point that did not count could come to: the box moved as far as the nearest of them stood past the top.
             if (metres >= watch.Clearance) { return true; }
-            if (group.Framed && (!Demand.Carry(layout: ref group.FrustumLayout, watch: ref group.Frustum) || Demand.Moves(metres: metres, watch: group.Frustum))) { return true; }
+            if ((group.FrustumWatch >= 0) && Demand.Moves(metres: metres, watch: m_watches.Of(record: group.FrustumWatch))) { return true; }
             if (!float.IsFinite(f: watch.Slack)) { return false; }
 
             // In the group's own units: the world pixel moves by the travel and the box's drift over its new units, the
@@ -382,7 +497,7 @@ public sealed partial class SdfMeshPathBake {
             // under the pixel that would move its tier) bound it; a tier held at one rung moves for no point.
             var pinned = (float.IsFinite(f: pixel) && !float.IsFinite(f: slack));
             var top = (float.IsFinite(f: pixel) ? (pixel + slack) : CoarsestEdgeOf(bias: bias, group: group));
-            var frustum = FrustumWatchOf(group: group);
+            var frustum = WatchScratch();
             var bounds = (pinned ? SdfMeshDemand.Bounds.None : BoundsOf(group: group, top: top, watch: frustum));
 
             if (!float.IsFinite(f: pixel) && float.IsFinite(f: top) && float.IsFinite(f: bounds.Beyond)) { (anchor, slack) = (bounds.Beyond, (MathF.Max(x: 0f, y: (bounds.Beyond - top)) * 0.999f)); }
@@ -395,11 +510,13 @@ public sealed partial class SdfMeshPathBake {
             (watch.Center, watch.Half) = (box ?? default);
             for (var clock = 0; (clock < DemandClocks); clock++) { watch.At[clock] = clocks[clock]; }
             (watch.Top, watch.Focal, watch.Clearance) = (top, bounds.Focal, bounds.Clearance);
-            group.Framed = bounds.Framed;
             if (bounds.Framed) {
-                Demand.Watch(watch: frustum);
-                group.FrustumLayout = Demand.Layout;
-                _ = m_framed.Add(group: group);
+                var kept = m_watches.Take(group: group, stamp: stamp);
+
+                frustum.CopyTo(destination: kept);
+                Demand.Watch(watch: kept);
+            } else {
+                m_watches.Release(group: group);
             }
             Schedule(group: group, clocks: in clocks);
             if ((bias > 0) && (float.IsNaN(f: before) || (FinerTierOf(bias: bias, group: group, pixel: before) != FinerTierOf(bias: bias, group: group, pixel: pixel)))) { m_finerDemandRevision++; }
@@ -492,13 +609,13 @@ public sealed partial class SdfMeshPathBake {
 
         return bounds;
     }
-    // A group's frustum watch at the frustum lanes' stride, begun with no lane watched, for a measure to write.
-    private Span<float> FrustumWatchOf(Group group) {
+    // A frustum watch at the frustum lanes' stride, begun with no lane watched, for a measure to write.
+    private Span<float> WatchScratch() {
         var length = Demand.WatchLength;
 
-        if (group.Frustum.Length != length) { group.Frustum = new float[length]; }
-        SdfMeshDemand.Unwatched(watch: group.Frustum);
-        return group.Frustum;
+        if (m_watchScratch.Length != length) { m_watchScratch = new float[length]; }
+        SdfMeshDemand.Unwatched(watch: m_watchScratch);
+        return m_watchScratch;
     }
     // A shared geometry's box, given in its own frame, where one of the frame's copies carries it: the world-axis box about
     // the carried one, and the copy's scale, the units its pixels are read in.

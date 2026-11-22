@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Memory;
+using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -101,6 +102,19 @@ public sealed class SdfMeshDemand {
         /// <param name="half">The box's half extents along the world axes, none negative.</param>
         /// <returns>The pixel's size in metres.</returns>
         public float ReachAt(Vector3 center, Vector3 half) => (MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: Eye)) / Focal);
+        /// <summary>Returns whether this point's widened frustum refuses a box, so a point bounded to its view demands
+        /// nothing of it, and how far the box may move before the frustum answers otherwise
+        /// (<see cref="CameraSnapshot.FrustumSlack"/>).</summary>
+        /// <param name="center">The box's center, in world space.</param>
+        /// <param name="half">The box's half extents along the world axes, none negative.</param>
+        /// <param name="slack">The distance, in metres, the box may move before the answer changes.</param>
+        /// <returns><see langword="true"/> when the frustum refuses the box.</returns>
+        public bool Refuses(Vector3 center, Vector3 half, out float slack) {
+            var (x, y, z) = (new Vector3(x: half.X, y: 0f, z: 0f), new Vector3(x: 0f, y: half.Y, z: 0f), new Vector3(x: 0f, y: 0f, z: half.Z));
+
+            slack = Camera.FrustumSlack(center: center, halfX: x, halfY: y, halfZ: z, margin: WithinViewMargin);
+            return !Camera.MaySee(center: center, halfX: x, halfY: y, halfZ: z, margin: WithinViewMargin);
+        }
     }
     /// <summary>A change of the demand points that no odometer bounds: a point that came (<paramref name="Before"/> none),
     /// went (<paramref name="After"/> none), or changed whether it is bounded to its view or has a frame. A pixel any box
@@ -110,7 +124,9 @@ public sealed class SdfMeshDemand {
     /// <param name="After">The point as it stands after, when it stands.</param>
     /// <param name="HadBefore">Whether <paramref name="Before"/> names a point.</param>
     /// <param name="HasAfter">Whether <paramref name="After"/> names a point.</param>
-    public readonly record struct Change(Viewpoint Before, Viewpoint After, bool HadBefore, bool HasAfter);
+    /// <param name="Point">The point <paramref name="After"/> stands at among the latest observation's, below
+    /// <see cref="Count"/>; -1 with none.</param>
+    public readonly record struct Change(Viewpoint Before, Viewpoint After, bool HadBefore, bool HasAfter, int Point);
 
     /// <summary>Gets how many demand points the latest frame named.</summary>
     public int Count { get; private set; }
@@ -125,6 +141,10 @@ public sealed class SdfMeshDemand {
     /// logarithm of a matched point's pixels a metre over what they were. A point's pixel at a fixed distance is
     /// multiplied by at most <c>e</c> to the scale between two observations, either way.</summary>
     public double Scale { get; private set; }
+    /// <summary>Returns a point's frustum lane (<see cref="FrustumLanes"/>).</summary>
+    /// <param name="point">The point, below <see cref="Count"/>.</param>
+    /// <returns>The lane; -1 for a point bounded by distance alone.</returns>
+    public int LaneOf(int point) => m_laneOf[point];
     /// <summary>Gets how many of the points are bounded to their views, each in a frustum lane of its own
     /// (<see cref="BoundsOf"/>, <see cref="Watch"/>).</summary>
     public int FrustumLanes => m_frustumLanes;
@@ -208,7 +228,7 @@ public sealed class SdfMeshDemand {
             // A point that jumped (a teleport, a cut) is read as one that went and one that came: the boxes either side
             // reaches are measured again, rather than every box a jump's travel would make due.
             if ((before < 0) || (m_held[before].Within != within) || !m_held[before].Framed || (Vector3.Distance(value1: m_held[before].Eye, value2: point.Eye) > JumpMetres)) {
-                if (before >= 0) { Changed(before: m_held[before], hadBefore: true, after: point, hasAfter: true); } else { Changed(before: default, hadBefore: false, after: point, hasAfter: true); }
+                if (before >= 0) { Changed(before: m_held[before], hadBefore: true, after: point, hasAfter: true, point: count); } else { Changed(before: default, hadBefore: false, after: point, hasAfter: true, point: count); }
             } else {
                 var was = m_held[before];
 
@@ -231,7 +251,7 @@ public sealed class SdfMeshDemand {
             count++;
         }
         for (var before = 0; (before < m_heldCount); before++) {
-            if (!matched[before]) { Changed(before: m_held[before], hadBefore: true, after: default, hasAfter: false); }
+            if (!matched[before]) { Changed(before: m_held[before], hadBefore: true, after: default, hasAfter: false, point: -1); }
         }
         Travel += travel;
         Scale += scale;
@@ -334,12 +354,12 @@ public sealed class SdfMeshDemand {
         return -1;
     }
     // Lists a change no odometer bounds, or notes that the list overflowed.
-    private void Changed(Viewpoint before, bool hadBefore, Viewpoint after, bool hasAfter) {
+    private void Changed(Viewpoint before, bool hadBefore, Viewpoint after, bool hasAfter, int point) {
         if (m_changes.Count >= MostChanges) {
             m_overflowed = true;
             return;
         }
-        m_changes.Add(item: new Change(After: after, Before: before, HadBefore: hadBefore, HasAfter: hasAfter));
+        m_changes.Add(item: new Change(After: after, Before: before, HadBefore: hadBefore, HasAfter: hasAfter, Point: point));
     }
     /// <summary>Returns a demand point as the latest observation holds it.</summary>
     /// <param name="index">The point, below <see cref="Count"/>.</param>
@@ -383,7 +403,7 @@ public sealed class SdfMeshDemand {
         m_sources[Count] = null;
         m_cuts[Count] = 0L;
         m_laneOf[Count] = -1;
-        Changed(before: default, hadBefore: false, after: PointAt(index: Count), hasAfter: true);
+        Changed(before: default, hadBefore: false, after: PointAt(index: Count), hasAfter: true, point: Count);
         Count++;
         Lanes();
     }
@@ -649,35 +669,45 @@ public sealed class SdfMeshDemand {
         m_laneShift.AsSpan(start: 0, length: stride).CopyTo(destination: watch);
         m_laneTurn.AsSpan(start: 0, length: stride).CopyTo(destination: watch[stride..]);
     }
-    /// <summary>Carries a frustum watch taken at the layout before into this one (<see cref="Layout"/>): each lane that
+    /// <summary>Watches one lane's frustum in a frustum watch from now on: the box's slack toward it and reach from its eye,
+    /// the tighter of each where the watch holds the lane already, with the lane's odometers as they stand.</summary>
+    /// <param name="watch">The watch, <see cref="WatchLength"/> values.</param>
+    /// <param name="lane">The lane, below <see cref="FrustumLanes"/>.</param>
+    /// <param name="slack">The distance, in metres, the box may move before the frustum answers otherwise for it.</param>
+    /// <param name="reach">The most the box reaches from the lane's eye, in metres.</param>
+    public void WatchLane(Span<float> watch, int lane, float slack, float reach) {
+        var stride = FrustumStride;
+
+        watch[lane] = m_laneShift[lane];
+        watch[(stride + lane)] = m_laneTurn[lane];
+        watch[((2 * stride) + lane)] = MathF.Min(x: watch[((2 * stride) + lane)], y: slack);
+        watch[((3 * stride) + lane)] = MathF.Max(x: watch[((3 * stride) + lane)], y: reach);
+    }
+    /// <summary>Carries a frustum watch taken at the layout before this one (<see cref="Layout"/>) into it: each lane that
     /// continues keeps its slack and reach in its new lane, its odometers read from where the lane stood when the layout
     /// changed; a lane whose point went or jumped is watched no more, since the change of points the bake reads then
-    /// measures what that point could reach.</summary>
-    /// <param name="watch">The watch, replaced by one of this layout's stride when that differs.</param>
-    /// <param name="layout">The layout the watch was taken at, set to this one when carried.</param>
-    /// <returns><see langword="false"/> for a watch taken before the layout before, which cannot be carried; the box is
-    /// then measured again.</returns>
-    public bool Carry(ref float[] watch, ref long layout) {
-        if (layout == Layout) { return true; }
-        if (layout != (Layout - 1)) { return false; }
-
-        var before = (watch.Length / WatchFields);
+    /// measures what that point could reach. A watch taken earlier than the layout before cannot be carried.</summary>
+    /// <param name="before">The watch at the layout before: four fields of that layout's stride.</param>
+    /// <param name="after">Receives the watch at this layout, <see cref="WatchLength"/> values.</param>
+    /// <returns><see langword="true"/> when a lane is still watched.</returns>
+    public bool Carry(ReadOnlySpan<float> before, Span<float> after) {
+        var from = (before.Length / WatchFields);
         var stride = FrustumStride;
-        var carried = new float[(WatchFields * stride)];
+        var watched = false;
 
-        Unwatched(watch: carried);
-        for (var lane = 0; (lane < Math.Min(val1: before, val2: m_layoutLanes)); lane++) {
-            var slack = watch[((2 * before) + lane)];
+        Unwatched(watch: after);
+        for (var lane = 0; (lane < Math.Min(val1: from, val2: m_layoutLanes)); lane++) {
+            var slack = before[((2 * from) + lane)];
 
             if (!float.IsFinite(f: slack) || (m_layoutMap[lane] is not (>= 0 and var into))) { continue; }
-            carried[into] = (watch[lane] - m_layoutShift[lane]);
-            carried[(stride + into)] = (watch[(before + lane)] - m_layoutTurn[lane]);
-            carried[((2 * stride) + into)] = slack;
-            carried[((3 * stride) + into)] = watch[((3 * before) + lane)];
+            after[into] = (before[lane] - m_layoutShift[lane]);
+            after[(stride + into)] = (before[(from + lane)] - m_layoutTurn[lane]);
+            after[((2 * stride) + into)] = slack;
+            after[((3 * stride) + into)] = before[((3 * from) + lane)];
+            watched = true;
         }
-        watch = carried;
-        layout = Layout;
-        return true;
+
+        return watched;
     }
     /// <summary>Returns whether some watched frustum may have moved far enough since a watch was taken to answer otherwise
     /// for its box: for each lane, the box moved by a distance, the lane's shift and its turn times the box's reach (with
@@ -769,8 +799,9 @@ public sealed class SdfMeshDemand {
 
     // One box read against every point (Read): each point's pixel there, as PixelAt measures it, and its frustum's answer,
     // whether it refuses the box and how far the box may move before the answer changes (CameraSnapshot.FrustumSlack),
-    // with the demand, its points' version and the box it was read for. One a thread, so a diagnostic reading on its own
-    // thread keeps no measure's read from it.
+    // with the demand, its points' version and the box it was read for. Each thread keeps its own, a few boxes by their
+    // hash, so a diagnostic reading on its own thread keeps no measure's read from it, and a measure of a shared
+    // geometry reads each copy once for its pixel and its bounds.
     private sealed class BoxRead {
         public float[] Pixel = [];
         public float[] Slack = [];
@@ -782,12 +813,19 @@ public sealed class SdfMeshDemand {
 
         public bool Refuses(int index) => (Refused[index] != 0);
     }
-    [ThreadStatic] private static BoxRead? ThreadRead;
+    [ThreadStatic] private static BoxRead[]? ThreadReads;
+    private const int KeptReads = 32;
 
     // Reads a box against every point, a vector of points at a time, or keeps this thread's latest read where it was of
     // the same box at the same points.
     private BoxRead Read(Vector3 center, Vector3 half) {
-        var read = (ThreadRead ??= new BoxRead());
+        var reads = (ThreadReads ??= NewReads());
+        var hash = Fnv1aHash.Create();
+
+        hash.AddBits(value: center);
+        hash.AddBits(value: half);
+
+        var read = reads[(int)(hash.Value & (KeptReads - 1))];
 
         if (ReferenceEquals(objA: read.Demand, objB: this) && (read.Version == m_version) && (read.Center == center) && (read.Half == half)) { return read; }
 
@@ -845,6 +883,12 @@ public sealed class SdfMeshDemand {
         (read.Demand, read.Version, read.Center, read.Half) = (this, version, center, half);
         PointReads += Count;
         return read;
+    }
+    private static BoxRead[] NewReads() {
+        var reads = new BoxRead[KeptReads];
+
+        for (var index = 0; (index < KeptReads); index++) { reads[index] = new BoxRead(); }
+        return reads;
     }
     // The distance from a point to a box, zero inside it.
     private static float DistanceTo(Vector3 center, Vector3 half, Vector3 point) =>

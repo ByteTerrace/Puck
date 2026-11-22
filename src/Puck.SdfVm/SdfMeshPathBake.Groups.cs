@@ -86,8 +86,6 @@ public sealed partial class SdfMeshPathBake {
         Fresh = 8,
         // Owed a measure a change of the points could only coarsen (SdfMeshPathBake.Demand.cs).
         Deferred = 16,
-        // Watched for a frustum that could move its tier (SdfMeshPathBake.Demand.cs).
-        Framed = 32,
     }
 
     // A list of groups, each in it at most once, by a mark the group carries for this list alone (Group.Marks): adding,
