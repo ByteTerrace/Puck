@@ -37,38 +37,24 @@ public static partial class AzureCommand {
                     token
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
-                if (
-                    (current is { } pending) &&
-                    (pending.Record.PendingOperationId is { } existingOperation)
-                ) {
-                    var requestedOther = ((operationId is { } requested) && (requested != existingOperation));
-
-                    if (
-                        (pending.Record.PendingTargetRelease != manifest.Identity) &&
-                        !requestedOther &&
-                        (pending.Record.ActiveRelease is null) &&
-                        !pending.Record.PendingCommitted
-                    ) {
-                        // A first deployment that never committed holds nothing a newer release must keep: a newer
-                        // bootstrap supersedes it, so a failed one never needs a hand-run resume before the next deploy.
-                        current = await SupersedeWorldReleaseBootstrapAsync(
-                            context: context,
-                            state: pending,
-                            successor: manifest.Identity,
-                            token: token
-                        ).ConfigureAwait(continueOnCapturedContext: false);
-                    } else {
-                        if (
-                            (pending.Record.PendingTargetRelease != manifest.Identity) ||
-                            requestedOther
-                        ) {
-                            throw new InvalidOperationException(message: $"operation {existingOperation:D} is already pending; run 'puck world release resume'");
-                        }
+                switch (WorldReleaseCoordinator.Succession(
+                    operationId: operationId,
+                    record: current?.Record,
+                    release: manifest.Identity
+                )) {
+                    case WorldReleaseSuccession.Resume:
                         return await ResumeWorldReleaseCoreAsync(
                             context: context,
                             token: token
                         ).ConfigureAwait(continueOnCapturedContext: false);
-                    }
+                    case WorldReleaseSuccession.Supersede:
+                        current = await SupersedeWorldReleaseAsync(
+                            context: context,
+                            state: current!.Value,
+                            successor: manifest.Identity,
+                            token: token
+                        ).ConfigureAwait(continueOnCapturedContext: false);
+                        break;
                 }
                 if (current?.Record.ActiveRelease == manifest.Identity) {
                     var active = await LoadWorldReleaseDeploymentAsync(
@@ -89,9 +75,6 @@ public static partial class AzureCommand {
                         Detail: "the exact release is already active and healthy",
                         Snapshot: current
                     );
-                }
-                if (current?.Record.RollbackEligible == true) {
-                    throw new InvalidOperationException(message: "the previous release is still retained for rollback; finalize that window before deploying another release");
                 }
                 if (current is null) {
                     if ((await WorkersAsync(

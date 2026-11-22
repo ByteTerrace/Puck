@@ -166,7 +166,7 @@ named doors (`docs/plans/disclosure.md:797-811`) **[checked]**.
   convention "a world writes only its own facts" is held by nothing.
 - **Trust at a seam.** The adjacency contact field reads the neighbour's body
   positions, orientations and colliders out of the session mirror into local
-  arrays (`src/Puck.World.Server/WorldAdjacencyFields.cs:486-498`) and applies
+  arrays (`src/Puck.World.Server/WorldAdjacencyFields.cs`) and applies
   the resulting correction to the local body
   (`src/Puck.World.Server/WorldAdjacencyContactField.cs:119-144`) **[checked]**.
   Nothing bounds what a neighbour may report; the convention is that a
@@ -348,7 +348,7 @@ about, and what invariant 1 implies.
   authority pair's responder is chosen by hash, so one side adjudicates every
   contact between two authorities, over positions and colliders the other side
   reported off the mirror
-  (`src/Puck.World.Server/WorldAdjacencyFields.cs:486-498`) **[checked]**.
+  (`src/Puck.World.Server/WorldAdjacencyFields.cs`) **[checked]**.
   Each side can therefore lie about its own body (position, collider, contact
   mode) in every pair, and about the outcome in the pairs it answers. A hit so
   decided is a claim by one authority about a body it does not own.

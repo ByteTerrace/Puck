@@ -1041,10 +1041,18 @@ Pre-commit recovery restores only that operation's protected source roots and
 then restarts the retained source. The removed blob-version rewind path is not
 an alternative rollback mechanism. An unmanaged worker or existing gameplay
 cannot be silently adopted as an empty bootstrap. A worker an earlier recovered
-bootstrap of the same group left is replaced with fresh compute, a bootstrap's
-recovery deletes its compute, and the next deploy supersedes an unfinished
-bootstrap of another release, so a failed first release never needs a manual
-resume or Azure change before the next push deploys.
+bootstrap of the same group left is replaced with fresh compute, and a bootstrap's
+recovery deletes its compute.
+
+A push to `main` deploys whatever its predecessor left behind, with no hand-run
+step. A deploy of another release accepts an admitted release and closes its
+rollback window in the same guarded write that claims the group, so the pipeline
+never runs `finalize`. Any other operation the deploy finds pending is ended at the
+cause of its durable phase before the new release qualifies, as the table under
+[World maintenance and recovery](#world-maintenance-and-recovery) lists: a
+committed release is admitted first, an operation that had no effect is abandoned,
+and every other pre-commit operation recovers its source. Nothing an Azure
+operation already did is retracted outside that recovery.
 
 Release Azure prepares the package before deploying it. Deploy automatically
 exports a coherent capture from the active source, preserving admission while
@@ -1088,8 +1096,10 @@ previous release and qualifies it against a fresh export of current progress.
 The coordinator then drains and cuts over using that progress. It never selects
 an earlier gameplay save. The completed deployment's retained operation permits
 rollback directly; do not finalize it first. If an operation is unfinished, use
-`status` and `resume` to finish it first. `puck world release finalize` closes the
-rollback window once the current release is accepted, allowing the next deploy.
+`status` and `resume` to finish it first: rollback is an operator's action, never
+the pipeline's, so it does not supersede pending work the way a deploy does.
+`puck world release finalize` closes the rollback window once the current release
+is accepted; the next deploy closes it the same way, so finalizing is optional.
 Finalization preserves history and retained artifacts. A separate explicit
 restore command is still required for intentional progress rewind.
 Use a fresh `--operation` identifier for a new rollback. Reusing a pending or
@@ -1098,9 +1108,10 @@ roots; inspect `status` and use `resume` for an unfinished transaction.
 
 The normal maintenance sequence is:
 
-1. Inspect `puck world release status`. Resolve an unfinished operation before
-   starting another. If a previous rollback window remains open, either use it or
-   explicitly accept the current release with `puck world release finalize`.
+1. Inspect `puck world release status`. An unfinished operation of another
+   release is ended by the next deploy as the table below lists, and an open
+   rollback window is closed by it; use the window first if the current release
+   must be withdrawn.
 2. Let Release Azure prepare and deploy the candidate, or deploy an already
    prepared package with `puck world release deploy artifacts/world-release`.
    Preparation verifies the package and runs both images against isolated copies
@@ -1116,9 +1127,9 @@ The normal maintenance sequence is:
    `puck world release rollback`, then repeat the status and gameplay checks.
    This uses the latest progress. It can refuse if current state is incompatible
    with the predecessor or a live metadata edit conflicts with the reverse change.
-5. Once the release is accepted, run `puck world release finalize` to allow the
-   next deployment. Finalization closes ordinary rollback eligibility; it does
-   not delete retained history or rewind the world.
+5. Once the release is accepted, `puck world release finalize` may close the
+   rollback window before the next deployment would. Finalization closes ordinary
+   rollback eligibility; it does not delete retained history or rewind the world.
 
 Intentional rewind uses a retained group recovery point. Run `puck world release
 checkpoint` while the closed group is serving and retain its printed request ID.
@@ -1136,21 +1147,28 @@ After a disconnect, cancellation, failed command or controller restart, start
 with `puck world release status`. A failed command or lost response does not tell
 you whether commit happened. A release-command failure returns 1 and cancellation
 returns 130; neither authorizes a manual storage change. Follow the reported next
-action with `puck world release resume`:
+action with `puck world release resume`, or deploy the next release, which
+ends the pending operation of another release first (`WorldReleaseCoordinator.SupersedeAsync`):
 
-| Durable status | What resume follows |
-|---|---|
-| `Prepare` | Recheck the pending inputs; the source has not drained. |
-| `Drain` | Finish the drain and protected capture. Keep the source available so a failed save can retry. |
-| `Activate` or `Verify` | Continue private candidate activation and verification, or enter recorded pre-commit recovery on failure. |
-| `Recover` or `RecoverActivate` | Restore and admit that operation's protected source under fresh fences. Admission stays closed until recovery completes. |
-| `Commit`, admission closed | Resume the committed target and open its admission. The old save is no longer an automatic fallback. |
-| Admission open, no unfinished operation | Inspect the active release and player state; the response may have been lost after success. |
+| Durable status | What resume follows | What a deploy of another release does first |
+|---|---|---|
+| `Prepare` | Recheck the pending inputs; the source has not drained. | Abandons the operation: nothing ran, and the source keeps its admission. |
+| `Drain` | Finish the drain and protected capture. Keep the source available so a failed save can retry. | Finishes the protected capture, then recovers the source as below. A first deployment that captured nothing is abandoned instead. |
+| `Activate` or `Verify` | Continue private candidate activation and verification, or enter recorded pre-commit recovery on failure. | Enters recorded pre-commit recovery: stops the candidate, restores the protected roots and admits the source (a first deployment's compute is deleted). |
+| `Recover` or `RecoverActivate` | Restore and admit that operation's protected source under fresh fences. Admission stays closed until recovery completes. | Finishes that recovery. |
+| `Commit`, admission closed | Resume the committed target and open its admission. The old save is no longer an automatic fallback. | Resumes the committed target to its admission, and refuses with its cause if it cannot be admitted, leaving the operation pending. |
+| Admission open, no unfinished operation | Inspect the active release and player state; the response may have been lost after success. | Accepts the active release: its retained operation moves into history and its rollback window closes as the new operation claims the group. |
+
+A deploy that recovers a source then qualifies the new release against that
+source's current state, never against the abandoned target. A committed release
+that cannot be admitted is the one state that holds every later deploy until its
+named cause is fixed, because its source's save is no longer a fallback and its
+progress cannot be exported for qualification.
 
 If resume refuses, retain its diagnostic and operation ID, correct the named
-missing input or service failure, and resume the same operation. Do not choose
-another image, replace authority pointers, clear the group record, or run a
-second deployment to bypass maintenance. Intentional rewind uses the separate
+missing input or service failure, and resume the same operation or deploy a
+release that fixes it. Do not choose another image by hand, replace authority
+pointers or clear the group record. Intentional rewind uses the separate
 `puck world release restore <point-id>` preview and explicit `--discard-progress`
 acknowledgement. Only a complete point captured under the enforced closed-group
 boundary is eligible; resume never selects an older point on its own.
