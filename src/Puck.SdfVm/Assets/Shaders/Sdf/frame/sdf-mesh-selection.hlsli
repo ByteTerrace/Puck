@@ -75,24 +75,6 @@ bool sdfSelectionKeeps(float3 center, float3 x, float3 y, float3 z) {
         sdfSelectionBeyond(up.xyz - (lens.y + vertical) * forward.xyz, 0.0, relative, x, y, z, sweep, reach) ||
         sdfSelectionBeyond((lens.y - vertical) * forward.xyz - up.xyz, 0.0, relative, x, y, z, sweep, reach));
 }
-// Whether a view's mesh pass draws a box at all: the end of the level ladder sdfSelectionLevel climbs, an empty level
-// whose error is the whole box, taken on the same terms. A box whose widest extent (its half axes' summed lengths,
-// doubled, which bounds every chord of the parallelepiped) projects to at most SdfMeshDetail.CoarserPixels over its
-// nearest point covers no more than a pixel, so it draws nothing; one the pass drew last frame draws until it falls to
-// that bound, and one it left out returns only past SdfMeshDetail.FinerPixels, so a draw at the boundary does not
-// flicker. A shadow cascade (whose texel test is its own), the glass pass and every pass under Finest or a forced level
-// draw every box they keep. SdfMeshDetail.WriteGpu writes the controls.
-bool sdfSelectionContributes(bool drawn, float3 center, float3 x, float3 y, float3 z) {
-    float4 detail = asfloat(sdfMeshOcclusionCandidates[1]);
-    if (detail.x != 1.0) { return true; }
-    float4 eye = asfloat(sdfMeshOcclusionCandidates[2]);
-    float4 direction = asfloat(sdfMeshOcclusionCandidates[3]);
-    float3 forward = direction.xyz;
-    float depth = ((dot(center - eye.xyz, forward) - abs(dot(x, forward))) - abs(dot(y, forward))) - abs(dot(z, forward));
-    if (!(depth > 0.0)) { return true; }
-    float widest = 2.0 * ((length(x) + length(y)) + length(z));
-    return (widest * detail.z) > ((drawn ? 1.0 : direction.w) * depth);
-}
 // The level a draw takes from its world box (sdfSelectionBox), its stretch, its staged generation and its level count.
 uint sdfSelectionLevel(uint record, uint4 previous, bool unboxed, float3 center, float3 x, float3 y, float3 z, float stretch, uint generation, uint count) {
     float4 detail = asfloat(sdfMeshOcclusionCandidates[1]);
