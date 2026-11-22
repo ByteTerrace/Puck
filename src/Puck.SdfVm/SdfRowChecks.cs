@@ -66,6 +66,13 @@ public static class SdfRowChecks {
     public static WorkKind Trims { get; } = Declare(name: "trims");
     /// <summary>Counts mesh regions shrunk after relocation.</summary>
     public static WorkKind Shrinks { get; } = Declare(name: "region.shrinks");
+    /// <summary>Counts the chunks a mapped mesh region's fits visited: those whose placement count crossed zero, those a
+    /// fit could not back, and every chunk at a new size.</summary>
+    public static WorkKind CoverChunks { get; } = Declare(name: "region.cover-chunks");
+    /// <summary>Counts the mesh region growths refused that took placements back (<see cref="SdfMeshRegionArena.Clip"/>).</summary>
+    public static WorkKind Clips { get; } = Declare(name: "region.clips");
+    /// <summary>Counts the mesh region plans whose limit a refused growth held to the bytes the region holds.</summary>
+    public static WorkKind RefusalHolds { get; } = Declare(name: "region.refusal-holds");
     /// <summary>Counts whole-table cursor answers, including a new table's first answer.</summary>
     public static WorkKind TablesWhole { get; } = Declare(name: "cursor.tables.whole");
     /// <summary>Counts deliberately uncommitted table-consumer windows.</summary>

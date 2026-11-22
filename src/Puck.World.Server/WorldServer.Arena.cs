@@ -170,6 +170,7 @@ public sealed partial class WorldServer {
         var time = m_ruleHost.Time;
 
         WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
+        WorldBootWork.Count(kind: WorldBootWork.ArenaInstallBuilds);
         if (!StateArena.TryCreate(
             arena: out var built,
             catalog: catalog,
@@ -221,6 +222,7 @@ public sealed partial class WorldServer {
         StateArena? built;
 
         WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
+        WorldBootWork.Count(kind: WorldBootWork.ArenaInstallBuilds);
         if (!((named is null)
             ? StateArena.TryCreate(arena: out built, catalog: definition.StateCatalog, options: WorldSlotLanes.Options(definition: definition),
                 reason: out reason, section: definition.StateRaw, time: in time)

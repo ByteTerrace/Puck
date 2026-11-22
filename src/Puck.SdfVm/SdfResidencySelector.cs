@@ -380,6 +380,7 @@ public sealed class SdfResidencyGrant : IDisposable {
     private long m_floor;
     private long m_retiring;
     private long m_reserved;
+    private long m_releases;
     private bool m_disposed;
 
     internal SdfResidencyGrant(SdfResidencySelector selector, string name, MemoryAccount.DeviceReservation reservation) {
@@ -461,6 +462,23 @@ public sealed class SdfResidencyGrant : IDisposable {
 
         return limit;
     }
+    /// <summary>Holds the region to what it holds after a growth was refused, in place of <see cref="ReserveGrowth"/>:
+    /// the reservation is lowered to what stands, and <see cref="LimitBytes"/> becomes <paramref name="limitBytes"/>, so
+    /// the residency's budget presses its bake to coarsen until the named meshes fit what the region holds.</summary>
+    /// <param name="limitBytes">The bytes the region holds, its unbacked interior included.</param>
+    /// <returns><paramref name="limitBytes"/>.</returns>
+    public long HoldStanding(long limitBytes) {
+        ReserveStanding();
+        Volatile.Write(location: ref m_limit, value: limitBytes);
+
+        return limitBytes;
+    }
+    /// <summary>Gets the most bytes the reservation's peak may be raised by now (the pool's room), or
+    /// <see cref="long.MaxValue"/> where nothing bounds the pool.</summary>
+    public long Room => m_reservation.Room;
+    /// <summary>Gets how many replaced buffers' releases the grant has recorded (<see cref="Released"/>), a count that
+    /// only rises.</summary>
+    public long Releases => Volatile.Read(location: ref m_releases);
     /// <summary>Gets the most bytes the region may place, as <see cref="ReserveGrowth"/> last answered:
     /// <see cref="long.MaxValue"/> before the first answer. The region's arena refuses a mesh past it, and the
     /// residency's budget (<see cref="Budget"/>) never passes <see cref="SdfMeshTier.BudgetEighths"/> of it, so the
@@ -499,6 +517,7 @@ public sealed class SdfResidencyGrant : IDisposable {
     /// reservation.</summary>
     /// <param name="bytes">The bytes of the released buffer.</param>
     public void Released(long bytes) {
+        _ = Interlocked.Increment(location: ref m_releases);
         Volatile.Write(location: ref m_retiring, value: Math.Max(val1: 0L, val2: (Retiring - bytes)));
         if (m_disposed) { return; }
         m_reservation.Retiring(bytes: Retiring);

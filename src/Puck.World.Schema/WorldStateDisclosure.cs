@@ -97,7 +97,8 @@ public static class WorldStateDisclosure {
             result.Add(item: region with {
                 Fields = fields,
                 Paint = region.Paint?.Where(predicate: fill => names.Contains(item: fill.Field)).ToArray(),
-                Reactions = reactions,
+                // Every reaction disclosed is the region's own list, so a projection equals the one before it.
+                Reactions = ((reactions.Count == (region.Reactions?.Count ?? 0)) ? region.Reactions : reactions),
                 TravelResistance = (((region.TravelResistance?.Row is { } row) && !observer.ReadsRow(name: row)) ? null : region.TravelResistance),
             });
         }
@@ -456,8 +457,48 @@ public static class WorldStateDisclosure {
             return new DisclosedFields(
                 authored: definition.AuthoredState.Where(row => row.Field is not null).Select(row => row.Name.Value).ToHashSet(StringComparer.Ordinal),
                 disclosed: (fields.World ?? []).ToDictionary(row => row.Name.Value, StringComparer.Ordinal),
-                lattices: [.. (state.Lattices ?? []).Where(topology => topology is not WorldFieldTopology), .. (fields.Lattices ?? [])]
+                lattices: Shared(authored: state.Lattices, lattices: [.. (state.Lattices ?? []).Where(topology => topology is not WorldFieldTopology), .. (fields.Lattices ?? [])])
             );
+        }
+
+        // The disclosed topology lists composed over one authored list, each distinct list once. A disclosed section
+        // whose topologies equal an earlier one's carries that list instance, so a reader's state view finds the two
+        // sections sharing their declarations (WorldStateSection.SharesDeclarations) and reloads rows in place of
+        // building an arena; a list composed afresh for every disclosure never shares.
+        private sealed class LatticeLists {
+            public readonly List<IReadOnlyList<LatticeTopology>> Held = [];
+        }
+
+        private const int MostLatticeLists = 8;
+        private static readonly IReadOnlyList<LatticeTopology> NoAuthoredLattices = [];
+        private static readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<LatticeTopology>, LatticeLists> SharedLattices = new();
+
+        // Topologies equal as values, a field topology's reactions compared as a sequence rather than as a list
+        // instance, since a projection that withholds some composes its list afresh.
+        private sealed class TopologyComparer : IEqualityComparer<LatticeTopology> {
+            public static readonly TopologyComparer Instance = new();
+
+            public bool Equals(LatticeTopology? x, LatticeTopology? y) => (EqualityComparer<LatticeTopology>.Default.Equals(x, y) ||
+                ((x is WorldFieldTopology left) && (y is WorldFieldTopology right) &&
+                    ((left with { Reactions = null }) == (right with { Reactions = null })) &&
+                    (left.Reactions ?? []).SequenceEqual(second: (right.Reactions ?? []))));
+            public int GetHashCode(LatticeTopology obj) => obj.Name.GetHashCode(comparisonType: StringComparison.Ordinal);
+        }
+
+        private static IReadOnlyList<LatticeTopology> Shared(IReadOnlyList<LatticeTopology>? authored, LatticeTopology[] lattices) {
+            var lists = SharedLattices.GetValue(key: (authored ?? NoAuthoredLattices), derive: static _ => new LatticeLists());
+
+            lock (lists) {
+                foreach (var held in lists.Held) {
+                    if (held.SequenceEqual(second: lattices, comparer: TopologyComparer.Instance)) { return held; }
+                }
+                if (lists.Held.Count == MostLatticeLists) { lists.Held.RemoveAt(index: 0); }
+                // Held frozen, as the section's own lists are, so a section handed it keeps this instance.
+                var frozen = Puck.Abstractions.Collections.OwnedLists.Freeze(items: lattices)!;
+
+                lists.Held.Add(item: frozen);
+                return frozen;
+            }
         }
         public WorldStateRow Project(WorldStateRow row) => !m_authored.Contains(row.Name.Value) ? row :
             m_disclosed.TryGetValue(row.Name.Value, out var field) ? row with { Field = field.Field } :

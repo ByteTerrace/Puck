@@ -14,9 +14,24 @@ public sealed partial class WorldRigidAssets {
         public SdfMeshTemplateRange Range;
     }
     private sealed record StaticCopy(StaticAsset Asset, WorldPlacement Placement, WorldPickTarget Target, object MotionKey, Vector3 Position, Quaternion Orientation);
+    // One static row as the latest reconcile admitted it: the creation it showed, whether it was admitted, and the
+    // copies its stamp placed (empty for a refused row or an empty stamp). A row is immutable, so the same instance
+    // showing the same creation instance is admitted alike, and the same compiled stamp (WorldPlacementStamp keeps one
+    // per row while its frame and inputs stand) places the same copies.
+    private sealed class StaticRow(WorldPrototype creation, string? refusal) {
+        public readonly WorldPrototype Creation = creation;
+        public readonly string? Refusal = refusal;
+        public CompiledPlacementStamp? Stamp;
+        public StaticAsset? Asset;
+        public StaticCopy[] Copies = [];
+    }
     private readonly List<StaticAsset> m_staticAssets = [];
     private readonly List<StaticCopy> m_staticCopies = [];
-    private readonly HashSet<WorldPlacement> m_staticPlacements = new(comparer: ReferenceEqualityComparer.Instance);
+    // The rows the latest reconcile met, by instance, and the scratch the next reconcile fills before the two swap.
+    private Dictionary<WorldPlacement, StaticRow> m_staticRowsMet = new(comparer: ReferenceEqualityComparer.Instance);
+    private Dictionary<WorldPlacement, StaticRow> m_staticRowsNext = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<string, StaticAsset> m_staticVariants = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, StaticAsset> m_staticVariantsNext = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, int> m_staticUnsupported = new(comparer: StringComparer.Ordinal);
     private readonly List<SdfVolume> m_staticVolumes = [];
     private WorldDefinition? m_staticDefinition;
@@ -28,60 +43,94 @@ public sealed partial class WorldRigidAssets {
     /// <summary>Gets the last emission's occurrences with at least one shape left visible by isolation.</summary>
     public int StaticVisibleCopies { get; private set; }
     /// <summary>Returns whether this exact row is owned by the retained static-copy roster.</summary>
-    public bool ContainsPlacement(WorldPlacement placement) => m_staticPlacements.Contains(placement);
+    public bool ContainsPlacement(WorldPlacement placement) => (m_staticRowsMet.TryGetValue(key: placement, value: out var row) && (row.Refusal is null));
 
     /// <summary>Prepares static occurrences from the same definition and rows the visual scene will emit. This is the
-    /// sole admission door: visual emission skips exactly these rows; query emission never passes this catalog.</summary>
+    /// sole admission door: visual emission skips exactly these rows; query emission never passes this catalog. A
+    /// definition that replaces some rows costs those rows: a row instance met before, showing the same creation
+    /// instance under the same seed and scope, keeps its verdict, and keeps its copies while its compiled stamp
+    /// stands.</summary>
     public void ReconcileStatic(WorldDefinition definition, IReadOnlyList<WorldPlacement> placements, string? scope = null) {
         var seed = (definition.Generation?.WorldSeed ?? 0UL);
         if (ReferenceEquals(m_staticDefinition, definition) && ReferenceEquals(m_staticRows, placements) && ReferenceEquals(m_staticCreations, definition.Creations) && (m_staticSeed == seed) && (m_staticScope == scope)) { return; }
+        // Copies carry the scope and the seed places them, so a change of either starts every row again.
+        var keeps = ((m_staticSeed == seed) && (m_staticScope == scope));
         m_staticDefinition = definition;
         m_staticRows = placements;
         m_staticCreations = definition.Creations;
         m_staticSeed = seed;
         m_staticScope = scope;
-        var previous = m_staticAssets.ToDictionary(asset => asset.Creation.Id.Value, StringComparer.Ordinal);
-        var variants = new Dictionary<string, StaticAsset>(StringComparer.Ordinal);
-        foreach (var asset in previous.Values) { asset.MaxScale = 0f; }
+        if (!keeps) { m_staticRowsMet.Clear(); }
+        var met = m_staticRowsMet;
+        var next = m_staticRowsNext;
+        var variants = m_staticVariantsNext;
+        var rebuilt = 0;
+
+        next.Clear();
+        variants.Clear();
         m_staticAssets.Clear();
         m_staticCopies.Clear();
-        m_staticPlacements.Clear();
         m_staticUnsupported.Clear();
         foreach (var placement in placements) {
             var creation = WorldDefinitionRows.FindCreation(definition.Creations, placement.ShownPrototypeId);
             if ((creation is null) || !WorldPlacementStamper.IsStaticStamp(placement, creation)) { continue; }
-            var document = creation.EngineDocument;
-            var reason = (!IsRigid(creation) ? "not-rigid" :
-                ((WorldStateDocumentValues.HasReference(creation.Document) || WorldStateDocumentValues.HasReference(placement)) ? "state-reference" :
-                ((placement.Mirror is not null) ? "reflection" :
-                ((document.TextRuns is { Count: > 0 }) ? "text" :
-                ((creation.Mesh is not null) ? "authored-mesh" :
-                (document.HasGlass ? "glass" :
-                ((document.Shapes is not { Count: > 0 }) ? "no-shapes" : null)))))));
-            if (reason is not null) {
+            if (!met.TryGetValue(key: placement, value: out var row) || !ReferenceEquals(objA: row.Creation, objB: creation)) {
+                row = new StaticRow(creation: creation, refusal: Refusal(creation: creation, placement: placement));
+            }
+            // A row listed twice is one occurrence set, as the instance it is.
+            if (!next.TryAdd(key: placement, value: row)) { continue; }
+            if (row.Refusal is { } reason) {
                 m_staticUnsupported[reason] = (m_staticUnsupported.GetValueOrDefault(reason) + 1);
                 continue;
             }
-            m_staticPlacements.Add(placement);
             var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: seed);
-            if (stamp.Count == 0) { continue; }
+            if (stamp.Count == 0) { row.Stamp = stamp; row.Copies = []; continue; }
             var key = creation.Id.Value;
             if (!variants.TryGetValue(key, out var asset)) {
-                if (!previous.TryGetValue(key, out asset) || !ReferenceEquals(asset.Creation, creation)) { asset = new StaticAsset(creation); }
+                if (!m_staticVariants.TryGetValue(key, out asset) || !ReferenceEquals(asset.Creation, creation)) { asset = new StaticAsset(creation); }
+                asset.MaxScale = 0f;
                 variants.Add(key, asset);
                 m_staticAssets.Add(asset);
             }
             asset.MaxScale = MathF.Max(asset.MaxScale, placement.Scale);
-            var visitor = new StaticCopyVisitor(m_staticCopies, asset, placement, stamp, scope);
-            stamp.ForEach(ref visitor);
+            if (!ReferenceEquals(objA: row.Stamp, objB: stamp) || !ReferenceEquals(objA: row.Asset, objB: asset)) {
+                var copies = new StaticCopy[stamp.Count];
+                var visitor = new StaticCopyVisitor(copies, asset, placement, stamp, scope);
+
+                stamp.ForEach(ref visitor);
+                row.Stamp = stamp;
+                row.Asset = asset;
+                row.Copies = copies;
+                rebuilt += copies.Length;
+            }
+            m_staticCopies.AddRange(collection: row.Copies);
         }
+        m_staticRowsMet = next;
+        m_staticRowsNext = met;
+        m_staticVariants.Clear();
+        foreach (var (key, asset) in variants) { m_staticVariants.Add(key, asset); }
+        WorldCreationWork.ProcessWork.Count(WorldCreationWork.StaticReconciles);
+        WorldCreationWork.ProcessWork.Add(WorldCreationWork.StaticCopiesRebuilt, rebuilt);
     }
-    private struct StaticCopyVisitor(List<StaticCopy> copies, StaticAsset asset, WorldPlacement placement, CompiledPlacementStamp stamp, string? scope) : ICreationStampVisitor {
+    // Why a static row is left to the ordinary visual emission, or null when it is a rigid static copy.
+    private static string? Refusal(WorldPrototype creation, WorldPlacement placement) {
+        var document = creation.EngineDocument;
+
+        return (!IsRigid(creation) ? "not-rigid" :
+            ((WorldStateDocumentValues.HasReference(creation.Document) || WorldStateDocumentValues.HasReference(placement)) ? "state-reference" :
+            ((placement.Mirror is not null) ? "reflection" :
+            ((document.TextRuns is { Count: > 0 }) ? "text" :
+            ((creation.Mesh is not null) ? "authored-mesh" :
+            (document.HasGlass ? "glass" :
+            ((document.Shapes is not { Count: > 0 }) ? "no-shapes" : null)))))));
+    }
+    private struct StaticCopyVisitor(StaticCopy[] copies, StaticAsset asset, WorldPlacement placement, CompiledPlacementStamp stamp, string? scope) : ICreationStampVisitor {
         private int m_ordinal;
         public void Visit(CreationStampInstance instance) {
-            var ordinal = stamp.OccurrenceAt(m_ordinal++);
+            var index = m_ordinal++;
+            var ordinal = stamp.OccurrenceAt(index);
             var target = new WorldPickTarget(placement.Id, null) { Prototype = asset.Creation.Id, Occurrence = ordinal };
-            copies.Add(new StaticCopy(asset, placement, target, (scope, placement.Id, ordinal), instance.Origin, stamp.Rotation));
+            copies[index] = new StaticCopy(asset, placement, target, (scope, placement.Id, ordinal), instance.Origin, stamp.Rotation);
         }
     }
     // Only body assets need template transform slots. Static templates retain the ordinary instance partitions.

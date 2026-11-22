@@ -217,6 +217,9 @@ public sealed class WorldPresentationManifest {
             root: definition,
             visitor: builder
         );
+        WorldBootWork.Count(kind: WorldBootWork.ManifestCompiles);
+        WorldBootWork.Count(amount: builder.PartsWalked, kind: WorldBootWork.ManifestPartsWalked);
+        WorldBootWork.Count(amount: builder.PartsReplayed, kind: WorldBootWork.ManifestPartsReplayed);
         foreach (var region in definition.FieldRegions) { builder.AddFields(fields: region); }
 
         var clocks = (definition.Timeline.Clocks ?? []).Where(predicate: static clock => (clock is not null)).ToArray();
@@ -367,12 +370,41 @@ public sealed class WorldPresentationManifest {
         return [.. builder.Bindings];
     }
 
+    // What one part of a document adds to a compile, in walk order, so a later compile that meets the same part instance
+    // replays it instead of walking it. A part is a direct member of the definition and each placement, look and creation
+    // row (Builder.IsPart): every document object is immutable, so the same instance adds the same reads, except a whole
+    // row binding's conversion, which reads the compiling document's state rows and is resolved again on replay.
+    private enum PartEntryKind : byte {
+        // A read that lasts as long as the document, with its conversion.
+        Add,
+        // A keyless binding of a bindable scalar, read whole when the compiling document's row is a bound row.
+        Whole,
+        // A template a body reads, recorded under its owner.
+        Body,
+        // A distinct text paint.
+        Text,
+    }
+    private readonly record struct PartEntry(PartEntryKind Kind, StateBinding Binding, WorldStateConversion Conversion, object? Owner, PalettePaintDocument? Paint);
+    private sealed class Part(PartEntry[] entries) {
+        public static readonly Part Empty = new(entries: []);
+
+        public PartEntry[] Entries { get; } = entries;
+    }
+
+    private static readonly Puck.Abstractions.CodeDerivedTable<object, Part> Parts = new();
+
     private sealed class Builder : IWorldDocumentVisitor {
         private readonly HashSet<WorldPresentationBinding> m_bodySeen = [];
         private readonly Stack<object?> m_owners = [];
         private readonly HashSet<WorldPresentationBinding> m_seen = [];
+        // The parts being walked, innermost last, each recording what it adds; and per entered value whether it is one.
+        private readonly Stack<List<PartEntry>> m_recording = [];
+        private readonly Stack<bool> m_entered = [];
 
         public List<WorldPresentationBinding> Bindings { get; } = [];
+        // The parts the walk entered and those whose recorded reads it replayed.
+        public int PartsWalked { get; private set; }
+        public int PartsReplayed { get; private set; }
 
         // The document the walk compiles, which says whether a keyless token names a keyed row; null for a seat's reads.
         public WorldDefinition? Definition { get; init; }
@@ -388,6 +420,33 @@ public sealed class WorldPresentationManifest {
         public Dictionary<object, List<WorldPresentationBinding>> Templates { get; } = new(comparer: ReferenceEqualityComparer.Instance);
 
         public void Add(StateBinding? binding, WorldStateConversion conversion) {
+            if ((binding is { } recorded) && (m_recording.Count > 0)) {
+                m_recording.Peek().Add(item: new PartEntry(Kind: PartEntryKind.Add, Binding: recorded, Conversion: conversion, Owner: null, Paint: null));
+            }
+            AddRead(binding: binding, conversion: conversion);
+        }
+        // A bindable scalar's keyless binding names its row whole: read as the row when the compiling document's row is a
+        // bound row (a pass's array reads it), otherwise as a number.
+        private void AddWhole(StateBinding binding) {
+            if (m_recording.Count > 0) {
+                m_recording.Peek().Add(item: new PartEntry(Kind: PartEntryKind.Whole, Binding: binding, Conversion: default, Owner: null, Paint: null));
+            }
+            AddRead(
+                binding: binding,
+                conversion: (((Definition is { } document) && WorldBoundRow.TryResolve(definition: document, length: out _, row: out _, rowName: binding.Row))
+                    ? WorldStateConversion.Row
+                    : WorldStateConversion.Number)
+            );
+        }
+        private void AddText(PalettePaintDocument paint) {
+            if (m_recording.Count > 0) {
+                m_recording.Peek().Add(item: new PartEntry(Kind: PartEntryKind.Text, Binding: default, Conversion: default, Owner: null, Paint: paint));
+            }
+            if (!SurfaceTexts.Contains(item: paint)) {
+                SurfaceTexts.Add(item: paint);
+            }
+        }
+        private void AddRead(StateBinding? binding, WorldStateConversion conversion) {
             if (
                 (binding is { } bound) &&
                 m_seen.Add(item: new WorldPresentationBinding(
@@ -470,6 +529,10 @@ public sealed class WorldPresentationManifest {
         }
         // A lease reads every template as a number.
         public void AddBody(StateBinding binding) {
+            if (m_recording.Count > 0) {
+                m_recording.Peek().Add(item: new PartEntry(Kind: PartEntryKind.Body, Binding: binding, Conversion: default, Owner: Owner, Paint: null));
+            }
+
             var entry = new WorldPresentationBinding(
                 Binding: binding,
                 Conversion: WorldStateConversion.Number
@@ -503,19 +566,68 @@ public sealed class WorldPresentationManifest {
         }
         // A look's or a creation's members record their templates under it.
         public bool Enter(object value, WorldDocumentSite site) {
+            var part = IsPart(value: value);
+
+            if (part) {
+                if (Parts.TryGetValue(key: value, value: out var held)) {
+                    Replay(part: held);
+                    PartsReplayed++;
+                    return false;
+                }
+                PartsWalked++;
+                m_recording.Push(item: []);
+            }
             if (!Collect(value: value)) {
+                if (part) { Close(value: value); }
                 return false;
             }
             if (value is WorldLook or WorldPrototype) {
                 m_owners.Push(item: Owner);
                 Owner = value;
             }
+            m_entered.Push(item: part);
 
             return true;
         }
         public void Leave(object value) {
             if (value is WorldLook or WorldPrototype) {
                 Owner = m_owners.Pop();
+            }
+            if (m_entered.Pop()) { Close(value: value); }
+        }
+        // Whether a value is a part whose reads are recorded and replayed: a direct member of the definition (the root's
+        // own Enter is the one with nothing entered), or a placement, look or creation row. A look or creation records
+        // its reads under itself whatever encloses it; anything else is a part only outside an owner, since a scalar
+        // inside one is read as a body's template.
+        private bool IsPart(object value) => !value.GetType().IsValueType &&
+            ((value is WorldLook or WorldPrototype) || ((Owner is null) && ((m_entered.Count == 1) || (value is WorldPlacement))));
+        // Holds what the part just walked added, and hands it to the part enclosing it, which added it too.
+        private void Close(object value) {
+            var entries = m_recording.Pop();
+
+            Parts.AddOrUpdate(key: value, value: ((entries.Count == 0) ? Part.Empty : new Part(entries: [.. entries])));
+            if (m_recording.Count > 0) { m_recording.Peek().AddRange(collection: entries); }
+        }
+        private void Replay(Part part) {
+            foreach (var entry in part.Entries) {
+                switch (entry.Kind) {
+                    case PartEntryKind.Add:
+                        Add(binding: entry.Binding, conversion: entry.Conversion);
+                        break;
+                    case PartEntryKind.Whole:
+                        AddWhole(binding: entry.Binding);
+                        break;
+                    case PartEntryKind.Body:
+                        var owner = Owner;
+
+                        Owner = entry.Owner;
+                        AddBody(binding: entry.Binding);
+                        Owner = owner;
+                        break;
+                    case PartEntryKind.Text:
+                        AddText(paint: entry.Paint!);
+                        break;
+                }
             }
         }
 
@@ -533,19 +645,11 @@ public sealed class WorldPresentationManifest {
                 case BindableScalar scalar:
                     if (scalar.State is { Key: StateBinding.BodyKey } bodyBinding) {
                         AddBody(binding: bodyBinding);
-                    } else {
+                    } else if (scalar.State is { Key: null } whole) {
                         // A token naming a keyed row with no key binds the whole row, which a pass's array reads.
-                        Add(
-                            binding: scalar.State,
-                            conversion: (((scalar.State is { Key: null } whole) && (Definition is { } document) && WorldBoundRow.TryResolve(
-                                definition: document,
-                                length: out _,
-                                row: out _,
-                                rowName: whole.Row
-                            ))
-                                ? WorldStateConversion.Row
-                                : WorldStateConversion.Number)
-                        );
+                        AddWhole(binding: whole);
+                    } else {
+                        Add(binding: scalar.State, conversion: WorldStateConversion.Number);
                     }
 
                     return false;
@@ -583,9 +687,7 @@ public sealed class WorldPresentationManifest {
                         if (paint.Text is not { } paintText) {
                             continue;
                         }
-                        if (!SurfaceTexts.Contains(item: paint)) {
-                            SurfaceTexts.Add(item: paint);
-                        }
+                        AddText(paint: paint);
                         foreach (var (_, placeholder) in WorldScreenText.Placeholders(line: paintText.Template)) {
                             Add(
                                 binding: placeholder,

@@ -41,8 +41,8 @@ public static partial class WorldPlacementStamp {
         private bool BuildDescriptor(WorldPlacement row, WorldPlacementSurface surface,
             out SurfaceDescriptor? descriptor, out string reason) {
             descriptor = null; reason = string.Empty;
-            var prefix = $"placement '{row.Id}'.surface";
-            if (row.Attach is not null || row.Inhabit is not null || !LiteralRoot(row) || !m_creations.ContainsKey(row.ShownPrototypeId)) {
+            var prefix = new Prefix(row.Id);
+            if (row.Attach is not null || row.Inhabit is not null || !LiteralRoot(row) || (CreationOf(row.ShownPrototypeId) is null)) {
                 return Invalid(out descriptor, out reason, $"{prefix} requires a literal static root, without live root attachment or inhabitance.");
             }
             if (surface.Targets is not { Count: > 0 }) {
@@ -60,7 +60,7 @@ public static partial class WorldPlacementStamp {
             for (var i = 0; i < surface.Targets.Count; i++) {
                 var id = surface.Targets[i];
                 if (id == row.Id || !seen.Add(id) || !m_rows.TryGetValue(id, out var target) ||
-                    !m_creations.TryGetValue(target.ShownPrototypeId, out var creation) || target.Solid is null ||
+                    (CreationOf(target.ShownPrototypeId) is not { } creation) || target.Solid is null ||
                     target.Deal is not null || target.Attach is not null || target.Inhabit is not null || !LiteralRoot(target) ||
                     CreationRig.Of(document: creation.Document).Animates || WorldStateDocumentValues.HasReference(creation.Document) ||
                     !CreationStampEmitter.EmitsContact(creation.EngineDocument)) {
@@ -72,6 +72,10 @@ public static partial class WorldPlacementStamp {
             descriptor = new SurfaceDescriptor(surface, sources);
             WorldBootWork.Count(WorldBootWork.SurfaceDescriptors);
             return true;
+        }
+        // A refusal's subject, formatted only when a refusal names it.
+        private readonly struct Prefix(string id) {
+            public override string ToString() => $"placement '{id}'.surface";
         }
         private bool TryParentFrame(WorldPlacement row, out string reason) {
             reason = string.Empty;

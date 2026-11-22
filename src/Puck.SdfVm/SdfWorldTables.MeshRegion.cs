@@ -86,6 +86,7 @@ public sealed partial class SdfWorldTables {
         if (Interlocked.Exchange(location1: ref m_meshTrimRequested, value: 0) == 0) { return; }
         try {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Trims);
+            m_refusedGrowthBytes = -1L;
             _ = ForgetUnusedMeshes();
             // A mapped region gives the forgotten meshes' chunks back now, under the pressure that asked for the trim.
             m_meshPlacementVersion++;
@@ -329,12 +330,46 @@ public sealed partial class SdfWorldTables {
     // A mapped region's grant reserves the chunks it backs; the chunks inside its size that an earlier fit gave back
     // (CoverMeshRegion) hold no device bytes, so they widen the words the arena may place without widening the
     // reservation, and backing one again is admitted by the ledger when a placement needs it.
+    // While a refused growth holds (HoldsRefusedGrowth), the arena is held to what the region holds instead, and the grant
+    // presses the bake's budget to it, so no plan places a mesh the region was just refused room for.
     private void PrepareMeshRegionLimit() {
+        if (HoldsRefusedGrowth()) {
+            SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.RefusalHolds);
+            m_meshArena.SetLimit(limitBytes: ((ulong)m_meshGrant.HoldStanding(limitBytes: m_meshRegion.ByteCount)));
+            return;
+        }
+
         var held = ((long)m_meshRegion.DestinationBytes);
         var holes = (m_meshRegion.Mapped ? Math.Max(val1: 0L, val2: (RoundUp(value: m_meshRegion.ByteCount, unit: m_meshRegion.MappedChunkBytes) - held)) : 0L);
         m_meshArena.SetLimit(limitBytes: ((ulong)m_meshGrant.ReserveGrowth(capacityBytes: held, mostBytes: ((long)MostMeshRegionBytes), unbackedBytes: holes)));
 
         static long RoundUp(long value, long unit) => (value.CeilingDivide(divisor: unit) * unit);
+    }
+    // A growth the account or the device refused (EnsureMeshRegionCapacity): the bytes the region held then, the pool's
+    // room and the grant's releases at the refusal, and the plans prepared since. Asking again for room just refused
+    // costs a refused allocation, a clip and the meshes' placements every frame, so the region holds what it has until
+    // something that could make room happens: the region changed size, a replaced buffer was released, the pool's room
+    // grew, a trim ran, or RefusedGrowthPlans plans passed (memory another owner gave back reaches no event here).
+    private long m_refusedGrowthBytes = -1L;
+    private long m_refusedGrowthRoom;
+    private long m_refusedGrowthReleases;
+    private int m_refusedGrowthPlans;
+    private const int RefusedGrowthPlans = 240;
+
+    private void RefuseGrowth(long heldBytes) {
+        m_refusedGrowthBytes = heldBytes;
+        m_refusedGrowthRoom = m_meshGrant.Room;
+        m_refusedGrowthReleases = m_meshGrant.Releases;
+        m_refusedGrowthPlans = 0;
+    }
+    private bool HoldsRefusedGrowth() {
+        if (m_refusedGrowthBytes < 0L) { return false; }
+        if ((m_meshRegion.ByteCount != m_refusedGrowthBytes) || (m_meshGrant.Releases != m_refusedGrowthReleases) ||
+            (++m_refusedGrowthPlans > RefusedGrowthPlans) || (m_meshGrant.Room > m_refusedGrowthRoom)) {
+            m_refusedGrowthBytes = -1L;
+            return false;
+        }
+        return true;
     }
     // A plan forgot these meshes: their words are free for the next mesh they hold, so they owe none and their landing
     // starts again should a list place them later.
@@ -1028,9 +1063,13 @@ public sealed partial class SdfWorldTables {
         m_owedDraws.Add(0, m_currentDrawRows.Count);
         SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Shrinks);
     }
-    // The placement version the mapped region's chunks were last fitted to, and the chunks the placements cover.
+    // The placement version the mapped region's chunks were last fitted to, and the size and chunk they were fitted at.
     private long m_meshCoveredVersion = -1L;
-    private bool[] m_meshCovered = [];
+    private long m_meshCoveredBytes = -1L;
+    private long m_meshCoveredChunk = -1L;
+    // The chunks a fit visits: those the arena's counts crossed since the last fit, and those a fit could not back.
+    private readonly List<int> m_meshCoverCandidates = [];
+    private readonly List<int> m_meshRefusedChunks = [];
     // Whether the latest fit left a covered chunk unbacked because the device refused it, which the fit is tried again
     // for every frame and a mesh named ahead in such a chunk is refused ahead for (RefusesAhead).
     private bool m_meshBackingRefused;
@@ -1050,7 +1089,10 @@ public sealed partial class SdfWorldTables {
         if (!TryCoverMeshRegion() && ForgetUnusedMeshes()) { _ = TryCoverMeshRegion(); }
     }
     // One fit of the chunks to the placements, giving back every chunk no placement covers before backing any it now
-    // covers; false when the device refused a chunk.
+    // covers; false when the device refused a chunk. A chunk is covered while the arena counts a placement or draw
+    // records in it (SdfMeshRegionArena.ChunkCount), and the first always, which holds a draw record. A fit visits only
+    // the chunks whose count crossed zero since the last fit and those it could not back, so it costs what the
+    // placements changed; a new size or chunk, or counts taken afresh, visits every chunk once.
     private bool TryCoverMeshRegion() {
         m_meshCoveredVersion = m_meshPlacementVersion;
 
@@ -1058,31 +1100,51 @@ public sealed partial class SdfWorldTables {
         var size = m_meshRegion.ByteCount;
         var chunks = ((int)size.CeilingDivide(divisor: chunk));
         var refused = false;
+        var candidates = m_meshCoverCandidates;
 
-        if (m_meshCovered.Length < chunks) { m_meshCovered = new bool[chunks]; }
-        Array.Clear(array: m_meshCovered, index: 0, length: chunks);
-        Cover(bytes: Math.Max(val1: (((long)m_meshArena.DrawCapacity) * SdfMeshRegion.DrawBytes), val2: SdfMeshRegion.DrawBytes), offset: 0L);
-        foreach (var (mesh, placement) in m_meshArena.Placements) {
-            Cover(bytes: (((long)SdfMeshRegion.WordsOf(mesh: mesh)) * sizeof(uint)), offset: (((long)placement.VertexWord) * sizeof(uint)));
+        m_meshArena.TrackChunks(chunkWords: (chunk / sizeof(uint)));
+        candidates.Clear();
+        var whole = (m_meshArena.ChunksRecounted || (m_meshCoveredBytes < 0L) || (m_meshCoveredChunk != chunk));
+
+        m_meshArena.TakeCrossedChunks(crossed: candidates);
+        if (whole) {
+            candidates.Clear();
+            for (var index = 0; (index < chunks); index++) { candidates.Add(item: index); }
+        } else {
+            candidates.AddRange(collection: m_meshRefusedChunks);
+            // A new size changes only the chunks past the shorter size, and the last chunk of either, which may turn
+            // whole or partial: a growth backs its new chunks whether a placement covers them or not.
+            if (m_meshCoveredBytes != size) {
+                var held = ((int)m_meshCoveredBytes.CeilingDivide(divisor: chunk));
+
+                for (var index = Math.Max(val1: 0, val2: (Math.Min(val1: held, val2: chunks) - 1)); (index < chunks); index++) { candidates.Add(item: index); }
+            }
         }
-        for (var index = 0; (index < chunks); index++) {
+        m_meshRefusedChunks.Clear();
+        m_meshCoveredBytes = size;
+        m_meshCoveredChunk = chunk;
+        SdfRowChecks.ProcessWork.Add(kind: SdfRowChecks.CoverChunks, amount: candidates.Count);
+        foreach (var index in candidates) {
+            if ((index >= chunks) || Covered(index: index)) { continue; }
             var offset = (index * chunk);
             var bytes = Math.Min(val1: chunk, val2: (size - offset));
 
-            if (!m_meshCovered[index] && (bytes == chunk) && m_meshRegion.IsBacked(bytes: bytes, offset: offset)) {
+            if ((bytes == chunk) && m_meshRegion.IsBacked(bytes: bytes, offset: offset)) {
                 ReplacedMeshRegion(newBytes: ((ulong)size), replaced: m_meshRegion.UnmapRange(bytes: bytes, offset: offset));
             }
         }
-        for (var index = 0; (index < chunks); index++) {
+        foreach (var index in candidates) {
+            if ((index >= chunks) || !Covered(index: index)) { continue; }
             var offset = (index * chunk);
             var bytes = Math.Min(val1: chunk, val2: (size - offset));
 
-            if (!m_meshCovered[index] || m_meshRegion.IsBacked(bytes: bytes, offset: offset)) { continue; }
+            if (m_meshRegion.IsBacked(bytes: bytes, offset: offset)) { continue; }
             try {
                 m_meshRegion.MapRange(bytes: bytes, offset: offset);
             } catch (GpuMemoryRefusedException) {
                 m_meshGrant.Kept(refused: true);
                 refused = true;
+                m_meshRefusedChunks.Add(item: index);
                 continue;
             }
             ReplacedMeshRegion(newBytes: ((ulong)size), replaced: GpuMappedRelease.None);
@@ -1091,12 +1153,7 @@ public sealed partial class SdfWorldTables {
         m_meshBackingRefused = refused;
         return !refused;
 
-        void Cover(long offset, long bytes) {
-            if (bytes <= 0L) { return; }
-            var last = Math.Min(val1: (chunks - 1), val2: ((int)offset.LastUnitOf(bytes: bytes, unit: chunk)));
-
-            for (var index = ((int)(offset / chunk)); (index <= last); index++) { m_meshCovered[index] = true; }
-        }
+        bool Covered(int index) => ((index == 0) || (m_meshArena.ChunkCount(chunk: index) > 0));
     }
     // The region changed size. The device bytes it gave up (a replaced buffer, or a mapped region's chunks past its new
     // size) are retired behind the next upload and leave the grant's reservation when they are released. A replaced
@@ -1140,8 +1197,10 @@ public sealed partial class SdfWorldTables {
             replaced = m_meshRegion.Grow(byteCount: ((long)grown));
         } catch (GpuMemoryRefusedException) {
             m_meshGrant.Kept(refused: true);
+            SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Clips);
             m_meshArena.Clip(limitBytes: current);
             ForgetArenaMeshes();
+            RefuseGrowth(heldBytes: m_meshRegion.ByteCount);
 
             var floor = (((ulong)m_meshArena.Words) * sizeof(uint));
 

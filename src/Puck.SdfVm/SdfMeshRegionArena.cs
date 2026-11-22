@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -76,6 +77,70 @@ public sealed class SdfMeshRegionArena : IDisposable {
     public void ForceLimit(ulong? bytes) { m_admissionBytes = bytes; ForceRelocation(); }
     /// <summary>Requests that the next plan pack its meshes regardless of the normal slack threshold.</summary>
     public void ForceRelocation() => m_forceRelocation = true;
+
+    // Per chunk of a mapped region (TrackChunks): how many placed meshes' words and how much of the draw reserve lie in
+    // it, and the chunks whose count left or reached zero since the region last took them (TakeCrossedChunks). The
+    // invariant: each count is the number of placements plus the reserve whose words touch the chunk. TryPlace, Forget
+    // and GrowReserve are the only writers of the placements and the reserve, and each counts what it changes here.
+    private int[] m_chunkCounts = [];
+    private long m_chunkWords;
+    private readonly List<int> m_crossedChunks = [];
+    private long m_countedReserveWords;
+
+    /// <summary>Gets whether the counts were taken afresh (<see cref="TrackChunks"/>) since the region last took the
+    /// crossed chunks, so every chunk's backing is to be fitted again rather than only the crossed ones.</summary>
+    public bool ChunksRecounted { get; private set; }
+
+    /// <summary>Counts, per chunk of a mapped region of <paramref name="chunkWords"/> words, the placed meshes and draw
+    /// records that lie in it, keeping the counts as placements change. Counting again under another chunk size takes
+    /// every count afresh (<see cref="ChunksRecounted"/>); zero stops counting.</summary>
+    /// <param name="chunkWords">The words one chunk covers; zero for a region that is not mapped.</param>
+    public void TrackChunks(long chunkWords) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: chunkWords);
+        if (chunkWords == m_chunkWords) { return; }
+        m_chunkWords = chunkWords;
+        m_crossedChunks.Clear();
+        m_countedReserveWords = 0L;
+        m_chunkCounts = ((chunkWords == 0L) ? [] : new int[(int)(((long)m_ranges.Size).CeilingDivide(divisor: chunkWords))]);
+        if (chunkWords == 0L) { return; }
+        CountReserve();
+        foreach (var (mesh, placement) in m_placements) { CountChunks(count: 1, word: placement.VertexWord, words: SdfMeshRegion.WordsOf(mesh: mesh)); }
+        m_crossedChunks.Clear();
+        ChunksRecounted = true;
+    }
+    /// <summary>Returns how many placed meshes and draw-record runs lie in a chunk (<see cref="TrackChunks"/>).</summary>
+    /// <param name="chunk">The chunk's index.</param>
+    /// <returns>The count; zero for a chunk past the counted range or while nothing is counted.</returns>
+    public int ChunkCount(int chunk) => (((uint)chunk < (uint)m_chunkCounts.Length) ? m_chunkCounts[chunk] : 0);
+    /// <summary>Moves the chunks whose count left or reached zero since the last take into a list, a chunk that crossed
+    /// more than once listed more than once, and clears <see cref="ChunksRecounted"/>.</summary>
+    /// <param name="crossed">The list the chunks are appended to.</param>
+    public void TakeCrossedChunks(List<int> crossed) {
+        ArgumentNullException.ThrowIfNull(argument: crossed);
+        crossed.AddRange(collection: m_crossedChunks);
+        m_crossedChunks.Clear();
+        ChunksRecounted = false;
+    }
+    private void CountChunks(long word, long words, int count) {
+        if ((m_chunkWords == 0L) || (words <= 0L)) { return; }
+        var last = (int)Math.Min(val1: (m_chunkCounts.Length - 1), val2: ((word + words) - 1L) / m_chunkWords);
+
+        for (var chunk = (int)(word / m_chunkWords); (chunk <= last); chunk++) {
+            var before = m_chunkCounts[chunk];
+
+            m_chunkCounts[chunk] = (before + count);
+            if ((before == 0) != (m_chunkCounts[chunk] == 0)) { m_crossedChunks.Add(item: chunk); }
+        }
+    }
+    // The reserve's draw records are counted as one run from word zero, moved whenever the reserve grows.
+    private void CountReserve() {
+        var reserve = (((long)m_drawCapacity) * SdfMeshRecord.DrawWords);
+
+        if (reserve == m_countedReserveWords) { return; }
+        CountChunks(count: -1, word: 0L, words: m_countedReserveWords);
+        CountChunks(count: 1, word: 0L, words: reserve);
+        m_countedReserveWords = reserve;
+    }
 
     // The meshes the latest full plan's list named, in its order.
     private SdfMesh?[] m_latestMeshes = [];
@@ -354,6 +419,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         m_placements.Add(key: mesh, value: new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord, SkinWord: skinWord));
         m_placed.Add(item: mesh);
         m_placedWords += SdfMeshRegion.WordsOf(mesh: mesh);
+        CountChunks(count: 1, word: vertexWord, words: SdfMeshRegion.WordsOf(mesh: mesh));
         RefreshUnused(mesh: mesh);
 
         return true;
@@ -362,6 +428,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
     private long Forget(SdfMesh mesh) {
         _ = m_placements.Remove(key: mesh, value: out var placement);
         m_placedWords -= SdfMeshRegion.WordsOf(mesh: mesh);
+        CountChunks(count: -1, word: placement.VertexWord, words: SdfMeshRegion.WordsOf(mesh: mesh));
         RefreshUnused(mesh: mesh);
         mesh.Release(cached: true);
 
@@ -435,6 +502,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
 
         // Every range that began under the reserve's end is free, so the lowest run that holds the reserve begins at zero.
         _ = m_ranges.Allocate(count: ((ulong)reserveEnd));
+        CountReserve();
     }
 
     /// <summary>Releases the arena's CPU source claims after all uploads and staged draw readers finish.</summary>
