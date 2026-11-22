@@ -70,13 +70,13 @@ with presented motion bursts as well as settled images.
 A world frame has two halves. The scene's shared tables — the program, the
 moving transforms, the screens, lights, volumes and mesh draws — live in one
 **residency** (`SdfWorldResidency`) per frame source, and the frame first
-submits one **upload** that brings those tables up to date. Then every view of
+submits one **upload** that brings those tables up to date and draws the world's shadows. Then every view of
 the scene is an instance of the render graph's `sdf.world` package, and its node
-records the package's eleven native passes into its own submission, reading the
+records the package's native passes into its own submission, reading the
 tables the upload wrote. The passes finish that view's own output image:
 
 ```text
-   upload → mask → bake → shadow-near → shadow-far → shadow-second → mesh → pyramid → surface → views → sky → composite
+   upload (with the world's shadows) → mask → bake → mesh → pyramid → surface → views → sky → composite
 ```
 
 A view of a program that holds a glass shape runs three more passes between
@@ -106,17 +106,9 @@ through the interpreter (`mapCore`), the frame's one walk of the SDF program. A
 frame with no pending bake skips both, so a settled scene evaluates no field on
 the GPU at all.
 
-**shadow-near**, **shadow-far** and **shadow-second** (`sdf-mesh-shadow.vert.hlsl`)
-draw opaque meshes from the light cameras
-`SdfMeshShadowCascades` fits ([the shadow cascades](#the-shadow-cascades)) into
-their depth alone, each draw whose box lies in the cascade's light box and,
-swept along the light, may shadow a receiver the view shows
-(what a raster pass draws, below). A frame with no mesh draw, or whose view has no cascade,
-skips them; `shadow-second` runs only while a second slotted directional light
-emits (the secondary shadow role, `SdfLights.RoleSlot`), and a view whose world
-holds one stable slot has no `shadow-second` at all. A view whose world draws a
-distant map adds `shadow-distant` ([the distant shadow map](#the-distant-shadow-map)),
-which stands on every frame its inputs do.
+No view draws shadows. A world's shadow entries (`SdfWorldShadows`, [the shadow cascades](#the-shadow-cascades)) are
+drawn by its residency's upload, ahead of every view's submission, through `sdf-mesh-shadow.vert.hlsl` into depth
+alone, each draw whose box lies in the entry's light box; every view of the world samples the same layers.
 
 The opaque shadow pipelines write depth without a fragment stage.
 The entry pass culls back faces on closed, rigid casters whose bounds are
@@ -1587,146 +1579,86 @@ empty, and quads take their neighbours' materials.
 ## The shadow cascades
 
 `SdfMeshShadowCascades` is one indexed set of entries, each a light camera for a
-shadow role. It fits two orthographic cameras along the key light (the slotted
-directional light that emits the most, the primary role): the near one around the view frustum's first
-16 metres, the far one to 120 metres or the far distance, each a bounding sphere
-of its slice snapped to whole texels, with casters up to 200 metres past the
-sphere toward the light. A world authors those three reaches as
+shadow role: the key light's (the slotted directional light that emits the most,
+the primary role) near and far entries, reaching 16 and 120 metres (or the far
+distance) from the eye in every direction, the secondary role's one entry over
+40 metres, and the key light's distant map. Each entry is a square centred on
+the cell of a grid of an eighth of its reach that the eye stands in, its half
+extent the reach plus the most an eye inside the cell lies from its centre, its
+plane's centre snapped to a whole texel, with casters up to 200 metres past it
+toward the light. A world authors the reaches as
 `render.shadowCoverage { near, far, casters }` (`SdfShadowCoverage`, carried on
-`SdfFrame.ShadowCoverage`); each cascade spreads the same texels over its
-sphere, so a longer reach coarsens that cascade's texel in proportion, and
-`world.budget` prints the coverage with each cascade's texel for a 60-degree
-16:9 view. The `shadow-near` and `shadow-far` passes
-draw every mesh draw from their camera through the shadow pipeline
-(`SdfMeshRasterPass.ShadowKey`): the mesh pass's layout and triangle pull, an
-orthographic vertex stage along the light (`sdf-mesh-shadow.vert.hlsl`) and a
-fragment stage that writes no colour and only counts its fragments, in a render
-pass with the cascade's `D32Float` depth alone, cleared to zero and stored. The
-depth is reversed and linear, one at the cascade's near plane and zero at its
-far plane, so the surface pass samples it (`sdfMeshShadowDepth`) and decodes
-the caster's light-space depth as `far - depth · (far - near)`; a texel nothing
-was drawn into reads as the far plane. The secondary role's light, when one
-emits, gets one entry over the first 40 metres, drawn by `shadow-second`. K holds
-each role's visibility and its cascades' coverage of the point; views takes the
-probes' answer where the coverage falls short of one.
+`SdfFrame.ShadowCoverage`); each entry spreads the same texels over its square,
+so a longer reach coarsens its texel in proportion, and `world.budget` prints
+the coverage with each entry's texel. A turning camera moves no entry, and a
+walking one moves an entry only as it crosses a cell.
 
-Every cascade is 2048 texels a side at the `high` shadow tier, 1024 at
-`medium` and 512 at `low` (`SdfViewQuality.ShadowResolution`,
-`WorldFramePresenter.ShadowResolutionOf`), 16 MB, 4 MB and 1 MB of depth each;
-the pass block's `meshShadowTexels` carries the size to the surface pass, and
-the fit snaps to that size's texels. The tier and whether the world holds a
-second stable slot choose the view's fragment (`SdfWorldPackage.WithShadows`),
-so changing either rebuilds the view's graph once; the slot count is the
-world's configured policy, so a handoff between lights allocates nothing.
+A world has one set of shadows, its residency's (`SdfWorldShadows`), drawn by
+the residency's per-frame upload ahead of every view's submission and read by
+every view; no view's graph holds a shadow pass or a shadow depth. Views whose
+eyes share a near cell read one anchor (its near, far and secondary entries); a
+view elsewhere takes an anchor of its own, up to eight, past which it reads the
+nearest, so a world shown on many screens pays for each place once. The
+distant map is one for the world. The shadow pipeline
+(`SdfMeshRasterPass.ShadowKey`) draws with the mesh pass's layout and triangle
+pull, an orthographic vertex stage along the light (`sdf-mesh-shadow.vert.hlsl`)
+and a fragment stage that writes no colour, into `D32Float` depths cleared to
+zero. The depth is reversed and linear, one at the entry's near plane and zero
+at its far plane, so the surface pass samples it (`sdfMeshShadowDepth`) and
+decodes the caster's light-space depth as `far - depth · (far - near)`; a texel
+nothing was drawn into reads as the far plane. K holds each role's visibility
+and its entries' coverage of the point; views takes the probes' answer where the
+coverage falls short of one.
 
-The far cascade refreshes at the rate a device table authors
-(`farShadows { hertz, turnDegrees }` on a quality row or `render.farShadows`,
-`SdfFrame.FarShadows`; every frame where none is authored) while
-`world.rates shadow-far` is on (`SdfUpdateRates.ShadowFar`): a view holds its
-far cascade's depth and fit while that floor allows on the frames'
-presentation time (`SdfWorldPasses.Rates`, `SdfUpdateRateTiers.Holds`),
-counted only over frames that decided it in a row,
-so `shadow-far` stands between refreshes whatever forces the frame's other
-passes, and every pass of the view reads that depth through the camera it was
-drawn from, so a static caster's shadow is exact on a held frame and only a
-dynamic caster beyond the near cascade lags, by under one of the far cascade's
-texels at walking speed. A hold ends early when the fit no longer covers what
-the view shows: the light turns past the authored `turnDegrees` (or, where none
-is authored, far enough to move the shadow of a caster at the far end of the
-cascade's depth span by one texel, `SdfFarShadows.TurnRadiansFor`), the
-cascade's extent or texels change, the camera cuts, turns past half a degree or
-moves half a metre, the view follows another residency, or a capture
-converges. Frames that come at or below the authored rate hold nothing.
+Every entry is 2048 texels a side at the `high` shadow tier, 1024 at `medium`
+and 512 at `low` (`SdfViewQuality.ShadowResolution`,
+`WorldFramePresenter.ShadowResolutionOf`), taken from the quality of the view an
+anchor is centred on; the pass block's `meshShadowTexels` carries the size to
+the surface pass. A view whose quality skips shadows takes no anchor.
 
-A cascade at a reduced rate holds a static layer (below), so a refresh the
-rate alone calls for draws both layers in one frame over it, costing only the
-moving casters. A cascade whose graph holds no static layer yet splits such a
-refresh over two frames: the first draws the depth and its glass extinction,
-the second draws the exit layer and holds the depth (`SdfFarLayers`). A
-refresh that ends a hold redraws both. Under occlusion culling a layer
-also records the sample grid its receivers were classified on
-(`SdfWorldPasses.ReceiverSignatureOf`: cull level, detail, extent, scale, cut
-and bindings, never the camera, the geometry or the jitter, which the hold's
-own tolerances and the receiver cells' margin cover); a changed grid refreshes
-both layers. For the frame between, the exit layer keeps the camera of the
-refresh before, and the surface pass reads it through the pass block's fourth
-camera row, without glass extinction for those receivers. The shadow-far pass
-asks `SdfWorldPasses.RecordFar` which layers to draw, which answers both while
-a layer of its current graph has never been drawn; the cameras it draws from
-are committed when the frame's submission succeeds (`SubmittedFar`), so each
-layer is always read through the camera it was drawn from. `world.rates`
-counts `shadow-far.rendered` (both layers), `.split` (one), `.held` and
-`.static` (a refresh that drew the static layer again): a still view at a 30 Hz
-rate on a 60 Hz display shows `.rendered` and `.held` on alternate frames and
-no `.static`.
+The entries are cached. Each is drawn whole only when the light turns past the
+entry's tolerance (`farShadows.turnDegrees` and `distantShadows.turnDegrees`
+where authored, otherwise the turn that moves the shadow of a caster as tall as
+the entry's reach by one texel), its eye crosses into another cell, its texels
+change or a static draw changes (`SdfWorldTables.StaticDrawRevision`). The far
+entry spreads such a redraw over the frames of one period of its authored rate
+(`farShadows { hertz, turnDegrees }`, `SdfFrame.FarShadows`, while
+`world.rates shadow-far` is on), into back layers copied into the layers
+receivers read only when the last share lands, so receivers always read a
+complete layer through the camera it was drawn from. `world.rates
+shadow-distant off` redraws every entry whole on every upload, the comparison
+for the cache's worth.
 
-A far cascade at a reduced rate (`farShadows.hertz` below every frame, with
-`world.rates shadow-far` on: `SdfFarShadows.HoldsStaticLayer`) also holds a
-static layer, two more depths of the far pass (`SdfWorldPackage.WithShadows`'
-`farStatic`): the static scene's casters drawn alone through their own
-selection (`SdfMeshMotion.Static`). Every refresh copies the layer into the
-cascade's depth and exit layer and draws the moving casters over the copy
-(`SdfMeshMotion.Dynamic`, whose two phases test against the static depth),
-then every glass draw's extinction, both layers in one frame, so a refresh
-costs the moving casters rather than the scene. The selection kernel leaves a
-draw its filter excludes untouched, so the two stagings keep each other's
-visibility history. The static layer is drawn again only when the static scene
-changes (`SdfWorldTables.StaticDrawRevision`, the revision the distant map
-holds by, read through `CastersRead`) or the fit no longer covers the view:
-`RecordFar` reuses it only while a submitted recording of the current graph
-drew it, the fit's tolerances still hold against the camera it was drawn from,
-and the revision is the one it drew. A refresh over a standing static layer
-draws from that layer's camera and leaves the fit's anchors where the layer's
-own refresh set them, so the tolerances bound how far the view strays from it.
+Between whole redraws the near, far and secondary entries follow what moves.
+Every draw record a staging changes reports the box it held and the box it holds
+(`SdfWorldTables.NoteMotion`); each entry judges the caster against where it
+last drew it, in its own texels, and once it has moved a texel across the plane
+or along the light, owes the rectangles where it was and where it is, merged
+into at most four. The upload clears each rectangle and draws every caster in
+its box again through a viewport of its own, from the camera of that rectangle
+of the plane, so its texels land where the whole entry's camera puts them. A
+still world draws nothing; a swaying blade that moves less than a texel draws
+nothing; the far entry draws its rectangles at its authored rate. `world.rates`
+counts each entry's whole redraws (`shadow-<entry>.static`), shares
+(`.share`), rectangle redraws (`.live`) and holds (`.held`), once per world
+upload, and `world.residency`'s `shadows` line prints the shadow work's GPU
+time, the anchors and each entry's state.
 
 ### The distant shadow map
 
-Past the far cascade, a world or a device's quality row may add a distant
-shadow map (`render.distantShadows { reach, texels, turnDegrees }`, a quality
+Past the far entry, a world or a device's quality row may add a distant shadow
+map (`render.distantShadows { reach, texels, turnDegrees, frames }`, a quality
 preset's `distantShadows`; `SdfDistantShadows` on `SdfFrame.DistantShadows`).
-It is the cascade set's fourth entry (`SdfMeshShadowCascades.DistantEntry`, the
-primary role), so a receiver no near or far cascade holds takes it before the
-probes' answer, and its texels are its own (the pass block's `meshShadowTexels`
-carries a size per entry), so a reach of a kilometre costs the near and far
-cascades no precision. A view's shadow tier halves its texels as it does the
-cascades', down to 256.
-
-The `shadow-distant` pass draws only the static scene
-(`SdfMeshDraw.IsStatic`, derived from the draw: never a skinned or displaced
-draw, which moves without its record changing, whatever its `IsDynamic` says;
-the selection kernel rejects a draw whose
-record carries `SdfMeshRecord.DynamicFlag` when the pass stages `staticOnly`),
-every caster in its light box whichever way the view faces
-(`SdfMeshCull.OfLightBox`), at the coarsest level whose error fits its texel.
-Its camera is a sphere about the cell of a grid the eye stands in
-(`SdfDistantShadows.CellOf`, an eighth of the reach a side), so neither a turn
-nor a step inside the cell moves it. It holds what it drew while the light
-turns less than `turnDegrees`, the eye stays in its cell, its reach, casters and
-texels stand, and no static draw changes (`SdfWorldTables.StaticDrawRevision`:
-a new value when a staging changes what a static draw draws, lands its mesh or
-removes it, never for a pose, a moving body or a relocation). That hold is the
-pass's signature (`SdfWorldPasses.Distant`): the camera the frame chose, the
-static revision, the texels, the cull and detail levers and the instance's
-bindings, so the pass stands whatever forces the frame's other passes. Like the
-far cascade, the camera a recording drew from is staged by
-`SdfWorldPasses.RecordDistant` and committed by `SubmittedDistant` once the
-frame's submission has reached the queue, and readers read the committed
-camera, or no distant entry until one is committed. A change to the map's reach
-or any other input of the cascade fit changes the view's signature, since the
-cadence signs the fitted cascade set (`SdfWorldTables.ViewSignature`).
-`world.rates shadow-distant off` lets it follow every turn of the light, and
-`world.rates` counts `shadow-distant.rendered` and `.held`.
-
-A map may spread each redraw over `frames` frames (`distantShadows.frames`,
-`SdfDistantShadows.Slices`), so no one frame pays a whole redraw. Its view then
-keeps a back map beside the map receivers read: each frame draws one share of
-the casters (those whose draw index leaves the share's remainder) into the back
-map from the camera the redraw started from, and the last share copies the back
-map into the map, whose camera only then changes. A redraw so lands `frames`
-frames after it starts, and runs to its end whatever the light or the eye does
-meanwhile; a static draw that changes during it is redrawn by the next one.
-`world.rates` counts each share that completes no map as
-`shadow-distant.share`.
+It is the set's fourth entry (`SdfMeshShadowCascades.DistantEntry`, the primary
+role), so a receiver no near or far entry holds takes it before the probes'
+answer, and its texels are its own (the pass block's `meshShadowTexels` carries
+a size per entry), so a reach of a kilometre costs the near and far entries no
+precision. A view's shadow tier halves its texels as it does the entries',
+down to 256. It draws only the static scene (`SdfMeshDraw.IsStatic`, derived
+from the draw: never a skinned or displaced draw, which moves without its record
+changing; the selection rejects a record carrying `SdfMeshRecord.DynamicFlag`),
+at the coarsest level whose error fits its texel, follows no motion, and spreads
+each redraw over `frames` frames (`SdfDistantShadows.Slices`).
 
 A shadow handoff (`SdfShadowHandoff`) is a pass value: while one runs, the
 outgoing light fades from its stable slot's cascade by the handoff's weight, and

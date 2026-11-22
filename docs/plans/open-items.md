@@ -242,7 +242,7 @@ packet; these are the ones owed now, most valuable first.
    a slope and on the stairs (`debug.go stairs`) show them planted.
 4. **The hunt 14 lanes.** `world.gpu-timing` (now per-frame milliseconds, stale
    rows marked) at the pool, the valley and the gallery entrance;
-   `world.rates` for `shadow-far.static`, `.rendered` and `.held` over the
+   `world.rates` for each shadow entry's `.static`, `.live` and `.held` over the
    route; a portal that a wall hides stays hidden while the camera moves; and
    the nested views' look at render scales 0.75 and 0.5. The paired before and
    after on the RTX 2060 rides its hosted leg.
@@ -1451,18 +1451,17 @@ The frame's GPU side:
   reading `sdfViewsFilterShadows` and `sdfViewsFilterNormals` puts rows 0 and
   3 on the same banks (read GPU Trace's bank conflicts, then try a row stride
   that clears it).
-- [high] The far shadow cascade draws nearly every caster in its box at the
-  coarsest level whose error fits its texel. At an authored rate below every
-  frame it now holds a static layer and redraws only moving casters over it
-  (`SdfFarShadows.HoldsStaticLayer`, counted as `shadow-far.static`), so these
-  limits bite when the static layer redraws. Two geometry limits remain after
-  receiver and light-space culling: a level chain stops at two contour cells
-  of error, so a finely contoured mesh (the card backs, the console bricks)
-  never coarsens toward a far texel (`SdfMeshCollapse.CellShares`), and draws
-  with members (the falls' slots) have no host box and draw level zero in
-  every pass. Measure each against the cascade's vertices before changing the
-  bake identity; then measure receiver-conditioned depth's total saving
-  against the box-only path's cadence
+- [high] A shadow entry's whole redraw draws nearly every caster in its light box
+  at the coarsest level whose error fits its texel (the distant map 17.1M triangles
+  over 6938 draws in one redraw, the far entry's static scene 4.7M, in the
+  selection marks), and runs at every light-turn tolerance, cell crossing and
+  static change (`SdfWorldShadows`), so these limits bite there. Two geometry
+  limits remain: a level chain stops at two contour cells of error, so a finely
+  contoured mesh (the card backs, the console bricks) never coarsens toward a far
+  texel (`SdfMeshCollapse.CellShares`), and draws with members (the falls' slots)
+  have no host box, draw level zero in every pass and owe every entry its whole
+  layer when they move (`SdfWorldShadows.MovedEverywhere`). Measure each against
+  the entries' drawn triangles before changing the bake identity
   ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#pucks-open-cases)).
 - [low] A frustum that meets a glass box a wall hides still runs the glass
   trio (`SdfWorldPasses.GlassSeen`); the glass pass's occlusion lies on the
@@ -2499,8 +2498,8 @@ then the reconstruction's two changes below.
 - [medium] The off-mode sill burst once showed two paired flashes about 11
   presentations apart, and has not reproduced since the shaft lintels were
   moved off the slab top. No run has qualified a cadence refresh: the far
-  cascade's rate is now authored (`farShadows`) and below every frame it holds
-  a static layer, so a re-run reads `shadow-far.held` and `shadow-far.static`
+  entry's rate is authored (`farShadows`) and the world's shadows are cached
+  (`SdfWorldShadows`), so a re-run reads the shadow entries' counts
   in `world.rates` beside the flashes. Region 0.36 0.78 0.32 0.1;
   `body.pose 16.15 13.57 37.28 191 0 0`;
   `view.override camera look 15.508 16.895 33.842 16.155 14.57 37.279 55`;
@@ -4800,15 +4799,6 @@ their lane order; this packet keeps the single duplicates and leads.
     hygiene. Then consider raising CA2027 to an error in `.editorconfig`: the
     SDK ships it but reports it as a build warning only under a stricter
     `AnalysisMode` than Puck's default.
-  - **Rendering: the far cascade's split refresh.** [medium] A rated far
-    cascade below every-frame rates always holds a static layer
-    (`SdfFarShadows.HoldsStaticLayer`), and `SdfWorldPasses.RecordFar` answers
-    both layers whenever the recorder's `SdfFarStaticLayer.Held` is set, so
-    the split path (`SdfFarLayers.Depth` and `Exit`, `FarExitOwed`, the exit
-    camera the surface pass reads as the cascades' fourth, and the exit branch
-    of `FarSignatureOf`) runs only while a rebuilt graph without the static
-    depths is installed. Make that window draw both layers too and delete the
-    split, with the exit camera row in the pass block and its HLSL reader.
 
 ### Author leaks to the standard
 

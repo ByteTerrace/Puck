@@ -141,19 +141,15 @@ The steps, each after the one it names:
    and not bandwidth. Check: the capture names the limiter; then the same
    route reads fewer loads for each output pixel and the resolve pass is no
    slower, with the history identity and motion vectors unchanged.
-4. **The shadows.** First on the RTX 4070, since neither change below has run
-   on a GPU. At an authored rate below every frame (`farShadows`,
-   `SdfFarShadows.HoldsStaticLayer`), the far cascade holds a static layer and
-   draws only the moving casters over it. The distant map redraws only for a
-   changed caster (`SdfMeshDraw.SameCaster`), and a table that spreads a
-   redraw over frames (`distantShadows.frames`, `SdfDistantShadows.Slices`)
-   draws one share a frame into a back map and commits the map when the last
-   share lands. Check: `world.rates` counts the far cascade held between
-   refreshes and its static layer redrawn (`shadow-far.static`) only when a
-   static caster changes; a body walking under the far cascade casts a shadow
-   that keeps up at the authored rate; a sliced redraw shows no partly drawn
-   map in motion; then, on the 2060, its shadow passes' timeline at the stage
-   and on the route.
+4. **The shadows.** A world's shadows are drawn once, by its residency's upload, and
+   cached ([the decision](../decisions/rendering.md#a-worlds-shadows-are-drawn-once-and-cost-what-moved)).
+   Check, on the 4070 then the 2060: `world.residency`'s `shadows` line reads the
+   shadow work's GPU time under 2 ms a frame on every route chapter in steady
+   state; `world.rates` counts whole redraws (`shadow-<entry>.static`) only at
+   the light's turn tolerance, cell crossings and static changes, and rectangle
+   redraws (`.live`) only while something moves; a body walking under the far
+   entry casts a shadow that keeps up at the authored rate; a sliced redraw
+   shows no partly drawn layer in motion; secondary views draw no shadow pass.
 5. **Device and host memory.** After 1. Read live residency and view-target
    bytes, including device-local and host-visible device-local use and
    Vulkan's aperture heaps, live and retiring residency and graph bytes, and
@@ -851,7 +847,7 @@ The [engine job system](open-items.md#engine-job-system) owns frame scheduling
 and recording. The remaining GPU and routed-world investigations are:
 
 Every raster pass selects its draws on the GPU through `SdfMeshOcclusion`
-([contract](../../.claude/skills/rendering/SKILL.md#far-cascade-caster-selection)).
+([contract](../../.claude/skills/rendering/SKILL.md#the-worlds-shadows)).
 Shared geometry instancing is a separate extension the
 [visibility plan](visibility.md#the-build-order) owns (ordered compaction and
 instance buckets): the meadow draws many copies of few geometries, and sparse
@@ -1095,11 +1091,10 @@ Remaining observations specific to visibility are:
   frame time while retaining the highest quality. Qualify the Deck's Vulkan
   path on the device at 45 FPS.
 
-The far cascade's snap is never coarsened to save frame time: a coarser snap
-gives up shadow resolution and cannot repair a missed frame bar. Holding the
-cascade between changes is the answer taken instead: at an authored rate below
-every frame it keeps a static layer and redraws only the moving casters over
-it (`SdfFarShadows`). Its GPU check is step 4 of
+A shadow entry's snap is never coarsened to save frame time: a coarser snap
+gives up shadow resolution and cannot repair a missed frame bar. Caching each
+world's entries and redrawing only what moved is the answer taken instead
+(`SdfWorldShadows`). Its GPU check is step 4 of
 [the RTX 2060's frame](#the-rtx-2060s-frame).
 
 ## Deferred to the end
