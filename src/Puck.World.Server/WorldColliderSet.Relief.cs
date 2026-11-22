@@ -199,7 +199,7 @@ public sealed partial class WorldColliderSet {
         var wavelength = ((finest > 0f) ? (((float)transform.Scale) / finest) : float.PositiveInfinity);
         var step = Math.Max(val1: ReliefGradientFloor, val2: Math.Min(val1: ((float)FixedColliderField.DefaultGradientStep), val2: (wavelength / 16f)));
 
-        var evaluator = new SdfFieldEvaluator(program: ReliefProgram(document: document, margin: margin, relieved: relieved, transform: transform), reading: SdfFieldReading.Contact, regional: true);
+        var evaluator = new SdfFieldEvaluator(program: ReliefProgram(document: document, margin: margin, relieved: relieved, transform: transform), reading: SdfFieldReading.Contact, regional: true, recordsRegions: true);
 
         return new FixedColliderField(
             field: evaluator,

@@ -57,7 +57,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
 
     private WorldProjectionDocument? m_held;
     private JsonObject? m_tree;
-    private ContentPin? m_recipientIdentity;
+    private Puck.Abstractions.Sha256Digest? m_recipientIdentity;
     private ContentPin? m_recipientFrame;
 
     /// <summary>Compares a traveller's current projection with its last delivery, retaining its clock anchors and

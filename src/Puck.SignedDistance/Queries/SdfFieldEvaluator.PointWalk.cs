@@ -90,7 +90,7 @@ public sealed partial class SdfFieldEvaluator {
             }
         }
 
-        PointWork.Add(kind: PointPrepassBounds, amount: cullBounds.Length);
+        PointWork.Add(kind: (m_marksRegions ? PointMarkedPrepassBounds : PointPrepassBounds), amount: cullBounds.Length);
         reaches = scratch.AsSpan(start: 0, length: cullBounds.Length);
 
         return candidate;
@@ -116,7 +116,7 @@ public sealed partial class SdfFieldEvaluator {
         );
 
         PointWork.Count(kind: PointEvaluations);
-        PointWork.Add(amount: walked, kind: PointInstructions);
+        PointWork.Add(amount: walked, kind: (m_marksRegions ? PointMarkedInstructions : PointInstructions));
         powerWork.Publish();
 
         return (resultDistance, resultMaterial, ((int)walked));

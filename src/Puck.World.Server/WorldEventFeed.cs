@@ -131,7 +131,7 @@ public sealed class WorldEventFeed {
     // the same frame by id for PlacesAt), and that frame's bounds grown by its slack. A body is tested against a region
     // only inside those bounds or while it is an occupant, so a tick's region work follows the bodies near each region
     // and not the product of regions and moved bodies. The grown bounds must hold every point the shape's own Contains
-    // accepts: the slack, a sixty-fourth of the extent and a few thousandths of a unit, is far past the rounding by
+    // accepts: the slack, a sixty-fourth of the widest extent on every axis and a few thousandths of a unit, is far past the rounding by
     // which an oriented box's containment and its world extent can disagree. Restore replaces the occupancy records,
     // and drops m_regionDefinition so the rows are filled again.
     private RegionRow[] m_regionRows = [];
@@ -653,11 +653,9 @@ public sealed class WorldEventFeed {
                 row.Framed = true;
                 row.HasCenter = hasCenter;
                 row.Shape = shape;
-                row.Bounds = bounds.Grow(margin: new FixedVector3(
-                    X: FixedQ4816.FromRawBits(value: ((extent.X.Value >> RegionBoundsShift) + RegionBoundsSlackRaws)),
-                    Y: FixedQ4816.FromRawBits(value: ((extent.Y.Value >> RegionBoundsShift) + RegionBoundsSlackRaws)),
-                    Z: FixedQ4816.FromRawBits(value: ((extent.Z.Value >> RegionBoundsShift) + RegionBoundsSlackRaws))
-                ));
+                // Every axis grows by the widest extent's share: a long box's stored axes round across axes, so the
+                // slack a thin axis needs follows the long one.
+                row.Bounds = bounds.Grow(margin: FixedQ4816.FromRawBits(value: ((Math.Max(val1: extent.X.Value, val2: Math.Max(val1: extent.Y.Value, val2: extent.Z.Value)) >> RegionBoundsShift) + RegionBoundsSlackRaws)));
             }
 
             var bodyCount = (frameChanged ? population.Capacity : changedBodies.Length);

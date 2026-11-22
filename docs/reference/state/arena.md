@@ -396,13 +396,21 @@ evaluate inside a scope is covered in
 
 ## Row versions and generations
 
-The arena keeps two counters per row. Each answers a different question, and
+The arena keeps three counters per row. Each answers a different question, and
 they aren't interchangeable.
 
 | Counter | Moves when | Use it to |
 |---|---|---|
 | `RowVersion` | A committed change leaves the row's bytes different from what they held when the outermost scope opened, or an unscoped write changes a byte. | Prove a row's content unchanged between two evaluations. |
 | `RowGeneration` | Any mutation of the row, including a write of the same value and a rewind. | Invalidate a cached answer derived from the row's storage. |
+| `RowStructureVersion` | A move of `RowVersion` that changed anything but a held cell's value, clock, behaviour or observation stamp: the row's members, their order, a cursor, a drawn mask, a cell's audience. | Prove a row holds the same cells in the same order, whatever their values. |
+
+A **structure version** takes a value no row has held before each time it
+moves, so two rows never share one. It moves through the same door that marks
+a row whole in `ChangedKeys` and moves `DisclosureRevision`, so the three agree
+on which writes are structural. A reader that keeps a row's keys, or anything
+else that no cell value can change, compares it instead of `RowVersion` and is
+not disturbed by a value write.
 
 A **row version** is a change counter. Versions settle when the
 outermost scope commits: the arena walks the record from the end, compares each
@@ -495,6 +503,20 @@ What the hash leaves out:
 `ComputeColumnHash` folds one column alone, and `AddRowTo` folds everything the
 arena stores for one row into a running hash. A caller that keys a cache by a
 set of rows folds each row through `AddRowTo` rather than reading values back.
+
+### The bytes of one cell
+
+`WriteCell` appends the canonical bytes of one stored cell to a buffer: its
+key's name, whether it holds a value, the value, its behaviour override, its
+clock, its observation stamp, its own audience restriction and the trait it
+declares for itself. Two cells write the same bytes exactly when a reader of
+both is shown the same cell, whichever arena, key table or slot holds each.
+`TryNextCellSlot` walks a row's held cells as `TryNextCell` does and answers
+each one's slot, and `WriteBehavior` writes a trait. A caller that must
+identify what part of a row a reader is shown, such as a world's disclosure,
+walks the row and writes the cells that reader may read, then digests the
+buffer. It allocates nothing, where an export (`ToRow`) builds the row's
+records. The bytes are for comparing and hashing; nothing parses them back.
 
 ## Export, import, relayout, and checkpoints
 

@@ -235,6 +235,28 @@ public sealed class SdfFieldEvaluatorRegionLawTests {
         Assert.True(condition: ((boxWalked * 50) < program.Instructions.Count), userMessage: $"A box beside one shape of {program.Instructions.Count} instructions read {boxWalked}.");
 
         AssertSame(points: Lattice(high: new Vector3(x: 64f, y: 15f, z: 64f), low: new Vector3(x: 56f, y: 9f, z: 56f), steps: 8), program: program);
+
+        // An evaluator that records on its point walks reads the leaf's tape from the first walk on: the work of a
+        // point is the same on the first ask, on a later one and from an index that has read other points first, and
+        // the answer is the plain evaluator's.
+        var plain = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact);
+        var recording = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact, recordsRegions: true, regional: true);
+        var later = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact, recordsRegions: true, regional: true);
+
+        foreach (var point in Lattice(high: new Vector3(x: 80f, y: 20f, z: 80f), low: new Vector3(x: 40f, y: 5f, z: 40f), steps: 4)) {
+            _ = later.TryDistance(distance: out _, material: out _, position: point);
+        }
+
+        foreach (var point in Lattice(high: new Vector3(x: 64f, y: 15f, z: 64f), low: new Vector3(x: 56f, y: 9f, z: 56f), steps: 4)) {
+            Assert.True(condition: plain.TryDistance(distance: out var expected, material: out var expectedMaterial, position: point));
+            Assert.True(condition: recording.TryDistance(distance: out var first, instructionsWalked: out var firstWalked, material: out var firstMaterial, position: point));
+            Assert.True(condition: recording.TryDistance(distance: out _, instructionsWalked: out var againWalked, material: out _, position: point));
+            Assert.True(condition: later.TryDistance(distance: out var other, instructionsWalked: out var otherWalked, material: out _, position: point));
+            Assert.Equal(actual: (first, firstMaterial), expected: (expected, expectedMaterial));
+            Assert.Equal(actual: other, expected: expected);
+            Assert.Equal(actual: againWalked, expected: firstWalked);
+            Assert.Equal(actual: otherWalked, expected: firstWalked);
+        }
     }
     // A chain that joins by a blend the accumulator's size does not order (an exclusive or) before a join that stands
     // below the accumulator: what the stream read before the chain still reaches the answer through the first join, so
