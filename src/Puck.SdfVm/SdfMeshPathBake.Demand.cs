@@ -91,7 +91,12 @@ public sealed partial class SdfMeshPathBake {
     // for a free record) and the prepared frame that group was last measured at, the free records, and the layout of
     // frustum lanes the records stand at (SdfMeshDemand.Layout). Group.FrustumWatch names a group's record.
     private sealed class FrustumWatches {
+        // The records' values at the current layout, and the buffer the next layout's records are carried into, kept
+        // between layouts, since a layout moves whenever a frustum lane's point comes, goes or jumps. Either may be
+        // longer than the records need. A reused buffer's old values are never read: a record is read only at its own
+        // offset, only while owned, and Carry, a measure or Unseen writes the whole of it when it is taken.
         private float[] m_values = [];
+        private float[] m_spare = [];
         private Group?[] m_owners = [];
         private long[] m_stamps = [];
         private readonly Stack<int> m_free = new();
@@ -152,7 +157,11 @@ public sealed partial class SdfMeshPathBake {
 
             var length = demand.WatchLength;
             var carries = (demand.Layout == (Layout + 1));
-            var values = new float[(m_owners.Length * length)];
+            var needed = (m_owners.Length * length);
+
+            if (m_spare.Length < needed) { m_spare = new float[needed]; }
+
+            var values = m_spare;
 
             for (var record = 0; (record < Count); record++) {
                 if (m_owners[record] is not { } owner) { continue; }
@@ -160,7 +169,7 @@ public sealed partial class SdfMeshPathBake {
                 if (!carries) { lost.Add(item: owner); }
                 Release(group: owner);
             }
-            m_values = values;
+            (m_spare, m_values) = (m_values, values);
             Length = length;
             Layout = demand.Layout;
         }
@@ -170,7 +179,7 @@ public sealed partial class SdfMeshPathBake {
 
                 Array.Resize(array: ref m_owners, newSize: capacity);
                 Array.Resize(array: ref m_stamps, newSize: capacity);
-                Array.Resize(array: ref m_values, newSize: (capacity * Length));
+                if (m_values.Length < (capacity * Length)) { Array.Resize(array: ref m_values, newSize: (capacity * Length)); }
             }
 
             return Count++;

@@ -10,8 +10,8 @@ namespace Puck.Hosting.Jobs;
 /// still hold. Partition indices come from one counter per fork, so which thread runs a partition varies and which
 /// elements a partition holds does not.
 /// </summary>
-/// <remarks>The pool holds <see cref="JobWorkers.Count"/> less one threads, at normal priority; a forking thread is
-/// the remaining one. Idle workers block on an operating-system semaphore and a forking thread on its fork's event,
+/// <remarks>The pool holds <see cref="JobWorkers.Count"/> less one threads, at <see cref="WorkerPriority"/>; a forking
+/// thread is the remaining one. Idle workers block on an operating-system semaphore and a forking thread on its fork's event,
 /// so nothing spins. Each <see cref="JobClass"/> holds one fork across the workers at a time, so the frame thread's
 /// fork and a tick thread's fork run side by side; a worker takes its next partition from the highest class with
 /// partitions left. A fork requested while its class's fork is in flight, a fork of one partition, and every fork of
@@ -23,6 +23,11 @@ public sealed class JobPool : IDisposable {
     public static readonly WaitReason JoinWait = new("jobs", "fork partitions");
     private static readonly WaitReason IdleWait = new("jobs", "ready partitions");
     private static readonly JobClass[] Classes = Enum.GetValues<JobClass>();
+    /// <summary>The scheduling priority of the pool's workers: above the normal priority of the background work
+    /// (bakes, decodes, loads, the runtime's thread pool), so a partition the frame or a tick forks and then joins is
+    /// never queued behind that work on a loaded machine, and below the frame thread's. A worker with no partition
+    /// waits on the pool's semaphore, so the priority takes no time from other programs while the pool is idle.</summary>
+    public const ThreadPriority WorkerPriority = ThreadPriority.AboveNormal;
     // The open fork: the high 32 bits its generation, the low 32 bits the next unclaimed partition. Closed while a
     // fork is being set up, so a worker that read an earlier generation can never claim a partition of the next.
     private const uint Closed = uint.MaxValue;
@@ -61,6 +66,7 @@ public sealed class JobPool : IDisposable {
             m_threads[index] = new Thread(start: () => Work(workerIndex)) {
                 IsBackground = true,
                 Name = $"Puck job worker {index}",
+                Priority = WorkerPriority,
             };
             m_threads[index].Start();
         }

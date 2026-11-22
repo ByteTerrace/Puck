@@ -69,6 +69,10 @@ public sealed partial class SdfWorldTables {
     private SlotReader[] m_paintReaders = [];
     private SdfProgram? m_paintProgram;
     private readonly List<SlotReader> m_frameReaders = [];
+    // The same readers joined to one per slot (ReachBySlot), in slot order, which a moved slot is judged by: every reader
+    // of a slot rides it rigidly, so the box holding them all in its frame moves as they do.
+    private SlotReader[] m_paintReach = [];
+    private readonly List<SlotReader> m_frameReach = [];
     private byte[] m_slotReaderMarks = [];
     private readonly List<(int Slot, Vector3 Position, Quaternion Orientation)> m_movedReaderSlots = [];
     // Each view's pose overlay: the rows it reads from, how many, the view, and the first slot it replaces; whether the
@@ -216,11 +220,17 @@ public sealed partial class SdfWorldTables {
         // In slot order, as the paints are, so a moved slot finds its readers by search (NoteMovedReaders).
         m_frameReaders.Sort(comparison: static (left, right) => left.Slot.CompareTo(value: right.Slot));
         foreach (var reader in m_frameReaders) { Mark(slot: reader.Slot, mark: FrameMark, set: true); }
+        ReachBySlot(readers: CollectionsMarshal.AsSpan(list: m_frameReaders), reach: m_frameReach);
         if (!ReferenceEquals(objA: m_paintProgram, objB: m_liveProgram)) {
             foreach (var reader in m_paintReaders) { Mark(slot: reader.Slot, mark: PaintMark, set: false); }
             m_paintProgram = m_liveProgram;
             m_paintReaders = PaintReadersOf(program: m_liveProgram);
             foreach (var reader in m_paintReaders) { Mark(slot: reader.Slot, mark: PaintMark, set: true); }
+
+            var reach = new List<SlotReader>();
+
+            ReachBySlot(readers: m_paintReaders, reach: reach);
+            m_paintReach = [.. reach];
         }
         for (var view = 0; (view < frame.Views.Count); view++) {
             if (frame.Views[view].PoseOverlay is { SlotCount: > 0 } overlay) { m_overlayRows.Add(item: (overlay.OverlaySlot, overlay.SlotCount, view, overlay.FirstSlot)); }
@@ -256,6 +266,31 @@ public sealed partial class SdfWorldTables {
         Array.Sort(array: readers, comparison: static (left, right) => left.Slot.CompareTo(value: right.Slot));
 
         return readers;
+    }
+    // Joins readers held in slot order to one a slot: a slot's lone reader as it is, and several as the axis box in the
+    // slot's frame that holds each one's box there, reaching everywhere when any of them does. The joined box holds every
+    // box it joins under any pose of the slot, so judging a moved slot by it meets every scope a reader would have met.
+    private static void ReachBySlot(ReadOnlySpan<SlotReader> readers, List<SlotReader> reach) {
+        reach.Clear();
+        for (var start = 0; (start < readers.Length);) {
+            var slot = readers[start].Slot;
+            var end = (start + 1);
+
+            while ((end < readers.Length) && (readers[end].Slot == slot)) { end++; }
+            if ((end - start) == 1) {
+                reach.Add(item: readers[start]);
+            } else {
+                var held = readers[start].BoxAt(orientation: Quaternion.Identity, position: Vector3.Zero);
+
+                for (var index = (start + 1); ((held is not null) && (index < end)); index++) {
+                    held = ((readers[index].BoxAt(orientation: Quaternion.Identity, position: Vector3.Zero) is { } box) ? SdfMeshBox.Enclosing(first: held.Value, second: in box) : null);
+                }
+                reach.Add(item: (held is { } joined)
+                    ? new(Center: joined.Center, Half: joined.AxisHalf, Reader: readers[start].Reader, Slot: slot, Turn: Quaternion.Identity)
+                    : new(Center: Vector3.Zero, Half: new(value: float.PositiveInfinity), Reader: readers[start].Reader, Slot: slot, Turn: Quaternion.Identity));
+            }
+            start = end;
+        }
     }
     // Reads the pose a slot holds before the staging writes it, for a slot something besides a draw reads; the one
     // writer of a transform row asks before its write and keeps the answer when the write changes the row
@@ -534,18 +569,18 @@ public sealed partial class SdfWorldTables {
         }
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
-    // Judges each reader of a slot the staging wrote, by the box it reached under the pose the slot held before the write
-    // and the box it reaches now. A slot written for the first time held no pose, and its table is seeded whole, which
-    // moves every scope.
+    // Judges the readers of each slot the staging wrote, by the box their reach (ReachBySlot) held under the pose the slot
+    // held before the write and the box it holds now. A slot written for the first time held no pose, and its table is
+    // seeded whole, which moves every scope.
     private void NoteMovedReaders() {
         foreach (var (slot, position, orientation) in m_movedReaderSlots) {
             if ((m_motionOpen == 0) || (slot >= m_motionTransforms.Count)) { break; }
             var now = SdfMeshGeometryBuilder.PoseOf(transform: m_motionTransforms[slot]);
 
-            if ((m_slotReaderMarks[slot] & PaintMark) != 0) { JudgeAll(readers: m_paintReaders); }
-            if ((m_slotReaderMarks[slot] & FrameMark) != 0) { JudgeAll(readers: CollectionsMarshal.AsSpan(list: m_frameReaders)); }
+            if ((m_slotReaderMarks[slot] & PaintMark) != 0) { JudgeAll(readers: m_paintReach); }
+            if ((m_slotReaderMarks[slot] & FrameMark) != 0) { JudgeAll(readers: CollectionsMarshal.AsSpan(list: m_frameReach)); }
 
-            // The readers riding the slot, found by search in a list held in slot order.
+            // The slot's reach, found by search in a list held in slot order.
             void JudgeAll(ReadOnlySpan<SlotReader> readers) {
                 for (var index = PartitionPoint.Of(span: readers, state: slot, isBefore: static (at, reader) => (reader.Slot < at)); ((index < readers.Length) && (readers[index].Slot == slot)); index++) {
                     SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.MotionReaders);

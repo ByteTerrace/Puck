@@ -69,7 +69,8 @@ public static class SdfResidencyWork {
     public static readonly WorkKind TierStarts = new(name: "sdf.residency.tiers.started", unit: "groups", workClass: WorkClass.Pacing);
     /// <summary>Counts the rows a staging judged because the slot they ride moved.</summary>
     public static readonly WorkKind MotionRows = new(name: "sdf.residency.motion.rows", unit: "rows", workClass: WorkClass.Pacing);
-    /// <summary>Counts the slot readers (lights, media, paints) a staging judged because their slot moved.</summary>
+    /// <summary>Counts the slot readers (lights, media, paints) a staging judged because their slot moved, each slot's
+    /// readers of one kind judged once, as the box that holds them all.</summary>
     public static readonly WorkKind MotionReaders = new(name: "sdf.residency.motion.readers", unit: "readers", workClass: WorkClass.Pacing);
     /// <summary>Counts the placed meshes the unselected-bytes report walked.</summary>
     public static readonly WorkKind MarkMeshes = new(name: "sdf.residency.marks.meshes", unit: "meshes", workClass: WorkClass.Pacing);
