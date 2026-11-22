@@ -548,21 +548,22 @@ public sealed class WorldDocumentStateView : IWorldStateView {
     }
     private readonly List<StateRow> m_reloadedRows = [];
 
-    // Reloads into the kept arena the authored rows of after that are not the instances before holds at the same
-    // position, when the two sections differ in nothing else; false, leaving the arena as it was, when they do or
-    // the arena refuses the rows. A reloaded row's observation header is dropped, as a build drops every one: the
-    // authority owes it again with the row's next snapshot.
-    private bool TryReloadRows(WorldStateSection? before, WorldStateSection? after) {
+    // Reloads into the kept arena the rows of after (its pools' generated rows included) that are not the instances
+    // before holds at the same position, when after's catalog has before's shape and the two sections share every
+    // declaration list; false, leaving the arena as it was, when they do not or the arena refuses the rows. A reloaded
+    // row's observation header is dropped, as a build drops every one: the authority owes it again with the row's next
+    // snapshot.
+    private bool TryReloadRows(WorldDefinition before, WorldDefinition after) {
         if (
-            (before is null) || (after is null) || !before.SharesDeclarations(other: after) ||
-            !ReferenceEquals(objA: before.Pools, objB: after.Pools) ||
-            !ReferenceEquals(objA: before.PairPools, objB: after.PairPools)
+            (before.StateRaw is not { } heldSection) || (after.StateRaw is not { } nextSection) ||
+            !heldSection.SharesDeclarations(other: nextSection) ||
+            (!ReferenceEquals(objA: before.StateCatalog, objB: after.StateCatalog) && !before.StateCatalog.MatchesShape(section: nextSection))
         ) {
             return false;
         }
 
-        var held = (before.World ?? []);
-        var next = (after.World ?? []);
+        var held = before.State;
+        var next = after.State;
 
         if (held.Count != next.Count) { return false; }
 
@@ -597,13 +598,13 @@ public sealed class WorldDocumentStateView : IWorldStateView {
 
         // A definition carrying the same state section and catalog over (a response swap moves only placements) keeps the
         // arena and the values delivered into it: building one again from the section costs a whole state load.
-        // A section over the same catalog whose rows are the instances the arena last loaded except for some (a replica
+        // A section of the same shape whose rows are the instances the arena last loaded except for some (a replica
         // document disclosed again after its frame moved) reloads only those rows, as the authority's own store does
         // (WorldServer.SyncArenaValues).
         if (
             (m_shaped is not { } shaped) ||
-            !ReferenceEquals(objA: document.StateCatalog, objB: shaped.StateCatalog) ||
-            (!ReferenceEquals(objA: document.StateRaw, objB: shaped.StateRaw) && !TryReloadRows(before: shaped.StateRaw, after: document.StateRaw))
+            ((!ReferenceEquals(objA: document.StateRaw, objB: shaped.StateRaw) || !ReferenceEquals(objA: document.StateCatalog, objB: shaped.StateCatalog)) &&
+                !TryReloadRows(before: shaped, after: document))
         ) {
             WorldBootWork.Count(kind: WorldBootWork.ArenaBuilds);
             m_arena = new StateArena(catalog: document.StateCatalog, section: document.StateRaw, time: ArenaTime.Origin);
