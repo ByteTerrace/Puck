@@ -304,7 +304,7 @@ internal static class SdfDualContouring {
         var coarseVertices = scope.Buffer<int>(length: coarseCount);
         var crossed = grid.CrossedFineCells;
         // Per crossed fine cell, by its fine key, its corner-sign mask and its first vertex.
-        var fineCells = new Dictionary<long, (byte Mask, int Vertex)>(capacity: crossed.Length);
+        using var fineCells = new OwnedLongMap<(byte Mask, int Vertex)>(allocator: grid.Allocator, capacity: crossed.Length, observer: grid.Workspace);
         // Every crossed fine cell places at least one vertex, and few place more, so the lists start near their final size
         // rather than growing by doubling from empty, which rents and returns an array at each step.
         var vertexEstimate = (crossed.Length + (crossed.Length / 4) + 64);
@@ -315,7 +315,7 @@ internal static class SdfDualContouring {
         // Per merging block, its low corner in fine lattice coordinates and its fine cells along each axis: an unmeasured
         // refined coarse cell, numbered by its coarse index, then the stride cells of measured cells of a stride past one,
         // numbered after the coarse cells as they are first met.
-        var strideBlocks = new Dictionary<long, int>();
+        using var strideBlocks = new OwnedLongMap<int>(allocator: grid.Allocator, observer: grid.Workspace);
         var blocks = new List<(int X, int Y, int Z, int Size)>();
         using var features = new OwnedBuffer<bool>(allocator: grid.Allocator, capacity: vertexEstimate, observer: grid.Workspace);
         using var solveds = new OwnedBuffer<bool>(allocator: grid.Allocator, capacity: vertexEstimate, observer: grid.Workspace);

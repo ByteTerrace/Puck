@@ -395,7 +395,7 @@ public sealed class SdfMeshStore {
 
         stored = null;
 
-        var written = WriteEntry(path, new MeshPayload(key, mesh, materials, ref stored), static (output, entry) => entry.Stored = SdfMeshStoreCodec.Encode(output, entry.Key, entry.Mesh, entry.Materials), queued: false);
+        var written = WriteEntry(path, new MeshPayload(key, mesh, materials, ref stored, m_allocator), static (output, entry) => entry.Stored = SdfMeshStoreCodec.Encode(output, entry.Key, entry.Mesh, entry.Materials, entry.Allocator), queued: false);
 
         KeepIfWritten(written, identity, Extension, key);
 
@@ -518,12 +518,12 @@ public sealed class SdfMeshStore {
         if (mesh is { OwnsNativeStorage: true }) {
             var encoded = new MemoryStream();
 
-            if (Quietly(action: () => SdfMeshStoreCodec.EncodeExact(encoded, key, mesh))) {
+            if (Quietly(action: () => SdfMeshStoreCodec.EncodeExact(encoded, key, mesh, m_allocator))) {
                 _ = WriteLater(bytes: encoded.Length, behind: Behind.Inline, write: () => KeepIfWritten(WriteEntry(path, encoded, static (output, buffer) => buffer.WriteTo(stream: output), queued: true), identity, CheckpointExtension, key));
             }
             return;
         }
-        _ = WriteLater(bytes: (mesh?.StorageBytes ?? 0L), behind: Behind.Inline, write: () => KeepIfWritten(WriteEntry(path, (key, mesh), static (output, entry) => SdfMeshStoreCodec.EncodeExact(output, entry.key, entry.mesh), queued: true), identity, CheckpointExtension, key));
+        _ = WriteLater(bytes: (mesh?.StorageBytes ?? 0L), behind: Behind.Inline, write: () => KeepIfWritten(WriteEntry(path, (key, mesh, allocator: m_allocator), static (output, entry) => SdfMeshStoreCodec.EncodeExact(output, entry.key, entry.mesh, entry.allocator), queued: true), identity, CheckpointExtension, key));
     }
 
     internal bool TryReadSamples(UInt128 identity, UInt128 key, int length, OwnedBuffer<byte> samples) {
@@ -875,13 +875,15 @@ public sealed class SdfMeshStore {
     }
     // A mesh entry's inputs, and where the encode answers the position planes it stored.
     private readonly ref struct MeshPayload {
-        public MeshPayload(UInt128 key, SdfMesh? mesh, int[] materials, ref SdfMeshStoreCodec.Positions? stored) {
+        public MeshPayload(UInt128 key, SdfMesh? mesh, int[] materials, ref SdfMeshStoreCodec.Positions? stored, IAllocator? allocator) {
             Key = key;
             Mesh = mesh;
             Materials = materials;
             Stored = ref stored;
+            Allocator = allocator;
         }
 
+        public IAllocator? Allocator { get; }
         public UInt128 Key { get; }
         public SdfMesh? Mesh { get; }
         public int[] Materials { get; }

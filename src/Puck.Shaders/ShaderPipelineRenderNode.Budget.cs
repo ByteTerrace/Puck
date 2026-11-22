@@ -417,14 +417,14 @@ public sealed partial class ShaderPipelineRenderNode {
                     );
 
                     if (
-                        !images.All(predicate: image => ((image is not null) && ((image.Usage & usage) == usage) && (image.Width == width) && (image.Height == height))) ||
+                        !EveryImageFits(images: images, usage: usage, width: width, height: height) ||
                         (((usage & GpuImageUsage.DepthAttachment) != 0) && (DepthOf(plan: plan, storage: storage, format: ParseFormat(format: storage.Declaration.Format)) != DepthOf(plan: installed.Plan, storage: old.Storage, format: ParseFormat(format: old.Spec.Format))))
                     ) {
                         continue;
                     }
                 } else if (
                     (old.Buffers is not { } buffers) ||
-                    !buffers.All(predicate: buffer => ((buffer is not null) && (buffer.SizeBytes == storage.Declaration.ResolveSizeBytes(counts: counts)))) ||
+                    !EveryBufferFits(buffers: buffers, sizeBytes: storage.Declaration.ResolveSizeBytes(counts: counts)) ||
                     ((BufferUsageOf(plan: installed.Plan, storage: old.Storage) & BufferUsageOf(plan: plan, storage: storage)) != BufferUsageOf(plan: plan, storage: storage))
                 ) {
                     continue;
@@ -438,6 +438,20 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         return carried;
+    }
+    // Whether every carried image exists with every usage the candidate gives it, at the candidate's extent.
+    private static bool EveryImageFits(IReadOnlyList<IGpuImage?> images, GpuImageUsage usage, uint width, uint height) {
+        for (var index = 0; (index < images.Count); index++) {
+            if ((images[index] is not { } image) || ((image.Usage & usage) != usage) || (image.Width != width) || (image.Height != height)) { return false; }
+        }
+        return true;
+    }
+    // Whether every carried buffer exists at the candidate's resolved size.
+    private static bool EveryBufferFits(IReadOnlyList<IGpuBuffer?> buffers, ulong sizeBytes) {
+        for (var index = 0; (index < buffers.Count); index++) {
+            if ((buffers[index] is not { } buffer) || (buffer.SizeBytes != sizeBytes)) { return false; }
+        }
+        return true;
     }
     // Whether a plan's storage is one only its own graph reads, which a replacement may take over: not package-owned and
     // not published.

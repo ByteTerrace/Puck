@@ -17,7 +17,7 @@ public sealed partial class StateArena {
         while (TryNextCell(rowOrdinal: rowOrdinal, cursor: ref cursor, key: out var key)) {
             Visit(lanes: 1L);
             if (!StateVisibility.Encloses(policy: Visibility(rowOrdinal: rowOrdinal, key: key), audience: audience)) { return false; }
-            for (var index = 0; index < zones.Count; index++) {
+            for (var index = 0; index < zones.Length; index++) {
                 var ordinal = zones[index];
                 var zone = m_rows[ordinal];
                 Visit(lanes: 1L);
