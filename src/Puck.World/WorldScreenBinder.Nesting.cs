@@ -208,7 +208,10 @@ public sealed partial class WorldScreenBinder {
     /// world; <c>endpoint:&lt;authority&gt;</c>, shared with every seat and window presenting that world; or <c>own</c>), and what each of its world's screens shows: a session view one
     /// level deeper, a camera view of that world, a source instance (a machine's or a probe's of that world's own host,
     /// with the fault that leaves it dark in parentheses), a fallback colour's source past the depth, <c>text</c>, or
-    /// <c>none</c>; then <c>text-fault</c> and why, when the world's font catalog does not resolve.</summary>
+    /// <c>none</c>; then <c>text-fault</c> and why, when the world's font catalog does not resolve. A host that draws
+    /// nothing builds no scene for a world a seat is routed to on another authority, and lists it as
+    /// <c>routed$&lt;digest&gt; depth 0 world &lt;authority&gt; unread fonts &lt;n&gt; machines &lt;n&gt;</c>, the fonts and
+    /// machines its delivered document carries, with <c>text-fault</c> when it does not hold one of those fonts.</summary>
     /// <returns>The description.</returns>
     public string DescribeNesting() {
         EnsureFeeds();
@@ -220,7 +223,11 @@ public sealed partial class WorldScreenBinder {
             handler: $"depth {BootNestingDepth()}"
         );
 
-        AppendRoutedLevels(builder: builder);
+        if (Presenter is null) {
+            AppendUnreadLevels(builder: builder);
+        } else {
+            AppendRoutedLevels(builder: builder);
+        }
 
         foreach (var feed in m_feeds) {
             var via = (feed.Home
@@ -248,6 +255,24 @@ public sealed partial class WorldScreenBinder {
         return builder.ToString();
     }
 
+    // The worlds on other authorities that seats are routed to, on a host with no presenter to build their scenes.
+    private void AppendUnreadLevels(System.Text.StringBuilder builder) {
+        var endpoints = new List<WorldAuthorityEndpoint>();
+
+        m_instanceHost.AddRemoteSeatEndpoints(endpoints: endpoints);
+
+        foreach (var endpoint in endpoints) {
+            var definition = endpoint.Definition;
+
+            _ = builder.Append(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $" | {WorldViewNames.Routed(authority: endpoint.Identity)} depth 0 world {endpoint.Identity} unread fonts {(definition.Text?.Fonts?.Count ?? 0)} machines {definition.Machines.Count}"
+            );
+            if (WorldTextCatalog.Unheld(definition: definition) is { } fault) {
+                _ = builder.Append(value: $" text-fault {fault}");
+            }
+        }
+    }
     private void AppendScreens(System.Text.StringBuilder builder, WorldNestedScreens<SessionFeed> screens, string? textFault) {
         _ = builder.Append(value: ((screens.Rows.Count == 0)
             ? " screens none"

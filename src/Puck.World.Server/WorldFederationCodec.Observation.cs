@@ -61,7 +61,8 @@ public static partial class WorldFederationCodec {
         );
     }
 }
-/// <summary>Authorizes a prototype fetch by composing the same live view that authorizes its reference.</summary>
+/// <summary>Authorizes a fetch of content by pin by composing the same live view that authorizes its reference: a
+/// prototype body the projection references, or content a row of the projection names by pin, such as a font.</summary>
 public static class WorldProjectionPrototypeFetch {
     /// <summary>Returns an object's bytes only while this recipient's current projection contains its pin.</summary>
     /// <param name="server">The authority receiving the request.</param>
@@ -103,9 +104,16 @@ public static class WorldProjectionPrototypeFetch {
                 var store = (content ?? WorldProjectionContent.Shared);
                 var projection = server.DeliveryView(recipient, ceiling).Project(content: store)!;
 
-                if (!projection.Creations.Any(predicate: reference => (reference.Content == pin.ToString())) ||
-                    !store.TryGet(content: out var body, pin: pin)) { return null; }
-                return body;
+                if (projection.Creations.Any(predicate: reference => (reference.Content == pin.ToString()))) {
+                    return (store.TryGet(content: out var body, pin: pin) ? body : null);
+                }
+
+                // Content a row of the projection names by pin, a font for one, is read from where this authority
+                // holds it: the file its own document names, through the one reader, which hashes it.
+                return ((WorldContentIndex.Names(maximumBytes: out var maximumBytes, pin: pin, projection: projection) &&
+                    WorldProjectionContent.Resolver.TryRead(content: out var held, maximumBytes: maximumBytes, pin: pin))
+                    ? held.ToArray()
+                    : null);
             } catch (WorldDisclosureException) {
                 return null;
             }

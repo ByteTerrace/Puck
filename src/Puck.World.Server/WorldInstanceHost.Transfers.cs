@@ -554,7 +554,7 @@ public sealed partial class WorldInstanceHost {
             return;
         }
         var reservation = answer.IsCompletedSuccessfully ? answer.Result :
-            WorldTransferReservationReply.Refused("reservation transport failed") with { Transient = true };
+            WorldTransferReservationReply.Refused($"reservation transport failed: {(answer.Exception?.GetBaseException() is { } fault ? $"{fault.GetType().Name}: {fault.Message.ReplaceLineEndings(replacementText: " ")}" : "the request was cancelled")}") with { Transient = true };
 
         if (reservation.Accepted) {
             targetAuthority.Remote?.AdoptReservationCredentials(reservationRequest, reservation);

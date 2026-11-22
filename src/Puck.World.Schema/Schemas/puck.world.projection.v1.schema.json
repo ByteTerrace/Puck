@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "puck.world.projection.v1",
   "title": "Puck world projection (puck.world.projection.v1)",
-  "description": "puck.world.projection.v1 \u2014 what an authority hands a peer holding the Presentation tier. A separate versioned document rather than a WorldDefinition with sections nulled out: a partial definition either refuses at WorldDefinitionValidator or misreports what it carries. This type\u0027s member list is the disclosure decision: a section that must not leave an authority below the replica tier has no member here. Absent by construction: rules, grants, state, admission, generation, generators, groups, properties, addons, storage, host, authoring, identity, inputHold, targetRegisters, bodyMotionPrograms, portals, and every kit\u0027s producers/actions (see WorldProjectedKit). Adjacencies, Destinations, References, and Interactions cross because TryDeriveOverlap reads them from both sides of a seam and must derive the same depth on each; withholding one side\u0027s inputs desymmetrizes it silently. Metadata crosses in reduced form: WorldProjectedMetadata carries title/description only \u2014 a world\u0027s authored name and blurb are harmless to a presentation-tier peer. authors, tags, and custom never cross; custom in particular is an unbounded author scratch bag that may hold notes never meant to leave the authority.",
+  "description": "puck.world.projection.v1 \u2014 what an authority hands a peer holding the Presentation tier. A separate versioned document rather than a WorldDefinition with sections nulled out: a partial definition either refuses at WorldDefinitionValidator or misreports what it carries. This type\u0027s member list is the disclosure decision: a section that must not leave an authority below the replica tier has no member here. Absent by construction: rules, grants, state, admission, generation, generators, groups, properties, addons, storage, host, authoring, identity, inputHold, targetRegisters, bodyMotionPrograms, portals, every kit\u0027s producers/actions (see WorldProjectedKit), and every machine\u0027s memory, contentFolders and preferFolderDefault (see WorldProjectedMachine). Adjacencies, Destinations, References, and Interactions cross because TryDeriveOverlap reads them from both sides of a seam and must derive the same depth on each; withholding one side\u0027s inputs desymmetrizes it silently. Metadata crosses in reduced form: WorldProjectedMetadata carries title/description only \u2014 a world\u0027s authored name and blurb are harmless to a presentation-tier peer. authors, tags, and custom never cross; custom in particular is an unbounded author scratch bag that may hold notes never meant to leave the authority.",
   "type": [
     "object",
     "null"
@@ -53804,6 +53804,169 @@
         ],
         "additionalProperties": false,
         "title": "SdfShadeDefinition"
+      },
+      "default": null
+    },
+    "text": {
+      "description": "The world\u0027s font catalog: each font by name, content pin and generated subset, so a recipient draws the text its screens and creations carry. A font\u0027s source path is a label on a recipient; its bytes are read by the pin (Resolver).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "defaultFont": {
+          "type": "string"
+        },
+        "fonts": {
+          "type": "array",
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "hash": {
+                "type": "string"
+              },
+              "codePointRanges": {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "characters": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "pixelSize": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "default": null
+              },
+              "distanceRange": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "faceIndex": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "default": null
+              },
+              "padding": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "default": null
+              },
+              "columns": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "name",
+              "source",
+              "hash",
+              "codePointRanges"
+            ],
+            "additionalProperties": false,
+            "title": "TextFontDefinition"
+          }
+        }
+      },
+      "required": [
+        "defaultFont",
+        "fonts"
+      ],
+      "additionalProperties": false,
+      "default": null,
+      "title": "TextFontCatalogDefinition"
+    },
+    "machines": {
+      "description": "The world\u0027s machines, projected (see WorldProjectedMachine), so a recipient knows what each machine screen shows.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One machine as a visitor\u0027s client sees it: what the device is and what it is cabled to, which is what a screen showing it and a client running it from its inputs both read. The projection document\u0027s own row type, not a WorldMachine with holes: it carries no member for the machine\u0027s memory bindings, which tie its hardware to state rows a projection does not carry, nor for its contentFolders and preferFolderDefault, which name places on the authority\u0027s disk and are read only by the authority that mounts from them. The content a machine runs is named by pin where the machine\u0027s state is delivered, never by a folder.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The instance identity a screen\u0027s machine source names.",
+            "type": "string"
+          },
+          "engine": {
+            "description": "The registered provider identifier.",
+            "type": "string"
+          },
+          "configuration": {
+            "description": "The provider\u0027s versioned configuration. A path inside it is a label on a recipient: nothing a delivery names is opened.",
+            "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+          },
+          "running": {
+            "description": "Whether the authority advances the instance.",
+            "type": "boolean",
+            "default": true
+          },
+          "cable": {
+            "description": "The standing cable endpoint, when the machine authors one: linked machines step as one unit, so a recipient reads which machines a unit holds.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "description": "The cable\u0027s stable kebab-case name, shared by every plugged port.",
+                "type": "string"
+              },
+              "position": {
+                "description": "This machine\u0027s 0-based place in cable order \u2014 contiguous across the cable\u0027s ports (validated), and what decides the linking engine\u0027s deterministic player order.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "name",
+              "position"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldMachineCable"
+          }
+        },
+        "required": [
+          "name",
+          "engine",
+          "configuration"
+        ],
+        "additionalProperties": false,
+        "title": "WorldProjectedMachine"
       },
       "default": null
     },

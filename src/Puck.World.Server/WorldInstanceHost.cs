@@ -128,7 +128,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private readonly System.Collections.Concurrent.ConcurrentDictionary<WorldRemoteAuthority, byte> m_remoteCustodyPeers = new();
     private readonly Dictionary<(string Source, string Destination, string Endpoint), WorldRemoteAuthority> m_recoveredRemoteAuthorities = new();
     private readonly Dictionary<string, WorldAuthorityEndpoint> m_authorityEndpoints = new(comparer: StringComparer.Ordinal);
-    private readonly HashSet<WorldAuthorityEndpoint> m_submittedEndpoints = [];
+    // The tick's scratch list of the remote authorities seats are routed to; a process seats a handful.
+    private readonly List<WorldAuthorityEndpoint> m_remoteSeatEndpoints = [];
     // Socket ingress reads onward routes while the tick thread publishes a just-committed handoff. The table itself
     // must therefore be concurrent even though every mutation still comes from the host's ordinary commit path.
     private readonly ConcurrentDictionary<(WorldServer Server, WorldEntityAddress Incarnation), ForwardedBody> m_forwardedBodies = [];
@@ -628,6 +629,19 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <see cref="LeaveRosterSeat"/> already applies to a stale route.</returns>
     public WorldDefinition ResolveRoutedDefinition(int slot) =>
         (m_seats.RoutedEndpoint(slot: slot)?.Definition ?? Boot!.Server.Definition);
+    /// <summary>Lists each authority another process runs that a local seat is routed to, once each, in seat
+    /// order: the worlds this process presents from a delivery and does not simulate.</summary>
+    /// <param name="endpoints">The list the endpoints are added to.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="endpoints"/> is <see langword="null"/>.</exception>
+    public void AddRemoteSeatEndpoints(List<WorldAuthorityEndpoint> endpoints) {
+        ArgumentNullException.ThrowIfNull(argument: endpoints);
+
+        for (var slot = 0; (slot < m_seats.SeatCount); slot++) {
+            if ((m_seats.RoutedEndpoint(slot: slot) is { ClockOwnedHere: false } endpoint) && !endpoints.Contains(item: endpoint)) {
+                endpoints.Add(item: endpoint);
+            }
+        }
+    }
     /// <summary>Scans the boot instance's document for portal faces (a <see cref="WorldPlacementFace"/> carrying a
     /// <see cref="WorldPlacementPortal"/> facet) against its own active local seats, and enqueues a transfer for each
     /// edge — a seat whose body was outside the face's enterable volume last scan and is inside it now (see
@@ -879,26 +893,18 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return;
         }
 
-        var submitted = m_submittedEndpoints;
+        var remote = m_remoteSeatEndpoints;
 
-        submitted.Clear();
+        remote.Clear();
+        AddRemoteSeatEndpoints(endpoints: remote);
 
-        for (var slot = 0; (slot < m_seats.SeatCount); slot++) {
-            if (m_seats.RoutedEndpoint(slot: slot) is not { } endpoint) {
-                continue;
-            }
-
-            if (
-                !endpoint.ClockOwnedHere &&
-                submitted.Add(item: endpoint)
-            ) {
-                m_seats.SubmitAuthorityIntents(
-                    endpoint: endpoint,
-                    tick: endpoint.NextInputTick
-                );
-            }
+        foreach (var endpoint in remote) {
+            m_seats.SubmitAuthorityIntents(
+                endpoint: endpoint,
+                tick: endpoint.NextInputTick
+            );
         }
-        submitted.Clear();
+        remote.Clear();
     }
     /// <summary>Looks up the endpoint a running local instance is observed and driven through: the one every seat routed to
     /// it and every view presented in it shares, whose mirror follows the instance's whole replica.</summary>
