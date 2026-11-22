@@ -119,12 +119,24 @@ Code the post makes worth revisiting is filed in the
   `ConfigureSynchronized` lock rather than configuring a second time.
 - **World publication uses ReadyToRun.** `Puck.World` restores the `win-x64` and
   `linux-x64` graphs and precompiles published assemblies; ordinary builds still
-  produce IL. Compare the exact published artifact with `puck bench startup
+  produce IL. The tools' World build store publishes the checkout's portable
+  build as one image per assembly (`WorldArtifactBuild.Command`), so the
+  Worlds tools boot run Puck's code precompiled. Compare the exact published artifact with `puck bench startup
   --world-artifact <path>` and account for its larger assemblies. The World
   README owns the publish recipe; CI retains its compile-once contract.
   `puck world player` publishes a self-contained composite image, which puts
   the framework and Puck in one version bubble and so precompiles most of the
   framework-generic instantiations the paragraph above leaves to the JIT.
+- **`host.memory`'s `jit methods` counts tier-up too.** `JitInfo` counts every
+  compile on every thread, so the figure keeps growing while a World runs:
+  the tiering thread recompiles each hot precompiled method, twice under
+  dynamic PGO (instrumented Tier1, then Tier1). Read boot JIT just after
+  `world.status`, and split a figure by tier before calling precompiled code
+  unused: run with `DOTNET_JitStdOutFile=<file>` and `DOTNET_JitDisasmSummary=1`
+  and count the bracketed tier of each `JIT compiled` line. Tier0 and FullOpts
+  lines in a precompiled build are code the image lacks (generics over another
+  bubble's types, `UnsafeAccessor` externs, IL stubs); the Tier1 family is
+  tier-up. `DOTNET_ReadyToRun=0` shows what the images save.
 - **A runtime or SDK change moves the baseline.** Startup, gen0 pauses,
   delegate and comparer allocations and several waits shift with the runtime
   alone. Rebuild the base commit on the new SDK before comparing, and read
@@ -271,8 +283,9 @@ calls in a fresh process can run several times slower than its steady state.
 - A compute kernel a request or count enters directly takes
   `[MethodImpl(MethodImplOptions.AggressiveOptimization)]`; the cheap dispatcher
   above several kernels stays tiered, so first use compiles only the path taken.
-- A published World is ReadyToRun-compiled, which moves first-use JIT work out
-  of startup; an ordinary build still produces IL that tiers. A rendering World
+- A published World and the tools' store build are ReadyToRun-compiled, which
+  moves first-use JIT work out of startup; an ordinary build still produces IL
+  that tiers. A rendering World
   of either build prepares the engine's non-generic methods on a lowest-priority
   background thread after boot (`WorldCodeWarmer`, `[world.warm]` on stderr),
   so methods prepared before their first use avoid first-call JIT compilation on

@@ -1566,11 +1566,19 @@ unchanged. Worktrees whose World sources are identical share a build. Outside a 
 checkout, no key can be computed, so the run builds under a name that no later
 run can reuse.
 
-On a miss, the run builds with `--output` into a sibling directory of the
-store and renames it into place once the build succeeds. Compilation stays
-incremental through the checkout's `obj` directories. A run that finds another
-run building the same key waits for that build and uses it. The progress line
-(`<verb>: building Puck.World once (Release) for source state <key>.` or
+On a miss, the run publishes the World into a sibling directory of the store
+and renames it into place once the publish succeeds. The closure builds into
+the checkout's own `bin` and `obj` directories, exactly as `dotnet build
+src/Puck.World -c Release` does, so sources an earlier run or a developer
+already compiled compile nothing; only the published files go into the store,
+and the Worlds run from there. The publish is ReadyToRun-precompiled for the
+machine's runtime, one image per assembly (each made again only when its
+assembly changed), so a boot runs precompiled code rather than compiling every
+method it calls. A World started from the checkout's `bin` (`dotnet run`) holds
+those assemblies open, so a store build of the same checkout fails while it
+runs. A run that finds another run building the same key waits for that build
+and uses it. The progress line
+(`<verb>: building and publishing Puck.World once (Release, ReadyToRun) for source state <key>.` or
 `<verb>: reusing the Puck.World build of source state <key>.`) goes to standard
 error, so standard output carries only results. Each build is several hundred
 megabytes. The store keeps the four most recently used builds, plus any build a

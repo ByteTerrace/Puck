@@ -159,7 +159,7 @@ public sealed class WorldArtifactBuildLawTests {
 
         var (roots, _) = WorldArtifactClosure.Walk(repositoryRoot: checkout.Root);
         Assert.True(condition: WorldArtifactKey.TryCompute(
-            buildArguments: CliProjectBuild.Arguments(project: WorldArtifactClosure.WorldProject),
+            buildArguments: WorldArtifactBuild.Command(spirv: false),
             key: out var key, reason: out var reason, repositoryRoot: checkout.Root, roots: roots), userMessage: reason);
         using var claim = store.AcquireBuild(key: key, clock: Stopwatch.StartNew(), budget: TestLiveness.Bound,
             waited: out _, cancellationToken: TestContext.Current.CancellationToken);
