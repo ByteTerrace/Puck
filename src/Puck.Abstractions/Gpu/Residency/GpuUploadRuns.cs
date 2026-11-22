@@ -85,9 +85,10 @@ public sealed class GpuUploadRuns {
             }
         }
 
-        var first = 0;
-
-        while ((first < m_count) && (m_ends[first] < start)) { first++; }
+        // The runs are sorted and disjoint, so their ends strictly ascend: the first run the range may touch is the first
+        // whose end reaches its start, found by a binary search rather than a walk from the head.
+        var found = ((ReadOnlySpan<int>)m_ends.AsSpan(start: 0, length: m_count)).BinarySearch(comparable: start);
+        var first = ((found >= 0) ? found : ~found);
         var after = first;
 
         while ((after < m_count) && (m_starts[after] <= end)) {

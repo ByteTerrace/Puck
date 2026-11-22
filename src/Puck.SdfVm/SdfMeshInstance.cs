@@ -25,6 +25,9 @@ public sealed class SdfMeshInstance(int AssetSlot, object Identity, DynamicTrans
     private object m_identity = Identity;
     private DynamicTransform m_transform = Transform;
     private float m_scale = Scale;
+    // The root matrix at m_transform and m_scale, composed whenever either is written, so its readers (the dresser's
+    // draws, the bake's demand reading of a shared geometry's copies) never compose two products and a rotation again.
+    private Matrix4x4 m_matrix = Compose(transform: Transform, scale: Scale);
     private bool m_isDynamic = IsDynamic;
     private object? m_motionIdentity;
     private SdfMeshTemplateRange? m_templateRange;
@@ -43,9 +46,21 @@ public sealed class SdfMeshInstance(int AssetSlot, object Identity, DynamicTrans
     /// <summary>Gets the host's picking identity for this copy.</summary>
     public object Identity { get => m_identity; init => m_identity = value; }
     /// <summary>Gets the copy's root pose.</summary>
-    public DynamicTransform Transform { get => m_transform; init => m_transform = value; }
+    public DynamicTransform Transform {
+        get => m_transform;
+        init {
+            m_transform = value;
+            m_matrix = Compose(transform: value, scale: m_scale);
+        }
+    }
     /// <summary>Gets the uniform size of the copy.</summary>
-    public float Scale { get => m_scale; init => m_scale = value; }
+    public float Scale {
+        get => m_scale;
+        init {
+            m_scale = value;
+            m_matrix = Compose(transform: m_transform, scale: value);
+        }
+    }
     /// <summary>Gets whether the surface can move or deform; fixed copies may enter static irradiance geometry.</summary>
     public bool IsDynamic { get => m_isDynamic; init => m_isDynamic = value; }
     /// <summary>Gets the host's motion-history identity, stable through continuous motion and changed on a pose cut.
@@ -69,7 +84,10 @@ public sealed class SdfMeshInstance(int AssetSlot, object Identity, DynamicTrans
     /// <summary>Gets the frame's root slot, assigned after the program's articulated slots.</summary>
     public int FrameSlot { get; internal set; }
     /// <summary>Gets the copy's root matrix at its current <see cref="Transform"/>.</summary>
-    public Matrix4x4 Matrix => ((Matrix4x4.CreateScale(scale: Scale) * Matrix4x4.CreateFromQuaternion(quaternion: Transform.Orientation)) * Matrix4x4.CreateTranslation(position: Transform.Position));
+    public Matrix4x4 Matrix => m_matrix;
+
+    // The root matrix of a pose at a uniform size: scaled, turned, then moved.
+    private static Matrix4x4 Compose(DynamicTransform transform, float scale) => ((Matrix4x4.CreateScale(scale: scale) * Matrix4x4.CreateFromQuaternion(quaternion: transform.Orientation)) * Matrix4x4.CreateTranslation(position: transform.Position));
 
     /// <summary>Rewrites the copy in place, moving <see cref="Revision"/> when any value differs from the one it holds;
     /// the frame-assigned <see cref="FrameSlot"/> is not the producer's and stays. The producer calls it on the frame
@@ -94,6 +112,7 @@ public sealed class SdfMeshInstance(int AssetSlot, object Identity, DynamicTrans
         if (Holds(assetSlot, identity, motionIdentity, scale, isDynamic, clip, mesh, material, otherAssetSlots, usesRootMaterialFrame, templateRange)) {
             if (!moved) { return false; }
             m_transform = transform;
+            m_matrix = Compose(transform: transform, scale: scale);
             if (!isDynamic) { Revision++; }
             return true;
         }
@@ -109,6 +128,7 @@ public sealed class SdfMeshInstance(int AssetSlot, object Identity, DynamicTrans
         m_otherAssetSlots = otherAssetSlots;
         m_usesRootMaterialFrame = usesRootMaterialFrame;
         m_templateRange = templateRange;
+        m_matrix = Compose(transform: transform, scale: scale);
         Revision++;
         return true;
     }

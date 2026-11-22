@@ -70,6 +70,9 @@ public sealed class SdfMeshHistory {
     public static WorkKind DressPoseCandidates { get; } = Registry.Declare(name: "sdf.instances.dress.pose-candidates", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts retained bindings actually visited to update their draw pose.</summary>
     public static WorkKind DressBindingsVisited { get; } = Registry.Declare(name: "sdf.instances.dress.bindings-visited", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts moved slots a dress left unwalked because they moved at the units their bindings were posed at,
+    /// so none of the rows riding them could change.</summary>
+    public static WorkKind DressSlotsSpared { get; } = Registry.Declare(name: "sdf.instances.dress.slots-spared", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts object-to-world matrix constructions while dressing, before reuse by surfaces or chunks.</summary>
     public static WorkKind DressMatricesComputed { get; } = Registry.Declare(name: "sdf.instances.dress.matrices-computed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts bake groups a dress walked to reconcile their drawn meshes and copies; a dress whose bake

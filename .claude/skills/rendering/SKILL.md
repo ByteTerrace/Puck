@@ -1676,8 +1676,11 @@ counts in `sdf.transforms`, never in `records.posed`.
   `FrameAccess` exposes (a group's shown mesh, its tier, the list) moves it through one of them. Rigid copies come
   through the composition source's copy journal (`SdfFrame.MeshCopyChanges`, a `GpuChangedRows` read by a
   `GpuRowCursor`), which the dresser and the bake's layout check each read. `sdf.instances.dress.groups-visited`,
-  `.groups-stood` and `.copies-visited` count it. A moved slot poses only the groups that ride it, and only where its
-  scale moved (`DrawBinding.Repose`); a rigid copy's root slot is past every group's, so the walk stops before it.
+  `.groups-stood` and `.copies-visited` count it. A slot's rows read its units alone (`DrawBinding.Repose`), so a slot
+  that moved at the units its bindings were posed at walks none of them (`SdfMeshDresser.m_slotUnits`,
+  `sdf.instances.dress.slots-spared`), and binding a row to a slot forgets that record (`ForgetSlotUnits`); a row that
+  came to read anything else of its slot would stand stale, so it goes through `Repose` and that record. A rigid copy's
+  root slot is past every group's, so the walk stops before it.
   The host draws arrive with a journal too: `SdfMeshDrawComposer` composes each producer's draws (a scene's statics
   and stamp pool, `WorldSceneMeshDraws`; the composition's emitters) and copies and owes only the rows a producer's
   journal names, which the dresser's host cursor reads.

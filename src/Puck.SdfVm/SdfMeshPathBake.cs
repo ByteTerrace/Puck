@@ -569,6 +569,8 @@ public sealed partial class SdfMeshPathBake {
     private IReadOnlyList<SdfMeshInstance> m_demandCopies = [];
     private CopyLayout[] m_copyLayout = [];
     private int[] m_copyAssetSlots = [];
+    // The same slots as a set, which CopiesOf asks of every dynamic group.
+    private readonly HashSet<int> m_copyAssetSlotSet = [];
     // The copy journal's endpoint the layout was last compared at, the runs it named, and whether they are every copy
     // because the journal could not prove the window.
     private readonly GpuRowCursor m_copyCursor = new();
@@ -800,6 +802,8 @@ public sealed partial class SdfMeshPathBake {
         m_instanceCopies.Clear();
         m_fixedAssetSlots.Clear();
         m_copyAssetSlots = frame.MeshAssetSlots.ToArray();
+        m_copyAssetSlotSet.Clear();
+        m_copyAssetSlotSet.UnionWith(other: m_copyAssetSlots);
         m_copyLayout = new CopyLayout[frame.MeshInstances.Count];
         for (var index = 0; (index < m_copyLayout.Length); index++) {
             var copy = frame.MeshInstances[index];
@@ -829,7 +833,7 @@ public sealed partial class SdfMeshPathBake {
     }
     private IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) {
         if (!group.Dynamic) { return m_instanceCopies.GetValueOrDefault(key: group.FirstInstance); }
-        if (!m_copyAssetSlots.Contains(value: group.Slot)) { return null; }
+        if (!m_copyAssetSlotSet.Contains(item: group.Slot)) { return null; }
         return (m_slotCopies.TryGetValue(key: group.Slot, value: out var copies) ? copies : Array.Empty<int>());
     }
 
@@ -3006,6 +3010,27 @@ public sealed partial class SdfMeshPathBake {
         // the mesh a listed group draws moves that bake's product revision here, the one door, so the dresser can trust
         // the revision: a group no list holds yet draws nothing.
         public SdfMeshPathBake? Owner { get; set; }
+
+        // The mesh whose region bytes PlacedBytes last read, and those bytes: Retier and FinerBytes read a drawn group's
+        // bytes on every decision and every recount, and a mesh's bytes never change, so each mesh is read once.
+        private SdfMesh? m_bytesOf;
+        private long m_placedBytes;
+
+        // The bytes the group's product takes of the mesh region (SdfMeshRegion.PlacedBytesOf), zero with none. On the
+        // frame's thread, under the gate.
+        public long PlacedBytes {
+            get {
+                if (m_mesh is not { } mesh) {
+                    m_bytesOf = null;
+                    return 0L;
+                }
+                if (!ReferenceEquals(objA: mesh, objB: m_bytesOf)) {
+                    m_placedBytes = SdfMeshRegion.PlacedBytesOf(mesh: mesh);
+                    m_bytesOf = mesh;
+                }
+                return m_placedBytes;
+            }
+        }
         // The group's product, and the mesh the frame draws for it (Shown). Invariant: a draw names a mesh that
         // replaces a drawn one only once its words stand in the mesh region. This setter is the one door a product
         // arrives by: where a residency's tables land the bake's meshes (LandsAhead), a product that replaces a drawn
