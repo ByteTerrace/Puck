@@ -342,34 +342,6 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
             Within(axis: cascade.Forward, low: cascade.Near, high: cascade.Far, toward: toward)
         );
     }
-    /// <summary>Returns whether the box, as a caster in a cascade, may shadow a receiver the view shows: the box swept
-    /// along the light through the cascade's depth meets the view's frustum, as far as the cascade's sphere reaches and
-    /// grown by <paramref name="reach"/>, the farthest a receiver's shadow filter reads beside it. A caster whose
-    /// shadow falls only where the view shows nothing changes no shaded pixel.</summary>
-    /// <param name="cascade">The cascade's light camera.</param>
-    /// <param name="camera">The view's camera.</param>
-    /// <param name="far">The frame's far distance, in world units.</param>
-    /// <param name="margin">The fraction the view's frustum sides are widened by (<see cref="MarginOf"/>).</param>
-    /// <param name="reach">The receivers' reach, in world units.</param>
-    /// <returns><see langword="false"/> when no receiver the view shows can read the box in the cascade.</returns>
-    public bool MayShadow(in SdfMeshShadowCamera cascade, in CameraSnapshot camera, float far, float margin, float reach) {
-        // The cascade encloses the bounding sphere of its slice of the view, whose center lies its half extent short of
-        // the far plane (SdfMeshShadowCascades), so no receiver reading it lies past the sphere's far side.
-        var sphere = (cascade.Position + (cascade.Forward * (cascade.Far - cascade.HalfHeight)));
-        var deepest = (Vector3.Dot(vector1: (sphere - camera.Position), vector2: camera.Forward) + cascade.HalfHeight);
-
-        return camera.MaySee(
-            center: Center,
-            far: (MathF.Min(x: far, y: deepest) + reach),
-            halfX: HalfX,
-            halfY: HalfY,
-            halfZ: HalfZ,
-            margin: margin,
-            reach: reach,
-            sweep: (cascade.Forward * (cascade.Far - cascade.Near))
-        );
-    }
-
     // Whether the box's extent along a unit axis meets [low, high].
     private bool Within(Vector3 axis, float low, float high, Vector3 toward) {
         var middle = Vector3.Dot(vector1: toward, vector2: axis);

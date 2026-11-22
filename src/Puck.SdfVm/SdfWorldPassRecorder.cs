@@ -7,13 +7,13 @@ namespace Puck.SdfVm;
 
 // One pass of an sdf.world instance (SdfWorldPasses): a part of the package's fragment, recorded into the instance's
 // command buffer for the pass. Every part writes its pass block (SdfFrameBlock): the view's camera, the frame's levers,
-// light count and curvature shading, the shadow cascades, the irradiance volume and the world values. Every compute part
-// binds the residency's World set of the ring slot the frame's upload wrote, which holds its tables (the lights and the
-// sky among them), and the world interface's pass group: the fragment storages its ports bind and, at every member its
-// ports do not, a dummy of the residency's; the node's work counters for the frame slot, whose row it writes into its
-// pass block; and the screens, whose host images are rewritten every frame. The mesh part draws the frame's mesh draws into
-// its target through the mesh pipeline and each shadow cascade into its depth alone through the shadow pipeline, each
-// with a set of its own per frame slot binding its pass block. A recorder records no barrier on the graph's resources:
+// light count and curvature shading, the world's shared shadow cascades, the irradiance volume and the world values. Every
+// compute part binds the residency's World set of the ring slot the frame's upload wrote, which holds its tables (the
+// lights and the sky among them), and the world interface's pass group: the fragment storages its ports bind, the world's
+// shadow layers (SdfWorldShadows, drawn by the residency's upload, never by a view) and, at every member nothing binds, a
+// dummy of the residency's; the node's work counters for the frame slot, whose row it writes into its pass block; and the
+// screens, whose host images are rewritten every frame. The mesh part draws the frame's mesh draws into its target through
+// the mesh pipeline, with a set of its own per frame slot binding its pass block. A recorder records no barrier on the graph's resources:
 // the planner's are the instance's, and the node's orders the work counters. The one exception is the mesh part's
 // occlusion (SdfMeshOcclusion), which orders its own buffers and moves the mesh target between its two phases, leaving it
 // in its attachment layout as the planner expects.
@@ -28,12 +28,10 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part switch {
         SdfWorldPackage.Parts.Views => m_view.Residency.SkyDetails.Labels,
         SdfWorldPackage.Parts.ViewsProbes => RateDetails,
-        SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowFar or SdfWorldPackage.Parts.ShadowSecond or SdfWorldPackage.Parts.ShadowDistant => CasterDetails,
         SdfWorldPackage.Parts.ViewsBins => BinDetails,
         _ => [],
     };
 
-    private static readonly string[] CasterDetails = ["receiver-rejected", "entry-rejected", "optical-tiles-cleared", "entry-back-face-culled"];
     private static readonly string[] RateDetails = ["tiles-1x1", "tiles-2x1", "tiles-1x2", "tiles-2x2"];
     private static readonly string[] BinDetails = ["no-program", "program"];
     // The world interface's scratch buffer members, each bound to the dummy unless a port binds it.
@@ -55,16 +53,23 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.ShadeArgumentsWritten,
         SdfWorldPackage.HistorySurface,
     ];
-    // Each cascade layer's storage and the binding the surface pass samples it at.
-    private static readonly (string Version, uint Binding)[] CascadeBindings = [
-        (SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowNear)),
-        (SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowFar)),
-        (SdfWorldPackage.Parts.ShadowSecondDepth, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowSecond)),
-        (SdfWorldPackage.Parts.ShadowNearExit, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowNearExit)),
-        (SdfWorldPackage.Parts.ShadowFarExit, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowFarExit)),
-        (SdfWorldPackage.Parts.ShadowSecondExit, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowSecondExit)),
-        (SdfWorldPackage.Parts.ShadowDistantDepth, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowDistant)),
-        (SdfWorldPackage.Parts.ShadowDistantExit, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowDistantExit)),
+    // Each layer of the world's shared shadows (SdfWorldShadows) a compute pass samples: its entry, whether it is the exit
+    // layer, and the binding.
+    private static readonly (int Entry, bool Exit, uint Binding)[] CascadeBindings = [
+        (SdfMeshShadowCascades.NearEntry, false, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowNear)),
+        (SdfMeshShadowCascades.FarEntry, false, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowFar)),
+        (SdfMeshShadowCascades.SecondEntry, false, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowSecond)),
+        (SdfMeshShadowCascades.NearEntry, true, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowNearExit)),
+        (SdfMeshShadowCascades.FarEntry, true, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowFarExit)),
+        (SdfMeshShadowCascades.SecondEntry, true, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowSecondExit)),
+        (SdfMeshShadowCascades.DistantEntry, false, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowDistant)),
+        (SdfMeshShadowCascades.DistantEntry, true, SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshShadowDistantExit)),
+    ];
+    // Each entry's glass extinction and the member a compute pass reads it through.
+    private static readonly (int Entry, string Member)[] OpticalBindings = [
+        (SdfMeshShadowCascades.NearEntry, SdfWorldPackage.MeshShadowNearOptical),
+        (SdfMeshShadowCascades.FarEntry, SdfWorldPackage.MeshShadowFarOptical),
+        (SdfMeshShadowCascades.SecondEntry, SdfWorldPackage.MeshShadowSecondOptical),
     ];
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
@@ -84,14 +89,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     // plan does not bin.
     private readonly bool m_binned;
 
-    private bool HasShadowOptical => (IsShadowCascade && m_outputs.Any(predicate: static output => output is SdfWorldPackage.Parts.ShadowNearOptical or SdfWorldPackage.Parts.ShadowFarOptical or SdfWorldPackage.Parts.ShadowSecondOptical));
-    // Whether the distant pass keeps a back map, which a redraw spread over several frames draws its shares into
-    // (SdfWorldPackage.WithShadows): its third and fourth outputs.
-    private bool HasDistantBack => ((m_part == SdfWorldPackage.Parts.ShadowDistant) && m_outputs.Contains(value: SdfWorldPackage.Parts.ShadowDistantBackDepth));
-    // Whether the far pass keeps a static layer (SdfWorldPackage.WithShadows' farStatic).
-    private bool HasFarStatic => ((m_part == SdfWorldPackage.Parts.ShadowFar) && m_outputs.Contains(value: SdfWorldPackage.Parts.ShadowFarStaticDepth));
-
-
     // Which screen indices the residency binds.
     private readonly bool[] m_declaredScreens = new bool[SdfWorldTables.MaxScreenSurfaces];
 
@@ -100,6 +97,8 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     // Per frame slot: the tables the pass set's ports and dummies were written for, and each screen element's last written
     // view.
     private readonly SdfWorldTables?[] m_portTables;
+    // Per frame slot, the shared shadows' binding revision the slot's pass set was written at.
+    private readonly long[] m_portShadows;
     // Per frame slot, the counter buffer the slot's pass set binds: the node replaces a slot's buffer when its detail rows
     // grow, so the binding follows the buffer the recording names rather than the one the ports were first written with.
     private readonly IGpuBuffer?[] m_boundCounters;
@@ -128,34 +127,8 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     private readonly SdfMeshOcclusion? m_occlusion;
     private readonly IGpuRenderPass? m_lateRenderPass;
 
-    // The framebuffers a raster part's second render pass draws in, one per instance of its target: the mesh part's
-    // occlusion phase over the target and depth, a cascade's exit layer over its second output.
+    // The framebuffers the mesh part's occlusion phase draws in, one per instance of its target, over the target and depth.
     private readonly IGpuFramebuffer[] m_lateFramebuffers = [];
-    private readonly IGpuFramebuffer[] m_shadowGlassFramebuffers = [];
-    private readonly IGpuFramebuffer[] m_entryLateFramebuffers = [];
-    // The distant pass's back map (HasDistantBack), per instance of its target: its depth and exit layer, a framebuffer
-    // over each that clears it (a redraw's first share) and one that loads it (each later share).
-    private readonly IReadOnlyList<IGpuImage> m_backDepths = [];
-    private readonly IReadOnlyList<IGpuImage> m_backExits = [];
-    private readonly IGpuFramebuffer[] m_backFramebuffers = [];
-    private readonly IGpuFramebuffer[] m_backExitFramebuffers = [];
-    private readonly IGpuFramebuffer[] m_backLoadFramebuffers = [];
-    private readonly IGpuFramebuffer[] m_backExitLoadFramebuffers = [];
-    // The far pass's static layer (HasFarStatic), per instance of its target: its depth and exit layer, framebuffers that
-    // clear each for the static draws and one that loads the depth for their second phase, a framebuffer that loads the
-    // cascade's own exit layer for the moving draws over the layer's copy (the entry's is m_entryLateFramebuffers), whether
-    // a submitted recording of this graph drew each instance's layer, and the static draws' own selection, so neither
-    // staging's visibility history is the other's.
-    private readonly IReadOnlyList<IGpuImage> m_staticDepths = [];
-    private readonly IReadOnlyList<IGpuImage> m_staticExits = [];
-    private readonly IGpuFramebuffer[] m_staticFramebuffers = [];
-    private readonly IGpuFramebuffer[] m_staticLateFramebuffers = [];
-    private readonly IGpuFramebuffer[] m_staticExitFramebuffers = [];
-    private readonly IGpuFramebuffer[] m_exitLoadFramebuffers = [];
-    private readonly bool[] m_staticWritten = [];
-    private readonly SdfMeshOcclusion? m_staticOcclusion;
-    // The target instance whose static layer the latest recording drew, which Submitted marks written.
-    private int? m_recordedStatic;
     // The glass clear's record of each glass sums buffer it has cleared (GlassClear): the bytes the glass raster may have
     // left nonzero there, from the rows its glass draws spanned (SdfWorldTables.GlassRows). The invariant is that every
     // word outside that range is zero, so a clear of the range alone leaves the whole buffer zero for the raster. A buffer
@@ -166,9 +139,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     // rasterized triangle covers the pixels whose centres it holds.
     private const uint GlassRowMargin = 2;
     private (IGpuBuffer Buffer, ulong Start, ulong End)? m_glassPending;
-    // The mesh sets of one group, one per frame slot and tables ring slot: the sets are laid out by group, the cascade's own
-    // selection first, the static layer's next when the pass keeps one, then the glass extinction's (OcclusionGroups).
-    private readonly int m_rasterSets;
     private readonly IGpuBuffer?[][] m_meshSetOcclusion = [];
     private readonly nint[] m_meshSetTargets = [];
     // Early and late compute sets beside each mesh set. Early binds a sampled filler while the target is an attachment;
@@ -177,22 +147,17 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     private readonly nint[] m_occlusionSets = [];
     private readonly IGpuBuffer?[][] m_occlusionSetBuffers = [];
     private readonly nint[] m_occlusionSetTargets = [];
-    // Whether each instance of the mesh part's or a cascade's target has been drawn or cleared once, and for a cascade
-    // whether that instance's exit layer has too: a layer drawn in no submitted frame of this graph has no contents.
+    // Whether each instance of the mesh part's target has been drawn or cleared once: a target drawn in no submitted frame
+    // of this graph has no contents.
     private readonly bool[] m_targetsWritten = [];
-    private readonly bool[] m_exitsWritten = [];
-    // Whether each instance's target, and a cascade's exit layer, last recorded a frame holding none of the part's draws,
-    // so it holds that recording's clear and no hit a later frame's draw records could misname (PartDrawCount).
+    // Whether each instance's target last recorded a frame holding none of the part's draws, so it holds that recording's
+    // clear and no hit a later frame's draw records could misname (PartDrawCount).
     private readonly bool[] m_targetsClear = [];
-    private readonly bool[] m_exitsClear = [];
 
-    // The layers the latest recording writes into its target instance (null for a layer it leaves), each with whether
-    // it writes the clear of a frame holding none of the part's draws. Only Submitted applies it to the four arrays
-    // above, and the node calls Submitted only once the recording's submission reached the queue, so a recording whose
-    // submission never ran marks no layer written or clear.
-    private (int Index, bool? Depth, bool? Exit)? m_recordedLayers;
-    private readonly HashSet<IGpuBuffer> m_opticalInitialized = new(ReferenceEqualityComparer.Instance);
-    private IGpuBuffer? m_recordedOpticalInitialization;
+    // The target instance the latest recording writes, with whether it writes the clear of a frame holding none of the
+    // part's draws. Only Submitted applies it to the two arrays above, and the node calls Submitted only once the
+    // recording's submission reached the queue, so a recording whose submission never ran marks no target written or clear.
+    private (int Index, bool Clear)? m_recordedTarget;
     private bool m_disposed;
     // What made the latest views render read external content, or null when nothing did.
     private string? m_sourceTaint;
@@ -213,15 +178,9 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         public ulong ClearStart;
         public ulong ClearEnd;
         // A raster part's draw.
-        public int CascadeTexels;
-        public System.Numerics.Vector2 Jitter;
         public bool Occlude;
         public SdfMeshCull Cull;
         public SdfMeshDetail Detail;
-        public SdfFarStaticUse StaticUse;
-        public SdfFarLayers Layers;
-        public SdfMeshMotion Motion;
-        public SdfDistantDraw? Share;
         // The views pass's kernels, pinned for the recording's submission.
         public SdfShadeSelection Selection;
     }
@@ -256,6 +215,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         var tables = (view.Residency.Tables ?? throw new InvalidOperationException(message: $"Residency '{view.Residency.Name}' has no tables for pass '{context.Pass}'."));
 
         m_portTables = new SdfWorldTables?[slots];
+        m_portShadows = new long[slots];
         m_boundCounters = new IGpuBuffer?[slots];
         m_boundRateHistory = m_rateHistoryPort >= 0 ? new IGpuBuffer?[slots] : [];
         m_screens = new nint[slots][];
@@ -283,28 +243,18 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             return;
         }
 
-        // The mesh part draws through the mesh interface's layout, whose one pass group holds the pass block the world
-        // interface lays out and the mesh region: a set per frame slot and tables ring slot from a pool of its own, its block
-        // bound to the frame slot's pass block buffer, and a framebuffer over each instance of its target and depth, or of a
-        // cascade's depth alone.
+        // The mesh and glass parts draw through the mesh interface's layout, whose one pass group holds the pass block the
+        // world interface lays out and the mesh region: a set per frame slot and tables ring slot from a pool of its own,
+        // its block bound to the frame slot's pass block buffer, two selection sets beside each, and a framebuffer over each
+        // instance of its target and depth.
         var bindings = context.Services.Bindings;
         var sizes = default(GpuDescriptorPoolSizes);
-        var rasterSets = (slots * SdfWorldTables.FrameRingSize);
-
-        m_rasterSets = rasterSets;
-
-        var selectingSets = (rasterSets * OcclusionGroups);
-        var sets = (selectingSets + (HasShadowOptical ? rasterSets : 0));
-
-        var occludes = IsMesh;
+        var sets = (slots * SdfWorldTables.FrameRingSize);
 
         for (var set = 0; (set < sets); set++) {
             sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.Mesh.Groups);
-
-            if (occludes && (set < selectingSets)) {
-                for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
-                    sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.MeshOcclusion.Groups);
-                }
+            for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
+                sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.MeshOcclusion.Groups);
             }
         }
 
@@ -321,41 +271,36 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             m_meshSetBuffers = new IGpuBuffer?[sets][];
             m_meshSetOcclusion = new IGpuBuffer?[sets][];
             m_meshSetTargets = new nint[sets];
-            var occlusionSets = (occludes ? (selectingSets * OcclusionSetsPerMesh) : 0);
-
-            m_occlusionSets = new nint[occlusionSets];
-            m_occlusionSetBuffers = new IGpuBuffer?[occlusionSets][];
-            m_occlusionSetTargets = new nint[occlusionSets];
+            m_occlusionSets = new nint[sets * OcclusionSetsPerMesh];
+            m_occlusionSetBuffers = new IGpuBuffer?[sets * OcclusionSetsPerMesh][];
+            m_occlusionSetTargets = new nint[sets * OcclusionSetsPerMesh];
 
             for (var set = 0; (set < sets); set++) {
-                var slot = ((set % (slots * SdfWorldTables.FrameRingSize)) / SdfWorldTables.FrameRingSize);
+                var slot = (set / SdfWorldTables.FrameRingSize);
 
                 m_meshSetBuffers[set] = new IGpuBuffer?[MeshSetBuffers];
                 m_meshSetOcclusion[set] = new IGpuBuffer?[MeshSetOcclusionBuffers];
+                for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
+                    var occlusionSet = ((set * OcclusionSetsPerMesh) + phase);
 
-                if (occludes && (set < selectingSets)) {
-                    for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
-                        var occlusionSet = ((set * OcclusionSetsPerMesh) + phase);
-
-                        m_occlusionSetBuffers[occlusionSet] = new IGpuBuffer?[(MeshSetBuffers + MeshSetOcclusionBuffers)];
-                        m_occlusionSets[occlusionSet] = bindings.AllocateSet(
-                            descriptorSetLayoutHandle: tables.OcclusionPipeline.GroupLayoutHandles[((int)ShaderInterfaceGroup.Pass)],
-                            name: new GpuObjectName(
-                                detail: "occlusion group",
-                                index: occlusionSet,
-                                owner: context.Instance,
-                                part: context.Pass
-                            ),
-                            poolHandle: m_meshPool
-                        );
-                        bindings.WriteConstantBuffer(
-                            arrayElement: 0,
-                            binding: 0,
-                            bufferHandle: groups.PassBlocks[slot].BufferHandle,
-                            bufferSize: groups.PassBlocks[slot].SizeBytes,
-                            descriptorSetHandle: m_occlusionSets[occlusionSet]
-                        );
-                    }
+                    m_occlusionSetBuffers[occlusionSet] = new IGpuBuffer?[(MeshSetBuffers + MeshSetOcclusionBuffers)];
+                    m_occlusionSets[occlusionSet] = bindings.AllocateSet(
+                        descriptorSetLayoutHandle: tables.OcclusionPipeline.GroupLayoutHandles[((int)ShaderInterfaceGroup.Pass)],
+                        name: new GpuObjectName(
+                            detail: "occlusion group",
+                            index: occlusionSet,
+                            owner: context.Instance,
+                            part: context.Pass
+                        ),
+                        poolHandle: m_meshPool
+                    );
+                    bindings.WriteConstantBuffer(
+                        arrayElement: 0,
+                        binding: 0,
+                        bufferHandle: groups.PassBlocks[slot].BufferHandle,
+                        bufferSize: groups.PassBlocks[slot].SizeBytes,
+                        descriptorSetHandle: m_occlusionSets[occlusionSet]
+                    );
                 }
 
                 m_meshSets[set] = bindings.AllocateSet(
@@ -380,78 +325,14 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             m_meshTargets = groups.OutputImages[0];
             m_framebuffers = new IGpuFramebuffer[m_meshTargets.Count];
             m_targetsWritten = new bool[m_meshTargets.Count];
-            m_exitsWritten = new bool[m_meshTargets.Count];
             m_targetsClear = new bool[m_meshTargets.Count];
-            m_exitsClear = new bool[m_meshTargets.Count];
 
             for (var index = 0; (index < m_framebuffers.Length); index++) {
-                m_framebuffers[index] = (IsShadowCascade
-                    ? context.Services.RenderPassFactory.CreateFramebuffer(
-                        colors: [],
-                        depth: m_meshTargets[index],
-                        renderPass: tables.ShadowRenderPass
-                    )
-                    : context.Services.RenderPassFactory.CreateFramebuffer(
-                        colors: [m_meshTargets[index]],
-                        depth: groups.OutputImages[1][index],
-                        renderPass: tables.MeshRenderPass
-                    ));
-            }
-
-            if (IsShadowCascade) {
-                m_lateFramebuffers = new IGpuFramebuffer[m_meshTargets.Count];
-                m_shadowGlassFramebuffers = new IGpuFramebuffer[(HasShadowOptical ? m_meshTargets.Count : 0)];
-                if (HasShadowOptical || (m_part == SdfWorldPackage.Parts.ShadowFar) || HasDistantBack) {
-                    m_lateRenderPass = context.Services.RenderPassFactory.Create(
-                    description: SdfMeshRasterPass.ShadowRenderPass with { Depth = SdfWorldPackage.MeshShadowDepthAttachment with { Load = GpuAttachmentLoad.Load } },
-                    name: new GpuObjectName(owner: context.Instance, part: context.Pass, detail: "retained depth"));
-                }
-                m_entryLateFramebuffers = new IGpuFramebuffer[((m_part == SdfWorldPackage.Parts.ShadowFar) ? m_meshTargets.Count : 0)];
-
-                for (var index = 0; (index < m_lateFramebuffers.Length); index++) {
-                    m_lateFramebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(
-                        colors: [],
-                        depth: groups.OutputImages[1][index],
-                        renderPass: tables.ShadowRenderPass
-                    );
-                    if (HasShadowOptical) {
-                        m_shadowGlassFramebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(
-                        colors: [], depth: groups.OutputImages[1][index], renderPass: m_lateRenderPass!);
-                    }
-                    if (m_entryLateFramebuffers.Length != 0) {
-                        m_entryLateFramebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(
-                        colors: [], depth: m_meshTargets[index], renderPass: m_lateRenderPass!);
-                    }
-                }
-                if (HasFarStatic) {
-                    m_staticDepths = groups.OutputImages[OutputNamed(output: SdfWorldPackage.Parts.ShadowFarStaticDepth)];
-                    m_staticExits = groups.OutputImages[OutputNamed(output: SdfWorldPackage.Parts.ShadowFarStaticExit)];
-                    m_staticFramebuffers = new IGpuFramebuffer[m_meshTargets.Count];
-                    m_staticLateFramebuffers = new IGpuFramebuffer[m_meshTargets.Count];
-                    m_staticExitFramebuffers = new IGpuFramebuffer[m_meshTargets.Count];
-                    m_exitLoadFramebuffers = new IGpuFramebuffer[m_meshTargets.Count];
-                    m_staticWritten = new bool[m_meshTargets.Count];
-                    for (var index = 0; (index < m_meshTargets.Count); index++) {
-                        m_staticFramebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(colors: [], depth: m_staticDepths[index], renderPass: tables.ShadowRenderPass);
-                        m_staticLateFramebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(colors: [], depth: m_staticDepths[index], renderPass: m_lateRenderPass!);
-                        m_staticExitFramebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(colors: [], depth: m_staticExits[index], renderPass: tables.ShadowRenderPass);
-                        m_exitLoadFramebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(colors: [], depth: groups.OutputImages[1][index], renderPass: m_lateRenderPass!);
-                    }
-                }
-                if (HasDistantBack) {
-                    m_backDepths = groups.OutputImages[OutputNamed(output: SdfWorldPackage.Parts.ShadowDistantBackDepth)];
-                    m_backExits = groups.OutputImages[OutputNamed(output: SdfWorldPackage.Parts.ShadowDistantBackExit)];
-                    m_backFramebuffers = new IGpuFramebuffer[m_meshTargets.Count];
-                    m_backExitFramebuffers = new IGpuFramebuffer[m_meshTargets.Count];
-                    m_backLoadFramebuffers = new IGpuFramebuffer[m_meshTargets.Count];
-                    m_backExitLoadFramebuffers = new IGpuFramebuffer[m_meshTargets.Count];
-                    for (var index = 0; (index < m_meshTargets.Count); index++) {
-                        m_backFramebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(colors: [], depth: m_backDepths[index], renderPass: tables.ShadowRenderPass);
-                        m_backExitFramebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(colors: [], depth: m_backExits[index], renderPass: tables.ShadowRenderPass);
-                        m_backLoadFramebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(colors: [], depth: m_backDepths[index], renderPass: m_lateRenderPass!);
-                        m_backExitLoadFramebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(colors: [], depth: m_backExits[index], renderPass: m_lateRenderPass!);
-                    }
-                }
+                m_framebuffers[index] = context.Services.RenderPassFactory.CreateFramebuffer(
+                    colors: [m_meshTargets[index]],
+                    depth: groups.OutputImages[1][index],
+                    renderPass: tables.MeshRenderPass
+                );
             }
             if (m_part == SdfWorldPackage.Parts.Mesh) {
                 m_lateRenderPass = context.Services.RenderPassFactory.Create(
@@ -468,11 +349,8 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                     );
                 }
             }
-            m_occlusion = new SdfMeshOcclusion(buffers: context.Services.BufferFactory, owner: context.Instance, part: context.Pass, slots: slots, cascade: IsShadowCascade, optical: HasShadowOptical,
+            m_occlusion = new SdfMeshOcclusion(buffers: context.Services.BufferFactory, owner: context.Instance, part: context.Pass, slots: slots, cascade: false,
                 sight: ((m_part == SdfWorldPackage.Parts.Mesh) ? owner.PortalSightOf(instance: context.Instance) : null));
-            m_staticOcclusion = (HasFarStatic
-                ? new SdfMeshOcclusion(buffers: context.Services.BufferFactory, owner: context.Instance, part: $"{context.Pass} static", slots: slots, cascade: true, optical: HasShadowOptical)
-                : null);
         } catch {
             foreach (var framebuffer in m_framebuffers) {
                 framebuffer?.Dispose();
@@ -481,9 +359,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                 framebuffer?.Dispose();
             }
 
-            foreach (var framebuffer in m_shadowGlassFramebuffers) { framebuffer?.Dispose(); }
-            foreach (var framebuffer in m_entryLateFramebuffers) { framebuffer?.Dispose(); }
-            DisposeBackFramebuffers();
             m_occlusion?.Dispose();
             m_lateRenderPass?.Dispose();
 
@@ -493,34 +368,21 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         }
     }
 
-    // Whether the part rasterizes the frame's mesh draws through the mesh pipeline: the mesh pass, one of the shadow
-    // cascades, which draw from the cascade's light camera, or the glass pass, which draws the glass draws alone.
-    private bool IsMesh => ((m_part is SdfWorldPackage.Parts.Mesh or SdfWorldPackage.Parts.Glass) || IsShadowCascade);
+    // Whether the part rasterizes the frame's mesh draws through the mesh pipeline: the mesh pass, or the glass pass, which
+    // draws the glass draws alone. The shadows are the residency's, drawn by its upload (SdfWorldShadows).
+    private bool IsMesh => (m_part is SdfWorldPackage.Parts.Mesh or SdfWorldPackage.Parts.Glass);
     private bool IsGlass => (m_part is SdfWorldPackage.Parts.Glass);
     // The interface every compute part's pass set is laid out by.
     private static ShaderInterfaceLayout PassLayout => SdfWorldInterfaces.WorldLayout;
-    private bool IsShadowCascade => (m_part is SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowFar or SdfWorldPackage.Parts.ShadowSecond or SdfWorldPackage.Parts.ShadowDistant);
-    // The cascade entry a shadow part draws (SdfMeshShadowCascades).
-    private int CascadeEntry => m_part switch {
-        SdfWorldPackage.Parts.ShadowNear => SdfMeshShadowCascades.NearEntry,
-        SdfWorldPackage.Parts.ShadowFar => SdfMeshShadowCascades.FarEntry,
-        SdfWorldPackage.Parts.ShadowDistant => SdfMeshShadowCascades.DistantEntry,
-        _ => SdfMeshShadowCascades.SecondEntry,
-    };
 
-    // The draws the part rasterizes: the glass draws for the glass pass, the opaque ones for the mesh pass and the cascades.
+    // The draws the part rasterizes: the glass draws for the glass pass, the opaque ones for the mesh pass.
     private uint PartDrawCount(SdfWorldTables tables) => (IsGlass ? tables.GlassDrawCount : tables.OpaqueDrawCount);
 
-    // Whether a mesh or cascade frame holding none of the part's draws may skip: every target instance (and a cascade's
-    // every exit layer) already holds the clear such a frame records. A target that last drew hits keeps them when its part
-    // skips, and the surface pass reads a hit's draw and triangle against draw records that may no longer hold their
-    // meshes. The glass passes skip by their own answer instead (SdfWorldPasses.GlassSeen), which skips the shading pass
-    // that reads their target with them.
-    private bool TargetsHoldClear => (Array.TrueForAll(array: m_targetsClear, match: static clear => clear) &&
-        (!IsShadowCascade || Array.TrueForAll(array: m_exitsClear, match: static clear => clear)));
-
-    // The mesh set groups that run a selection: the cascade's own, and the static layer's when the pass keeps one.
-    private int OcclusionGroups => (HasFarStatic ? 2 : 1);
+    // Whether a mesh frame holding none of the part's draws may skip: every target instance already holds the clear such a
+    // frame records. A target that last drew hits keeps them when its part skips, and the surface pass reads a hit's draw
+    // and triangle against draw records that may no longer hold their meshes. The glass passes skip by their own answer
+    // instead (SdfWorldPasses.GlassSeen), which skips the shading pass that reads their target with them.
+    private bool TargetsHoldClear => Array.TrueForAll(array: m_targetsClear, match: static clear => clear);
 
     // The index of the target instance a recording binds among the part's instances, or -1 for none of them.
     private int TargetIndexOf(IGpuImage? target) {
@@ -532,11 +394,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
 
         return -1;
     }
-    // Whether a submitted recording of this graph drew the static layer of the target instance a recording binds.
-    private bool StaticWritten(IGpuImage? target) => ((TargetIndexOf(target: target) is var index and >= 0) && (index < m_staticWritten.Length) && m_staticWritten[index]);
-    // Whether every layer of the target instance a recording binds has been drawn in this graph.
-    private bool LayersWritten(IGpuImage? target) => ((TargetIndexOf(target: target) is var index and >= 0) &&
-        m_targetsWritten[index] && (!IsShadowCascade || m_exitsWritten[index]));
 
     public void Dispose() {
         if (m_disposed) {
@@ -553,12 +410,8 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             framebuffer.Dispose();
         }
 
-        foreach (var framebuffer in m_shadowGlassFramebuffers) { framebuffer?.Dispose(); }
-        foreach (var framebuffer in m_entryLateFramebuffers) { framebuffer?.Dispose(); }
-        DisposeBackFramebuffers();
         m_lateRenderPass?.Dispose();
         m_occlusion?.Dispose();
-        m_staticOcclusion?.Dispose();
 
         if (m_meshPool != 0) {
             m_context.Services.Bindings.DestroyPool(poolHandle: m_meshPool);
@@ -567,26 +420,11 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         m_shade.Release(releases: m_owner.ShadeReleases);
         LeaveView();
     }
-    private void DisposeBackFramebuffers() {
-        foreach (var framebuffer in m_staticFramebuffers) { framebuffer?.Dispose(); }
-        foreach (var framebuffer in m_staticLateFramebuffers) { framebuffer?.Dispose(); }
-        foreach (var framebuffer in m_staticExitFramebuffers) { framebuffer?.Dispose(); }
-        foreach (var framebuffer in m_exitLoadFramebuffers) { framebuffer?.Dispose(); }
-        foreach (var framebuffer in m_backFramebuffers) { framebuffer?.Dispose(); }
-        foreach (var framebuffer in m_backExitFramebuffers) { framebuffer?.Dispose(); }
-        foreach (var framebuffer in m_backLoadFramebuffers) { framebuffer?.Dispose(); }
-        foreach (var framebuffer in m_backExitLoadFramebuffers) { framebuffer?.Dispose(); }
-    }
-    // The index of one of the part's outputs by its name in the fragment.
-    private int OutputNamed(string output) => Array.IndexOf(array: m_outputs, value: output) is var index and >= 0
-        ? index
-        : throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' has no output '{output}'.");
     // A part skips a frame whose work it would not do, recording neither its work nor its planned barriers: the mesh part
-    // a frame that draws no opaque mesh, the glass passes one whose view sees no glass draw, and a shadow cascade a frame
-    // with no draw or no cascade of its own. The mesh part and the cascades with no draws still record until every
-    // instance of their target holds the clear such a frame records (TargetsHoldClear): before the first bake lands, and
-    // after a frame that drew, whose hits a skipped frame would leave for the surface pass to read. No part walks the
-    // field: the bake samples it as the residency's background GPU work (SdfMeshBakeGpuWork).
+    // a frame that draws no opaque mesh, and the glass passes one whose view sees no glass draw. The mesh part with no draws
+    // still records until every instance of its target holds the clear such a frame records (TargetsHoldClear): before the
+    // first bake lands, and after a frame that drew, whose hits a skipped frame would leave for the surface pass to read. No
+    // part walks the field: the bake samples it as the residency's background GPU work (SdfMeshBakeGpuWork).
     public bool Skips(in FrameContext context) {
         switch (m_part) {
             case SdfWorldPackage.Parts.Mesh: {
@@ -611,63 +449,30 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             case SdfWorldPackage.Parts.ViewsBins: {
                     return !m_view.Residency.ShadesInBins;
                 }
-            case SdfWorldPackage.Parts.ShadowNear:
-            case SdfWorldPackage.Parts.ShadowFar:
-            case SdfWorldPackage.Parts.ShadowSecond:
-            case SdfWorldPackage.Parts.ShadowDistant: {
-                    var tables = m_view.Residency.Staged(context: in context);
-                    var cascades = tables.CascadesOf(frame: m_view.Residency.Frame!, view: m_view.View);
-
-                    return (!cascades.Holds(index: CascadeEntry) || ((PartDrawCount(tables: tables) == 0) && TargetsHoldClear));
-                }
             default:
                 return false;
         }
     }
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) =>
         m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context, reads: reads);
-    public ulong? InputSignature(string input, long generation) => (((m_part == SdfWorldPackage.Parts.ShadowFar) && (m_context.Inputs.Count > 0) &&
-        (input == m_context.Inputs[0].Name))
-            ? m_owner.ReceiverSignatureOf(instance: m_context.Instance)
-            : unchecked((ulong)generation));
-    public void Stood() {
-        if (m_part == SdfWorldPackage.Parts.ShadowFar) {
-            m_view.Residency.Frame?.RateCounts?.Count(kind: SdfUpdateRateCounts.ShadowFarHeld);
-        }
-        if (m_part == SdfWorldPackage.Parts.ShadowDistant) {
-            m_view.Residency.Frame?.RateCounts?.Count(kind: SdfUpdateRateCounts.ShadowDistantHeld);
-        }
-    }
+    public ulong? InputSignature(string input, long generation) => unchecked((ulong)generation);
+    public void Stood() { }
 
     private SdfMeshRowStamp m_previousMeshRows;
     private bool m_notedMeshRows;
 
     public void Submitted() {
         m_notedMeshRows = false;
-        if (m_recordedOpticalInitialization is { } optical) {
-            m_opticalInitialized.Add(optical);
-            m_recordedOpticalInitialization = null;
-        }
-        if (m_recordedLayers is { } recorded) {
-            if (recorded.Depth is { } depth) { m_targetsWritten[recorded.Index] = true; m_targetsClear[recorded.Index] = depth; }
-            if (recorded.Exit is { } exit) { m_exitsWritten[recorded.Index] = true; m_exitsClear[recorded.Index] = exit; }
-            m_recordedLayers = null;
-        }
-        if (m_recordedStatic is { } drawn) {
-            m_staticWritten[drawn] = true;
-            m_recordedStatic = null;
+        if (m_recordedTarget is { } recorded) {
+            m_targetsWritten[recorded.Index] = true;
+            m_targetsClear[recorded.Index] = recorded.Clear;
+            m_recordedTarget = null;
         }
         if (m_glassPending is { } cleared) {
             var known = FindGlassDirtyIndex(buffer: cleared.Buffer);
 
             if (known >= 0) { m_glassDirty[known] = cleared; } else { m_glassDirty.Add(item: cleared); }
             m_glassPending = null;
-        }
-        if (m_part == SdfWorldPackage.Parts.ShadowFar) {
-            m_owner.SubmittedFar(instance: m_context.Instance);
-        }
-        if (m_part == SdfWorldPackage.Parts.ShadowDistant) {
-            m_owner.SubmittedDistant(instance: m_context.Instance);
         }
         if (m_part == SdfWorldPackage.Parts.Views) {
             m_owner.SubmittedTaint(m_context.Instance, m_sourceTaint, m_readsHistory);
@@ -683,11 +488,10 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         return -1;
     }
     // Decides the pass's frame: everything the instance's later passes, its commit or its residency read (the rows and hits
-    // it notes, the view's history, the far and distant cameras it stages, the shading plan it commits, the screens'
-    // leases) changes here, in pass order, and the values the emission draws by are kept in m_decided.
+    // it notes, the view's history, the shading plan it commits, the screens' leases) changes here, in pass order, and the
+    // values the emission draws by are kept in m_decided.
     public RenderGraphPackageOutcome Decide(in RenderGraphPackageRecording recording) {
-        m_recordedLayers = null;
-        m_recordedOpticalInitialization = null;
+        m_recordedTarget = null;
 
         var residency = m_view.Residency;
         var tables = residency.Staged(context: recording.Context);
@@ -744,7 +548,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             view: view,
             width: width
         );
-        // A shadow cascade can record first; history always describes the camera's sample grid, not that pass's target.
         var temporal = m_owner.TemporalOf(
             instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, temporal: m_temporal, unread: recording.UnreadFrames, renderWidth: recording.RenderWidth, renderHeight: recording.RenderHeight
         );
@@ -781,76 +584,19 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         }
 
         SdfFrameBlock.WriteMeshIrradiance(block: recording.PassBlock, volume: residency.MeshIrradianceParameters);
-
-        var boundTexels = BoundCascadeTexels(recording: in recording, distant: false);
-        var boundDistantTexels = BoundCascadeTexels(recording: in recording, distant: true);
-        // The far cascade may draw one layer of a split refresh; asking stages the camera each drawn layer is drawn from,
-        // which the cascades below and every later reader this frame read.
-        var staticUse = SdfFarStaticUse.Absent;
-        var layers = ((m_part == SdfWorldPackage.Parts.ShadowFar)
-            ? m_owner.RecordFar(
-                counts: frame.RateCounts,
-                staticUse: out staticUse,
-                fresh: tables.CascadesOf(frame: frame, texels: boundTexels, view: view)[SdfMeshShadowCascades.FarEntry],
-                instance: m_context.Instance,
-                layer: new SdfFarStaticLayer(Held: HasFarStatic, Revision: tables.StaticDrawRevision, Written: StaticWritten(target: recording.Outputs[0].Owned)),
-                written: LayersWritten(target: recording.Outputs[0].Owned)
-            )
-            : SdfFarLayers.Both);
-
-        // A static layer drawn now may miss a caster absent from the records, whose landing must then move the revision.
-        if (staticUse == SdfFarStaticUse.Draws) {
-            tables.CastersRead();
-        }
-
-        // The distant map is drawn from the camera its signature chose this frame (the fit below decides it), whole or as
-        // one share of a redraw into the back map; asking stages that camera for this frame's readers when the drawing
-        // completes a map. A share is drawn from its redraw's camera whatever camera receivers read this frame.
-        SdfDistantDraw? distantDraw = null;
-
-        if (m_part == SdfWorldPackage.Parts.ShadowDistant) {
-            _ = m_owner.CascadesOf(distantTexels: boundDistantTexels, frame: frame, instance: m_context.Instance, tables: tables, texels: boundTexels, view: view);
-            distantDraw = m_owner.RecordDistant(counts: frame.RateCounts, hasBack: HasDistantBack, instance: m_context.Instance, revision: tables.StaticDrawRevision);
-            tables.CastersRead();
-        }
-
-        var cascades = m_owner.CascadesOf(distantTexels: boundDistantTexels, frame: frame, instance: m_context.Instance, tables: tables, texels: boundTexels, view: view);
-        var drawCamera = ((distantDraw is { } drawn) ? drawn.Camera : (IsShadowCascade ? cascades[CascadeEntry] : default));
-
-        SdfFrameBlock.WriteMeshShadows(block: recording.PassBlock, cascades: in cascades);
-        if (IsShadowCascade) {
-            SdfFrameBlock.WriteShadowCamera(block: recording.PassBlock, camera: drawCamera, texels: cascades.TexelsOf(index: CascadeEntry));
-        }
+        // The world's shared cascades, each through the camera its layers were drawn from (SdfWorldShadows).
+        SdfFrameBlock.WriteMeshShadows(block: recording.PassBlock, cascades: tables.CascadesOf(frame: frame, view: view));
         if (IsMesh) {
-            var cascade = CascadeEntry;
-            var cascadeTexels = cascades.TexelsOf(index: cascade);
-            var distant = (m_part == SdfWorldPackage.Parts.ShadowDistant);
-            // A cascade's cull is measured against the view's render extent, the mesh and glass passes' against their own.
-            var (cullWidth, cullHeight) = (IsShadowCascade ? (recording.RenderWidth, recording.RenderHeight) : (width, height));
-
-            m_owner.NoteDrawn(distantTexels: boundDistantTexels, height: cullHeight, instance: m_context.Instance, part: m_part, texels: boundTexels, width: cullWidth);
-            m_decided.CascadeTexels = cascadeTexels;
-            m_decided.Jitter = temporal.Jitter;
-            m_decided.Occlude = ((frame.MeshCull == SdfMeshCullLevel.Occlusion) || (!IsShadowCascade && (frame.MeshCull == SdfMeshCullLevel.Camera)));
-            // The distant map is held across camera turns and moves, so it keeps every caster in its light's box rather
-            // than those that may shadow what the view shows now. Every other pass draws under the cull its motion scope
-            // judges changes by (SdfWorldPasses.CullOf).
-            m_decided.Cull = (distant
-                ? ((frame.MeshCull == SdfMeshCullLevel.Off) ? SdfMeshCull.None : SdfMeshCull.OfLightBox(cascade: drawCamera))
-                : SdfWorldPasses.CullOf(cascade: (IsShadowCascade ? cascade : -1), cascades: in cascades, frame: frame, height: cullHeight, view: view, width: cullWidth));
+            m_owner.NoteDrawn(height: height, instance: m_context.Instance, part: m_part, width: width);
+            m_decided.Occlude = (frame.MeshCull is SdfMeshCullLevel.Occlusion or SdfMeshCullLevel.Camera);
+            m_decided.Cull = SdfWorldPasses.CullOf(frame: frame, height: height, view: view, width: width);
             // The glass pass's thickness is the sums of its own triangles' ray distances, so glass draws its own.
             m_decided.Detail = (IsGlass
                 ? SdfMeshDetail.Finest
                 : (frame.MeshDetail switch {
-                    SdfMeshDetailLevel.Auto => (IsShadowCascade
-                        ? SdfMeshDetail.Of(cascade: drawCamera, texels: cascadeTexels)
-                        : SdfMeshDetail.Of(camera: frame.Views[view].Camera, displayHeight: recording.FrameHeight)),
+                    SdfMeshDetailLevel.Auto => SdfMeshDetail.Of(camera: frame.Views[view].Camera, displayHeight: recording.FrameHeight),
                     _ => SdfMeshDetail.Forced(level: (((int)frame.MeshDetail) - 1)),
                 }));
-            m_decided.StaticUse = staticUse;
-            m_decided.Layers = layers;
-            m_decided.Motion = (distant ? SdfMeshMotion.Static : (((staticUse == SdfFarStaticUse.Reuses) || (staticUse == SdfFarStaticUse.Draws)) ? SdfMeshMotion.Dynamic : SdfMeshMotion.Any));
-            m_decided.Share = ((distantDraw is { IsShare: true } share) ? share : null);
         } else {
             DecideCompute(recording: in recording, tables: tables);
         }
@@ -870,16 +616,10 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         }
         if (IsMesh) {
             RecordMesh(
-                cascadeTexels: m_decided.CascadeTexels,
                 cull: in m_decided.Cull,
                 detail: in m_decided.Detail,
-                jitter: m_decided.Jitter,
-                layers: m_decided.Layers,
-                motion: m_decided.Motion,
                 occlude: m_decided.Occlude,
                 recording: in recording,
-                share: m_decided.Share,
-                staticUse: m_decided.StaticUse,
                 tables: tables
             );
         } else {
@@ -903,14 +643,12 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         m_pick?.Submitted(slot: slot);
         m_diagnosticPick?.Submitted(slot: slot);
         m_occlusion?.Submitted(slot: slot);
-        m_staticOcclusion?.Submitted(slot: slot);
     }
     public void Completed(int slot) {
         m_shade.Completed(slot: slot);
         m_pick?.Completed(slot: slot);
         m_diagnosticPick?.Completed(slot: slot);
         m_occlusion?.Completed(slot: slot);
-        m_staticOcclusion?.Completed(slot: slot);
     }
     public void Abandoned(int slot) {
         if (m_notedMeshRows) { _ = m_owner.NoteMeshRows(instance: m_context.Instance, stamp: m_previousMeshRows); m_notedMeshRows = false; }
@@ -918,7 +656,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         m_pick?.Abandoned(slot: slot);
         m_diagnosticPick?.Abandoned(slot: slot);
         m_occlusion?.Abandoned(slot: slot);
-        m_staticOcclusion?.Abandoned(slot: slot);
     }
 
     private int OutputIndexOf(string member) {
@@ -936,35 +673,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             }
         }
         throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' has no input read through '{member}'.");
-    }
-    // The texels a side of the cascade depth the pass binds, a cascade's output or the surface pass's input, which its pass
-    // block and its fit follow, so a pass draws and reads the depth its graph allocated while a graph of another shadow
-    // resolution builds; null for a pass that binds none. `distant` asks for the distant map's, whose size is its own.
-    private int? BoundCascadeTexels(in RenderGraphPackageRecording recording, bool distant) {
-        for (var port = 0; (port < m_outputs.Length); port++) {
-            if (IsCascadeDepth(version: m_outputs[port], distant: distant)) {
-                return ((int)recording.Outputs[port].ReadImage(latch: recording.Latch).Width);
-            }
-        }
-        for (var port = 0; (port < m_inputs.Length); port++) {
-            if (IsCascadeDepth(version: m_inputs[port], distant: distant)) {
-                return ((int)recording.Inputs[port].ReadImage(latch: recording.Latch).Width);
-            }
-        }
-
-        return null;
-    }
-    private static bool IsCascadeDepth(string version, bool distant) => ((CascadeIndexOf(version: version) >= 0) &&
-        (distant == (version is SdfWorldPackage.Parts.ShadowDistantDepth or SdfWorldPackage.Parts.ShadowDistantExit)));
-    // The cascade layer a storage is (its index in CascadeBindings), or -1 for any other storage.
-    private static int CascadeIndexOf(string version) {
-        for (var cascade = 0; (cascade < CascadeBindings.Length); cascade++) {
-            if (string.Equals(a: CascadeBindings[cascade].Version, b: version, comparisonType: StringComparison.Ordinal)) {
-                return cascade;
-            }
-        }
-
-        return -1;
     }
     // The view follows the one the instance resolved this frame in place when its passes can record it
     // (SdfWorldPasses.CanFollow); one they cannot record rebuilds them instead. A counter change holds recording until
@@ -1151,158 +859,63 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
     }
-    // Selects draws and levels on the GPU, then draws one indirect phase (two for opaque occlusion), pulling triangles
-    // from the shared mesh region; a cascade uses the shadow pipeline into its depth,
-    // cascadeTexels a side. A frame with no draws records the render pass alone, which clears the target.
     // The mesh set a frame slot draws through while the tables upload into their current ring slot. The tables' ring and
     // the frame slots' turn at different lengths, so a set per pair keeps each set's buffers those of one ring slot, and
     // a set never rewrites what it binds once written.
     private static int MeshSetOf(int slot, SdfWorldTables tables) =>
         ((slot * SdfWorldTables.FrameRingSize) + tables.CurrentSlot);
-    // A cascade draws its depth (with the glass extinction that reads it) and its exit layer as `layers` says; a layer it
-    // skips keeps what an earlier frame drew into it.
-    // A share of a distant map redraw (`share`) draws into the back map instead, clearing it on the first share and loading
-    // it on each later one, and the last share copies the back map into the map receivers read.
-    // A far cascade with a static layer draws both layers each recording: the static draws into the static layer first when
-    // `staticUse` draws it, then a copy of the layer into the cascade, then the moving draws (`motion`) loading that copy, and
-    // the glass extinction of every glass draw over the result; a recording that bypasses the layer draws as a cascade
-    // without one.
-    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels, in SdfMeshCull cull, in SdfMeshDetail detail, bool occlude, SdfFarLayers layers, System.Numerics.Vector2 jitter, SdfMeshMotion motion, SdfFarStaticUse staticUse = SdfFarStaticUse.Absent, SdfDistantDraw? share = null) {
-        var drawsDepth = (!IsShadowCascade || ((layers & SdfFarLayers.Depth) != 0));
-        var drawsExit = ((layers & SdfFarLayers.Exit) != 0);
+    // Selects draws and levels on the GPU, then draws one indirect phase (two for opaque occlusion), pulling triangles
+    // from the shared mesh region. A frame with no draws records the render pass alone, which clears the target.
+    private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, in SdfMeshCull cull, in SdfMeshDetail detail, bool occlude) {
         var count = tables.MeshDrawCount;
         var slot = recording.Slot;
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;
-        var pipeline = (IsShadowCascade ? tables.ShadowPipeline : (IsGlass ? tables.GlassPipeline : tables.MeshPipeline));
+        var pipeline = (IsGlass ? tables.GlassPipeline : tables.MeshPipeline);
         var meshSet = MeshSetOf(slot: slot, tables: tables);
         var target = recording.Outputs[0].Owned!;
         var framebuffer = m_framebuffers[0];
         var lateFramebuffer = ((m_lateFramebuffers.Length > 0) ? m_lateFramebuffers[0] : null);
         var occlusion = ((count > 0) ? m_occlusion : null);
-        var twoPhase = (occlude && !IsGlass && (!IsShadowCascade || ((m_part == SdfWorldPackage.Parts.ShadowFar) && (m_inputs.Length > 0))));
-        var entryLateFramebuffer = ((m_entryLateFramebuffers.Length > 0) ? m_entryLateFramebuffers[0] : lateFramebuffer);
-        var shadowGlassFramebuffer = (HasShadowOptical ? m_shadowGlassFramebuffers[0] : null);
+        var twoPhase = (occlude && !IsGlass);
         var targetIndex = TargetIndexOf(target: target);
 
-        m_recordedStatic = null;
         if (targetIndex >= 0) {
-            var index = targetIndex;
-
-            framebuffer = m_framebuffers[index];
-            lateFramebuffer = ((m_lateFramebuffers.Length > 0) ? m_lateFramebuffers[index] : null);
-            entryLateFramebuffer = ((m_entryLateFramebuffers.Length > 0) ? m_entryLateFramebuffers[index] : lateFramebuffer);
-            m_recordedLayers = (index, (drawsDepth ? (PartDrawCount(tables: tables) == 0) : null), ((IsShadowCascade && drawsExit) ? (PartDrawCount(tables: tables) == 0) : null));
-            if (HasShadowOptical) { shadowGlassFramebuffer = m_shadowGlassFramebuffers[index]; }
-            if (share is { } drawing) {
-                framebuffer = ((drawing.Slice == 0) ? m_backFramebuffers[index] : m_backLoadFramebuffers[index]);
-                lateFramebuffer = ((drawing.Slice == 0) ? m_backExitFramebuffers[index] : m_backExitLoadFramebuffers[index]);
-                // A share leaves the map receivers read as it was; the last copies the back map into it, which may
-                // hold casters of earlier shares a later share's draw count no longer shows, so it is never clear.
-                m_recordedLayers = (drawing.Completes ? (index, false, false) : null);
-            }
+            framebuffer = m_framebuffers[targetIndex];
+            lateFramebuffer = ((m_lateFramebuffers.Length > 0) ? m_lateFramebuffers[targetIndex] : null);
+            m_recordedTarget = (targetIndex, (PartDrawCount(tables: tables) == 0));
         }
 
-        // A frame holding none of the part's draws certifies its target clear (m_recordedLayers), so later empty frames
+        // A frame holding none of the part's draws certifies its target clear (m_recordedTarget), so later empty frames
         // skip: it clears the whole allocation, since the render grid can later grow within it and a render pass clears
-        // only its area. A cascade covers its whole depth, whatever the view's render extent.
+        // only its area.
         var area = ((PartDrawCount(tables: tables) == 0)
             ? new GpuPixelRect(Height: target.Height, Width: target.Width, X: 0, Y: 0)
-            : new GpuPixelRect(
-                Height: (IsShadowCascade ? ((uint)cascadeTexels) : recording.Height),
-                Width: (IsShadowCascade ? ((uint)cascadeTexels) : recording.Width),
-                X: 0,
-                Y: 0
-            ));
+            : new GpuPixelRect(Height: recording.Height, Width: recording.Width, X: 0, Y: 0));
 
-        // The static layer: drawn again when RecordFar says so, into its own depths through its own selection, then copied
-        // into the cascade, which the moving draws below load rather than clear.
-        if (HasFarStatic && (targetIndex >= 0) && ((staticUse == SdfFarStaticUse.Reuses) || (staticUse == SdfFarStaticUse.Draws))) {
-            var staticDepth = m_staticDepths[targetIndex];
-            var staticExit = m_staticExits[targetIndex];
+        SelectDraws(cull: in cull, detail: in detail, meshSet: meshSet, occlusion: occlusion, recording: in recording, tables: tables, target: target, twoPhase: twoPhase);
 
-            if (staticUse == SdfFarStaticUse.Draws) {
-                var staticSet = (meshSet + m_rasterSets);
-                var staticSelection = ((count > 0) ? m_staticOcclusion : null);
+        var set = m_meshSets[meshSet];
 
-                SelectDraws(cascadeTexels: cascadeTexels, cull: in cull, detail: in detail, drawsDepth: true, drawsExit: true, jitter: jitter, meshSet: staticSet, motion: SdfMeshMotion.Static,
-                    occlusion: staticSelection, recording: in recording, share: null, tables: tables, target: staticDepth, twoPhase: twoPhase);
-                DrawLayers(area: area, drawsDepth: true, drawsExit: true, entryFramebuffer: m_staticFramebuffers[targetIndex], entryLateFramebuffer: m_staticLateFramebuffers[targetIndex],
-                    exitFramebuffer: m_staticExitFramebuffers[targetIndex], meshSet: staticSet, occlusion: staticSelection, pipeline: pipeline, recording: in recording, tables: tables, target: staticDepth, twoPhase: twoPhase);
-                m_recordedStatic = targetIndex;
-            }
-
-            CopyDepth(recorder: recorder, commandBuffer: commandBuffer, source: staticDepth, destination: target);
-            CopyDepth(recorder: recorder, commandBuffer: commandBuffer, source: staticExit, destination: recording.Outputs[1].Owned!);
-            framebuffer = entryLateFramebuffer!;
-            lateFramebuffer = m_exitLoadFramebuffers[targetIndex];
+        recorder.BeginRenderPass(area: area, commandBufferHandle: commandBuffer, framebuffer: framebuffer);
+        if (occlusion is not null) {
+            // The first phase: what the previous frame found visible, and every draw no host box bounds.
+            RecordMeshPhase(commandBuffer: commandBuffer, phase: 0, pipeline: pipeline, recorder: recorder, selection: occlusion, set: set);
         }
+        recorder.EndRenderPass(commandBufferHandle: commandBuffer);
 
-        var optical = HasShadowOptical && drawsDepth ? recording.Outputs[2].Buffer! : null;
-        SelectDraws(cascadeTexels: cascadeTexels, cull: in cull, detail: in detail, drawsDepth: drawsDepth, drawsExit: drawsExit, jitter: jitter, meshSet: meshSet, motion: motion,
-            occlusion: occlusion, recording: in recording, share: share, tables: tables, target: target, twoPhase: twoPhase, optical: optical);
-        if (optical is not null) {
-            ClearShadowOptical(recording, tables, occlusion, meshSet, target.Width, optical);
-        }
-        DrawLayers(area: area, drawsDepth: drawsDepth, drawsExit: drawsExit, entryFramebuffer: framebuffer, entryLateFramebuffer: entryLateFramebuffer, exitFramebuffer: lateFramebuffer,
-            meshSet: meshSet, occlusion: occlusion, pipeline: pipeline, recording: in recording, tables: tables, target: target, twoPhase: twoPhase);
-        if (HasShadowOptical && drawsDepth && (occlusion is not null)) {
-            // Separate descriptors: early raster/selection must never bind the entry depth while it is an attachment.
-            var glassSetIndex = (meshSet + (m_rasterSets * OcclusionGroups));
-            var glassSet = m_meshSets[glassSetIndex];
-            var bound = m_meshSetBuffers[glassSetIndex];
-
-            tables.WriteMeshTables(bound: bound, set: glassSet, slot: tables.CurrentSlot);
-            tables.WriteMeshWorkCounters(bound: ref bound[MeshSetCounters], counters: WorkCountersOf(recording: in recording).Buffer, set: glassSet);
-            tables.WriteMeshBuffer(bound: ref bound[MeshSetVisibility], buffer: tables.DummyBuffer, member: SdfWorldPackage.VisibilityRecords, set: glassSet);
-            tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: recording.Outputs[2].Buffer!, member: SdfWorldPackage.GlassSumsWritten, set: glassSet);
-            SdfMeshOcclusion.Unbind(bound: m_meshSetOcclusion[glassSetIndex], boundTarget: ref m_meshSetTargets[glassSetIndex], first: 0, set: glassSet, tables: tables);
-            tables.WriteMeshTarget(bound: ref m_meshSetTargets[glassSetIndex], set: glassSet, view: target.ImageViewHandle);
-            occlusion.BindDraws(tables: tables, set: glassSet, bound: m_meshSetOcclusion[glassSetIndex]);
-            recorder.TransitionImageLayout(commandBufferHandle: commandBuffer, imageHandle: target.ImageHandle,
-                oldLayout: GpuImageLayout.DepthAttachment, newLayout: GpuImageLayout.ShaderReadOnly,
-                sourceAccessMask: GpuAccess.DepthAttachmentWrite, sourceStageMask: GpuStage.FragmentTests,
-                destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.FragmentShader);
-            recorder.BeginRenderPass(area: area, commandBufferHandle: commandBuffer, framebuffer: shadowGlassFramebuffer!);
-            RecordMeshPhase(commandBuffer: commandBuffer, pipeline: tables.ShadowGlassPipeline, recorder: recorder, set: glassSet, selection: occlusion, phase: 4);
+        if (twoPhase && (occlusion is not null) && (occlusion.CandidateCount > 0)) {
+            occlusion.RecordLate(commandBuffer: commandBuffer, pipeline: tables.OcclusionPipeline, recorder: recorder, set: m_occlusionSets[((meshSet * OcclusionSetsPerMesh) + 1)], target: target.ImageHandle);
+            recorder.BeginRenderPass(area: area, commandBufferHandle: commandBuffer, framebuffer: lateFramebuffer!);
+            RecordMeshPhase(commandBuffer: commandBuffer, phase: 1, pipeline: pipeline, recorder: recorder, selection: occlusion, set: set);
             recorder.EndRenderPass(commandBufferHandle: commandBuffer);
-            recorder.TransitionImageLayout(commandBufferHandle: commandBuffer, imageHandle: target.ImageHandle,
-                oldLayout: GpuImageLayout.ShaderReadOnly, newLayout: GpuImageLayout.DepthAttachment,
-                sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: GpuStage.FragmentShader,
-                destinationAccessMask: GpuAccess.DepthAttachmentWrite, destinationStageMask: GpuStage.FragmentTests);
         }
-        if ((share is { Completes: true }) && (targetIndex >= 0)) {
-            CopyDepth(recorder: recorder, commandBuffer: commandBuffer, source: m_backDepths[targetIndex], destination: target);
-            CopyDepth(recorder: recorder, commandBuffer: commandBuffer, source: m_backExits[targetIndex], destination: recording.Outputs[1].Owned!);
-        }
-    }
-    private void ClearShadowOptical(in RenderGraphPackageRecording recording, SdfWorldTables tables, SdfMeshOcclusion? selection,
-        int meshSet, uint side, IGpuBuffer optical) {
-        var recorder = recording.Recorder;
-        var command = recording.CommandBuffer;
-        var initializes = !m_opticalInitialized.Contains(optical);
-        var full = initializes || (selection is null);
-        var clearStage = full ? GpuStage.Transfer : GpuStage.ComputeShader;
-        var clearWrite = full ? GpuAccess.TransferWrite : GpuAccess.ShaderWrite;
-        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: optical.BufferHandle,
-            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader | GpuStage.FragmentShader,
-            destinationAccessMask: full ? clearWrite : GpuAccess.ShaderRead | clearWrite, destinationStageMask: clearStage);
-        if (full) {
-            recorder.ClearStorageBuffer(command, optical.BufferHandle, optical.SizeBytes);
-            if (initializes) { m_recordedOpticalInitialization = optical; }
-        } else {
-            selection!.RecordOpticalClear(recorder, command, tables.OcclusionPipeline, m_occlusionSets[meshSet * OcclusionSetsPerMesh], side);
-        }
-        // Surface shading can read an empty cascade even when no glass fragment executes after this clear.
-        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: optical.BufferHandle,
-            sourceAccessMask: clearWrite, sourceStageMask: clearStage,
-            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.FragmentShader | GpuStage.ComputeShader);
     }
     // Writes a mesh set's tables and counters, stages the selection's draws into it and records the selection's first
-    // step: the set and its two selection sets are one group's (meshSet), and `target` is the depth the selection's second
+    // step: the set and its two selection sets are one group's (meshSet), and `target` is the image the selection's second
     // phase samples.
-    private void SelectDraws(in RenderGraphPackageRecording recording, SdfWorldTables tables, SdfMeshOcclusion? occlusion, int meshSet, IGpuImage target, int cascadeTexels, in SdfMeshCull cull,
-        in SdfMeshDetail detail, bool twoPhase, bool drawsDepth, bool drawsExit, System.Numerics.Vector2 jitter, SdfMeshMotion motion, SdfDistantDraw? share, IGpuBuffer? optical = null) {
+    private void SelectDraws(in RenderGraphPackageRecording recording, SdfWorldTables tables, SdfMeshOcclusion? occlusion, int meshSet, IGpuImage target, in SdfMeshCull cull,
+        in SdfMeshDetail detail, bool twoPhase) {
         if (tables.MeshDrawCount == 0) {
             return;
         }
@@ -1320,7 +933,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             set: set
         );
         // The glass pass reads each pixel's opaque hit, its one input, and accumulates into the glass sums, its
-        // third output; every other raster part binds the dummy at both.
+        // third output; the mesh pass binds the dummy at both.
         tables.WriteMeshBuffer(
             bound: ref m_meshSetBuffers[meshSet][MeshSetVisibility],
             buffer: (IsGlass ? recording.Inputs[0].Buffer! : tables.DummyBuffer),
@@ -1343,14 +956,9 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         }
 
         var frame = m_view.Residency.Frame!;
-        var slot = recording.Slot;
-        var shadowReceiver = ((IsShadowCascade && twoPhase) ? recording.Inputs[0].ReadImage(latch: recording.Latch) : default);
 
-        occlusion.Stage(tables: tables, count: tables.MeshDrawCount, height: (IsShadowCascade ? (uint)cascadeTexels : recording.RenderHeight), width: (IsShadowCascade ? (uint)cascadeTexels : recording.RenderWidth), slot: slot, cull: in cull, detail: in detail, held: tables.HoldsFrame, glass: IsGlass, occlude: twoPhase, splitExit: IsShadowCascade, skipsDepth: !drawsDepth, skipsExit: (IsShadowCascade && !drawsExit),
-            camera: frame.Views[Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1))].Camera,
-            receiverWidth: shadowReceiver.Width,
-            receiverHeight: shadowReceiver.Height, jitter: jitter, motion: motion,
-            slice: Math.Max(val1: (share?.Slice ?? 0), val2: 0), slices: (share?.Slices ?? 1));
+        occlusion.Stage(tables: tables, count: tables.MeshDrawCount, height: recording.RenderHeight, width: recording.RenderWidth, slot: recording.Slot, cull: in cull, detail: in detail, held: tables.HoldsFrame, glass: IsGlass, occlude: twoPhase,
+            camera: frame.Views[Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1))].Camera);
         occlusion.BindDraws(tables: tables, set: set, bound: m_meshSetOcclusion[meshSet]);
         for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
             var index = ((meshSet * OcclusionSetsPerMesh) + phase);
@@ -1360,80 +968,11 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             tables.WriteMeshTables(bound: bound, set: occlusionSet, slot: tables.CurrentSlot);
             tables.WriteMeshWorkCounters(bound: ref bound[MeshSetCounters], counters: WorkCountersOf(recording: in recording).Buffer, set: occlusionSet);
             tables.WriteMeshBuffer(bound: ref bound[MeshSetVisibility], buffer: tables.DummyBuffer, member: SdfWorldPackage.VisibilityRecords, set: occlusionSet);
-            tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: (phase == 0 ? optical : null) ?? tables.DummyBuffer, member: SdfWorldPackage.GlassSumsWritten, set: occlusionSet);
+            tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: tables.DummyBuffer, member: SdfWorldPackage.GlassSumsWritten, set: occlusionSet);
             occlusion.Bind(bound: bound, boundTarget: ref m_occlusionSetTargets[index], first: MeshSetBuffers, set: occlusionSet, tables: tables,
-                target: (!twoPhase ? tables.SampledFiller.ImageViewHandle : ((phase != 0) ? target.ImageViewHandle :
-                    (IsShadowCascade ? shadowReceiver.ImageViewHandle : tables.SampledFiller.ImageViewHandle))));
+                target: ((twoPhase && (phase != 0)) ? target.ImageViewHandle : tables.SampledFiller.ImageViewHandle));
         }
         occlusion.RecordEarly(commandBuffer: recording.CommandBuffer, pipeline: tables.OcclusionPipeline, recorder: recording.Recorder, set: m_occlusionSets[(meshSet * OcclusionSetsPerMesh)]);
-    }
-    // Draws a selection's entry depth into `target` in its two phases, the second after the selection's late step, and a
-    // cascade's exit layer after the entry is final, each in the framebuffer `layers` names; a layer it skips keeps what an
-    // earlier frame drew into it.
-    private void DrawLayers(in RenderGraphPackageRecording recording, SdfWorldTables tables, SdfMeshOcclusion? occlusion, int meshSet, IGpuPipeline pipeline, IGpuImage target, GpuPixelRect area,
-        IGpuFramebuffer entryFramebuffer, IGpuFramebuffer? entryLateFramebuffer, IGpuFramebuffer? exitFramebuffer, bool twoPhase, bool drawsDepth, bool drawsExit) {
-        var recorder = recording.Recorder;
-        var commandBuffer = recording.CommandBuffer;
-        var set = m_meshSets[meshSet];
-
-        if (drawsDepth) {
-            recorder.BeginRenderPass(
-                area: area,
-                commandBufferHandle: commandBuffer,
-                framebuffer: entryFramebuffer
-            );
-            if (occlusion is not null) {
-                // The first phase: what the previous frame found visible, and every draw no host box bounds.
-                RecordEntry(phase: 0);
-            }
-            recorder.EndRenderPass(commandBufferHandle: commandBuffer);
-        }
-
-        if (twoPhase && drawsDepth && (occlusion is not null) && (occlusion.CandidateCount > 0)) {
-            // Finish entry depth before any exit/peel or glass consumer. Both camera and light use this one path.
-            occlusion.RecordLate(commandBuffer: commandBuffer, pipeline: tables.OcclusionPipeline, recorder: recorder, set: m_occlusionSets[((meshSet * OcclusionSetsPerMesh) + 1)], target: target.ImageHandle);
-            recorder.BeginRenderPass(area: area, commandBufferHandle: commandBuffer, framebuffer: entryLateFramebuffer!);
-            RecordEntry(phase: 1);
-            recorder.EndRenderPass(commandBufferHandle: commandBuffer);
-        }
-        if (IsShadowCascade && drawsExit) {
-            // Exit solids use front-face culling; sheets and clipped draws use the unculled pipeline.
-            recorder.BeginRenderPass(area: area, commandBufferHandle: commandBuffer, framebuffer: exitFramebuffer!);
-            if (occlusion is not null) {
-                RecordMeshPhase(commandBuffer: commandBuffer, pipeline: tables.ShadowExitPipeline, recorder: recorder, set: set, selection: occlusion, phase: 2);
-                RecordMeshPhase(commandBuffer: commandBuffer, pipeline: tables.ShadowPipeline, recorder: recorder, set: set, selection: occlusion, phase: 3);
-            }
-            recorder.EndRenderPass(commandBufferHandle: commandBuffer);
-        }
-
-        void RecordEntry(int phase) {
-            RecordMeshPhase(commandBuffer: commandBuffer, phase: phase, pipeline: pipeline, recorder: recorder, selection: occlusion!, set: set);
-            if (IsShadowCascade) {
-                RecordMeshPhase(commandBuffer: commandBuffer, phase: SdfKernelInterfaces.MeshShadowCulledEntryPhase + phase,
-                    pipeline: tables.ShadowEntryPipeline, recorder: recorder, selection: occlusion!, set: set);
-            }
-        }
-    }
-    // Copies one whole depth attachment into another of its format and extent, each left in its attachment layout as the
-    // planner expects it after the pass.
-    private static void CopyDepth(IGpuRecorder recorder, nint commandBuffer, IGpuImage source, IGpuImage destination) {
-        recorder.TransitionImageLayout(commandBufferHandle: commandBuffer, imageHandle: source.ImageHandle,
-            oldLayout: GpuImageLayout.DepthAttachment, newLayout: GpuImageLayout.TransferSource,
-            sourceAccessMask: GpuAccess.DepthAttachmentWrite, sourceStageMask: GpuStage.FragmentTests,
-            destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
-        recorder.TransitionImageLayout(commandBufferHandle: commandBuffer, imageHandle: destination.ImageHandle,
-            oldLayout: GpuImageLayout.DepthAttachment, newLayout: GpuImageLayout.TransferDestination,
-            sourceAccessMask: GpuAccess.DepthAttachmentWrite, sourceStageMask: GpuStage.FragmentTests,
-            destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
-        recorder.CopyImage(commandBufferHandle: commandBuffer, sourceImageHandle: source.ImageHandle, destinationImageHandle: destination.ImageHandle, width: source.Width, height: source.Height);
-        recorder.TransitionImageLayout(commandBufferHandle: commandBuffer, imageHandle: source.ImageHandle,
-            oldLayout: GpuImageLayout.TransferSource, newLayout: GpuImageLayout.DepthAttachment,
-            sourceAccessMask: GpuAccess.TransferRead, sourceStageMask: GpuStage.Transfer,
-            destinationAccessMask: GpuAccess.DepthAttachmentWrite, destinationStageMask: GpuStage.FragmentTests);
-        recorder.TransitionImageLayout(commandBufferHandle: commandBuffer, imageHandle: destination.ImageHandle,
-            oldLayout: GpuImageLayout.TransferDestination, newLayout: GpuImageLayout.DepthAttachment,
-            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
-            destinationAccessMask: GpuAccess.DepthAttachmentWrite, destinationStageMask: GpuStage.FragmentTests);
     }
     // Binds one raster phase and consumes its existing counted arguments.
     private static void RecordMeshPhase(IGpuPipeline pipeline, IGpuRecorder recorder, nint commandBuffer, nint set, SdfMeshOcclusion selection, int phase) {
@@ -1461,16 +1000,16 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         tables.WriteInterfaceBuffer(buffer: counters, layout: PassLayout, member: ShaderWorkCounters.Buffer, set: set);
         m_boundCounters[recording.Slot] = counters;
     }
-    // Writes, once per slot, every storage the pass's ports bind at the member its access reads or writes it through, and
-    // the tables' dummy and fillers at every member no port binds. The storages a slot resolves stay
-    // the instance's for the recorder's life.
+    // Writes, once per slot, every storage the pass's ports bind at the member its access reads or writes it through, the
+    // world's shared shadow layers (SdfWorldShadows) at theirs, and the tables' dummy and fillers at every member nothing
+    // binds. The storages a slot resolves stay the instance's for the recorder's life; the shadow layers are written again
+    // whenever the shadows allocate anew (SdfWorldShadows.BindingRevision).
     private void BindPorts(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var slot = recording.Slot;
+        var shadows = tables.Shadows;
+        var shadowRevision = (shadows?.BindingRevision ?? -1L);
 
-        if (ReferenceEquals(
-            objA: m_portTables[slot],
-            objB: tables
-        )) {
+        if (ReferenceEquals(objA: m_portTables[slot], objB: tables) && (m_portShadows[slot] == shadowRevision)) {
             return;
         }
 
@@ -1478,9 +1017,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         var layout = PassLayout;
         var output = tables.StorageFiller.ImageViewHandle;
         var meshVisibility = tables.SampledFiller.ImageViewHandle;
-        Span<nint> cascades = stackalloc nint[CascadeBindings.Length];
-
-        cascades.Fill(value: tables.SampledFiller.ImageViewHandle);
 
         foreach (var member in ScratchMembers) {
             tables.WriteInterfaceBuffer(buffer: tables.DummyBuffer, layout: layout, member: member, set: set);
@@ -1500,8 +1036,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                 comparisonType: StringComparison.Ordinal
             )) {
                 meshVisibility = bound.ReadImage(latch: recording.Latch).ImageViewHandle;
-            } else if (CascadeIndexOf(version: name) is var cascade and >= 0) {
-                cascades[cascade] = bound.ReadImage(latch: recording.Latch).ImageViewHandle;
             }
         }
         for (var port = 0; (port < m_outputs.Length); port++) {
@@ -1516,10 +1050,16 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                 output = bound.ReadImage(latch: recording.Latch).ImageViewHandle;
             }
         }
+        foreach (var (entry, member) in OpticalBindings) {
+            if (shadows?.OpticalOf(entry: entry) is { } optical) {
+                tables.WriteInterfaceBuffer(buffer: optical, layout: layout, member: member, set: set);
+            }
+        }
 
         m_boundCounters[slot] = null;
         if (m_rateHistoryPort >= 0) { m_boundRateHistory[slot] = null; }
         m_portTables[slot] = tables;
+        m_portShadows[slot] = shadowRevision;
 
         bindings.WriteStorageImage(
             arrayElement: 0,
@@ -1533,8 +1073,9 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             descriptorSetHandle: set,
             imageViewHandle: meshVisibility
         );
-        for (var cascade = 0; (cascade < CascadeBindings.Length); cascade++) {
-            bindings.WriteSampledImage(arrayElement: 0, binding: CascadeBindings[cascade].Binding, descriptorSetHandle: set, imageViewHandle: cascades[cascade]);
+        foreach (var (entry, exit, binding) in CascadeBindings) {
+            bindings.WriteSampledImage(arrayElement: 0, binding: binding, descriptorSetHandle: set,
+                imageViewHandle: (shadows?.ViewOf(entry: entry, exit: exit, filler: tables.SampledFiller.ImageViewHandle) ?? tables.SampledFiller.ImageViewHandle));
         }
         Array.Clear(array: m_screens[slot]);
     }
@@ -1550,9 +1091,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     private static string? ReadMemberOf(string version) => version switch {
         SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.Parts.MeshPyramid => SdfWorldPackage.MeshPyramid,
-        SdfWorldPackage.Parts.ShadowNearOptical => SdfWorldPackage.MeshShadowNearOptical,
-        SdfWorldPackage.Parts.ShadowFarOptical => SdfWorldPackage.MeshShadowFarOptical,
-        SdfWorldPackage.Parts.ShadowSecondOptical => SdfWorldPackage.MeshShadowSecondOptical,
         SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecords,
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecords,
         SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTiles,

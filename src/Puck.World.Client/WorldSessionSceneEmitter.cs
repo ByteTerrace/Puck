@@ -557,7 +557,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         })));
 
         m_pool.RateBy(counts: dressed.RateCounts, height: height, intervals: dressed.RateIntervals, views: views);
-        m_pool.ShadowBy(frame: dressed, height: height, width: width);
+        m_pool.ShadowBy(frame: dressed);
         return dressed;
     }
     /// <inheritdoc/>

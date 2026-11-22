@@ -208,6 +208,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             (m_tables?.DescribeLanding() ?? "region=none"),
             (m_tables?.DescribeSelection() ?? "selection=none"),
             (m_tables?.DescribeMotion() ?? "motion-scopes=none"),
+            $"shadows {(m_tables?.DescribeShadows() is { Length: > 0 } shadows ? shadows : "none")}",
             ((m_tables is { } tables) ? $"{tables.Grant.Selector.Describe()}{tables.Grant.Selector.Work.Describe()}" : "selector=none"),
             (m_tables?.DescribeFixedCost() ?? "fixed-cost=none"),
             $"{(m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none")} late-stagings={LateStagings}{(m_tables?.GpuWork.Describe() ?? string.Empty)}",
@@ -505,6 +506,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
         m_begun = true;
         m_tables?.ForgetViewInputs();
+        m_tables?.BeginShadowFrame();
         m_frameSeconds = Math.Max(val1: frameSeconds, val2: 0);
         m_captured = false;
         m_packed = false;

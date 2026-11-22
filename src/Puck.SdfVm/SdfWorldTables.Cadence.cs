@@ -84,15 +84,14 @@ public sealed partial class SdfWorldTables {
         SdfWorldPackage.MeshShadowRoles,
     ]);
 
-    // A view's signature inputs, built once for each frame the view's passes read (InputsOf): the cascade set the frame
-    // fits for the view, and its pass block (SdfFrameBlock.Write) with the render extent left out and that cascade set
-    // written, folded into the hashes every pass group's signature takes of it. The fit's cameras stand for every input
-    // of the fit (the shadow coverage, the distant map's reach and texels, the view's shadow resolution) without naming
-    // them, so an input a later fit reads cannot be left out of a signature.
+    // A view's signature inputs, built once for each frame the view's passes read (InputsOf): its pass block
+    // (SdfFrameBlock.Write) with the render extent left out and the world's cascade set as the view reads it written
+    // (SdfWorldShadows.CascadesOf), folded into the hashes every pass group's signature takes of it. The set's cameras
+    // stand for every input of the fit (the shadow coverage, the distant map's reach and texels, the world's shadow
+    // resolution) without naming them, so an input a later fit reads cannot be left out of a signature.
     //
-    // A memo stands only while every input the fit and the block read is the one it was built from. The fit reads the
-    // frame alone; the block reads the frame, the view and the tables' pass values. FitOf and InputsOf, the one door to
-    // the memo, hold each:
+    // A memo stands only while every input the block reads is the one it was built from. The block reads the frame, the
+    // view, the tables' pass values and the shadows' cameras. FitOf and InputsOf, the one door to the memo, hold each:
     //   - the frame object      : compared by reference on every read.
     //   - the frame's contents  : the frame and the objects it borrows (its view list, its lights and shadow slots) are
     //                             written by its producer's capture, so the epoch moves wherever one can change while
@@ -102,6 +101,8 @@ public sealed partial class SdfWorldTables {
     //   - the pass values       : compared by value on every read (a record struct, so a value it gains is compared with
     //                             it), the exposures object among them by reference.
     //   - the exposures' values : compared by their revision (SdfViewExposures.Revision), which moves at every stage.
+    //   - the shadows' cameras  : compared by the shadows' content revision (SdfWorldShadows.ContentRevision), which moves
+    //                             with every camera a completed static layer changes.
     // Everything else a signature folds (the tables' group signatures, the environment publications, the material wraps,
     // the shading demand, the view's bloom and tone) is read afresh on every call, never memoized.
     private sealed class ViewInputs {
@@ -111,12 +112,10 @@ public sealed partial class SdfWorldTables {
         public SdfFrame? LightMaskFrame;
         public long LightMaskEpoch = -1;
         public UInt128 LightMask;
-        public SdfMeshShadowCascades Cascades;
-        public int Texels;
-        public int DistantTexels;
         public bool Built;
         public SdfPassValues Values;
         public long Exposures;
+        public long Shadows = -1;
         public ulong Whole;
         public ulong Composite;
         public ulong Lighting;
@@ -163,23 +162,17 @@ public sealed partial class SdfWorldTables {
 
         return inputs.LightMask;
     }
-    /// <summary>Returns the cascade set the frame fits for a view (<see cref="SdfMeshShadowCascades.Fit"/>), fitted once a
-    /// frame for each view and read by every pass that asks with the view's own texels.</summary>
+    /// <summary>Returns the world's cascade set as a view reads it (<see cref="SdfWorldShadows.CascadesOf"/>): every entry
+    /// through the camera the world's shared layers were drawn from, or none for a view that skips shadows or while the
+    /// pipelines the shadows draw with still build.</summary>
     /// <param name="frame">The frame the tables hold.</param>
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>, clamped to the frame's views.</param>
-    /// <param name="texels">The texels along each side of the cascade depths the pass binds, or <see langword="null"/>
-    /// for the view's quality.</param>
-    /// <param name="distantTexels">The texels along each side of the distant map's depth the pass binds, or
-    /// <see langword="null"/> for the frame's distant map at the view's quality.</param>
     /// <returns>The cascade set.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
-    public SdfMeshShadowCascades CascadesOf(SdfFrame frame, int view, int? texels = null, int? distantTexels = null) {
-        var inputs = FitOf(frame: frame, view: view);
+    public SdfMeshShadowCascades CascadesOf(SdfFrame frame, int view) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
 
-        // A pass binding a depth of another size than the quality's (a graph of the new size building) fits its own.
-        return ((((texels ?? inputs.Texels) == inputs.Texels) && ((distantTexels ?? inputs.DistantTexels) == inputs.DistantTexels))
-            ? inputs.Cascades
-            : SdfMeshShadowCascades.Fit(distantTexels: distantTexels, frame: frame, texels: texels, view: view));
+        return (Shadows?.CascadesOf(frame: frame, view: view) ?? default);
     }
     private ViewInputs ViewInputsOf(int index) {
         if (index >= m_viewInputs.Length) {
@@ -194,8 +187,6 @@ public sealed partial class SdfWorldTables {
         var inputs = ViewInputsOf(index: index);
 
         if (!ReferenceEquals(objA: inputs.Frame, objB: frame) || (inputs.Epoch != m_viewInputsEpoch)) {
-            (inputs.Texels, inputs.DistantTexels) = SdfMeshShadowCascades.TexelsFor(frame: frame, view: index);
-            inputs.Cascades = SdfMeshShadowCascades.Fit(distantTexels: inputs.DistantTexels, frame: frame, texels: inputs.Texels, view: index);
             inputs.Frame = frame;
             inputs.Epoch = m_viewInputsEpoch;
             inputs.Built = false;
@@ -207,19 +198,22 @@ public sealed partial class SdfWorldTables {
         var inputs = FitOf(frame: frame, view: view);
         var values = PassValues;
         var exposures = (values.Exposures?.Revision ?? 0L);
+        var clamped = Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1));
+        // Read first: the shadows decide the frame's upload here, and the revision follows that decision.
+        var cascades = CascadesOf(frame: frame, view: clamped);
+        var shadows = (m_shadows?.ContentRevision ?? -1L);
 
-        if (inputs.Built && (inputs.Values == values) && (inputs.Exposures == exposures)) {
+        if (inputs.Built && (inputs.Values == values) && (inputs.Exposures == exposures) && (inputs.Shadows == shadows)) {
             return inputs;
         }
 
         var block = inputs.Block.AsSpan();
-        var clamped = Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1));
 
         block.Clear();
         // The draw count stands in a signature only as none or some: each row added or removed is judged by every scope
         // (NoteStagedRow, NoteUnnamedRow), so a list that grows where a pass draws nothing leaves the pass standing.
         SdfFrameBlock.Write(block: block, frame: frame, height: 0u, lightMask: LightMaskOf(frame: frame, view: clamped), tables: (values with { MeshDraws = Math.Min(val1: values.MeshDraws, val2: 1u) }), view: clamped, width: 0u);
-        SdfFrameBlock.WriteMeshShadows(block: block, cascades: inputs.Cascades);
+        SdfFrameBlock.WriteMeshShadows(block: block, cascades: in cascades);
         inputs.Whole = Fnv1aHash.Compute(values: block);
 
         var owners = Fnv1aHash.Create();
@@ -246,14 +240,15 @@ public sealed partial class SdfWorldTables {
         inputs.Geometry = Fnv1aHash.Compute(values: scratch);
         inputs.Values = values;
         inputs.Exposures = exposures;
+        inputs.Shadows = shadows;
         inputs.Built = true;
 
         return inputs;
     }
 
     /// <summary>Returns the package-owned inputs of a pass group, independent of temporal sampling and graph versions.
-    /// Geometry covers the field, the camera and the draws and poses the pass can show, shadow covers selected directions
-    /// and reach, lighting covers hit shading, and visual covers the sky and bounded media. The graph also checks each
+    /// Geometry covers the field, the camera and the draws and poses the pass can show, shadow covers selected directions,
+    /// reach and what the world's shared shadow layers hold, lighting covers hit shading, and visual covers the sky and bounded media. The graph also checks each
     /// input's last write.</summary>
     /// <param name="frame">The packed frame.</param>
     /// <param name="view">The view index.</param>
@@ -280,6 +275,8 @@ public sealed partial class SdfWorldTables {
         shadow.Add(value: m_shadowSignature);
         shadow.Add(value: inputs.Owners);
         shadow.Add(value: inputs.Shadow);
+        // What the world's shared layers hold, which no pass of the view draws.
+        shadow.Add(value: unchecked((ulong)inputs.Shadows));
         var geometry = Fnv1aHash.Create();
 
         geometry.Add(value: m_geometrySignature);
@@ -289,23 +286,18 @@ public sealed partial class SdfWorldTables {
 
         hash.Add(value: geometry.Value);
         switch (part) {
-            // The surface pass writes each pixel's shadow visibility from the cascades, which draw along the shadowed
-            // lights.
+            // The surface pass writes each pixel's shadow visibility from the world's shared cascades, which draw along
+            // the shadowed lights.
             case SdfWorldPackage.Parts.Surface:
-            case SdfWorldPackage.Parts.ShadowNear:
-            case SdfWorldPackage.Parts.ShadowFar:
-            case SdfWorldPackage.Parts.ShadowSecond:
                 hash.Add(value: shadow.Value);
                 // The surface pass queries the cascades wherever a material's wrap carries its light, so a palette's wraps
                 // decide which pixels it measures.
-                if (part == SdfWorldPackage.Parts.Surface) {
-                    hash.Add(value: m_wrapSignature);
-                    hash.Add(value: frame.ShadePrograms ? 1u : 0u);
-                    if (frame.ShadePrograms && frame.ShadeDefault is { } shade) {
-                        hash.AddBits(value: shade.Demand.MaxWrap);
-                        hash.AddBits(value: shade.Demand.MaxTiltRadians);
-                        hash.Add(value: shade.Demand.EverySide ? 1u : 0u);
-                    }
+                hash.Add(value: m_wrapSignature);
+                hash.Add(value: frame.ShadePrograms ? 1u : 0u);
+                if (frame.ShadePrograms && frame.ShadeDefault is { } shade) {
+                    hash.AddBits(value: shade.Demand.MaxWrap);
+                    hash.AddBits(value: shade.Demand.MaxTiltRadians);
+                    hash.Add(value: shade.Demand.EverySide ? 1u : 0u);
                 }
                 break;
             // The glass shading pass lights the glass and reads the lit image; the clear and the glass raster are
@@ -385,8 +377,9 @@ public sealed partial class SdfWorldTables {
 
     /// <summary>Returns the 64-bit FNV-1a signature of what one view renders from in the frame the tables hold: the
     /// tables' signature (<see cref="UpdateTablesSignature"/>) folded with the view's pass block
-    /// (<see cref="SdfFrameBlock"/>), written with no render extent and with the cascade set the frame fits for the view
-    /// (<see cref="SdfMeshShadowCascades.Fit"/>), and its separate sky field fraction. A collision would need a
+    /// (<see cref="SdfFrameBlock"/>), written with no render extent and with the world's cascade set as the view reads it
+    /// (<see cref="CascadesOf"/>), what the shared shadow layers hold (<see cref="SdfWorldShadows.ContentRevision"/>), and
+    /// its separate sky field fraction. A collision would need a
     /// 64-bit hash clash across two genuinely different input sets — negligible, and still only presentation, never
     /// simulation.</summary>
     /// <param name="frame">The frame the tables packed.</param>
@@ -409,6 +402,7 @@ public sealed partial class SdfWorldTables {
         hash.Add(value: unchecked((ulong)m_skyEnvironment.Publication.Renders));
         hash.Add(value: unchecked((ulong)m_screenEmission.Publication.Renders));
         hash.Add(value: inputs.Whole);
+        hash.Add(value: unchecked((ulong)inputs.Shadows));
         hash.AddBits(value: frame.Views[view].Quality.SkyFieldFraction);
         var bloom = frame.Views[view].Bloom;
 

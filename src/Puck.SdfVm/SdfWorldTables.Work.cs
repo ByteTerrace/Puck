@@ -9,9 +9,10 @@ public sealed partial class SdfWorldTables {
     private const int FillersPass = 0;
     private const int UploadPass = 1;
     private const int EnvironmentPass = 2;
+    private const int ShadowsPass = 3;
 
-    private static readonly string[] PassLabelTable = ["fillers", "upload", "environment"];
-    private static readonly WorkClass[] PassClassTable = [WorkClass.Deterministic, WorkClass.PerBackendDeterministic, WorkClass.Deterministic];
+    private static readonly string[] PassLabelTable = ["fillers", "upload", "environment", "shadows"];
+    private static readonly WorkClass[] PassClassTable = [WorkClass.Deterministic, WorkClass.PerBackendDeterministic, WorkClass.Deterministic, WorkClass.Pacing];
 
     // The ledger every wrapped GPU service counts into: the owner's (a residency that outlives device-loss rebuilds) or
     // the tables' own.
@@ -22,14 +23,15 @@ public sealed partial class SdfWorldTables {
     private long m_workRevision;
 
     /// <summary>Gets the labels of an upload's passes, in submission order: <c>fillers</c>, the fillers' first transitions
-    /// and clears, on the first upload alone; <c>upload</c>, the region copies; and <c>environment</c>, the CPU projection deciding whether a procedural sky
-    /// owes a device refresh. An upload skips a pass it has no work for, which then
-    /// reads skipped.</summary>
+    /// and clears, on the first upload alone; <c>upload</c>, the region copies; <c>shadows</c>, the world's shadow layers
+    /// (<see cref="SdfWorldShadows"/>); and <c>environment</c>, the CPU projection deciding whether a procedural sky owes a
+    /// device refresh. An upload skips a pass it has no work for, which then reads skipped.</summary>
     public static ReadOnlySpan<string> PassLabels => PassLabelTable;
     /// <summary>Gets what two runs of each pass may be held to agree on, in <see cref="PassLabels"/> order:
     /// <c>fillers</c> and <c>environment</c> are <see cref="WorkClass.Deterministic"/>; <c>upload</c> is
     /// <see cref="WorkClass.PerBackendDeterministic"/>, because what it writes and copies follows the residency policy
-    /// each device's memory profile selects.</summary>
+    /// each device's memory profile selects; <c>shadows</c> is <see cref="WorkClass.Pacing"/>, because which layers an
+    /// upload redraws follows the light's turn and the eye's cells as presented.</summary>
     public static ReadOnlySpan<WorkClass> PassClasses => PassClassTable;
     /// <summary>Gets the GPU work the tables' uploads recorded, for the newest upload known to have completed.</summary>
     public IGpuWorkSource Work =>

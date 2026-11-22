@@ -11,9 +11,9 @@ namespace Puck.Shaders;
 /// residency's background GPU work rather than in the fragment, read their own (<see cref="BakeMembers"/>), which holds
 /// only what the bake reads. A buffer one pass writes and a later pass reads is two members over the one buffer: a
 /// read-write member named with an <c>RW</c> suffix for its writer, and a read-only member for its readers.</para>
-/// <para>The fragment (<see cref="NativeFragment"/>) is one view of the residency's baked meshes: the shadow cascades'
-/// and the view's mesh rasterization, the surface
-/// pass that writes every pixel's visibility record from them, shading the records into the lit image, then the sky's
+/// <para>The fragment (<see cref="NativeFragment"/>) is one view of the residency's baked meshes: the view's mesh
+/// rasterization, the surface pass that writes every pixel's visibility record from it and the residency's shared shadow
+/// layers (<c>SdfWorldShadows</c>, which no view's graph draws), shading the records into the lit image, then the sky's
 /// field runs and the composite that writes the output. Its scratch is retained, one allocation shared by every frame
 /// slot, and scales with the counts its host resolves: the view's extent, one viewport, and the program's instance-mask
 /// words.</para>
@@ -368,7 +368,7 @@ public static partial class SdfWorldPackage {
         Value(name: ScreenFidelity, type: ShaderValueType.Float),
         Value(name: StampFade, type: ShaderValueType.Float3),
         Value(name: PoseOverlay, type: ShaderValueType.Uint3),
-        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshShadowCascadeCount * MeshShadowCascadeRows), name: MeshShadowCascades, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshShadowEntries * MeshShadowCascadeRows), name: MeshShadowCascades, type: ShaderValueType.Float4),
         Value(name: MeshShadowCount, type: ShaderValueType.Uint),
         Value(name: MeshShadowParameters, type: ShaderValueType.Float4),
         Value(name: MeshShadowSlopes, type: ShaderValueType.Float4),
@@ -440,7 +440,7 @@ public static partial class SdfWorldPackage {
     ];
     /// <summary>Gets what every compute pass of the fragment but the bake's reads (<see cref="BakeMembers"/>): from its
     /// pass group, beside the extent, the values (<see cref="Values"/>), the view's scratch, its output, the screens it
-    /// shows, the mesh and cascade targets and the work counters; and the World group's members
+    /// shows, the mesh target, the residency's shared shadow layers and the work counters; and the World group's members
     /// (<see cref="Tables"/>).</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Members { get; } = [
         .. Values,
@@ -489,8 +489,7 @@ public static partial class SdfWorldPackage {
         .. Tables,
     ];
     /// <summary>Gets the fragment a native view runs as: one view's dispatch set, its scratch retained and counted, its
-    /// one output the view's color. The cascades and the mesh pass rasterize the frame's mesh
-    /// draws, the pyramid pass reduces the mesh target into the depth pyramid (<see cref="Parts.Pyramid"/>), the surface pass writes every pixel's visibility record from them (<see cref="Parts.Surface"/>), the probe
+    /// one output the view's color. The mesh pass rasterizes the frame's mesh draws, the pyramid pass reduces the mesh target into the depth pyramid (<see cref="Parts.Pyramid"/>), the surface pass writes every pixel's visibility record from them (<see cref="Parts.Surface"/>), the probe
     /// lookup gathers the irradiance volume once a cell of <see cref="ViewsProbeRate"/> pixels (<see cref="Parts.ViewsProbes"/>),
     /// views shades the records into the lit image (<see cref="Parts.Lit"/>), the sky evaluates its field runs where the lit image's
     /// coverage is below one (<see cref="Parts.Sky"/>), and the composite writes the color (<see cref="Parts.Composite"/>).
@@ -501,19 +500,8 @@ public static partial class SdfWorldPackage {
         OutputVersions: [Color],
         Passes: [
             Raster(depth: Parts.MeshDepth, name: Parts.Mesh, target: Parts.MeshTarget),
-            ShadowRaster(depth: Parts.ShadowNearDepth, exit: Parts.ShadowNearExit, name: Parts.ShadowNear),
-            ShadowRaster(depth: Parts.ShadowFarDepth, exit: Parts.ShadowFarExit, name: Parts.ShadowFar),
-            ShadowRaster(depth: Parts.ShadowSecondDepth, exit: Parts.ShadowSecondExit, name: Parts.ShadowSecond),
-            ShadowRaster(depth: Parts.ShadowDistantDepth, exit: Parts.ShadowDistantExit, name: Parts.ShadowDistant),
             Pass(inputs: [Parts.MeshTarget], name: Parts.Pyramid, outputs: [Parts.MeshPyramid]),
-            Pass(
-                inputs: [
-                    Parts.MeshTarget, Parts.MeshPyramid, Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth,
-                    Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit, Parts.ShadowDistantDepth, Parts.ShadowDistantExit,
-                ],
-                name: Parts.Surface,
-                outputs: [Parts.Visibility]
-            ),
+            Pass(inputs: [Parts.MeshTarget, Parts.MeshPyramid], name: Parts.Surface, outputs: [Parts.Visibility]),
             Pass(inputs: [Parts.Visibility], name: Parts.ViewsProbes, outputs: [Parts.Probes]),
             Pass(inputs: [Parts.Visibility, Parts.Probes], name: Parts.Views, outputs: [Parts.Lit]),
             Pass(inputs: [Parts.Lit], name: Parts.Sky, outputs: SkyRuns) with { Members = SkyMembers },
@@ -523,14 +511,6 @@ public static partial class SdfWorldPackage {
             Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.Lit, retained: true),
             .. SkyResources,
             Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Color, retained: false),
-            ShadowDepth(name: Parts.ShadowNearDepth, texels: MeshShadowResolution),
-            ShadowDepth(name: Parts.ShadowFarDepth, texels: MeshShadowResolution),
-            ShadowDepth(name: Parts.ShadowSecondDepth, texels: MeshShadowResolution),
-            ShadowDepth(name: Parts.ShadowNearExit, texels: MeshShadowResolution),
-            ShadowDepth(name: Parts.ShadowFarExit, texels: MeshShadowResolution),
-            ShadowDepth(name: Parts.ShadowSecondExit, texels: MeshShadowResolution),
-            ShadowDepth(name: Parts.ShadowDistantDepth, texels: MeshShadowResolution),
-            ShadowDepth(name: Parts.ShadowDistantExit, texels: MeshShadowResolution),
             Image(format: MeshTargetFormat, from: null, name: Parts.MeshTarget, retained: true),
             // Two words a pyramid texel; the levels one up hold under a third of the extent's texels, with their tiles'
             // padding, and the kernels bound every level by the buffer's length.
@@ -613,8 +593,7 @@ public static partial class SdfWorldPackage {
         OutputAccesses: [.. outputs.Select(selector: static _ => RenderGraphPortAccess.ComputeWrite)],
         Outputs: [.. outputs.Select(selector: static output => new ResourceReference(Name: output))]
     );
-    // A raster pass drawing the frame's mesh draws through the mesh pipeline into its target and depth: the view's mesh
-    // pass, or a shadow cascade's from the cascade's light camera.
+    // A raster pass drawing the frame's mesh draws through the mesh pipeline into its target and depth.
     private static RenderGraphFragmentPass Raster(string name, string target, string depth) => new(
         CountsKernelWork: true,
         InputAccesses: [],
@@ -623,86 +602,8 @@ public static partial class SdfWorldPackage {
         OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
         Outputs: [new ResourceReference(Name: target), new ResourceReference(Name: depth)]
     );
-    /// <summary>Removes the far cascade's camera-depth input when receiver culling is disabled.</summary>
-    /// <param name="fragment">The fragment to specialize.</param>
-    /// <returns>A fragment whose cascades have no camera-depth dependency.</returns>
-    public static RenderGraphPackageFragment WithoutCasterReceivers(RenderGraphPackageFragment fragment) => fragment with {
-        Passes = [.. fragment.Passes.Select(static pass => pass.Name == Parts.ShadowFar
-            ? pass with { Inputs = [], InputAccesses = [] } : pass)],
-    };
-    // A shadow cascade's raster pass, drawing the frame's mesh draws from the cascade's light camera into its two layers:
-    // the depth, the nearest face of any facing (where the light enters the first solid it crosses), and the exit layer,
-    // the nearest face turned from the light (where it leaves the first solid it crosses).
-    private static RenderGraphFragmentPass ShadowRaster(string name, string depth, string exit) => new(
-        CountsKernelWork: true,
-        InputAccesses: name == Parts.ShadowFar ? [RenderGraphPortAccess.ComputeRead] : [],
-        Inputs: name == Parts.ShadowFar ? [new ResourceReference(Name: Parts.MeshTarget)] : [],
-        Name: name,
-        OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
-        Outputs: [new ResourceReference(Name: depth), new ResourceReference(Name: exit)]
-    );
-    // Signed 64-bit optical depth and complemented nearest entry distance, followed by a bit per clear tile.
-    private static ShaderPipelineResource ShadowOptical(string name, int texels) =>
-        Buffer(count: null, name: name, sizeBytes: checked(((ulong)texels * (ulong)texels * ShadowOpticalTexelWords + ShadowOpticalBitmapWords((uint)texels)) * sizeof(uint)), strideBytes: sizeof(uint));
-    // A cascade's depth, texels a side, which its raster pass writes and the surface pass samples.
-    private static ShaderPipelineResource ShadowDepth(string name, int texels) => new(
-        ClearDepth: MeshClearDepth,
-        Dimensions: ShaderPipelineDimensions.Absolute(height: texels, width: texels),
-        Format: MeshDepthFormat.ToString(),
-        Kind: ShaderPipelineResourceKind.Depth,
-        Name: name,
-        Retained: true
-    );
-
     /// <summary>The names of the fragment's passes and versions.</summary>
     public static partial class Parts {
-        /// <summary>The near cascade's optical-depth term.</summary>
-        public const string ShadowNearOptical = "shadowNearOptical";
-        /// <summary>The far cascade's optical-depth term.</summary>
-        public const string ShadowFarOptical = "shadowFarOptical";
-        /// <summary>The second light's cascade optical-depth term.</summary>
-        public const string ShadowSecondOptical = "shadowSecondOptical";
-        /// <summary>The near shadow cascade's raster pass.</summary>
-        public const string ShadowNear = "shadow-near";
-        /// <summary>The far shadow cascade's raster pass.</summary>
-        public const string ShadowFar = "shadow-far";
-        /// <summary>The second shadow slot's cascade raster pass.</summary>
-        public const string ShadowSecond = "shadow-second";
-        /// <summary>The distant shadow map's raster pass: the key light's static casters out to the authored distant
-        /// reach, redrawn only when the light turns past its authored tolerance, the eye crosses a cell of the map's
-        /// grid or a static draw changes (<c>SdfWorldPasses</c>).</summary>
-        public const string ShadowDistant = "shadow-distant";
-        /// <summary>The distant shadow map's depth.</summary>
-        public const string ShadowDistantDepth = "shadowDistantDepth";
-        /// <summary>The distant shadow map's exit layer.</summary>
-        public const string ShadowDistantExit = "shadowDistantExit";
-        /// <summary>The distant shadow map's back depth, which a redraw spread over several frames draws its shares into
-        /// before it is copied into <see cref="ShadowDistantDepth"/> (<see cref="WithShadows"/>).</summary>
-        public const string ShadowDistantBackDepth = "shadowDistantBackDepth";
-        /// <summary>The distant shadow map's back exit layer, beside <see cref="ShadowDistantBackDepth"/>.</summary>
-        public const string ShadowDistantBackExit = "shadowDistantBackExit";
-        /// <summary>The far cascade's static layer: the depth of the static scene's casters alone, held while the far
-        /// cascade's fit stands, which each refresh copies into <see cref="ShadowFarDepth"/> before it draws the moving
-        /// casters over it (<see cref="WithShadows"/>).</summary>
-        public const string ShadowFarStaticDepth = "shadowFarStaticDepth";
-        /// <summary>The far cascade's static exit layer, beside <see cref="ShadowFarStaticDepth"/>.</summary>
-        public const string ShadowFarStaticExit = "shadowFarStaticExit";
-        /// <summary>The near cascade's depth: per texel the reversed-Z orthographic depth of the nearest caster, zero (the
-        /// far plane) where none was drawn.</summary>
-        public const string ShadowNearDepth = "shadowNearDepth";
-        /// <summary>The far cascade's depth.</summary>
-        public const string ShadowFarDepth = "shadowFarDepth";
-        /// <summary>The second slot's cascade depth.</summary>
-        public const string ShadowSecondDepth = "shadowSecondDepth";
-        /// <summary>The near cascade's exit layer: per texel the reversed-Z orthographic depth of the nearest face turned
-        /// from the light, zero (the far plane) where none was drawn. A receiver turned from the light compares against it,
-        /// so the body the light crosses to reach that receiver lets it through while any solid in front of that body
-        /// still shadows it.</summary>
-        public const string ShadowNearExit = "shadowNearExit";
-        /// <summary>The far cascade's exit layer.</summary>
-        public const string ShadowFarExit = "shadowFarExit";
-        /// <summary>The second slot's cascade exit layer.</summary>
-        public const string ShadowSecondExit = "shadowSecondExit";
         /// <summary>The mesh pass drawing the frame's mesh draws into the mesh visibility target.</summary>
         public const string Mesh = "mesh";
         /// <summary>The pyramid pass, writing the mesh depth pyramid the surface pass's occlusion reads from the mesh

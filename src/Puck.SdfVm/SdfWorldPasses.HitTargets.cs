@@ -64,7 +64,7 @@ public sealed partial class SdfWorldPasses {
     // The revision a hit target stands for: its writer's scope's, the glass pass's for the glass target and the mesh
     // pass's for the mesh target and the visibility records written from it.
     private long HitRevisionOf(Entry entry, string instance, HitTarget target, SdfWorldTables tables) => ((entry.View is { } view)
-        ? MotionOf(entry: entry, instance: instance, part: ((target == HitTarget.Glass) ? SdfWorldPackage.Parts.Glass : SdfWorldPackage.Parts.Mesh), tables: tables, view: view)
+        ? MotionOf(entry: entry, part: ((target == HitTarget.Glass) ? SdfWorldPackage.Parts.Glass : SdfWorldPackage.Parts.Mesh), tables: tables, view: view)
         : 0L);
     /// <summary>Notes that an instance's mesh pass skipped over a target that holds the clear, which no draw record reads
     /// a hit from, so it stands for the tables' current revision.</summary>

@@ -289,6 +289,7 @@ public sealed partial class SdfWorldTables {
                 paramName: nameof(frame)
             );
         }
+        m_shadowFrame = frame;
         PackShadeDefault(frame: frame);
 
         if (frame.DynamicTransforms.Count < m_requiredDynamicTransformCapacity) {

@@ -25,12 +25,14 @@ public enum SdfUpdateRates : byte {
     /// <summary>An in-world screen's source image upload at least 30 or 15 times a second once it is shown below its
     /// native size; the machine behind it still runs at full rate.</summary>
     Screens = 4,
-    /// <summary>The key light's far shadow cascade refreshed at the rate the device table authors
-    /// (<see cref="SdfFrame.FarShadows"/>), its fit held between refreshes.</summary>
+    /// <summary>The key light's far shadow entry drawing its moving casters at the rate the device table authors
+    /// (<see cref="SdfFrame.FarShadows"/>) and spreading a redraw of its static layer over the frames of one such period;
+    /// off, it draws both whenever they change (<see cref="SdfWorldShadows"/>).</summary>
     ShadowFar = 8,
-    /// <summary>The key light's distant shadow map held while the light turns within its authored tolerance and the eye
-    /// stays inside its cell (<see cref="SdfDistantShadows"/>); off, it is drawn again on every frame the light moves at
-    /// all. Either way it is drawn again when a static draw changes.</summary>
+    /// <summary>Every shadow entry's static layer held while the light turns within the entry's tolerance and the eye stays
+    /// inside the entry's cell, the distant map's redraws spread over its authored frames
+    /// (<see cref="SdfDistantShadows"/>); off, every static layer is drawn again whole on every upload. Either way a static
+    /// layer is drawn again when a static draw changes.</summary>
     ShadowDistant = 16,
     /// <summary>Every lever on, the default.</summary>
     All = ((((Bodies | Views) | Screens) | ShadowFar) | ShadowDistant),
@@ -75,12 +77,6 @@ public static class SdfUpdateRateTiers {
     /// <summary>The share of its native height at and below which a screen's image uploads at 15 Hz: four texels a step,
     /// two pixels or less at half its native size.</summary>
     public const float ScreenQuarterRateShare = 0.5f;
-    /// <summary>The camera turn, in radians, past which a held far cascade refreshes at once: at its 120 m reach the
-    /// view's frustum moves about a metre, within the shadow filter's reach the cascade's caster cull keeps beside
-    /// every receiver (<see cref="SdfMeshCull.ShadowFilterTexels"/>).</summary>
-    public const float ShadowFarTurnRadians = 0.0087f;
-    /// <summary>The camera move, in metres, past which a held far cascade refreshes at once.</summary>
-    public const float ShadowFarMoveMetres = 0.5f;
 
     /// <summary>Returns the rate a posed creation (a body, or a placed creation) updates at for its largest pixels per
     /// metre over the views that may see it and the fastest its parts move relative to its root: the slowest tier at
@@ -371,23 +367,17 @@ public static class SdfUpdateRateCounts {
     public static readonly WorkKind PlacementsPosed = new(name: "sdf.rates.placements.posed", unit: "placements", workClass: WorkClass.Pacing);
     /// <summary>Counts each animated placed creation's pose a frame held.</summary>
     public static readonly WorkKind PlacementsHeld = new(name: "sdf.rates.placements.held", unit: "placements", workClass: WorkClass.Pacing);
-    /// <summary>Counts each frame a view rendered both layers of its far cascade.</summary>
-    public static readonly WorkKind ShadowFarRendered = new(name: "sdf.rates.shadow-far.rendered", unit: "frames", workClass: WorkClass.Pacing);
-    /// <summary>Counts each frame a view rendered one layer of its far cascade, half of a split refresh.</summary>
-    public static readonly WorkKind ShadowFarSplit = new(name: "sdf.rates.shadow-far.split", unit: "frames", workClass: WorkClass.Pacing);
-    /// <summary>Counts each frame a view held its far cascade.</summary>
-    public static readonly WorkKind ShadowFarHeld = new(name: "sdf.rates.shadow-far.held", unit: "frames", workClass: WorkClass.Pacing);
-    /// <summary>Counts each frame a view drew its far cascade's static layer again (<see cref="SdfFarShadows.HoldsStaticLayer"/>):
-    /// a refresh that counts as <see cref="ShadowFarRendered"/> without it drew only the moving casters over the held layer.</summary>
-    public static readonly WorkKind ShadowFarStatic = new(name: "sdf.rates.shadow-far.static", unit: "frames", workClass: WorkClass.Pacing);
-    /// <summary>Counts each frame a view drew its distant shadow map.</summary>
-    public static readonly WorkKind ShadowDistantRendered = new(name: "sdf.rates.shadow-distant.rendered", unit: "frames", workClass: WorkClass.Pacing);
-    /// <summary>Counts each frame a view drew one share of a distant shadow map redraw spread over several frames
-    /// (<see cref="SdfDistantShadows.Slices"/>) that completed no map; the share that completes one counts as
-    /// <see cref="ShadowDistantRendered"/>.</summary>
-    public static readonly WorkKind ShadowDistantShared = new(name: "sdf.rates.shadow-distant.share", unit: "frames", workClass: WorkClass.Pacing);
-    /// <summary>Counts each frame a view held its distant shadow map.</summary>
-    public static readonly WorkKind ShadowDistantHeld = new(name: "sdf.rates.shadow-distant.held", unit: "frames", workClass: WorkClass.Pacing);
+    /// <summary>The counters of each entry of a world's shared shadows (<see cref="SdfWorldShadows"/>), indexed by entry
+    /// (<see cref="SdfMeshShadowCascades.NearEntry"/> through <see cref="SdfMeshShadowCascades.DistantEntry"/>): each
+    /// upload that drew the entry's static layer whole or completed a redraw (<c>static</c>), that drew one share of a
+    /// redraw spread over several frames completing nothing (<c>share</c>), that drew its moving casters over the static
+    /// layer (<c>live</c>), and that drew nothing for it (<c>held</c>). They count per world, once an upload, whatever
+    /// views read it.</summary>
+    public static IReadOnlyList<SdfShadowEntryCounts> ShadowEntries { get; } = [.. ((string[])["near", "far", "second", "distant"]).Select(selector: static name => new SdfShadowEntryCounts(
+        Static: new WorkKind(name: $"sdf.rates.shadow-{name}.static", unit: "uploads", workClass: WorkClass.Pacing),
+        Share: new WorkKind(name: $"sdf.rates.shadow-{name}.share", unit: "uploads", workClass: WorkClass.Pacing),
+        Live: new WorkKind(name: $"sdf.rates.shadow-{name}.live", unit: "uploads", workClass: WorkClass.Pacing),
+        Held: new WorkKind(name: $"sdf.rates.shadow-{name}.held", unit: "uploads", workClass: WorkClass.Pacing)))];
     /// <summary>Counts each frame a nested view was shown at a reduced rate.</summary>
     public static readonly WorkKind ViewsRated = new(name: "sdf.rates.views.rated", unit: "footprints", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a nested view's glass was shown too small to render (<see cref="SdfUpdateRateTiers.ViewHeldPixels"/>),
@@ -396,9 +386,17 @@ public static class SdfUpdateRateCounts {
     /// <summary>Counts each frame a screen's source was shown at a reduced rate.</summary>
     public static readonly WorkKind ScreensRated = new(name: "sdf.rates.screens.rated", unit: "footprints", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld, ShadowFarRendered, ShadowFarSplit, ShadowFarHeld, ShadowFarStatic, ShadowDistantRendered, ShadowDistantShared, ShadowDistantHeld, ViewsRated, ViewsHeld, ScreensRated];
+    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, PlacementsPosed, PlacementsHeld,
+        .. ShadowEntries.SelectMany(selector: static entry => (WorkKind[])[entry.Static, entry.Share, entry.Live, entry.Held]),
+        ViewsRated, ViewsHeld, ScreensRated];
 
     /// <summary>Creates the counters a host's frames count into.</summary>
     /// <returns>A set over every kind this class declares, in report order, every count zero.</returns>
     public static WorkCounterSet Counters() => new(kinds: DeclaredKinds, name: SourceName);
 }
+/// <summary>One shadow entry's counters (<see cref="SdfUpdateRateCounts.ShadowEntries"/>).</summary>
+/// <param name="Static">Counts each upload that drew the entry's static layer whole or completed a redraw of it.</param>
+/// <param name="Share">Counts each upload that drew one share of a redraw spread over several frames, completing none.</param>
+/// <param name="Live">Counts each upload that drew the moving casters over the entry's static layer.</param>
+/// <param name="Held">Counts each upload that drew nothing for the entry.</param>
+public readonly record struct SdfShadowEntryCounts(WorkKind Static, WorkKind Share, WorkKind Live, WorkKind Held);

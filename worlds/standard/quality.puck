@@ -178,6 +178,7 @@ render {
       reach: 1200
       texels: 2048
       turnDegrees: 0.1
+      frames: 4
     }
     farShadows {
       hertz: 30

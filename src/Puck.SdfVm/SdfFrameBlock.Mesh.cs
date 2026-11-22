@@ -30,7 +30,7 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (MeshShadowTexelsOffset + (index * sizeof(uint))), value: (rendered ? ((uint)cascades.TexelsOf(index: index)) : 0u));
         }
 
-        for (var index = 0; (index < SdfWorldPackage.MeshShadowCascadeCount); index++) {
+        for (var index = 0; (index < SdfWorldPackage.MeshShadowEntries); index++) {
             var camera = cascades[index];
             var row = (MeshShadowCascadesOffset + ((index * SdfWorldPackage.MeshShadowCascadeRows) * 16));
 
