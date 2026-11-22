@@ -83,11 +83,17 @@ public sealed partial class WorldBenchmarkCommandModule {
             ["gpu"] = (gpuTiming?.Capture() ?? new JsonObject { ["state"] = "absent" }),
             ["profile"] = ProfileReport(),
             ["topology"] = TopologyReport(),
+            ["preparation"] = m_prepared,
         };
+
+        m_prepared = null;
 
         gpuTiming?.RequireRecording(false);
 
         _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"[world.benchmark: '{m_route}' {((reason is null) ? "finished" : $"ended early ({reason}; {dropped} armed line(s) dropped)")}; {m_entry}");
+        if (report["preparation"] is JsonObject prepared) {
+            _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"; {prepared["what"]} prepared in {prepared["seconds"]!.GetValue<double>():0.0} s before the run, outside its frames");
+        }
         if (recording is null) {
             _ = text.Append(value: "; frames unmeasured: this host keeps no frame timeline");
         } else if (recording.Dropped > 0) {
