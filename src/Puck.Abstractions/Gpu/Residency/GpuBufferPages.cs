@@ -87,16 +87,19 @@ public sealed class GpuBufferPages {
         }
     }
 
-    // Contiguous replacement preserves old words through an ordered carry; only its newly backed tail changes.
-    internal void GrowCarried(long bytes) {
+    // Contiguous replacement preserves the words both sizes hold through an ordered carry: a grown tail is newly
+    // backed, and a lease reaching past a shrunk size stops being current (Lease.IsCurrent reads the extent).
+    internal void ResizeCarried(long bytes) {
         var old = m_writable.Length;
-        var count = Math.Max(val1: old, val2: checked((int)bytes.CeilingDivide(divisor: PageBytes)));
+        var count = checked((int)bytes.CeilingDivide(divisor: PageBytes));
 
         Array.Resize(array: ref m_writable, newSize: count);
         Array.Resize(array: ref m_generations, newSize: count);
-        Array.Fill(array: m_writable, count: (count - old), startIndex: old, value: true);
-        Array.Fill(array: m_generations, count: (count - old), startIndex: old, value: m_generation);
-        m_bytes = Math.Max(val1: m_bytes, val2: bytes);
+        if (count > old) {
+            Array.Fill(array: m_writable, count: (count - old), startIndex: old, value: true);
+            Array.Fill(array: m_generations, count: (count - old), startIndex: old, value: m_generation);
+        }
+        m_bytes = bytes;
     }
     internal void Revoke() => SetWritable(0, m_writable.Length, false);
     // Exact intersection after GpuUploadRuns coarsening. Never feed these runs back through its gap joining.

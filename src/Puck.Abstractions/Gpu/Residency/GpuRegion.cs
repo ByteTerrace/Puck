@@ -102,6 +102,17 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <summary>The most separate word ranges one copy carries; past it neighbouring ranges pair up and the words
     /// between them are copied again.</summary>
     public const int MaxCopyRuns = 256;
+    /// <summary>The value of a packed request's sixth word (<c>sourceStride</c>, which a packed copy leaves zero) that
+    /// makes it a move within the destination (<see cref="TryOweMove"/>): each run's words are read from the destination
+    /// itself, from the run's source word, and the source words, one per run, follow the run table, each counted from
+    /// <c>destinationBase</c> as the run's region word is.</summary>
+    public const uint CopyMoveMode = 1U;
+    /// <summary>The value of a packed request's sixth word that makes it a gather (<see cref="TryOweGather"/>): each run's
+    /// words are read from the source binding from <c>sourceBase</c> plus the run's source word, which follow the run table
+    /// as a move's do.</summary>
+    public const uint CopyGatherMode = 2U;
+    /// <summary>The most moves a region owes at once (<see cref="TryOweMove"/>): one dispatch's run table.</summary>
+    public const int MaxMoves = MaxCopyRuns;
 
     // A slot's request buffer, in uints: the header and the run-table reserve of two uints per run. A flush whose
     // clipped runs pass the reserve grows its slot's buffer.
@@ -177,6 +188,11 @@ public sealed unsafe class GpuRegion : IDisposable {
     private GpuBufferPages? m_pages;
     private ulong m_pageRevision;
 
+    // The moves within the destination (TryOweMove) and the gathers from an owner's packed buffer (TryOweGather) owed until
+    // the next recorded copy, in words from the destination's base; null until reserved (ReserveRunCopies).
+    private GpuRegionRunCopy? m_moves;
+    private GpuRegionRunCopy? m_gathers;
+
     // Exact, so carrying unmapped debt never joins it across words an exact source was not owed.
     private readonly GpuUploadRuns m_deferredCopies = new(MaxCopyRuns, exact: true);
     private readonly List<(int Start, int Length, GpuBufferPages.Lease Lease)> m_copyRuns = [];
@@ -206,7 +222,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     // region's all-writable authority can preserve its proofs across an ordered contiguous carry.
     private void SetDestinationPages(IGpuBuffer destination, bool carried = false) {
         if ((destination is not IGpuPagedBuffer) && carried && (m_pages is not null)) {
-            m_pages.GrowCarried(bytes: ((long)destination.SizeBytes));
+            m_pages.ResizeCarried(bytes: ((long)destination.SizeBytes));
             return;
         }
         var pages = ((destination is IGpuPagedBuffer paged) ? paged.Pages : new GpuBufferPages(((long)destination.SizeBytes)));
@@ -888,11 +904,12 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <summary>Gets the handle of the pipeline <see cref="RecordCopy"/> dispatches, or zero for a region that copies
     /// nothing.</summary>
     public nint CopyPipelineHandle => (m_copyPipeline?.Handle ?? 0);
-    /// <summary>Gets whether the next <see cref="RecordCopy"/> records a copy: the region is staged and owes words.</summary>
+    /// <summary>Gets whether the next <see cref="RecordCopy"/> records a copy: the region is staged and owes words or
+    /// moves.</summary>
     public bool OwesCopy => (
         (Policy == GpuResidencyPolicy.Staged) &&
         !m_disposed &&
-        (m_owed[0].Count > 0)
+        ((m_owed[0].Count > 0) || OwesMoves || OwesGathers)
     );
     /// <summary>Gets the bytes the next flush stages and <see cref="RecordCopy"/> copies: a staged region's owed words, and
     /// zero under the other policies.</summary>
@@ -948,6 +965,8 @@ public sealed unsafe class GpuRegion : IDisposable {
         if (!m_external) { m_pages?.Revoke(); }
         m_copySets?.ForgetWriter(region: this);
         m_ownedCopyPool?.Dispose();
+        m_moves?.Dispose();
+        m_gathers?.Dispose();
 
         foreach (var buffer in m_ownedBuffers) {
             buffer.Dispose();
@@ -1248,18 +1267,18 @@ public sealed unsafe class GpuRegion : IDisposable {
     }
 
     /// <summary>Shrinks a staged region that owns its destination to <paramref name="byteCount"/> bytes without waiting
-    /// for any submission: it creates a destination of the new size, keeps the first <paramref name="byteCount"/> bytes
-    /// of <see cref="Contents"/> and frees the rest, drops any carry a grow still owed, and owes every word of the new
-    /// size the host copy holds, since the new destination holds nothing yet. The words past the host copy of a region
-    /// with a source (<see cref="Shadow"/>) are not owed: its owner owes the ones its readers need
-    /// (<see cref="OweSourced"/>). A staging ring larger than the flushes need is replaced at a later flush
+    /// for any submission: it keeps the first <paramref name="byteCount"/> bytes of <see cref="Contents"/> and frees the
+    /// rest, and every word below the new size stays where it stands, so only the debt past the new size is dropped and
+    /// a move owed past it with it. A mapped destination gives its chunks past the new size back in place; any other is
+    /// replaced by one of the new size, which its next copy recording clears and fills with the words below the new size
+    /// from the one it replaced on the GPU (<see cref="RecordCarry"/>), and whose page leases below the new size stay
+    /// current. A staging ring larger than the flushes need is replaced at a later flush
     /// (<see cref="StagingFloorBytes"/>).</summary>
     /// <param name="byteCount">The new size in bytes; positive, smaller than <see cref="ByteCount"/> and a whole number of
     /// uints.</param>
     /// <returns>What the region gave up, which the caller now owns and disposes once every submission recorded before the
-    /// shrink has completed: the destination it replaced, or a mapped destination's chunks past the new size
-    /// (<see cref="IGpuMappedBuffer.Unmap"/>). A mapped region keeps its destination and every word below the new size, so
-    /// it owes nothing.</returns>
+    /// shrink has completed and its carry is recorded (<see cref="PendingCarry"/>): the destination it replaced, or a
+    /// mapped destination's chunks past the new size (<see cref="IGpuMappedBuffer.Unmap"/>).</returns>
     /// <exception cref="InvalidOperationException">The region is not staged, or its destination is external.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not positive, not smaller than
     /// <see cref="ByteCount"/> or not a whole number of uints.</exception>
@@ -1287,6 +1306,9 @@ public sealed unsafe class GpuRegion : IDisposable {
                 paramName: nameof(byteCount)
             );
         }
+        // A move past the new size would read or write words the shrunk destination no longer holds.
+        _ = m_moves?.Runs.RemoveAll(match: move => ((((long)Math.Max(val1: move.Source, val2: move.Destination)) + move.Words) * sizeof(uint)) > byteCount);
+        _ = m_gathers?.Runs.RemoveAll(match: gather => ((((long)gather.Destination) + gather.Words) * sizeof(uint)) > byteCount);
         if (m_destination is IGpuMappedBuffer mapped) {
             return ShrinkMapped(byteCount: byteCount, mapped: mapped);
         }
@@ -1310,19 +1332,27 @@ public sealed unsafe class GpuRegion : IDisposable {
         }
         _ = m_ownedBuffers.Remove(item: replaced);
         m_ownedBuffers.Add(item: replacement);
-        m_carrySource = null;
-        m_carryBytes = 0;
+        // The new destination carries the words below its size from the one it replaces (RecordCarry), so the words
+        // already there stay where they stand and only the debt past the new size is dropped. A carry a grow still owes
+        // comes from the destination before it, which the replaced one never received; a destination still owing its
+        // clear holds nothing to carry.
+        if ((m_carrySource is null) && !m_clearOwed) {
+            m_carrySource = replaced;
+            m_carryBytes = byteCount;
+        } else {
+            m_carryBytes = Math.Min(val1: m_carryBytes, val2: byteCount);
+        }
         m_destination = replacement;
-        SetDestinationPages(replacement);
+        SetDestinationPages(replacement, carried: (replaced is not IGpuPagedBuffer));
         ByteCount = byteCount;
-        // Every host-copy word is owed below, so the destination holds the host copy once the copy runs.
-        m_knownWords = ((int)(shadow / sizeof(uint)));
+        m_knownWords = Math.Min(val1: m_knownWords, val2: ((int)(shadow / sizeof(uint))));
         m_copySets!.ForgetWriter(region: this);
+
+        var kept = StagedRuns();
+
+        kept.Append(limit: ((int)(byteCount / sizeof(uint))), source: m_owed[0]);
         m_owed[0].Clear();
-        m_owed[0].Add(
-            length: m_knownWords,
-            start: 0
-        );
+        m_owed[0].Append(source: kept);
         m_stagedSlot = -1;
 
         return replaced;
@@ -1606,6 +1636,117 @@ public sealed unsafe class GpuRegion : IDisposable {
         );
         m_stagedSlot = -1;
     }
+    /// <summary>Reserves what the region's moves (<see cref="TryOweMove"/>) and gathers (<see cref="TryOweGather"/>) record
+    /// with: a copy set and a request buffer per slot for each, beside the slot's copy set, so neither rewrites the set its
+    /// copy binds. Reserving twice does nothing.</summary>
+    /// <exception cref="InvalidOperationException">The region is not staged, or its destination is external.</exception>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public void ReserveRunCopies() {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        if ((Policy != GpuResidencyPolicy.Staged) || m_external) {
+            throw new InvalidOperationException(message: "Only a staged region that owns its destination moves or gathers words into it.");
+        }
+        if (m_moves is not null) { return; }
+        m_moves = CreateRunCopy(detail: "moves", mode: CopyMoveMode);
+        m_gathers = CreateRunCopy(detail: "gathers", mode: CopyGatherMode);
+    }
+    private GpuRegionRunCopy CreateRunCopy(string detail, uint mode) {
+        var name = (m_name.IsEmpty ? default : new GpuObjectName(owner: m_name.Owner!, part: m_name.Part!, detail: detail));
+
+        return new GpuRegionRunCopy(bindings: m_bindings, buffers: m_buffers, pipeline: m_copyPipeline!, recorder: m_recorder, name: in name,
+            slotCount: SlotCount, mode: mode);
+    }
+    /// <summary>Gets whether the region owes moves its next copy records (<see cref="TryOweMove"/>).</summary>
+    public bool OwesMoves => (m_moves?.Runs.Count > 0);
+    /// <summary>Gets whether the region owes gathers its next copy records (<see cref="TryOweGather"/>).</summary>
+    public bool OwesGathers => (m_gathers?.Runs.Count > 0);
+    /// <summary>Gets how many moves the region has recorded over its life (<see cref="TryOweMove"/>).</summary>
+    public long MovesRecorded => (m_moves?.Recorded ?? 0L);
+    /// <summary>Owes a move of <paramref name="length"/> bytes within the destination, from <paramref name="sourceOffset"/>
+    /// to <paramref name="destinationOffset"/>, which the next recorded copy of any slot dispatches before its gathers
+    /// and staged words, so every word written after this call lands after the move has read its source and written its
+    /// destination. No word passes through the host. The words the move writes hold the source's words once it runs; the
+    /// source keeps its words until something writes them.
+    /// <para>Invariant: no two moves owed together overlap, in source or destination, and no move overlaps itself, so
+    /// the moves of one dispatch read no word another of them writes. The caller keeps both ranges backed until the
+    /// submission that records the move (<see cref="OwesMoves"/> false once recorded).</para></summary>
+    /// <param name="sourceOffset">The source's first byte; a whole number of uints.</param>
+    /// <param name="destinationOffset">The destination's first byte; a whole number of uints, at or past
+    /// <see cref="ShadowBytes"/>.</param>
+    /// <param name="length">The bytes; positive, a whole number of uints, both ranges ending within
+    /// <see cref="ByteCount"/>.</param>
+    /// <returns><see langword="false"/> when the region already owes <see cref="MaxMoves"/> moves, or the move overlaps
+    /// one it owes; nothing is owed then.</returns>
+    /// <exception cref="InvalidOperationException">The region reserved no run copies (<see cref="ReserveRunCopies"/>).</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A range is not whole uints, the destination starts before
+    /// <see cref="ShadowBytes"/>, or a range runs past <see cref="ByteCount"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public bool TryOweMove(long sourceOffset, long destinationOffset, long length) {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        if (m_moves is null) { throw new InvalidOperationException(message: "The region reserved no run copies."); }
+        RequireRunDestination(destinationOffset: destinationOffset, length: length);
+        if (((sourceOffset % sizeof(uint)) != 0) || (sourceOffset < 0) || (sourceOffset > (ByteCount - length))) {
+            throw new ArgumentOutOfRangeException(actualValue: sourceOffset, message: $"A move's source is whole uints within the region's {ByteCount} bytes.", paramName: nameof(sourceOffset));
+        }
+
+        var source = ((int)(sourceOffset / sizeof(uint)));
+        var destination = ((int)(destinationOffset / sizeof(uint)));
+        var words = ((int)(length / sizeof(uint)));
+
+        if ((m_moves.Runs.Count == MaxMoves) || GpuRegionRunCopy.Overlap(source, words, destination, words) ||
+            m_moves.Overlaps(first: source, words: words) || m_moves.Overlaps(first: destination, words: words)) { return false; }
+        m_moves.Add(destination: destination, from: null, source: source, words: words);
+        m_stagedSlot = -1;
+
+        return true;
+    }
+    /// <summary>Owes a gather of <paramref name="words"/> words a caller packed into a host-visible buffer of its own, from
+    /// its word <paramref name="sourceWord"/> to the destination's byte <paramref name="destinationOffset"/>, which the next
+    /// recorded copy of any slot dispatches after its moves and before its staged words. Every gather owed together reads
+    /// one buffer, which the caller keeps alive and unwritten until the submission that records the gather has completed.
+    /// The caller records the copy at once (it owes a gather only where it then flushes and records the region), and
+    /// keeps the destination range backed until then.</summary>
+    /// <param name="source">The buffer the words are packed in.</param>
+    /// <param name="sourceWord">The first word of <paramref name="source"/> the gather reads.</param>
+    /// <param name="destinationOffset">The destination's first byte; a whole number of uints, at or past
+    /// <see cref="ShadowBytes"/>.</param>
+    /// <param name="words">The words; positive, the range ending within <see cref="ByteCount"/>.</param>
+    /// <returns><see langword="false"/> when the region already owes <see cref="MaxCopyRuns"/> gathers, the gather reads
+    /// another buffer than those it owes, or its destination overlaps one it owes; nothing is owed then.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The region reserved no run copies (<see cref="ReserveRunCopies"/>).</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The destination is not whole uints, starts before
+    /// <see cref="ShadowBytes"/> or runs past <see cref="ByteCount"/>, or the source words pass
+    /// <paramref name="source"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
+    public bool TryOweGather(IGpuStorageBuffer source, int sourceWord, long destinationOffset, int words) {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        ArgumentNullException.ThrowIfNull(argument: source);
+        if (m_gathers is null) { throw new InvalidOperationException(message: "The region reserved no run copies."); }
+        RequireRunDestination(destinationOffset: destinationOffset, length: (((long)words) * sizeof(uint)));
+        if ((sourceWord < 0) || (((((ulong)sourceWord) + ((ulong)words)) * sizeof(uint)) > source.SizeBytes)) {
+            throw new ArgumentOutOfRangeException(actualValue: sourceWord, message: $"A gather reads words within its {source.SizeBytes}-byte buffer.", paramName: nameof(sourceWord));
+        }
+
+        var destination = ((int)(destinationOffset / sizeof(uint)));
+
+        if ((m_gathers.Runs.Count == MaxCopyRuns) || ((m_gathers.Source is { } owed) && !ReferenceEquals(objA: owed, objB: source)) ||
+            m_gathers.Overlaps(first: destination, words: words)) { return false; }
+        m_gathers.Add(destination: destination, from: source, source: sourceWord, words: words);
+        m_stagedSlot = -1;
+
+        return true;
+    }
+    private void RequireRunDestination(long destinationOffset, long length) {
+        if ((length <= 0) || ((length % sizeof(uint)) != 0) || ((destinationOffset % sizeof(uint)) != 0) ||
+            (destinationOffset < m_shadowBytes) || (destinationOffset > (ByteCount - length))) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: destinationOffset,
+                message: $"A run copy writes whole uints within the region's {ByteCount} bytes, past the host copy's {m_shadowBytes}.",
+                paramName: nameof(destinationOffset)
+            );
+        }
+    }
     /// <summary>Makes <paramref name="slot"/> owe every word of the region again, as a new buffer does, so its next flush
     /// or copy sends the whole region whatever the slot last held. An owner that rewrites the whole region each frame
     /// calls it so each frame's upload is the region, not the part that differs from what that slot held frames
@@ -1690,7 +1831,11 @@ public sealed unsafe class GpuRegion : IDisposable {
         foreach (var run in m_copyRuns) {
             if (!run.Lease.IsCurrent) { StageOwed(slot: slot); break; }
         }
-        if (m_header[0] == 0) { m_stagedSlot = -1; return false; }
+        // Moves go first, then gathers: the words written after a move may be ones it reads or writes.
+        var moved = RecordRunCopies(commandBuffer: commandBuffer, pipelineBound: pipelineBound, slot: slot);
+
+        pipelineBound |= moved;
+        if (m_header[0] == 0) { m_stagedSlot = -1; return moved; }
 
         // The set is unwritten, or another region its owner's reserved sets serve wrote it since this one did; the
         // slot's last submission has retired, so the set is written before it is bound.
@@ -1714,6 +1859,16 @@ public sealed unsafe class GpuRegion : IDisposable {
         return true;
     }
 
+    // Writes a copy set's three bindings (CopyBindings), each read as uints: the one door every region-copy set is
+    // written through.
+    internal static void WriteCopySet(IGpuBindings bindings, nint set, IGpuBuffer request, IGpuBuffer source, IGpuBuffer destination) {
+        bindings.WriteBuffer(binding: CopyRequestBinding, bufferHandle: request.BufferHandle, bufferSize: request.SizeBytes,
+            descriptorSetHandle: set, elementStride: sizeof(uint), kind: GpuBindingKind.ReadOnlyBuffer);
+        bindings.WriteBuffer(binding: CopySourceBinding, bufferHandle: source.BufferHandle, bufferSize: source.SizeBytes,
+            descriptorSetHandle: set, elementStride: sizeof(uint), kind: GpuBindingKind.ReadOnlyBuffer);
+        bindings.WriteBuffer(binding: CopyDestinationBinding, bufferHandle: destination.BufferHandle, bufferSize: destination.SizeBytes,
+            descriptorSetHandle: set, elementStride: sizeof(uint), kind: GpuBindingKind.ReadWriteBuffer);
+    }
     // The one dispatch door for packed-region uploads and generic strided buffer copies.
     internal static void RecordCopyDispatch(IGpuRecorder recorder, nint commandBuffer, IGpuComputePipeline pipeline, nint set, uint words, bool pipelineBound = false) {
         if (!pipelineBound) {
@@ -1965,32 +2120,8 @@ public sealed unsafe class GpuRegion : IDisposable {
     // the destination into the slot's copy set.
     private void WriteCopySet(int slot) {
         var set = m_copySets!.SetOf(slot: slot);
-        var ring = m_blocks[slot].Ring!;
 
-        m_bindings.WriteBuffer(
-            binding: CopyRequestBinding,
-            bufferHandle: m_hostBuffers[slot].BufferHandle,
-            bufferSize: m_hostBuffers[slot].SizeBytes,
-            descriptorSetHandle: set,
-            elementStride: sizeof(uint),
-            kind: GpuBindingKind.ReadOnlyBuffer
-        );
-        m_bindings.WriteBuffer(
-            binding: CopySourceBinding,
-            bufferHandle: ring.BufferHandle,
-            bufferSize: ring.SizeBytes,
-            descriptorSetHandle: set,
-            elementStride: sizeof(uint),
-            kind: GpuBindingKind.ReadOnlyBuffer
-        );
-        m_bindings.WriteBuffer(
-            binding: CopyDestinationBinding,
-            bufferHandle: m_destination!.BufferHandle,
-            bufferSize: m_destination.SizeBytes,
-            descriptorSetHandle: set,
-            elementStride: sizeof(uint),
-            kind: GpuBindingKind.ReadWriteBuffer
-        );
+        WriteCopySet(bindings: m_bindings, destination: m_destination!, request: m_hostBuffers[slot], set: set, source: m_blocks[slot].Ring!);
         m_copySets.WrittenBy(
             region: this,
             slot: slot
@@ -2149,6 +2280,9 @@ public sealed unsafe class GpuRegion : IDisposable {
     // destination word, then per run its region word and first thread, which is also where its words start in the block.
     // The slot's previous block is released first: its last submission has retired.
     private void StageOwed(int slot) {
+        m_moves?.Stage(destinationWord: m_destinationWord);
+        m_gathers?.Stage(destinationWord: m_destinationWord);
+
         var owed = m_owed[0];
 
         m_pages!.OweChanged(after: m_pageRevision, bytes: (((long)m_knownWords) * sizeof(uint)), offset: (((long)m_destinationWord) * sizeof(uint)), owed: owed);
@@ -2203,6 +2337,25 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_header[4] = 0; m_header[5] = 0; m_header[6] = 0;
         request.Write<uint>(data: m_header.AsSpan(0, requestWords));
         m_stagedSlot = slot;
+    }
+    // Records the moves and then the gathers the slot's flush staged, each followed by the barrier that orders its reads and
+    // writes of the destination before the next dispatch's; false when neither was staged.
+    private bool RecordRunCopies(nint commandBuffer, int slot, bool pipelineBound) {
+        var recorded = false;
+
+        foreach (var copies in (ReadOnlySpan<GpuRegionRunCopy?>)[m_moves, m_gathers]) {
+            if ((copies is null) || !copies.Record(commandBuffer: commandBuffer, destination: m_destination!, pipelineBound: (pipelineBound || recorded), slot: slot)) { continue; }
+            recorded = true;
+            m_recorder.MemoryBarrier(
+                commandBufferHandle: commandBuffer,
+                destinationAccessMask: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite),
+                destinationStageMask: GpuStage.ComputeShader,
+                sourceAccessMask: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite),
+                sourceStageMask: GpuStage.ComputeShader
+            );
+        }
+
+        return recorded;
     }
     // Returns the slot's request buffer, replaced first by one of at least the bytes asked when it holds fewer (the slot's
     // last submission has retired, so the buffer is free). The copy sets are written again before each slot's next copy.
