@@ -361,10 +361,16 @@ Workers follow the same evidence: a bootstrap that finds a worker replaces it (d
 fresh compute at Activate) only when `WorldReleaseGroupRecord.HasRecoveredBootstrap` holds, that is, the group never
 committed and its history records a bootstrap that captured roots and recovered; otherwise it refuses. A bootstrap's
 recovery deletes its compute (`StopCandidateAsync` with no source), since nothing restarts on it and Azure's
-automatic repairs would keep rerunning the refused extension. A deploy of another release supersedes the group's
-unfinished bootstrap (`WorldReleaseCoordinator.SupersedeBootstrapAsync`): one with no recovery root is abandoned
-(`AbandonBootstrapAsync` keeps any roots it saved unrecorded), one with roots is recovered. So every failed
-bootstrap leaves a group the next deploy can bootstrap without a hand-run resume or an Azure change.
+automatic repairs would keep rerunning the refused extension. A deploy decides what to do with the group's pending
+operation through `WorldReleaseCoordinator.Succession`, shared by the Azure host and the succession laws: its own
+release resumes, no unfinished operation begins (the store's `BeginAsync` moves an admitted operation into history and
+closes its rollback window in the claiming write, so the pipeline never finalizes), and another release's unfinished
+operation is superseded (`WorldReleaseCoordinator.SupersedeAsync`). Supersession admits a committed target first and
+refuses with its cause when it cannot; abandons a Prepare operation or an uncaptured bootstrap (`AbandonAsync` keeps
+any roots it saved unrecorded); and recovers every other pre-commit operation's source, finishing a drain's capture
+first. So every failed release leaves a group the next deploy can follow without a hand-run resume or an Azure change,
+except a committed release that cannot be admitted. `WorldReleaseCoordinatorSafetyLawTests.ADeploymentFollowsWhateverItsPredecessorLeftPending`
+drives each phase against a host fake that makes the worker's durable writes.
 Every pre-commit recovery outcome names its cause: `RecoverPreCommitAsync` is
 the one door, and it appends the failure that began recovery to every result. `world prepare` relocates
 provider-declared machine asset paths from nested origins to the common worlds

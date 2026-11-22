@@ -486,20 +486,54 @@ public sealed class WorldReleaseCoordinator {
             current: current,
             phase: WorldReleaseOperationPhase.Verify
         );
-    /// <summary>Ends an unfinished first deployment so a newer release can bootstrap the group: one that has captured no
-    /// recovery root is abandoned without a runtime effect, and one that has is recovered through
-    /// <see cref="IWorldReleaseRuntime"/> (its compute stopped and its roots restored), as a failed start would be. A
-    /// committed operation, or one with a source, is never superseded.</summary>
-    /// <param name="current">The group state holding the unfinished bootstrap.</param>
+    /// <summary>Returns what a deployment of <paramref name="release"/> does with the group's pending operation. A group
+    /// with no unfinished operation begins the deployment's own (which accepts an admitted one), the deployment's own
+    /// release resumes, and another release's unfinished operation is superseded first
+    /// (<see cref="SupersedeAsync"/>), so a deployment always follows whatever its predecessor left behind.</summary>
+    /// <param name="record">The durable group state, or <see langword="null"/> for a group not yet created.</param>
+    /// <param name="release">The identity of the release being deployed.</param>
+    /// <param name="operationId">The operation identifier the deployment requested, or <see langword="null"/> for a
+    /// fresh one.</param>
+    /// <returns>The deployment's next step.</returns>
+    /// <exception cref="InvalidOperationException">The pending operation is <paramref name="release"/>'s own under
+    /// another identifier than <paramref name="operationId"/>.</exception>
+    public static WorldReleaseSuccession Succession(WorldReleaseGroupRecord? record, string release, Guid? operationId) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(release);
+        if (record?.PendingOperationId is not { } pending) { return WorldReleaseSuccession.Begin; }
+        if (string.Equals(
+            a: record.PendingTargetRelease,
+            b: release,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            return (((operationId is { } requested) && (requested != pending))
+                ? throw new InvalidOperationException(message: $"operation {pending:D} is already pending for release {release}; repeat the deployment with its identifier, or without one, to resume it")
+                : WorldReleaseSuccession.Resume);
+        }
+        return (record.HasUnfinishedOperation
+            ? WorldReleaseSuccession.Supersede
+            : WorldReleaseSuccession.Begin);
+    }
+    /// <summary>Ends the group's pending operation of another release so <paramref name="successor"/> can begin, at the
+    /// cause of each durable phase rather than by retracting any effect:
+    /// <para>An admitted, committed operation is left as it is: the successor's claim accepts it
+    /// (<see cref="WorldReleaseGroupStore.BeginAsync"/>). A committed operation that is not yet admitted is resumed
+    /// through its target's admission, since its source's save is no longer a fallback; when that fails the run refuses
+    /// with the target's cause and the operation stays pending. An operation still in Prepare, and a first deployment
+    /// that captured no recovery root, are abandoned without a runtime effect
+    /// (<see cref="WorldReleaseGroupStore.AbandonAsync"/>). Every other pre-commit operation is recovered as a failed
+    /// start would be: a source still draining finishes its protected capture first, then the candidate stops, the
+    /// source's protected roots are restored and the source is admitted again (a first deployment's compute is deleted
+    /// instead).</para></summary>
+    /// <param name="current">The group state holding the pending operation.</param>
     /// <param name="successor">The identity of the release that supersedes it.</param>
-    /// <param name="pendingTarget">The manifest of the bootstrap's own target release.</param>
-    /// <param name="capturedRoots">The recovery roots the bootstrap saved under its operation identifier without
-    /// recording them, kept in the history of an abandoned bootstrap.</param>
-    /// <param name="runtime">The runtime driver for the bootstrap's own target, used only when it is recovered.</param>
+    /// <param name="pendingTarget">The manifest of the pending operation's own target release.</param>
+    /// <param name="capturedRoots">The recovery roots the operation saved under its identifier without recording them,
+    /// kept in the history of an abandoned operation.</param>
+    /// <param name="runtime">The runtime driver for the pending operation's own source and target.</param>
     /// <param name="cancellationToken">The token that cancels storage and runtime work.</param>
-    /// <returns>The run result; its snapshot holds no pending operation when the bootstrap has ended, and its detail
-    /// names why it has not otherwise.</returns>
-    public async Task<WorldReleaseRunResult> SupersedeBootstrapAsync(
+    /// <returns>The run result; its snapshot holds no unfinished operation when the successor may begin, and its detail
+    /// names why it may not otherwise.</returns>
+    public async Task<WorldReleaseRunResult> SupersedeAsync(
         WorldReleaseGroupSnapshot current,
         string successor,
         WorldReleaseManifest pendingTarget,
@@ -508,14 +542,12 @@ public sealed class WorldReleaseCoordinator {
         CancellationToken cancellationToken = default) {
         ArgumentException.ThrowIfNullOrWhiteSpace(successor);
         ArgumentNullException.ThrowIfNull(pendingTarget);
+        ArgumentNullException.ThrowIfNull(capturedRoots);
         ArgumentNullException.ThrowIfNull(runtime);
         var record = current.Record;
 
         if (
-            (record.PendingOperationId is null) ||
-            (record.ActiveRelease is not null) ||
-            (record.PendingSourceRelease is not null) ||
-            record.PendingCommitted ||
+            (record.PendingOperationId is not { } operation) ||
             !string.Equals(
                 a: record.PendingTargetRelease,
                 b: pendingTarget.Identity,
@@ -527,12 +559,40 @@ public sealed class WorldReleaseCoordinator {
                 comparisonType: StringComparison.Ordinal
             )
         ) {
-            return RefusedRun(reason: "only an unfinished bootstrap of another release can be superseded");
+            return RefusedRun(reason: "only a pending operation of another release can be superseded");
+        }
+        if (!record.HasUnfinishedOperation) {
+            return new(
+                false,
+                false,
+                $"operation {operation:D} is admitted; release {successor} accepts it when it claims the group",
+                current
+            );
+        }
+        if (record.PendingCommitted) {
+            var resumed = await ResumeAsync(
+                cancellationToken: cancellationToken,
+                current: current,
+                runtime: runtime,
+                target: pendingTarget
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return ((resumed.Completed && (resumed.Snapshot is { Record.HasUnfinishedOperation: false }))
+                ? new(
+                    false,
+                    false,
+                    $"the committed release {pendingTarget.Identity} was admitted before release {successor} follows it",
+                    resumed.Snapshot
+                )
+                : RefusedRun(reason: $"the committed release {pendingTarget.Identity} must be admitted before release {successor} can follow it, because its source's save is no longer a fallback: {resumed.Detail}"));
         }
         var reason = $"superseded by release {successor}";
 
-        if (record.RecoveryRoots.Count == 0) {
-            var abandoned = await m_groups.AbandonBootstrapAsync(
+        if (
+            (record.RecoveryRoots.Count == 0) &&
+            ((record.PendingPhase == WorldReleaseOperationPhase.Prepare) || (record.PendingSourceRelease is null))
+        ) {
+            var abandoned = await m_groups.AbandonAsync(
                 cancellationToken: cancellationToken,
                 capturedRoots: capturedRoots,
                 current: current,
@@ -543,17 +603,53 @@ public sealed class WorldReleaseCoordinator {
                 ? new(
                     false,
                     false,
-                    $"the unfinished bootstrap captured no recovery root and was abandoned: {reason}",
+                    $"operation {operation:D} had no effect to undo and was abandoned: {reason}",
                     abandoned.Snapshot
                 )
                 : RefusedRun(reason: abandoned.Detail)
             );
         }
+        // A source in Drain may already be frozen or stopped, so only its complete protected capture lets recovery
+        // restore and readmit it.
+        var drained = await CaptureDrainAsync(
+            cancellationToken: cancellationToken,
+            runtime: runtime,
+            state: current
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (!drained.Ok) { return RefusedRun(reason: $"the source must finish its protected capture before release {successor} supersedes operation {operation:D}: {drained.Detail}"); }
         return await RecoverPreCommitAsync(
             cancellationToken: cancellationToken,
             failure: reason,
             runtime: runtime,
-            state: current
+            state: drained.Snapshot!.Value
+        ).ConfigureAwait(continueOnCapturedContext: false);
+    }
+    // Drains the operation's source and records the protected roots it captured. A state that already holds roots is
+    // returned unchanged, so a retry neither contacts a stopped source nor recaptures newer state.
+    private async Task<WorldReleaseGroupOutcome> CaptureDrainAsync(WorldReleaseGroupSnapshot state, IWorldReleaseRuntime runtime, CancellationToken cancellationToken) {
+        if (state.Record.RecoveryRoots.Count != 0) {
+            return new(
+                WorldReleaseOperationOutcomeKind.Ok,
+                string.Empty,
+                state
+            );
+        }
+        var drained = await runtime.DrainSourceAndCaptureAsync(
+            state.Record,
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (
+            !drained.Succeeded ||
+            (drained.RecoveryRoots is not { Count: > 0 })
+        ) {
+            return Refused(reason: $"source drain did not produce protected roots; retry drain: {drained.Detail}");
+        }
+        return await RecordCapturedRootsAsync(
+            state,
+            drained.RecoveryRoots,
+            cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <summary>Resumes the exact durable operation without accepting a different source or target.</summary>
@@ -600,27 +696,14 @@ public sealed class WorldReleaseCoordinator {
                             continue;
                         }
                     case WorldReleaseOperationPhase.Drain: {
-                            if (state.Record.RecoveryRoots.Count == 0) {
-                                var drained = await runtime.DrainSourceAndCaptureAsync(
-                                    state.Record,
-                                    cancellationToken
-                                ).ConfigureAwait(continueOnCapturedContext: false);
+                            var captured = await CaptureDrainAsync(
+                                cancellationToken: cancellationToken,
+                                runtime: runtime,
+                                state: state
+                            ).ConfigureAwait(continueOnCapturedContext: false);
 
-                                if (
-                                    !drained.Succeeded ||
-                                    (drained.RecoveryRoots is not { Count: > 0 })
-                                ) {
-                                    return RefusedRun(reason: $"source drain did not produce protected roots; retry drain: {drained.Detail}");
-                                }
-                                var captured = await RecordCapturedRootsAsync(
-                                    state,
-                                    drained.RecoveryRoots,
-                                    cancellationToken
-                                ).ConfigureAwait(continueOnCapturedContext: false);
-
-                                if (!captured.Ok) { return RefusedRun(reason: captured.Detail); }
-                                state = captured.Snapshot!.Value;
-                            }
+                            if (!captured.Ok) { return RefusedRun(reason: captured.Detail); }
+                            state = captured.Snapshot!.Value;
                             var advanced = await RecordActivationAsync(
                                 cancellationToken: cancellationToken,
                                 current: state
@@ -803,7 +886,10 @@ public sealed class WorldReleaseCoordinator {
         if (durable is not { } currentState) { return RefusedRun(reason: "the deployment-group state disappeared before release start"); }
         var pending = currentState;
 
-        if (pending.Record.PendingOperationId is null) {
+        if (
+            (pending.Record.PendingOperationId is null) ||
+            (!pending.Record.HasUnfinishedOperation && (pending.Record.PendingOperationId != operationId))
+        ) {
             var begun = await BeginDeploymentAsync(
                 cancellationToken: cancellationToken,
                 current: pending,

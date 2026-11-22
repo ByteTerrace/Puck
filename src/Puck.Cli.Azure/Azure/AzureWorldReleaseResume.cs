@@ -46,9 +46,9 @@ public static partial class AzureCommand {
             token
         ).ConfigureAwait(continueOnCapturedContext: false);
     }
-    // Ends the group's unfinished bootstrap of another release (WorldReleaseCoordinator.SupersedeBootstrapAsync) and
-    // returns the group state that holds no pending operation, or refuses with the reason it could not end.
-    private static async Task<WorldReleaseGroupSnapshot> SupersedeWorldReleaseBootstrapAsync(WorldReleaseContext context,
+    // Ends the group's unfinished operation of another release (WorldReleaseCoordinator.SupersedeAsync) and returns the
+    // group state that holds no unfinished operation, or refuses with the reason it could not end.
+    private static async Task<WorldReleaseGroupSnapshot> SupersedeWorldReleaseAsync(WorldReleaseContext context,
         WorldReleaseGroupSnapshot state, string successor, CancellationToken token) {
         using var temporary = RunDirectory.Create(
             keepOnFailure: false,
@@ -60,7 +60,7 @@ public static partial class AzureCommand {
             temporary: temporary.Path,
             token: token
         ).ConfigureAwait(continueOnCapturedContext: false);
-        var result = await new WorldReleaseCoordinator(groups: context.Groups).SupersedeBootstrapAsync(
+        var result = await new WorldReleaseCoordinator(groups: context.Groups).SupersedeAsync(
             state,
             successor,
             candidate,
@@ -73,9 +73,9 @@ public static partial class AzureCommand {
         ).ConfigureAwait(continueOnCapturedContext: false);
 
         Console.WriteLine(value: $"Superseded operation {state.Record.PendingOperationId:D}: {result.Detail}");
-        return ((result.Snapshot is { Record.PendingOperationId: null } ended)
+        return ((result.Snapshot is { Record.HasUnfinishedOperation: false } ended)
             ? ended
-            : throw new InvalidOperationException(message: $"the unfinished bootstrap {state.Record.PendingOperationId:D} could not be superseded: {result.Detail}"));
+            : throw new InvalidOperationException(message: $"the unfinished operation {state.Record.PendingOperationId:D} could not be superseded: {result.Detail}"));
     }
     // The Azure runtime driver for the record's pending operation, over its retained source and target deployments.
     private static async Task<(WorldReleaseManifest Candidate, AzureWorldReleaseRuntime Runtime)> CreateWorldReleaseRuntimeAsync(
