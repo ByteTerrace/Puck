@@ -162,6 +162,9 @@ public static class WorldServerStepShell {
                 return current.Tick;
             }
 
+            // The collect: the tick's recorded deliveries and callbacks reach the host loop's sinks, in order, before
+            // any hook reads the completed tick.
+            server.Output.Collect();
             var tick = (current.Tick + 1UL);
 
             Collect(server, tick, publishTick);
@@ -200,7 +203,12 @@ public static class WorldServerStepShell {
         using var work = HostFrameWork.MeasureWorld(server.InstanceIdentity);
         var resuming = server.Tick.PendingReason is not null;
 
-        if (!resuming) { server.DrainMailbox(); }
+        // Opening a new tick replays what the outbox recorded since the last collect (a socket task's operation
+        // between ticks), so the host loop's sinks hold it before this tick's input closes.
+        if (!resuming) {
+            server.Output.Collect();
+            server.DrainMailbox();
+        }
 
         lock (server.AuthorityGate) {
             var injected = false;
@@ -290,6 +298,9 @@ public static class WorldServerStepShell {
 
         using var work = HostFrameWork.MeasureWorld(server.InstanceIdentity);
 
+        // The tick's recorded deliveries and callbacks reach the host loop's sinks, in order, before any hook reads the
+        // completed tick.
+        server.Output.Collect();
         publishTick(tick);
         work.Complete();
     }

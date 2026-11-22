@@ -391,9 +391,11 @@ public static class WorldPostBuildWiring {
         // WorldMutation (see WorldEffect.Save's remarks for why), so WorldServer cannot run it through the ordinary
         // mutation pipeline — and cannot compose the snapshot itself either: Puck.World.Server references no rendering
         // or input, and the lever half of the world.save fold needs the live render levers, audio director, and pacing
-        // control, all composition-root state. This closure composes the IDENTICAL snapshot (WorldSaveSnapshot)
-        // WorldMutationCommandModule's own 'world.save' verb writes, to the world's own loaded file (never an authored
-        // path — see the effect's remarks on why), and compacts the journal on success exactly like a manual save.
+        // control, all composition-root state. The server captures the authority half where the rule fires
+        // (WorldSaveCapture) and this closure runs when its outbox collects, on the host loop: it folds the levers into
+        // the IDENTICAL snapshot (WorldSaveSnapshot) WorldMutationCommandModule's own 'world.save' verb writes, writes
+        // the world's own loaded file (never an authored path — see the effect's remarks on why), and on success
+        // compacts the journal through the entries the capture saw.
         // A write failure (disk full, the target's directory gone, a read-only file) is caught and narrated on
         // stderr by name; the firing tick is not rolled back, because nothing durable in it depended on the save
         // succeeding.
@@ -404,21 +406,20 @@ public static class WorldPostBuildWiring {
 
         services.GetRequiredService<WorldClient>().PresentCues = audioDirector.PresentLocalCues;
 
-        worldServer.SaveEffectTap = tick => {
+        worldServer.SaveEffectTap = capture => {
             var target = definitionSource.SourcePath;
 
             try {
-                var snapshot = WorldSaveSnapshot.Compose(
+                var snapshot = WorldSaveSnapshot.Fold(
                     audio: audioDirector,
+                    authority: capture.Snapshot,
                     bindingBar: bindingBarVisibility,
                     editor: editorSeats,
                     pacing: pacing,
-                    render: renderSettings,
-                    server: worldServer,
-                    tick: tick
+                    render: renderSettings
                 );
 
-                var saved = WorldSaveSnapshot.TryWrite(snapshot, target, definitionSource, worldServer, machineCatalog,
+                var saved = WorldSaveSnapshot.TryWrite(snapshot, target, definitionSource, () => capture.CompactSaved(), machineCatalog,
                     machineCatalogFingerprint, out var result);
                 Console.Error.WriteLine(saved ? $"[world.rule: save effect -> {result}]" : $"[world.rule: save effect refused — {result}]");
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidDataException or System.Text.Json.JsonException)) {

@@ -159,9 +159,9 @@ public sealed partial class WorldReplaySnapshot {
         // rule effect, but writing the world's own file is engine I/O. The tap narrates why no file write happened; the
         // hash this drive compares never depends on whether the write occurred. This shadow binds no sink of its own,
         // so the line reaches a caller only if it attaches one first.
-        server.SaveEffectTap = tick => server.Output.Narrate(
+        server.SaveEffectTap = capture => server.Output.Narrate(
             channel: "replay",
-            text: $"[replay: save effect suppressed (tick {tick}) — replay verification is side-effect-free]"
+            text: $"[replay: save effect suppressed (tick {capture.Tick}) — replay verification is side-effect-free]"
         );
 
         if (StartCheckpoint is null) {

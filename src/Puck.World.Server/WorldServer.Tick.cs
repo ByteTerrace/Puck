@@ -104,6 +104,7 @@ public sealed partial class WorldServer {
     /// <inheritdoc cref="WorldTick.DrainAdministrative"/>
     [Replaces(root: typeof(StateArena))]
     public bool DrainAdministrative() {
+        m_output.Collect();
         DrainMailbox();
         var applied = m_tick.DrainAdministrative();
         PrepareUnsteppedAdjacencyPresentation();
@@ -153,6 +154,13 @@ public sealed partial class WorldServer {
     /// <inheritdoc cref="WorldTick.Step"/>
     [Replaces(root: typeof(StateArena))]
     public void Step(in FixedStepContext context) => m_tick.Step(context: in context);
+    /// <summary>Submits a loopback envelope: the in-process client's door. Its completion is the host loop's, so it is
+    /// routed through the server's outbox: one the tick or another thread raises reaches the client when the outbox
+    /// collects. A completion raised on the collector between ticks still runs before this returns.</summary>
+    /// <param name="envelope">The envelope.</param>
+    /// <param name="completion">The client's typed result callback, or <see langword="null"/>.</param>
+    void IWorldServerHost.Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion) =>
+        m_tick.Submit(completion: m_output.Route(action: completion), envelope: envelope);
     /// <inheritdoc cref="WorldTick.Submit"/>
     public void Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) =>
         m_tick.Submit(

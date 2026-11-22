@@ -171,6 +171,23 @@ public sealed partial class WorldDocument {
         m_baseOrigin = new WorldBaseOrigin(Kind: WorldBaseOriginKind.Save);
         m_journal = [];
     }
+    /// <summary>Compacts the journal through <paramref name="saved"/>, a journal this document held earlier: its
+    /// entries leave the journal and <paramref name="base"/>, the document as of that journal, becomes the base. Does
+    /// nothing when the journal no longer starts with exactly those entries.</summary>
+    /// <param name="base">The live document materialized when <paramref name="saved"/> was the journal.</param>
+    /// <param name="saved">The journal as it stood then.</param>
+    /// <returns>Whether the journal compacted.</returns>
+    internal bool CompactThrough(WorldDefinition @base, ImmutableList<WorldJournalEntry> saved) {
+        var journal = m_journal;
+        if (journal.Count < saved.Count) { return false; }
+        for (var index = 0; index < saved.Count; index++) {
+            if (!journal[index].Equals(saved[index])) { return false; }
+        }
+        m_base = @base;
+        m_baseOrigin = new WorldBaseOrigin(Kind: WorldBaseOriginKind.Save);
+        m_journal = journal.RemoveRange(index: 0, count: saved.Count);
+        return true;
+    }
     /// <summary>Restores the solid field and its revision verbatim from a checkpoint.</summary>
     /// <param name="solids">The captured field.</param>
     /// <param name="revision">The captured revision.</param>

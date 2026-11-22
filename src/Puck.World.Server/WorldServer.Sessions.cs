@@ -80,7 +80,7 @@ public sealed partial class WorldServer {
             tier: tier
         );
         var observed = new WorldSessionSink(
-            inner: sink,
+            observer: sink,
             observation: admitted,
             server: this
         );
