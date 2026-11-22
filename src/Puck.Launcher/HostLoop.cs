@@ -292,8 +292,10 @@ public sealed class HostLoop(
                 }
             }
 
-            // A step left executing beside the last iteration is collected before the host tears down.
+            // A step left executing beside the last iteration is collected before the host tears down. The iterations
+            // are over, so the last one's allowance no longer clips the settle's waits.
             if (pump is { StepPending: true }) {
+                HostWaits.EndPump();
                 using (timeline.FrameWork.Bind()) {
                     _ = pump.Settle();
                 }

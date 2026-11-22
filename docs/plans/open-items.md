@@ -1314,9 +1314,15 @@ The frame thread's CPU work, largest first:
   off the frame thread is the presentation view's last cut
   ([runtime plan](runtime-and-delivery.md#the-presentation-view)). On a settled
   tick, rule quiescence, candidate-only fact derivation, memoized scoped-replay
-  section/tail digests, collision pose tracking, reusable outbox loans and
-  direct step-section motion capture make rules, fact derivation, input
-  admission, collision events, delivery and scoped replay follow what changed;
+  section/tail digests, reusable outbox loans and direct step-section motion
+  capture make rules, fact derivation, input admission, delivery and scoped
+  replay follow what changed. The collision-event pass
+  (`WorldEventFeed.Collect`) still searches from every event body each tick,
+  awake and stationary alike: which bodies search decides which candidates
+  the authored budgets admit, so a pass that skips stationary bodies needs a
+  moved-this-tick set that the population's checkpoint carries, as it carries
+  its event bodies. A cache of what the feed last saw, which no checkpoint
+  holds, made a restored run admit other pairs than the live run. The
   body support queries over relieved ground (`FixedStepUp.TrySnap` and
   `BodySupportMemo.Query` into `FixedFieldColliderContact.Solve`, whose
   `SdfBoundsCache` keys exact boxes) remain the main per-moving-body cost.

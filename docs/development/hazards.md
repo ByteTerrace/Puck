@@ -302,6 +302,13 @@ replayed run mints different identities.
   (`src/Puck.World.Schema/WorldSessionResolver.cs`) mints the generation ids
   a transfer continuation's checkpoint carries, and nothing captures the counter.
   Unconfirmed: a restored host's adoption mints afresh rather than reusing.
+- The inverse: a cache of what a pass last saw steers a simulation decision.
+  `WorldEventFeed`'s collision pass once chose which bodies searched for new
+  pairs from the poses it had last seen, which no checkpoint holds, so a
+  restored feed searched from every body, spent the authored candidate budget
+  on other pairs and dropped a collision edge the live run delivered. A
+  decision reads only checkpointed state; a cache may only skip work whose
+  result it cannot change.
 - A published copy is named by a version someone types. A Template Spec's
   source gained a storage right while its pinned version stayed the same, so
   deployments kept reading the old published copy and the right never

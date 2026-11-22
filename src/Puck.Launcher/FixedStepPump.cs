@@ -413,23 +413,28 @@ public sealed class FixedStepPump {
 
     /// <summary>Waits for the step in progress and completes it, as the host's run ends: a step left executing beside
     /// the last frame is collected before the host tears down, so every step that began has run its whole order of
-    /// events and nothing still executes against what teardown frees. A step that can no longer finish
-    /// (<see cref="IFixedStepSimulation.StepInterrupted"/>) is left as it is.</summary>
+    /// events and nothing still executes against what teardown frees, and no authority is left holding a tick that
+    /// teardown would wait on. A step held on a dependency is resumed until it completes: each call blocks on the
+    /// dependency up to its own deadline, and a tick held past its stall budget freezes its authority, so the waits
+    /// end. A step that can no longer finish (<see cref="IFixedStepSimulation.StepInterrupted"/>), or whose slice is
+    /// still executing past the stall budget (<see cref="IFixedStepSimulation.StepExecuting"/>), is left as it is.
+    /// The calling thread must no longer hold an iteration's pump allowance, which would clip each wait and turn the
+    /// resumption into a spin.</summary>
     /// <returns><see langword="true"/> when no step is left in progress.</returns>
     public bool Settle() {
-        if (!StepPending) {
-            return true;
-        }
-        if (m_simulation.StepInterrupted) {
-            return false;
-        }
+        while (StepPending) {
+            if (m_simulation.StepInterrupted) {
+                return false;
+            }
 
-        var width = m_pendingContext.StepTicks;
+            var width = m_pendingContext.StepTicks;
 
-        if (!Step(collection: StepCollection.Waits, stepTicks: width)) {
-            return false;
+            if (Step(collection: StepCollection.Waits, stepTicks: width)) {
+                m_accumulatorTicks -= Math.Min(m_accumulatorTicks, width);
+            } else if (m_simulation.StepExecuting) {
+                return false;
+            }
         }
-        m_accumulatorTicks -= Math.Min(m_accumulatorTicks, width);
 
         return true;
     }

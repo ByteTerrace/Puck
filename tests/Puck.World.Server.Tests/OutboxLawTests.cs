@@ -91,9 +91,11 @@ public sealed class OutboxLawTests {
         Assert.Equal(inline.Records.Skip(inlineFrom), deferred.Records.Skip(deferredFrom));
     }
 
+    // The pump is one thread, as the host loop's is: the law registers it, opens and closes its window and collects on
+    // it, and makes each socket worker's deliveries on a thread of their own, joined before the pump reads on. An await
+    // here would resume the pump's half on whatever thread the continuation lands on, which no host loop does.
     [Fact]
-    public async Task OffPumpMirrorAndRemoteRouteDeliveriesWaitForTheBoundaryWindowCollect() {
-        var ct = TestContext.Current.CancellationToken;
+    public void OffPumpMirrorAndRemoteRouteDeliveriesWaitForTheBoundaryWindowCollect() {
         var definition = CountingTable() with {
             CamerasRaw = [new WorldCamera(
                 Name: "cam",
@@ -152,7 +154,7 @@ public sealed class OutboxLawTests {
         try {
             // While the pump stands in its frame section (window closed), a socket worker delivers a stream and two
             // onward route updates. Nothing touches the mirror's body journal, its state mirror, or the route listener.
-            await Task.Run(() => {
+            OnASocketWorker(() => {
                 const ulong StreamId = 77UL;
                 route.DeliverDefinition(definition, version, new WorldStreamStamp(StreamId, 1, 1));
                 var movedScratch = new[] { ticksOrdinal };
@@ -189,7 +191,7 @@ public sealed class OutboxLawTests {
                 travelerRemote.ObserveRoute(new WorldAuthorityRouteDescription(
                     "127.0.0.1:49152", new WorldEntityAddress("hop-2", 2, 4), 5UL, default, FixedQuaternion.Identity,
                     Vector3.One, 0, 0, 0, FixedQ4816.FromInteger(2), null, definition, version));
-            }, ct);
+            });
 
             Assert.False(mirror.IsActive(0));
             Assert.False(mirror.CollectBodyChanges(cursor: bodyCursor, into: bodyRuns));
@@ -217,7 +219,7 @@ public sealed class OutboxLawTests {
             Assert.Equal(new WorldEntityAddress("hop-2", 2, 4), deliveredRoute.Route.Entity);
 
             // A dropped remote session closes its span through the same outbox, so withdrawal also waits for the window.
-            await Task.Run(() => route.CloseSpan(stream: 77UL), ct);
+            OnASocketWorker(() => route.CloseSpan(stream: 77UL));
             Assert.True(mirror.IsActive(0));
 
             boundary.Open(drain: false);
@@ -231,6 +233,17 @@ public sealed class OutboxLawTests {
         } finally {
             boundary.UnregisterPump();
             try { File.Delete(keyPath); } catch (IOException) { }
+        }
+
+        static void OnASocketWorker(Action deliver) {
+            Exception? fault = null;
+            var worker = new Thread(start: () => {
+                try { deliver(); } catch (Exception exception) { fault = exception; }
+            });
+
+            worker.Start();
+            worker.Join();
+            if (fault is not null) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(source: fault); }
         }
     }
 }
