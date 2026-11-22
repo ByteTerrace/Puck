@@ -75,6 +75,8 @@ public sealed partial class SdfMeshPathBake {
         var boxes = 0L;
         var due = 0;
         var stood = 0;
+        var moved = 0;
+        var copied = 0;
 
         foreach (var group in m_groups.TakeFresh()) { Measure(group: group); }
         if (!slotsWhole) {
@@ -86,7 +88,7 @@ public sealed partial class SdfMeshPathBake {
                         var group = m_groups[index];
 
                         if (!Moved(group: group)) { stood++; continue; }
-                        _ = Measure(group: group);
+                        if (Measure(group: group)) { moved++; }
                     }
                 }
             }
@@ -141,9 +143,13 @@ public sealed partial class SdfMeshPathBake {
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandBoxes, amount: boxes);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandDue, amount: due);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandStood, amount: stood);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandMoved, amount: moved);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandCopied, amount: copied);
 
         void MeasureOwners(bool dynamic, int key) {
-            for (var index = m_groups.FirstOf(dynamic: dynamic, key: key); (index >= 0); index = m_groups.NextOf(index: index)) { _ = Measure(group: m_groups[index]); }
+            for (var index = m_groups.FirstOf(dynamic: dynamic, key: key); (index >= 0); index = m_groups.NextOf(index: index)) {
+                if (Measure(group: m_groups[index])) { copied++; }
+            }
         }
         // Whether a group whose slot moved may demand another tier: its box moved by no more than the distance between the
         // world box its latest measure read and the one it stands at now, so its pixel moved by no more than that over the
@@ -158,7 +164,6 @@ public sealed partial class SdfMeshPathBake {
 
             if (group.DemandUnits == 0f) { return false; }
             if (!float.IsFinite(f: group.DemandSlack) && !within) { return false; }
-            if (UnitsOf(group: group) != group.DemandUnits) { return true; }
 
             var (center, half) = WorldBox(group: group);
             var delta = Vector3.Abs(value: (half - group.DemandWorldHalf));
@@ -166,7 +171,13 @@ public sealed partial class SdfMeshPathBake {
 
             // A box crossing a frustum-bound point's frustum moves its answer by any amount (SdfMeshDemand.FrustumSlack).
             if (within && (metres >= group.DemandFrustumSlack)) { return true; }
-            return (((travel - group.DemandMeasuredTravel) + (metres / Demand.LeastPixelsPerMetre)) >= group.DemandSlack);
+
+            // In the group's own units: the world pixel moves by the travel and the box's drift over its new units, and
+            // the units' change moves the pixel it was measured at by their ratio (an animated slot's scale wavers).
+            var units = UnitsOf(group: group);
+            var moved = ((((travel - group.DemandMeasuredTravel) + (metres / Demand.LeastPixelsPerMetre)) / units) + (group.DemandPixel * MathF.Abs(x: ((group.DemandUnits / units) - 1f))));
+
+            return (moved >= (group.DemandSlack / group.DemandUnits));
         }
         // Measures one listed group, once a frame, and queues it at the travel its tier may next move at. A group whose
         // demanded tier stands is not read by the next decision for it, and keeps the earlier of its queued dues.

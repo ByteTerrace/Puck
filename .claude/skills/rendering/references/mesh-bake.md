@@ -717,7 +717,10 @@ laws exercise that boundary.
   the demand watch in `SdfMeshPathBake.Demand.cs`): groups newly set into a
   place, groups whose slot or copy moved (the frame's transform and copy
   journals, through the list's owner index), and groups the demand points'
-  travel made due. `SdfMeshDemand.Travel` bounds how far any pixel moves
+  travel made due. A moved slot's group is measured only once its world box
+  has moved, with the travel since, by as much as its tier band leaves, and
+  under a frustum-bound point by less than its distance to that frustum's
+  planes (`CameraSnapshot.FrustumSlack`). `SdfMeshDemand.Travel` bounds how far any pixel moves
   while `SdfMeshDemand.Revision` stands, so a group waits in a due queue at
   its tier band's slack (`SdfMeshTier.Slack`); a change no travel bounds (a
   view came or went, a frustum-bound point moved, the bias or the copy layout
