@@ -419,13 +419,7 @@ public sealed class SdfMeshDemand {
     /// <returns>The pixel's size in metres; infinity with no demand point.</returns>
     public float PixelAt(Vector3 center, Vector3 half, out int point) {
         point = -1;
-        if (Count == 0) { return float.PositiveInfinity; }
-
-        var read = Read(center: center, half: half);
-        var finest = PixelOf(read: read);
-
-        if (float.IsFinite(f: finest)) { point = read.Lanes!.Points[read.Demanded.AsSpan(start: 0, length: read.Lanes.Stride).IndexOf(value: finest)]; }
-        return finest;
+        return ((Count == 0) ? float.PositiveInfinity : FinestOf(point: out point, read: Read(center: center, half: half)));
     }
     /// <summary>Reads boxes against every point, once each, and holds the reads on this thread for
     /// <see cref="HeldPixelAt"/> and <see cref="HeldBoundsOf"/> until the next call: a shared geometry's copies, whose
@@ -445,8 +439,12 @@ public sealed class SdfMeshDemand {
     /// <summary>Returns <see cref="PixelAt(Vector3, Vector3, out int)"/> of a box this thread's latest
     /// <see cref="ReadBoxes"/> read.</summary>
     /// <param name="box">The box, below the count that call read.</param>
+    /// <param name="point">The demand point that sees the box finest; -1 with none.</param>
     /// <returns>The pixel's size in metres; infinity with no demand point.</returns>
-    public float HeldPixelAt(int box) => ((Count == 0) ? float.PositiveInfinity : PixelOf(read: ThreadHeld![box]));
+    public float HeldPixelAt(int box, out int point) {
+        point = -1;
+        return ((Count == 0) ? float.PositiveInfinity : FinestOf(point: out point, read: ThreadHeld![box]));
+    }
     /// <summary>Returns <see cref="BoundsOf"/> of a box this thread's latest <see cref="ReadBoxes"/> read.</summary>
     /// <param name="box">The box, below the count that call read.</param>
     /// <param name="units">The units the box's pixels are read in; positive.</param>
@@ -455,6 +453,13 @@ public sealed class SdfMeshDemand {
     /// <returns>The bounds.</returns>
     public Bounds HeldBoundsOf(int box, float units, float top, Span<float> watch) => BoundsOfRead(read: ThreadHeld![box], top: top, units: units, watch: watch);
     [ThreadStatic] private static List<BoxRead>? ThreadHeld;
+    // The finest pixel a read box is demanded at, and the point demanding it so.
+    private static float FinestOf(BoxRead read, out int point) {
+        var finest = PixelOf(read: read);
+
+        point = (float.IsFinite(f: finest) ? read.Lanes!.Points[read.Demanded.AsSpan(start: 0, length: read.Lanes.Stride).IndexOf(value: finest)] : -1);
+        return finest;
+    }
     // The finest pixel a read box is demanded at.
     private static float PixelOf(BoxRead read) {
         var lanes = read.Lanes!;

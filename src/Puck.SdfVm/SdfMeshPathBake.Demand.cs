@@ -569,23 +569,33 @@ public sealed partial class SdfMeshPathBake {
         var bias = m_chosenBias;
         ref var reading = ref m_readings[index];
         var copies = CopiesOf(group: group);
-        var pixel = ((copies is null) ? ReadBox(boxes: out reading.Boxes, group: group, units: out reading.Units, box: out var box) : ReadCopies(boxes: out reading.Boxes, copies: copies, group: group, units: out reading.Units, box: out box));
+        (Vector3 Center, Vector3 Half)? box = null;
+        float pixel;
+
+        if (copies is null) {
+            var (center, half) = WorldBox(group: group);
+
+            box = (center, half);
+            (reading.Boxes, reading.Units) = (1, UnitsOf(group: group));
+            pixel = (Demand.PixelAt(center: center, half: half) / reading.Units);
+        } else {
+            reading.Boxes = Math.Max(val1: 1, val2: copies.Count);
+            pixel = CopiesPixel(center: group.DemandCenter, copies: copies, half: group.DemandHalf, point: out _, units: out reading.Units);
+        }
+
         var slack = DemandSlack(bias: bias, group: group, pixel: pixel);
         var pinned = (float.IsFinite(f: pixel) && !float.IsFinite(f: slack));
         var top = (float.IsFinite(f: pixel) ? (pixel + slack) : CoarsestEdgeOf(bias: bias, group: group));
         var watch = m_chosenWatches.AsSpan(start: (index * m_chosenLength), length: m_chosenLength);
-
-        SdfMeshDemand.Unwatched(watch: watch);
-
         var bounds = SdfMeshDemand.Bounds.None;
 
-        if (pinned) {
-        } else if (copies is null) {
-            bounds = BoundsOf(group: group, top: top, watch: watch);
-        } else {
+        SdfMeshDemand.Unwatched(watch: watch);
+        if (!pinned && (box is { } one)) {
+            bounds = Demand.BoundsOf(center: one.Center, half: one.Half, top: top, units: reading.Units, watch: watch);
+        } else if (!pinned && (copies is not null)) {
+            // The copies CopiesPixel read and held, each in its own scale.
             for (var copy = 0; (copy < copies.Count); copy++) { bounds = bounds.Join(other: Demand.HeldBoundsOf(box: copy, top: top, units: m_copyScales[copy], watch: watch)); }
         }
-
         reading.Anchor = pixel;
         if (!float.IsFinite(f: pixel) && float.IsFinite(f: top) && float.IsFinite(f: bounds.Beyond)) { (reading.Anchor, slack) = (bounds.Beyond, (MathF.Max(x: 0f, y: (bounds.Beyond - top)) * 0.999f)); }
         reading.Pixel = pixel;
@@ -595,46 +605,6 @@ public sealed partial class SdfMeshPathBake {
         (reading.Center, reading.Half) = (box ?? default);
         reading.Bounds = bounds;
     }
-    // A group's pixel at its one world box, in its own units (MeasurePixel), with no demand point named.
-    private float ReadBox(Group group, out int boxes, out float units, out (Vector3 Center, Vector3 Half)? box) {
-        var (center, half) = WorldBox(group: group);
-
-        boxes = 1;
-        units = UnitsOf(group: group);
-        box = (center, half);
-        return (Demand.PixelAt(center: center, half: half) / units);
-    }
-    // A shared geometry's pixel where its copies stand (CopiesPixel), each copy's box read once and held for its bounds
-    // (SdfMeshDemand.ReadBoxes), with the copies' scales the bounds read them in.
-    private float ReadCopies(Group group, IReadOnlyList<int> copies, out int boxes, out float units, out (Vector3 Center, Vector3 Half)? box) {
-        var count = copies.Count;
-
-        if (m_copyCenters.Length < count) {
-            var capacity = ArrayCapacity.Grown(m_copyCenters.Length, count);
-
-            m_copyCenters = new Vector3[capacity];
-            m_copyHalves = new Vector3[capacity];
-            m_copyScales = new float[capacity];
-        }
-        for (var copy = 0; (copy < count); copy++) { (m_copyCenters[copy], m_copyHalves[copy], m_copyScales[copy]) = CopyBox(center: group.DemandCenter, copy: copies[copy], half: group.DemandHalf); }
-        Demand.ReadBoxes(centers: m_copyCenters.AsSpan(start: 0, length: count), halves: m_copyHalves.AsSpan(start: 0, length: count));
-
-        var finest = float.PositiveInfinity;
-
-        units = float.PositiveInfinity;
-        for (var copy = 0; (copy < count); copy++) {
-            units = MathF.Min(x: units, y: m_copyScales[copy]);
-            finest = MathF.Min(x: finest, y: (Demand.HeldPixelAt(box: copy) / m_copyScales[copy]));
-        }
-        if (!float.IsFinite(f: units)) { units = 1f; }
-        boxes = Math.Max(val1: 1, val2: count);
-        box = null;
-        return finest;
-    }
-    // The copies' boxes and scales the latest ReadCopies read.
-    private Vector3[] m_copyCenters = [];
-    private Vector3[] m_copyHalves = [];
-    private float[] m_copyScales = [];
     // Keeps one chosen group's readings, on the frame's thread: its watch stands on them, it falls due on each clock at
     // half what its band leaves there, its frustums are watched, and a group whose demanded tier stands is not read by
     // the next decision for it.
@@ -728,27 +698,6 @@ public sealed partial class SdfMeshPathBake {
 
         return finest;
     }
-    // How a group's boxes stand toward the points that could move its pixel past a top (SdfMeshDemand.BoundsOf), its
-    // frustums' part written into its frustum watch: its world box's, or the tighter of each over a shared geometry's
-    // copies, each read in its own units.
-    private SdfMeshDemand.Bounds BoundsOf(Group group, float top, Span<float> watch) {
-        if (CopiesOf(group: group) is not { } copies) {
-            var (center, half) = WorldBox(group: group);
-
-            return Demand.BoundsOf(center: center, half: half, top: top, units: UnitsOf(group: group), watch: watch);
-        }
-
-        var bounds = SdfMeshDemand.Bounds.None;
-
-        foreach (var index in copies) {
-            var (center, half, scale) = CopyBox(center: group.DemandCenter, copy: index, half: group.DemandHalf);
-
-            bounds = bounds.Join(other: Demand.BoundsOf(center: center, half: half, top: top, units: scale, watch: watch));
-        }
-
-        return bounds;
-    }
-
     // A shared geometry's box, given in its own frame, where one of the frame's copies carries it: the world-axis box about
     // the carried one, and the copy's scale, the units its pixels are read in.
     private (Vector3 Center, Vector3 Half, float Units) CopyBox(Vector3 center, Vector3 half, int copy) {
