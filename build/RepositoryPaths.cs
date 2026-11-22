@@ -28,7 +28,8 @@ internal static class RepositoryPaths {
             path2: relativePath
         );
 
-    private static string? FindRootAbove(string start) =>
+    // The checkout holding `start`: the nearest directory at or above it with a Puck.slnx, or null outside any.
+    public static string? FindRootAbove(string start) =>
         Ascend(
             probe: static directory => (File.Exists(path: Path.Combine(
                 path1: directory.FullName,
