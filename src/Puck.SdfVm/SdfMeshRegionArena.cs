@@ -214,7 +214,6 @@ public sealed class SdfMeshRegionArena : IDisposable {
         }
         foreach (var mesh in m_scratch) {
             _ = Forget(mesh: mesh);
-            _ = m_placed.Remove(item: mesh);
             if (m_named.ContainsKey(key: mesh)) {
                 _ = m_moved.Add(item: mesh);
                 _ = m_refused.Add(item: mesh);
@@ -225,6 +224,8 @@ public sealed class SdfMeshRegionArena : IDisposable {
                 m_forgotten.Add(item: mesh);
             }
         }
+        // The clipped meshes leave the placed list in one pass: each has just lost its placement.
+        if (m_scratch.Count > 0) { _ = m_placed.RemoveAll(match: mesh => !m_placements.ContainsKey(key: mesh)); }
         m_scratch.Clear();
         LimitWords = words;
     }
