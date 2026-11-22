@@ -54,7 +54,7 @@ public sealed partial class SdfWorldTables {
     // The meshes the order holds first, measured again every staging, and the most row-and-demand-point pairs the sweep
     // measures a staging: a row costs one priority test per demand point.
     private const int LandingHeadRanks = 16;
-    private const int LandingSweepTests = 4096;
+    private const int LandingSweepTests = 8192;
 
     // The owed meshes named ahead of the draws that the order above does not hold, and the first that may still
     // have words to take: listed again before a take once the set named ahead, or the owed set, changed.
