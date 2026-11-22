@@ -673,15 +673,13 @@ public sealed partial class SdfMeshPathBake {
     // group goes through Touch, which also moves the product revision the dresser stands its whole walk on, and a change
     // no group names (the list replaced, a verdict declined, which moves every floor's trace) marks the whole list
     // changed. FrameAccess takes the list under the gate, so a change made after that lands in the next. Under the gate.
-    private List<Group> m_touched = [];
-    private List<Group> m_touchedSpare = [];
+    private readonly MarkedGroups m_touched = new(mark: GroupMarks.Touched);
     private bool m_touchedAll = true;
 
     private void Touch(Group group) {
         m_productRevision++;
-        if (m_touchedAll || group.Touched) { return; }
-        group.Touched = true;
-        m_touched.Add(item: group);
+        if (m_touchedAll) { return; }
+        _ = m_touched.Add(group: group);
     }
     // Marks every group changed, for a change that names none.
     private void TouchAll() {
@@ -690,16 +688,10 @@ public sealed partial class SdfMeshPathBake {
     }
     // Hands the dresser the groups changed since it last took them, and starts the next list.
     private List<Group> TakeTouched(out bool whole) {
-        var taken = m_touched;
-
         whole = m_touchedAll;
         m_touchedAll = false;
-        foreach (var group in taken) { group.Touched = false; }
-        m_touched = m_touchedSpare;
-        m_touched.Clear();
-        m_touchedSpare = taken;
 
-        return taken;
+        return m_touched.Take();
     }
 
     // Invariant: the dresser reads the bake's groups (their list, drawn meshes, traces, tiers and copies) only while it
@@ -811,7 +803,7 @@ public sealed partial class SdfMeshPathBake {
             m_copyLayout[index] = new(copy.AssetSlot, copy.TemplateRange, copy.IsDynamic, (copy.Mesh is not null), copy.OtherAssetSlots.ToArray());
         }
         m_copyLayoutRevision++;
-        m_demandReset = true;
+        m_demandCopyLayout = true;
         for (var index = 0; (index < frame.MeshInstances.Count); index++) {
             var copy = frame.MeshInstances[index];
 
@@ -2952,10 +2944,6 @@ public sealed partial class SdfMeshPathBake {
         // What the group last added to the counts of the frame's holes, and the epoch it was counted in (CountHoles).
         public int HoleBits { get; set; }
         public int HoleEpoch { get; set; }
-        // Whether the group is on its bake's list of groups changed since the dresser read them (Touch), and on its list of
-        // groups that keep a floor (Keep).
-        public bool Touched { get; set; }
-        public bool Keeping { get; set; }
 
         private int m_awaitsJudging;
 
@@ -3315,25 +3303,10 @@ public sealed partial class SdfMeshPathBake {
         // The metres one display pixel covers at its demand box, as the bake last measured it (MeasureDemands); not a
         // number before the first measure.
         public float DemandPixel { get; set; } = float.NaN;
-        // The demand points' travel (SdfMeshDemand.Travel) at which DemandPixel may next name another tier, the group's
-        // place in the due queue; infinity when no travel can, and not a number before the demand first measured it
-        // (MeasureDemand). Whether it waits to be measured as a group newly set into a place (GroupList.TakeFresh), the
-        // prepared frame that last measured it, and whether the tier decisions read it (Attend).
-        public double DemandDueAt { get; set; } = double.NaN;
-        public long DemandQueuedEpoch { get; set; } = -1L;
-        // What the latest measure stood on, which a moved slot's bound reads (MeasureDemands): the travel it was taken at,
-        // the travel its tier band leaves (in travel units, its pixel slack times its units), and the world box and units
-        // it read, units of zero for a measure that read no single box (a shared geometry's copies); and how far the box
-        // may move before a frustum-bound point answers otherwise for it (SdfMeshDemand.FrustumSlack).
-        public double DemandMeasuredTravel { get; set; }
-        public float DemandSlack { get; set; }
-        public float DemandFrustumSlack { get; set; } = float.PositiveInfinity;
-        public Vector3 DemandWorldCenter { get; set; }
-        public Vector3 DemandWorldHalf { get; set; }
-        public float DemandUnits { get; set; }
-        public bool DemandFresh { get; set; }
-        public long DemandMeasuredAt { get; set; } = -1L;
-        public bool Attended { get; set; }
+        // What the demand watch's latest measure stood on and when each of its clocks next makes it due (DemandWatch).
+        public DemandWatch Watch;
+        // The marked lists the group stands in (MarkedGroups): each list's own bit, set while the group is in it.
+        public GroupMarks Marks;
 
         public int OwedFrames { get; set; }
         // The frames in a row the demand has asked a coarser tier than it draws, and, for a tier's replacement, the

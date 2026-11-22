@@ -257,6 +257,31 @@ public readonly record struct CameraSnapshot {
         return slack;
     }
 
+    /// <summary>Returns the largest angle, in radians, through which a plane of this camera's frustum stands turned from
+    /// the same plane of another's (its near plane and four sides, widened alike): a turn of the camera, or a change of
+    /// its field of view, aspect or frustum offset. A point at a distance <c>r</c> from the eye has its distance to such a
+    /// plane moved by no more than <c>r</c> times this angle, beside the eye's own move.</summary>
+    /// <param name="other">The camera to compare with.</param>
+    /// <param name="margin">The fraction both frustums' sides are widened by, as <see cref="MaySee"/> takes it.</param>
+    /// <returns>The angle, between zero and pi.</returns>
+    public float FrustumTurn(in CameraSnapshot other, float margin) {
+        Span<(Vector3 Normal, float Offset)> mine = stackalloc (Vector3, float)[FrustumPlanes];
+        Span<(Vector3 Normal, float Offset)> theirs = stackalloc (Vector3, float)[FrustumPlanes];
+        var turn = 0f;
+
+        Planes(far: float.PositiveInfinity, margin: margin, planes: mine);
+        other.Planes(far: float.PositiveInfinity, margin: margin, planes: theirs);
+        for (var plane = 0; (plane < FrustumPlanes); plane++) {
+            if (plane == 1) { continue; }
+
+            var chord = Vector3.Distance(value1: Vector3.Normalize(value: mine[plane].Normal), value2: Vector3.Normalize(value: theirs[plane].Normal));
+
+            turn = MathF.Max(x: turn, y: (2f * MathF.Asin(x: MathF.Min(x: 1f, y: (0.5f * chord)))));
+        }
+
+        return turn;
+    }
+
     // The planes MaySee tests, in its order.
     private const int FrustumPlanes = 6;
 

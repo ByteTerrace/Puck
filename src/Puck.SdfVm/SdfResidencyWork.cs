@@ -28,8 +28,18 @@ public static class SdfResidencyWork {
     public static readonly WorkKind DemandMoved = new(name: "sdf.residency.demand.moved", unit: "groups", workClass: WorkClass.Pacing);
     /// <summary>Counts the measures a moved copy made, a part of <see cref="DemandGroups"/>.</summary>
     public static readonly WorkKind DemandCopied = new(name: "sdf.residency.demand.copied", unit: "groups", workClass: WorkClass.Pacing);
-    /// <summary>Counts the demand points' changes that no movement bound covers (a view came or went, its focal or frustum
-    /// changed, the detail bias moved), each of which measures every group again.</summary>
+    /// <summary>Counts the demand points' changes no clock bounds (a point came, went, jumped or changed kind), each of
+    /// which has every group read whether the point's distance could reach under its band
+    /// (<see cref="DemandReached"/>).</summary>
+    public static readonly WorkKind DemandChanges = new(name: "sdf.residency.demand.changes", unit: "changes", workClass: WorkClass.Pacing);
+    /// <summary>Counts the groups the points' changes were read against, at one distance a change point and box.</summary>
+    public static readonly WorkKind DemandReached = new(name: "sdf.residency.demand.reached", unit: "groups", workClass: WorkClass.Pacing);
+    /// <summary>Counts the changes of the detail bias, each of which recomputes every group's bands from the pixel it
+    /// holds, measuring none.</summary>
+    public static readonly WorkKind DemandRebiased = new(name: "sdf.residency.demand.rebiased", unit: "changes", workClass: WorkClass.Pacing);
+    /// <summary>Counts the resets that measure every group again over <see cref="SdfMeshTier.MeasureFrames"/> frames: the
+    /// first frame, and a frame whose points changed more than their list keeps
+    /// (<see cref="SdfMeshDemand.MostChanges"/>).</summary>
     public static readonly WorkKind DemandResets = new(name: "sdf.residency.demand.resets", unit: "resets", workClass: WorkClass.Pacing);
     /// <summary>Counts the groups the tier decisions read.</summary>
     public static readonly WorkKind TierGroups = new(name: "sdf.residency.tiers.groups", unit: "groups", workClass: WorkClass.Pacing);
@@ -45,5 +55,5 @@ public static class SdfResidencyWork {
     public static readonly WorkKind MarkMeshes = new(name: "sdf.residency.marks.meshes", unit: "meshes", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the process's residency counts.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.residency", kinds: [Prepared, DemandGroups, DemandBoxes, DemandDue, DemandStood, DemandMoved, DemandCopied, DemandResets, TierGroups, TierDecisions, TierStarts, MotionRows, MotionReaders, MarkMeshes]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.residency", kinds: [Prepared, DemandGroups, DemandBoxes, DemandDue, DemandStood, DemandMoved, DemandCopied, DemandChanges, DemandReached, DemandRebiased, DemandResets, TierGroups, TierDecisions, TierStarts, MotionRows, MotionReaders, MarkMeshes]);
 }
