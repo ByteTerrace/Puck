@@ -727,7 +727,10 @@ laws exercise that boundary.
   its world box has moved, with the clocks since, by that much. A view that
   comes, goes, jumps past `SdfMeshDemand.JumpMetres` or changes kind is a
   change: only groups whose distance from either side puts their pixel under
-  their band's top are measured. A bias change recomputes the bands from the
+  their band's top are measured, at once where the new side reaches and a
+  share a frame where only the old side does (their pixel can only rise).
+  Frustum and distance bounds count only the points that could reach under
+  a group's band (`SdfMeshDemand.BoundsOf`). A bias change recomputes the bands from the
   pixels held, and only an overflowing change list
   (`SdfMeshDemand.MostChanges`) measures every group over
   `SdfMeshTier.MeasureFrames` frames.

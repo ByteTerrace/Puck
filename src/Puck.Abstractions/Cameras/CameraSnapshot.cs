@@ -231,9 +231,11 @@ public readonly record struct CameraSnapshot {
         return true;
     }
     /// <summary>Returns how far a box may move before <see cref="MaySee"/>, with no sweep or reach, answers otherwise for
-    /// it: the least distance, over the frustum's planes, between the plane and the box's nearest point to it, on
-    /// whichever side the box lies. A box whose center moves by <c>d</c> and whose half axes move by <c>e</c> in all
-    /// (the sum of their moves' lengths) keeps its answer while <c>d + e</c> stays under the result.</summary>
+    /// it. A box the frustum may hold is refused once it lies wholly past any one plane, so its slack is the least, over
+    /// the planes, of how far it stands from lying wholly past that plane. A refused box is held again only once it lies
+    /// wholly past none, so its slack is the most, over the planes it lies wholly past, of how far past it lies. A box
+    /// whose center moves by <c>d</c> and whose half axes move by <c>e</c> in all (the sum of their moves' lengths) keeps
+    /// its answer while <c>d + e</c> stays under the result.</summary>
     /// <param name="center">The box's center, in world space.</param>
     /// <param name="halfX">The box's first half axis.</param>
     /// <param name="halfY">The box's second half axis.</param>
@@ -244,17 +246,25 @@ public readonly record struct CameraSnapshot {
     public float FrustumSlack(Vector3 center, Vector3 halfX, Vector3 halfY, Vector3 halfZ, float margin, float far = float.PositiveInfinity) {
         var box = new SweptBox(Center: (center - Position), HalfX: halfX, HalfY: halfY, HalfZ: halfZ, Reach: 0f, Sweep: default);
         Span<(Vector3 Normal, float Offset)> planes = stackalloc (Vector3, float)[FrustumPlanes];
-        var slack = float.PositiveInfinity;
+        var inside = float.PositiveInfinity;
+        var outside = 0f;
+        var refused = false;
 
         Planes(far: far, margin: margin, planes: planes);
         foreach (var (normal, offset) in planes) {
             var length = normal.Length();
             var nearest = box.Nearest(normal: normal, offset: offset);
 
-            if ((length > 0f) && float.IsFinite(f: nearest)) { slack = MathF.Min(x: slack, y: (MathF.Abs(x: nearest) / length)); }
+            if (!(length > 0f) || !float.IsFinite(f: nearest)) { continue; }
+            if (nearest >= 0f) {
+                refused = true;
+                outside = MathF.Max(x: outside, y: (nearest / length));
+            } else {
+                inside = MathF.Min(x: inside, y: (-nearest / length));
+            }
         }
 
-        return slack;
+        return (refused ? outside : inside);
     }
 
     /// <summary>Returns the largest angle, in radians, through which a plane of this camera's frustum stands turned from

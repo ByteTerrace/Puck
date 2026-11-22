@@ -84,6 +84,8 @@ public sealed partial class SdfMeshPathBake {
         Attended = 4,
         // Set into a place and not yet measured by the demand watch (GroupList.TakeFresh).
         Fresh = 8,
+        // Owed a measure a change of the points could only coarsen (SdfMeshPathBake.Demand.cs).
+        Deferred = 16,
     }
 
     // A list of groups, each in it at most once, by a mark the group carries for this list alone (Group.Marks): adding,
@@ -125,6 +127,11 @@ public sealed partial class SdfMeshPathBake {
         public void Keep(int at, Group group) => m_items[at] = group;
         public void Drop(Group group) => group.Marks &= ~mark;
         public void Truncate(int count) => m_items.RemoveRange(index: count, count: (m_items.Count - count));
+        // Takes the first groups out, in order, unmarking them: a queue a consumer drains a share at a time.
+        public void Shift(int count) {
+            for (var index = 0; (index < count); index++) { m_items[index].Marks &= ~mark; }
+            m_items.RemoveRange(index: 0, count: count);
+        }
     }
 
     // What each listed group still baking adds to the counts a take reads (TryTake): how many fly in a dispatch, run a

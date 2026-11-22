@@ -18,7 +18,9 @@ namespace Puck.SdfVm;
 //     (DemandWatch.Dues): its tier band's slack for travel and scale, its distance to the frustums for shift and turn;
 //   - the groups a change of the points could reach (SdfMeshDemand.Changes: a point came, went, jumped or changed kind).
 //     A box keeps its answer unless the changed point's distance alone puts its pixel under the box's band, so only the
-//     boxes either side of the change reaches are measured, whatever the point set's size;
+//     boxes either side of the change reaches are measured, whatever the point set's size: at once where the new side
+//     reaches (the pixel may fall), and a share a frame where only the old side does (it can only rise, asking a coarser
+//     tier, which no decision takes before its hold);
 //   - and every group once, spread over SdfMeshTier.MeasureFrames frames, only when the points' changes overflowed their
 //     list or before the first observation. A change of the bias recomputes every band from the pixels it holds, a lost
 //     transform window reads every dynamic group's drift, and a lost copy window or a new copy layout measures the
@@ -59,6 +61,7 @@ public sealed partial class SdfMeshPathBake {
         public float Clearance;
         public float FrustumSlack;
         public float Reach;
+        public long DeferredAt;
         public DemandReadings Dues;
         public DemandEpochs Epochs;
 
@@ -92,6 +95,11 @@ public sealed partial class SdfMeshPathBake {
     // This bake's measures since it began, by route, for its residency's report: every group measured, and those a moved
     // slot, a clock, a change of the points and a moved copy made.
     private (long Groups, long Moved, long Due, long Changed, long Copied) m_demandMeasured;
+    // The groups a change of the points could only coarsen, measured a share a frame (MeasureDemands).
+    private readonly MarkedGroups m_demandDeferred = new(mark: GroupMarks.Deferred);
+    // How a change of the points reaches a group (Reaches): not at all, only through points that left its reach (its
+    // pixel can only rise), or through a point that came within it (its pixel may fall).
+    private enum ChangeReach : byte { None, Coarser, Finer }
     // The groups the tier decisions read (Attend).
     private readonly MarkedGroups m_attention = new(mark: GroupMarks.Attended);
 
@@ -178,7 +186,14 @@ public sealed partial class SdfMeshPathBake {
             foreach (var group in m_groups) {
                 if (!group.Listed || group.Retired || !group.HasDemandBox || !group.Watch.Measured || (group.Watch.Stamp == stamp)) { continue; }
                 reached++;
-                if (Reaches(group: group) && Measure(group: group)) { changed++; }
+
+                var reach = Reaches(group: group);
+
+                if (reach == ChangeReach.Finer) {
+                    if (Measure(group: group)) { changed++; }
+                } else if ((reach == ChangeReach.Coarser) && m_demandDeferred.Add(group: group)) {
+                    group.Watch.DeferredAt = stamp;
+                }
             }
         }
         for (var clock = 0; (clock < DemandClocks); clock++) {
@@ -189,6 +204,21 @@ public sealed partial class SdfMeshPathBake {
                 if ((group.Watch.Dues[clock] != at) || (group.Watch.Epochs[clock] != m_demandEpochs[clock])) { continue; }
                 if (Measure(group: group)) { due++; }
             }
+        }
+        // The groups a change could only coarsen, a share a frame: a pixel that only rises asks a coarser tier, which the
+        // decisions act on only past their hold, so a measure a few frames late moves no tier later than a reset's sweep
+        // would have.
+        if (m_demandDeferred.Count > 0) {
+            var share = m_demandSweep.Share;
+            var spent = 0L;
+            var taken = 0;
+
+            while ((taken < m_demandDeferred.Count) && (spent < share)) {
+                var group = m_demandDeferred[taken++];
+
+                spent += (((group.Watch.Stamp <= group.Watch.DeferredAt) && Measure(group: group)) ? Math.Max(val1: 1, val2: (CopiesOf(group: group)?.Count ?? 1)) : 1);
+            }
+            m_demandDeferred.Shift(count: taken);
         }
         if (m_demandSweepLeft > 0) {
             var count = m_groups.Count;
@@ -244,24 +274,26 @@ public sealed partial class SdfMeshPathBake {
                 if (Measure(group: m_groups[index])) { copied++; }
             }
         }
-        // Whether a change of the points could move a measured group's tier: some point it names, before or after, has a
-        // distance from one of the group's boxes, over its pixels a metre and in the group's units, under the band's top
-        // (pixel plus slack). The group's pixel is the least over the points, so a point whose pixel stays at or past that
-        // top was not the least and does not become it; distance alone covers a frustum-bound point's every turn.
-        bool Reaches(Group group) {
+        // How a change of the points could move a measured group's tier: through a point it names whose distance from one
+        // of the group's boxes, over its pixels a metre and in the group's units, puts it under the band's top (pixel plus
+        // slack). The group's pixel is the least over the points, so a point whose pixel stays at or past that top was not
+        // the least and does not become it; distance alone covers a frustum-bound point's every turn. A point that comes
+        // under the top can make the pixel finer; one that only leaves can only make it coarser.
+        ChangeReach Reaches(Group group) {
             var top = group.Watch.Top;
+            var reach = ChangeReach.None;
 
             // A tier held at both of the group's rungs moves for no pixel.
-            if (!float.IsFinite(f: top) && float.IsFinite(f: group.DemandPixel)) { return false; }
+            if (!float.IsFinite(f: top) && float.IsFinite(f: group.DemandPixel)) { return reach; }
 
             for (var index = 0; (index < changes.Count); index++) {
                 var change = changes[index];
 
-                if (change.HadBefore && (ReachOf(group: group, point: change.Before) < top)) { return true; }
-                if (change.HasAfter && (ReachOf(group: group, point: change.After) < top)) { return true; }
+                if (change.HasAfter && (ReachOf(group: group, point: change.After) < top)) { return ChangeReach.Finer; }
+                if (change.HadBefore && (ReachOf(group: group, point: change.Before) < top)) { reach = ChangeReach.Coarser; }
             }
 
-            return false;
+            return reach;
         }
         // Whether a group whose slot moved may demand another tier: its box moved by no more than the distance between the
         // world box its latest measure read and the one it stands at now, so its pixel moved by no more than that over the
