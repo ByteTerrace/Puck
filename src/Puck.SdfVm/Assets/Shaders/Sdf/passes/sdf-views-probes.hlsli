@@ -1,9 +1,12 @@
 // The probe lookup at the view's own rate (SdfWorldPackage.Parts.ViewsProbes): the irradiance volume's gather
-// (sdfMeshProbesAt) evaluated once for each cell of SDF_VIEWS_PROBE_RATE by SDF_VIEWS_PROBE_RATE pixels, at one
-// representative pixel of the cell, and written into the cell's probe record; views then reads the record for every pixel
-// of the cell whose receiver is compatible with the representative's, and gathers for itself only where it is not
-// (sdfViewsProbesAt). The gather is the expensive part of the lookup (each corner's angular surface test), while the
-// cube reads that follow it stay per shading sample, along each pixel's own shading normal and mirror direction.
+// (sdfMeshProbesAt) evaluated for each cell of SDF_VIEWS_PROBE_RATE by SDF_VIEWS_PROBE_RATE pixels at one representative
+// pixel of the cell, and at each other pixel of the cell whose receiver is not compatible with the representative's
+// (sdfViewsProbesCompatible), each written into the cell's probe record. Views reads the gather its pixel's record names
+// (sdfViewsProbesAt) and never gathers: the gather is the expensive part of the lookup (each corner's angular surface
+// test) and the largest code in the volume, so it runs in the lookup's own lean kernel, balanced across the lookup's
+// group, rather than in the shading kernel, where a quarter of foliage pixels gathering made every warp pay a whole gather
+// at the shading kernel's occupancy. The cube reads that follow a gather stay per shading sample, along each pixel's own
+// shading normal and mirror direction.
 //
 // What a reused gather may differ in: the representative's trilinear shares, facing fade and surface visibility, taken at
 // a receiver within SdfViewsProbeReach of the pixel's, on the same tangent plane within SdfViewsProbePlane and facing within
@@ -20,11 +23,16 @@
 // 10: the chosen stage's share as UNORM16 in bits 0 to 15, its measured flag in bit 16, the remainder's in bit 17, the
 //     representative's pixel within the cell (x + SDF_VIEWS_PROBE_RATE * y) in bits 18 to 25, and in bit 26 whether a
 //     representative was gathered at all (a cell with no pixel that wants the lookup holds none). Bits 27..28 select shared shading along x and y.
+//     Bits 29 to 31 say which of the cell's other pixels, in raster order skipping the representative, hold a gather of
+//     their own in the extra slot of that index.
 // 11 to 31: the gather's six-axis cubes blended by its weights as the record holds them (sdfMeshProbeCube), in a probe
 //     slot's cube packing (sdfMeshCubeRead): the sky shares in 11 to 13, the radiance in 14 to 22 and the sky light in 23
 //     to 31, as half floats. A pixel that reuses the record reads its indirect light and reflection from these words, three
 //     faces a direction, rather than every corner's cube; the cube is linear in its faces, so the answer is the corners'
 //     up to the order of the sums and the halves' rounding.
+// 32 onward: SDF_VIEWS_PROBE_RATE^2 - 1 extra slots of SdfViewsProbeExtraWords words, one for each pixel of the cell but the
+//     representative: words 0 to 9 as words 0 to 9 above, and word 10 the share and measured flags as in the state word. A
+//     pixel with its own gather reads its indirect light and reflection from its corners' cubes.
 #ifndef PASSES_SDF_VIEWS_PROBES_HLSLI
 #define PASSES_SDF_VIEWS_PROBES_HLSLI
 #include "../shade/sdf-mesh-irradiance.hlsli"
@@ -52,6 +60,23 @@ static const uint SdfViewsProbeRemainderMeasured = (1u << 17u);
 static const uint SdfViewsProbeLaneShift = 18u;
 static const uint SdfViewsRateShift = 27u;
 static const uint SdfViewsProbePresent = (1u << 26u);
+static const uint SdfViewsProbeExtraShift = 29u;
+static const uint SdfViewsProbeExtraWord = 32u;
+static const uint SdfViewsProbeExtraWords = 11u;
+
+// Whether a receiver at `offset` from a representative whose normal is `representativeNormal`, with its own geometric
+// normal `normal`, may read the representative's gather (the head of this file): within the reach, on its tangent plane
+// and facing as it does. The probe lookup decides with it which pixels of a cell gather for themselves.
+bool sdfViewsProbesCompatible(float3 offset, float3 representativeNormal, float3 normal) {
+    return ((dot(offset, offset) <= (SdfViewsProbeReach * SdfViewsProbeReach))
+        && (abs(dot(offset, representativeNormal)) <= SdfViewsProbePlane)
+        && (dot(normal, representativeNormal) >= SdfViewsProbeFacing));
+}
+// The extra slot a non-representative pixel of a cell reads: its place among the cell's pixels in raster order with the
+// representative's skipped. `pixel` and `representative` are each a pixel's place in the cell, x + SDF_VIEWS_PROBE_RATE * y.
+uint sdfViewsProbeExtraSlot(uint pixel, uint representative) {
+    return (pixel - ((pixel > representative) ? 1u : 0u));
+}
 
 // Whether a pixel shades with the irradiance volume: a hit of an ordinary material in a view that shades finally, or any
 // hit under the indirect debug view, which shows the volume's light on every surface.
@@ -72,30 +97,51 @@ uint sdfViewsProbeRecord(uint2 cell, uint viewIndex) {
     return (SDF_VIEWS_PROBE_WORDS * ((((viewIndex * cells.y) + cell.y) * cells.x) + cell.x));
 }
 
+// A gather's share and measured flags, as the state word and an extra slot's last word hold them.
+uint sdfViewsProbesFlags(SdfMeshProbes probes) {
+    return ((uint)round(saturate(probes.share) * 65535.0)
+        | (probes.measured ? SdfViewsProbeMeasured : 0u) | (probes.remainderMeasured ? SdfViewsProbeRemainderMeasured : 0u));
+}
+
 #if defined(SDF_VIEWS_PROBES_PASS)
-// Writes a cell's record: the representative's gather and its pixel within the cell, or with `present` false a cell
-// whose every record word but the state is left as it was.
-void sdfViewsProbesStore(uint record, SdfMeshProbes probes, uint lane, bool present, uint rateMask) {
-    uint rate = rateMask << SdfViewsRateShift;
-    if (!present) {
-        sdfViewsProbeRecordBuffer[record + SdfViewsProbeStateWord] = rate;
-        return;
-    }
-    sdfViewsProbeRecordBuffer[record] = probes.cage;
-    sdfViewsProbeRecordBuffer[record + 1u] = probes.remainderCage;
-    // The cube blends the weights as a reader of the record holds them, quantized.
+// Writes a gather's cages and weights from `at` (a record's first word or an extra slot's) and returns the probes as a
+// reader of those words holds them, the weights quantized.
+SdfMeshProbes sdfViewsProbesStoreGather(uint at, SdfMeshProbes probes) {
     SdfMeshProbes held = probes;
+
+    sdfViewsProbeRecordBuffer[at] = probes.cage;
+    sdfViewsProbeRecordBuffer[at + 1u] = probes.remainderCage;
     [unroll] for (uint pair = 0u; (pair < 8u); pair++) {
         uint low = (uint)round(saturate(probes.weight[2u * pair]) * 65535.0);
         uint high = (uint)round(saturate(probes.weight[(2u * pair) + 1u]) * 65535.0);
 
         held.weight[2u * pair] = (float(low) / 65535.0);
         held.weight[(2u * pair) + 1u] = (float(high) / 65535.0);
-        sdfViewsProbeRecordBuffer[record + 2u + pair] = (low | (high << 16u));
+        sdfViewsProbeRecordBuffer[at + 2u + pair] = (low | (high << 16u));
     }
-    sdfViewsProbeRecordBuffer[record + SdfViewsProbeStateWord] = ((uint)round(saturate(probes.share) * 65535.0)
-        | (probes.measured ? SdfViewsProbeMeasured : 0u) | (probes.remainderMeasured ? SdfViewsProbeRemainderMeasured : 0u)
-        | (lane << SdfViewsProbeLaneShift) | SdfViewsProbePresent | rate);
+    return held;
+}
+// Writes the gather of the cell's non-representative pixel that reads extra slot `slot`.
+void sdfViewsProbesStoreExtra(uint record, uint slot, SdfMeshProbes probes) {
+    uint at = (record + SdfViewsProbeExtraWord + (slot * SdfViewsProbeExtraWords));
+
+    sdfViewsProbesStoreGather(at, probes);
+    sdfViewsProbeRecordBuffer[at + SdfViewsProbeStateWord] = sdfViewsProbesFlags(probes);
+}
+// Writes a cell's record: the representative's gather, its pixel within the cell and which other pixels hold gathers of
+// their own (`extras`, a bit an extra slot), or with `present` false a cell whose every record word but the state is left
+// as it was.
+void sdfViewsProbesStore(uint record, SdfMeshProbes probes, uint lane, bool present, uint rateMask, uint extras) {
+    uint rate = rateMask << SdfViewsRateShift;
+    if (!present) {
+        sdfViewsProbeRecordBuffer[record + SdfViewsProbeStateWord] = rate;
+        return;
+    }
+    // The cube blends the weights as a reader of the record holds them, quantized.
+    SdfMeshProbes held = sdfViewsProbesStoreGather(record, probes);
+
+    sdfViewsProbeRecordBuffer[record + SdfViewsProbeStateWord] = (sdfViewsProbesFlags(probes)
+        | (lane << SdfViewsProbeLaneShift) | SdfViewsProbePresent | rate | (extras << SdfViewsProbeExtraShift));
 
     float sky[6];
     float3 radiance[6];
@@ -116,68 +162,58 @@ void sdfViewsProbesStore(uint record, SdfMeshProbes probes, uint lane, bool pres
     }
 }
 #else
-// Reads a cell's gather; false for a cell with no representative.
-bool sdfViewsProbesLoad(uint record, out SdfMeshProbes probes, out uint lane) {
-    uint state = sdfViewsProbeRecordBuffer[record + SdfViewsProbeStateWord];
+// Reads the gather whose cages and weights start at `at` (a record's first word or an extra slot's), with the share and
+// measured flags of `flags`.
+SdfMeshProbes sdfViewsProbesLoadGather(uint at, uint flags) {
+    SdfMeshProbes probes = sdfMeshProbesNone();
 
-    probes = sdfMeshProbesNone();
-    lane = ((state >> SdfViewsProbeLaneShift) & 0xFFu);
-    if ((state & SdfViewsProbePresent) == 0u) {
-        return false;
-    }
-    probes.cage = sdfViewsProbeRecordBuffer[record];
-    probes.remainderCage = sdfViewsProbeRecordBuffer[record + 1u];
+    probes.cage = sdfViewsProbeRecordBuffer[at];
+    probes.remainderCage = sdfViewsProbeRecordBuffer[at + 1u];
     [unroll] for (uint pair = 0u; (pair < 8u); pair++) {
-        uint word = sdfViewsProbeRecordBuffer[record + 2u + pair];
+        uint word = sdfViewsProbeRecordBuffer[at + 2u + pair];
 
         probes.weight[2u * pair] = (float(word & 0xFFFFu) / 65535.0);
         probes.weight[(2u * pair) + 1u] = (float(word >> 16u) / 65535.0);
     }
-    probes.share = (float(state & 0xFFFFu) / 65535.0);
-    probes.measured = ((state & SdfViewsProbeMeasured) != 0u);
-    probes.remainderMeasured = ((state & SdfViewsProbeRemainderMeasured) != 0u);
-    return true;
+    probes.share = (float(flags & 0xFFFFu) / 65535.0);
+    probes.measured = ((flags & SdfViewsProbeMeasured) != 0u);
+    probes.remainderMeasured = ((flags & SdfViewsProbeRemainderMeasured) != 0u);
+    return probes;
 }
 
-// The probes a views pixel shades with: its cell's gather where the representative's receiver is compatible with this
-// pixel's (the head of this file), otherwise its own (sdfMeshProbesAt). `normal` is the hit's geometric normal, the one the
-// probe lookup gathered the representative at.
-SdfMeshProbes sdfViewsProbesAt(SdfPixel p, float3 surfacePoint, float3 normal) {
+// The probes a views pixel shades with, as its cell's record names them: the representative's gather, with its blended
+// cube, for the representative and every pixel compatible with it, and a pixel's own gather (the probe lookup ran it for
+// the pixel, sdfViewsProbesCompatible) for every other; none for a cell with no representative, which no pixel of the cell
+// wants (sdfViewsProbesWanted).
+SdfMeshProbes sdfViewsProbesAt(SdfPixel p) {
 #if defined(SDF_VIEWS_OMIT_PROBES)
     return sdfMeshProbesNone();
 #else
-#if !defined(SDF_VIEWS_OMIT_PROBE_SHARING)
-    uint2 cell = (p.pixel / SDF_VIEWS_PROBE_RATE);
-    SdfMeshProbes cellProbes;
-    uint lane;
+    uint record = sdfViewsProbeRecord((p.pixel / SDF_VIEWS_PROBE_RATE), p.viewIndex);
+    uint state = sdfViewsProbeRecordBuffer[record + SdfViewsProbeStateWord];
 
-    uint cellRecord = sdfViewsProbeRecord(cell, p.viewIndex);
+    if ((state & SdfViewsProbePresent) == 0u) {
+        return sdfMeshProbesNone();
+    }
 
-    if (sdfViewsProbesLoad(cellRecord, cellProbes, lane)) {
-        uint2 representative = ((cell * SDF_VIEWS_PROBE_RATE) + uint2((lane % SDF_VIEWS_PROBE_RATE), (lane / SDF_VIEWS_PROBE_RATE)));
+    uint2 corner = (p.pixel % SDF_VIEWS_PROBE_RATE);
+    uint lane = ((state >> SdfViewsProbeLaneShift) & 0xFFu);
+    uint place = (corner.x + (SDF_VIEWS_PROBE_RATE * corner.y));
 
-        cellProbes.cube = (cellRecord + 1u);
+    if (place != lane) {
+        uint slot = sdfViewsProbeExtraSlot(place, lane);
 
-        if (all(representative == p.pixel)) {
-            return cellProbes;
-        }
+        if (((state >> (SdfViewsProbeExtraShift + slot)) & 1u) != 0u) {
+            uint at = (record + SdfViewsProbeExtraWord + (slot * SdfViewsProbeExtraWords));
 
-        uint record = worldVisibilityRecord(representative, p.viewIndex);
-        float t = asfloat(sdfVisibilityRecordBuffer[record + SdfVisibilityTWord]);
-        float3 representativeNormal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord]);
-        float3 direction = cameraRayDirection(p.view, ((float2(representative) + 0.5) / float2(worldViewDims(p.view))));
-        precise float3 travel = (direction * t);
-        precise float3 representativePoint = (p.rayOrigin + travel);
-        float3 offset = (surfacePoint - representativePoint);
-
-        if ((dot(offset, offset) <= (SdfViewsProbeReach * SdfViewsProbeReach))
-            && (abs(dot(offset, representativeNormal)) <= SdfViewsProbePlane)
-            && (dot(normal, representativeNormal) >= SdfViewsProbeFacing)) {
-            return cellProbes;
+            return sdfViewsProbesLoadGather(at, sdfViewsProbeRecordBuffer[at + SdfViewsProbeStateWord]);
         }
     }
-#endif
-    return sdfMeshProbesAt(surfacePoint, normal);
+
+    SdfMeshProbes probes = sdfViewsProbesLoadGather(record, state);
+
+    probes.cube = (record + 1u);
+    return probes;
 #endif
 }
 

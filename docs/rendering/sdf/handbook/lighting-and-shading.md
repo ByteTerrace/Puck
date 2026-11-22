@@ -287,8 +287,9 @@ in the frame.
   publication reads unsettled, naming the GPU and live windows separately.
 - **Reading it.** The views passes (`shade/sdf-mesh-irradiance.hlsli`) gather
   the eight probes about the shaded point once (`sdfMeshProbesAt`): the probe
-  lookup pass gathers once a cell of a few pixels and views reuses the gather
-  for the cell's pixels whose receiver matches (`passes/sdf-views-probes.hlsli`).
+  lookup pass gathers once a cell of a few pixels, and again for each pixel of the
+  cell whose receiver does not match, and views reads the gather its pixel's
+  record names (`passes/sdf-views-probes.hlsli`).
   The receiver is pushed 5 cm along its normal, weighted trilinearly, by how far each lies in front of the
   surface and by its depth visibility. The sky term is each probe's sky-light
   cube, which the relight integrates from the rays that missed every surface,
