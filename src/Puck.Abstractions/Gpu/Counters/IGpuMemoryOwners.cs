@@ -21,10 +21,11 @@ public interface IGpuMemoryOwners {
     /// ledger's lock, from any thread.</summary>
     /// <param name="segment">The segment the allocation would be placed in, with its pool.</param>
     /// <param name="bytes">The allocation's size, in bytes, as the device will be asked for it.</param>
-    /// <param name="payer">The family of the resource that prompted the allocation, whose reservation is drawn on first
-    /// and whose class decides what a full pool answers; <see langword="null"/> for none.</param>
-    /// <param name="payerBytes">The most of <paramref name="payer"/>'s reservation the allocation consumes, at most
-    /// <paramref name="bytes"/>.</param>
+    /// <param name="payer">The family of the resource that prompted the allocation, whose reservation is drawn on first,
+    /// up to the whole allocation, since a shared block's room holds the payer's next resources, and whose class decides
+    /// what a full pool answers; <see langword="null"/> for none.</param>
+    /// <param name="payerBytes">The bytes of the resource that prompted the allocation, at most <paramref name="bytes"/>:
+    /// what the payer's floor is judged by.</param>
     /// <param name="givesWay">Whether the allocation is one its holder can do without
     /// (<see cref="GpuMemoryAdmissionScope"/>): with no room it is refused whatever the payer's class.</param>
     /// <returns>The answer, handed back to <see cref="Settle"/> unless it refuses.</returns>

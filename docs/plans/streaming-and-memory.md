@@ -1311,8 +1311,8 @@ reader needs them. That door restores only those two planes: its storage
 declines positions, level-zero indices, materials, members and influences
 **[opened]**. Positions, level-zero indices and triangle materials stay, and
 the region reads a mesh's words again through the hold for a flush, a
-relocation, a moved mesh and another residency's landing
-(`SdfWorldTables.MeshWordsOf`); the lighting's trace scene claims every static
+relocation, a moved mesh the region cannot copy on the GPU and a landing
+(`SdfWorldTables.MeshWords`); the lighting's trace scene claims every static
 mesh and builds its CPU hierarchy from positions and level-zero indices,
 leaving dynamic and glass meshes out (`SdfMeshDraw.IsStatic`); a
 renumbered variant reads the materials; a device loss lands everything again.

@@ -289,7 +289,7 @@ least that many times a second of presentation time, whatever the frames' pace.
 The far cascade stands between refreshes at least 30 times a second
 ([the shadow cascades](#the-shadow-cascades)); a footprint showing a nested
 portal or session view asks for it at least 30 times a second at or below 120
-display pixels high and 15 at or below 60, and holds it entirely while its glass
+display pixels high, 15 at or below 60, 10 at or below 40 and 5 at or below 20, and holds it entirely while its glass
 covers no more than two such steps on either axis of the image showing it
 (`SdfUpdateRateTiers.ViewHeldPixels`), which bounds the held image's error to
 the glass itself ([views](motion-and-views.md)); one showing a screen's source at
@@ -298,7 +298,7 @@ on the display and 15 at or below half of it (`RenderGraphRefresh.AtLeast` on
 `RenderGraphFootprint.Refresh`, which the scheduler honours as it does a root's
 refresh, the most frequent demand winning); and a body's pose evaluation runs
 at least 30, 15, 10 or 5 times a second at or below that many pixels per metre
-(`SdfUpdateRateTiers.BodyTiers`), its root followed every frame and its parts riding the root rigidly between
+(`SdfUpdateRateTiers.Tiers`), its root followed every frame and its parts riding the root rigidly between
 packs (`WorldCreationInstances.Rates`). A placed creation's animation decides
 through the same function: it holds while no view, shadow cascade or reader of
 its parts may show it, and takes the reduced tiers while visible only where its

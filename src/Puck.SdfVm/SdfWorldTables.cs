@@ -357,6 +357,10 @@ public sealed partial class SdfWorldTables : IDisposable {
         // A mapped region's first chunk is backing beyond its draw record.
         m_meshGrant.Mapped = m_meshRegion.Mapped;
         m_meshGrant.Created(capacityBytes: ((long)m_meshRegion.DestinationBytes));
+        // The arena compacts by moving standing meshes on the GPU (SdfMeshRegionArena.Moved, GpuRegion.TryOweMove). A
+        // mapped region's free words cost nothing past the chunks they share, so only an unmapped one compacts to shrink.
+        m_meshRegion.ReserveRunCopies();
+        m_meshArena.FreeWordsCost = !m_meshRegion.Mapped;
         m_lightRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_lightRecords), region: LightRegionIndex));
         m_skyRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyRecord), region: SkyRegionIndex));
         m_skyLayerRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyLayerRecords), region: SkyLayerRegionIndex));

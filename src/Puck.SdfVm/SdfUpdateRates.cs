@@ -19,7 +19,7 @@ public enum SdfUpdateRates : byte {
     /// least 30, 15, 10 or 5 times a second as its pixels per metre fall (<see cref="SdfUpdateRateTiers.BodyHertz"/>),
     /// and held while nothing may show or read its pose, its root still followed every frame.</summary>
     Bodies = 1,
-    /// <summary>A nested portal or session view at least 30 or 15 times a second as the share of the display it covers
+    /// <summary>A nested portal or session view at least 30, 15, 10 or 5 times a second as the share of the display it covers
     /// shrinks.</summary>
     Views = 2,
     /// <summary>An in-world screen's source image upload at least 30 or 15 times a second once it is shown below its
@@ -49,18 +49,13 @@ public static class SdfUpdateRateTiers {
     /// for at least: a stride's swing. A resting body and a placed creation are sized for their own measured part speed
     /// (<see cref="BodyHertz"/>).</summary>
     public const float BodyPartSpeed = 2f;
-    /// <summary>Gets the rates a body's pose takes, in hertz, fastest first: every frame, then each reduced tier. Each
-    /// divides 30 and 60, so its floor lands on an even cadence on either grid.</summary>
-    public static ReadOnlySpan<int> BodyTiers => [EveryFrameHertz, 30, 15, 10, 5];
+    /// <summary>Gets the rates rated work takes, in hertz, fastest first: every frame, then each reduced tier, which a body's
+    /// pose (<see cref="BodyHertz"/>) and a nested view (<see cref="ViewHertz"/>) choose from by one rule
+    /// (<see cref="TierFor"/>). Each divides 30 and 60, so its floor lands on an even cadence on either grid.</summary>
+    public static ReadOnlySpan<int> Tiers => [EveryFrameHertz, 30, 15, 10, 5];
     /// <summary>The share of its own height a nested view's content moves in a second at most, which the view tiers are
     /// sized for: a viewer walking past a window, not a snap turn.</summary>
     public const float ViewParallaxPerSecond = 0.5f;
-    /// <summary>The pixels of display height at and below which a nested view renders at 30 Hz: content moving
-    /// <see cref="ViewParallaxPerSecond"/> of it a second steps <see cref="PerceptibleStepPixels"/> in a 30th of a
-    /// second.</summary>
-    public const float ViewHalfRatePixels = ((PerceptibleStepPixels * 30f) / ViewParallaxPerSecond);
-    /// <summary>The pixels of display height at and below which a nested view renders at 15 Hz.</summary>
-    public const float ViewQuarterRatePixels = ((PerceptibleStepPixels * 15f) / ViewParallaxPerSecond);
     /// <summary>The maximum width or height in pixels at and below which the glass a nested view shows on renders nothing and holds its latest image
     /// (<see cref="HeldHertz"/>): two <see cref="PerceptibleStepPixels"/> steps, so whatever the destination did while
     /// held, the held image differs from a fresh one within a patch no larger than the step pair, and the first fresh
@@ -97,7 +92,7 @@ public static class SdfUpdateRateTiers {
     /// <param name="partSpeed">The fastest the creation's parts move relative to its root, in metres a second: a moving
     /// body's <see cref="BodyPartSpeed"/> or faster, a resting body's or a placed creation's measured bound; infinity for
     /// motion no bound covers, which updates every frame wherever anything may show it.</param>
-    /// <returns>The slowest of <see cref="BodyTiers"/> that bound allows, where 60 means every frame; 15 for a creation
+    /// <returns>The slowest of <see cref="Tiers"/> that bound allows, where 60 means every frame; 15 for a creation
     /// only shown elsewhere, whose size in what shows it is not measured, when its motion has a bound; or
     /// <see cref="HeldHertz"/> when nothing may show or read its pose.</returns>
     public static int BodyHertz(float pixelsPerMetre, bool shownElsewhere, float partSpeed = BodyPartSpeed) {
@@ -111,10 +106,23 @@ public static class SdfUpdateRateTiers {
         }
 
         // The on-screen speed of the fastest part, in pixels a second.
-        var screenSpeed = (pixelsPerMetre * MathF.Max(x: partSpeed, y: 0f));
+        return TierFor(screenSpeed: (pixelsPerMetre * MathF.Max(x: partSpeed, y: 0f)));
+    }
+    /// <summary>Returns the rate a nested view renders at for the pixels of display height it covers: the tier at which
+    /// its content, moving <see cref="ViewParallaxPerSecond"/> of its height a second, steps at most
+    /// <see cref="PerceptibleStepPixels"/> (<see cref="TierFor"/>): every frame above 120 pixels, 30 Hz at or below them,
+    /// down to 5 Hz at or below 20.</summary>
+    /// <param name="pixels">The view's height on the display, in pixels.</param>
+    /// <returns>One of <see cref="Tiers"/>, where 60 means every frame its consumer renders.</returns>
+    public static int ViewHertz(double pixels) => TierFor(screenSpeed: (pixels * ViewParallaxPerSecond));
+    /// <summary>Returns the slowest of <see cref="Tiers"/> at which content moving across the screen at a speed steps at most
+    /// <see cref="PerceptibleStepPixels"/> in one period: the speed at most the step times the tier.</summary>
+    /// <param name="screenSpeed">The content's speed on the screen, in pixels a second.</param>
+    /// <returns>One of <see cref="Tiers"/>, where 60 means every frame.</returns>
+    public static int TierFor(double screenSpeed) {
         var hertz = EveryFrameHertz;
 
-        foreach (var tier in BodyTiers[1..]) {
+        foreach (var tier in Tiers[1..]) {
             if (screenSpeed > (PerceptibleStepPixels * tier)) {
                 break;
             }
@@ -124,12 +132,6 @@ public static class SdfUpdateRateTiers {
 
         return hertz;
     }
-    /// <summary>Returns the rate a nested view renders at for the pixels of display height it covers.</summary>
-    /// <param name="pixels">The view's height on the display, in pixels.</param>
-    /// <returns>60, 30 or 15, where 60 means every frame its consumer renders.</returns>
-    public static int ViewHertz(double pixels) => ((pixels > ViewHalfRatePixels)
-        ? 60
-        : ((pixels > ViewQuarterRatePixels) ? 30 : 15));
     /// <summary>Returns the rate a screen's image uploads at for its height on the display against its image's own.</summary>
     /// <param name="share">The screen's height on the display over its image's height in texels.</param>
     /// <returns>60, 30 or 15, where 60 means at the source's own cadence.</returns>

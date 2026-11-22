@@ -39,11 +39,11 @@ public static class WorldArtifactBuild {
     /// <summary>The MSBuild switches every World build passes beside <see cref="CliProjectBuild.Arguments"/>, which
     /// the source-state key covers with them. <c>AppendRuntimeIdentifierToOutputPath=false</c> keeps the runtime-specific
     /// publish on the portable build's outputs, so it compiles nothing an ordinary build did not (the recipe CI publishes
-    /// with); <c>PuckPrewarmPlayerProducts=false</c> leaves the player prewarm to the World's own boot.</summary>
+    /// with).</summary>
     /// <param name="spirv">Whether the build carries Vulkan SPIR-V (<c>-p:PuckShaderSpirvEnabled=true</c>).</param>
     /// <returns>The switches, in the order the build passes them.</returns>
     public static string[] BuildProperties(bool spirv) =>
-        [AppendRuntimeIdentifier, NoPrewarm, .. (spirv ? (string[])["-p:PuckShaderSpirvEnabled=true"] : [])];
+        [AppendRuntimeIdentifier, .. (spirv ? (string[])["-p:PuckShaderSpirvEnabled=true"] : [])];
 
     /// <summary>The whole World build command before its publish directory, which the source-state key covers.</summary>
     /// <param name="spirv">Whether the build carries Vulkan SPIR-V.</param>
@@ -52,7 +52,6 @@ public static class WorldArtifactBuild {
         [.. CliProjectBuild.Arguments(project: WorldArtifactClosure.WorldProject, publish: true), .. BuildProperties(spirv: spirv)];
 
     private const string AppendRuntimeIdentifier = "-p:AppendRuntimeIdentifierToOutputPath=false";
-    private const string NoPrewarm = "-p:PuckPrewarmPlayerProducts=false";
 
     /// <summary>Resolves the World build for the checkout's current sources, building it only when the store holds
     /// none.</summary>

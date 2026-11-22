@@ -112,17 +112,6 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
-    <!-- -p:PuckPrewarmPlayerProducts=false skips the player prewarm for a publish that boots from source state, such as
-         the tools' World build store, whose Worlds derive those products into their own cache at boot. -->
-    <Target Name="PuckPrewarmPlayerProducts" AfterTargets="Publish" Condition="'$(PuckPrewarmPlayerProducts)' != 'false'">
-        <PropertyGroup>
-            <_PuckPlayerProductDirectory>$(PublishDir.Replace('\', '/'))</_PuckPlayerProductDirectory>
-        </PropertyGroup>
-        <MSBuild Projects="../Puck.Cli.Worlds/Puck.Cli.Worlds.csproj" Targets="Build"
-                 Properties="Configuration=$(Configuration);RuntimeIdentifier=;SelfContained=false"
-                 RemoveProperties="NoBuild;PublishDir;PublishReadyToRun;AppendRuntimeIdentifierToOutputPath" />
-        <Exec Command="dotnet &quot;$(MSBuildProjectDirectory)/../Puck.Cli.Worlds/bin/$(Configuration)/$(TargetFramework)/Puck.Cli.Worlds.dll&quot; prewarm --output &quot;$(_PuckPlayerProductDirectory)&quot;" />
-    </Target>
     <ItemGroup>
         <!-- The engine's own content: the default recording. Worlds are asset packages the engine is handed at boot,
              never shipped beside it. -->

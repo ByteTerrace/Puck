@@ -4,13 +4,17 @@ using Puck.Abstractions.Gpu;
 namespace Puck.Shaders;
 
 public sealed partial class ShaderPipelineRenderNode {
-    /// <summary>The number of node submissions covered by a pass's observational mean.</summary>
+    /// <summary>The number of render graph frames a pass's observational window covers, and the samples it retains a
+    /// pass: a pass records at most once a frame.</summary>
     public const int TimingWindow = 32;
 
     private TimingSlot[] m_timingSlots = [];
     private GpuPassTiming[] m_timings = [];
-    private (long Submission, double Milliseconds)[] m_timingValues = [];
-    private bool m_timingWindowDirty;
+    // Each pass's latest TimingWindow samples, by the submission that took them and the render graph frame it rendered in.
+    private (long Submission, long Frame, double Milliseconds)[] m_timingValues = [];
+    // The frame the window was last computed for, and the first frame the current graph's timing covers.
+    private long m_timingWindowAt = -1;
+    private long m_timingSince;
     private int m_timingWindowFrames;
     private long m_timingRevision = -1;
     private bool m_timingEnabled;
@@ -44,30 +48,38 @@ public sealed partial class ShaderPipelineRenderNode {
     /// by name and leaves the graph rendering. A refusal is tried again only when timing is enabled anew or the
     /// operator's GPU faults move, never once per frame.</summary>
     public string? TimingRefusal => (m_timingEnabled ? m_timingRefusal : null);
-    /// <summary>Gets the current graph's completed per-pass means. Empty while disabled, unsupported, or awaiting its
-    /// first timed submission. A pass with no completed pair has zero samples, never a fabricated time.</summary>
-    public ReadOnlySpan<GpuPassTiming> Timings {
-        get {
-            if (!HasCompletedTiming) { return []; }
-            if (m_timingWindowDirty) { UpdateTimingWindow(); }
-            return m_timings;
-        }
+    /// <summary>Gets or sets the render graph frame the node's next submission renders in, which the runtime writes before
+    /// it begins the node's frame and the node's timing window counts in (<see cref="TimingsAt"/>).</summary>
+    public long TimingFrame { get; set; }
+    /// <summary>Returns the current graph's completed per-pass readings over the <see cref="TimingWindow"/> render graph
+    /// frames whose timestamps can have completed by <paramref name="frame"/> (the window ends the node's frames in flight
+    /// before it). A frame the node or a pass did not render counts as zero time, so <see cref="GpuPassTiming.PerFrameMs"/>
+    /// is what the pass costs a frame on average, and a node that stopped rendering reads zero and stale rather than the
+    /// cost of its last renders. Empty while disabled, unsupported, or awaiting its first timed submission. A pass with no
+    /// completed pair in the window has zero samples, never a fabricated time.</summary>
+    /// <param name="frame">The render graph's latest frame (<c>RenderGraphRuntime.Latest.Frame</c>).</param>
+    /// <returns>The readings, one a pass.</returns>
+    public ReadOnlySpan<GpuPassTiming> TimingsAt(long frame) {
+        if (!HasCompletedTiming) { return []; }
+        if (m_timingWindowAt != frame) { UpdateTimingWindow(frame: frame); }
+        return m_timings;
     }
     private bool HasCompletedTiming => m_timingCompleted && (m_timingRevision == m_revision);
-    /// <summary>Gets the number of completed submissions covered since starting this graph's timing, capped at the window width.</summary>
+    /// <summary>Gets the number of render graph frames the latest <see cref="TimingsAt"/> window covered: the window's
+    /// width, or fewer while the current graph's timing is younger than it.</summary>
     public int TimingWindowFrames => (HasCompletedTiming ? m_timingWindowFrames : 0);
     /// <summary>Gets how many timed submissions this node has read back, which moves with each one and never repeats.</summary>
     public long TimingFrames => m_timingFrames;
     /// <summary>Gets the summed pass time, in milliseconds, of the latest timed submission read back for the current graph,
-    /// or zero while <see cref="Timings"/> is empty.</summary>
+    /// or zero while <see cref="TimingsAt"/> is empty.</summary>
     public double LatestTimingMilliseconds => (HasCompletedTiming ? m_timingLatest : 0d);
     /// <summary>Gets the identity of the submission <see cref="LatestTimingMilliseconds"/> timed, as the node's work ledger
-    /// numbers it: the newest submission read back, whichever frame slot held it. Zero while <see cref="Timings"/> is
+    /// numbers it: the newest submission read back, whichever frame slot held it. Zero while <see cref="TimingsAt"/> is
     /// empty.</summary>
     public long LatestTimingSubmission => (HasCompletedTiming ? m_timingLatestSubmission : 0L);
     /// <summary>Gets when the latest timed submission's first timed pass began and its last timed pass ended, in
     /// milliseconds on the recording queue's timestamp clock, which every node on that queue shares; (0, 0) while
-    /// <see cref="Timings"/> is empty. Two nodes' spans compare only when they come from the same queue.</summary>
+    /// <see cref="TimingsAt"/> is empty. Two nodes' spans compare only when they come from the same queue.</summary>
     public (double Start, double End) LatestTimingSpan => (HasCompletedTiming ? m_timingLatestSpan : default);
     /// <summary>Gets the logical bytes of timestamp readback buffers still owned, including disabled slots awaiting fences.</summary>
     public ulong TimingReadbackBytes {
@@ -121,9 +133,10 @@ public sealed partial class ShaderPipelineRenderNode {
     private void ProvisionTiming(IGpuTimestampFactory factory, int slot) {
         if (m_timingRevision != m_revision) {
             m_timings = new GpuPassTiming[m_passLabels.Length];
-            m_timingValues = new (long Submission, double Milliseconds)[m_passLabels.Length * TimingWindow];
+            m_timingValues = new (long Submission, long Frame, double Milliseconds)[m_passLabels.Length * TimingWindow];
             m_timingCompleted = false;
-            m_timingWindowDirty = false;
+            m_timingWindowAt = -1;
+            m_timingSince = TimingFrame;
             m_timingWindowFrames = 0;
             m_timingLatestSubmission = m_submissions;
             for (var index = 0; (index < m_timings.Length); index++) {
@@ -212,6 +225,7 @@ public sealed partial class ShaderPipelineRenderNode {
         if (TimingActive && (m_timingSlots.Length != 0) && (m_timingSlots[slot].Pool is not null)) {
             m_timingSlots[slot].Fence = fence;
             m_timingSlots[slot].Submission = m_submissions;
+            m_timingSlots[slot].Frame = TimingFrame;
         }
     }
     private void PollTimings() {
@@ -241,7 +255,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 frame += value;
                 var index = ((pass * TimingWindow) + (int)(slot.Submission % TimingWindow));
                 if (m_timingValues[index].Submission < slot.Submission) {
-                    m_timingValues[index] = (slot.Submission, value);
+                    m_timingValues[index] = (slot.Submission, slot.Frame, value);
                 }
                 if (m_timings[pass].LastSubmission < slot.Submission) {
                     m_timings[pass] = m_timings[pass] with { LastSubmission = slot.Submission };
@@ -249,34 +263,39 @@ public sealed partial class ShaderPipelineRenderNode {
             }
             // Several slots can complete in one poll, so the newest submission, not the last slot read, is the latest.
             if (slot.Submission > m_timingLatestSubmission) {
-                m_timingWindowFrames = (int)Math.Min(TimingWindow, m_timingWindowFrames + (slot.Submission - m_timingLatestSubmission));
                 m_timingLatest = frame;
                 m_timingLatestSubmission = slot.Submission;
                 m_timingLatestSpan = (last >= first)
                     ? (((first * pool.NanosecondsPerTick) / 1_000_000), ((last * pool.NanosecondsPerTick) / 1_000_000))
                     : default;
             }
-            m_timingWindowDirty = true;
+            m_timingWindowAt = -1;
             m_timingFrames++;
         }
     }
-    private void UpdateTimingWindow() {
-        var first = Math.Max(1, m_timingLatestSubmission - TimingWindow + 1);
+    // Computes each pass's reading over the frames whose timestamps can have completed by the given frame: the window
+    // ends the node's frames in flight before it and starts no earlier than the frame the current graph's timing began.
+    private void UpdateTimingWindow(long frame) {
+        var last = (frame - m_inFlight);
+        var first = Math.Max(val1: (last - TimingWindow + 1), val2: m_timingSince);
+        var frames = (int)Math.Clamp(value: ((last - first) + 1), min: 1L, max: TimingWindow);
+
         for (var pass = 0; pass < m_timings.Length; pass++) {
             var count = 0;
             var total = 0d;
-            foreach (var (submission, milliseconds) in m_timingValues.AsSpan(pass * TimingWindow, TimingWindow)) {
-                if (submission < first) { continue; }
+            foreach (var (submission, sampled, milliseconds) in m_timingValues.AsSpan(pass * TimingWindow, TimingWindow)) {
+                if ((submission == 0) || (sampled < first) || (sampled > last)) { continue; }
                 total += milliseconds;
                 count++;
             }
             m_timings[pass] = m_timings[pass] with {
                 Milliseconds = (count == 0 ? 0 : total / count),
                 Samples = count,
-                PerFrameMs = total / TimingWindow,
+                PerFrameMs = total / frames,
             };
         }
-        m_timingWindowDirty = false;
+        m_timingWindowFrames = frames;
+        m_timingWindowAt = frame;
     }
     private void ReleaseTiming() {
         foreach (var slot in m_timingSlots) { slot.Dispose(); }
@@ -298,6 +317,8 @@ public sealed partial class ShaderPipelineRenderNode {
         public long Revision;
         public long Epoch;
         public long Submission;
+        public long Frame;
+
 
         public void Dispose() {
             Pool?.Dispose();
