@@ -162,9 +162,6 @@ public static class WorldServerStepShell {
                 return current.Tick;
             }
 
-            // The collect: the tick's recorded deliveries and callbacks reach the host loop's sinks, in order, before
-            // any hook reads the completed tick.
-            server.Output.Collect();
             var tick = (current.Tick + 1UL);
 
             Collect(server, tick, publishTick);
