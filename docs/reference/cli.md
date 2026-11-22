@@ -360,19 +360,20 @@ machine of the `advanced-gaming-brick` engine takes the bundled firmware, and ea
 Rust addon guest variant an addon row's module path names. A world that references
 neither needs no `clang`, `ld.lld` or Rust toolchain; one that does needs them at
 prepare time. `prewarm --output <player>` prepares every BIOS and addon variant the
-engine can derive, for a player executable directory. Publishing `Puck.World` runs
-it automatically.
+engine can derive, for a player executable directory; the artifact producer
+runs it on the published World.
 
 `world player` assembles the folder a consumer machine runs, one that never builds
 from source, compiles a cartridge or cold-bakes. It builds `Puck.World` in Release
 with SPIR-V under the build lease and publishes it self-contained for this
-machine's runtime (that publish runs `prewarm` into `derived/`, so it needs the
-toolchains above); publishes the stub and the installer (`Puck.Launcher.Setup`)
+machine's runtime; publishes the stub and the installer (`Puck.Launcher.Setup`)
 self-contained, one file each, into `launcher/`; publishes each `--extension` project into
 `extensions/<name>/`, where the host discovers it (a hosted authority's sign-in
 provider is one); compiles the package's parent directory into `worlds/` as
 `compile --tree` does; and exports the package's specialized shading kernels into
-`derived/` as `world prepare` does, and prepares every file a machine of the
+`derived/` as `world prepare` does, prewarms the AGB BIOS and Rust addon guests
+those worlds reference there (so a world that references them needs the toolchains
+above), and prepares every file a machine of the
 package can mount from its content folders into `cache/derived/`. It then boots
 the published engine itself, windowed, with `--cache-dir cache`. Every boot
 waits for its bakes to settle where it spawns and then at each spawn point the
