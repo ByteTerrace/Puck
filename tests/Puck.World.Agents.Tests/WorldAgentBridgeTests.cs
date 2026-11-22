@@ -904,6 +904,8 @@ public sealed class WorldAgentBridgeTests {
         public SubmissionEnvelope? LastEnvelope { get; private set; }
 
         public IDisposable AttachSink(IClientSink sink) => new NoopDisposable();
+        // A fake holds no tick, so every inline reply is admitted.
+        public void RequireInlineSubmission() { }
         public void EnqueueIntent(in IntentSubmission submission) => throw new NotSupportedException();
         public void Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) {
             LastEnvelope = envelope;

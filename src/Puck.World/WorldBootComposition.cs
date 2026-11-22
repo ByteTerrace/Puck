@@ -1310,7 +1310,6 @@ public static class WorldBootComposition {
         var haptics = sp.GetRequiredService<WorldHapticDirector>();
         var keyLights = sp.GetRequiredService<WorldKeyLightDirector>();
         var highlights = sp.GetService<WorldHighlightDirector>();
-        var presentation = sp.GetRequiredService<WorldPresentationCollect>();
 
         return () => {
             for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
@@ -1334,8 +1333,6 @@ public static class WorldBootComposition {
             haptics.Tick(tick: client.Tick);
             keyLights.Tick();
             highlights?.Tick();
-            // The collect: what the frame reads of the authority, copied after every instance stepped.
-            presentation.Collect();
         };
     }
     /// <summary>Registers the boot shape the resolved host settings select over the authoritative core: the headless
@@ -1372,7 +1369,8 @@ public static class WorldBootComposition {
                 // Constructing the runtime mounts the guests for the presented shape.
                 _ = sp.GetRequiredService<WorldAddonRuntime>();
             }
-            return new WorldSimulation(sp.GetRequiredService<WorldHostStep>(), postStep, sp.GetRequiredService<WorldLinkBoundary>());
+            return new WorldSimulation(sp.GetRequiredService<WorldHostStep>(), postStep, sp.GetRequiredService<WorldLinkBoundary>(),
+                collect: sp.GetRequiredService<WorldPresentationCollect>().Collect);
         });
 
         // The platform's high-resolution wait for every shape's pacing loop and device-loss backoff, registered by the

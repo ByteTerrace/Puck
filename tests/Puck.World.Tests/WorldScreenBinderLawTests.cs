@@ -39,7 +39,7 @@ public sealed class WorldScreenBinderLawTests {
         using var world = scene.Residency("world");
         binder.ViewHost = world;
         var context = scene.Frame(new FakeGpuDevice());
-        binder.Publish(in context);
+        scene.Present(context: in context);
         var hosted = scene.Host.ScreenSession(WorldInstanceHost.BootInstanceName, BinderScene.Session)!;
         var observation = hosted.Observation!;
         Assert.True(scene.Host.TryGet(hosted.InstanceName!, out var destination));
@@ -55,7 +55,7 @@ public sealed class WorldScreenBinderLawTests {
 
         // Access is what the frame settled: the revocation reaches the views at the next published frame.
         destination.Server.Revoke(grant, Principal.Console);
-        binder.Publish(in context);
+        scene.Present(context: in context);
         Assert.False(binder.AccessOf(session).Available);
         Assert.False(binder.AccessOf(camera).Available);
         Assert.True(childObservation.CanObserve);
@@ -70,7 +70,7 @@ public sealed class WorldScreenBinderLawTests {
 
         // Granted again at the access it had, the session makes its residency from the content it was delivered then.
         destination.Server.Grant(grant, Principal.Console);
-        binder.Publish(in context);
+        scene.Present(context: in context);
         Assert.True(binder.AccessOf(session).Available);
         Assert.True(binder.AccessOf(camera).Available);
         Assert.True(binder.TryResolveView(session, out var own));
@@ -86,7 +86,7 @@ public sealed class WorldScreenBinderLawTests {
         // grant returns at the same access.
         var epoch = binder.AccessOf(session).Epoch;
         destination.Server.Revoke(grant, Principal.Console);
-        binder.Publish(in context);
+        scene.Present(context: in context);
         Assert.False(binder.AccessOf(session).Available);
         Assert.NotEqual(epoch, binder.AccessOf(session).Epoch);
         Assert.NotEqual(epoch, binder.AccessOf(camera).Epoch);
@@ -97,7 +97,7 @@ public sealed class WorldScreenBinderLawTests {
         scene.RenderProbe.CopyNodes(nodes);
         Assert.Equal(created, nodes.Count);
         destination.Server.Grant(grant, Principal.Console);
-        binder.Publish(in context);
+        scene.Present(context: in context);
         Assert.True(binder.TryResolveView(session, out var resumed));
         Assert.Same(own.Residency, resumed.Residency);
         Assert.Same(observation, hosted.Observation);
@@ -113,7 +113,7 @@ public sealed class WorldScreenBinderLawTests {
         using var world = scene.Residency("world");
         binder.ViewHost = world;
         var context = scene.Frame(new FakeGpuDevice());
-        binder.Publish(in context);
+        scene.Present(context: in context);
 
         var hosted = scene.Host.ScreenSession(WorldInstanceHost.BootInstanceName, BinderScene.Session)!;
         var observation = hosted.Observation!;
@@ -151,21 +151,21 @@ public sealed class WorldScreenBinderLawTests {
 
         // Revocation, re-grant and a second revocation (epoch advance) propagate identically through ReadAccess.
         destination.Server.Revoke(grant, Principal.Console);
-        binder.Publish(in context);
+        scene.Present(context: in context);
         AssertMatches();
         Assert.False(actual[1].Available);
         Assert.False(actual[2].Available);
         Assert.False(actual[3].Available);
 
         destination.Server.Grant(grant, Principal.Console);
-        binder.Publish(in context);
+        scene.Present(context: in context);
         AssertMatches();
         Assert.True(actual[1].Available);
         Assert.True(actual[2].Available);
 
         var epochBefore = actual[1].Epoch;
         destination.Server.Revoke(grant, Principal.Console);
-        binder.Publish(in context);
+        scene.Present(context: in context);
         AssertMatches();
         Assert.False(actual[1].Available);
         Assert.NotEqual(epochBefore, actual[1].Epoch);
@@ -466,8 +466,8 @@ public sealed class WorldScreenBinderLawTests {
         Assert.Equal(actual: fault, expected: "no source instance 'nothing' is running");
 
         // A capture a verb opened waits one publish for the source instance that shows it, then goes.
-        binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
-        binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
+        scene.Present(context: scene.Frame(device: new FakeGpuDevice()));
+        scene.Present(context: scene.Frame(device: new FakeGpuDevice()));
         binder.NotifyDeviceLost();
     }
     [Fact]
@@ -552,7 +552,7 @@ public sealed class WorldScreenBinderLawTests {
         _ = binder.TrySurface(point: out _, ray: default, view: session);
         Assert.Equal(actual: binder.HostView(view: 3), expected: 0);
         Assert.True(condition: binder.ApplyNonMachineSource(index: BinderScene.Session, source: new WorldScreenSource.Session(Destination: "garden")).Ok);
-        binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
+        scene.Present(context: scene.Frame(device: new FakeGpuDevice()));
         Assert.True(condition: binder.TryResolveView(name: session, view: out _));
 
         // The display resizes, the refresh divisor moves, and both refuse what is out of range.
@@ -651,7 +651,7 @@ public sealed class WorldScreenBinderLawTests {
         binder.RetainFrameSource(seat: 2, source: camera);
         Assert.True(condition: binder.TryCamera(index: BinderScene.None, seat: 1, sensor: WorldCameraSensor.Color).Ok);
         Assert.True(condition: binder.TryCamera(index: BinderScene.Pattern, seat: 1, sensor: WorldCameraSensor.Color).Ok);
-        binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
+        scene.Present(context: scene.Frame(device: new FakeGpuDevice()));
         binder.ReleaseProbeCameraDemand(camera: new WorldCameraSettings(Profile: rich, Seat: 2), contextSeat: 1);
         binder.ReleaseProbeCameraDemand(camera: new WorldCameraSettings(Seat: 2), contextSeat: 1);
         binder.ReleaseProbeCameraDemand(camera: new WorldCameraSettings(Seat: 3), contextSeat: 1);
@@ -662,7 +662,7 @@ public sealed class WorldScreenBinderLawTests {
         Assert.False(condition: binder.TryGetProbeOutput(fault: out var fault, generation: out _, height: 8, id: "fresh", output: out _, width: 8));
         Assert.Equal(actual: fault, expected: "probe output awaiting provisioning");
         Assert.False(condition: binder.TryGetProbeOutput(fault: out _, generation: out _, height: 8, id: "probe", output: out _, width: 8));
-        binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
+        scene.Present(context: scene.Frame(device: new FakeGpuDevice()));
         Assert.False(condition: binder.TryGetProbeOutput(fault: out fault, generation: out _, height: 8, id: "probe", output: out _, width: 8));
         Assert.Equal(actual: fault, expected: "the render adapter reports no LUID");
         binder.BindProbeRun(id: "probe", run: null!);
@@ -697,11 +697,11 @@ public sealed class WorldScreenBinderLawTests {
 
         // A frame over screens that show nothing external converts no capture fill until a HUD frame names a webcam.
         binder.ReconcileScreens(materials: [], screens: [scene.Rows[0]]);
-        binder.Publish(context: scene.Frame(device: new FakeGpuDevice { AdapterLuid = 7L }));
+        scene.Present(context: scene.Frame(device: new FakeGpuDevice { AdapterLuid = 7L }));
         Assert.False(condition: binder.TryGetRenderedKernelHost(fault: out var fault, host: out _));
         Assert.Equal(actual: fault, expected: "this platform hosts no probe kernels");
         binder.RetainFrameSource(seat: 1, source: WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CameraId, settings: new WorldCameraSettings()));
-        binder.Publish(context: scene.Frame(device: new FakeGpuDevice { AdapterLuid = 7L }));
+        scene.Present(context: scene.Frame(device: new FakeGpuDevice { AdapterLuid = 7L }));
     }
     [Fact]
     public void APublishedFrameFollowsTheSessionsAndTheirWorldsScreens() {
@@ -710,10 +710,10 @@ public sealed class WorldScreenBinderLawTests {
         var session = WorldViewNames.Session(screen: BinderScene.Session);
 
         // A frame with no device publishes nothing; one with a device follows each session's destination's screens.
-        binder.Publish(context: scene.Frame(device: null));
+        scene.Present(context: scene.Frame(device: null));
         scene.ConfigureViews();
-        binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
-        binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
+        scene.Present(context: scene.Frame(device: new FakeGpuDevice()));
+        scene.Present(context: scene.Frame(device: new FakeGpuDevice()));
 
         var nesting = binder.DescribeNesting();
 
@@ -735,7 +735,7 @@ public sealed class WorldScreenBinderLawTests {
         // The garden retires: the screen's picture is withdrawn; the screen goes, and every level beneath it.
         Assert.True(condition: binder.TryDescribeSession(description: out var described, index: BinderScene.Session));
         Assert.True(condition: scene.Host.TryRetire(name: described.InstanceName, reason: out _));
-        binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
+        scene.Present(context: scene.Frame(device: new FakeGpuDevice()));
         Assert.True(condition: binder.TryDescribeSession(description: out described, index: BinderScene.Session));
         Assert.True(condition: described.InstanceGone);
         binder.ReconcileScreens(materials: [], screens: [scene.Rows[0]]);
@@ -755,7 +755,7 @@ public sealed class WorldScreenBinderLawTests {
         Assert.True(condition: binder.TryDescribeSession(description: out _, index: BinderScene.Session));
 
         // The destination refuses the session the authority now holds, so the screen keeps the session it had.
-        binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
+        scene.Present(context: scene.Frame(device: new FakeGpuDevice()));
         Assert.True(condition: binder.TryDescribeSession(description: out var described, index: BinderScene.Session));
         Assert.Equal(actual: described.Destination, expected: "garden");
     }
@@ -763,7 +763,7 @@ public sealed class WorldScreenBinderLawTests {
     public void ANestingDepthOfNoneReleasesEverySession() {
         using var scene = new BinderScene(options: new BinderOptions(NestingDepth: 0));
 
-        scene.Binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
+        scene.Present(context: scene.Frame(device: new FakeGpuDevice()));
         Assert.False(condition: scene.Binder.TryDescribeSession(description: out _, index: BinderScene.Session));
     }
     [Fact]
@@ -788,7 +788,7 @@ public sealed class WorldScreenBinderLawTests {
         Assert.False(condition: binder.TryGetRenderedKernelHost(fault: out fault, host: out _));
         Assert.Equal(actual: fault, expected: "binder disposed");
         Assert.Equal(actual: binder.ApplyNonMachineSource(index: BinderScene.Session, source: new WorldScreenSource.Session(Destination: "garden")), expected: (false, "binder disposed"));
-        binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
+        scene.Present(context: scene.Frame(device: new FakeGpuDevice()));
     }
 
     // A screen source set that implements only what the interface requires.
@@ -998,6 +998,12 @@ public sealed class WorldScreenBinderLawTests {
         public WorldPresentationFeed Feed { get; } = new();
 
         // Publishes the machines and sessions of the scene's instances, as a host step's collect does.
+        // Presents a frame as the World does: the boundary window that precedes every frame closes with a collect, so the
+        // binder reads what the authority holds now.
+        public void Present(in FrameContext context) {
+            Publish();
+            Binder.Publish(context: in context);
+        }
         public void Publish() => Feed.Publish(
             diagnostics: WorldDiagnosticCopy.Off,
             machines: WorldPresentationCopy.Machines(held: Feed.Machines, instances: Host),
