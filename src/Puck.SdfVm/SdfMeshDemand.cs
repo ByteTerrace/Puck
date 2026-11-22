@@ -419,9 +419,42 @@ public sealed class SdfMeshDemand {
     /// <returns>The pixel's size in metres; infinity with no demand point.</returns>
     public float PixelAt(Vector3 center, Vector3 half, out int point) {
         point = -1;
-        if (Count == 0) { return float.PositiveInfinity; }
+        return ((Count == 0) ? float.PositiveInfinity : PixelOf(point: out point, read: Read(center: center, half: half)));
+    }
+    /// <summary>Reads boxes against every point, once each, and holds the reads on this thread for
+    /// <see cref="HeldPixelAt"/> and <see cref="HeldBoundsOf"/> until the next call: a shared geometry's copies, whose
+    /// pixel is the finest over them all and whose bounds then take that pixel's band.</summary>
+    /// <param name="centers">The boxes' centers, in world space.</param>
+    /// <param name="halves">The boxes' half extents along the world axes, as many as the centers, none negative.</param>
+    /// <exception cref="ArgumentException"><paramref name="halves"/> and <paramref name="centers"/> differ in
+    /// length.</exception>
+    public void ReadBoxes(ReadOnlySpan<Vector3> centers, ReadOnlySpan<Vector3> halves) {
+        if (halves.Length != centers.Length) { throw new ArgumentException(message: "Each box needs its center and its half extents.", paramName: nameof(halves)); }
 
-        var read = Read(center: center, half: half);
+        var held = (ThreadHeld ??= []);
+
+        while (held.Count < centers.Length) { held.Add(item: new BoxRead()); }
+        for (var box = 0; (box < centers.Length); box++) { ReadInto(center: centers[box], half: halves[box], read: held[box]); }
+    }
+    /// <summary>Returns <see cref="PixelAt(Vector3, Vector3, out int)"/> of a box this thread's latest
+    /// <see cref="ReadBoxes"/> read.</summary>
+    /// <param name="box">The box, below the count that call read.</param>
+    /// <param name="point">The demand point that sees the box finest; -1 with none.</param>
+    /// <returns>The pixel's size in metres; infinity with no demand point.</returns>
+    public float HeldPixelAt(int box, out int point) {
+        point = -1;
+        return ((Count == 0) ? float.PositiveInfinity : PixelOf(point: out point, read: ThreadHeld![box]));
+    }
+    /// <summary>Returns <see cref="BoundsOf"/> of a box this thread's latest <see cref="ReadBoxes"/> read.</summary>
+    /// <param name="box">The box, below the count that call read.</param>
+    /// <param name="units">The units the box's pixels are read in; positive.</param>
+    /// <param name="top">The pixel, in those units, a point must reach to count.</param>
+    /// <param name="watch">The frustum watch the box's group keeps (<see cref="BoundsOf"/>).</param>
+    /// <returns>The bounds.</returns>
+    public Bounds HeldBoundsOf(int box, float units, float top, Span<float> watch) => BoundsOfRead(read: ThreadHeld![box], top: top, units: units, watch: watch);
+    [ThreadStatic] private static List<BoxRead>? ThreadHeld;
+    // The finest pixel a read box is demanded at, and the point demanding it so.
+    private static float PixelOf(BoxRead read, out int point) {
         var lanes = read.Lanes!;
         ref var demanded = ref MemoryMarshal.GetArrayDataReference(array: read.Demanded);
         var least = Vector256.Create(value: float.PositiveInfinity);
@@ -430,8 +463,7 @@ public sealed class SdfMeshDemand {
 
         var finest = Least(values: least);
 
-        if (float.IsFinite(f: finest)) { point = lanes.Points[read.Demanded.AsSpan(start: 0, length: lanes.Stride).IndexOf(value: finest)]; }
-
+        point = (float.IsFinite(f: finest) ? lanes.Points[read.Demanded.AsSpan(start: 0, length: lanes.Stride).IndexOf(value: finest)] : -1);
         return finest;
     }
     /// <summary>Returns the metres one display pixel covers at a planned group's box (<see cref="PixelAt(Vector3, Vector3)"/>),
@@ -607,14 +639,14 @@ public sealed class SdfMeshDemand {
     /// with <see cref="Unwatched"/>.</param>
     /// <returns>The bounds.</returns>
     /// <exception cref="ArgumentException"><paramref name="watch"/> is not five fields long.</exception>
-    public Bounds BoundsOf(Vector3 center, Vector3 half, float units, float top, Span<float> watch) {
+    public Bounds BoundsOf(Vector3 center, Vector3 half, float units, float top, Span<float> watch) =>
+        ((Count == 0) ? Bounds.None : BoundsOfRead(read: Read(center: center, half: half), top: top, units: units, watch: watch));
+    private Bounds BoundsOfRead(BoxRead read, float units, float top, Span<float> watch) {
         var stride = FrustumStride;
 
         if (watch.Length != (WatchFields * stride)) { throw new ArgumentException(message: "A frustum watch holds five fields of the frustum stride.", paramName: nameof(watch)); }
 
-        if (Count == 0) { return Bounds.None; }
-
-        var read = Read(center: center, half: half);
+        var (center, half) = (read.Center, read.Half);
         var lanes = read.Lanes!;
         var inverse = Vector256.Create(value: (1f / units));
         var unit = Vector256.Create(value: units);
@@ -927,8 +959,11 @@ public sealed class SdfMeshDemand {
 
         var read = reads[(int)(hash.Value & (KeptReads - 1))];
 
-        if (ReferenceEquals(objA: read.Demand, objB: this) && (read.Version == m_version) && (read.Center == center) && (read.Half == half)) { return read; }
-
+        if (!ReferenceEquals(objA: read.Demand, objB: this) || (read.Version != m_version) || (read.Center != center) || (read.Half != half)) { ReadInto(center: center, half: half, read: read); }
+        return read;
+    }
+    // Reads a box against every point into a read, a vector of points at a time.
+    private void ReadInto(BoxRead read, Vector3 center, Vector3 half) {
         var version = m_version;
         var lanes = m_lanes;
         var stride = lanes.Stride;
@@ -986,7 +1021,6 @@ public sealed class SdfMeshDemand {
             (((at < framed) ? Vector256.ConditionalSelect(condition: refused, left: infinity, right: pixel) : pixel)).StoreUnsafe(destination: ref demanded, elementOffset: offset);
         }
         (read.Lanes, read.Demand, read.Version, read.Center, read.Half) = (lanes, this, version, center, half);
-        return read;
     }
     private static BoxRead[] NewReads() {
         var reads = new BoxRead[KeptReads];

@@ -117,6 +117,20 @@ public sealed partial class SdfMeshPathBake {
             m_stamps[record] = stamp;
             return Of(record: record);
         }
+        // Lists the groups whose watch some lane's move since may have spent (SdfMeshDemand.Moves), the records of groups
+        // measured at the stamp passed over; returns the records read.
+        public int Trip(SdfMeshDemand demand, List<Group> due, long stamp) {
+            var read = 0;
+
+            due.Clear();
+            for (var record = 0; (record < Count); record++) {
+                if ((m_owners[record] is not { } owner) || (m_stamps[record] == stamp)) { continue; }
+                read++;
+                if (demand.Moves(metres: 0f, watch: m_values.AsSpan(start: (record * Length), length: Length))) { due.Add(item: owner); }
+            }
+
+            return read;
+        }
         // Frees a group's record, when it holds one.
         public void Release(Group group) {
             if (group.FrustumWatch < 0) { return; }
@@ -325,12 +339,7 @@ public sealed partial class SdfMeshPathBake {
         // Every watched group against each of its frustums' own moves since its measure, the groups measured this frame
         // passed over; a group no frustum can move any more leaves the watch.
         if (m_watches.Watched > 0) {
-            m_framedDue.Clear();
-            for (var record = 0; (record < m_watches.Count); record++) {
-                if ((m_watches.OwnerOf(record: record) is not { } owner) || (m_watches.StampOf(record: record) == stamp)) { continue; }
-                watched++;
-                if (Demand.Moves(metres: 0f, watch: m_watches.Of(record: record))) { m_framedDue.Add(item: owner); }
-            }
+            watched += m_watches.Trip(demand: Demand, due: m_framedDue, stamp: stamp);
             foreach (var group in m_framedDue) {
                 if (!group.Listed || group.Retired) {
                     m_watches.Release(group: group);
@@ -556,7 +565,8 @@ public sealed partial class SdfMeshPathBake {
         var group = m_chosen[index];
         var bias = m_chosenBias;
         ref var reading = ref m_readings[index];
-        var pixel = MeasurePixel(boxes: out reading.Boxes, group: group, point: out _, units: out reading.Units, box: out var box);
+        var copies = CopiesOf(group: group);
+        var pixel = ((copies is null) ? MeasurePixel(boxes: out reading.Boxes, group: group, point: out _, units: out reading.Units, box: out var box) : ReadCopies(boxes: out reading.Boxes, copies: copies, group: group, units: out reading.Units, box: out box));
         var slack = DemandSlack(bias: bias, group: group, pixel: pixel);
         var pinned = (float.IsFinite(f: pixel) && !float.IsFinite(f: slack));
         var top = (float.IsFinite(f: pixel) ? (pixel + slack) : CoarsestEdgeOf(bias: bias, group: group));
@@ -564,7 +574,14 @@ public sealed partial class SdfMeshPathBake {
 
         SdfMeshDemand.Unwatched(watch: watch);
 
-        var bounds = (pinned ? SdfMeshDemand.Bounds.None : BoundsOf(group: group, top: top, watch: watch));
+        var bounds = SdfMeshDemand.Bounds.None;
+
+        if (pinned) {
+        } else if (copies is null) {
+            bounds = BoundsOf(group: group, top: top, watch: watch);
+        } else {
+            for (var copy = 0; (copy < copies.Count); copy++) { bounds = bounds.Join(other: Demand.HeldBoundsOf(box: copy, top: top, units: m_copyScales[copy], watch: watch)); }
+        }
 
         reading.Anchor = pixel;
         if (!float.IsFinite(f: pixel) && float.IsFinite(f: top) && float.IsFinite(f: bounds.Beyond)) { (reading.Anchor, slack) = (bounds.Beyond, (MathF.Max(x: 0f, y: (bounds.Beyond - top)) * 0.999f)); }
@@ -575,6 +592,37 @@ public sealed partial class SdfMeshPathBake {
         (reading.Center, reading.Half) = (box ?? default);
         reading.Bounds = bounds;
     }
+    // A shared geometry's pixel where its copies stand (CopiesPixel), each copy's box read once and held for its bounds
+    // (SdfMeshDemand.ReadBoxes), with the copies' scales the bounds read them in.
+    private float ReadCopies(Group group, IReadOnlyList<int> copies, out int boxes, out float units, out (Vector3 Center, Vector3 Half)? box) {
+        var count = copies.Count;
+
+        if (m_copyCenters.Length < count) {
+            var capacity = ArrayCapacity.Grown(m_copyCenters.Length, count);
+
+            m_copyCenters = new Vector3[capacity];
+            m_copyHalves = new Vector3[capacity];
+            m_copyScales = new float[capacity];
+        }
+        for (var copy = 0; (copy < count); copy++) { (m_copyCenters[copy], m_copyHalves[copy], m_copyScales[copy]) = CopyBox(center: group.DemandCenter, copy: copies[copy], half: group.DemandHalf); }
+        Demand.ReadBoxes(centers: m_copyCenters.AsSpan(start: 0, length: count), halves: m_copyHalves.AsSpan(start: 0, length: count));
+
+        var finest = float.PositiveInfinity;
+
+        units = float.PositiveInfinity;
+        for (var copy = 0; (copy < count); copy++) {
+            units = MathF.Min(x: units, y: m_copyScales[copy]);
+            finest = MathF.Min(x: finest, y: (Demand.HeldPixelAt(box: copy, point: out _) / m_copyScales[copy]));
+        }
+        if (!float.IsFinite(f: units)) { units = 1f; }
+        boxes = Math.Max(val1: 1, val2: count);
+        box = null;
+        return finest;
+    }
+    // The copies' boxes and scales the latest ReadCopies read.
+    private Vector3[] m_copyCenters = [];
+    private Vector3[] m_copyHalves = [];
+    private float[] m_copyScales = [];
     // Keeps one chosen group's readings, on the frame's thread: its watch stands on them, it falls due on each clock at
     // half what its band leaves there, its frustums are watched, and a group whose demanded tier stands is not read by
     // the next decision for it.
