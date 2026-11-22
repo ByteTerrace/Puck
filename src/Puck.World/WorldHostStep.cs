@@ -126,6 +126,10 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
 
     private enum StepPhase { Prepare, Boot, Rows }
     private StepPhase m_phase;
+
+    /// <summary>Gets whether a step has begun and not finished: its tick may be executing, so nothing reads the
+    /// authority for the frame until it is collected.</summary>
+    public bool StepInProgress => (m_phase != StepPhase.Prepare);
     private bool m_stepsBoot;
 
     /// <summary>Gets whether the step in progress can no longer finish: the boot authority froze at a stall while its
