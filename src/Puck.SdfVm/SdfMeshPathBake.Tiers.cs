@@ -180,10 +180,7 @@ public sealed partial class SdfMeshPathBake {
         point = -1;
         units = float.PositiveInfinity;
         foreach (var index in copies) {
-            var matrix = m_demandCopies[index].Matrix;
-
-            var (boxCenter, boxHalf) = TransformBox(center: center, half: half, matrix: matrix);
-            var scale = MathF.Max(x: 1.0e-6f, y: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length());
+            var (boxCenter, boxHalf, scale) = CopyBox(center: center, copy: index, half: half);
             var pixel = (Demand.PixelAt(center: boxCenter, half: boxHalf, point: out var seen) / scale);
 
             units = MathF.Min(x: units, y: scale);
@@ -348,7 +345,7 @@ public sealed partial class SdfMeshPathBake {
             var group = attention[at];
 
             if (group.Retired || !group.Listed || !group.HasDemandBox) {
-                group.Attended = false;
+                attention.Drop(group: group);
                 continue;
             }
             if (float.IsNaN(f: group.DemandPixel)) { group.DemandPixel = MeasurePixel(group: group, point: out _); }
@@ -361,12 +358,12 @@ public sealed partial class SdfMeshPathBake {
 
             Decide(group: group, index: index, pixel: pixel, demanded: demanded, resident: resident);
             if ((demanded == resident) && !group.FirstDetailOwed && (group.Replaces is null)) {
-                group.Attended = false;
+                attention.Drop(group: group);
                 continue;
             }
-            attention[kept++] = group;
+            attention.Keep(at: kept++, group: group);
         }
-        attention.RemoveRange(index: kept, count: (attention.Count - kept));
+        attention.Truncate(count: kept);
         SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.TierDecisions);
 
         // Reads one group's demanded tier against the one it draws: a first detail it owes, a finer tier it owes or a

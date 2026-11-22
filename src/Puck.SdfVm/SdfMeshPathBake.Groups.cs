@@ -19,8 +19,7 @@ public sealed partial class SdfMeshPathBake {
     private sealed class GroupList : IReadOnlyList<Group> {
         private readonly List<Group> m_items = [];
         private readonly GpuRowIndex<(bool Dynamic, int Key)> m_byOwner = new();
-        private List<Group> m_fresh = [];
-        private List<Group> m_freshSpare = [];
+        private readonly MarkedGroups m_fresh = new(mark: GroupMarks.Fresh);
 
         public int Count => m_items.Count;
 
@@ -46,10 +45,7 @@ public sealed partial class SdfMeshPathBake {
             group.Listed = true;
             m_items[index] = group;
             m_byOwner.Set(key: OwnerKey(group: group), row: index);
-            if (double.IsNaN(d: group.DemandDueAt) && !group.DemandFresh) {
-                group.DemandFresh = true;
-                m_fresh.Add(item: group);
-            }
+            if (!group.Watch.Measured) { _ = m_fresh.Add(group: group); }
         }
         // Takes every group out of the list.
         public void Clear() {
@@ -58,16 +54,7 @@ public sealed partial class SdfMeshPathBake {
             m_byOwner.Clear();
         }
         // Hands over the groups set into a place since the last hand-over, some of which may have left the list since.
-        public List<Group> TakeFresh() {
-            var taken = m_fresh;
-
-            m_fresh = m_freshSpare;
-            m_fresh.Clear();
-            m_freshSpare = taken;
-            foreach (var group in taken) { group.DemandFresh = false; }
-
-            return taken;
-        }
+        public List<Group> TakeFresh() => m_fresh.Take();
         // Appends planned groups, unlisted until Set puts each into its place.
         public void Plan(IEnumerable<Group> groups) {
             var first = m_items.Count;
@@ -83,6 +70,68 @@ public sealed partial class SdfMeshPathBake {
 
         IEnumerator<Group> IEnumerable<Group>.GetEnumerator() => GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    // The lists a group stands in by a mark of its own (MarkedGroups), one bit a list.
+    [Flags]
+    private enum GroupMarks : byte {
+        None = 0,
+        // Changed since the dresser last read the groups (Touch).
+        Touched = 1,
+        // Keeps a floor (Keep).
+        Keeping = 2,
+        // Read by the tier decisions (Attend).
+        Attended = 4,
+        // Set into a place and not yet measured by the demand watch (GroupList.TakeFresh).
+        Fresh = 8,
+        // Owed a measure a change of the points could only coarsen (SdfMeshPathBake.Demand.cs).
+        Deferred = 16,
+    }
+
+    // A list of groups, each in it at most once, by a mark the group carries for this list alone (Group.Marks): adding,
+    // taking and dropping cost what the list holds, never a search. The mark and the list move together through these
+    // doors only, so a group is marked exactly while the list holds it. Under the bake's gate.
+    private sealed class MarkedGroups(GroupMarks mark) {
+        private List<Group> m_items = [];
+        private List<Group> m_spare = [];
+
+        public int Count => m_items.Count;
+
+        public Group this[int index] => m_items[index];
+
+        // Adds a group the list does not hold; false for one it does.
+        public bool Add(Group group) {
+            if ((group.Marks & mark) != 0) { return false; }
+            group.Marks |= mark;
+            m_items.Add(item: group);
+            return true;
+        }
+        // Hands over the list, its groups unmarked, and starts an empty one; the taken list is valid until the next take.
+        public List<Group> Take() {
+            var taken = m_items;
+
+            m_items = m_spare;
+            m_items.Clear();
+            m_spare = taken;
+            foreach (var group in taken) { group.Marks &= ~mark; }
+
+            return taken;
+        }
+        // Empties the list, unmarking its groups.
+        public void Clear() {
+            foreach (var group in m_items) { group.Marks &= ~mark; }
+            m_items.Clear();
+        }
+        // A walk that keeps some groups in order: each kept group is placed at the next kept index (Keep), each dropped one
+        // unmarked (Drop), and the list cut to the kept count at the end (Truncate).
+        public void Keep(int at, Group group) => m_items[at] = group;
+        public void Drop(Group group) => group.Marks &= ~mark;
+        public void Truncate(int count) => m_items.RemoveRange(index: count, count: (m_items.Count - count));
+        // Takes the first groups out, in order, unmarking them: a queue a consumer drains a share at a time.
+        public void Shift(int count) {
+            for (var index = 0; (index < count); index++) { m_items[index].Marks &= ~mark; }
+            m_items.RemoveRange(index: 0, count: count);
+        }
     }
 
     // What each listed group still baking adds to the counts a take reads (TryTake): how many fly in a dispatch, run a

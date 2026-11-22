@@ -36,35 +36,105 @@ public sealed class SdfMeshDemand {
     private CameraSnapshot[] m_cameras = new CameraSnapshot[4];
     private bool[] m_within = new bool[4];
     private bool[] m_framed = new bool[4];
+    // Each point's view, by the object whose view it shows and its cut (SdfViewSnapshot.Source, CutRevision), which an
+    // observation matches the points it held by; a view with no source is matched by its place among those with none.
+    private object?[] m_sources = new object?[4];
+    private long[] m_cuts = new long[4];
+    // The points the observation before held, which the next one matches its views against.
+    private Viewpoint[] m_held = new Viewpoint[4];
+    private object?[] m_heldSources = new object?[4];
+    private long[] m_heldCuts = new long[4];
+    private int m_heldCount;
+    // The changes no odometer bounds since the bake last took them (TakeChanges), and whether they ran past what the list
+    // holds, which leaves every answer open.
+    private readonly List<Change> m_changes = [];
+    private bool m_overflowed = true;
+
+    /// <summary>The farthest, in metres, a point's eye moves between two observations before the move is read as a jump
+    /// (<see cref="Change"/>) rather than travel: well past a step a walking or flying view takes in a frame, and well
+    /// short of a teleport.</summary>
+    public const float JumpMetres = 2f;
+    /// <summary>The most changes the list keeps between two takes (<see cref="TakeChanges"/>) before it says only that
+    /// it overflowed.</summary>
+    public const int MostChanges = 256;
+
+    /// <summary>One demand point as an observation saw it: its eye, its pixels a metre one metre in front of it, whether it
+    /// demands only inside its view, whether it has a camera at all, and the camera, begun at its widened near plane for
+    /// a point bounded to its view.</summary>
+    /// <param name="Eye">The eye, in world space.</param>
+    /// <param name="Focal">The pixels a metre one metre in front of the eye.</param>
+    /// <param name="Within">Whether the point demands only inside its view's widened frustum.</param>
+    /// <param name="Framed">Whether the point has a camera; a point placed with no frame sees every box.</param>
+    /// <param name="Camera">The point's camera, when framed.</param>
+    public readonly record struct Viewpoint(Vector3 Eye, float Focal, bool Within, bool Framed, CameraSnapshot Camera) {
+        /// <summary>Returns the metres one display pixel covers at a box from this point's distance alone, whatever its view
+        /// holds (<see cref="PixelAt(Vector3, Vector3)"/> without the view's test): no turn of a point bounded to its view
+        /// can bring the box finer than this.</summary>
+        /// <param name="center">The box's center, in world space.</param>
+        /// <param name="half">The box's half extents along the world axes, none negative.</param>
+        /// <returns>The pixel's size in metres.</returns>
+        public float ReachAt(Vector3 center, Vector3 half) => (MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: Eye)) / Focal);
+    }
+    /// <summary>A change of the demand points that no odometer bounds: a point that came (<paramref name="Before"/> none),
+    /// went (<paramref name="After"/> none), or changed whether it is bounded to its view or has a frame. A pixel any box
+    /// reads moves only through the points the change names, so a box neither side's pixel reaches below its own keeps
+    /// its answer.</summary>
+    /// <param name="Before">The point as it stood before, when it stood.</param>
+    /// <param name="After">The point as it stands after, when it stands.</param>
+    /// <param name="HadBefore">Whether <paramref name="Before"/> names a point.</param>
+    /// <param name="HasAfter">Whether <paramref name="After"/> names a point.</param>
+    public readonly record struct Change(Viewpoint Before, Viewpoint After, bool HadBefore, bool HasAfter);
 
     /// <summary>Gets how many demand points the latest frame named.</summary>
     public int Count { get; private set; }
 
-    /// <summary>Gets the revision of the demand points' shape: one more each time an observation changes them in a way
-    /// <see cref="Travel"/> does not bound (a point came or went, a point's pixels a metre changed, a point that demands
-    /// inside its view moved or turned at all, or a point was placed with no frame). A measure taken under an older
-    /// revision may stand on any answer.</summary>
-    public long Revision { get; private set; }
-    /// <summary>Gets the demand points' travel since the bake began, in metres a display pixel covers: each observation
-    /// that keeps <see cref="Revision"/> adds the most any point moved over that point's pixels a metre. No
-    /// <see cref="PixelAt(Vector3, Vector3)"/> answer changes by more than the travel between two observations of one
-    /// revision, divided by the units the box is measured in, since a box's distance from a point moves no more than the
-    /// point does and the near clamp keeps that bound.</summary>
+    /// <summary>Gets the demand points' travel, in metres a display pixel covers: each observation adds the most any point
+    /// it matched moved over that point's pixels a metre. A box's <see cref="PixelAt(Vector3, Vector3)"/> answer moves
+    /// by no more than the travel between two observations, divided by the units the box is measured in, together with
+    /// <see cref="Scale"/> and <see cref="Changes"/>: a box's distance from a point moves no more than the point does,
+    /// and the near clamp keeps that bound.</summary>
     public double Travel { get; private set; }
-    /// <summary>Gets the fewest pixels a metre any demand point covers one metre in front of it, infinity with none: a
-    /// box that moves a distance moves a <see cref="PixelAt(Vector3, Vector3)"/> answer by at most that distance over
-    /// this, as the points' own travel does.</summary>
-    public float LeastPixelsPerMetre { get; private set; } = float.PositiveInfinity;
-    /// <summary>Gets whether some demand point demands only inside its view (<see cref="SdfViewSnapshot.DemandWithinView"/>):
-    /// a box that moves across its frustum moves its answer by any amount, so no distance bounds a moved box's answer.</summary>
-    public bool AnyWithinView { get; private set; }
+    /// <summary>Gets the demand points' change of scale: each observation adds the largest magnitude of the natural
+    /// logarithm of a matched point's pixels a metre over what they were. A point's pixel at a fixed distance is
+    /// multiplied by at most <c>e</c> to the scale between two observations, either way.</summary>
+    public double Scale { get; private set; }
+    /// <summary>Gets the travel of the points bounded to their views, in metres: each observation adds the most any such
+    /// matched point's eye and near plane moved. A box's distance to one of those frustums' planes moves by no more than
+    /// this, with <see cref="Turn"/>.</summary>
+    public double Shift { get; private set; }
+    /// <summary>Gets the turn of the points bounded to their views, in radians: each observation adds the largest angle any
+    /// such matched point's frustum planes turned through (<see cref="CameraSnapshot.FrustumTurn"/>), whether its camera
+    /// turned or its field of view or aspect moved. A box within a distance <c>r</c> of the eye has its distance to a plane
+    /// moved by no more than <c>r</c> times the turn.</summary>
+    public double Turn { get; private set; }
+    /// <summary>Gets the changes no odometer bounds since the bake last took them (<see cref="TakeChanges"/>).</summary>
+    public IReadOnlyList<Change> Changes => m_changes;
+
+    /// <summary>Hands over the changes since the last hand-over and starts the next list, for the one bake that measures by
+    /// this demand.</summary>
+    /// <param name="overflowed">Whether more changes came than the list keeps (<see cref="MostChanges"/>), or none was
+    /// observed yet, so every answer may have moved.</param>
+    /// <returns>The changes, valid until the next observation.</returns>
+    public IReadOnlyList<Change> TakeChanges(out bool overflowed) {
+        overflowed = m_overflowed;
+        m_overflowed = false;
+        m_taken.Clear();
+        m_taken.AddRange(collection: m_changes);
+        m_changes.Clear();
+        return m_taken;
+    }
+
+    private readonly List<Change> m_taken = [];
 
     /// <summary>Reads the demand points from a frame's views: each view's eye, and its pixels a metre one metre in front of
     /// it, from the height its sizes are measured in (<see cref="SdfViewSnapshot.DemandHeight"/>) or else its share of
     /// the output's height, and its field of view. A view that demands only inside its frustum
     /// (<see cref="SdfViewSnapshot.DemandWithinView"/>) demands nothing of a box wholly outside it, widened by
     /// <see cref="WithinViewMargin"/> and begun at its near plane. The points keep the views' order, so the first is the
-    /// primary seat's while that seat is presented here.</summary>
+    /// primary seat's while that seat is presented here. Each view is matched to the point it held before by its source
+    /// and cut, or by its place among the views with none: a matched point's moves add to the odometers
+    /// (<see cref="Travel"/>, <see cref="Scale"/>, <see cref="Shift"/>, <see cref="Turn"/>), and any other change is
+    /// listed (<see cref="Changes"/>).</summary>
     /// <param name="frame">The frame.</param>
     /// <param name="height">The output's height in display pixels.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
@@ -73,10 +143,17 @@ public sealed class SdfMeshDemand {
 
         var views = frame.Views;
         var count = 0;
-        var reshaped = false;
         var travel = 0f;
+        var scale = 0f;
+        var shift = 0f;
+        var turn = 0f;
+        var unsourced = 0;
 
+        Hold();
         EnsureCapacity(views.Count);
+        Span<bool> matched = stackalloc bool[m_heldCount];
+
+        matched.Clear();
         for (var index = 0; (index < views.Count); index++) {
             var view = views[index];
             var camera = view.Camera;
@@ -87,41 +164,84 @@ public sealed class SdfMeshDemand {
             var focal = ((((view.DemandHeight > 0f) ? view.DemandHeight : MathF.Max(x: 1f, y: (view.Region.Height * height))) * 0.5f) / tan);
             var within = view.DemandWithinView;
             var held = (within ? (camera with { Near = (camera.Near * SdfMeshCull.NearKeeps) }) : camera);
+            var point = new Viewpoint(Camera: held, Eye: camera.Position, Focal: focal, Framed: true, Within: within);
+            var before = Match(source: view.Source, cut: view.CutRevision, unsourced: ((view.Source is null) ? unsourced++ : -1), matched: matched);
 
-            // A point held at this index before keeps the revision while only its eye moved: a distance moves no more
-            // than the eye does. A point bounded to its view moves its frustum with it, which no distance bounds.
-            if ((count >= Count) || !m_framed[count] || (m_within[count] != within) || (m_focal[count] != focal) || (within && (m_cameras[count] != held))) {
-                reshaped = true;
+            // A point that jumped (a teleport, a cut) is read as one that went and one that came: the boxes either side
+            // reaches are measured again, rather than every box a jump's travel would make due.
+            if ((before < 0) || (m_held[before].Within != within) || !m_held[before].Framed || (Vector3.Distance(value1: m_held[before].Eye, value2: point.Eye) > JumpMetres)) {
+                if (before >= 0) { Changed(before: m_held[before], hadBefore: true, after: point, hasAfter: true); } else { Changed(before: default, hadBefore: false, after: point, hasAfter: true); }
             } else {
-                travel = MathF.Max(x: travel, y: (Vector3.Distance(value1: m_points[count], value2: camera.Position) / focal));
+                var was = m_held[before];
+
+                // A distance moves no more than the eye does; a pixel at a fixed distance by the focal's ratio.
+                travel = MathF.Max(x: travel, y: (Vector3.Distance(value1: was.Eye, value2: point.Eye) / focal));
+                scale = MathF.Max(x: scale, y: MathF.Abs(x: MathF.Log(x: (focal / was.Focal))));
+                if (within) {
+                    shift = MathF.Max(x: shift, y: (Vector3.Distance(value1: was.Eye, value2: point.Eye) + MathF.Abs(x: (held.Near - was.Camera.Near))));
+                    turn = MathF.Max(x: turn, y: held.FrustumTurn(other: was.Camera, margin: WithinViewMargin));
+                }
             }
-            m_points[count] = camera.Position;
+            m_points[count] = point.Eye;
             m_focal[count] = focal;
             m_within[count] = within;
             m_framed[count] = true;
             m_cameras[count] = held;
+            m_sources[count] = view.Source;
+            m_cuts[count] = view.CutRevision;
             count++;
         }
-        if (reshaped || (count != Count)) {
-            Revision++;
-        } else {
-            Travel += travel;
+        for (var before = 0; (before < m_heldCount); before++) {
+            if (!matched[before]) { Changed(before: m_held[before], hadBefore: true, after: default, hasAfter: false); }
         }
+        Travel += travel;
+        Scale += scale;
+        Shift += shift;
+        Turn += turn;
         Count = count;
-        Measured();
     }
-    // Reads the figures a moved box's bound takes from the points (LeastPixelsPerMetre, AnyWithinView).
-    private void Measured() {
-        var least = float.PositiveInfinity;
-        var within = false;
-
-        for (var index = 0; (index < Count); index++) {
-            least = MathF.Min(x: least, y: m_focal[index]);
-            within |= m_within[index];
+    // Keeps the points the latest observation held, for the next one to match its views against.
+    private void Hold() {
+        if (m_held.Length < Count) {
+            Array.Resize(array: ref m_held, newSize: m_points.Length);
+            Array.Resize(array: ref m_heldSources, newSize: m_points.Length);
+            Array.Resize(array: ref m_heldCuts, newSize: m_points.Length);
         }
-        LeastPixelsPerMetre = least;
-        AnyWithinView = within;
+        for (var index = 0; (index < Count); index++) {
+            m_held[index] = PointAt(index: index);
+            m_heldSources[index] = m_sources[index];
+            m_heldCuts[index] = m_cuts[index];
+        }
+        m_heldCount = Count;
     }
+    // The held point a view continues: the one with its source and cut, or for a view with none the held point at the
+    // same place among those with none; -1 for none.
+    private int Match(object? source, long cut, int unsourced, Span<bool> matched) {
+        var place = 0;
+
+        for (var before = 0; (before < m_heldCount); before++) {
+            var heldSource = m_heldSources[before];
+            var match = ((source is null) ? ((heldSource is null) && (place++ == unsourced)) : (ReferenceEquals(objA: heldSource, objB: source) && (m_heldCuts[before] == cut)));
+
+            if (!match || matched[before]) { continue; }
+            matched[before] = true;
+            return before;
+        }
+
+        return -1;
+    }
+    // Lists a change no odometer bounds, or notes that the list overflowed.
+    private void Changed(Viewpoint before, bool hadBefore, Viewpoint after, bool hasAfter) {
+        if (m_changes.Count >= MostChanges) {
+            m_overflowed = true;
+            return;
+        }
+        m_changes.Add(item: new Change(After: after, Before: before, HadBefore: hadBefore, HasAfter: hasAfter));
+    }
+    /// <summary>Returns a demand point as the latest observation holds it.</summary>
+    /// <param name="index">The point, below <see cref="Count"/>.</param>
+    /// <returns>The point.</returns>
+    public Viewpoint PointAt(int index) => new(Camera: m_cameras[index], Eye: m_points[index], Focal: m_focal[index], Framed: m_framed[index], Within: m_within[index]);
     private void EnsureCapacity(int required) {
         if (required <= m_points.Length) { return; }
         var capacity = ArrayCapacity.Grown(m_points.Length, required);
@@ -130,6 +250,8 @@ public sealed class SdfMeshDemand {
         Array.Resize(ref m_cameras, capacity);
         Array.Resize(ref m_within, capacity);
         Array.Resize(ref m_framed, capacity);
+        Array.Resize(ref m_sources, capacity);
+        Array.Resize(ref m_cuts, capacity);
     }
     /// <summary>Adds a demand point after those the latest frame named: an eye with its
     /// pixels a metre one metre in front of it, for a plan made with no frame (an offline audit at a chosen eye).</summary>
@@ -145,9 +267,10 @@ public sealed class SdfMeshDemand {
         m_within[Count] = false;
         m_framed[Count] = false;
         m_focal[Count] = ((Math.Max(val1: height, val2: 1u) * 0.5f) / tanHalfFieldOfView);
+        m_sources[Count] = null;
+        m_cuts[Count] = 0L;
+        Changed(before: default, hadBefore: false, after: PointAt(index: Count), hasAfter: true);
         Count++;
-        Revision++;
-        Measured();
     }
     /// <summary>Returns the metres one display pixel covers at a box from the demand point that sees it finest: the
     /// distance from the eye to the box, no nearer than <see cref="NearDistance"/>, over the point's pixels a metre; what
@@ -307,16 +430,55 @@ public sealed class SdfMeshDemand {
         return boxed;
     }
 
-    /// <summary>Returns how far a world-axis box may move before some point that demands only inside its view
-    /// (<see cref="AnyWithinView"/>) answers otherwise whether its widened frustum may hold it
-    /// (<see cref="CameraSnapshot.FrustumSlack"/>): the least over those points; infinity with none.</summary>
+    /// <summary>How a box stands toward the demand points that could move its tier past a pixel, its band's top: the
+    /// points whose distance alone puts the box's pixel at or under the top count (the rest read it no finer however they
+    /// turn, and cannot become its finest while it moves less than <paramref name="Clearance"/>).</summary>
+    /// <param name="Focal">The fewest pixels a metre among the counted points: a box that moves a distance moves its
+    /// pixel by at most that distance over this; infinity with none counted.</param>
+    /// <param name="Clearance">The least distance, in metres, the box may move before a point not counted could put its
+    /// pixel under the top; infinity with none uncounted.</param>
+    /// <param name="FrustumSlack">The least distance, in metres, the box may move before a counted point bounded to its
+    /// view answers otherwise whether its widened frustum may hold it (<see cref="CameraSnapshot.FrustumSlack"/>);
+    /// infinity with none.</param>
+    /// <param name="FrustumReach">The most the box reaches from a counted point bounded to its view, in metres: the
+    /// distance to its center plus its half extents' sum, which that frustum's <see cref="Turn"/> multiplies into the most
+    /// the box's distance to a plane moves; zero with none.</param>
+    /// <param name="Beyond">The least pixel an uncounted point's distance puts the box at; infinity with none.</param>
+    public readonly record struct Bounds(float Focal, float Clearance, float FrustumSlack, float FrustumReach, float Beyond) {
+        /// <summary>Gets the bounds of no box: nothing counted and nothing uncounted.</summary>
+        public static Bounds None { get; } = new(Beyond: float.PositiveInfinity, Clearance: float.PositiveInfinity, Focal: float.PositiveInfinity, FrustumReach: 0f, FrustumSlack: float.PositiveInfinity);
+
+        /// <summary>Returns the bounds of two boxes read as one: the tighter of each.</summary>
+        /// <param name="other">The other box's bounds.</param>
+        /// <returns>The joined bounds.</returns>
+        public Bounds Join(Bounds other) => new(
+            Beyond: MathF.Min(x: Beyond, y: other.Beyond),
+            Clearance: MathF.Min(x: Clearance, y: other.Clearance),
+            Focal: MathF.Min(x: Focal, y: other.Focal),
+            FrustumReach: MathF.Max(x: FrustumReach, y: other.FrustumReach),
+            FrustumSlack: MathF.Min(x: FrustumSlack, y: other.FrustumSlack)
+        );
+    }
+    /// <summary>Returns how a world-axis box stands toward the demand points that could move its tier past a pixel
+    /// (<see cref="Bounds"/>).</summary>
     /// <param name="center">The box's center, in world space.</param>
     /// <param name="half">The box's half extents along the world axes, none negative.</param>
-    /// <returns>The distance in metres.</returns>
-    public float FrustumSlack(Vector3 center, Vector3 half) {
-        var slack = float.PositiveInfinity;
+    /// <param name="units">The units the box's pixels are read in; positive.</param>
+    /// <param name="top">The pixel, in those units, a point must reach to count.</param>
+    /// <returns>The bounds.</returns>
+    public Bounds BoundsOf(Vector3 center, Vector3 half, float units, float top) {
+        var bounds = Bounds.None;
+        var (focal, clearance, slack, reach, beyond) = (bounds.Focal, bounds.Clearance, bounds.FrustumSlack, bounds.FrustumReach, bounds.Beyond);
 
         for (var index = 0; (index < Count); index++) {
+            var pixel = (MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])) / (m_focal[index] * units));
+
+            if (pixel > top) {
+                beyond = MathF.Min(x: beyond, y: pixel);
+                clearance = MathF.Min(x: clearance, y: ((pixel - top) * m_focal[index] * units));
+                continue;
+            }
+            focal = MathF.Min(x: focal, y: m_focal[index]);
             if (!m_within[index]) { continue; }
             slack = MathF.Min(x: slack, y: m_cameras[index].FrustumSlack(
                 center: center,
@@ -325,9 +487,10 @@ public sealed class SdfMeshDemand {
                 halfZ: new Vector3(x: 0f, y: 0f, z: half.Z),
                 margin: WithinViewMargin
             ));
+            reach = MathF.Max(x: reach, y: (Vector3.Distance(value1: center, value2: m_points[index]) + ((half.X + half.Y) + half.Z)));
         }
 
-        return slack;
+        return new Bounds(Beyond: beyond, Clearance: clearance, Focal: focal, FrustumReach: reach, FrustumSlack: slack);
     }
 
     // Whether a point demands a world-axis box at all: always for a point that demands by distance alone, and only a

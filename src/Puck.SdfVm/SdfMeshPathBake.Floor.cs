@@ -36,18 +36,13 @@ public sealed partial class SdfMeshPathBake {
     // standing in the list that holds a kept floor is here, which KeepFloorOf, the one place a floor is kept, enforces
     // through Keep and Restart rebuilds from the list (ListKeepers); a retired group is dropped where the list is walked
     // whole (ServeAhead). The cursor is where the eviction sweep (CollectEvictions) resumes. Under the gate.
-    private readonly List<Group> m_keepers = [];
+    private readonly MarkedGroups m_keepers = new(mark: GroupMarks.Keeping);
     private int m_evictAt;
 
-    private void Keep(Group group) {
-        if (group.Keeping) { return; }
-        group.Keeping = true;
-        m_keepers.Add(item: group);
-    }
+    private void Keep(Group group) => _ = m_keepers.Add(group: group);
     // Lists again the groups that keep a floor, for the program a restart plans: the groups it kept from the one before
     // hold theirs.
     private void ListKeepers() {
-        foreach (var group in m_keepers) { group.Keeping = false; }
         m_keepers.Clear();
         foreach (var group in m_groups) {
             if (group.KeptFloor is not null) { Keep(group: group); }

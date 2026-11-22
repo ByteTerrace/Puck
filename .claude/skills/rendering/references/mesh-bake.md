@@ -716,15 +716,24 @@ laws exercise that boundary.
   the groups whose demand may have moved (`SdfMeshPathBake.MeasureDemands`,
   the demand watch in `SdfMeshPathBake.Demand.cs`): groups newly set into a
   place, groups whose slot or copy moved (the frame's transform and copy
-  journals, through the list's owner index), and groups the demand points'
-  travel made due. A moved slot's group is measured only once its world box
-  has moved, with the travel since, by as much as its tier band leaves, and
-  under a frustum-bound point by less than its distance to that frustum's
-  planes (`CameraSnapshot.FrustumSlack`). `SdfMeshDemand.Travel` bounds how far any pixel moves
-  while `SdfMeshDemand.Revision` stands, so a group waits in a due queue at
-  its tier band's slack (`SdfMeshTier.Slack`); a change no travel bounds (a
-  view came or went, a frustum-bound point moved, the bias or the copy layout
-  moved) measures every group once over `SdfMeshTier.MeasureFrames` frames.
+  journals, through the list's owner index), groups a clock made due, and
+  groups a change of the points reaches. `SdfMeshDemand` matches each view to
+  the point it held by its source and cut and keeps four clocks: travel and
+  scale bound how far any pixel moves, and the frustum-bound points' shift
+  and turn (`CameraSnapshot.FrustumTurn`) how far a box's distance to their
+  frustums moves. Each measure leaves its group due on each clock at half
+  what its bands leave there (`SdfMeshTier.Slack`,
+  `CameraSnapshot.FrustumSlack`). A moved slot's group is measured only once
+  its world box has moved, with the clocks since, by that much. A view that
+  comes, goes, jumps past `SdfMeshDemand.JumpMetres` or changes kind is a
+  change: only groups whose distance from either side puts their pixel under
+  their band's top are measured, at once where the new side reaches and a
+  share a frame where only the old side does (their pixel can only rise).
+  Frustum and distance bounds count only the points that could reach under
+  a group's band (`SdfMeshDemand.BoundsOf`). A bias change recomputes the bands from the
+  pixels held, and only an overflowing change list
+  (`SdfMeshDemand.MostChanges`) measures every group over
+  `SdfMeshTier.MeasureFrames` frames.
   `Retier` decides the tiers once every `MeasureFrames` frames, reading only
   the groups the watch attends: those measured or set since they last stood
   at the tier they draw. A still view measures nothing and decides over

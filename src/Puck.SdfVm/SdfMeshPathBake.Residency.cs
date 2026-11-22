@@ -775,13 +775,13 @@ public sealed partial class SdfMeshPathBake {
                 var group = m_keepers[at];
 
                 if (group.Retired || (group.KeptFloor is not { } floor)) {
-                    group.Keeping = false;
+                    m_keepers.Drop(group: group);
                     continue;
                 }
-                m_keepers[kept++] = group;
+                m_keepers.Keep(at: kept++, group: group);
                 for (var piece = 0; (piece < floor.PieceCount); piece++) { m_aheadMeshes.Add(item: floor.Piece(index: piece)); }
             }
-            m_keepers.RemoveRange(index: kept, count: (m_keepers.Count - kept));
+            m_keepers.Truncate(count: kept);
             tables.NameMeshesAhead(meshes: m_aheadMeshes);
             m_aheadNamed = m_aheadRevision;
             m_floorsNamed = m_floorRevision;
@@ -818,6 +818,22 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
+    // Counts the measured groups whose held pixel demands another tier than a fresh measure would: coarser and finer.
+    // Under the gate.
+    private (int Coarser, int Finer) DemandStale() {
+        var (coarser, finer) = (0, 0);
+
+        foreach (var group in m_groups) {
+            if (!group.Listed || group.Retired || !group.HasDemandBox || !group.Watch.Measured) { continue; }
+
+            var held = DemandedTierOf(group: group, pixel: group.DemandPixel);
+            var fresh = DemandedTierOf(group: group, pixel: MeasurePixel(group: group, point: out _));
+
+            if (held > fresh) { coarser++; } else if (held < fresh) { finer++; }
+        }
+
+        return (coarser, finer);
+    }
     /// <summary>Describes where the resident triangles' detail is asked from: one line a demand point that sees some
     /// group finest (its eye, its pixels a metre at one metre, the groups and triangles whose tier it sets and the
     /// finest tier among them), then the groups holding the most triangles, each with its tier, the rungs that change
@@ -957,9 +973,16 @@ public sealed partial class SdfMeshPathBake {
             // against it, the meshes the region refuses, the groups drawing a finer tier than their demand asks, the
             // finer tiers the budget holds back, the coarser tiers landed to make room, and the half rungs every demand
             // is coarsened by, the selector's one bias, with its steps up and down.
-            // The demand watch (SdfMeshPathBake.Demand.cs): the groups the tier decisions read, those waiting on the
-            // demand points' travel, the boxes a whole reset sweep reads and the groups such a sweep still owes.
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" demand-attended={m_attention.Count} demand-due={m_demandDue.Count} demand-sweep-boxes={m_demandSweep.Boxes} demand-sweep-left={m_demandSweepLeft}");
+            // The demand watch (SdfMeshPathBake.Demand.cs): the groups the tier decisions read, those waiting on each of
+            // the demand points' clocks, the boxes a whole reset sweep reads, the groups such a sweep still owes, and the
+            // groups the watch measured since the bake began, by route.
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" demand-attended={m_attention.Count} demand-due={m_demandDue[0].Count}/{m_demandDue[1].Count}/{m_demandDue[2].Count}/{m_demandDue[3].Count} demand-sweep-boxes={m_demandSweep.Boxes} demand-sweep-left={m_demandSweepLeft} demand-measured={m_demandMeasured.Groups} demand-measured-moved={m_demandMeasured.Moved} demand-measured-due={m_demandMeasured.Due} demand-measured-changed={m_demandMeasured.Changed} demand-measured-copied={m_demandMeasured.Copied}");
+            // The watch held to a fresh measure of every group it holds measured: those whose held pixel demands a
+            // coarser tier than a measure now would (a miss, which the watch's bounds rule out), and a finer one (a
+            // group a change could only coarsen, owed its measure a share a frame, or one a reset sweep has not reached).
+            var (coarser, finer) = DemandStale();
+
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" demand-stale-coarser={coarser} demand-stale-finer={finer}");
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" region-budget={m_regionBudgetBytes}B region-named={m_regionNamedBytes}B region-refused={m_regionRefused} tiers-spare={m_tiersSpare} tiers-held-back={m_tiersHeldBack} coarsened={m_coarsened} detail-bias={m_bias} bias-raised={(m_detail?.Selector.BiasSteps.Raised ?? 0)} bias-lowered={(m_detail?.Selector.BiasSteps.Lowered ?? 0)}");
             for (var tier = 0; (tier < tierTriangles.Length); tier++) {
                 if (tierTriangles[tier] > 0) { _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" tier{tier}={tierTriangles[tier]}tri@{(1000f * SdfMeshTier.Cell(tier: tier)):0.###}mm"); }
