@@ -34,8 +34,8 @@ public sealed partial class SdfWorldTables {
     // one door (OwedMeshes) and the two places a row's mesh changes (StageMeshRegion, Unname); RankLanding settles each
     // touched mesh before any take, and CompleteLanding settles the mesh it lands at once. The ranks themselves may be a
     // few stagings behind the views: a mesh is ranked when it joins, when one of its rows changes, while it is among the
-    // first the order takes (LandingHeadRanks), and otherwise in turn, at most LandingSweepRows rows a staging. Order
-    // never changes a mesh, only when it lands.
+    // first the order takes (LandingHeadRanks), and otherwise in turn, at most LandingSweepTests priority tests a
+    // staging. Order never changes a mesh, only when it lands.
     private readonly Dictionary<SdfMesh, LandingRank> m_landingRanks = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<SdfMesh> m_landingTouched = [];
     // The ranks in landing order as of the last merge, any that left since included (LandingRank.Staged false); the
@@ -51,9 +51,10 @@ public sealed partial class SdfWorldTables {
     private int m_landingCursor;
     private int m_landingLeft;
 
-    // The meshes the order holds first, measured again every staging, and the most rows the sweep measures a staging.
+    // The meshes the order holds first, measured again every staging, and the most row-and-demand-point pairs the sweep
+    // measures a staging: a row costs one priority test per demand point.
     private const int LandingHeadRanks = 16;
-    private const int LandingSweepRows = 256;
+    private const int LandingSweepTests = 4096;
 
     // The owed meshes named ahead of the draws that the order above does not hold, and the first that may still
     // have words to take: listed again before a take once the set named ahead, or the owed set, changed.
@@ -81,10 +82,10 @@ public sealed partial class SdfWorldTables {
 
     // Settles the touched meshes into the landing order and measures the ranks it owes a measure: a mesh that joined or
     // one of whose rows changed, and with sweep (a staging) the first the order takes and in turn the stalest, at most
-    // LandingSweepRows rows of them. Merges what it measured into the order. Its order is the demand points' largest
-    // first (SdfMeshDemand.Priority over the rows naming the mesh), a draw no host box bounds (a skinned body) before any,
-    // then the list's order; after it come the owed meshes named ahead (ListLandingAhead). Any other placed mesh no draw
-    // names stays owed until a list names it again.
+    // LandingSweepTests priority tests of them. Merges what it measured into the order. Its order is the demand points'
+    // largest first (SdfMeshDemand.Priority over the rows naming the mesh), a draw no host box bounds (a skinned body)
+    // before any, then the list's order; after it come the owed meshes named ahead (ListLandingAhead). Any other placed
+    // mesh no draw names stays owed until a list names it again.
     private void RankLanding(SdfMeshDraws draws, bool sweep) {
         var demand = ((MeshDemand is { Count: > 0 } points) ? points : null);
         var rows = 0;
@@ -105,8 +106,9 @@ public sealed partial class SdfWorldTables {
                 }
             }
             var swept = 0;
+            var sweepRows = Math.Max(val1: LandingHeadRanks, val2: (LandingSweepTests / demand.Count));
 
-            while ((swept < LandingSweepRows) && m_landingStalest.TryPeek(result: out var stalest)) {
+            while ((swept < sweepRows) && m_landingStalest.TryPeek(result: out var stalest)) {
                 // A queued rank measured in this staging was queued after every entry still ahead of it, so the
                 // entries left were all measured in it.
                 if ((stalest.Rank.Measures == stalest.Measure) && stalest.Rank is { Staged: true, Measured: true }) { break; }
@@ -175,7 +177,7 @@ public sealed partial class SdfWorldTables {
         m_landingMeasured.Add(item: rank);
         // Entries a later measure made stale wait in the queue until the sweep reaches them; past a few per rank the
         // queue is listed again from the ranks themselves.
-        if (m_landingStalest.Count > ((4 * m_landingRanks.Count) + LandingSweepRows)) {
+        if (m_landingStalest.Count > ((4 * m_landingRanks.Count) + LandingSweepTests)) {
             m_landingStalest.Clear();
             foreach (var held in m_landingRanked) {
                 if (held is { Staged: true, Measured: false }) { m_landingStalest.Enqueue(item: (held, held.Measures)); }
@@ -249,7 +251,7 @@ public sealed partial class SdfWorldTables {
     // when every ordered mesh's words are taken.
     private bool TryTakeLanding(int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out LandingJob? job) {
         job = null;
-        if ((m_landingTouched.Count > 0) || (m_landingMeasured.Count > 0)) { RankLanding(draws: m_currentDrawRows, sweep: false); }
+        if (m_landingTouched.Count > 0) { RankLanding(draws: m_currentDrawRows, sweep: false); }
         if (m_meshesOwed.Count == 0) { return false; }
         ListLandingAhead();
 
