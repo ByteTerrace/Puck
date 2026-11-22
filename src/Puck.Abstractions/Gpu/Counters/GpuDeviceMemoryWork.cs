@@ -279,8 +279,9 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     /// which each name their own part (<see cref="CountPlaced"/>).</param>
     /// <param name="payer">The family of the resource that prompted the allocation, whose reservation the grant draws on
     /// first; <see langword="null"/> draws on unreserved room alone.</param>
-    /// <param name="payerBytes">The bytes of the resource that prompted the allocation: the most of
-    /// <paramref name="payer"/>'s reservation this allocation consumes.</param>
+    /// <param name="payerBytes">The bytes of the resource that prompted the allocation, which the payer's floor is judged
+    /// by when the pool is full; the grant draws on as much of <paramref name="payer"/>'s reservation as the whole
+    /// allocation takes.</param>
     /// <param name="grant">The grant, when the allocation may be made.</param>
     /// <returns><see langword="true"/> when the allocation may be made; <see langword="false"/> when the account refused
     /// it, and nothing was allocated or counted.</returns>

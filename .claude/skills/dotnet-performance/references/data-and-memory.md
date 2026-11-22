@@ -228,7 +228,8 @@ storage through the host's `IAllocator`.
   what moved ([mesh bake](../../rendering/references/mesh-bake.md#the-mesh-region)).
 - **Write from the source, keep no shadow copy** of a large table: the mesh
   region's flush writes from the `SdfMesh` arrays
-  ([`SdfWorldTables.MeshWordsOf`](../../../../src/Puck.SdfVm/SdfWorldTables.MeshRegion.cs)).
+  ([`SdfWorldTables.MeshWords`](../../../../src/Puck.SdfVm/SdfWorldTables.MeshRegion.cs)), and the landing packs
+  them on a worker straight from those arrays.
 
 Sources: bandwidth and the cost of streaming past the last-level cache
 ([DREPPER], [INTEL-OPT]).

@@ -1379,10 +1379,15 @@ paired arithmetic. Carry author-facing parameters through
   both queue arrangements and an open batch. This is the binding door only:
   native sparse buffer ownership and mesh backing selection remain step 7.
 - The mesh region keeps no host copy of its meshes. Its host copy is the draw
-  records alone (`GpuRegion.Shadow`); a placed mesh's words are owed without a
-  compare (`GpuRegion.OweSourced`) and the upload's flush writes them from the
+  records alone (`GpuRegion.Shadow`). A landing job's words are packed from the
+  `SdfMesh` buffers on a worker into a buffer of the landing's own and gathered into
+  the region (`GpuRegion.TryOweGather`); a mesh moved on the GPU
+  (`GpuRegion.TryOweMove`) passes through no host buffer; the few words a frame's
+  flush still owes without a compare (`GpuRegion.OweSourced`) come from the
   `SdfMesh` buffers (`SdfWorldTables.WriteSourcedMeshWords`, an
-  `IGpuRegionSource`). The irradiance scene likewise reads its triangles through
+  `IGpuRegionSource`). A region's moves record first, then its gathers, then its
+  staged words, in one recording door (`GpuRegion.RecordCopy`), so a word written
+  after a move never races it. The irradiance scene likewise reads its triangles through
   each mesh's positions and indices, never a copy. A new consumer of baked
   triangles reads the `SdfMesh` buffers rather than copying them: the debug
   world's published meshes are native payloads with explicit consumer claims, and every copy costs that
