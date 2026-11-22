@@ -35,7 +35,9 @@ public static class SdfMeshCollapse {
     public static ReadOnlySpan<float> NormalDegrees => [2f, 6f, 15f, 30f];
     /// <summary>The normal angle, in degrees, the levels a view resolving the mesh's own tier takes stay within: the
     /// second level's, which the field levels' witnesses hold too (<see cref="SdfMeshFieldLevels"/>).</summary>
-    public static float ResolvedDegrees => NormalDegrees[1];
+    public static float ResolvedDegrees => NormalDegrees[(ResolvedLevels - 1)];
+    /// <summary>The levels a view resolving the mesh's own tier takes, finest first (<see cref="CellShares"/>).</summary>
+    public const int ResolvedLevels = 2;
 
     /// <summary>The most of the next finer level's triangles a level keeps and still is made: one that saves less is not
     /// worth its region words.</summary>
@@ -76,7 +78,11 @@ public static class SdfMeshCollapse {
         var levels = new List<SdfMeshLevel>(capacity: CellShares.Length);
         var kept = mesh.TriangleCount;
 
-        for (var level = 0; (level < CellShares.Length); level++) {
+        // A mesh whose features are preserved (lettering) makes only the levels a view resolving its tier takes: its
+        // strokes are what it shows, which the coarser levels' wider normal bounds would let merge.
+        var levelCount = (preserveFeatures ? ResolvedLevels : CellShares.Length);
+
+        for (var level = 0; (level < levelCount); level++) {
             var made = collapser.Run(cosine: Math.Cos(d: ((NormalDegrees[level] * Math.PI) / 180.0)), error: (CellShares[level] * cell));
 
             if (made.TriangleCount > (KeptShare * kept)) {
