@@ -539,7 +539,8 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         uint level = min(state.y, d.w);
         if (step == SDF_OCCLUSION_EARLY_STEP) {
             kept = ((draw % slices) == slice) &&
-                (splitExit || (((a.w >> 1u) & 1u) == (header.w & 1u))) && (unboxed || sdfSelectionKeeps(boxCenter, boxX, boxY, boxZ));
+                (splitExit || (((a.w >> 1u) & 1u) == (header.w & 1u))) &&
+                (unboxed || (sdfSelectionKeeps(boxCenter, boxX, boxY, boxZ) && sdfSelectionContributes(kept, boxCenter, boxX, boxY, boxZ)));
             if (kept && splitExit && occlude && !unboxed) {
                 kept = sdfReceiverMayShadow(boxCenter, boxX, boxY, boxZ);
                 receiverRejected = !kept && (a.w & 2u) == 0u ? 1u : 0u;

@@ -7,7 +7,7 @@ namespace Puck.World.Client;
 
 // The world.rates levers the host's footprints carry (SdfUpdateRates.Views and Screens): a footprint showing a nested
 // view or a screen's source asks for it less often as the pixels it covers on the display shrink, so the scheduler
-// renders the view or uploads the source at least 30 or 15 times a second of presentation time
+// renders the view at least 30, 15, 10 or 5 times a second, or uploads the source at least 30 or 15, of presentation time
 // (RenderGraphRefresh.AtLeast on RenderGraphFootprint.Refresh). The pixels are the footprint's share of its consumer
 // times the consumer's share of the display, measured before this frame prunes small glass. Each rated producer's
 // achieved intervals are read back from the schedule its footprints were scheduled in (MeasureRatedRenders), which is

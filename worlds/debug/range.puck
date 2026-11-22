@@ -64,9 +64,10 @@ let tvCentre = 1.6
 
 // The windows: doors into the garden (garden.puck) like the garden painting, each showing the garden through the
 // garden's arrival frame as the viewer moves, its canvas the painting's 2.24 by 2.84 m so a crossing keeps a traveller's
-// size. A nested view renders at 30 Hz at or below 120 display pixels high and at 15 Hz at or below 60: at D 27 that is
-// 30 Hz at 1280x900 and every frame at 3840x2160, at D 69 15 and 30 Hz, and at D 121 15 Hz at both. Each window is a
-// session of its own, so each takes its own tier.
+// size. A nested view renders at 30 Hz at or below 120 display pixels high, 15 Hz at or below 60, 10 Hz at or below 40
+// and 5 Hz at or below 20, so the three distances take different tiers at one display size and the same window takes a
+// faster tier on a larger display; world.rates lists each window's height and tier. Each window is a session of its own,
+// so each takes its own tier.
 let windows = [
   { name: "range-window-27", d: 27 }
   { name: "range-window-69", d: 69 }

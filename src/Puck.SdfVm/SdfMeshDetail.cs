@@ -6,8 +6,11 @@ namespace Puck.SdfVm;
 /// Which level of detail one raster pass draws each mesh draw at (<see cref="SdfMesh.Levels"/>), chosen beside the box cull
 /// (<see cref="SdfMeshCull"/>) from the draw's box and its mesh's recorded errors. A view's mesh pass takes the coarsest
 /// level whose error projects to at most <see cref="CoarserPixels"/> display pixels over the nearest point of the draw's
-/// box, and goes back to a finer one only when the level it drew shows more than <see cref="FinerPixels"/>; a shadow
-/// cascade takes the coarsest level whose error is within one of its texels. The glass pass, and every pass under
+/// box, and goes back to a finer one only when the level it drew shows more than <see cref="FinerPixels"/>. The ladder
+/// ends in an empty level whose error is the whole box: a draw whose box projects to at most <see cref="CoarserPixels"/>
+/// draws nothing in a view, and returns once it shows more than <see cref="FinerPixels"/>
+/// (<c>sdfSelectionContributes</c>), so a small view draws what it can show rather than every mesh's coarsest level. A
+/// shadow cascade takes the coarsest level whose error is within one of its texels. The glass pass, and every pass under
 /// <see cref="Finest"/>, draws each mesh's own triangles. A draw with no host box draws its own triangles too.
 /// Presentation only.
 /// </summary>
