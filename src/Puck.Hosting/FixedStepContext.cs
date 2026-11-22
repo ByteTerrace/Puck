@@ -65,6 +65,13 @@ public interface IFixedStepSimulation {
     /// recover or quit) instead of waiting for a step that never settles.</summary>
     bool StepInterrupted => false;
 
+    /// <summary>Gets whether a slice of the step in progress is still executing on the simulation's own thread, which
+    /// the last <see cref="TryStep(in FixedStepContext, in CommandSnapshot)"/> stopped waiting for. A
+    /// <see langword="false"/> result from that call with this <see langword="false"/> means the step is held on a
+    /// dependency, which the next call resumes and waits on. A simulation that steps on the calling thread answers
+    /// <see langword="false"/>.</summary>
+    bool StepExecuting => false;
+
     /// <summary>Begins or resumes the same step. A false result retains the command snapshot and clock position.</summary>
     [Replaces(root: typeof(object))]
     bool TryStep(in FixedStepContext context, in CommandSnapshot commands) {

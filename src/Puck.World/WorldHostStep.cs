@@ -143,6 +143,10 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         }
     }
 
+    /// <summary>Gets whether a tick slice of the step in progress is still executing on the host's step thread, which
+    /// the last <see cref="TryStep"/> stopped waiting for.</summary>
+    public bool StepExecuting => m_instances.StepInFlight;
+
     /// <summary>Registers the host loop's wake with the step thread, which calls it each time a tick slice it executes
     /// finishes.</summary>
     /// <param name="wake">The wake, or <see langword="null"/> to register none.</param>
