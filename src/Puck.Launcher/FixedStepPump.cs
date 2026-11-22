@@ -122,8 +122,20 @@ public sealed class FixedStepPump {
     /// <summary>Runs the iteration's control phase even when no step is due. The first step reuses it; later steps in a
     /// catch-up burst still run it before each input snapshot.</summary>
     public void BeginIteration() {
-        m_beforeStep?.Invoke(AtTickBoundary);
+        RunControlPhase();
         m_iterationDrained = true;
+    }
+
+    private void RunControlPhase() {
+        var atBoundary = AtTickBoundary;
+        var window = atBoundary ? m_simulation.TickBoundary : null;
+
+        window?.Open(drain: !StepPending);
+        try {
+            m_beforeStep?.Invoke(atBoundary);
+        } finally {
+            window?.Close();
+        }
     }
     /// <summary>Creates the pump every launcher host loop drives: it drains the console before every step, holds the
     /// first step until piped standard input no longer can hold it, stops stepping once <c>quit</c> has run, and bounds
@@ -349,7 +361,7 @@ public sealed class FixedStepPump {
     // simulation's rate (read before the drain as ratePerSecond), when the host may not step, or when a holding pump's
     // simulation withholds it, spending withheldTicks of host time.
     private StepGate Gate(uint ratePerSecond, ulong withheldTicks) {
-        if (m_iterationDrained) { m_iterationDrained = false; } else { m_beforeStep?.Invoke(AtTickBoundary); }
+        if (m_iterationDrained) { m_iterationDrained = false; } else { RunControlPhase(); }
 
         if (StepPending) { return StepGate.Steps; }
 
@@ -393,30 +405,40 @@ public sealed class FixedStepPump {
 
     // Apply input once, then retain the same coordinates and commands until the simulation completes. A collectBy
     // bounds how long this thread waits for a step the simulation executes on another; without one it waits for it.
+    // The simulation's boundary window is open for the whole call, and drains deferred submissions only when the call
+    // starts a step.
     private bool Step(ulong stepTicks, WaitDeadline? collectBy = null) {
         var started = m_timeline?.Time.GetTimestamp() ?? 0L;
-        if (!StepPending) {
-            var stepElapsedTicks = m_elapsedTicks + stepTicks;
-            var windowEndTick = CaptureOriginTicks + stepElapsedTicks;
-            m_pendingCommands = m_inputRouter.SnapshotForTick(tick: m_completedStepCount, windowEndTick: windowEndTick,
-                windowStartTick: windowEndTick - stepTicks);
-            m_registry.ApplySnapshot(snapshot: in m_pendingCommands);
-            m_pendingContext = new FixedStepContext(ElapsedTicks: stepElapsedTicks, StepTicks: stepTicks, Tick: m_completedStepCount);
-        }
-        var completed = ((collectBy is { } wait)
-            ? m_simulation.TryStep(in m_pendingContext, in m_pendingCommands, wait)
-            : m_simulation.TryStep(in m_pendingContext, in m_pendingCommands));
+        var window = m_simulation.TickBoundary;
 
-        // Summed over every call a step held across wait slices takes, so the lane reports the whole tick.
-        if (m_timeline is { } open) {
-            m_stepExecutedTicks += open.TakeExecutedTicks();
-            m_stepPumpTicks += (open.Time.GetTimestamp() - started);
+        window?.Open(drain: !StepPending);
+        try {
+            if (!StepPending) {
+                var stepElapsedTicks = m_elapsedTicks + stepTicks;
+                var windowEndTick = CaptureOriginTicks + stepElapsedTicks;
+                m_pendingCommands = m_inputRouter.SnapshotForTick(tick: m_completedStepCount, windowEndTick: windowEndTick,
+                    windowStartTick: windowEndTick - stepTicks);
+                m_registry.ApplySnapshot(snapshot: in m_pendingCommands);
+                m_pendingContext = new FixedStepContext(ElapsedTicks: stepElapsedTicks, StepTicks: stepTicks, Tick: m_completedStepCount);
+            }
+
+            var completed = ((collectBy is { } wait)
+                ? m_simulation.TryStep(in m_pendingContext, in m_pendingCommands, wait)
+                : m_simulation.TryStep(in m_pendingContext, in m_pendingCommands));
+
+            // Summed over every call a step held across wait slices takes, so the lane reports the whole tick.
+            if (m_timeline is { } open) {
+                m_stepExecutedTicks += open.TakeExecutedTicks();
+                m_stepPumpTicks += (open.Time.GetTimestamp() - started);
+            }
+            if (!completed) { return false; }
+            m_elapsedTicks = m_pendingContext.ElapsedTicks;
+            m_completedStepCount++;
+            m_pendingContext = default;
+            m_pendingCommands = default;
+        } finally {
+            window?.Close();
         }
-        if (!completed) { return false; }
-        m_elapsedTicks = m_pendingContext.ElapsedTicks;
-        m_completedStepCount++;
-        m_pendingContext = default;
-        m_pendingCommands = default;
         if (m_timeline is { } timeline) {
             timeline.NoteTick(ticks: ((m_stepExecutedTicks > 0L) ? m_stepExecutedTicks : m_stepPumpTicks));
             m_stepExecutedTicks = 0L;

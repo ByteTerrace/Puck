@@ -1,3 +1,4 @@
+using Puck.Abstractions.Pacing;
 using Puck.Commands;
 using Puck.Maths;
 
@@ -13,6 +14,9 @@ public readonly record struct FixedStepContext(ulong Tick, ulong ElapsedTicks, u
 /// <summary>The optional deterministic simulation seam driven by a Puck host. For each due fixed tick the launcher
 /// builds one <see cref="CommandSnapshot"/>, applies it to the command registry, then calls <see cref="Step"/> once.</summary>
 public interface IFixedStepSimulation {
+    /// <summary>The optional boundary the host opens for control work and stepping.</summary>
+    IHostTickBoundary? TickBoundary => null;
+
     /// <summary>The fixed rate, in Hz, this simulation steps at — MUST divide <see cref="FixedTickConversion.TicksPerSecond"/>
     /// exactly (<see cref="FixedTickConversion.PerRate"/> is how the host turns it into a step width). <c>Puck.Hosting</c> is
     /// domain-agnostic and owns no notion of "the" simulation rate — a genre-specific host (e.g. a loaded world

@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+using System.Collections.Immutable;
 using Puck.Abstractions.Machines;
 using Puck.Assets.Documents;
 using Puck.Commands;
@@ -43,6 +45,8 @@ public sealed class WorldOwnedWorlds {
 
     private WorldDocumentSubmissionReceipt? m_lastReceipt;
     private long m_revision = 1;
+    private WorldDefinition?[] m_rosterProfileDocuments = [];
+    private WorldRosterProfiles? m_rosterProfiles;
 
     private static readonly CellName MoveSpeedState = WorldIdentityRows.MoveSpeed;
     private static readonly CellName TurnSpeedState = WorldIdentityRows.TurnSpeed;
@@ -930,46 +934,57 @@ public sealed class WorldOwnedWorlds {
     ));
     /// <summary>Resolves a reconnect-stable controller from state-slot references in the owned worlds.</summary>
     public WorldIdentity? PreferredProfile(InputDeviceId device) {
-        if (
-            (device.Persistence != InputDeviceIdentityPersistence.Reconnect) ||
-            (MachineId == Guid.Empty)
-        ) {
-            return null;
-        }
-        WorldIdentity? match = null;
+        return device.Persistence == InputDeviceIdentityPersistence.Reconnect &&
+            CaptureRosterProfiles().PreferredIds.TryGetValue(device.Value, out var id)
+            ? FindById(id)
+            : null;
+    }
 
-        foreach (var identity in m_identities) {
-            foreach (var slots in (identity.Document?.Identity?.Controllers ?? [])) {
-                if (
-                    identity.TryReadState(
-                    name: slots.MachineState,
-                    row: out var machineRow
-                ) &&
-                    ((machineRow is { Kind: CellKind.Text, IsSlot: true }) && (machineRow.Cells![0].Value.AsText is { } machine)) &&
-                    identity.TryReadState(
-                    name: slots.DeviceState,
-                    row: out var deviceRow
-                ) &&
-                    ((deviceRow is { Kind: CellKind.Text, IsSlot: true }) && (deviceRow.Cells![0].Value.AsText is { } storedDevice)) &&
-                    string.Equals(
-                    a: machine,
-                    b: MachineId.ToString(format: "D"),
-                    comparisonType: StringComparison.OrdinalIgnoreCase
-                ) &&
-                    string.Equals(
-                    a: storedDevice,
-                    b: device.Value.ToString(format: "D"),
-                    comparisonType: StringComparison.OrdinalIgnoreCase
-                )
-                ) {
-                    if (match is not null) {
-                        return null;
-                    }
-                    match = identity;
+    /// <summary>Captures the local roster's view at a settled authority boundary.</summary>
+    public WorldRosterProfiles CaptureRosterProfiles() {
+        if (m_rosterProfiles is { } cached && RosterProfilesCurrent(cached)) { return cached; }
+
+        var profiles = ImmutableArray.CreateBuilder<WorldIdentityProjection>(m_identities.Count);
+        var documents = new WorldDefinition?[m_identities.Count];
+        var preferred = new Dictionary<Guid, string?>();
+        var machineId = MachineId.ToString(format: "D");
+
+        for (var index = 0; index < m_identities.Count; index++) {
+            var identity = m_identities[index];
+            documents[index] = identity.Document;
+            profiles.Add(identity.Project());
+
+            if (MachineId == Guid.Empty || identity.Document?.Identity?.Controllers is not { } controllers) { continue; }
+            foreach (var slots in controllers) {
+                if (identity.TryReadState(slots.MachineState, out var machine) &&
+                    machine is { Kind: CellKind.Text, IsSlot: true } &&
+                    string.Equals(machine.Cells![0].Value.AsText, machineId, StringComparison.OrdinalIgnoreCase) &&
+                    identity.TryReadState(slots.DeviceState, out var device) &&
+                    device is { Kind: CellKind.Text, IsSlot: true } &&
+                    device.Cells![0].Value.AsText is { Length: 36 } stored &&
+                    Guid.TryParseExact(stored, "D", out var deviceId) &&
+                    !preferred.TryAdd(deviceId, identity.Id)) {
+                    preferred[deviceId] = null;
                 }
             }
         }
-        return match;
+
+        m_rosterProfileDocuments = documents;
+        return m_rosterProfiles = new WorldRosterProfiles(
+            profiles.MoveToImmutable(),
+            preferred.Where(entry => entry.Value is not null).ToFrozenDictionary(entry => entry.Key, entry => entry.Value!)
+        );
+    }
+
+    private bool RosterProfilesCurrent(WorldRosterProfiles cached) {
+        if (cached.Catalog.Length != m_identities.Count) { return false; }
+        for (var index = 0; index < m_identities.Count; index++) {
+            var identity = m_identities[index];
+            if (!ReferenceEquals(m_rosterProfileDocuments[index], identity.Document) || cached.Catalog[index] != identity.Project()) {
+                return false;
+            }
+        }
+        return true;
     }
     /// <summary>Stores a controller preference as two text slots in the selected owned world.</summary>
     public void RememberPreferredController(WorldIdentity profile, InputDeviceId device) {

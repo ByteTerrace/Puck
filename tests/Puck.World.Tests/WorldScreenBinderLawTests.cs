@@ -954,6 +954,7 @@ public sealed class WorldScreenBinderLawTests {
             Roster = new PlayerRoster(
                 definition: boot,
                 link: Boot.Link,
+                profiles: Boot.Server.CaptureRosterProfiles(),
                 seatBindings: new WorldSeatBindings(definition: boot)
             );
             Rows = [

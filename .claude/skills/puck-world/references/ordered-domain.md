@@ -96,6 +96,10 @@ client when the outbox collects, right after that tick and before its hooks.
 `WorldServer.EchoTap` and `WorldServer.SaveEffectTap` are routed the same way
 at their assignment. The public `WorldServer.Submit`, which socket peers and
 forwarded travellers use, keeps its completion on the raising thread.
+`Refusal(Code, Detail)` (an ingress or transport refusal that forms no mutation outcome).
+Local queries and session requests receive their answer inside the boundary
+window. Console verbs format their answer from the reply. Buffered edits
+settle at the apply boundary.
 
 ## Drain timing
 
@@ -192,8 +196,15 @@ half of that rule is `WorldToastPolicy`, which also withholds the toast from eve
   payload), `SubmitSession`, and `Query`. Each per-kind `Submit*` is a
   `ServerLinkSubmissions` extension method over `SubmitEnvelope`, so it
   resolves through a variable of the concrete link type too.
-- `IWorldServerHost` — deliberately 3 members (`AttachSink`, `EnqueueIntent`,
-  `Submit`), so the transport never names `WorldServer`.
+- `IWorldServerHost` exposes `AttachSink`, `EnqueueIntent`, `Submit`, and
+  `RequireInlineSubmission`. The last uses `WorldServer.ThrowIfTickPending`
+  to refuse an inline answer from an authority with an incomplete tick.
+- `HostLoop` registers the pump before its first input capture.
+  `FixedStepPump` opens `WorldLinkBoundary` for control and step work.
+  Outside that window, `LoopbackTransport` queues fire-and-forget work before
+  `Mint` and refuses `Query` and `SubmitSession`. The next settled boundary
+  drains the queue in order. The roster resolves a controller's preference
+  from `WorldRosterProfiles`, which `WorldHostStep` publishes after collect.
 - `IClientSink` — 7 deliveries: `DeliverSnapshot`, `DeliverAnswer`,
   `DeliverDefinition` (a shape change), `DeliverState` (a value-only write),
   both carrying the definition's `WorldDocumentVersion` (activation plus install

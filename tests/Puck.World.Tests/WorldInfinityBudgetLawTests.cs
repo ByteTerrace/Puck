@@ -14,7 +14,7 @@ public sealed class WorldInfinityBudgetLawTests {
         using var row = HostRow.Build(name: "infinity-budget");
         var probe = new WorldRenderProbe();
         var roster = new PlayerRoster(definition: row.Server.Definition, link: row.Instance.Link,
-            seatBindings: new WorldSeatBindings(definition: row.Server.Definition));
+            seatBindings: new WorldSeatBindings(definition: row.Server.Definition), profiles: row.Server.CaptureRosterProfiles());
         var registry = new CommandRegistry(modules: [new WorldPopulationCommandModule(roster: roster,
             server: row.Server, link: row.Instance.Link, renderProbe: probe)]);
         var first = new object();

@@ -9,7 +9,7 @@ namespace Puck.World;
 /// The fixed step every boot shape runs: seat route changes, boot scheduling, authority and instance steps,
 /// the composition's post-step, then seat intent completion. The host-work clock a world.wait counts lives here.
 /// </summary>
-internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTestRun scheduleRunner, WorldTickScript tickScript, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, WorldReload reload, HostPacing pacing) {
+internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTestRun scheduleRunner, WorldTickScript tickScript, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, PlayerRoster roster, WorldSourceWatch sourceWatch, WorldReload reload, HostPacing pacing) {
     private readonly WorldCaptureScheduler m_captureScheduler = captureScheduler;
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
@@ -157,6 +157,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         }
         Publish();
         if (m_instances.TryStepInstances(context.StepTicks, deadline, collectBy) is not null) { return false; }
+        roster.PublishProfiles(m_server.CaptureRosterProfiles());
         _ = m_seatRouter.DeliverRouteChanges();
         afterInstances?.Invoke();
         m_instances.FinishSeatIntents();

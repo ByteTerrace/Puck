@@ -178,6 +178,8 @@ public sealed class HostLoop(
             });
         }
 
+        var boundary = m_simulation?.TickBoundary;
+        boundary?.RegisterPump();
         try {
             while (!stoppingToken.IsCancellationRequested && (isOpen?.Invoke() ?? true)) {
                 timeline.BeginIteration();
@@ -272,6 +274,7 @@ public sealed class HostLoop(
         } finally {
             m_simulation?.WakeOnStepProgress(wake: null);
             resume?.Dispose();
+            boundary?.UnregisterPump();
             HostWaits.EndPump();
             try {
                 LauncherHostRun.RunTeardown(fault, logger, ("flush output", output.Drain));

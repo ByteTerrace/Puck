@@ -161,6 +161,15 @@ public sealed partial class WorldServer {
     /// <param name="completion">The client's typed result callback, or <see langword="null"/>.</param>
     void IWorldServerHost.Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion) =>
         m_tick.Submit(completion: m_output.Route(action: completion), envelope: envelope);
+
+    void IWorldServerHost.RequireInlineSubmission() => ThrowIfTickPending();
+
+    /// <summary>Captures the owned profiles for the local roster while the authority is settled.</summary>
+    public WorldRosterProfiles CaptureRosterProfiles() {
+        using var gate = EnterAuthorityGate();
+        return m_profiles.CaptureRosterProfiles();
+    }
+
     /// <inheritdoc cref="WorldTick.Submit"/>
     public void Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) =>
         m_tick.Submit(

@@ -113,15 +113,7 @@ rebuilt from a projection **[opened]** (`src/Puck.World.Schema/WorldIdentity.cs:
 The catalog's door, `WorldOwnedWorlds.TrySetFact`, is shared by rule effects
 and the console, saves an owned identity, keeps a visitor's fact on its
 travelling row, and refuses an owned document another catalog owns
-**[opened]** (`src/Puck.World.Server/WorldOwnedWorlds.cs:1289-1293`):
-
-```csharp
-    /// <summary>Writes one fact on an identity's facts row, the one door a rule effect and the console share. An
-    /// identity this catalog owns is persisted when the row changed, through the same save every other identity edit
-    /// takes. A visitor — an identity another authority's traveler arrived as — keeps the fact on its travelling row,
-    /// which its next crossing carries on and its own authority adopts when it comes home; nothing is saved here. An
-    /// identity carrying an owned document this catalog does not own is refused by name and left unchanged.</summary>
-```
+**[opened]**.
 
 Its two callers are the rule effect (`WorldRuleHost.PersistIdentityFact`,
 `src/Puck.World.Server/WorldRuleHost.IdentityFacts.cs:214-230`) and the console

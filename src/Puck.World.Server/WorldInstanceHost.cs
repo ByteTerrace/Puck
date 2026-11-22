@@ -87,6 +87,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private readonly bool m_admitsSpawn;
     private readonly bool m_presents;
     private readonly bool m_scenario;
+    private readonly WorldLinkBoundary? m_linkBoundary;
     private readonly CancellationToken m_applicationStopping;
     // The host-selected machine metadata used by every live instance load, neighbour composition, and reload.
     private readonly string m_catalogFingerprint;
@@ -1387,7 +1388,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 origin: () => resolvedPath,
                 server: server,
                 ownedMachines: machines,
-                link: new LoopbackTransport(server: server),
+                link: new LoopbackTransport(server: server, boundary: m_linkBoundary),
                 federation: Boot!.Federation,
                 documentOrigin: new WorldFileOrigin(
                     catalog: m_machineCatalog,
@@ -1577,9 +1578,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <param name="jobs">The engine's job pool every spawned row's server forks its partitioned tick phases onto, or
     /// <see langword="null"/> for serial servers.</param>
     /// <param name="scenario">Whether neighbour starts run in a deterministic scenario with no live entropy.</param>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null, Func<WorldDefinition, WorldServer, IWorldAddonHost>? addonHostFactory = null, bool presents = true, Puck.Hosting.Jobs.JobPool? jobs = null, bool scenario = false) {
+    /// <param name="linkBoundary">The local pump window shared by links to the worlds it steps.</param>
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null, Func<WorldDefinition, WorldServer, IWorldAddonHost>? addonHostFactory = null, bool presents = true, Puck.Hosting.Jobs.JobPool? jobs = null, bool scenario = false, WorldLinkBoundary? linkBoundary = null) {
         m_presents = presents;
         m_scenario = scenario;
+        m_linkBoundary = linkBoundary;
         m_pacing = (pacing ?? HostPacing.WallClockInline);
         m_jobs = jobs;
         ArgumentNullException.ThrowIfNull(argument: seats);
