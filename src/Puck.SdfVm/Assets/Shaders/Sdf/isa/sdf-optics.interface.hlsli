@@ -69,6 +69,15 @@ void puckAddWork(uint word, uint amount) {
         InterlockedAdd(workCounters[word + 1u], 1u);
     }
 }
+// Adds to one count of the pass's own row, or nothing while the pass counts nothing. The disabled row's scaled
+// words wrap to indices just below the buffer, an out-of-bounds write a Vulkan device without robust buffer
+// access faults on, so every lane's add to the pass row passes this door, which tests the row before scaling.
+void puckAddRowWork(uint word, uint amount) {
+    if (passGroup.workCounterRow == PuckWorkDisabledRow) {
+        return;
+    }
+    puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + word), amount);
+}
 #if !defined(__SHADER_TARGET_STAGE) || (__SHADER_TARGET_STAGE == __SHADER_STAGE_COMPUTE)
 groupshared uint puckWorkGroupALo;
 groupshared uint puckWorkGroupAHi;
@@ -202,19 +211,20 @@ void puckCountFragmentWork(uint steps, uint texels) {
     uint waveTexels = WaveActiveSum(counting ? texels : 0u);
 
     if (counting && (WavePrefixCountBits(counting) == 0u)) {
-        uint row = (passGroup.workCounterRow * PuckWorkRowWords);
-
-        puckAddWork((row + PuckWorkStepsWord), waveSteps);
-        puckAddWork((row + PuckWorkTexelsWord), waveTexels);
+        puckAddRowWork(PuckWorkStepsWord, waveSteps);
+        puckAddRowWork(PuckWorkTexelsWord, waveTexels);
     }
 }
 // Adds one hit the mesh hit door rejected to its pass's row, from the rejecting lane alone: a rejection is rare
 // and may sit in divergent control flow, so it takes no wave operation.
 void puckCountRejectedHit() {
-    if (passGroup.workCounterRow == PuckWorkDisabledRow) {
-        return;
-    }
-    puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkRejectedHitsWord), 1u);
+    puckAddRowWork(PuckWorkRejectedHitsWord, 1u);
+}
+// Adds a lane's sky evaluations and sky texture loads to its pass's row, from the lane alone, since a sky lookup
+// sits in divergent shading.
+void puckCountSky(uint evaluations, uint loads) {
+    puckAddRowWork(PuckWorkSkyWord, evaluations);
+    puckAddRowWork(PuckWorkSkyTextureLoadsWord, loads);
 }
 
 #endif // PUCK_SHADER_INTERFACE_SDF_OPTICS

@@ -143,7 +143,12 @@ it runs as background GPU work with counters of its own that nothing reads
 back, so no view's node counts its steps or shapes (its done line counts its
 samples and taps). The
 sky and composite passes also count `sky.evaluations`, `sky.hashes` and
-`sky.texture-loads` into their named layer rows through `puckCountDetail`. A
+`sky.texture-loads` into their named layer rows through `puckCountDetail`, and
+shading's sky lookups (`shade/sdf-sky-lighting.hlsli`) add theirs to the pass row
+through `puckCountSky`. A kernel counts only through these generated functions and
+never scales `workCounterRow` itself: the disabled row's words wrap to indices just
+below the counter buffer, a write Direct3D 12 drops and Vulkan loses the device on,
+so every add to the pass row passes `puckAddRowWork`, which tests the row first. A
 new counting site adds to `sdfWorkSteps` beside the evaluation it counts. The
 runtime declares a view unchanged when nothing it renders from moved
 (`SdfWorldResidency.IsUnchanged`, `RenderGraphFrame.Unchanged`) and records none
@@ -388,7 +393,16 @@ exactness off its lowering without a GPU.
   side (`VulkanDeviceAddressBindings`, fed by
   `VK_EXT_device_address_binding_report` whenever the device supports it): a
   read just past a buffer's end shows as the nearest object below, and a read
-  of a released buffer as an unbound range. Objects are keyed by type and handle
+  of a released buffer as an unbound range. NVIDIA reports a shader's faulting
+  data page as an untyped (`none`, type 0) address beside the instruction
+  pointer, and it is named like the rest. A shader forms an element's offset in
+  32 bits, so a negative index lands 4 GiB above its buffer at an address no
+  object holds: the report then lists the buffers starting just above the
+  address less 4 GiB ("a negative 32-bit offset of up to ... bytes from"),
+  nearest first, the likeliest to be the one indexed; one that recurs across
+  runs whose layouts differ is the one. The driver reports no unbind for a buffer
+  destroyed inside memory that stays allocated, so a bound entry can outlive its
+  object. Objects are keyed by type and handle
   together, and a name lives only while its object holds a bound range (the
   unbind of the last one retires it, and an unbound entry keeps the name the
   object had then), so an object named before the driver reports its first
