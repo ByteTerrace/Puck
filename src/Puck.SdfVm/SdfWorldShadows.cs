@@ -750,29 +750,42 @@ internal sealed class SdfWorldShadows : IDisposable {
             );
 
             if (rect.IsEmpty) { return; }
-            // Merges into a rectangle it touches; otherwise takes a new one, and past the most merges the pair whose union
-            // grows least.
-            for (var at = 0; (at < m_owedCount); at++) {
-                if (m_owed[at].Touches(other: in rect)) {
-                    m_owed[at] = m_owed[at].Union(other: in rect);
-                    return;
+            // Merges into a rectangle it touches, else takes a new one, else merges into the one whose union grows least;
+            // a grown union then absorbs every other it touches, so no two owed rectangles overlap.
+            var into = -1;
+
+            for (var at = 0; ((at < m_owedCount) && (into < 0)); at++) {
+                if (m_owed[at].Touches(other: in rect)) { into = at; }
+            }
+            if ((into < 0) && (m_owedCount < MaxRectangles)) {
+                m_owed[m_owedCount++] = rect;
+            } else {
+                if (into < 0) {
+                    var growth = long.MaxValue;
+
+                    for (var at = 0; (at < m_owedCount); at++) {
+                        var grown = (m_owed[at].Union(other: in rect).Area - m_owed[at].Area);
+
+                        if (grown < growth) { (into, growth) = (at, grown); }
+                    }
+                }
+                m_owed[into] = m_owed[into].Union(other: in rect);
+                for (var at = 0; (at < m_owedCount);) {
+                    if ((at == into) || !m_owed[at].Touches(other: in m_owed[into])) {
+                        at++;
+                        continue;
+                    }
+                    m_owed[into] = m_owed[into].Union(other: in m_owed[at]);
+                    m_owed[at] = m_owed[--m_owedCount];
+                    if (into == m_owedCount) { into = at; }
+                    at = 0;
                 }
             }
-            if (m_owedCount < MaxRectangles) {
-                m_owed[m_owedCount++] = rect;
-                return;
-            }
+            // Each rectangle selects and draws every caster in its box, so past half the layer one whole redraw costs less.
+            var owed = 0L;
 
-            var best = 0;
-            var growth = long.MaxValue;
-
-            for (var at = 0; (at < m_owedCount); at++) {
-                var union = m_owed[at].Union(other: in rect);
-                var grown = (union.Area - m_owed[at].Area);
-
-                if (grown < growth) { (best, growth) = (at, grown); }
-            }
-            m_owed[best] = m_owed[best].Union(other: in rect);
+            for (var at = 0; (at < m_owedCount); at++) { owed += m_owed[at].Area; }
+            if ((2L * owed) >= ((long)m_texels * m_texels)) { OweAll(); }
         }
         // The shares one redraw takes: the distant map's authored frames, and the far entry's refresh period (the authored
         // far rate, farShadows.hertz, spreads a redraw over the frames of one of its periods); one otherwise.
