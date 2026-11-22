@@ -99,7 +99,7 @@ clamped to it: asked for 3840x2160 on a 2560x1440 monitor, the World presents
 ## How the distances follow
 
 A body switches to 30 Hz at or below 30 pixels per metre, and to 15, 10 and
-5 Hz at or below 15, 10 and 5 (`SdfUpdateRateTiers.BodyTiers`): a limb moving
+5 Hz at or below 15, 10 and 5 (`SdfUpdateRateTiers.Tiers`): a limb moving
 2 m/s then steps at most two pixels between packs. Pixels per metre are the
 display's height over `2 tan(0.48)` = 1.0432 times the body's depth. The
 depth is measured to the nearest point of the sphere the body's look reaches. The chase camera stands

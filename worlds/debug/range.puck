@@ -13,7 +13,7 @@
 //   x = -108                 the televisions, on the lane's left
 //   x = -112                 the windows, further left
 //
-// The tiers switch by a body's pixels per metre (SdfUpdateRateTiers.BodyTiers): 30, 15, 10 or 5 Hz at or below that many.
+// The tiers switch by a body's pixels per metre (SdfUpdateRateTiers.Tiers): 30, 15, 10 or 5 Hz at or below that many.
 // The default chase camera (avatars/moth.puck: 4.2 m behind her at a 0.3 rad pitch, 0.96 rad high) sees a body at its
 // nearest point, so a body whose home is D down the lane stands about 0.9553 D + 2.39 m deep in the view, and its pixels
 // per metre are the display's height over 1.0432 times that depth. The thresholds fall at D = 27.6, 57.7 and 87.8 m at
