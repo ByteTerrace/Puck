@@ -1502,9 +1502,33 @@ The frame's GPU side:
 - [low] Portal sight has no counter, so `world.counters` cannot show how
   often a completed verdict hides a portal while the camera moves
   (`SdfPortalSight`). Smaller GPU leads: the views filter decodes each tap's
-  normal again; one distant map could serve every view of a residency at one
-  cell and static revision (`SdfMeshShadowCascades`); and every pixel pass
-  pays a value-returning atomic a wave for its work count.
+  normal again; and every pixel pass pays a value-returning atomic a wave for
+  its work count.
+- [high] Every secondary view runs its own shadow cascades and its own distant
+  map, and nearly every session screen and portal of the debug world is a view
+  of one residency (the shared session scene, `WorldViewNames.Shared`, about
+  fifty views), so one world's identical distant map is drawn again by each
+  view that shows it. Shadows are most of what secondary views cost on the
+  route's portal chapters. One shadow solution per residency, read by every
+  view of it, is the fix; it must cover the union of its views' eyes, since a
+  session world's views look at places no player stands in.
+- [medium] A small view is vertex-bound: a session view a few dozen pixels
+  high draws each group at the tier its residency's largest view demands
+  (`SdfMeshDemand`), at that tier's coarsest collapse level, so it can draw
+  more vertices than the main view. A view's draws should take a tier and
+  level its own size asks for; dropping only sub-pixel boxes moved no measured
+  view.
+- [medium] A portal whose glass reaches the camera's near plane, or runs past
+  the image's edges, renders its whole aperture into an image no larger than
+  its consumer's (`WorldPortalVisibility.Coverage` answers the whole image), so
+  close up it is sampled below a texel a pixel and shades texels no one sees.
+  Fitting the session's frustum to the visible part of the glass, with the
+  glass's image map naming that part, renders it at the pixels it covers.
+- [low] A view whose world binds a screen never stands whole
+  (`SdfWorldTables.ForcesRender`); its passes stand on the screens'
+  publications instead. The render graph could carry an unbound read's
+  publication into the instance's unchanged decision so a still screen inside
+  a still view renders nothing.
 - [medium] Confirm whether the bench's default `world.indirect medium` is the
   bar's highest quality; if not, every frame reading sits below the bar's
   setting.

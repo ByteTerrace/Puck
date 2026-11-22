@@ -53,7 +53,7 @@ public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
                 if (runtime.Producer(instance: index) is not null) { continue; }
                 var node = runtime.Node(instance: index);
                 var passes = new JsonArray();
-                var timings = node.Timings;
+                var timings = node.TimingsAt(frame: (runtime.Latest?.Frame ?? 0L));
                 foreach (var timing in timings) {
                     measured |= (timing.Samples > 0);
                     passes.Add(new JsonObject {
@@ -77,7 +77,7 @@ public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
         }
         return new JsonObject {
             ["state"] = !Available ? "absent" : measured ? "present" : "unmeasured",
-            ["coverage"] = "closing node submission windows",
+            ["coverage"] = "the render graph's latest frames, a frame a pass did not render counting as zero",
             ["window"] = Puck.Shaders.ShaderPipelineRenderNode.TimingWindow,
             ["nodes"] = nodes,
         };
@@ -153,7 +153,7 @@ public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
             var name = runtime.Instances.Instances[index].Name;
 
             if (node.TimingRefusal is not null) { continue; }
-            foreach (var timing in node.Timings) {
+            foreach (var timing in node.TimingsAt(frame: (runtime.Latest?.Frame ?? 0L))) {
                 readings.Add(item: timing with { Pass = $"{name}/{timing.Pass}" });
             }
         }
@@ -176,7 +176,7 @@ public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
                     text.Append(value: $"\n{name}: refused {refusal}");
                     continue;
                 }
-                var timings = node.Timings;
+                var timings = node.TimingsAt(frame: (runtime.Latest?.Frame ?? 0L));
                 if (timings.IsEmpty) { text.Append(value: $"\n{name}: awaiting completed timestamps"); }
                 foreach (var timing in timings) {
                     var state = timing.Stale ? "stale" : timing.Samples == 0 ? "unmeasured" : "present";

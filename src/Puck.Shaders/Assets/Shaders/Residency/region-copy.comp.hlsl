@@ -7,7 +7,10 @@
 // Request layout: seven uints (count, runCount, sourceBase, destinationBase, rowWords, sourceStride, destinationStride),
 // then runCount (logical word, first thread) pairs. With rowWords zero, the source holds packed data from sourceBase (a
 // region's block of its staging ring). With rowWords nonzero, logical word / rowWords selects a row and % rowWords selects
-// its column, mapped through sourceStride and destinationStride. Source data is a separate binding.
+// its column, mapped through sourceStride and destinationStride. Source data is a separate binding. With rowWords zero
+// and sourceStride nonzero, runCount source words follow the run table and each run reads from its own: with
+// RegionCopyMoveMode from the destination at destinationBase plus its source word (a move within the destination), with
+// RegionCopyGatherMode from the source at sourceBase plus its source word (a gather from a packed buffer).
 // Thread t is its
 // dispatch row times RegionCopyRowThreads plus its column (a copy past one row of 65,535 groups dispatches further rows,
 // at most RegionCopyMaxRows of them, since Direct3D 12's GPU-based validation refuses more than 4,194,303 groups). It
@@ -26,6 +29,9 @@ static const uint RegionCopyHeaderWords = 7;
 static const uint RegionCopyGroupsPerRow = 65535;
 static const uint RegionCopyRowThreads = (RegionCopyGroupsPerRow * 64);
 static const uint RegionCopyMaxRows = 64;
+// A packed request's (rowWords zero) sixth word: a move within the destination (GpuRegion.CopyMoveMode), or a gather from
+// the source with a source word per run (GpuRegion.CopyGatherMode, 2).
+static const uint RegionCopyMoveMode = 1;
 
 [numthreads(64, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
@@ -61,6 +67,17 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             uint column = word % rowWords;
             sourceWord = copyRequest[2] + row * copyRequest[5] + column;
             destinationWord = copyRequest[3] + row * copyRequest[6] + column;
+        } else if (copyRequest[5] != 0u) {
+            // A run with its own source word, which follows the run table: a move reads the destination itself (no move
+            // of one request reads a word another writes, GpuRegion.TryOweMove), a gather the source binding.
+            uint runSource = (copyRequest[(RegionCopyHeaderWords + (copyRequest[1] * 2) + low)] + (i - copyRequest[(run + 1)]));
+
+            if (copyRequest[5] == RegionCopyMoveMode) {
+                copyDestination[destinationWord] = copyDestination[(copyRequest[3] + runSource)];
+            } else {
+                copyDestination[destinationWord] = copySource[(copyRequest[2] + runSource)];
+            }
+            continue;
         }
 
         copyDestination[destinationWord] = copySource[sourceWord];

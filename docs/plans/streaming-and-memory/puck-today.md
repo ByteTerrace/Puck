@@ -118,8 +118,9 @@ All paths are under `src/` unless stated.
   **[opened]**. Unnamed meshes are retained up to `RetainedSlackWords = (1 << 23)` (32 MB) (src/Puck.SdfVm/SdfMeshRegionArena.cs:42, 194-196)
   **[opened]**.
 - **Under pressure:** unnamed meshes forgotten first (`ForgetUnnamed`, src/Puck.SdfVm/SdfMeshRegionArena.cs:206-212, 364-378); a named mesh with
-  no run is refused (`_ = m_refused.Add(item: mesh);`, :211) and its draws wait out of the frame; a relocation packs
-  when refused meshes would fit packed or free words pass `PackedShare = 3` times named (:223-231); an account trim
+  no run is refused (`_ = m_refused.Add(item: mesh);`, :211) and its draws wait out of the frame; a compaction
+  (`SdfMeshRegionArena.Compact`) moves the highest meshes into lower runs on the GPU when refused meshes would fit packed,
+  or, for an unmapped region, when free words pass `PackedShare = 3` times named; an account trim
   forgets unnamed meshes on the frame thread (`ServiceMemoryTrim`, MeshRegion.cs:53-66) **[opened]**.
 - **Device refusal:** `SdfWorldTables.EnsureMeshRegionCapacity` catches a refused
   growth, clips placements to the buffer it holds and leaves those rows absent.

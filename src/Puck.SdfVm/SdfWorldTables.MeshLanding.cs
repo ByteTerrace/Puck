@@ -9,12 +9,14 @@ namespace Puck.SdfVm;
 // never through a frame's upload. The meshes the latest staged list names and the region still owes are taken in the
 // order the views see them largest (MeshDemand), so the scene fills in from the cameras outward, and after them the
 // meshes named ahead of the draws (NameMeshesAhead), which no draw waits on; a large mesh lands in
-// several jobs. Each job owes its words to the region (GpuRegion.OweSourced), which stages them from the meshes' own
-// arrays into the job's slot of the region (MeshLandingSlot) and records the copy into the job's command buffer.
+// several jobs. A worker packs each job's words from the meshes' own arrays into a host-visible buffer of the landing's
+// own ahead of the take (TryTakePackedLanding), so the frame thread writes no mesh word; the job's recording gathers them
+// from it into the region (GpuRegion.TryOweGather) in its slot's copy (MeshLandingSlot), after any move the region owes.
 //
 // Invariant: a mesh leaves m_meshesOwed, and so may be named by a staged draw record, only once every word of it at its
 // current placement has been copied by a completed submission: CompleteLanding, on the fence the service observed, or
-// the frame upload that writes a moved mesh together with the records naming it. StageMeshDraw is the one place a row
+// the recorded copy that moves or writes a moved mesh together with the records naming it (MoveMesh), which is
+// submitted before any submission that reads those records. StageMeshDraw is the one place a row
 // is staged live or absent according to MeshStands. A plan that relocates the arena, moves
 // a mesh, or forgets a placement drops that mesh's progress, so a job taken for its old words records none of them, and
 // one already in flight completes into a progress no longer kept (LandingProgress identity) and lands nothing; its
@@ -309,7 +311,9 @@ public sealed partial class SdfWorldTables {
             var take = Math.Min(val1: (progress.Words - progress.Taken), val2: (budget - taken));
 
             if (take > 0) {
-                (job ??= new LandingJob()).Slices.Add(item: new LandingSlice(Mesh: mesh, Progress: progress, Word: progress.Taken, Count: take));
+                // The job's words are packed one slice after another, each from the word the slices before it end at.
+                (job ??= new LandingJob()).Slices.Add(item: new LandingSlice(Mesh: mesh, Progress: progress, Word: progress.Taken, Count: take,
+                    Source: taken, Placement: m_meshArena.Placements[mesh]));
                 progress.Taken += take;
                 taken += take;
             }
@@ -317,36 +321,148 @@ public sealed partial class SdfWorldTables {
         }
         if (waiting >= 0) { cursor = Math.Min(val1: cursor, val2: waiting); }
     }
-    // Owes each slice's words at its mesh's current placement and records their copy into the job's slot of the region.
-    // A slice whose progress a plan dropped since the take owes nothing: its mesh was moved or forgotten, and the words
-    // it was taken for may be another mesh's.
+    // Records a packed job's copy into the job's slot of the region: each slice whose words still belong where they were
+    // packed for is gathered from the job's buffer (GpuRegion.TryOweGather), after any move the region owes and before its
+    // staged words, in one recording of the region. A slice whose progress a plan dropped since the take, or whose mesh no
+    // longer lies where its words were packed for, owes nothing: its mesh was moved or forgotten, and the words it was
+    // taken for may be another mesh's.
     private void RecordLanding(LandingJob job, in SdfGpuWorkRecording recording) {
         if (!ReferenceEquals(objA: recording.Queue, objB: m_deviceContext.Services.QueueSubmitter)) {
             throw new InvalidOperationException(message: "Mesh landing must submit on the tables' frame queue; row reuse requires its order.");
         }
+
+        var words = 0;
+
         for (var index = 0; (index < job.Slices.Count); index++) {
             var slice = job.Slices[index];
 
             if (!m_landing.TryGetValue(key: slice.Mesh, value: out var progress) || !ReferenceEquals(objA: progress, objB: slice.Progress) ||
-                !m_meshArena.Placements.TryGetValue(key: slice.Mesh, value: out var placement) || (progress.Pages is not { IsCurrent: true })) { continue; }
+                !m_meshArena.Placements.TryGetValue(key: slice.Mesh, value: out var placement) || (placement.VertexWord != slice.Placement.VertexWord) ||
+                (progress.Pages is not { IsCurrent: true }) || !job.PackedSlices[index]) { continue; }
+            if (!m_meshRegion.TryOweGather(destinationOffset: ((((long)placement.VertexWord) + slice.Word) * sizeof(uint)), source: job.Buffer!,
+                sourceWord: slice.Source, words: slice.Count)) { continue; }
             job.Slices[index] = slice with { Recorded = true };
-
-            m_meshRegion.OweSourced(
-                length: (((long)slice.Count) * sizeof(uint)),
-                offset: ((((long)placement.VertexWord) + slice.Word) * sizeof(uint))
-            );
+            words += slice.Count;
         }
         recording.CopyRegion(readers: RegionReaders, region: m_meshRegion, regionSlot: MeshLandingSlot(backgroundSlot: recording.Slot));
-        // A mesh sliced over several jobs is written into the scratch once (MeshWordsOf); the scratch lets go of it once
-        // its last slice is staged.
-        if ((job.Slices[^1] is var last) && ((last.Word + last.Count) == last.Progress.Words)) { m_meshWordsMesh = null; }
 
-        var bytes = (((long)job.Words) * sizeof(uint));
+        var bytes = (((long)words) * sizeof(uint));
 
-        m_meshWordsWritten += job.Words;
+        m_meshWordsWritten += words;
         m_landingJobs++;
         m_landingBytes += bytes;
         m_landingMostBytes = Math.Max(val1: m_landingMostBytes, val2: bytes);
+    }
+    // Takes the job a worker packed when it is ready and fits what the service allows now, and starts packing the next,
+    // so one job packs while the one before it is recorded and copied. While a job packs, or none is owed, it hands over
+    // none. A ready job priced past what is left while work is queued waits, its price held (estimatedSeconds).
+    private bool TryTakePackedLanding(int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out LandingJob? job, out double estimatedSeconds) {
+        job = null;
+        estimatedSeconds = 0d;
+        if (m_landingPacking is { } packing) {
+            if (!packing.Pack!.IsCompleted) { return false; }
+
+            var bytes = (((long)packing.Words) * sizeof(uint));
+            var price = SdfGpuWork.UploadSecondsOf(bytes: bytes);
+
+            // The job was cut to the upload bytes its packing began under; the budget's credit carries what it takes past
+            // what is allowed now.
+            if (allowance.Queued && !allowance.Admits(seconds: price)) {
+                estimatedSeconds = price;
+                return false;
+            }
+            m_landingPacking = null;
+            ReleasePackClaims(job: packing);
+            // A packer that faulted lands nothing, and its meshes' words are taken again; the fault reaches the service.
+            if (packing.Pack.Exception is { } fault) {
+                AbandonLanding(job: packing);
+                ReturnLandingBuffer(buffer: packing.Buffer, used: false);
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(source: fault.GetBaseException());
+            }
+            job = packing;
+            estimatedSeconds = price;
+            StartPackingLanding(uploadBytes: uploadBytes);
+            return true;
+        }
+        StartPackingLanding(uploadBytes: uploadBytes);
+        return false;
+    }
+    // Takes the next owed words in landing order and hands them to a worker that packs them into a host-visible buffer of
+    // the landing's own, from the meshes' own arrays. Each slice's mesh is claimed until the packing ends, so its storage
+    // stays while the worker reads it; a mesh whose storage was already released lands nothing and is taken again.
+    private void StartPackingLanding(int uploadBytes) {
+        if ((m_landingPacking is not null) || m_disposed) { return; }
+        if (!TryTakeLanding(job: out var job, uploadBytes: uploadBytes)) {
+            // A landing with nothing owed keeps no packed buffer: the region holds no word it could land.
+            if (m_meshesOwed.Count == 0) { while (m_landingFree.TryPop(result: out var free)) { _ = m_landingBuffers.Remove(item: free); free.Dispose(); } }
+            return;
+        }
+
+        job.PackedSlices = new bool[job.Slices.Count];
+        for (var index = 0; (index < job.Slices.Count); index++) {
+            var mesh = job.Slices[index].Mesh;
+
+            if (job.Claimed.Contains(item: mesh)) { job.PackedSlices[index] = true; continue; }
+            if (!mesh.TryAcquire(cached: false)) { ForgetLanding(mesh: mesh); continue; }
+            _ = job.Claimed.Add(item: mesh);
+            job.PackedSlices[index] = true;
+        }
+        job.Buffer = TakeLandingBuffer(bytes: (((ulong)job.Words) * sizeof(uint)));
+        job.Packer = m_landingPacker;
+        job.Wake = m_gpuWork;
+        m_landingPacking = job;
+        job.Pack = Task.Run(action: job.PackWords);
+    }
+    // Lets go of the claims a packing job held on its meshes, on the frame thread, once the worker has finished.
+    private static void ReleasePackClaims(LandingJob job) {
+        foreach (var mesh in job.Claimed) { mesh.Release(cached: false); }
+        job.Claimed.Clear();
+    }
+    // The landing's packed buffers: the free ones, and every one it holds, which its dispose releases once no job reads
+    // them. A buffer comes back free only when the job that read it has completed.
+    private readonly Stack<IGpuStorageBuffer> m_landingFree = new();
+    private readonly List<IGpuStorageBuffer> m_landingBuffers = [];
+    private readonly MeshWords m_landingPacker = new();
+    private LandingJob? m_landingPacking;
+    // The most free packed buffers the landing keeps between jobs.
+    private const int LandingFreeBuffers = 2;
+
+    private IGpuStorageBuffer TakeLandingBuffer(ulong bytes) {
+        var size = Math.Max(val1: bytes, val2: (ulong)SdfGpuWork.MostUploadJobBytes);
+
+        while (m_landingFree.TryPop(result: out var free)) {
+            if (free.SizeBytes >= size) { return free; }
+            _ = m_landingBuffers.Remove(item: free);
+            free.Dispose();
+        }
+
+        var buffer = m_gpu.BufferFactory.CreateHostVisible(name: NameOf("mesh-landing"), sizeBytes: size, usage: GpuBufferUsage.Storage);
+
+        m_landingBuffers.Add(item: buffer);
+        return buffer;
+    }
+    // Returns a job's packed buffer: free again once its copy has completed (used, the job answered) or was never
+    // recorded; one a submission may still read waits for the device's timeline behind the tables' retirement.
+    private void ReturnLandingBuffer(IGpuStorageBuffer? buffer, bool used, bool retire = false) {
+        if (buffer is null) { return; }
+        if (retire || (m_landingFree.Count >= LandingFreeBuffers)) {
+            _ = m_landingBuffers.Remove(item: buffer);
+            if (retire && used) { Retire(replaced: buffer); } else { buffer.Dispose(); }
+            return;
+        }
+        m_landingFree.Push(item: buffer);
+    }
+    // Waits the worker packing a job, if any, and releases what the landing holds: called as the service disposes its
+    // clients, after every job in flight has been waited and handed back, so no submission reads a buffer.
+    private void DisposeLanding() {
+        if (m_landingPacking is { } packing) {
+            try { packing.Pack?.Wait(); } catch (AggregateException) { }
+            ReleasePackClaims(job: packing);
+            m_landingPacking = null;
+        }
+        foreach (var buffer in m_landingBuffers) { buffer.Dispose(); }
+        m_landingBuffers.Clear();
+        m_landingFree.Clear();
     }
     // Lands each slice whose progress is still the mesh's: a mesh all of whose words have completed leaves the owed set,
     // and the next staging names its draws. A mesh the staged list does not name (one named ahead) held no draw out,
@@ -493,15 +609,46 @@ public sealed partial class SdfWorldTables {
         public int Taken { get; set; }
         public int Words { get; } = words;
     }
-    private readonly record struct LandingSlice(SdfMesh Mesh, LandingProgress Progress, int Word, int Count) {
+    // A slice of one mesh's words: from its word Word, Count words, packed into its job's buffer from word Source, for the
+    // placement the mesh held when it was taken.
+    private readonly record struct LandingSlice(SdfMesh Mesh, LandingProgress Progress, int Word, int Count, int Source, SdfMeshRegionMesh Placement) {
         public bool Recorded { get; init; }
     }
+    // A landing job: its slices and words, the buffer a worker packs them into and the packing, the meshes it claims while
+    // the worker reads them, and which slices were packed.
+    //
+    // Invariant: the worker owns the buffer and the scratch it packs through (Packer) from the start of the packing until
+    // the packing completes, and reads only the slices and the claimed meshes; the frame thread touches the job again only
+    // once Pack has completed (TryTakePackedLanding), and the buffer is free again only once the copy that reads it has
+    // completed (Complete), or was never recorded.
     private sealed class LandingJob {
         public List<LandingSlice> Slices { get; } = [];
         public int Words { get; set; }
+        public HashSet<SdfMesh> Claimed { get; } = new(comparer: ReferenceEqualityComparer.Instance);
+        public bool[] PackedSlices { get; set; } = [];
+        public IGpuStorageBuffer? Buffer { get; set; }
+        public Task? Pack { get; set; }
+        public MeshWords? Packer { get; set; }
+        public SdfGpuWork? Wake { get; set; }
+
+        // Packs each claimed slice's words into the buffer from its source word, then wakes the work so the job is taken.
+        public void PackWords() {
+            try {
+                for (var index = 0; (index < Slices.Count); index++) {
+                    if (!PackedSlices[index]) { continue; }
+
+                    var slice = Slices[index];
+                    var words = Packer!.Of(mesh: slice.Mesh, placement: slice.Placement);
+
+                    Buffer!.Write<uint>(data: words.Slice(start: slice.Word, length: slice.Count), destinationOffsetBytes: (((ulong)slice.Source) * sizeof(uint)));
+                }
+            } finally {
+                Wake?.Wake();
+            }
+        }
     }
     // The background GPU work's client that lands the mesh region's owed words; the tables own its state, and every call
-    // runs on the frame thread.
+    // runs on the frame thread. Its jobs' words are packed on a worker ahead of the take (TryTakePackedLanding).
     private sealed class MeshLanding(SdfWorldTables tables) : ISdfGpuWorkClient {
         public GpuQueueCategory Category => GpuQueueCategory.Upload;
         public GpuMemoryBytes OwnedBytes => default;
@@ -519,13 +666,11 @@ public sealed partial class SdfWorldTables {
                 }
                 uploadBytes = ((int)Math.Max(val1: SdfGpuWork.UploadChunkBytes, val2: Math.Min(val1: (allowance.Seconds * SdfGpuWork.UploadCopyBytesPerSecond), val2: uploadBytes)));
             }
-            if (current.TryTakeLanding(job: out var landing, uploadBytes: uploadBytes)) {
+            if (current.TryTakePackedLanding(allowance: allowance, estimatedSeconds: out estimatedSeconds, job: out var landing, uploadBytes: uploadBytes)) {
                 job = landing;
-                estimatedSeconds = SdfGpuWork.UploadSecondsOf(bytes: (((long)landing.Words) * sizeof(uint)));
                 return true;
             }
             job = null;
-            estimatedSeconds = 0d;
             return false;
         }
         // While a staged draw waits for its mesh (DrawsAwaitMeshes) the landing fills a hole the frame shows, so it is
@@ -537,10 +682,14 @@ public sealed partial class SdfWorldTables {
         public void Complete(object job, SdfGpuWorkReadback readback) {
             readback.Release();
             tables.CompleteLanding(job: ((LandingJob)job));
+            tables.ReturnLandingBuffer(buffer: ((LandingJob)job).Buffer, used: true);
         }
+        // A job handed back may have been submitted, so its buffer waits for the device's timeline.
         public void Abandon(object job) {
-            if (!tables.m_disposed) { tables.AbandonLanding(job: ((LandingJob)job)); }
+            if (tables.m_disposed) { return; }
+            tables.AbandonLanding(job: ((LandingJob)job));
+            tables.ReturnLandingBuffer(buffer: ((LandingJob)job).Buffer, retire: true, used: true);
         }
-        public void Dispose() { }
+        public void Dispose() => tables.DisposeLanding();
     }
 }

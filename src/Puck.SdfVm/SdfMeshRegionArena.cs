@@ -21,12 +21,16 @@ namespace Puck.SdfVm;
 /// move: each one the list names is placed again (<see cref="Moved"/>), and the rest are forgotten. A body straddling a
 /// door draws twice, so a list can outgrow the reserve wherever a body stands; growing it once moves a mesh or two,
 /// never every mesh the region holds.</para>
-/// <para>A plan relocates every mesh a list names, packing the arena from the reserve's end in the list's order and
-/// forgetting every other mesh, only on the first plan, or when a named mesh finds no free run although the named meshes
-/// packed would fit the limit, or when the free words under the last placed mesh pass both <see cref="PackedShare"/>
-/// times the named meshes' words and the retained slack. The plan states what it owes: <see cref="Relocated"/>, or the
-/// meshes it placed (<see cref="Placed"/>), of which the <see cref="Moved"/> ones held words a draw read until this
-/// plan.</para>
+/// <para>A plan compacts the arena, moving only the meshes it must, when a named mesh finds no free run although the
+/// named meshes packed would fit the limit, and, where free words cost device memory (<see cref="FreeWordsCost"/>), when
+/// the free words under the last placed mesh pass both <see cref="PackedShare"/> times the named meshes' words and the
+/// retained slack (<see cref="Compact"/>): the highest placed meshes each take the lowest free run below where they lie,
+/// at most <see cref="MostCompactionWords"/> a plan, until the meshes it refused fit. A moved mesh keeps its words where
+/// they were until the region has copied them (<see cref="MovedFrom"/>, <see cref="ReleaseMoveSources"/>). A plan relocates
+/// every mesh a list names, packing the arena from the reserve's end in the list's order and forgetting every other mesh,
+/// only on the first plan, when forced, or when a compaction can move no mesh at all although the named meshes packed
+/// would fit. The plan states what it owes: <see cref="Relocated"/>, or the meshes it placed (<see cref="Placed"/>) and
+/// those it moved (<see cref="Moved"/>), which held words a draw read until this plan.</para>
 /// <para>A mesh the draws are about to name is named ahead of them (<see cref="PlanAhead"/>): it is placed and kept
 /// like a mesh a draw names, so its words can land while the draws still read the mesh it replaces, and a list that
 /// then names it finds it where it lies. One no free run holds is refused ahead (<see cref="AheadRefused"/>), which
@@ -36,12 +40,15 @@ public sealed class SdfMeshRegionArena : IDisposable {
     /// <summary>The fewest draw records the region reserves.</summary>
     public const int MinimumDrawCapacity = 256;
     /// <summary>The multiple of the named meshes' words the free words under the last placed mesh may reach before a
-    /// plan packs the arena, where they also pass the retained slack.</summary>
+    /// plan compacts an arena whose free words cost device memory, where they also pass the retained slack.</summary>
     public const int PackedShare = 3;
     /// <summary>The words outside the named meshes (meshes no list names any more) the arena keeps before a plan forgets
     /// them: 32 MB, so a body crossing between worlds finds its meshes where it left them rather than writing them
     /// again.</summary>
     public const int RetainedSlackWords = (1 << 23);
+    /// <summary>The most words one plan's compaction moves (<see cref="Compact"/>): 32 MB, a copy of a fraction of a
+    /// millisecond on the GPU; a compaction needing more goes on at the next plan.</summary>
+    public const int MostCompactionWords = (1 << 23);
 
     private readonly Dictionary<SdfMesh, SdfMeshRegionMesh> m_placements = new(comparer: ReferenceEqualityComparer.Instance);
     // Each mesh the latest list's draws name, with how many of its rows name it.
@@ -53,6 +60,14 @@ public sealed class SdfMeshRegionArena : IDisposable {
     private readonly HashSet<SdfMesh> m_ahead = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly HashSet<SdfMesh> m_aheadRefused = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<SdfMesh> m_scratch = [];
+    // Each mesh the latest plan moved, with the placement it held until then.
+    private readonly Dictionary<SdfMesh, SdfMeshRegionMesh> m_movedFrom = new(comparer: ReferenceEqualityComparer.Instance);
+    // The words moved meshes left, counted in their chunks until the region has copied them (ReleaseMoveSources), so a
+    // mapped region keeps them backed for the copy that reads them.
+    private readonly List<(long Word, long Words)> m_moveSources = [];
+    // The placed meshes from the highest down, listed afresh for each compaction, and the ranges it vacated.
+    private readonly List<(int Word, SdfMesh Mesh)> m_compactOrder = [];
+    private readonly List<ulong> m_vacated = [];
 
     private readonly int m_retainedSlackWords;
     // The region's words up to the limit: the reserve is the range at zero, and each placed mesh a range of its own.
@@ -69,6 +84,9 @@ public sealed class SdfMeshRegionArena : IDisposable {
     // Whether a trim forgot a mesh since the latest full plan, so a list naming a refused mesh is planned again.
     private bool m_trimmed;
     private bool m_forceRelocation;
+    // One more for every placement given or taken back, and its value when a compaction last moved nothing.
+    private long m_placementChanges;
+    private long m_stuckAtChanges = -1L;
     private ulong? m_admissionBytes;
 
     /// <summary>Sets the diagnostic admission cap and requests a relocation so already placed meshes pass through
@@ -235,9 +253,10 @@ public sealed class SdfMeshRegionArena : IDisposable {
     /// <summary>Gets the meshes the latest plan placed, whose words it owes; every placed mesh when it
     /// <see cref="Relocated"/>.</summary>
     public IReadOnlyList<SdfMesh> Placed => m_placed;
-    /// <summary>Gets the meshes the latest plan moved out of the words a grown reserve took: the region drew them from
-    /// their old words until this plan, so it writes each one placed again before the draws read it rather than letting
-    /// it land over later frames. One no free run held is <see cref="Refused"/> instead of placed.</summary>
+    /// <summary>Gets the meshes the latest plan moved, out of the words a grown reserve took or by a compaction: the
+    /// region drew them from their old words until this plan (<see cref="MovedFrom"/>), so it copies or writes each one
+    /// placed again before the draws read it rather than letting it land over later frames. One no free run held is
+    /// <see cref="Refused"/> instead of placed.</summary>
     public IReadOnlySet<SdfMesh> Moved => m_moved;
     /// <summary>Gets the meshes the latest plan forgot without relocating: placed until this plan, named by no list, and
     /// their words free for the next mesh they hold. Empty when the plan <see cref="Relocated"/>, which forgets every
@@ -253,6 +272,32 @@ public sealed class SdfMeshRegionArena : IDisposable {
     public long Relocations { get; private set; }
     /// <summary>Gets why the latest relocating plan relocated, or <see langword="null"/> before the first.</summary>
     public string? RelocationReason { get; private set; }
+    /// <summary>Gets how many plans compacted the arena (<see cref="Compact"/>).</summary>
+    public long Compactions { get; private set; }
+    /// <summary>Gets how many meshes compactions moved, over the arena's life.</summary>
+    public long CompactionMoves { get; private set; }
+    /// <summary>Gets how many words compactions moved, over the arena's life.</summary>
+    public long CompactionWords { get; private set; }
+    /// <summary>Gets or sets whether the arena's free words below its last placed mesh cost device memory, as an unmapped
+    /// region's do, so a plan compacts the arena once they pass the packed share; a mapped region gives a free chunk back
+    /// wherever it lies, and never compacts for its free words alone. True until set.</summary>
+    public bool FreeWordsCost { get; set; } = true;
+    /// <summary>Gets whether words moved meshes left are still counted as held (<see cref="ReleaseMoveSources"/>): no plan
+    /// compacts again until they are released.</summary>
+    public bool HoldsMoveSources => (m_moveSources.Count > 0);
+
+    /// <summary>Returns the placement a mesh the latest plan moved held until it (<see cref="Moved"/>): the words it was
+    /// read from by every draw and copy recorded before the plan.</summary>
+    /// <param name="mesh">The mesh.</param>
+    /// <param name="placement">The placement it left.</param>
+    /// <returns><see langword="false"/> when the latest plan did not move it.</returns>
+    public bool MovedFrom(SdfMesh mesh, out SdfMeshRegionMesh placement) => m_movedFrom.TryGetValue(key: mesh, value: out placement);
+    /// <summary>Stops counting the words moved meshes left as held, once the region has recorded and submitted every copy
+    /// that reads them, so a mapped region's next fit may give their chunks back.</summary>
+    public void ReleaseMoveSources() {
+        foreach (var (word, words) in m_moveSources) { CountChunks(count: -1, word: word, words: words); }
+        m_moveSources.Clear();
+    }
     /// <summary>Gets whether the latest plan's list named the meshes the plan before it named, in the same order, so every
     /// placement and the reserve stand as they were and only the draws' own values can have moved.</summary>
     public bool Unchanged { get; private set; }
@@ -274,7 +319,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
     internal void BeginRows(int extent) {
         m_namesChanged = 0;
         ArgumentOutOfRangeException.ThrowIfGreaterThan(extent, SdfMeshRegion.MaxDraws);
-        m_placed.Clear(); m_moved.Clear(); m_forgotten.Clear(); m_toPlace.Clear();
+        m_placed.Clear(); m_moved.Clear(); m_movedFrom.Clear(); m_forgotten.Clear(); m_toPlace.Clear();
         Relocated = false; Unchanged = true;
         m_firstRows = ((m_drawCapacity == 0) && (extent > 0));
         ArrayCapacity.EnsureLength(ref m_latestMeshes, extent);
@@ -320,12 +365,23 @@ public sealed class SdfMeshRegionArena : IDisposable {
             if (TryPlace(mesh: mesh)) { m_refused.Remove(item: mesh); } else { m_refused.Add(item: mesh); }
         }
         var reserveWords = (((long)m_drawCapacity) * SdfMeshRecord.DrawWords);
-        var free = ((Words - reserveWords) - m_placedWords);
-        var relocate = (m_forceRelocation || ((m_refused.Count > 0) && ((reserveWords + NamedWords) <= LimitWords) && !Unchanged) ||
-            ((free > (PackedShare * NamedWords)) && (free > m_retainedSlackWords)));
+        var packedFits = ((m_refused.Count > 0) && ((reserveWords + NamedWords) <= LimitWords) && !Unchanged);
+        var relocate = m_forceRelocation;
 
+        // Compaction waits for the copies of the moves before it, whose words a new move must not take.
+        // One that moved nothing is not tried again until a placement changes.
+        if (!relocate && !m_firstRows && !HoldsMoveSources && (m_placementChanges != m_stuckAtChanges) &&
+            (packedFits || (FreeWordsCost && Sparse(reserveWords: reserveWords)))) {
+            if (Compact(fitRefused: packedFits)) {
+                Unchanged = false;
+            } else {
+                m_stuckAtChanges = m_placementChanges;
+                // A compaction that can move nothing while a named mesh still waits for room packs the arena.
+                relocate = (packedFits && (m_refused.Count > 0));
+            }
+        }
         if (relocate) {
-            RelocationReason = (m_forceRelocation ? "forced relocation" : ((m_refused.Count > 0) ? "named meshes fit packed" : "free words exceed packed share"));
+            RelocationReason = (m_forceRelocation ? "forced relocation" : "compaction stuck");
             m_forceRelocation = false;
             Pack();
         } else if (m_firstRows) { RelocationReason = "first plan"; }
@@ -340,6 +396,104 @@ public sealed class SdfMeshRegionArena : IDisposable {
         NameRow(index: index, mesh: mesh);
     }
 
+    // Whether the free words under the last placed mesh pass both the packed share of the named meshes' words and the
+    // retained slack.
+    private bool Sparse(long reserveWords) {
+        var free = ((Words - reserveWords) - m_placedWords);
+
+        return ((free > (PackedShare * NamedWords)) && (free > m_retainedSlackWords));
+    }
+    /// <summary>Compacts the arena by moving the fewest meshes it can: from the highest placed mesh down, each takes the
+    /// lowest free run that ends at or below where it begins, until the meshes the plan refused fit (with
+    /// <paramref name="fitRefused"/>) or the arena is no longer sparse, at most <see cref="MostCompactionWords"/> words and
+    /// one dispatch's moves (<see cref="GpuRegion.MaxMoves"/>) a plan. A mesh no lower run holds stays where it lies.
+    /// <para>Invariant: no move's new words overlap the words any move of the same plan, or of a plan whose copies the
+    /// region has not recorded, left (<see cref="HoldsMoveSources"/> keeps a plan from compacting until they are
+    /// released), so the region's moves read no word another of them writes. The words a move left are free to a mesh
+    /// placed afterwards, which lands only through copies recorded after the move.</para></summary>
+    /// <param name="fitRefused">Whether the compaction makes room for the refused named meshes, which it then places;
+    /// otherwise it lowers the last placed mesh while the arena is sparse.</param>
+    /// <returns>Whether it moved or placed a mesh.</returns>
+    private bool Compact(bool fitRefused) {
+        var need = 0L;
+
+        if (fitRefused) { foreach (var mesh in m_refused) { need += Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh)); } }
+        m_compactOrder.Clear();
+        foreach (var (mesh, placement) in m_placements) { m_compactOrder.Add(item: (placement.VertexWord, mesh)); }
+        m_compactOrder.Sort(comparison: static (left, right) => right.Word.CompareTo(value: left.Word));
+
+        var reserveWords = (((long)m_drawCapacity) * SdfMeshRecord.DrawWords);
+        var movedWords = 0L;
+        // The highest word a placement the compaction left standing or gave a lower run ends at.
+        var highest = 0L;
+
+        m_vacated.Clear();
+        for (var index = 0; (index < m_compactOrder.Count); index++) {
+            var (word, mesh) = m_compactOrder[index];
+            var words = Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh));
+            var below = ((index + 1) < m_compactOrder.Count) ? (((long)m_compactOrder[index + 1].Word) + Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: m_compactOrder[index + 1].Mesh))) : reserveWords;
+            var end = Math.Max(val1: highest, val2: below);
+            // The words under the highest placement left standing, were this mesh to stay where it lies.
+            var standing = Math.Max(val1: end, val2: (((long)word) + words));
+            var done = (fitRefused
+                ? ((LimitWords - standing) >= need)
+                : (((standing - reserveWords) - m_placedWords) <= Math.Max(val1: (PackedShare * NamedWords), val2: m_retainedSlackWords)));
+
+            if (done || (m_vacated.Count >= (GpuRegion.MaxMoves - 1)) || ((movedWords + words) > MostCompactionWords)) {
+                highest = Math.Max(val1: highest, val2: (word + words));
+                break;
+            }
+            if (!m_ranges.TryAllocate(count: ((ulong)words), start: out var start)) {
+                highest = Math.Max(val1: highest, val2: (word + words));
+                continue;
+            }
+            if ((((long)start) + words) > word) {
+                _ = m_ranges.Free(start: start);
+                highest = Math.Max(val1: highest, val2: (word + words));
+                continue;
+            }
+
+            var from = m_placements[mesh];
+
+            m_movedFrom[mesh] = from;
+            _ = m_moved.Add(item: mesh);
+            m_placements[mesh] = PlacementAt(mesh: mesh, vertexWord: ((int)start));
+            CountChunks(count: 1, word: ((long)start), words: words);
+            m_moveSources.Add(item: (word, words));
+            m_vacated.Add(item: ((ulong)word));
+            m_placementChanges++;
+            movedWords += words;
+            highest = Math.Max(val1: highest, val2: (((long)start) + words));
+        }
+        // The words the moves left are free once every move has taken its new words.
+        foreach (var start in m_vacated) { _ = m_ranges.Free(start: start); }
+
+        var placed = 0;
+
+        if (fitRefused) {
+            m_scratch.Clear();
+            m_scratch.AddRange(collection: m_refused);
+            foreach (var mesh in m_scratch) {
+                if (TryPlace(mesh: mesh)) { _ = m_refused.Remove(item: mesh); placed++; }
+            }
+            m_scratch.Clear();
+        }
+        if ((m_vacated.Count == 0) && (placed == 0)) { return false; }
+        Compactions++;
+        CompactionMoves += m_vacated.Count;
+        CompactionWords += movedWords;
+        m_vacated.Clear();
+
+        return true;
+    }
+    // A placement of a mesh's words from a first word: its vertices, triangle materials, indices and skin, in that order.
+    private static SdfMeshRegionMesh PlacementAt(SdfMesh mesh, int vertexWord) {
+        var materialWord = (vertexWord + (mesh.Positions.Length * SdfMeshRecord.VertexWords));
+        var indexWord = (materialWord + SdfMeshRegion.MaterialWordsOf(mesh: mesh));
+        var skinWord = (mesh.VertexMembers.IsEmpty ? 0 : (indexWord + SdfMeshRegion.IndexWordsOf(mesh: mesh)));
+
+        return new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord, SkinWord: skinWord);
+    }
     private void RefreshUnused(SdfMesh mesh) {
         if (m_placements.ContainsKey(key: mesh) && !Names(mesh: mesh)) {
             if (m_unused.Add(item: mesh)) { m_unusedWords += SdfMeshRegion.WordsOf(mesh: mesh); }
@@ -413,12 +567,10 @@ public sealed class SdfMeshRegionArena : IDisposable {
         }
 
         var vertexWord = ((int)start);
-        var materialWord = (vertexWord + (mesh.Positions.Length * SdfMeshRecord.VertexWords));
-        var indexWord = (materialWord + SdfMeshRegion.MaterialWordsOf(mesh: mesh));
-        var skinWord = (mesh.VertexMembers.IsEmpty ? 0 : (indexWord + SdfMeshRegion.IndexWordsOf(mesh: mesh)));
 
-        m_placements.Add(key: mesh, value: new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord, SkinWord: skinWord));
+        m_placements.Add(key: mesh, value: PlacementAt(mesh: mesh, vertexWord: vertexWord));
         m_placed.Add(item: mesh);
+        m_placementChanges++;
         m_placedWords += SdfMeshRegion.WordsOf(mesh: mesh);
         CountChunks(count: 1, word: vertexWord, words: SdfMeshRegion.WordsOf(mesh: mesh));
         RefreshUnused(mesh: mesh);
@@ -428,6 +580,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
     // Frees a placed mesh's words and lets its placement claim go; its words.
     private long Forget(SdfMesh mesh) {
         _ = m_placements.Remove(key: mesh, value: out var placement);
+        m_placementChanges++;
         m_placedWords -= SdfMeshRegion.WordsOf(mesh: mesh);
         CountChunks(count: -1, word: placement.VertexWord, words: SdfMeshRegion.WordsOf(mesh: mesh));
         RefreshUnused(mesh: mesh);
@@ -458,6 +611,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         m_scratch.Clear();
         m_forgotten.Clear();
         m_moved.Clear();
+        m_movedFrom.Clear();
         m_placed.Clear();
         m_refused.Clear();
         for (var row = 0; (row < m_latestMeshCount); row++) {
@@ -491,9 +645,16 @@ public sealed class SdfMeshRegionArena : IDisposable {
             if (placement.VertexWord < reserveEnd) { m_scratch.Add(item: mesh); }
         }
         foreach (var mesh in m_scratch) {
+            var from = m_placements[mesh];
+
             _ = Forget(mesh: mesh);
             if (Names(mesh: mesh)) {
+                var words = Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh));
+
                 _ = m_moved.Add(item: mesh);
+                m_movedFrom[mesh] = from;
+                CountChunks(count: 1, word: from.VertexWord, words: words);
+                m_moveSources.Add(item: (from.VertexWord, words));
             } else {
                 m_forgotten.Add(item: mesh);
             }

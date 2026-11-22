@@ -916,8 +916,11 @@ public sealed class MemoryAccount {
             var pool = segment.Pool;
             var entry = (((payer is not null) && m_families.TryGetValue(key: (pool, GpuObjectName.MemoryOwnerOf(family: payer)), value: out var found)) ? found : null);
             // What the payer's reservation already promised is not promised again, and is drawn from it here, under
-            // the lock, so no other grant is given the same credit.
-            var credit = Math.Min(val1: payerBytes, val2: (entry?.Promise ?? 0L));
+            // the lock, so no other grant is given the same credit. The credit covers the whole allocation the promise
+            // reaches, not only the resource that prompted it: a shared block placed for one resource holds the room the
+            // payer's next resources take (a mapped region's next chunks), so the block's room stands once, in the
+            // block, and the pool never counts it both as held and as the payer's promise.
+            var credit = Math.Min(val1: bytes, val2: (entry?.Promise ?? 0L));
             var net = (bytes - credit);
             var state = m_pools[((int)pool)];
             var segmentState = (m_segments.TryGetValue(key: (backend, segment.Index, pool), value: out var known) ? known : null);

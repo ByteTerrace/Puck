@@ -73,6 +73,9 @@ jobs:
       # The engine ships no world: the worlds directory is compiled beside it, the debug world's package and every
       # package it imports (worlds/standard, worlds/games) in their authored layout, documents, compiled worlds and shader package
       # store included, so the published World boots the debug world compiling nothing.
+      # The native AGB BIOS and the Rust addon guests, prewarmed into the published World's derived store.
+      - name: Prewarm the published World's derived products
+        run: dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll prewarm --output artifacts/world
       - name: Compile the worlds directory into the published World
         run: dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll compile --tree worlds --output artifacts/world/worlds
       - name: Verify the published World host

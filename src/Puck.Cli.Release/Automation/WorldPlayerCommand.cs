@@ -75,11 +75,12 @@ public static class WorldPlayerCommand {
 
         command.Detail(detail: """
             Steps, in order: build Puck.World in Release (SPIR-V included) under the build lease and publish it
-            self-contained for this machine's runtime as one composite ReadyToRun image, which runs its player prewarm (the AGB BIOS and every Rust guest
-            into derived/; needs clang, ld.lld and Rust with wasm32-unknown-unknown); publish the stub and the installer
+            self-contained for this machine's runtime as one composite ReadyToRun image; publish the stub and the installer
             (Puck.Launcher.Setup) self-contained into launcher/; publish each --extension into extensions/<name>/; compile
             the package's parent directory into worlds/ (documents, compiled worlds and the shader package store); compose
-            the package's worlds and export their specialized shading kernels into derived/; then boot the published engine
+            the package's worlds, export their specialized shading kernels into derived/ and prewarm the AGB BIOS and the
+            Rust guests they reference there (needs clang, ld.lld and Rust with wasm32-unknown-unknown when a world
+            references them); then boot the published engine
             windowed with --cache-dir cache, once per backend with --mesh-cache ladder (the fill) and then once per backend
             and --target with --mesh-cache stored on the target's device profile (the check). Every boot waits for its
             bakes to settle where it spawns and at each spawn point the world's documents author, posing the first body
@@ -175,6 +176,7 @@ public static class WorldPlayerCommand {
             var composed = WorldPrepareCommand.Compose(primary: entry);
 
             WorldPrepareCommand.PrepareShading(output: output, sets: composed.ShadeSets);
+            PlayerDerivedProducts.Prepare(output: output, agbBios: composed.Needs.AgbBios, guests: [.. composed.Needs.Guests]);
             PrepareCartridges(cache: Path.Combine(path1: output, path2: CacheName, path3: "derived"), composed: composed);
 
             var world = Path.Combine(path1: output, path2: "worlds", path3: Path.GetFileName(path: Path.TrimEndingDirectorySeparator(path: package)));
@@ -249,8 +251,7 @@ public static class WorldPlayerCommand {
     // One Release publish with the World's own self-contained switch (PuckSelfContained, see Puck.World.csproj): a global
     // SelfContained or RuntimeIdentifier would flow into every referenced project's locked restore. The ReadyToRun image is
     // composite: the framework and Puck share one version bubble, so the precompiler reaches the generic instantiations
-    // over framework types that a per-assembly image leaves to the JIT (the World README holds the counts). Puck.World's
-    // own publish target runs the player prewarm into derived/.
+    // over framework types that a per-assembly image leaves to the JIT (the World README holds the counts).
     private static void Publish(string repository, string output) {
         var project = Path.Combine(path1: repository, path2: "src/Puck.World/Puck.World.csproj");
 

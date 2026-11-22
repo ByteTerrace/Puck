@@ -307,6 +307,7 @@ public sealed partial class RenderGraphRuntime {
         // The root is shown as the display, at its own extent; every other instance is resampled by what reads it.
         node.ShownAtItsExtent = (index == m_root);
         node.UnreadFrames = m_unreadFrames[index];
+        node.TimingFrame = m_readFrame;
         // What the node commits for a deferred submission, and an export it writes, settle once the batch is flushed.
         node.DefersExportCompletion = true;
 

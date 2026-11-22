@@ -12,16 +12,8 @@ public readonly record struct GpuBufferCopyWork(uint Rows, uint Words, uint Requ
 /// buffers' readers and writers. This helper owns neither the pipeline nor the copied buffers and records no barriers.</summary>
 public sealed class GpuBufferStridedCopy : IDisposable {
     private const int RequestWords = (GpuRegion.CopyHeaderWords + (2 * GpuRegion.MaxCopyRuns));
-    private readonly IGpuBindings m_bindings;
-    private readonly IGpuRecorder m_recorder;
-    private readonly IGpuComputePipeline m_pipeline;
-    private readonly GpuRegionCopyPool m_pool;
-    private readonly IGpuStorageBuffer?[] m_requests;
-    private readonly IGpuBuffer?[] m_sources;
-    private readonly IGpuBuffer?[] m_destinations;
+    private readonly GpuCopyRequests m_requests;
     private readonly uint[] m_words = new uint[RequestWords];
-    private readonly int m_frameSlotCount;
-    private readonly int m_recordingCount;
     private bool m_disposed;
 
     /// <summary>Creates request buffers and reserves sets for every frame slot and independent recording.</summary>
@@ -40,44 +32,18 @@ public sealed class GpuBufferStridedCopy : IDisposable {
         ArgumentNullException.ThrowIfNull(pipeline);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frameSlotCount);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(recordingCount);
-        m_bindings = bindings;
-        m_recorder = recorder;
-        m_pipeline = pipeline;
-        m_frameSlotCount = frameSlotCount;
-        m_recordingCount = recordingCount;
-        var count = checked((frameSlotCount * recordingCount));
-
-        m_requests = new IGpuStorageBuffer?[count];
-        m_sources = new IGpuBuffer?[count];
-        m_destinations = new IGpuBuffer?[count];
         var names = new GpuObjectName[recordingCount];
 
         for (var recording = 0; recording < recordingCount; recording++) {
             names[recording] = (name.IsEmpty ? default : new GpuObjectName(owner: name.Owner!, part: name.Part!,
                 detail: string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{name.Detail ?? "copy"} request {recording}")));
         }
-        m_pool = new GpuRegionCopyPool(bindings: bindings, copyPipeline: pipeline, slotCount: frameSlotCount, name: name, regions: names);
-        try {
-            for (var recording = 0; recording < recordingCount; recording++) {
-                for (var slot = 0; slot < frameSlotCount; slot++) {
-                    m_requests[IndexOf(slot, recording)] = buffers.CreateHostVisible(name: names[recording].At(slot),
-                        sizeBytes: (RequestWords * sizeof(uint)), usage: GpuBufferUsage.Storage);
-                }
-            }
-        } catch {
-            Dispose();
-            throw;
-        }
+        m_requests = new GpuCopyRequests(bindings: bindings, buffers: buffers, name: in name, names: names, pipeline: pipeline, recorder: recorder,
+            requestWords: RequestWords, slotCount: frameSlotCount);
     }
 
     /// <summary>Gets the actual host-visible request allocations. The caller accounts its descriptors separately.</summary>
-    public GpuMemoryBytes OwnedBytes {
-        get {
-            var bytes = 0UL;
-            foreach (var request in m_requests) { bytes += (request?.SizeBytes ?? 0UL); }
-            return new GpuMemoryBytes(DeviceLocal: 0, HostVisible: bytes);
-        }
-    }
+    public GpuMemoryBytes OwnedBytes => new(DeviceLocal: 0, HostVisible: m_requests.RequestBytes);
 
     /// <summary>Returns the descriptors reserved by a recorder with these frame-slot and recording counts.</summary>
     /// <param name="frameSlotCount">The fenced frame slots; positive.</param>
@@ -111,7 +77,7 @@ public sealed class GpuBufferStridedCopy : IDisposable {
         ArgumentOutOfRangeException.ThrowIfZero(rowWords);
         ArgumentOutOfRangeException.ThrowIfLessThan(sourceStrideWords, rowWords);
         ArgumentOutOfRangeException.ThrowIfLessThan(destinationStrideWords, rowWords);
-        var index = IndexOf(slot, recording);
+        _ = m_requests.RequestOf(slot: slot, recording: recording);
         if ((rows.Count == 0) || (rowLimit == 0)) { return default; }
         if (source.BufferHandle == destination.BufferHandle) { throw new ArgumentException(message: "A strided copy requires distinct source and destination storage.", paramName: nameof(destination)); }
 
@@ -147,14 +113,8 @@ public sealed class GpuBufferStridedCopy : IDisposable {
         m_words[4] = rowWords;
         m_words[5] = sourceStrideWords;
         m_words[6] = destinationStrideWords;
-        var request = m_requests[index]!;
         var requestWords = (GpuRegion.CopyHeaderWords + (2 * runCount));
-        request.Write<uint>(data: m_words.AsSpan(0, requestWords));
-        var set = m_pool.Region(recording).SetOf(slot);
-        if (m_sources[index] is null) { Bind(set, GpuRegion.CopyRequestBinding, request, GpuBindingKind.ReadOnlyBuffer); }
-        if (!ReferenceEquals(m_sources[index], source)) { Bind(set, GpuRegion.CopySourceBinding, source, GpuBindingKind.ReadOnlyBuffer); m_sources[index] = source; }
-        if (!ReferenceEquals(m_destinations[index], destination)) { Bind(set, GpuRegion.CopyDestinationBinding, destination, GpuBindingKind.ReadWriteBuffer); m_destinations[index] = destination; }
-        GpuRegion.RecordCopyDispatch(recorder: m_recorder, commandBuffer: commandBuffer, pipeline: m_pipeline, set: set, words: copiedWords);
+        m_requests.Record(commandBuffer: commandBuffer, destination: destination, recording: recording, request: m_words.AsSpan(0, requestWords), slot: slot, source: source);
         return new GpuBufferCopyWork(Rows: copiedRows, Words: copiedWords, RequestBytes: checked((((uint)requestWords) * sizeof(uint))));
     }
 
@@ -164,25 +124,11 @@ public sealed class GpuBufferStridedCopy : IDisposable {
             throw new ArgumentOutOfRangeException(paramName: nameof(buffer), message: "The strided copy exceeds its buffer or the shared copy word-address range.");
         }
     }
-    private int IndexOf(int slot, int recording) {
-        ArgumentOutOfRangeException.ThrowIfNegative(slot);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(slot, m_frameSlotCount);
-        ArgumentOutOfRangeException.ThrowIfNegative(recording);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(recording, m_recordingCount);
-        return ((recording * m_frameSlotCount) + slot);
-    }
-    private void Bind(nint set, uint binding, IGpuBuffer buffer, GpuBindingKind kind) =>
-        m_bindings.WriteBuffer(descriptorSetHandle: set, binding: binding, bufferHandle: buffer.BufferHandle,
-            bufferSize: buffer.SizeBytes, elementStride: sizeof(uint), kind: kind);
 
     /// <summary>Releases the private requests and descriptor pool after all submitted users have retired.</summary>
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
-        foreach (var request in m_requests) { request?.Dispose(); }
-        Array.Clear(m_requests);
-        Array.Clear(m_sources);
-        Array.Clear(m_destinations);
-        m_pool.Dispose();
+        m_requests.Dispose();
     }
 }
