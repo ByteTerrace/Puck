@@ -73,6 +73,23 @@ public sealed record WorldStateSection(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<StatePairPool>? PairPools { get => field; init => field = OwnedLists.Freeze(items: value); } = OwnedLists.Freeze(items: PairPools);
 
+    /// <summary>Returns whether another section holds every declaration list this one holds, by instance: the body and
+    /// identity slots, lattices, spaces, enums, families and records, so the two differ at most in their world rows and
+    /// pools. A store laid out for one is laid out for the other wherever their rows agree in shape.</summary>
+    /// <param name="other">The other section.</param>
+    /// <returns><see langword="true"/> when every declaration list is the same instance.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
+    public bool SharesDeclarations(WorldStateSection other) {
+        ArgumentNullException.ThrowIfNull(argument: other);
+
+        return (
+            ReferenceEquals(objA: Body, objB: other.Body) && ReferenceEquals(objA: Identity, objB: other.Identity) &&
+            ReferenceEquals(objA: Lattices, objB: other.Lattices) && ReferenceEquals(objA: Spaces, objB: other.Spaces) &&
+            ReferenceEquals(objA: Enums, objB: other.Enums) && ReferenceEquals(objA: Families, objB: other.Families) &&
+            ReferenceEquals(objA: Records, objB: other.Records)
+        );
+    }
+
     IReadOnlyList<StateEnum>? IStateSection.Enums => Enums;
     IReadOnlyList<StateFamily>? IStateSection.Families => Families;
     IReadOnlyList<StateSpace>? IStateSection.Spaces => Spaces;

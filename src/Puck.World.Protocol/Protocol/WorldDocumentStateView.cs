@@ -554,14 +554,7 @@ public sealed class WorldDocumentStateView : IWorldStateView {
     // authority owes it again with the row's next snapshot.
     private bool TryReloadRows(WorldStateSection? before, WorldStateSection? after) {
         if (
-            (before is null) || (after is null) ||
-            !ReferenceEquals(objA: before.Body, objB: after.Body) ||
-            !ReferenceEquals(objA: before.Identity, objB: after.Identity) ||
-            !ReferenceEquals(objA: before.Lattices, objB: after.Lattices) ||
-            !ReferenceEquals(objA: before.Spaces, objB: after.Spaces) ||
-            !ReferenceEquals(objA: before.Enums, objB: after.Enums) ||
-            !ReferenceEquals(objA: before.Families, objB: after.Families) ||
-            !ReferenceEquals(objA: before.Records, objB: after.Records) ||
+            (before is null) || (after is null) || !before.SharesDeclarations(other: after) ||
             !ReferenceEquals(objA: before.Pools, objB: after.Pools) ||
             !ReferenceEquals(objA: before.PairPools, objB: after.PairPools)
         ) {

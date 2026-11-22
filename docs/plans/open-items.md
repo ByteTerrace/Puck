@@ -664,7 +664,19 @@ wait behind them.
    only through what a collect delivered or published, and a host that paces
    to the wall clock produces its frame beside its last due tick. Left: the
    wave, which hands every other world's tick over together where the pump
-   now visits once for each, and the lead's readings of frame time and
+   now visits once for each, and with it a burst's earlier steps beside the
+   frame: today the pump waits for every due step but the last
+   (`FixedStepPump.Advance`'s `WaitsAllowance`), and for each instance tick
+   of a host step it resumes in its step section. A thread-time trace of the
+   moving route under load put the pump's waits for the step thread
+   (`WorldStepThread.TryCollect`) at about a tenth of the frame thread's
+   time, two thirds of it for the boot world's three instance worlds, whose
+   ticks cost tens of microseconds each. Continuing a burst at the
+   post-produce resume (after the control phase, from the iteration's own
+   capture) and collecting the instance wave in the next step section leaves
+   the frame no tick to wait for. That amends
+   [H6](tick-thread.md#the-reviews-findings)'s ruling, which keeps a new host
+   step out of every resume. Then the lead's readings of frame time and
    input-to-display time on the route
    ([what the lead measures](tick-thread.md#what-the-lead-measures)). Check:
    `host.frames` shows the
@@ -1253,6 +1265,30 @@ The frame bar is read with `bench frames`, `host.frames` (produce split into
 `world.counters sdf.mesh-gi` and sampled thread time. `bench frames` pauses
 authority at each stop, so it reads the frame side alone; a played frame also
 carries the tick.
+
+What a delivered document still costs the frame (a `gc-verbose` trace of the
+moving route's later chapters, frame thread, 60 s):
+
+- [high] A replica document disclosed again after its frame moved (the lift's
+  car) is a new definition object, and `WorldRigidAssets.ReconcileStatic`
+  rebuilds every static copy whenever the definition object changes. Each
+  rebuild resolves every placement's stamp (`WorldPlacementStamp.Resolve`),
+  which compiles the whole new placements section's frames
+  (`WorldPlacementFrameCompilation.Resolve`, `FixedQ4816.FromDegreesExact`
+  over `BigInteger`) and builds descriptors through `WorldDocumentWalker`.
+  That was most of 1.5 GB the frame thread allocated in a minute, and the
+  produce frames that follow a lift delivery. Reconcile only the placements
+  whose row or parent chain changed, and carry a frame table across a section
+  whose rows are reused (as `CarryAcrossHolding` does for holdings). Check:
+  the frame thread's allocation in the lift chapter, and `world.boot`'s
+  counters per delivery.
+- [high] `SdfMeshRegionArena.Clip` ran 80 to 190 ms on several consecutive
+  frames of the lift ride (`SdfWorldTables.EnsureMeshRegionCapacity`): a
+  region that cannot grow clips, refuses and re-plans the same meshes each
+  frame. Check: `world.residency`'s region line holds still while the car
+  rides.
+- [medium] `WorldPresentationManifest.Compile` walks the whole document again
+  for each new delivered definition (`WorldStateMirror.Install`).
 
 What an arrival and a hand-over still cost the frame:
 

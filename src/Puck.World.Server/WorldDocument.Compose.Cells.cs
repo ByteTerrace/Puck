@@ -34,11 +34,7 @@ public sealed partial class WorldDocument {
         var before = source;
         var after = definition.StateRaw!;
 
-        if ((entry.Arena.Layout.Options != WorldSlotLanes.Options(definition: definition)) ||
-            !ReferenceEquals(objA: before.Body, objB: after.Body) || !ReferenceEquals(objA: before.Identity, objB: after.Identity) ||
-            !ReferenceEquals(objA: before.Lattices, objB: after.Lattices) || !ReferenceEquals(objA: before.Spaces, objB: after.Spaces) ||
-            !ReferenceEquals(objA: before.Enums, objB: after.Enums) || !ReferenceEquals(objA: before.Families, objB: after.Families) ||
-            !ReferenceEquals(objA: before.Records, objB: after.Records)) {
+        if ((entry.Arena.Layout.Options != WorldSlotLanes.Options(definition: definition)) || !before.SharesDeclarations(other: after)) {
             return false;
         }
         var rows = definition.AuthoredState;
