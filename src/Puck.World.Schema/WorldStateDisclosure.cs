@@ -187,7 +187,7 @@ public static class WorldStateDisclosure {
             )) {
                 continue;
             }
-            if (ComposeRow(arena: arena, observer: ref observer, presented: (presented?.Contains(item: row.Name.Value) == true), row: row, rowOrdinal: rowOrdinal) is { } observed) {
+            if (ComposeRow(arena: arena, reader: ref observer, presented: (presented?.Contains(item: row.Name.Value) == true), row: row, rowOrdinal: rowOrdinal) is { } observed) {
                 result.Add(item: observed);
             }
         }
@@ -197,9 +197,18 @@ public static class WorldStateDisclosure {
             : result
         );
     }
+    // What one reader of a row answers about it: whether the row's own policy admits the reader, and whether it may
+    // read each held cell. A live observer answers from the store's policies; a recorded mask answers what an observer
+    // answered when the mask was taken (WorldRowImageWriter), so one composer serves both and they cannot differ.
+    internal interface IRowReader {
+        bool ReadsRow(StateRow row);
+        // index counts the row's held cells in StateArena.TryNextCell order, the cell at key among them.
+        bool ReadsCell(StateRow row, int rowOrdinal, CellKey key, int index);
+    }
     // One document row's observation as Compose composes it, or null when the row does not cross: it declares no policy
-    // and is not presented, or its own policy excludes the recipient. The shared image table composes one row through it.
-    internal static WorldObservedRow? ComposeRow(StateArena arena, ref Observer observer, StateRow row, int rowOrdinal, bool presented) {
+    // and is not presented, or its own policy excludes the reader. The shared image table composes one row through it.
+    internal static WorldObservedRow? ComposeRow<TReader>(StateArena arena, ref TReader reader, StateRow row, int rowOrdinal, bool presented)
+        where TReader : struct, IRowReader {
         // Which rows cross is decided by declaration, never by whether a member is restricted now.
         if (
             (row.Visibility is null) &&
@@ -208,22 +217,21 @@ public static class WorldStateDisclosure {
         ) {
             return null;
         }
-        if (
-            (row.Visibility is { } policy) &&
-            !observer.Allows(policy: policy)
-        ) {
+        if (!reader.ReadsRow(row: row)) {
             return null;
         }
         var cells = new List<WorldObservedCell>();
         var hidden = 0;
         var hiddenPolicy = (row.Visibility?.Hidden ?? HiddenCells.Omit);
         var cursor = 0;
+        var index = -1;
 
         while (arena.TryNextCell(
             cursor: ref cursor,
             key: out var key,
             rowOrdinal: rowOrdinal
         )) {
+            index++;
             if (!arena.TryRead(
                 key: key,
                 rowOrdinal: rowOrdinal,
@@ -231,7 +239,8 @@ public static class WorldStateDisclosure {
             )) {
                 continue;
             }
-            if (observer.CanRead(
+            if (reader.ReadsCell(
+                index: index,
                 key: key,
                 row: row,
                 rowOrdinal: rowOrdinal
@@ -745,12 +754,15 @@ public static class WorldStateDisclosure {
 
     // One recipient's view of one live store: format the canonical token only for a restricted policy. Ordered
     // zones are indexed by token domain, so a cell's read check costs the zones over its own domain and nothing else.
-    internal struct Observer {
+    internal struct Observer : IRowReader {
         private readonly StateArena m_arena;
         private readonly bool m_unrestricted;
         private readonly Principal? m_recipient;
 
         private string? m_name;
+
+        bool IRowReader.ReadsRow(StateRow row) => Allows(policy: row.Visibility);
+        bool IRowReader.ReadsCell(StateRow row, int rowOrdinal, CellKey key, int index) => CanRead(key: key, row: row, rowOrdinal: rowOrdinal);
 
         // name, when given, is the recipient's canonical token already formatted (a view's, formatted once).
         public Observer(StateArena arena, Principal? recipient, bool unrestricted = false, string? name = null) {

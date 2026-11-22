@@ -35,8 +35,14 @@ public enum WorldReplicaCompletion : byte {
 /// the current disclosure, a change hidden throughout (a hidden install, a policy the recipient never passed added or
 /// removed, a write to a row it never read) cannot move the generation.</para></remarks>
 public sealed class WorldDeliveryCursor {
-    // A row's image as the stream last held it, and whether the stream read the row whole then.
-    private readonly record struct HeldRow(WorldRecipientImage Image, bool Whole);
+    // A row as the stream last held it. A row it read cell by cell is held as the image it was delivered. A row it read
+    // whole is held as the keys the row had, which is all a later loss is decided from (Loses), so a write to such a
+    // row's values costs the cursor nothing and no image of the row is built for it.
+    private readonly record struct HeldRow(WorldRecipientImage? Image, WorldRowMembers Keys) {
+        public bool Whole => (Image is null);
+        // Whether the stream read any cell of the row.
+        public bool ReadCells => ((Image is { } image) ? (image.Cells.Count != 0) : !Keys.Keys.IsEmpty);
+    }
 
     // Every row of the stream's document, by name, as it last held it.
     private readonly Dictionary<string, HeldRow> m_rows = new(comparer: StringComparer.Ordinal);
@@ -44,7 +50,7 @@ public sealed class WorldDeliveryCursor {
     // Advance's scratch: the rows a change can move, and the same in row order.
     private readonly Puck.Abstractions.Collections.MarkedIndexSet m_affected = new();
     private int[] m_ordered = [];
-    private ContentPin? m_definition;
+    private Puck.Abstractions.Sha256Digest? m_definition;
     private ContentPin? m_frame;
     // The field regions of the stream's last document, whether that document kept every field cell of the one before
     // it, and whether it was the stream's first, which its attach primer completes.
@@ -189,38 +195,46 @@ public sealed class WorldDeliveryCursor {
         m_metadataPrimers.Clear();
         for (var row = 0; row < view.Source.AuthoredState.Count; row++) {
             var name = view.Arena.Rows[row].Name.Value;
-            var whole = view.HoldsWhole(row);
+            var held = default(HeldRow);
+            var holds = seeded && (previous is not null) && previous.Remove(name, out held);
+
+            if (view.HoldsWhole(row)) {
+                m_rows[name] = new HeldRow(Image: null, Keys: view.Images.Members(view, row));
+                continue;
+            }
             var image = view.Image(row);
             // The definition carries no observation header, including when its hidden count is zero. Whether
             // the following primer is owed depends on the row's policy, never on its current hidden members.
-            if (!whole && (view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica) && (image.Observation is not null)) { m_metadataPrimers.Add(row); }
-            m_rows[name] = new HeldRow(image, whole);
-            if (!seeded) { continue; }
-            if ((previous is not null) && previous.Remove(name, out var held) && !whole) { cut |= Loses(held.Image, image); }
+            if ((view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica) && (image.Observation is not null)) { m_metadataPrimers.Add(row); }
+            m_rows[name] = new HeldRow(Image: image, Keys: WorldRowMembers.Empty);
+            if (holds) { cut |= Loses(held, image); }
         }
         if (previous is not null) {
-            foreach (var held in previous.Values) { cut |= (!held.Whole && (held.Image.Cells.Count != 0)); }
+            foreach (var held in previous.Values) { cut |= (!held.Whole && held.ReadCells); }
         }
         m_seeded = true;
         if (cut) { Cut(); }
     }
-    // Whether an image now lacks a cell the stream was delivered in its held image: a cell withheld or removed, which a
+    // Whether an image now lacks a cell the stream read in the row as it held it: a cell withheld or removed, which a
     // row that can withhold must not let the recipient tell apart. A row the stream read whole held every cell it had,
     // so the same test decides a row that turns withholding: it cuts only when a cell the stream read is unreadable now.
-    private static bool Loses(WorldRecipientImage held, WorldRecipientImage now) {
-        if (ReferenceEquals(held, now) || (held.Cells.Count == 0)) { return false; }
+    private static bool Loses(in HeldRow held, WorldRecipientImage now) {
+        if (ReferenceEquals(held.Image, now) || !held.ReadCells) { return false; }
         var current = now.Cells;
-        if (current.Count <= 16) {
-            foreach (var cell in held.Cells) {
-                var found = false;
-                foreach (var candidate in current) { if (candidate.Key == cell.Key) { found = true; break; } }
-                if (!found) { return true; }
-            }
-            return false;
+        var count = ((held.Image is { } image) ? image.Cells.Count : held.Keys.Keys.Length);
+        HashSet<Puck.State.CellName>? indexed = null;
+
+        if (current.Count > 16) {
+            indexed = new HashSet<Puck.State.CellName>(current.Count);
+            for (var index = 0; index < current.Count; index++) { indexed.Add(current[index].Key); }
         }
-        var keys = new HashSet<Puck.State.CellName>(current.Count);
-        foreach (var candidate in current) { keys.Add(candidate.Key); }
-        foreach (var cell in held.Cells) { if (!keys.Contains(cell.Key)) { return true; } }
+        for (var index = 0; index < count; index++) {
+            var key = ((held.Image is { } cells) ? cells.Cells[index].Key : held.Keys.Keys[index]);
+            var found = (indexed?.Contains(key) == true);
+
+            for (var candidate = 0; (indexed is null) && !found && (candidate < current.Count); candidate++) { found = (current[candidate].Key == key); }
+            if (!found) { return true; }
+        }
         return false;
     }
     internal IReadOnlyList<WorldRowReplacement> Advance(WorldRecipientView view, ReadOnlySpan<int> rows) {
@@ -240,22 +254,27 @@ public sealed class WorldDeliveryCursor {
         ordered.Sort();
         foreach (var row in ordered) {
             var name = view.Arena.Rows[row].Name.Value;
-            var whole = view.HoldsWhole(row);
-            var image = view.Images.Image(view, row, audience ??= view.Images.Audience(view));
             var holds = m_rows.TryGetValue(name, out var held);
-            if (whole) {
-                // A row the stream reads whole is held whole; one turning whole replaces its prior restricted image once.
-                m_rows[name] = new HeldRow(image, Whole: true);
-                if (holds && !held.Whole) { m_metadataPrimers.Remove(row); (result ??= []).Add(new(row, image)); }
+            if (view.HoldsWhole(row)) {
+                // A row the stream reads whole is held as its keys, which stand while the row's membership does: the
+                // tick's own carrier brings the values. One turning whole replaces its prior restricted image once.
+                var keys = view.Images.Members(view, row);
+
+                if (!holds || !held.Whole || !ReferenceEquals(held.Keys, keys)) { m_rows[name] = new HeldRow(Image: null, Keys: keys); }
+                if (holds && !held.Whole) {
+                    m_metadataPrimers.Remove(row);
+                    (result ??= []).Add(new(row, view.Images.Image(view, row, audience ??= view.Images.Audience(view))));
+                }
                 continue;
             }
+            var image = view.Images.Image(view, row, audience ??= view.Images.Audience(view));
             if (holds) {
-                cut |= Loses(held.Image, image);
-                if (!m_metadataPrimers.Remove(row) && !held.Whole && held.Image.Identity == image.Identity) { continue; }
+                cut |= Loses(held, image);
+                if (!m_metadataPrimers.Remove(row) && (held.Image is { } delivered) && (delivered.Digest == image.Digest)) { continue; }
             } else {
                 m_metadataPrimers.Remove(row);
             }
-            m_rows[name] = new HeldRow(image, Whole: false);
+            m_rows[name] = new HeldRow(Image: image, Keys: WorldRowMembers.Empty);
             (result ??= []).Add(new(row, image));
         }
         if (cut) { Cut(); }

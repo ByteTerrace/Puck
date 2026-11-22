@@ -6,8 +6,10 @@ using Puck.World.Authoring;
 namespace Puck.World;
 
 public sealed partial class WorldDisclosureImages {
-    // One audience's scene identity (SceneIdentity), kept while nothing it was computed from can have moved: the same
-    // source document, arena, policy revision and move sequence, and the same frame identity.
+    // One audience's scene identity (SceneIdentity) and the parts it digests. While nothing it was computed from can
+    // have moved (the same source document, arena, policy revision and move sequence, and the same frame identity) it
+    // is answered without reading a row; after that the parts are read again and the pin is spelled again only when
+    // they differ, so a tick that moved no scene input spells none.
     private sealed class SceneEntry {
         public WorldDefinition? Source;
         public StateArena? Arena;
@@ -15,6 +17,8 @@ public sealed partial class WorldDisclosureImages {
         public long Moves = -1L;
         public ContentPin Frame;
         public ContentPin Identity;
+        public byte[] Parts = [];
+        public int PartsLength = -1;
         public int[] Rows = [];
         public object? RowsOf;
     }
@@ -56,11 +60,16 @@ public sealed partial class WorldDisclosureImages {
         foreach (var row in entry.Rows) {
             if (view.ReadsWhole(row)) { parts[at] = WholeMarker; at += 1 + SHA256.HashSizeInBytes; continue; }
             at += 1;
-            Image(view, row, audience).Digest.CopyTo(parts[at..]); at += SHA256.HashSizeInBytes;
+            RowDigest(view, row, audience).CopyTo(parts[at..]); at += SHA256.HashSizeInBytes;
         }
         entry.Source = source; entry.Arena = arena; entry.Revision = arena.DisclosureRevision; entry.Moves = arena.MoveSequence;
         entry.Frame = frame;
-        entry.Identity = ContentPin.Compute(parts);
+        if ((entry.PartsLength != length) || !parts.SequenceEqual(entry.Parts.AsSpan(0, length))) {
+            ArrayCapacity.EnsureLength(ref entry.Parts, length);
+            parts.CopyTo(entry.Parts);
+            entry.PartsLength = length;
+            entry.Identity = ContentPin.Compute(parts);
+        }
         return entry.Identity;
     }
     // SceneIdentity's scratch, reused across audiences and ticks.

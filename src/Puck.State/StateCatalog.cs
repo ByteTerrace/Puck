@@ -222,10 +222,23 @@ public sealed class StateCatalog {
     public EffectiveBehavior Behavior(int rowOrdinal, CellName key, StateCellBehavior behavior) {
         if (key != StateRow.SlotKey) {
             if (behavior == StateCellBehavior.None) { return EffectiveBehavior.None; }
-            if ((m_cellBehaviors[rowOrdinal] is { } cells) && cells.TryGetValue(key: key, value: out var declared)) { return declared; }
+            if (TryDeclaredBehavior(rowOrdinal: rowOrdinal, key: key, declared: out var declared)) { return declared; }
         }
         return m_defaultBehaviors[rowOrdinal];
     }
+    /// <summary>Gets the trait a cell declares for itself, apart from its row's default.</summary>
+    /// <param name="rowOrdinal">The document row ordinal.</param>
+    /// <param name="key">The cell name.</param>
+    /// <param name="declared">The cell's own trait on success; otherwise <see cref="EffectiveBehavior.None"/>.</param>
+    /// <returns><see langword="true"/> when the cell declares a trait of its own.</returns>
+    public bool TryDeclaredBehavior(int rowOrdinal, CellName key, out EffectiveBehavior declared) {
+        declared = EffectiveBehavior.None;
+        return ((key != StateRow.SlotKey) && (m_cellBehaviors[rowOrdinal] is { } cells) && cells.TryGetValue(key: key, value: out declared));
+    }
+    /// <summary>Gets the trait a row's cells take when they declare none of their own.</summary>
+    /// <param name="rowOrdinal">The document row ordinal.</param>
+    /// <returns>The row's default trait, or <see cref="EffectiveBehavior.None"/>.</returns>
+    public EffectiveBehavior DefaultBehavior(int rowOrdinal) => m_defaultBehaviors[rowOrdinal];
     private bool MatchesBehaviors(int rowOrdinal, StateRow row) {
         static bool Same(EffectiveBehavior a, EffectiveBehavior b) =>
             (a.Advance == b.Advance) && (a.Cycle == b.Cycle) && (a.Dynamics == b.Dynamics);
