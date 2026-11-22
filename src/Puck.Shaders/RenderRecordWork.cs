@@ -16,9 +16,12 @@ namespace Puck.Shaders;
 /// because their signature and inputs held, or skipped a frame they had no work in. They are counts of work, and
 /// over the same frames <c>passes.stood</c> against <c>passes.recorded</c> is how much of the graph a frame left
 /// standing. A frame records its jobs in dependency waves (<c>waves</c>), each forked across the job pool as one partition
-/// per group of jobs that share a recording domain (<c>partitions</c>); <c>jobs.worker</c> and <c>passes.worker</c> count
-/// the jobs, and their recorded passes, that a worker thread recorded rather than the frame thread, and <c>lists</c> the
-/// command lists the jobs handed to the queue.
+/// per group of jobs that share a recording domain (<c>partitions</c>). A job decides its passes in order and leaves the
+/// passes an emitter records to <c>lanes</c>, each a command list a second fork of the wave emits; <c>passes.emitted</c>
+/// counts the passes the lanes emitted. <c>jobs.worker</c> counts the jobs a worker thread walked rather than the frame
+/// thread, <c>passes.worker</c> the recorded passes whose commands a worker recorded, in a job's walk or a lane, and
+/// <c>lists</c> the command lists the jobs handed to the queue. <c>longest-microseconds</c> sums each frame's longest single
+/// piece of recording, a job's walk or one lane.
 /// </summary>
 public sealed class RenderRecordWork : WorkLedger<WorkCounterSet> {
     private static readonly WorkKind Frames = Kind(name: "render.record.frames", unit: "count");
@@ -37,7 +40,9 @@ public sealed class RenderRecordWork : WorkLedger<WorkCounterSet> {
     private static readonly WorkKind WorkerJobs = Kind(name: "render.record.jobs.worker", unit: "count");
     private static readonly WorkKind WorkerPasses = Kind(name: "render.record.passes.worker", unit: "count");
     private static readonly WorkKind Lists = Kind(name: "render.record.lists", unit: "count");
-    private static readonly WorkKind[] Kinds = [Frames, Jobs, Failed, Prepare, Record, Commit, Longest, PackagePreparation, PassesRecorded, PassesStood, PassesSkipped, Waves, Partitions, WorkerJobs, WorkerPasses, Lists];
+    private static readonly WorkKind EmitLanes = Kind(name: "render.record.lanes", unit: "count");
+    private static readonly WorkKind PassesEmitted = Kind(name: "render.record.passes.emitted", unit: "count");
+    private static readonly WorkKind[] Kinds = [Frames, Jobs, Failed, Prepare, Record, Commit, Longest, PackagePreparation, PassesRecorded, PassesStood, PassesSkipped, Waves, Partitions, WorkerJobs, WorkerPasses, Lists, EmitLanes, PassesEmitted];
 
     private RenderRecordWork() : base(counters: new(name: "render.record", kinds: Kinds)) { }
 
@@ -73,11 +78,22 @@ public sealed class RenderRecordWork : WorkLedger<WorkCounterSet> {
         Counters.Count(Waves);
         Counters.Add(Partitions, partitions);
     }
-    /// <summary>Counts one job a worker thread recorded rather than the frame thread.</summary>
-    /// <param name="passes">The passes the job recorded.</param>
+    /// <summary>Counts one job a worker thread walked rather than the frame thread.</summary>
+    /// <param name="passes">The passes the job's walk recorded itself, as against those it left to lanes.</param>
     internal void WorkerJob(int passes) {
         Counters.Count(WorkerJobs);
         Counters.Add(WorkerPasses, passes);
+    }
+    /// <summary>Counts one wave's emission lanes.</summary>
+    /// <param name="lanes">The lanes the wave's second fork emitted.</param>
+    internal void Lanes(int lanes) => Counters.Add(EmitLanes, lanes);
+    /// <summary>Counts the passes one lane emitted, and whether a worker thread emitted them rather than the frame
+    /// thread.</summary>
+    /// <param name="passes">The passes the lane emitted.</param>
+    /// <param name="worker">Whether a worker thread emitted the lane.</param>
+    internal void Lane(int passes, bool worker) {
+        Counters.Add(PassesEmitted, passes);
+        if (worker) { Counters.Add(WorkerPasses, passes); }
     }
     /// <summary>Counts the command lists one job handed to the queue.</summary>
     /// <param name="lists">The lists submitted.</param>

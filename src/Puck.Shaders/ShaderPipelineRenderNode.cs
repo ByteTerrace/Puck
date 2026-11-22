@@ -907,9 +907,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             throw;
         }
     }
-    // Begins the slot's one command list, which every pass, the preview, the export copy and the presentation record
-    // into; only the region copies, which the passes' recordings owe, record in a list of their own, submitted first.
-    // The recording that begins it owns it until SubmitCounted hands it over or AbandonRecording gives it up. The
+    // Begins the slot's first command list, which the frame's passes record into until a lane's list or a later serial list
+    // takes over (ShaderPipelineRenderNode.Emission.cs); the region copies, which the passes' recordings owe, record in a
+    // list of their own, submitted first. The recording that begins it owns it until SubmitCounted hands it over or
+    // AbandonRecording gives it up. The
     // borrowed buffers it records against are refreshed first (PrepareFrameCommands), by the caller's preparation.
     private nint BeginFrameCommands(int slot) {
         BeginRecording(slot: slot);
@@ -1193,7 +1194,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             m_bufferPublicationScratch = previousBufferScratch;
             m_bufferPublicationSecondScratch = previousBufferSecondScratch;
             if (!hadFences) {
-                foreach (var slot in m_slots) { slot.Fence?.Dispose(); slot.Fence = null; slot.Commands?.Dispose(); slot.Commands = null; }
+                foreach (var slot in m_slots) { slot.Fence?.Dispose(); slot.Fence = null; slot.DisposeCommands(); }
             }
             if (!key.Candidate || error is DeviceLostException) {
                 throw;
@@ -1553,8 +1554,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_encoder = null;
         m_readbackBytes = 0UL;
         foreach (var slot in m_slots) {
-            slot.Commands?.Dispose();
-            slot.Commands = null;
+            slot.DisposeCommands();
             slot.Fence?.Dispose();
             slot.Fence = null;
             slot.ReadbacksOwed = false;
@@ -2066,6 +2066,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         PrepareFrameCommands();
         m_commands.Clear();
         BeginCadenceFrame(slot: slotIndex);
+        m_open.RecordingFault = (m_device.Services.Faults?.TakeRecordingDue() ?? 0L);
         // What a pass's recording would change outside the instance is changed here, on the frame thread, so the
         // recording itself may run on any thread (IRenderGraphPackageRecorder.PrepareRecord). A preparation that fails
         // fails the recording, which then abandons the frame as any failed recording does.
@@ -2084,7 +2085,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             Slot: slotIndex
         );
     }
-    // Records the slot's lists: every pass, the region copies, the preview, the export copy and the presentation.
+    // Records the slot's lists: every pass, or its decision for a lane, the region copies, the preview, the export copy and
+    // the presentation, which the frame's last list records after its passes.
     private void RecordFrame(in FrameContext context, in FrameJob job) {
         m_recording.RecordedAt = Stopwatch.GetTimestamp();
 
@@ -2093,12 +2095,15 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var command = BeginFrameCommands(slot: slotIndex);
 
         m_open.PrepareFailure?.Throw();
-        RecordPasses(
+        command = RecordPasses(
             command: command,
+            commands: commands,
             context: context,
             slot: slotIndex
         );
-        m_device.Services.Faults?.ThrowIfRecordingDue();
+        if (m_open.RecordingFault is > 0L and var fault) {
+            throw new GpuRecordingFaultException(recording: fault);
+        }
         RecordRegionCopies(
             commands: commands,
             slot: slotIndex
@@ -2128,7 +2133,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         // The region copies' list runs first in the submission, so the frame's list resolves its timestamps too.
         ResolveTimings(command: command, slot: slotIndex);
         EndRecordedList(command: command);
-        commands.Add(item: command);
         m_recording.RecordEndedAt = Stopwatch.GetTimestamp();
     }
     // Submits the recorded lists and publishes what they write. From the submission on the queue owns the write: a

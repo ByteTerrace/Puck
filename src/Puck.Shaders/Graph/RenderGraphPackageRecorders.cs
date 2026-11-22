@@ -210,6 +210,36 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// package records on one thread.</summary>
     object? RecordingDomain => null;
 }
+/// <summary>A package recorder whose recording splits in two: a decision its instance takes on one thread, in its passes'
+/// order, and an emission that records what was decided and may run on another thread, beside the emissions of the
+/// instance's other passes, into a command list of its own that the instance submits in pass order. Its
+/// <see cref="IRenderGraphPackageRecorder.Record"/> is the two in a row, into one command buffer.</summary>
+public interface IRenderGraphPackageEmitter : IRenderGraphPackageRecorder {
+    /// <summary>Decides the pass's work for one frame: writes the pass block, changes every state outside the recorder that
+    /// a later pass of the frame or the frame's commit reads (a view's history, a staged camera, a lease the recording
+    /// samples), and keeps in the recorder what <see cref="Emit"/> needs. It records no command: the recording's
+    /// <see cref="RenderGraphPackageRecording.CommandBuffer"/> is zero when the instance emits the pass apart.</summary>
+    /// <param name="recording">The frame's bound versions and pass block.</param>
+    /// <returns>Whether the recording writes its outputs, or leaves each to stand for its input; <see cref="Emit"/> runs
+    /// only for <see cref="RenderGraphPackageOutcome.Drew"/>.</returns>
+    RenderGraphPackageOutcome Decide(in RenderGraphPackageRecording recording);
+    /// <summary>Records into the recording's command buffer the work the frame's <see cref="Decide"/> chose. It may run on
+    /// any thread once every pass of the instance's frame has decided, beside the emissions of the instance's other passes
+    /// and of other instances: it reads only the recorder's own state, the recording's bound versions and state nothing
+    /// changes until the frame commits (its residency's staged tables and frame), and writes only the recorder's own
+    /// state, the command buffer and the descriptor sets the recorder alone binds. Its recording carries a copy of the pass
+    /// block, which the instance uploaded when the decision returned, no external reads and no leases to take.</summary>
+    /// <param name="recording">The frame's command buffer, begun, with the pass's planned barriers recorded.</param>
+    void Emit(in RenderGraphPackageRecording recording);
+    RenderGraphPackageOutcome IRenderGraphPackageRecorder.Record(in RenderGraphPackageRecording recording) {
+        var outcome = Decide(recording: in recording);
+
+        if (outcome == RenderGraphPackageOutcome.Drew) {
+            Emit(recording: in recording);
+        }
+        return outcome;
+    }
+}
 /// <summary>A package output allocation and the optional hold on its exact owner. Acquiring a replacement transfers
 /// the hold to the graph; the graph retires the hold, never the borrowed allocation itself.</summary>
 /// <param name="Buffer">The package-owned allocation.</param>

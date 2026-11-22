@@ -172,13 +172,18 @@ public sealed partial class ShaderPipelineRenderNode {
         pool.Reset(command: command, count: 2, first: first);
         pool.Write(command: command, index: first);
     }
-    private void EndTiming(nint command, int slot, int pass) {
+    // Writes a pass's closing timestamp; `mark` also notes the pair for ResolveTimings, which a pass emitted on a lane
+    // notes at its decision instead (MarkTimed), since the frame's tail resolves the pairs before the lanes run.
+    private void EndTiming(nint command, int slot, int pass, bool mark = true) {
         if (!TimingActive || (m_timingSlots.Length == 0) || (m_timingSlots[slot].Pool is not { } pool)) { return; }
-        var target = m_timingSlots[slot];
         var first = checked((uint)(pass * 2));
 
         pool.Write(command: command, index: (first + 1));
-        target.Recorded[pass] = true;
+        if (mark) { m_timingSlots[slot].Recorded[pass] = true; }
+    }
+    private void MarkTimed(int slot, int pass) {
+        if (!TimingActive || (m_timingSlots.Length == 0) || (m_timingSlots[slot].Pool is null)) { return; }
+        m_timingSlots[slot].Recorded[pass] = true;
     }
     // Copies every pair the submission wrote into the slot's readback, one copy per run of adjacent timed passes, after
     // the last command that writes one. A copy waits for its timestamps to land (VK_QUERY_RESULT_WAIT_BIT on Vulkan), so

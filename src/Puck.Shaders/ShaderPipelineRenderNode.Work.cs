@@ -92,19 +92,22 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
             revision: m_revision
         );
     }
-    // Records every pass into the frame's list inside its own ledger pass. A package pass that skips the frame
-    // (IRenderGraphPackageRecorder.Skips) records nothing and is counted as skipped, never as a pass that ran and did no
-    // work. A pass that throws leaves its submission unsealed, so the partial record is dropped rather than published
-    // under a pass that never finished. The kernel
-    // counters are cleared before the first executed pass and copied behind the last, outside every pass. When all
-    // outputs stand or skip, no kernel could count: the ledger's fresh zero rows need no GPU clear or readback.
-    private void RecordPasses(nint command, in FrameContext context, int slot) {
+    // Walks every pass in order inside its own ledger pass. A package pass whose recorder is an emitter is decided here and
+    // emitted on a lane (ShaderPipelineRenderNode.Emission.cs); every other pass records here into the frame's current
+    // serial list. A package pass that skips the frame (IRenderGraphPackageRecorder.Skips) records nothing and is counted as
+    // skipped, never as a pass that ran and did no work. A pass that throws leaves its submission unsealed, so the partial
+    // record is dropped rather than published under a pass that never finished. The kernel counters are cleared before the
+    // first executed pass and copied behind the last, outside every pass. When all outputs stand or skip, no kernel could
+    // count: the ledger's fresh zero rows need no GPU clear or readback. Returns the list the frame's tail records into,
+    // having laid the frame's pass lists out in `commands` in submission order.
+    private nint RecordPasses(nint command, in FrameContext context, int slot, List<nint> commands) {
         var passes = m_passes;
         var counters = ((passes.Length > 0)
             ? passes[0].KernelCounters
             : null);
 
         WriteFrameGroup(slot: slot);
+        BeginEmissions(command: command);
 
         try {
             PrepareWorkDetails(context: in context, counters: counters, slot: slot);
@@ -141,22 +144,34 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                     stood++;
                     continue;
                 }
-                if (!countersWritten && counters is not null && countersNeeded) {
-                    counters.RecordClear(commandBuffer: command, recorder: m_gpu.Recorder, slot: slot);
-                    countersWritten = true;
+                var clears = (!countersWritten && counters is not null && countersNeeded);
+
+                countersWritten |= clears;
+                if (m_lanesEnabled && (pass.Package is IRenderGraphPackageEmitter)) {
+                    m_work.EnterPass(pass: index);
+                    PrepareHistoryWrites(pass: pass);
+                    DecidePackage(clearsCounters: clears, index: index, pass: pass, slot: slot);
+                    MarkTimed(pass: index, slot: slot);
+                } else {
+                    var list = SerialList(slot: slot);
+
+                    if (clears) {
+                        counters!.RecordClear(commandBuffer: list, recorder: m_gpu.Recorder, slot: slot);
+                    }
+                    m_work.EnterPass(pass: index);
+                    PrepareHistoryWrites(pass: pass);
+                    m_gpu.Recorder.BeginDebugGroup(commandBufferHandle: list, label: pass.Label);
+                    BeginTiming(command: list, pass: index, slot: slot);
+                    Record(
+                        command: list,
+                        context: in context,
+                        pass: pass,
+                        slot: slot
+                    );
+                    EndTiming(command: list, pass: index, slot: slot);
+                    m_gpu.Recorder.EndDebugGroup(commandBufferHandle: list);
+                    m_passesRecordedSerially++;
                 }
-                m_work.EnterPass(pass: index);
-                PrepareHistoryWrites(pass: pass);
-                m_gpu.Recorder.BeginDebugGroup(commandBufferHandle: command, label: pass.Label);
-                BeginTiming(command: command, pass: index, slot: slot);
-                Record(
-                    command: command,
-                    context: in context,
-                    pass: pass,
-                    slot: slot
-                );
-                EndTiming(command: command, pass: index, slot: slot);
-                m_gpu.Recorder.EndDebugGroup(commandBufferHandle: command);
                 m_work.LeavePass();
                 RecordedCadence(pass: pass, signature: signature);
                 pass.Recorded = true;
@@ -164,9 +179,12 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
             }
             RenderRecordWork.Process.Passes(recorded: recorded, skipped: skipped, stood: stood);
             LastPassesRecorded = recorded;
+
+            var tail = PlanEmissions(commands: commands, slot: slot);
+
             if (countersWritten && counters is not null) {
                 counters.RecordCopy(
-                    commandBuffer: command,
+                    commandBuffer: tail,
                     recorder: m_gpu.Recorder,
                     slot: slot
                 );
@@ -176,6 +194,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                 );
             }
             m_work.MarkKernelCounts(counted: m_kernelCounting);
+            return tail;
         } catch {
             m_work.Invalidate();
 

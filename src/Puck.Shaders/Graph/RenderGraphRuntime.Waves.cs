@@ -10,20 +10,23 @@ namespace Puck.Shaders;
 // frame (an external producer produces as it is prepared, so its readers may share its wave); every other render of a
 // wave reads nothing the wave writes. Each wave is prepared on the frame thread in schedule order (bindings, the slot's
 // fence, leases and checkpoint, IRenderGraphPackageRecorder.PrepareRecord), recorded as one fork of the job pool's frame
-// class, and committed on the frame thread in schedule order, so the next wave binds what this one published. Submission
-// order is wave order, then schedule order: every producer still reaches the queue before its same-frame readers.
+// class, its recordings' lanes emitted as a second fork (EmitWave), and committed on the frame thread in schedule order,
+// so the next wave binds what this one published. Submission order is wave order, then schedule order: every producer
+// still reaches the queue before its same-frame readers.
 //
-// The invariant the fork rests on: a recording reads and writes only its own instance and the recording domains its
+// The invariant the first fork rests on: a recording reads and writes only its own instance and the recording domains its
 // passes name (ShaderPipelineRenderNode.AddRecordingDomains). One door enforces it: RecordWave groups the wave's jobs by
 // shared domain, and a group records on one thread, in schedule order. A package that shares state its recorder does not
 // name is caught by its own guards (a residency's upload and an SDF view's resolution refuse to run inside a partition),
-// and otherwise only by review.
+// and otherwise only by review. The second fork rests on every recording having decided all its passes before any lane
+// runs: a lane changes nothing a decision or another lane reads (IRenderGraphPackageEmitter.Emit).
 public sealed partial class RenderGraphRuntime {
     private JobPool? m_jobs;
     // Each instance's wave this frame, or -1 for an instance that does not render.
     private int[] m_waveOf = [];
     private readonly List<WaveJob> m_waveJobs = [];
     private readonly WaveRecording m_waveRecording = new();
+    private readonly WaveEmission m_waveEmission = new();
     private readonly Dictionary<object, int> m_waveDomains = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<object> m_jobDomains = [];
     private readonly DisjointSet m_waveGroups = new(count: 0);
@@ -35,7 +38,8 @@ public sealed partial class RenderGraphRuntime {
         public bool HoldingConvergence;
         // The node that submitted last this frame, whose submission follows the host's presentation of the last frame.
         public ShaderPipelineRenderNode? Submitter;
-        // The frame's longest single recording, the critical path its record jobs keep side by side.
+        // The frame's longest single piece of recording (a node's walk over its passes, or one lane of its emissions), the
+        // critical path its record jobs keep side by side.
         public long LongestRecord;
     }
     // A graph node's render a wave prepared, whose record job its fork runs and its commit ends.
@@ -287,6 +291,9 @@ public sealed partial class RenderGraphRuntime {
             node: node
         );
 
+        // A node may spread its passes across as many lanes as the pool has threads (EmitWave).
+        node.EmitLaneLimit = ((m_jobs is { Serial: false } pool) ? pool.Workers.Count : 1);
+
         // Readback may complete inline in the frame. That still counts the final rendered sample of this request.
         var job = new WaveJob(
             Converging: (((index == m_captureInstance) && IsConverging(index: index)) ? m_convergence : null),
@@ -350,15 +357,38 @@ public sealed partial class RenderGraphRuntime {
         recording.ForkingThread = Environment.CurrentManagedThreadId;
         RenderRecordWork.Process.Wave(partitions: partitions);
         try {
-            if (m_jobs is { } pool) {
-                pool.Fork(body: recording, jobClass: JobClass.Frame, partitions: partitions);
-            } else {
-                for (var partition = 0; (partition < partitions); partition++) {
-                    recording.Run(partition: partition);
-                }
-            }
+            ForkFrame(body: recording, partitions: partitions);
         } finally {
             recording.Release();
+        }
+        EmitWave();
+    }
+    // Runs a fork of the frame class across the job pool, or its partitions in order on this thread with no pool.
+    private void ForkFrame(IJobPartitions body, int partitions) {
+        if (m_jobs is { } pool) {
+            pool.Fork(body: body, jobClass: JobClass.Frame, partitions: partitions);
+            return;
+        }
+        for (var partition = 0; (partition < partitions); partition++) {
+            body.Run(partition: partition);
+        }
+    }
+    // Emits the lanes the wave's recordings left (ShaderPipelineRenderNode.EmitLane) as one fork: every recording has
+    // decided all its passes, so a lane reads nothing another lane or a recording writes, and lanes of nodes that share a
+    // recording domain run side by side too. The heaviest lanes (by their last emissions) go first.
+    private void EmitWave() {
+        var emission = m_waveEmission;
+        var lanes = emission.Collect(jobs: m_waveJobs);
+
+        if (lanes == 0) {
+            return;
+        }
+        emission.ForkingThread = Environment.CurrentManagedThreadId;
+        RenderRecordWork.Process.Lanes(lanes: lanes);
+        try {
+            ForkFrame(body: emission, partitions: lanes);
+        } finally {
+            emission.Release();
         }
     }
     // Commits one render's frame and settles what the runtime keeps of it.
@@ -433,7 +463,7 @@ public sealed partial class RenderGraphRuntime {
         node.DefersExportCompletion = false;
         if (node.OwesSettlement) { m_settlementsOwed.Add(item: node); }
         if (node.FrameCounter != job.Rendered) {
-            rendering.LongestRecord = Math.Max(val1: rendering.LongestRecord, val2: node.LastRecordTicks);
+            rendering.LongestRecord = Math.Max(val1: rendering.LongestRecord, val2: node.LastLongestRecordTicks);
             m_historySucceeded[index] = true;
             RememberOutput(frame: schedule.Frame, index: index, node: node, rendered: true, schedule: schedule, surface: node.PublishedSurface);
         }
@@ -483,7 +513,7 @@ public sealed partial class RenderGraphRuntime {
                     m_weights[partitions] = 0L;
                     m_cursor[root] = partitions++;
                 }
-                m_weights[m_cursor[root]] -= Math.Max(val1: jobs[job].Node.LastRecordTicks, val2: 1L);
+                m_weights[m_cursor[root]] -= Math.Max(val1: jobs[job].Node.LastWalkTicks, val2: 1L);
             }
             Array.Sort(keys: m_weights, items: m_groups, index: 0, length: partitions);
             // Each group's run in m_order (a counting sort by partition), then the jobs in schedule order into their runs.
@@ -511,11 +541,68 @@ public sealed partial class RenderGraphRuntime {
 
                 node.RecordPendingFrame();
                 if (offThread) {
-                    RenderRecordWork.Process.WorkerJob(passes: node.LastPassesRecorded);
+                    RenderRecordWork.Process.WorkerJob(passes: node.LastPassesRecordedSerially);
                 }
             }
         }
         // Lets go of the wave's jobs once its fork has joined.
         public void Release() => m_jobs = [];
+    }
+    // One wave's emission fork: every lane its recordings left, heaviest first, a partition each.
+    private sealed class WaveEmission : IJobPartitions {
+        private ShaderPipelineRenderNode[] m_nodes = [];
+        private int[] m_lanes = [];
+        private long[] m_weights = [];
+        private int[] m_order = [];
+        private int m_count;
+
+        // The thread that forks, whose lanes are the frame thread's own recording.
+        public int ForkingThread;
+
+        // Gathers the jobs' lanes and orders them heaviest first; returns the partition count.
+        public int Collect(List<WaveJob> jobs) {
+            var count = 0;
+
+            foreach (var job in jobs) {
+                count += job.Node.EmitLanes;
+            }
+            if (count == 0) {
+                return 0;
+            }
+            ArrayCapacity.EnsureScratch(array: ref m_nodes, required: count);
+            ArrayCapacity.EnsureScratch(array: ref m_lanes, required: count);
+            ArrayCapacity.EnsureScratch(array: ref m_weights, required: count);
+            ArrayCapacity.EnsureScratch(array: ref m_order, required: count);
+
+            var at = 0;
+
+            foreach (var job in jobs) {
+                var node = job.Node;
+
+                for (var lane = 0; (lane < node.EmitLanes); lane++, at++) {
+                    m_nodes[at] = node;
+                    m_lanes[at] = lane;
+                    // Heaviest first: the sort below is ascending, so the weight is negated.
+                    m_weights[at] = -node.LaneWeight(lane: lane);
+                    m_order[at] = at;
+                }
+            }
+            Array.Sort(keys: m_weights, items: m_order, index: 0, length: count);
+            m_count = count;
+            return count;
+        }
+        public void Run(int partition) {
+            var at = m_order[partition];
+            var node = m_nodes[at];
+            var lane = m_lanes[at];
+
+            node.EmitLane(lane: lane);
+            RenderRecordWork.Process.Lane(passes: node.LanePasses(lane: lane), worker: (Environment.CurrentManagedThreadId != ForkingThread));
+        }
+        // Lets go of the wave's nodes once its fork has joined.
+        public void Release() {
+            Array.Clear(array: m_nodes, index: 0, length: m_count);
+            m_count = 0;
+        }
     }
 }

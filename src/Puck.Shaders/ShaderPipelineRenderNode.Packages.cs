@@ -439,13 +439,85 @@ public sealed partial class ShaderPipelineRenderNode {
     // instance the pass read.
     private readonly record struct PackageAlias(RuntimeResource? Target, string? Name, int Instance);
 
+    // Records a package pass whole into one command list: its decision and its commands in a row.
     private void RecordPackage(RuntimePass pass, int slot, in FrameContext context, nint command) {
         var handle = command;
         var recorder = m_gpu.Recorder;
+        var region = pass.PassRegion!;
+        var sink = new CommandSink(command: handle, node: this, recorder: recorder);
+        Span<byte> passBlock = stackalloc byte[checked((int)region.ByteCount)];
+
+        ResolvePackagePorts(pass: pass, slot: slot);
+        FillPassBlock(
+            block: passBlock,
+            pass: pass
+        );
+        InitializeResources(
+            command: handle,
+            recorder: recorder,
+            slot: slot
+        );
+
+        var mayStandIn = MayStandIn(pass: pass, slot: slot);
+
+        // A pass that will draw nothing records its reads' barriers, which leave each input shader-readable for the output
+        // standing for it, and none for the outputs it would have written.
+        if (mayStandIn && (pass.Package is not IRenderGraphPackageReadback) && pass.Package!.DrawsNothing(passBlock: passBlock)) {
+            RecordAccesses(command: handle, pass: pass, readsOnly: true, recorder: recorder, slot: slot);
+            _ = region.Write(bytes: passBlock, offset: 0);
+            region.Flush(slot: slot);
+            ApplyOutcome(outcome: RenderGraphPackageOutcome.DrewNothing, pass: pass, slot: slot);
+            return;
+        }
+        RecordAccesses(
+            command: handle,
+            pass: pass,
+            recorder: recorder,
+            slot: slot
+        );
+        var outcome = pass.Package!.Record(recording: new RenderGraphPackageRecording(
+            Arguments: PackageArgumentsOf(pass: pass, slot: slot),
+            CommandBuffer: handle,
+            Context: context,
+            FrameWidth: m_width,
+            FrameHeight: m_height,
+            RenderWidth: m_renderWidth,
+            RenderHeight: m_renderHeight,
+            Height: pass.Height,
+            Inputs: pass.PackageInputs!,
+            Leases: m_frameLeases,
+            MayStandIn: mayStandIn,
+            Outputs: pass.PackageOutputs!,
+            PassBlock: passBlock,
+            Reads: Reads,
+            Recorder: recorder,
+            Slot: slot,
+            UnreadFrames: UnreadFrames,
+            Width: pass.Width,
+            WorkDetailRow: pass.WorkDetailRow,
+            WorkCounters: WorkCountersOf(pass: pass, slot: slot)
+        ));
+
+        RecordPackageReadback(pass: pass, sink: ref sink, slot: slot);
+
+        // The recorder wrote its declared values beside the extent and config; the slot takes whichever words changed.
+        _ = region.Write(
+            bytes: passBlock,
+            offset: 0
+        );
+        region.Flush(slot: slot);
+
+        ApplyOutcome(
+            outcome: outcome,
+            pass: pass,
+            slot: slot
+        );
+        pass.Drew = (outcome == RenderGraphPackageOutcome.Drew);
+    }
+    // Resolves the versions a package pass's ports bind this frame into its port arrays, which its recording reads.
+    private void ResolvePackagePorts(RuntimePass pass, int slot) {
         var inputs = pass.PackageInputs!;
         var outputs = pass.PackageOutputs!;
-        var region = pass.PassRegion!;
-        Span<byte> passBlock = stackalloc byte[checked((int)region.ByteCount)];
 
         // An input standing for another is handed over as the one it stands for, which the planned read of that one
         // left in the shader-readable layout every image read leaves.
@@ -472,92 +544,34 @@ public sealed partial class ShaderPipelineRenderNode {
                 resource: m_resourceLookup[output.Name]
             );
         }
-
-        FillPassBlock(
-            block: passBlock,
-            pass: pass
-        );
-        InitializeResources(
-            command: handle,
-            recorder: recorder,
-            slot: slot
-        );
-
-        var mayStandIn = ((pass.PackageAliasRefusal is null) && (HostInputInAnotherLayout(pass: pass, slot: slot) < 0) && (OwnImageInput(pass: pass, slot: slot) < 0));
-
-        // A pass that will draw nothing records its reads' barriers, which leave each input shader-readable for the output
-        // standing for it, and none for the outputs it would have written.
-        if (mayStandIn && (pass.Package is not IRenderGraphPackageReadback) && pass.Package!.DrawsNothing(passBlock: passBlock)) {
-            RecordAccesses(command: handle, pass: pass, readsOnly: true, recorder: recorder, slot: slot);
-            _ = region.Write(bytes: passBlock, offset: 0);
-            region.Flush(slot: slot);
-            ApplyOutcome(outcome: RenderGraphPackageOutcome.DrewNothing, pass: pass, slot: slot);
-            return;
-        }
-        RecordAccesses(
-            command: handle,
-            pass: pass,
-            recorder: recorder,
-            slot: slot
-        );
-        var outcome = pass.Package!.Record(recording: new RenderGraphPackageRecording(
-            // The arguments resolve as their access's barrier did (InstanceIndex), so a history buffer's dispatch reads
-            // the instance its writer last wrote, not the submission slot's.
-            Arguments: ((pass.PackageArguments is { } arguments)
-                ? ResolveBuffer(
-                    index: InstanceIndex(
-                        previous: false,
-                        resource: m_resourceLookup[arguments],
-                        slot: slot
-                    ),
-                    name: arguments,
-                    resource: m_resourceLookup[arguments]
-                )
-                : null),
-            CommandBuffer: handle,
-            Context: context,
-            FrameWidth: m_width,
-            FrameHeight: m_height,
-            RenderWidth: m_renderWidth,
-            RenderHeight: m_renderHeight,
-            Height: pass.Height,
-            Inputs: inputs,
-            Leases: m_frameLeases,
-            MayStandIn: mayStandIn,
-            Outputs: outputs,
-            PassBlock: passBlock,
-            Reads: Reads,
-            Recorder: recorder,
-            Slot: slot,
-            UnreadFrames: UnreadFrames,
-            Width: pass.Width,
-            WorkDetailRow: pass.WorkDetailRow,
-            WorkCounters: (pass.CountsKernelWork
-                ? (m_kernelCounting
-                    ? m_passes[0].KernelCounters!.RowOf(
-                        row: pass.Index,
-                        slot: slot
-                    )
-                    : m_passes[0].KernelCounters!.DisabledOf(slot: slot))
-                : null)
-        ));
-
-        RecordPackageReadback(command: handle, pass: pass, recorder: recorder, slot: slot);
-
-        // The recorder wrote its declared values beside the extent and config; the slot takes whichever words changed.
-        _ = region.Write(
-            bytes: passBlock,
-            offset: 0
-        );
-        region.Flush(slot: slot);
-
-        ApplyOutcome(
-            outcome: outcome,
-            pass: pass,
-            slot: slot
-        );
-        pass.Drew = (outcome == RenderGraphPackageOutcome.Drew);
     }
+    // Whether a package pass's recording may draw nothing and leave each output standing for its input.
+    private bool MayStandIn(RuntimePass pass, int slot) =>
+        ((pass.PackageAliasRefusal is null) && (HostInputInAnotherLayout(pass: pass, slot: slot) < 0) && (OwnImageInput(pass: pass, slot: slot) < 0));
+    // The buffer an indirectly dispatched package pass reads its group counts from, or null. The arguments resolve as
+    // their access's barrier did (InstanceIndex), so a history buffer's dispatch reads the instance its writer last wrote,
+    // not the submission slot's.
+    private IGpuBuffer? PackageArgumentsOf(RuntimePass pass, int slot) => ((pass.PackageArguments is { } arguments)
+        ? ResolveBuffer(
+            index: InstanceIndex(
+                previous: false,
+                resource: m_resourceLookup[arguments],
+                slot: slot
+            ),
+            name: arguments,
+            resource: m_resourceLookup[arguments]
+        )
+        : null);
+    // Where a counting package pass's kernels count their work this frame: its row, or the disabled row on a frame no
+    // reading demands the counts; null for a pass that does not count.
+    private GpuKernelCounterRow? WorkCountersOf(RuntimePass pass, int slot) => (pass.CountsKernelWork
+        ? (m_kernelCounting
+            ? m_passes[0].KernelCounters!.RowOf(
+                row: pass.Index,
+                slot: slot
+            )
+            : m_passes[0].KernelCounters!.DisabledOf(slot: slot))
+        : null);
     // The layout each port's image is in when the recorder records: the one its planned access's barrier left it in.
     private static GpuImageLayout[] LayoutsOf(ShaderPipelineAccess[] accesses, ResourceReference[] ports) {
         var layouts = new GpuImageLayout[ports.Length];

@@ -27,13 +27,21 @@ public sealed partial class SdfWorldTables {
     private long m_unselectedBytes;
     private int m_unselectedMeshes;
     private long m_selectedBytes;
-    // The upload a report last asked for the sums at, which keeps them counted for a window after it.
+    // The upload a report last asked for the sums at, which keeps them counted for a window after it, and whether one
+    // ever asked.
     private ulong m_selectionAskedAt;
+    private bool m_selectionAsked;
     // Each raster selection's latest read marks, by the occlusion that read them.
     private readonly ConcurrentDictionary<object, SelectionSummary> m_selections = new(comparer: ReferenceEqualityComparer.Instance);
 
     private sealed record SelectionSummary(string Part, long[] Levels, long[] Tiers, long Draws);
 
+    /// <summary>Gets whether the raster passes mark what they select (<see cref="SelectionMarkFrames"/>): only while a
+    /// reading asked for the selection (<see cref="DescribeSelection"/>) within <see cref="SelectionWindowUploads"/>
+    /// uploads, so a frame nobody reads the selection for marks nothing, reads no marks back and walks none on the frame
+    /// thread. Safe to read from any thread.</summary>
+    internal bool MarksSelections => (Volatile.Read(location: ref m_selectionAsked) &&
+        ((m_uploads - Volatile.Read(location: ref m_selectionAskedAt)) <= SelectionWindowUploads));
     /// <summary>Gets the epoch of the staged list's rows: it moves whenever a staging changes the mesh or occupant a row
     /// holds or how many rows the list has, never for a moved matrix. Read on the frame thread.</summary>
     public long MeshRowEpoch => m_meshRowEpoch;
@@ -128,14 +136,16 @@ public sealed partial class SdfWorldTables {
     /// <summary>Describes what the raster passes selected, from their latest marks: per pass part, the triangles drawn at
     /// each level and at each tier the meshes were baked at (<c>none</c> for a mesh no bake tiered), the mesh bytes
     /// placed in the region that some pass selected and those none selected within
-    /// <see cref="SelectionWindowUploads"/> uploads, and the mark rounds read and those stale. The byte sums are counted
-    /// only for a window of uploads after a reading asks for them, so the first reading after a quiet spell shows the
-    /// sums as last counted and a reading a mark round later shows them current. Safe to read from any thread.</summary>
+    /// <see cref="SelectionWindowUploads"/> uploads, and the mark rounds read and those stale. The passes mark, and the
+    /// sums are counted, only for a window of uploads after a reading asks (<see cref="MarksSelections"/>), so the first
+    /// reading after a quiet spell shows the sums as last counted, a reading a mark round later shows them current, and
+    /// the unselected bytes cover a whole window once a window of readings has passed. Safe to read from any thread.</summary>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeSelection() {
         var line = new StringBuilder();
 
         Volatile.Write(location: ref m_selectionAskedAt, value: m_uploads);
+        Volatile.Write(location: ref m_selectionAsked, value: true);
         var parts = new SortedDictionary<string, (long[] Levels, long[] Tiers, long Draws)>(comparer: StringComparer.Ordinal);
 
         foreach (var summary in m_selections.Values) {

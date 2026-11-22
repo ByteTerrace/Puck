@@ -107,14 +107,18 @@ public sealed partial class ShaderPipelineRenderNode {
     // A pass that draws nothing (readsOnly) records the barriers of its reads alone and leaves each storage it would have
     // written where SkipAccess leaves it.
     private void RecordAccesses(RuntimePass pass, int slot, nint command, IGpuRecorder recorder, bool readsOnly = false) {
+        var sink = new CommandSink(command: command, node: this, recorder: recorder);
+
         recorder.BeginBarriers(commandBufferHandle: command);
         try {
-            RecordAccessBarriers(command: command, pass: pass, readsOnly: readsOnly, recorder: recorder, slot: slot);
+            RecordAccessBarriers(pass: pass, readsOnly: readsOnly, sink: ref sink, slot: slot);
         } finally {
             recorder.EndBarriers(commandBufferHandle: command);
         }
     }
-    private void RecordAccessBarriers(RuntimePass pass, int slot, nint command, IGpuRecorder recorder, bool readsOnly) {
+    // Moves the tracker through a pass's accesses and hands each access's barrier to the sink: a command list's, or a
+    // pass emission's for its lane (ShaderPipelineRenderNode.Emission.cs).
+    private void RecordAccessBarriers<TSink>(RuntimePass pass, int slot, bool readsOnly, ref TSink sink) where TSink : struct, IRecordSink {
         var accesses = pass.Accesses;
 
         for (var index = 0; (index < accesses.Length); index++) {
@@ -163,13 +167,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     ));
                 resource.HasOverride[instance] = false;
             }
-            RecordBarrier(
-                barrier: barrier,
-                command: command,
-                instance: instance,
-                recorder: recorder,
-                resource: resource
-            );
+            sink.Barrier(barrier: barrier, instance: instance, resource: resource);
 
             // History can remain in a read role for arbitrarily many submissions. Remember its actual last access
             // using the existing override, since the plan alone assumes a write on every submission.
@@ -213,49 +211,8 @@ public sealed partial class ShaderPipelineRenderNode {
         resource.HasOverride[instance] = true;
         resource.OverridePlanned[instance] = true;
     }
-    private void RecordBarrier(ShaderPipelineBarrier barrier, RuntimeResource resource, int instance, nint command, IGpuRecorder recorder) {
-        switch (barrier.Kind) {
-            case ShaderPipelineBarrierKind.Image:
-                recorder.TransitionImageLayout(
-                    command,
-                    ResolveImage(
-                        resource,
-                        resource.Spec.Name,
-                        instance
-                    ).ImageHandle,
-                    barrier.OldLayout,
-                    barrier.NewLayout,
-                    barrier.SourceAccess,
-                    barrier.DestinationAccess,
-                    barrier.SourceStage,
-                    barrier.DestinationStage
-                );
-                break;
-            case ShaderPipelineBarrierKind.Memory:
-                recorder.MemoryBarrier(
-                    command,
-                    barrier.SourceAccess,
-                    barrier.DestinationAccess,
-                    barrier.SourceStage,
-                    barrier.DestinationStage
-                );
-                break;
-            case ShaderPipelineBarrierKind.Buffer:
-                recorder.TransitionBuffer(
-                    command,
-                    ResolveBuffer(
-                        resource,
-                        resource.Spec.Name,
-                        instance
-                    ).BufferHandle,
-                    barrier.SourceAccess,
-                    barrier.DestinationAccess,
-                    barrier.SourceStage,
-                    barrier.DestinationStage
-                );
-                break;
-        }
-    }
+    private void RecordBarrier(ShaderPipelineBarrier barrier, RuntimeResource resource, int instance, nint command, IGpuRecorder recorder) =>
+        EmitBarrier(barrier: barrier, command: command, recorder: recorder, target: BarrierTarget(barrier: barrier, instance: instance, resource: resource));
     // The state a host-owned storage arrives in: a bound image in its declared layout, ready to sample; a buffer after
     // anything its host did between frames.
     private ShaderPipelineAccessState HostPrior(RuntimeResource resource) =>

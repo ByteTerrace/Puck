@@ -26,9 +26,11 @@ namespace Puck.Abstractions.Gpu;
 /// published next.
 /// </para>
 /// <para>
-/// Every member except <see cref="TryReadCompleted"/> and <see cref="TryRead"/> runs on the node's recording thread,
-/// and so does every counted call except object creation: a node may create its pipelines on a build thread while it
-/// records frames, so the lifetime counts are written interlocked. <see cref="TryReadCompleted"/> and
+/// Every member except <see cref="TryReadCompleted"/>, <see cref="TryRead"/>, <see cref="EnterLane"/> and
+/// <see cref="LeaveLane"/> runs on the node's recording thread. Counted calls may also come from the threads that emit
+/// the node's passes side by side (<see cref="EnterLane"/>), and from a build thread creating pipelines, so every count
+/// is added interlocked and a record opens under a lock; a count made on a thread inside a lane goes to that lane's
+/// pass, and any other to the pass the recording thread entered. <see cref="TryReadCompleted"/> and
 /// <see cref="TryRead"/> may run on any thread: the published sample is double-buffered with a version, and a read that overlaps
 /// a publication retries. Counting, sealing, completing, and reading allocate nothing once the records and samples
 /// have grown to the configured pass count.
@@ -42,7 +44,11 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     private readonly Record[] m_records;
 
     private readonly GpuWorkSample[] m_snapshots = [new(), new()];
+    private readonly Lock m_openGate = new();
     private int m_currentPass = -1;
+    // The ledger and pass the calling thread's emission lane counts into (EnterLane), or null outside a lane.
+    [ThreadStatic] private static GpuWorkLedger? LaneLedger;
+    [ThreadStatic] private static int LanePass;
     private WorkClass[] m_classes = [];
     private string[] m_labels = [];
     private GpuWorkDetail[] m_details = [];
@@ -208,6 +214,32 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         m_open = null;
         Withdraw();
     }
+    /// <summary>Counts what the calling thread records next under a pass the recording thread already entered in the work
+    /// being recorded, while other threads emit other passes of the same submission side by side: a count made on this
+    /// thread goes to <paramref name="pass"/> until <see cref="LeaveLane"/>, whatever pass the recording thread is in. The
+    /// recording thread opens the record and enters and leaves each pass before any lane emits it, so a lane changes no
+    /// state but its own thread's.</summary>
+    /// <param name="pass">The zero-based pass index in the configured labels, which this submission executed.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="pass"/> is not a configured pass.</exception>
+    /// <exception cref="InvalidOperationException">The calling thread is already in a lane, no record is open, or the open
+    /// record did not execute <paramref name="pass"/>.</exception>
+    public void EnterLane(int pass) {
+        if (LaneLedger is not null) {
+            throw new InvalidOperationException(message: $"The thread is already in pass {LanePass}'s lane; leave it before entering pass {pass}'s.");
+        }
+
+        var record = (Volatile.Read(location: ref m_open) ?? throw new InvalidOperationException(message: "No submission is being recorded."));
+
+        ValidatePass(pass: pass, record: record);
+        if (record.States[pass] != GpuPassState.Executed) {
+            throw new InvalidOperationException(message: $"Pass {pass} is emitted in a lane but the submission did not execute it.");
+        }
+        LanePass = pass;
+        LaneLedger = this;
+    }
+    /// <summary>Ends the calling thread's lane (<see cref="EnterLane"/>); its counts go to the recording thread's pass
+    /// again.</summary>
+    public void LeaveLane() => LaneLedger = null;
     /// <summary>Ends the running pass; the work counted next is outside every pass until another pass is entered.</summary>
     /// <exception cref="InvalidOperationException">No pass is running.</exception>
     public void LeavePass() {
@@ -388,8 +420,9 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
 
     internal void Count(int column, long amount) {
         var record = OpenRecord();
+        var pass = (ReferenceEquals(objA: LaneLedger, objB: this) ? LanePass : m_currentPass);
 
-        record.Counts[(((m_currentPass + 1) * Columns) + column)] += amount;
+        _ = Interlocked.Add(location1: ref record.Counts[(((pass + 1) * Columns) + column)], value: amount);
         CountTransfer(record, column, amount);
     }
     internal void CountCreated(int lifetimeIndex) =>
@@ -421,11 +454,17 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         return record.Submission;
     }
 
+    // A count from an emission lane may be the first of a submission, beside another lane's, so the record opens under a
+    // lock; once open, the reference is all a count reads.
     private Record OpenRecord() {
-        if (m_open is { } open) {
+        if (Volatile.Read(location: ref m_open) is { } open) {
             return open;
         }
-
+        lock (m_openGate) {
+            return (m_open ?? OpenRecordLocked());
+        }
+    }
+    private Record OpenRecordLocked() {
         Record? chosen = null;
 
         foreach (var record in m_records) {
