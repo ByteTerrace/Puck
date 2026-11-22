@@ -483,10 +483,11 @@ public sealed class HostFrameTimeline {
         builder.Append(CultureInfo.InvariantCulture, $" other {(total - named) / indices.Length:0.###}");
     }
 
-    // The simulation's named parts, as the mean over the iterations that ran a step: where a tick's time went.
+    // The simulation's named parts, as the mean over the iterations that ran a step: where a tick's time went. The
+    // parts are summed rather than taken from the simulate phase, which is only the hand-off when a step thread runs
+    // the tick; the ticks line below gives the whole tick to read the sum against.
     private void AppendTickParts(StringBuilder builder, long[] indices) {
         var stepped = 0;
-        var total = 0.0;
         HostFrameWorkTimes parts = default;
 
         foreach (var index in indices) {
@@ -494,7 +495,6 @@ public sealed class HostFrameTimeline {
 
             if (m_steps[slot] == 0) { continue; }
             stepped++;
-            total += Milliseconds(m_phases[slot * PhaseCount + (int)HostFramePhase.Simulate]);
             for (var part = (int)HostFrameWorkPart.TickIngress; part < (int)HostFrameWorkPart.Count; part++) { parts[part] += m_workParts[slot][part]; }
         }
         if (stepped == 0) { return; }
@@ -508,7 +508,7 @@ public sealed class HostFrameTimeline {
             named += milliseconds;
             builder.Append(CultureInfo.InvariantCulture, $" {((HostFrameWorkPart)part).ToString()["Tick".Length..].ToLowerInvariant()} {milliseconds / stepped:0.###}");
         }
-        builder.Append(CultureInfo.InvariantCulture, $" other {(total - named) / stepped:0.###}");
+        builder.Append(CultureInfo.InvariantCulture, $" sum {named / stepped:0.###}");
     }
 
     private void AppendPhases(StringBuilder builder, long[] indices, string label, HostFramePhase first, HostFramePhase? second, bool? stepped = null, bool lessBlocked = false) {

@@ -304,9 +304,12 @@ the ticks a due list left it alone (`elided=`), the evaluations, the skips and
 the firings the evaluator counted since the latches began, and the work those
 cost at the sheet's own prices: setup per visit, check per evaluation that ran,
 fire per firing. Every count is deterministic, so two runs of one document and
-input print the same sheet. The costliest line comes first, with its schedule,
-so a rule that spends because its Level gate is always open, or because it reads
-a fact with no version, says which.
+input print the same sheet. `settled=` counts the skips that stood for a Level
+firing proven to change nothing, and `armed=` the firings that queued an arm
+that leaves the arena (each makes the host derive its fact versions again). The
+costliest line comes first, with its schedule and, for a Level rule, the
+schedule a firing stands on, so a rule that spends because its firing changes a
+row every tick, or because it reads a fact with no version, says which.
 
 Puck.World also reports contradictory gates, where a gate pins a cell to an
 empty range and can never hold (`WorldRuleWorkBudget.ContradictoryGates`).
@@ -375,9 +378,15 @@ schedule names:
   population's placement table version; an input-history read of a literal
   owner (an event, its time, value or tick, a hold, or the music clock at an
   event) as that owner's input version, which moves on an admission, an
-  expiry, a switch or a restore; and the music clock's current beat, bar,
+  expiry, a switch or a restore; the music clock's current beat, bar,
   beat in bar or phase error as a version that moves when the value does, so a
-  beat read moves on the beat's edge;
+  beat read moves on the beat's edge; and a fact that names no binding and
+  answers from host state alone (a literal seat's `$channel:`, `$pointer:` or
+  `board(engaged|pointer|side, ...)`, the `physics(quiescent)` census and the
+  population count) as a version that moves when the value it answers does:
+  the host reads each one again wherever its state may have moved, which is
+  before a walk, after a firing that delivered an arm, and after a commit that
+  resynchronised gates, input owners or body cells;
 - for a sweep, the set it sweeps: the keyed row it iterates, or the live-body
   roster;
 - a **deadline**: a gate conjunct `$tick >= X`, `$tick > X` or `$tick == X` (or
@@ -427,16 +436,66 @@ version of every dependency the schedule names and the binding's wake tick.
 On the next evaluation, if the tick is before the wake and every version
 matches (`RuleEvaluator.VersionsMatch`, the one door every kept verdict
 passes), the binding keeps its verdict without running its locals or gate. A
-local's value is memoized the same way. A Level gate that held always runs,
-and so does a traced evaluation.
+local's value is memoized the same way. A traced evaluation always runs.
+
+A row answers the door with the number that names its content
+(`StateArena.RowContent`), which is its version unless a commit put its numbers
+back as they recently stood. A row that one rule clears and the next rebuilds
+every tick therefore answers the same number at each point of the tick from one
+tick to the next, and the readers between and after the two keep their
+verdicts.
+
+### Keep a Level firing that changed nothing
+
+A Level gate that held fires again every tick. Most such firings recompute a
+value that has not moved, so the evaluator keeps one as it keeps a closed
+verdict, on a wider schedule: the **firing schedule**
+(`RuleDataflow.CollectFiring`) names the judgement's dependencies, the locals
+deferred to the firing, every row the effects read, every row they write, and
+every host fact they observe. `world.budget.rules --why <rule>` prints it after
+the judgement's schedule.
+
+A firing is **settled** when the firing itself proves it changed nothing
+(`RuleEvaluator.FireProposal`):
+
+- its scope was the outermost one, and no row version moved across its commit
+  (`StateArena.MoveSequence` moves exactly when one does);
+- every row it wrote, changed or not, is a row the firing schedule names, read
+  from the journal's own entries, so no effect's declared write set is trusted
+  for the rows it did write;
+- it queued no arm, reported no refusal, and wrote no latch bit;
+- the host's commit did nothing but close the arena's scope
+  (`IEffectHost.CommitStateTransaction` answers so; the world host answers no
+  when a gate, an input owner or a body cell resynchronised, or a private draw
+  word was read).
+
+The binding then records the firing schedule's versions and the step's engine
+ticks. While every one of them stands and the deadline is ahead, the firing is
+not run: fired again it would read the same values and write what is already
+there. The skip answers `RuleOutcome.Fired`, which is what the firing answered,
+so a `maxFirings` budget and a staged group's step count it as before. A firing
+schedule is volatile for the same reasons a judgement's is, and also when an
+effect kind reads the tick (`EffectNeeds.ReadsTick`) or the rule holds a read of
+`$tick` beyond its deadline's; an arm a firing queues is left out of the
+schedule, because a firing that queued one is never settled. Every other
+facet-bearing fact the compiler created for the rule is in it wherever the fact
+sits (`RuleNeeds.FacetFacts`), so a fact an effect walk does not reach makes the
+schedule volatile rather than leaving it out. An Edge rule and a group rewind
+have no firing schedule.
+
+`RuleEvaluator.QuiescenceChecked` fires every such firing anyway and records
+the first that does not settle again (`StaleQuiescence`). `puck test
+--reproduce` turns it on for the replay, so each replayed tick's hash compares
+a recording that skipped the firing with a replay that fired it.
 
 ### Visit only the rules that are due
 
 The rules a family evaluates directly walk a **due list**
 (`RuleEvaluator.EvaluateDue`, `RuleDueList`) in document order instead of the
 rule array. A rule is due when its schedule is volatile, when its last verdict
-asks for it (a Level gate that held, a refusal, a fault), when its deadline
-comes, or when a row or host fact it names moves. Interactions have their own
+asks for it (a Level firing that did not settle, a refusal, a fault), when its
+deadline comes, or when a row or host fact it names moves; a settled Level rule
+is also due when a row or fact its firing schedule names moves. Interactions have their own
 due list after the groups. A distance interaction follows its carriers' positions,
 and a region interaction follows the event feed's occupancy for its placement.
 Both follow carrier membership and pool instance lifetimes. When due, each visits
@@ -462,7 +521,7 @@ facts moved, and all of them when a row it reads or the roster moved.
 
 `state.rules.due` and `state.rules.elided` in `world.counters state` count the
 rules the walk visited and the ones it left alone, beside `evaluations`,
-`skips` and `firings`. `world.budget.rules --spent` lists the same counts per
+`skips`, `settled`, `firings` and `armed`. `world.budget.rules --spent` lists the same counts per
 rule (see [Price a tick's rules](#price-a-ticks-rules)).
 
 `RuleEvaluator.SchedulingEnabled` is `true` by default. Tests turn it off to

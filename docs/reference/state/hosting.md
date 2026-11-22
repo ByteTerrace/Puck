@@ -146,7 +146,12 @@ faulted and refused cases, through `IRuleKey.ResolveForWrite`.
 
 Puck.World's `WorldServer.ValidateStateTransaction` prepares input selection
 with `WorldInputRuntime.TryPrepareBodies` or `TryPrepareAll` while refusal can
-still rewind. `WorldServer.CommitStateTransaction` commits the arena and
+still rewind. `IEffectHost.CommitStateTransaction` answers whether the commit
+did nothing but close the arena's scope, which is what lets the evaluator take
+a Level firing as having changed nothing
+([keep a Level firing](analysis.md#keep-a-level-firing-that-changed-nothing));
+a host that also does work of its own there answers no.
+`WorldServer.CommitStateTransaction` commits the arena and
 applies those selections with `ApplyPreparedBodies` or `ApplyPreparedAll`;
 application cannot refuse. `WorldRuleHost.CommitTransactional` installs the
 prepared document before the delivered arms run. A delivery refusal counts

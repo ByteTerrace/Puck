@@ -12,7 +12,7 @@ namespace Puck.State;
 /// each refusing by name and pointing at <see cref="ExpressionOp.IsAbsent"/> and <see cref="ExpressionOp.Coalesce"/>,
 /// the operations that answer an absence. A faulted fact is read as an absence by a consumer that answers only
 /// absences, and as arithmetic failure by one that evaluates. Neither is ever encoded as a numeric stand-in.</remarks>
-public readonly struct Fact {
+public readonly struct Fact : IEquatable<Fact> {
     /// <summary>Initializes a new instance of the <see cref="Fact"/> struct.</summary>
     /// <param name="outcome">What the operand read answered.</param>
     /// <param name="kind">The encoding a finite reading of the same operand carries.</param>
@@ -25,6 +25,16 @@ public readonly struct Fact {
     public Outcome Outcome { get; }
     /// <summary>Gets the encoding a finite reading carries.</summary>
     public CellKind Kind { get; }
+
+    /// <summary>Determines whether two facts carry the same answer in the same encoding, so a reader that keeps one
+    /// can tell whether a later read of the same operand answered anything else.</summary>
+    /// <param name="other">The fact to compare with.</param>
+    /// <returns><see langword="true"/> when the answers and the encodings are equal.</returns>
+    public bool Equals(Fact other) => ((Kind == other.Kind) && Outcome.Equals(other: other.Outcome));
+    /// <inheritdoc/>
+    public override bool Equals(object? obj) => ((obj is Fact other) && Equals(other: other));
+    /// <inheritdoc/>
+    public override int GetHashCode() => HashCode.Combine(Kind, Outcome);
 
     /// <summary>Creates the no-cell fact in a cell encoding.</summary>
     /// <param name="kind">The encoding a finite reading of the same operand would carry.</param>

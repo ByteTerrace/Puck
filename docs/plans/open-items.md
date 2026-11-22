@@ -718,6 +718,48 @@ wait behind them.
    ([the churn list](#engine-job-system) names what still allocates). Check:
    the trace's pauses during a cold bake, by generation and by allocating
    thread.
+6. **A tick costs what changed.** Built: a Level firing that changed nothing
+   is not fired again until a row it reads or writes or a host fact it
+   observes moves
+   ([keep a Level firing](../reference/state/analysis.md#keep-a-level-firing-that-changed-nothing)),
+   a row that is changed and changed back within a tick keeps its readers'
+   verdicts (`StateArena.RowContent`), and a literal seat's channel, pointer
+   and board facts and the resting census are versioned by the value they
+   answer. `host.frames` prints the tick's named parts, and
+   `world.budget.rules --spent` each rule's `settled=` and `armed=`. Left, in
+   the order the debug world spends them:
+   - **An arm that would change nothing.** A Level rule that poses a body every
+     tick (`poseCell` holding a cursor or a lift car in place) queues an arm on
+     every firing, so it never settles, and each firing makes the host derive
+     every population slot's facts again. The arm's delivery has to be able to
+     answer that it found the body already as it would leave it, with the body
+     state it compared (pose, velocity, rest) named as host facts in the firing
+     schedule; the pose version covers the first of those only. Check:
+     `world.budget.rules --spent` shows `armed=` fall to the firings that moved
+     a body, and `world.tick.fact-derives` a tick falls with it.
+   - **Fact derivation on the slot notes.** `WorldRuleHost.DeriveFacts`
+     compares every population slot each time host state may have moved; it
+     becomes the slots written ([the body state door](body-state-door.md), its
+     followers step).
+   - **A scoped replay's fold.** An active scope folds every one of its bodies
+     on every tick and encodes six sections with no compare
+     (`WorldPopulation.AppendContinuationHash`); the body state door's entry
+     and reader step makes a parked slot encode nothing.
+   - **The step's restore snapshot.** `WorldBody.CaptureMotion` copies a body's
+     whole residue and transfer state on every advance so a refused sweep can
+     restore it; behind the body's section holders it becomes the sections the
+     step wrote.
+   - **A sweep's unmoved bindings.** A row sweep whose bindings read a
+     placement's pose is swept whole whenever any placement's inhabitant moves
+     (`RuleDueList` keeps per-binding dues for body sweeps only), so each
+     binding still pays its version check.
+   - **Host-owned field rows.** A rule that folds a field lattice's rows
+     (`WorldHostOwnedCellOperand`) is volatile, so it fires every tick whether
+     or not the lattice moved; a lattice row needs a version the host can
+     answer.
+
+   At scale: a zone's rule cost follows what its players touched this tick,
+   not how many rules and tables it holds.
 
 ### The player build never bakes
 
