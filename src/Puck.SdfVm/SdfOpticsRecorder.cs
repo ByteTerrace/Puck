@@ -43,9 +43,10 @@ internal sealed class SdfOpticsRecorder : IRenderGraphPackageRecorder {
         m_context.Services.Bindings.DestroySampler(samplerHandle: m_sampler);
         m_owner.Leave(view: m_view);
     }
+    // The view's residency is the state every recording of it shares (IRenderGraphPackageRecorder.RecordingDomain).
+    public object? RecordingDomain => m_view.Residency;
+    public void PrepareRecord(in FrameContext context) => _ = m_owner.PrepareRecord(instance: m_context.Instance, view: ref m_view, context: in context);
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-        _ = m_owner.Follow(instance: m_context.Instance, view: ref m_view);
-        m_owner.Begin(residency: m_view.Residency);
         var tables = m_view.Residency.Staged(context: recording.Context);
         var frame = m_view.Residency.Frame!;
         var snapshot = frame.Views[Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1))];

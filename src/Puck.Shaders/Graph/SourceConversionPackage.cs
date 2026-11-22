@@ -198,6 +198,8 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
             m_disposed = true;
             m_built.Dispose();
         }
+        // A recording binds and records its own sets alone, so it shares nothing with another instance's.
+        public object? RecordingDomain => this;
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
             var command = recording.CommandBuffer;
             var recorder = recording.Recorder;

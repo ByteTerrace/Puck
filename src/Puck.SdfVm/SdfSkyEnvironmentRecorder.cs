@@ -40,8 +40,10 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
     public ulong ReadbackBytes => 0;
 
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => (Screens ? ScreenWorkDetails : (Reduces ? [] : m_built.Residency.SkyDetails.Labels));
+    // The residency is the state every recording of it shares (IRenderGraphPackageRecorder.RecordingDomain).
+    public object? RecordingDomain => m_built.Residency;
+    public void PrepareRecord(in FrameContext context) => m_views.PrepareResidency(residency: m_built.Residency, context: in context);
     public bool Skips(in FrameContext context) {
-        m_views.Begin(residency: m_built.Residency);
         return (!m_built.Residency.Prepare(context: context) ||
             !ReferenceEquals(objA: m_built.Tables, objB: m_built.Residency.Tables) || (!Screens && !m_built.Tables.SkyEnvironmentDemand));
     }

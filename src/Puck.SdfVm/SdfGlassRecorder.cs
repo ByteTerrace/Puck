@@ -54,11 +54,11 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
     }
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) =>
         m_owner.SignatureOf(instance: m_context.Instance, part: SdfWorldPackage.Parts.GlassShade, temporal: m_temporal, context: in context, reads: reads);
+    // The view's residency is the state every recording of it shares (IRenderGraphPackageRecorder.RecordingDomain).
+    public object? RecordingDomain => m_view.Residency;
+    public void PrepareRecord(in FrameContext context) => _ = m_owner.PrepareRecord(instance: m_context.Instance, view: ref m_view, context: in context);
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-        _ = m_owner.Follow(instance: m_context.Instance, view: ref m_view);
         var residency = m_view.Residency;
-
-        m_owner.Begin(residency: residency);
         var tables = residency.Staged(context: recording.Context);
 
         m_owner.NoteGlassExtent(instance: m_context.Instance, width: recording.RenderWidth, height: recording.RenderHeight);

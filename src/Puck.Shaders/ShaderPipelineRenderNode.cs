@@ -1,5 +1,6 @@
 using Puck.Abstractions.Collections;
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
@@ -1926,23 +1927,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// <returns>The latest published surface, or an empty surface before the node has published one or once it is
     /// disposed.</returns>
     public Surface ProduceFrame(in FrameContext context) {
-        // A caller that rendered the previous frame inside a batch settles it after the flush; one that did not is settled
-        // here, before anything reads the history that frame committed.
-        SettleHandOver();
-        var latch = (context.Latch.IsLatched ? context.Latch : DeliveryLatch.Capture());
-        var latched = (context.Latch.IsLatched ? context : (context with { Latch = latch }));
-
-        m_frameLatch = latch;
-        try {
-            return Produce(context: in latched);
-        } catch {
-            AbandonRecording();
-            AbortCadenceFrame();
-            throw;
-        } finally {
-            m_frameLatch = default;
-            ReleaseUnheldLeases();
+        if (BeginFrame(context: in context)) {
+            RecordPendingFrame();
         }
+        return EndFrame();
     }
 
     private Surface Produce(in FrameContext context) {
@@ -2038,7 +2026,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         ValidateExternalResources();
         ValidateLeases();
 
-        // An exported output is copied only on a frame its reader has released it, and every write begun is ended.
+        // An exported output is copied only on a frame its reader has released it, and every write begun is ended
+        // (CloseFrame).
         var exported = ExportedImage;
 
         if (
@@ -2048,49 +2037,11 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             exported = null;
         }
 
-        var exportWritten = false;
-        var exportValue = 0UL;
-
-        try {
-            return RenderFrame(
-                context: in context,
-                exportValue: out exportValue,
-                exportWritten: out exportWritten,
-                exported: exported
-            );
-        } finally {
-            if ((exported is not null) && (m_exportOwed is null)) {
-                m_export!.EndWrite(
-                    image: exported,
-                    written: exportWritten,
-                    writtenValue: exportValue
-                );
-            }
-        }
-    }
-    // Renders a frame of the installed graph: every pass, the region copies, the preview, the export's copy and the
-    // published outputs, in one submission, which takes an exported image back from its reader before it writes it and
-    // completes it for the reader after. The frame is one record job (ShaderPipelineRenderNode.Recording.cs): prepared,
-    // recorded, then committed; a recording that fails is abandoned before anything reaches the queue.
-    private Surface RenderFrame(in FrameContext context, IGpuExportableImage? exported, out ulong exportValue, out bool exportWritten) {
-        exportValue = 0UL;
-        exportWritten = false;
-
-        var job = PrepareFrame(exported: exported);
-
-        try {
-            RecordFrame(context: in context, job: in job);
-        } catch (Exception error) when (ContainsRecordFailure(error: error)) {
-            AbandonRecording();
-            AbortCadenceFrame();
-            NoteRecordFailure(error: error);
-            return m_lastSurface;
-        }
-        return CommitFrame(
-            exportValue: out exportValue,
-            exportWritten: out exportWritten,
-            job: in job
-        );
+        m_open.Exported = exported;
+        m_open.Context = context;
+        m_open.Job = PrepareFrame(exported: exported);
+        m_open.Pending = true;
+        return default;
     }
 
     // What preparation reserved for one frame's recording.
@@ -2115,6 +2066,17 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         PrepareFrameCommands();
         m_commands.Clear();
         BeginCadenceFrame(slot: slotIndex);
+        // What a pass's recording would change outside the instance is changed here, on the frame thread, so the
+        // recording itself may run on any thread (IRenderGraphPackageRecorder.PrepareRecord). A preparation that fails
+        // fails the recording, which then abandons the frame as any failed recording does.
+        try {
+            foreach (var pass in m_passes) {
+                pass.Package?.PrepareRecord(context: in m_open.Context);
+            }
+        } catch (Exception error) when (error is not DeviceLostException) {
+            m_open.PrepareFailure = ExceptionDispatchInfo.Capture(source: error);
+        }
+        m_recording.PrepareEndedAt = Stopwatch.GetTimestamp();
         return new FrameJob(
             Exported: exported,
             Previewed: NeedsPreview(spec: selectedResource.Spec),
@@ -2130,6 +2092,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var commands = m_commands;
         var command = BeginFrameCommands(slot: slotIndex);
 
+        m_open.PrepareFailure?.Throw();
         RecordPasses(
             command: command,
             context: context,
@@ -2166,6 +2129,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         ResolveTimings(command: command, slot: slotIndex);
         EndRecordedList(command: command);
         commands.Add(item: command);
+        m_recording.RecordEndedAt = Stopwatch.GetTimestamp();
     }
     // Submits the recorded lists and publishes what they write. From the submission on the queue owns the write: a
     // later export or readback failure must not reuse this submission slot or roll the committed history back.

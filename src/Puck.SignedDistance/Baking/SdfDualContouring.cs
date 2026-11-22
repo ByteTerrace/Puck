@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Memory;
 
 namespace Puck.SignedDistance.Baking;
@@ -1008,8 +1009,8 @@ internal static class SdfDualContouring {
         };
     }
     // The pieces of the blocks' surfaces: two fine vertices of one owner are one piece where a quad edge joins them.
-    private static SdfDisjointSet Pieces(OwnedBuffer<int> owners, OwnedBuffer<int> quads, IAllocationObserver? workspace) {
-        var sets = new SdfDisjointSet(count: owners.Length, owner: workspace);
+    private static DisjointSet Pieces(OwnedBuffer<int> owners, OwnedBuffer<int> quads, IAllocationObserver? workspace) {
+        var sets = new DisjointSet(count: owners.Length, owner: workspace);
 
         for (var quad = 0; (quad < quads.Length); quad += 4) {
             for (var corner = 0; (corner < 4); corner++) {
@@ -1307,7 +1308,7 @@ internal static class SdfDualContouring {
     // The patches of a corner-sign mask: the sign-changing cube edges joined by the marching-squares segments of the six
     // faces, each connected piece one patch.
     private static (sbyte[] PatchOfEdge, int Count) Patches(int mask) {
-        using var patchSets = new SdfDisjointSet(count: CellEdges.Length);
+        using var patchSets = new DisjointSet(count: CellEdges.Length);
         var changes = new bool[CellEdges.Length];
 
         for (var edge = 0; (edge < CellEdges.Length); edge++) {

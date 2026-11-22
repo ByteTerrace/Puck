@@ -1,5 +1,6 @@
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.Hosting.Jobs;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -559,6 +560,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // residency. Returns whether the residency changed, so the recorder rebinds what it declared for the old one.
     internal bool Follow(string instance, ref SdfWorldView view) {
         if ((ViewOf(instance: instance) is not { } current) || (current == view)) { return false; }
+        RefuseInPartition(instance: instance, change: "follow another view");
         var previous = view.Residency;
         var moved = !ReferenceEquals(objA: previous, objB: current.Residency);
 
@@ -570,6 +572,23 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
         view = current;
         return moved;
+    }
+    // Prepares a recorder's frame on the frame thread before the recording forks (IRenderGraphPackageRecorder.PrepareRecord):
+    // follows the view the instance resolved, then prepares its residency (PrepareResidency). Returns whether the view
+    // moved to another residency, so the recorder rebinds what it declared for the old one.
+    internal bool PrepareRecord(string instance, ref SdfWorldView view, in FrameContext context) {
+        var moved = Follow(instance: instance, view: ref view);
+
+        PrepareResidency(residency: view.Residency, context: in context);
+        return moved;
+    }
+    // Begins a residency's frame and stages it for a recording the frame's preparation did not reach, so a recording on
+    // another thread finds both done (SdfWorldResidency.StageLate). A released residency is left for the recording to
+    // refuse.
+    internal void PrepareResidency(SdfWorldResidency residency, in FrameContext context) {
+        if (residency.IsReleased) { return; }
+        Begin(residency: residency);
+        _ = residency.StageLate(context: in context);
     }
     // Gives back the hold and the retain a recorder keeps on the view it records, as it is released.
     internal void Leave(SdfWorldView view) {
@@ -646,7 +665,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         if (entry.Frame == m_frame) {
             return entry;
         }
-
+        RefuseInPartition(instance: instance, change: "resolve its view");
         entry.Frame = m_frame;
 
         var view = m_resolve(arg: instance);
@@ -712,6 +731,14 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         return entry;
     }
 
+    // A recording forked onto the job pool reads only its instance's entry and its view's residency; resolving a view or
+    // following another changes the holds every residency shares, which only the frame thread may (PrepareRecord does it
+    // before the fork).
+    private static void RefuseInPartition(string instance, string change) {
+        if (JobPool.InPartition) {
+            throw new InvalidOperationException(message: $"Instance '{instance}' asked to {change} from a forked recording; only the frame thread's preparation may.");
+        }
+    }
     // Where an on-demand pass's pipelines came from.
     private sealed record OnDemandSource(GpuPassPipelineCache Cache, IGpuDeviceContext Device);
     // What a pass's build hands its recorder: the view, whose residency the build holds until the recorder takes it.

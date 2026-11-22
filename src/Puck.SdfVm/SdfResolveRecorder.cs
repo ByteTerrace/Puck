@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 using Puck.Shaders;
 using Puck.Maths;
 
@@ -65,11 +66,11 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         m_disposed = true;
         m_owner.Leave(view: m_view);
     }
+    // The view's residency is the state every recording of it shares (IRenderGraphPackageRecorder.RecordingDomain).
+    public object? RecordingDomain => m_view.Residency;
+    public void PrepareRecord(in FrameContext context) => _ = m_owner.PrepareRecord(instance: m_context.Instance, view: ref m_view, context: in context);
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-        _ = m_owner.Follow(instance: m_context.Instance, view: ref m_view);
         var residency = m_view.Residency;
-
-        m_owner.Begin(residency: residency);
         var tables = residency.Staged(context: recording.Context);
         var frame = residency.Frame!;
         var index = Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1));

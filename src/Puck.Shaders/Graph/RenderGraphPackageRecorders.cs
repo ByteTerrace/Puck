@@ -193,6 +193,22 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// the runtime retires those acquisitions. A pass that records takes the leases through its recording.</param>
     /// <returns>The output's package-input identity, or null to force execution.</returns>
     ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => null;
+    /// <summary>Prepares the frame's recording on the frame thread, after the instance has waited its frame slot and
+    /// before any recording of the frame is handed to another thread: whatever the recording would otherwise change
+    /// outside its own instance (the view it follows, a shared residency it begins or stages, a hold on another owner) is
+    /// changed here, so that <see cref="Skips"/>, <see cref="Signature"/>, <see cref="Record"/> and the rest of the
+    /// recording read and write nothing but their instance's own state and their <see cref="RecordingDomain"/>. Called
+    /// once for every package pass of an instance about to record, whether or not the pass then skips or stands. The
+    /// default changes nothing.</summary>
+    /// <param name="context">The frame being prepared.</param>
+    void PrepareRecord(in FrameContext context) { }
+    /// <summary>Gets the state the pass's recording shares with the recordings of other instances, read on the frame
+    /// thread after <see cref="PrepareRecord"/>. The runtime records the instances of one wave side by side on the job
+    /// pool, and every instance whose recording names a domain another names (by reference) records on the same thread,
+    /// in schedule order, so a recording may read and write its domain without a lock. A recorder that shares nothing
+    /// names itself; the default, <see langword="null"/>, names the recorder's package factory, so every instance of the
+    /// package records on one thread.</summary>
+    object? RecordingDomain => null;
 }
 /// <summary>A package output allocation and the optional hold on its exact owner. Acquiring a replacement transfers
 /// the hold to the graph; the graph retires the hold, never the borrowed allocation itself.</summary>

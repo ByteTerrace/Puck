@@ -209,6 +209,7 @@ public static class WorldRenderRoot {
             disposesInBackground: true,
             graphs: graphs,
             hostsOnDirectX: hostSettings.HostsOnDirectX,
+            jobs: sp.GetService<Puck.Hosting.Jobs.JobPool>(),
             packages: packages,
             pipelines: sp.GetRequiredService<GpuPassPipelineCache>(),
             refusal: out var refusal,

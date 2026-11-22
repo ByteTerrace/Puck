@@ -491,6 +491,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <param name="disposesInBackground">Whether an image every reader is done with is disposed on a worker thread
     /// (<see cref="GpuImageLeases(bool)"/>), so destroying a replaced or released graph's targets costs the frame
     /// nothing; disposal and device loss wait for the worker.</param>
+    /// <param name="jobs">The job pool a frame forks its record jobs across, wave by wave, or <see langword="null"/> to
+    /// record every job on the frame thread.</param>
     /// <returns><see langword="true"/> when the graphs installed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="set"/>, <paramref name="graphs"/>,
     /// <paramref name="root"/>, <paramref name="packages"/>, <paramref name="pipelines"/> or
@@ -498,7 +500,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="inFlightFrames"/> is less than two.</exception>
     /// <exception cref="InvalidDataException">A graph cannot be installed on a node: its shader compilation failed, or
     /// its plan is not one a node runs.</exception>
-    public static bool TryCreate(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, string root, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, IGpuDeviceContext deviceContext, bool hostsOnDirectX, [NotNullWhen(returnValue: true)] out RenderGraphRuntime? runtime, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal, uint inFlightFrames = DefaultInFlightFrames, bool disposesInBackground = false) {
+    public static bool TryCreate(RenderGraphInstanceSet set, IReadOnlyList<RenderGraphRuntimeGraph?> graphs, string root, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, IGpuDeviceContext deviceContext, bool hostsOnDirectX, [NotNullWhen(returnValue: true)] out RenderGraphRuntime? runtime, [NotNullWhen(returnValue: false)] out RenderGraphRuntimeRefusal? refusal, uint inFlightFrames = DefaultInFlightFrames, bool disposesInBackground = false, Puck.Hosting.Jobs.JobPool? jobs = null) {
         ArgumentNullException.ThrowIfNull(argument: set);
         ArgumentNullException.ThrowIfNull(argument: graphs);
         ArgumentNullException.ThrowIfNull(argument: root);
@@ -664,6 +666,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 standIns: standIns
             );
             runtime.RecordPackageFragments(fragments: fragments);
+            runtime.m_jobs = jobs;
 
             return true;
         } catch {
@@ -1381,13 +1384,14 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
         var renders = schedule.Renders;
         HostFrameWork.NoteScheduledRenders(renders.Count);
-        // The node that submitted last this frame, whose submission follows the host's presentation of the last frame.
-        ShaderPipelineRenderNode? submitter = null;
-        // The frame's longest single recording, the critical path its record jobs would keep side by side.
-        var longestRecord = -1L;
-        var holdingConvergence = ((m_convergence is { IsActive: true } convergence) &&
-            (convergence.Samples >= convergence.Request.Converge) &&
-            (m_nodes[m_captureInstance]?.PendingCapturePath == convergence.Request.Path));
+        var rendering = new FrameRenders {
+            HoldingConvergence = ((m_convergence is { IsActive: true } convergence) &&
+                (convergence.Samples >= convergence.Request.Converge) &&
+                (m_nodes[m_captureInstance]?.PendingCapturePath == convergence.Request.Path)),
+            LongestRecord = -1L,
+            Prior = prior,
+            Schedule = schedule,
+        };
 
         // The frame's renders reach the queue together: every node's submission joins one batch, flushed once they have all
         // recorded (IGpuQueueSubmitter.BeginBatch), so a frame costs the queue one call rather than one a node.
@@ -1399,257 +1403,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         try {
             // The packages' shared frame work (an SDF residency's upload and pump) is done before any render records, so no
             // node's recording pays for it; its submissions open the frame's batch, ahead of every render's.
-            PackagesPrepareRenders(context: in context, holdingConvergence: holdingConvergence, renders: renders);
+            PackagesPrepareRenders(context: in context, holdingConvergence: rendering.HoldingConvergence, renders: renders);
 
             work.Next(HostFrameWorkPart.Record);
-            for (var position = 0; (position < renders.Count); position++) {
-                var index = renders[position];
-                var row = schedule.Instances[index];
-
-                // The display encoder may still be building after the last requested sample. Keep the contributing
-                // images alive until readback completes; another render would silently capture a later jitter sample.
-                if (holdingConvergence && m_convergenceInstances.Contains(item: index)) {
-                    if (index == m_captureInstance) {
-                        m_nodes[index]?.PollCapture();
-                    }
-                    m_unproduced++;
-                    schedule.Next.Withdraw(index: index, previous: prior);
-                    continue;
-                }
-
-                // An external producer submits through its own ring, at the scheduled extent, before its consumers render. A
-                // capture of it moves to it first, and it serves the capture from the next frame it produces. A render it
-                // could not produce is withdrawn from the history, so its cadence counts from its last completed frame and a
-                // source that renders once is asked again on the next frame.
-                if (m_producers[index] is { } producer) {
-                    var reads = BindExternalReads(
-                        index: index,
-                        schedule: schedule
-                    );
-
-                    if (
-                        (index == m_captureInstance) &&
-                        (m_capture.PendingPath is not null) &&
-                        (m_taintedReads[index] is null) &&
-                        !MarkReadStale(index: index, schedule: schedule)
-                    ) {
-                        m_capture.Forward(target: producer);
-                        m_forwardedCaptureIndex = index;
-                    }
-
-                    var produced = (((row.Width > 0) && (row.Height > 0))
-                        ? producer.Produce(
-                            context: in context,
-                            height: ((uint)row.Height),
-                            reads: reads,
-                            width: ((uint)row.Width)
-                        )
-                        : FrameRender.Waiting(reason: "the schedule gave it no extent"));
-
-                    reads?.RetireUntaken();
-
-                    if (!produced.IsRendered) {
-                        m_unproduced++;
-                        MarkProduction(
-                            index: index,
-                            production: produced
-                        );
-                        schedule.Next.Withdraw(
-                            index: index,
-                            previous: prior
-                        );
-                    } else {
-                        m_historySucceeded[index] = true;
-                        MarkRendered(index: index, schedule: schedule);
-                    }
-
-                    continue;
-                }
-
-                var node = m_nodes[index]!;
-                var source = m_sources[index];
-
-                // An uploaded source writes its image for the frame's tick into its region; one with no image is withdrawn,
-                // as an external producer's render is, so its cadence counts from its last converted frame.
-                if (
-                    (source is not null) &&
-                    (source.Write(
-                        node: node,
-                        tick: frame.Tick
-                    ) is { IsRendered: false } written)
-                ) {
-                    m_unproduced++;
-
-                    if (written.Completion == FrameCompletion.Refused) {
-                        MarkProduction(
-                            index: index,
-                            production: written
-                        );
-                    } else {
-                        MarkUnproduced(
-                            index: index,
-                            node: node,
-                            waiting: written.Reason
-                        );
-                    }
-
-                    schedule.Next.Withdraw(
-                        index: index,
-                        previous: prior
-                    );
-
-                    continue;
-                }
-                // A render its package withholds records nothing: its image waits on work the frame's preparation ran,
-                // which another recording would only queue GPU work ahead of. Its completed image stands published, a
-                // capture already reading it is polled, and the render is withdrawn so the next frame asks again.
-                if (
-                    (LatestOf(index: index, latch: in m_latch).Frame >= 0) &&
-                    (PackageReasonOf(index: index, kind: PackageReason.Withheld) is { } withheld)
-                ) {
-                    if (index == m_captureInstance) {
-                        node.PollCapture();
-                    }
-                    m_unproduced++;
-                    MarkStale(
-                        index: index,
-                        reason: withheld
-                    );
-                    schedule.Next.Withdraw(
-                        index: index,
-                        previous: prior
-                    );
-
-                    continue;
-                }
-                if (!Bind(
-                    index: index,
-                    schedule: schedule
-                )) {
-                    m_unproduced++;
-                    if (!MarkReadStale(index: index, schedule: schedule)) {
-                        MarkStale(
-                            index: index,
-                            reason: $"the instance '{m_set.Instances[index].Name}' reads a buffer with no completed output"
-                        );
-                    }
-
-                    continue;
-                }
-
-                // The reads its graph binds to no version reach its package passes, their taint the instance's; what they
-                // leave is retired with the frame.
-                node.Reads = BindUnboundReads(
-                    index: index,
-                    schedule: schedule
-                );
-                // A source's graph renders at the extent its descriptor fixed, which it declared to the scheduler.
-                if (
-                    (source is null) &&
-                    (row.Width > 0) &&
-                    (row.Height > 0)
-                ) {
-                    node.Resize(
-                        height: ((uint)row.Height),
-                        width: ((uint)row.Width)
-                    );
-                }
-                // A capture moves to its instance's node only once that node renders a graph over completed inputs, so the
-                // frame it produces is the one the capture reads; until then it stays armed here, where
-                // UnservedCaptureReasonOf explains it.
-                // A node whose published image stands for one that is gone serves no capture until it has rendered again,
-                // which a shown one does this frame (WithRerenders).
-                if (
-                    (index == m_captureInstance) &&
-                    (m_capture.PendingPath is not null) &&
-                    CanServeConvergence &&
-                    node.IsReady &&
-                    (m_standInReads[index] is null) &&
-                    (m_taintedReads[index] is null) &&
-                    !HasPackageTaint(index: index) &&
-                    !m_outputs.HasEnded(index: index, latch: in m_latch) &&
-                    (m_outputs.StandsFor(index: index).IsOwn || (LatestOf(index: index, latch: in m_latch).Frame >= 0)) &&
-                    !MarkReadStale(index: index, schedule: schedule)
-                ) {
-                    m_capture.Forward(target: node);
-                    m_forwardedCaptureIndex = index;
-                }
-
-                OfferCaptureSource(
-                    index: index,
-                    node: node
-                );
-
-                var rendered = node.FrameCounter;
-                var submitted = node.SubmissionCount;
-                // Readback may complete inline in ProduceFrame. That still counts the final rendered sample of this request.
-                var converging = (((index == m_captureInstance) && IsConverging(index: index)) ? m_convergence : null);
-                Surface surface;
-
-                // The root is shown as the display, at its own extent; every other instance is resampled by what reads it.
-                node.ShownAtItsExtent = (index == m_root);
-                node.UnreadFrames = m_unreadFrames[index];
-
-                // What the node commits for a deferred submission, and an export it writes, settle once the batch is flushed.
-                node.DefersExportCompletion = true;
-
-                try {
-                    surface = node.ProduceFrame(context: in context);
-                } finally {
-                    node.DefersExportCompletion = false;
-                    if (node.OwesSettlement) { m_settlementsOwed.Add(item: node); }
-                    if (node.FrameCounter != rendered) {
-                        longestRecord = Math.Max(val1: longestRecord, val2: node.LastRecordTicks);
-                        m_historySucceeded[index] = true;
-                        RememberOutput(frame: schedule.Frame, index: index, node: node, rendered: true, schedule: schedule, surface: node.PublishedSurface);
-                    }
-                    node.Reads?.RetireUntaken();
-                    node.Reads = null;
-                    NoteOwedReadbacks(index: index);
-                }
-
-                if (node.FrameCounter == rendered) {
-                    m_unproduced++;
-                    MarkUnproduced(
-                        index: index,
-                        node: node
-                    );
-                    // A paused node presents its last image as this frame's output on purpose, writing nothing: the frame it
-                    // was scheduled for is spent, so its refresh, and the demand it passes to its producers, keep their cadence.
-                    if (Stands(index: index)) {
-                        m_historySucceeded[index] = true;
-                        SettleWithdrawal(index: index);
-                    }
-
-                    // A source whose conversion has not built yet is asked again, since its cadence may never ask twice.
-                    if (source is not null) {
-                        schedule.Next.Withdraw(
-                            index: index,
-                            previous: prior
-                        );
-                    }
-
-                    if (node.SubmissionCount == submitted) {
-                        continue;
-                    }
-                }
-
-                // A sample rendered at an extent the node was not asked for is one its capture never reads.
-                if ((node.FrameCounter != rendered) && (converging is not null) &&
-                    (m_standInReads[index] is null) && (m_taintedReads[index] is null) && (node.Extent == node.RequestedExtent)) {
-                    converging.Count();
-                }
-
-                MarkRendered(
-                    index: index,
-                    schedule: schedule
-                );
-
-                submitter = node;
-                if (node.FrameCounter == rendered) {
-                    RememberOutput(frame: schedule.Frame, index: index, node: node, rendered: false, schedule: schedule, surface: in surface);
-                }
-            }
+            RenderWaves(context: in context, frame: in frame, rendering: ref rendering);
 
             ConvertForCapture(
                 context: in context,
@@ -1664,13 +1421,15 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             SettleHandOvers(queue: queue);
         }
         work.Next(HostFrameWorkPart.Pump);
-        if (longestRecord >= 0) { RenderRecordWork.Process.Frame(longestRecordTicks: longestRecord); }
+        if (rendering.LongestRecord >= 0) { RenderRecordWork.Process.Frame(longestRecordTicks: rendering.LongestRecord); }
 
         // The image the display presents this frame, read back once every node has submitted.
         ServePresented(presentation: frame.Index);
 
         // Every reader has submitted before this point. Borrowed-buffer producers may now stand indefinitely;
         // retire displaced package owners against this actual reader fence, without another producer submission.
+        var submitter = rendering.Submitter;
+
         foreach (var node in m_nodes) { node?.RetireAfterConsumers(submitter: submitter); }
         ArmRetiring(submitter: submitter);
         // The frame's recordings are all handed to the queue, so a checkpoint now follows every reader of what an owner

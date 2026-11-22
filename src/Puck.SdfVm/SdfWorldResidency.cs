@@ -3,6 +3,7 @@ using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Hosting.Jobs;
 using Puck.Shaders;
 using Puck.SignedDistance;
 
@@ -756,35 +757,46 @@ public sealed partial class SdfWorldResidency : IDisposable {
         return true;
     }
     // Submits the frame's upload and pumps the tables' background work against it, once a frame: the one place the
-    // frame's upload is submitted.
+    // frame's upload is submitted, which only the frame thread may reach. A recording forked onto the job pool finds it
+    // done (SdfWorldPasses.PrepareResidency) and refuses rather than submit from another thread.
     private void SubmitOnce(SdfWorldTables tables) {
         if (m_submitted) { return; }
+        if (JobPool.InPartition) {
+            throw new InvalidOperationException(message: $"Residency '{Name}' was asked to stage its frame from a forked recording; only the frame thread's preparation may.");
+        }
         m_submitted = true;
         tables.HoldsFrame = HoldsFrame;
         tables.SubmitUpload();
         // A withheld frame presents nothing, so the work it waits on, its meshes or its lighting, runs at the GPU's pace.
         if (FrameWithheld) { tables.GpuWork.Drive(tables: tables); } else { tables.GpuWork.Pump(tables: tables); }
     }
-    /// <summary>Returns the tables the frame's preparation staged (<see cref="Stage"/>), for a pass that records against
-    /// them. A recording that reaches a residency the preparation did not stage (a graph that installed during the frame
-    /// with a package the schedule did not name) stages it here, and counts it (<see cref="LateStagings"/>).</summary>
+    /// <summary>Returns the tables the frame is staged in (<see cref="Stage"/>), for a pass that records against them,
+    /// staging it late (<see cref="StageLate"/>) when nothing has yet.</summary>
     /// <param name="context">The host's frame context.</param>
     /// <returns>The tables, which hold the frame the pass renders.</returns>
-    /// <exception cref="InvalidOperationException">The residency has no tables: a pass records only once its residency is
-    /// ready.</exception>
-    public SdfWorldTables Staged(in FrameContext context) {
-        if (!m_submitted) {
-            if (!Stage(context: in context)) {
-                throw new InvalidOperationException(message: $"Residency '{Name}' has no tables to render: {NotReadyReason}");
-            }
-            LateStagings++;
-        }
-
-        return m_tables!;
+    /// <exception cref="InvalidOperationException">The residency has no tables, since a pass records only once its
+    /// residency is ready, or it is asked to stage from a forked recording.</exception>
+    /// <exception cref="ObjectDisposedException">The residency is released.</exception>
+    public SdfWorldTables Staged(in FrameContext context) => (StageLate(context: in context)
+        ? m_tables!
+        : throw new InvalidOperationException(message: $"Residency '{Name}' has no tables to render: {NotReadyReason}"));
+    /// <summary>Stages a frame the render graph's preparation did not reach (a graph that installed during the frame with
+    /// a package the schedule did not name), counting it (<see cref="LateStagings"/>); does nothing to a staged frame. A
+    /// recorder asks it as it prepares its recording on the frame thread, before the recording forks.</summary>
+    /// <param name="context">The host's frame context.</param>
+    /// <returns><see langword="true"/> when the frame is staged; <see langword="false"/> before the tables are
+    /// built.</returns>
+    /// <exception cref="InvalidOperationException">The frame is unstaged and this is a forked recording.</exception>
+    /// <exception cref="ObjectDisposedException">The residency is released.</exception>
+    public bool StageLate(in FrameContext context) {
+        if (m_submitted) { return true; }
+        if (!Stage(context: in context)) { return false; }
+        LateStagings++;
+        return true;
     }
 
-    /// <summary>Gets the frames a pass's recording staged because the frame's preparation had not
-    /// (<see cref="Staged"/>); zero while every recording finds the frame's shared work done before it begins.</summary>
+    /// <summary>Gets the frames a recording staged because the frame's preparation had not (<see cref="StageLate"/>); zero
+    /// while every recording finds the frame's shared work done before it begins.</summary>
     public long LateStagings { get; private set; }
 
     /// <summary>Serves the residency's upkeep, whether or not anything reads it this frame: pumps the tables' background GPU

@@ -565,8 +565,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     public bool Skips(in FrameContext context) {
         switch (m_part) {
             case SdfWorldPackage.Parts.Mesh: {
-                    Follow();
-                    m_owner.Begin(residency: m_view.Residency);
                     var staged = m_view.Residency.Staged(context: in context);
                     var skips = ((PartDrawCount(tables: staged) == 0) && TargetsHoldClear);
 
@@ -577,29 +575,21 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             // (SdfWorldPasses.GlassSeen); the shading pass, which reads their sums and target, then draws nothing.
             case SdfWorldPackage.Parts.GlassClear:
             case SdfWorldPackage.Parts.Glass: {
-                    Follow();
-                    m_owner.Begin(residency: m_view.Residency);
                     return !m_owner.GlassSeen(instance: m_context.Instance, view: m_view, context: in context);
                 }
             // The surface pass reads the pyramid only for a pixel the mesh covers, which a frame with no draws has none of.
             case SdfWorldPackage.Parts.Pyramid: {
-                    Follow();
-                    m_owner.Begin(residency: m_view.Residency);
                     return (m_view.Residency.Staged(context: in context).MeshDrawCount == 0);
                 }
             // The filter and bins passes skip a frame whose views do not shade in bins (SdfWorldResidency.ShadesInBins).
             case SdfWorldPackage.Parts.ViewsFilter:
             case SdfWorldPackage.Parts.ViewsBins: {
-                    Follow();
-                    m_owner.Begin(residency: m_view.Residency);
                     return !m_view.Residency.ShadesInBins;
                 }
             case SdfWorldPackage.Parts.ShadowNear:
             case SdfWorldPackage.Parts.ShadowFar:
             case SdfWorldPackage.Parts.ShadowSecond:
             case SdfWorldPackage.Parts.ShadowDistant: {
-                    Follow();
-                    m_owner.Begin(residency: m_view.Residency);
                     var tables = m_view.Residency.Staged(context: in context);
                     var cascades = tables.CascadesOf(frame: m_view.Residency.Frame!, view: m_view.View);
 
@@ -670,12 +660,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         m_recordedLayers = null;
         m_recordedOpticalInitialization = null;
-        Follow();
 
         var residency = m_view.Residency;
-
-        m_owner.Begin(residency: residency);
-
         var tables = residency.Staged(context: recording.Context);
 
         if (m_part == SdfWorldPackage.Parts.Mesh) {
@@ -925,10 +911,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         return -1;
     }
-    // Takes the view the instance resolved this frame (SdfWorldPasses.Follow). A counter change holds recording until
-    // matching passes install. The ports and screens rebind for another residency's tables on this recording.
-    private void Follow() {
-        if (!m_owner.Follow(instance: m_context.Instance, view: ref m_view)) { return; }
+    // The view's residency is the state every recording of it shares (IRenderGraphPackageRecorder.RecordingDomain).
+    public object? RecordingDomain => m_view.Residency;
+    // Takes the view the instance resolved this frame (SdfWorldPasses.PrepareRecord). A counter change holds recording
+    // until matching passes install. The ports and screens rebind for another residency's tables on this recording.
+    public void PrepareRecord(in FrameContext context) {
+        if (!m_owner.PrepareRecord(instance: m_context.Instance, view: ref m_view, context: in context)) { return; }
         DeclareScreens(residency: m_view.Residency);
         foreach (var screens in m_screens) {
             Array.Clear(array: screens);

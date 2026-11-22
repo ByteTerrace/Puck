@@ -1,7 +1,6 @@
 using System.Numerics;
-
+using Puck.Abstractions.Collections;
 using Puck.Maths;
-using Puck.SignedDistance.Baking;
 
 namespace Puck.SdfVm;
 
@@ -894,7 +893,7 @@ public sealed class SdfMeshFieldLevels {
             }
         }
 
-        using var sets = new SdfDisjointSet(count: triangles);
+        using var sets = new DisjointSet(count: triangles);
 
         for (var triangle = 0; (triangle < triangles); triangle++) {
             foreach (var neighbour in neighbours[triangle]) { sets.Union(first: triangle, second: neighbour); }

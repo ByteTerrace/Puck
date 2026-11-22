@@ -49,7 +49,8 @@ internal sealed class SdfShadeSubmission {
 /// the node's wait of the slot completes it; releasing the recorder hands every unproven submission to its package's
 /// <see cref="SdfShadeReleases"/>. Nothing reaches a residency except through a capture its own recording made, so a pass
 /// that skipped or stood, or a residency the recorder has since followed away from, never receives another recording's
-/// identities. Single-threaded, on the frame thread.</summary>
+/// identities. Used by one thread at a time: the frame thread, or the fork partition recording the residency's views
+/// (<see cref="IRenderGraphPackageRecorder.RecordingDomain"/>), which records every recorder of that residency.</summary>
 public sealed class SdfShadeSlots {
     private readonly RenderGraphSlotResults<SdfShadeSubmission> m_slots;
 

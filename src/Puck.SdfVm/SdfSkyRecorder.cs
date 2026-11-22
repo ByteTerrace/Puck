@@ -149,9 +149,8 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
         var signature = m_owner.SignatureOf(instance: m_context.Instance, part: m_context.Part!, temporal: m_temporal, context: in context, reads: reads);
 
         if (signature is not { } value) { return null; }
-        var view = (m_owner.ViewOf(instance: m_context.Instance) ?? m_view);
-        var frame = view.Residency.Frame!;
-        var index = Math.Min(val1: view.View, val2: (frame.Views.Count - 1));
+        var frame = m_view.Residency.Frame!;
+        var index = Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1));
         var hash = Fnv1aHash.Create();
 
         hash.Add(value: value);
@@ -165,13 +164,15 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
         }
         return hash.Value;
     }
-    public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
-        if (m_owner.Follow(instance: m_context.Instance, view: ref m_view)) {
+    // The view's residency is the state every recording of it shares (IRenderGraphPackageRecorder.RecordingDomain).
+    public object? RecordingDomain => m_view.Residency;
+    public void PrepareRecord(in FrameContext context) {
+        if (m_owner.PrepareRecord(instance: m_context.Instance, view: ref m_view, context: in context)) {
             DeclareScreens(residency: m_view.Residency);
         }
+    }
+    public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         var residency = m_view.Residency;
-
-        m_owner.Begin(residency: residency);
         var tables = residency.Staged(context: recording.Context);
         var frame = residency.Frame!;
         var index = Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1));

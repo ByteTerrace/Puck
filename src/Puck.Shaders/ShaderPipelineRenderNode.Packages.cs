@@ -182,6 +182,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         // The recorder owns the build from here, whether or not it is created.
         objects.PackageBuilt = null;
+        runtime.PackageFactory = objects.PackageFactory;
         runtime.Package = objects.PackageFactory!.Create(
             built: built,
             context: objects.PackageContext!,

@@ -185,6 +185,8 @@ public sealed partial class ShaderPipelineRenderNode {
         public nint[]? Sets;
         public IGpuBuffer? GeometryBuffer;
         public IRenderGraphPackageRecorder? Package;
+        // The factory that created Package, whose state the recorder shares unless it names a narrower domain.
+        public IRenderGraphPackageFactory? PackageFactory;
         public PassCadence? Cadence;
         public bool Recorded;
         // Whether the package pass's recording this frame drew (RenderGraphPackageOutcome.Drew); cleared with Recorded.
@@ -199,6 +201,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public void Dispose(GpuDeviceServices gpu, IGpuDeviceContext device, Action<IDisposable?> later) {
             Package?.Dispose();
             Package = null;
+            PackageFactory = null;
             later(obj: GeometryBuffer);
             GeometryBuffer = null;
             if (Framebuffers is not null) {
