@@ -231,6 +231,32 @@ public sealed class DisclosureImageLawTests {
         }
     }
 
+    // Below a replica a row no policy restricts crosses only while the document presents it. Whether it does is read
+    // when the row is asked for, so a document that begins to bind the row is imaged with it at once, over the same
+    // store and with no write to the row, and one that stops binding it is imaged without.
+    [Fact]
+    public void ARowADocumentBeginsToPresentIsImagedAtOnce() {
+        var plain = Fixtures.BuildDocument() with {
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(Name: Name(value: "level"), Kind: CellKind.Fixed, Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Fixed(3L))])]),
+            Rules = [],
+        };
+        var bound = plain with {
+            RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: new BindableScalar(binding: "state.level")))),
+        };
+        var arena = Fixtures.Store(definition: plain);
+        var current = plain;
+        var view = new WorldRecipientView(() => current, () => arena, Principal.Seat(slot: 1), WorldDisclosureTier.Presentation,
+            static () => true, new WorldDisclosureImages(), "test", static () => ArenaTime.Origin);
+
+        Assert.Null(@object: view.Image(row: 0).Observation);
+        Assert.Empty(collection: view.Image(row: 0).Cells);
+        current = bound;
+        Assert.Equal(expected: 3L, actual: Assert.Single(collection: view.Image(row: 0).Observation!.Cells).Value);
+        Assert.Single(collection: view.Image(row: 0).Cells);
+        current = plain;
+        Assert.Null(@object: view.Image(row: 0).Observation);
+    }
+
     // A hand dealt into a rack: seat 1 is shown the king and the queen and not the ace, which only seat 0 reads. The
     // queen then takes the very policy object the ace holds, so the set of policies the store holds does not change and
     // the table's policy index is not rebuilt. The stream still loses the queen: its frame moves, its document is dealt
