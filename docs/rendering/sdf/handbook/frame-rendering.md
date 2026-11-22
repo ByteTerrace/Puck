@@ -1840,12 +1840,11 @@ orders each scratch resource's first use in a frame after the previous frame's
 last use of it, which serializes that view's GPU frames against each other
 while still overlapping CPU production with GPU execution. Only the view's
 color output is kept per frame slot, so a consumer can read the previous
-frame's image while the next one renders. A view holds only the cascades it
-draws: two at the debug world's `high` tier and one stable slot, 34 MB of its
-295 MB at 1280×900 temporal, and a view whose quality skips shadows (a portal
-window, a camera view, `world.shadows off`) runs its fragment without them
-(`SdfWorldPackage.WithoutShadows`): no cascade pass, no cascade depth, and a
-surface pass that binds the tables' filler in their place.
+frame's image while the next one renders. A view holds no cascade: the world's
+shadow layers are its residency's (`SdfWorldShadows`), one set per anchor, and
+a view whose quality skips shadows (a portal window, a camera view,
+`world.shadows off`) takes no anchor and its surface pass binds the tables'
+filler in their place.
 
 ## Reading per-pass GPU cost
 

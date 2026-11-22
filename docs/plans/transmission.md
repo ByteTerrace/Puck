@@ -271,10 +271,10 @@ compilation to four ulp, so none is allowed.
 
 In metres, at the near half of a cascade's reversed-Z range where depth lies
 in [0.5, 1), one ulp is `R · 2^-24` with `R` the cascade's depth range
-`2 · radius + casters - 1` (`SdfMeshShadowCascades.Cascade`). With the
+`2 · halfExtent + casters - 1` (`SdfMeshShadowCascades.HalfExtentOf`). With the
 default coverage (16 m near, 120 m far, 200 m of casters) the near cascade's
-`R` is about 231 m and the far cascade's about 439 m, so `ε` is 55 µm and
-105 µm; an authored coverage of 20 km gives 4.8 mm. A chord of one body
+`R` is about 235 m and the far cascade's about 465 m, so `ε` is 56 µm and
+111 µm; an authored coverage of 20 km gives 4.8 mm. A chord of one body
 thinner than `ε` along the light reads lit on its dark side; no other
 surface, of any body, is affected.
 
