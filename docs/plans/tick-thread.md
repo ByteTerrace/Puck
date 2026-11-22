@@ -445,8 +445,11 @@ the window.
 |---|---|---|
 | `HostLoop`, through `WorldHostStep.RatePerSecond` and `WorldHostStep.StepInterrupted` | `WorldServer.Configuration` and the tick's stall flag, on every iteration | Values `WorldHostStep` publishes at each collect. `HostLoop` reads the rate once an iteration instead of three times |
 | `WorldScreenBinder.MachinesOf` and its callers | A world's `IWorldMachineHost`, for its presentation clock and a screen's video output, on every frame | Each running world's `WorldMachinePresentation`, captured whole at the collect (`IWorldMachineHost.CapturePresentation`) into the feed's `WorldMachineTable`; the clock is `WorldMachinePresentation.PresentedTicks` |
-| `WorldScreenBinder`'s boot definition and shared-scene proof | `WorldServer.Definition` and the instance's server, per frame | The client's delivered definition, and the observation's own identity |
-| The binder's session and infinity feeds | `WorldServer.Envelope`, configured from the frame and read by the tick's capacity check | The envelope publishes its configuration as one immutable record |
+| `WorldScreenBinder`'s boot definition and shared-scene proof | `WorldServer.Definition` and the instance's server, per frame | `WorldClient.Definition`, and a proof the collect checks and publishes with the session (`WorldObservationAdmission`'s `ProofHolds`) |
+| The binder's sessions | The observation sessions the instance host admits and releases | The feed's `WorldObservationTable`: a `WorldObservedSession` for each, with the `WorldObservationAdmission` the composition root builds (its token, tier, proof, window and disclosure projection) |
+| The binder's session and infinity feeds | `WorldServer.Envelope`, configured from the frame and read by the tick's capacity check | A copy-on-write `WorldRenderEnvelope`: the frame replaces the configuration whole and the tick reads the one it finds |
+| Machine audio and the machine console's facades | The machine host, from the audio director and from the binder | The audio reads `WorldMachinePresentation` from the table; the facades moved to the console modules, which run in the window |
+| The binder's backend export | A Direct3D 12 type named in the binder | `IGpuSurfaceExportProvider`, which the composition root supplies |
 | `WorldRenderRoot`'s device-profile step | `WorldServer.Definition` on the first frame | `WorldClient.Definition` |
 | `PresentationReadings`' `seat.<n>.place` | `WorldServer.Events` while the HUD binds | A value per seat, published at collect |
 | `WorldHudBindingResolver` | `WorldPopulation` counts and `WorldHistory`'s cursor | Values published at collect |
@@ -483,11 +486,16 @@ architecture profile refuses a reference to the server or the machines. The
 screen binder reads its machine output and clock from the feed, and the render
 root its device profile from `WorldClient.Definition`.
 
-Still in the composition root, where nothing but reading the code stops a
-frame-side read of the authority (step 8b): the screen binder's boot
-definition, shared-scene proof and session and infinity feeds; the render
-root; the audio director; the capture scheduler's read when a frame serves a
-capture; the adjacency source's pins; and the editor seats' edit probe.
+Step 8b moved the screen binder, the render root, the audio director, the
+device profile state and the inspector into `Puck.World.Presentation` as
+well, so the same profile refuses them a reference to the server or the
+machines. Where that guarantee stops is the closures the composition root
+wires into them: the disclosure projection of a `WorldObservationAdmission`,
+which the tick runs inside the envelope's capacity check; the source tuning;
+the export provider; the inspector's reload error; and the binder's reader
+of the seats' remote routes (`WorldScreenBinder.RemoteSeatEndpoints`). Those
+are found by reading the wiring, and step 9's window covers a `WorldServer`
+member read through one.
 
 Two readers are found by their effect and not by a server reference.
 
@@ -838,13 +846,13 @@ for the last tick due.
 
 What a frame-producing host still needs before it runs beside the tick:
 
-- Step 8b. The outbox, the link and the first slice of the presentation
-  project are in, so a delivery reaches `WorldClient` only at the pump's
-  collect and a submission outside the window queues. The screen binder, the
-  render root and the audio director still read the authority from produce.
+- Nothing more from stage two's doors. The outbox, the link and the
+  presentation project are in: a delivery reaches `WorldClient` only at the
+  pump's collect, a submission outside the window queues, and the frame's
+  types cannot name the authority.
 - The window and the seam check (step 9), on the window the link built
-  (`WorldLinkBoundary`). It lands after step 8b, because before it the first
-  windowed frame would throw.
+  (`WorldLinkBoundary`), which is what catches a read through a closure the
+  composition root wired.
 - The tick's completion time handed to the sinks at the replay, so a frame
   that applies a tick late interpolates it as far as today.
 - In `HostLoop`: producing while a step is in flight outside lockstep, the
@@ -972,12 +980,10 @@ what stages two and three must keep.
    project builds under its architecture profile, which is the proof that no
    frame type in it holds the authority.
 
-   8b. **The binder, the render root and the audio director**, which still
-   live in the composition root, read the feed or the client, with the
-   capture scheduler's frame-side read, the adjacency pins and the editor
-   seats' edit probe. Check: `puck references` finds no `WorldServer`,
-   `WorldPopulation` or `IWorldMachineHost` member read from a method produce
-   reaches; step 9's window then throws on any that remain.
+   8b. **The binder, the render root and the audio director** read the feed
+   or the client from inside the presentation project. Built. Check: the
+   project builds under its profile with them in it; step 9's window then
+   throws on a read that reaches the authority through a wired closure.
 9. **The window and the seam check**, on every member the tick mutates.
    Check: a law reads `WorldServer.Population` from a registered pump outside
    the window, which throws; the windowed debug world plays the benchmark
@@ -985,7 +991,7 @@ what stages two and three must keep.
 
 **Stage three: the wait ends.** Built for a host with no frame
 ([the loop beside the tick](#the-loop-beside-the-tick)); a frame-producing
-host follows once steps 8b and 9 have landed.
+host follows once step 9 and the loop's frame mechanics are built.
 
 10. **The loop stops waiting for the last due tick.** `HostLoop` produces
     while a step is in flight outside lockstep, polls after produce only to

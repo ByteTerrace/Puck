@@ -255,11 +255,16 @@ public sealed partial class WorldScreenBinder {
         return builder.ToString();
     }
 
+    /// <summary>Gets the reader the composition root wires to its instance host: it adds each authority another process
+    /// runs that a local seat is routed to. It reads the seats' routes, which the pump owns, and no authority state. A
+    /// binder without one lists no such world.</summary>
+    public Action<List<WorldAuthorityEndpoint>>? RemoteSeatEndpoints { get; init; }
+
     // The worlds on other authorities that seats are routed to, on a host with no presenter to build their scenes.
     private void AppendUnreadLevels(System.Text.StringBuilder builder) {
         var endpoints = new List<WorldAuthorityEndpoint>();
 
-        m_instanceHost.AddRemoteSeatEndpoints(endpoints: endpoints);
+        RemoteSeatEndpoints?.Invoke(obj: endpoints);
 
         foreach (var endpoint in endpoints) {
             var definition = endpoint.Definition;

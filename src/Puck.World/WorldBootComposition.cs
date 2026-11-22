@@ -569,6 +569,9 @@ public static class WorldBootComposition {
                 // Shared surfaces export through Direct3D 12, on either render backend, where the platform has them.
                 surfaceExports: (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240) ? new Puck.DirectX.DirectXGpuSurfaceExportProvider() : null)
             ) {
+                // The binder cannot name the instance host; it lists the worlds seats are routed to on other authorities
+                // through this reader, which reads the seats' routes only.
+                RemoteSeatEndpoints = sp.GetRequiredService<WorldInstanceHost>().AddRemoteSeatEndpoints,
                 // The baked meshes persist in the device cache the boot was handed, so an unchanged world reboots without
                 // baking; a composition without the roots keeps them for the run.
                 MeshLibrary = new SdfMeshLibrary(allocator: sp.GetRequiredService<Puck.Abstractions.Memory.IAllocator>(), store: ((sp.GetService<WorldCacheRoots>() is { } caches) ? new SdfMeshStore(directory: caches.Meshes, allocator: sp.GetRequiredService<Puck.Abstractions.Memory.IAllocator>()) : null)) {
