@@ -140,14 +140,21 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     /// every box answer is as certain an enclosure (<see cref="TryDistanceBounds(FixedPosition, FixedPosition, out FixedInterval, out int)"/>);
     /// it pays for a program large enough that a walk of the whole of it is the cost of a query, and holds the regions
     /// it has built.</param>
+    /// <param name="recordsRegions">Whether a point query records every region on its way, as a box query always
+    /// does, in place of marking a region on the first walk that reaches it and recording it on the second. The part
+    /// of the program a query walks is then a function of the program and the query alone, whatever queries came
+    /// before, which an evaluator the simulation reads needs: its answers stay the same if a region's tape ever
+    /// dropped something it should have kept, and its work counts repeat. Ignored unless
+    /// <paramref name="regional"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="program"/> contains an op or shape the reading cannot
     /// interpret, or, read for contact, a <see cref="SdfOp.Scale"/> whose axes differ in magnitude.</exception>
-    public SdfFieldEvaluator(SdfProgram program, SdfFieldReading reading, bool regional = false) {
+    public SdfFieldEvaluator(SdfProgram program, SdfFieldReading reading, bool regional = false, bool recordsRegions = false) {
         ArgumentNullException.ThrowIfNull(argument: program);
 
         m_rootFrames = program.RootFrames;
         m_regions = (regional ? new RegionIndex() : null);
+        m_marksRegions = (regional && !recordsRegions);
 
         m_reading = reading;
         m_instructions = Compile(program: program, reading: reading);

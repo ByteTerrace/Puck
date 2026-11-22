@@ -66,6 +66,9 @@ public sealed partial class SdfFieldEvaluator {
     private static List<(int First, int End)>? RegionRecord;
 
     private readonly RegionIndex? m_regions;
+    // Whether a point walk marks a region no walk has reached before a later one records it; a walk of an evaluator
+    // that does not records every region on its way, as a box walk always does.
+    private readonly bool m_marksRegions;
 
     /// <summary>Gets the kind counting regions recorded, a region recorded twice by a race counted twice.</summary>
     public static WorkKind RegionsBuilt { get; } = new(name: "sdf.regions.built", unit: "count", workClass: WorkClass.Pacing);
@@ -106,7 +109,7 @@ public sealed partial class SdfFieldEvaluator {
     // which reads the region around it (the whole stream, for a root): a point no later walk comes near costs one walk,
     // and an index that drops its regions loses only those walks came back to.
     private bool TryRegionTape(FixedVector3 point, out ReadOnlySpan<int> tape) {
-        var region = RegionAt(least: RegionLeafShift, record: false, x: point.X.Value, y: point.Y.Value, z: point.Z.Value);
+        var region = RegionAt(least: RegionLeafShift, record: !m_marksRegions, x: point.X.Value, y: point.Y.Value, z: point.Z.Value);
 
         tape = ((region is null) ? default : region.Tape);
 
