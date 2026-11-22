@@ -15,7 +15,11 @@ public static partial class WorldPlacementStamp {
         // The creations the context was compiled under, found through the list's shared key index.
         private readonly IReadOnlyList<WorldPrototype> m_creations;
 
-        private readonly IReadOnlyDictionary<string, CompiledPlacementFrame> m_authored;
+        // The authored world frames resolved so far, each on its first read with the parents it composes over
+        // (WorldPlacementFrameCompilation.TryResolveFrame, which carries a row's frame by its identity across
+        // sections), so a context built for a few rows' frames holds and allocates those rows' alone.
+        private readonly Dictionary<string, CompiledPlacementFrame> m_authored;
+        private readonly HashSet<string> m_authoring = new(comparer: StringComparer.Ordinal);
 
         private readonly Dictionary<WorldPlacement, CompiledPlacementFrame> m_frames = new(comparer: ReferenceEqualityComparer.Instance);
         private readonly Dictionary<WorldPlacement, CompiledPlacementStamp> m_stamps = new(comparer: ReferenceEqualityComparer.Instance);
@@ -32,20 +36,87 @@ public static partial class WorldPlacementStamp {
 
         public CompilationContext(WorldPlacementsSection section, IReadOnlyList<WorldPrototype> creations, ulong seed, int revision) {
             m_seed = seed; m_revision = revision;
-            m_authored = WorldPlacementFrameCompilation.Resolve(section: section, worldSeed: seed);
-            var projected = false;
-
+            m_authored = new(comparer: StringComparer.Ordinal);
             m_rows = WorldPlacementIndex.ById(placements: (section.Rows ?? []));
-            foreach (var row in m_rows.Values) { projected |= (row.Surface is not null); }
             m_creations = creations;
-            FrameTable = (projected ? new LazyFrames(owner: this) : m_authored);
+            FrameTable = new LazyFrames(owner: this);
         }
+        // A successor of the previous context. Surface descriptors and parent validation read only the rows' literal
+        // structure (a surface row, its targets and its parents are literal static roots), never a holding mask or a
+        // bound value, so they always carry. A holding-only replacement also carries frames and stamps, each to the row
+        // that replaced its row; a move of the section's bound values (moved) resolves the frames again and derives
+        // each stamp again through the per-row stamp table, which keeps a stamp whose frame did not move. Ground fields
+        // are not carried: they are only read when a stamp derives again, and an evaluator is not shared between two
+        // contexts' gates.
+        private CompilationContext(CompilationContext previous, WorldPlacementsSection section, IReadOnlyDictionary<WorldPlacement, WorldPlacement> replaced, bool moved) {
+            m_seed = previous.m_seed; m_revision = previous.m_revision;
+            // A holding mask moves no frame, so a holding-only successor starts from the frames resolved before.
+            m_authored = (moved ? new(comparer: StringComparer.Ordinal) : new(previous.m_authored, comparer: StringComparer.Ordinal));
+            m_rows = WorldPlacementIndex.ById(placements: (section.Rows ?? []));
+            m_creations = previous.m_creations;
+            FrameTable = new LazyFrames(owner: this);
+
+            WorldPlacement Row(WorldPlacement row) => replaced.GetValueOrDefault(key: row, defaultValue: row);
+            RowRead[] Reads(RowRead[] held) {
+                foreach (var read in held) {
+                    if (!read.Creation && (read.Row is WorldPlacement row) && replaced.ContainsKey(key: row)) {
+                        return [.. held.Select(each => (!each.Creation && (each.Row is WorldPlacement kept)) ? each with { Row = Row(row: kept) } : each)];
+                    }
+                }
+                return held;
+            }
+            SurfaceValidation Validation(SurfaceValidation held) {
+                var reads = Reads(held: held.Reads);
+                var descriptor = held.Descriptor;
+
+                if (descriptor is not null) {
+                    foreach (var source in descriptor.Sources) {
+                        if (replaced.ContainsKey(key: source.Row)) {
+                            descriptor = descriptor with { Sources = [.. descriptor.Sources.Select(each => each with { Row = Row(row: each.Row) })] };
+                            break;
+                        }
+                    }
+                }
+                return ((ReferenceEquals(objA: reads, objB: held.Reads) && ReferenceEquals(objA: descriptor, objB: held.Descriptor)) ? held : new SurfaceValidation(descriptor, held.Reason, reads));
+            }
+
+            if (!moved) {
+                foreach (var (row, frame) in previous.m_frames) { m_frames[Row(row: row)] = frame; }
+                foreach (var (row, stamp) in previous.m_stamps) { m_stamps[Row(row: row)] = stamp; }
+            }
+            foreach (var (row, validation) in previous.m_descriptors) { m_descriptors[Row(row: row)] = Validation(held: validation); }
+            foreach (var (row, parent) in previous.m_parentValidation) {
+                var reads = Reads(held: parent.Reads);
+
+                m_parentValidation[Row(row: row)] = (ReferenceEquals(objA: reads, objB: parent.Reads) ? parent : new ParentValidation(parent.Reason, reads));
+            }
+        }
+        // The context for a holding-only replacement of this context's section; see the constructor.
+        public CompilationContext Rebase(WorldPlacementsSection section, IReadOnlyDictionary<WorldPlacement, WorldPlacement> replaced) {
+            lock (Gate) { return new CompilationContext(moved: false, previous: this, replaced: replaced, section: section); }
+        }
+        // The context for this context's own section once the bound values its frames read have moved.
+        public CompilationContext Moved(WorldPlacementsSection section) {
+            lock (Gate) { return new CompilationContext(moved: true, previous: this, replaced: NoReplacements, section: section); }
+        }
+        private static readonly IReadOnlyDictionary<WorldPlacement, WorldPlacement> NoReplacements = new Dictionary<WorldPlacement, WorldPlacement>();
+        public int Revision => m_revision;
+        public IReadOnlyList<WorldPrototype> Creations => m_creations;
+        public ulong Seed => m_seed;
         private WorldPrototype? CreationOf(string id) => WorldDefinitionRows.FindCreation(creations: m_creations, id: id);
         private static bool SingleRoot(WorldPlacement row) => row.Distribution is null && row.Mirror is null && row.Deal is null;
         private bool Owned(WorldPlacement row) => m_rows.TryGetValue(row.Id, out var declared) && ReferenceEquals(row, declared);
-        private CompiledPlacementFrame Authored(WorldPlacement row) => (Owned(row: row)
-            ? m_authored.GetValueOrDefault(row.Id, WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: row, worldSeed: m_seed))
-            : WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: row, worldSeed: m_seed));
+        // A declared row's authored world frame; a row whose parent chain does not resolve keeps its own authored root,
+        // as frame compilation gives it.
+        private CompiledPlacementFrame Authored(WorldPlacement row) {
+            if (!Owned(row: row)) { return WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: row, worldSeed: m_seed); }
+            if (m_authored.TryGetValue(key: row.Id, value: out var frame)) { return frame; }
+            if (!WorldPlacementFrameCompilation.TryResolveFrame(byId: m_rows, frame: out frame, frames: m_authored, placement: row, reason: out _, visiting: m_authoring, worldSeed: m_seed)) {
+                frame = WorldPlacementFrameCompilation.LocalFrame(inheritScale: out _, parent: null, row: row, worldSeed: m_seed);
+                m_authored[row.Id] = frame;
+            }
+            return frame;
+        }
         private CompiledPlacementFrame BaseFrame(WorldPlacement row) {
             if (row.Parent is not { Length: > 0 } parentId || !m_rows.TryGetValue(parentId, out var parent)) { return Authored(row); }
             var parentFrame = FrameOf(parent);

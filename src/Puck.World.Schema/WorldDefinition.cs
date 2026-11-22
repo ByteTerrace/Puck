@@ -1064,6 +1064,7 @@ public sealed partial record WorldDefinition(
         var section = (PlacementsRaw ?? new WorldPlacementsSection());
         var rows = Placements;
         var next = new WorldPlacement[rows.Count];
+        var replaced = new Dictionary<WorldPlacement, WorldPlacement>(capacity: holdings.Count, comparer: ReferenceEqualityComparer.Instance);
 
         for (var index = 0; (index < rows.Count); index++) {
             next[index] = rows[index];
@@ -1071,6 +1072,7 @@ public sealed partial record WorldDefinition(
         foreach (var (row, holding) in holdings) {
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: ((uint)row), other: ((uint)rows.Count), paramName: nameof(holdings));
             next[row] = (rows[row] with { Holding = holding });
+            replaced[rows[row]] = next[row];
             WorldPlacementStamp.CarryAcrossHolding(rows[row], next[row]);
         }
 
@@ -1078,6 +1080,7 @@ public sealed partial record WorldDefinition(
         var updated = (this with { PlacementsRaw = placements });
 
         WorldPlacementFrameCompilation.CarryAcrossHolding(source: section, target: placements);
+        WorldPlacementStamp.CarryAcrossHolding(replaced: replaced, source: section, target: placements);
         WorldSpatialQueryCompilation.CarryAcrossHolding(source: section, target: placements);
         WorldStateDocumentValues.CarryReferencedRows(source: this, target: updated);
         WorldFaceCatalog.CarryAcrossHolding(holdings: holdings, source: this, target: updated);

@@ -1,4 +1,6 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
+using Puck.Abstractions;
 
 namespace Puck.SignedDistance;
 
@@ -432,11 +434,14 @@ public sealed partial class SdfProgram {
             }
         }
         public void Derived(SdfOperandLanes lanes, Vector3 expected, string derivation) {
-            var components = Lanes(lanes: lanes).ToArray();
+            var components = Lanes(lanes: lanes).GetEnumerator();
 
-            Derived(derivation: derivation, expected: expected.X, lane: components[0]);
-            Derived(derivation: derivation, expected: expected.Y, lane: components[1]);
-            Derived(derivation: derivation, expected: expected.Z, lane: components[2]);
+            _ = components.MoveNext();
+            Derived(derivation: derivation, expected: expected.X, lane: components.Current);
+            _ = components.MoveNext();
+            Derived(derivation: derivation, expected: expected.Y, lane: components.Current);
+            _ = components.MoveNext();
+            Derived(derivation: derivation, expected: expected.Z, lane: components.Current);
         }
         // A star's or regular polygon's half-sector π/n, for a whole n of at least the minimum; returns n.
         public int HalfSector(SdfOperandLanes lane, int minimumSides) {
@@ -471,10 +476,14 @@ public sealed partial class SdfProgram {
         }
         public void MarkWritten(SdfOperandLanes lanes) => m_written |= lanes;
         public readonly void Require(bool condition, SdfOperandLanes lane, string requirement) {
-            if (!condition) {
-                throw new ArgumentException(message: $"Instruction {index} ({instruction.Op}) carries {Describe(lane: lane)} in {Name(lane: lane)}; {requirement}.", paramName: paramName);
-            }
+            if (!condition) { Refuse(lane: lane, requirement: requirement); }
         }
+        // The same check with a formatted requirement, which a passing check never formats (RefusalText).
+        public readonly void Require(bool condition, SdfOperandLanes lane, [InterpolatedStringHandlerArgument("condition")] ref RefusalText requirement) {
+            if (!condition) { Refuse(lane: lane, requirement: requirement.ToStringAndClear()); }
+        }
+        private readonly void Refuse(SdfOperandLanes lane, string requirement) =>
+            throw new ArgumentException(message: $"Instruction {index} ({instruction.Op}) carries {Describe(lane: lane)} in {Name(lane: lane)}; {requirement}.", paramName: paramName);
         public void Unit(SdfOperandLanes lanes, string subject) {
             m_unit |= lanes;
 
@@ -524,13 +533,22 @@ public sealed partial class SdfProgram {
         };
     }
 
-    // The single lanes of a set, in lane order.
-    private static IEnumerable<SdfOperandLanes> Lanes(SdfOperandLanes lanes) {
-        for (var bit = 0; (bit < 11); bit++) {
-            var lane = ((SdfOperandLanes)(1 << bit));
+    // The single lanes of a set, in lane order, enumerated without allocating.
+    private static LaneSet Lanes(SdfOperandLanes lanes) => new(lanes: lanes);
 
-            if ((lanes & lane) != 0) {
-                yield return lane;
+    private readonly struct LaneSet(SdfOperandLanes lanes) {
+        public Enumerator GetEnumerator() => new(remaining: (((uint)lanes) & 0x7FFu));
+
+        public struct Enumerator(uint remaining) {
+            private uint m_remaining = remaining;
+
+            public SdfOperandLanes Current { get; private set; }
+
+            public bool MoveNext() {
+                if (m_remaining == 0u) { return false; }
+                Current = ((SdfOperandLanes)(m_remaining & (0u - m_remaining)));
+                m_remaining &= (m_remaining - 1u);
+                return true;
             }
         }
     }
