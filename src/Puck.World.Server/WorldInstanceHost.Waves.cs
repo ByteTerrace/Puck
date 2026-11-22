@@ -152,13 +152,10 @@ public sealed partial class WorldInstanceHost {
         m_waveNext = 0;
         m_wavePhase = WavePhase.Idle;
     }
-    // Whether the row's instance is still the one running under its name, and may still step.
-    private bool StillSteps(WaveRow row) => (
-        m_instances.TryGetValue(key: row.Instance.Name, value: out var current) &&
-        ReferenceEquals(objA: current, objB: row.Instance) &&
-        !row.Instance.Server.IsRetiring &&
-        !row.Instance.Server.Tick.ExecutionInterrupted
-    );
+    // Whether the row's instance is still the one running under its name: an earlier row's settle can stop it.
+    private bool StillRuns(WaveRow row) => (m_instances.TryGetValue(key: row.Instance.Name, value: out var current) && ReferenceEquals(objA: current, objB: row.Instance));
+    // Whether the row still runs and may take another tick.
+    private bool StillSteps(WaveRow row) => (StillRuns(row: row) && !row.Instance.Server.IsRetiring && !row.Instance.Server.Tick.ExecutionInterrupted);
 
     // Prepares one tick of every row that still owes one, in name order, and hands them over; false when none does. The
     // first wave also lists the paused and stopped rows, which are settled in their name order without a tick.
@@ -220,7 +217,8 @@ public sealed partial class WorldInstanceHost {
             if (m_wave.Count == 0) {
                 return false;
             }
-            SettleAdministrative();
+            _ = SettleWave();
+            m_firstWave = false;
 
             return ComposeWave(deadline: deadline);
         }
@@ -228,16 +226,6 @@ public sealed partial class WorldInstanceHost {
 
         return true;
     }
-    // Settles the paused and stopped rows of a first wave that executed nothing.
-    private void SettleAdministrative() {
-        foreach (var row in m_wave) {
-            if (row.Administrative && StillRuns(row: row)) {
-                SettleIdle(row: row);
-            }
-        }
-        m_firstWave = false;
-    }
-    private bool StillRuns(WaveRow row) => (m_instances.TryGetValue(key: row.Instance.Name, value: out var current) && ReferenceEquals(objA: current, objB: row.Instance));
     // A paused or stopped row still applies its buffered document mutations, and its sessions still follow its
     // definition but forward nothing.
     private void SettleIdle(WaveRow row) {
