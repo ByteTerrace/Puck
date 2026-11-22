@@ -3295,6 +3295,15 @@ public sealed partial class SdfMeshPathBake {
         // (MeasureDemand). Whether it waits to be measured as a group newly set into a place (GroupList.TakeFresh), the
         // prepared frame that last measured it, and whether the tier decisions read it (Attend).
         public double DemandDueAt { get; set; } = double.NaN;
+        public long DemandQueuedEpoch { get; set; } = -1L;
+        // What the latest measure stood on, which a moved slot's bound reads (MeasureDemands): the travel it was taken at,
+        // the travel its tier band leaves (in travel units, its pixel slack times its units), and the world box and units
+        // it read; units of zero for a measure that read no single box (a shared geometry's copies).
+        public double DemandMeasuredTravel { get; set; }
+        public float DemandSlack { get; set; }
+        public Vector3 DemandWorldCenter { get; set; }
+        public Vector3 DemandWorldHalf { get; set; }
+        public float DemandUnits { get; set; }
         public bool DemandFresh { get; set; }
         public long DemandMeasuredAt { get; set; } = -1L;
         public bool Attended { get; set; }

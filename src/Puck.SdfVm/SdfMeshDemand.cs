@@ -51,6 +51,13 @@ public sealed class SdfMeshDemand {
     /// revision, divided by the units the box is measured in, since a box's distance from a point moves no more than the
     /// point does and the near clamp keeps that bound.</summary>
     public double Travel { get; private set; }
+    /// <summary>Gets the fewest pixels a metre any demand point covers one metre in front of it, infinity with none: a
+    /// box that moves a distance moves a <see cref="PixelAt(Vector3, Vector3)"/> answer by at most that distance over
+    /// this, as the points' own travel does.</summary>
+    public float LeastPixelsPerMetre { get; private set; } = float.PositiveInfinity;
+    /// <summary>Gets whether some demand point demands only inside its view (<see cref="SdfViewSnapshot.DemandWithinView"/>):
+    /// a box that moves across its frustum moves its answer by any amount, so no distance bounds a moved box's answer.</summary>
+    public bool AnyWithinView { get; private set; }
 
     /// <summary>Reads the demand points from a frame's views: each view's eye, and its pixels a metre one metre in front of
     /// it, from the height its sizes are measured in (<see cref="SdfViewSnapshot.DemandHeight"/>) or else its share of
@@ -101,6 +108,19 @@ public sealed class SdfMeshDemand {
             Travel += travel;
         }
         Count = count;
+        Measured();
+    }
+    // Reads the figures a moved box's bound takes from the points (LeastPixelsPerMetre, AnyWithinView).
+    private void Measured() {
+        var least = float.PositiveInfinity;
+        var within = false;
+
+        for (var index = 0; (index < Count); index++) {
+            least = MathF.Min(x: least, y: m_focal[index]);
+            within |= m_within[index];
+        }
+        LeastPixelsPerMetre = least;
+        AnyWithinView = within;
     }
     private void EnsureCapacity(int required) {
         if (required <= m_points.Length) { return; }
@@ -127,6 +147,7 @@ public sealed class SdfMeshDemand {
         m_focal[Count] = ((Math.Max(val1: height, val2: 1u) * 0.5f) / tanHalfFieldOfView);
         Count++;
         Revision++;
+        Measured();
     }
     /// <summary>Returns the metres one display pixel covers at a box from the demand point that sees it finest: the
     /// distance from the eye to the box, no nearer than <see cref="NearDistance"/>, over the point's pixels a metre; what

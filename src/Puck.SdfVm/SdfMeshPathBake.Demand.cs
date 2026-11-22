@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Abstractions.Gpu;
 
 namespace Puck.SdfVm;
@@ -7,7 +8,9 @@ namespace Puck.SdfVm;
 // changes shape, or the group's box moves. So a frame measures:
 //   - the groups set into a place since the last frame (GroupList.TakeFresh), which the watch has never measured;
 //   - the groups whose box moved: a dynamic group whose slot's transform moved, and a group one of whose copies moved,
-//     each found through the list's owner index (GroupList.FirstOf);
+//     each found through the list's owner index (GroupList.FirstOf). A moved slot's group is measured only when its
+//     world box moved, with the points' travel since its measure, by as much as its tier band leaves: a box's distance
+//     from a point moves no more than its center and half extents do (Moved);
 //   - the groups the demand points' travel made due: SdfMeshDemand.Travel bounds how far any pixel moves between two
 //     observations of one revision, so a group measured at travel T with its pixel s (in travel units) from the nearest
 //     edge of the tier band it stands in keeps its tier until the travel passes T + s (DemandDueAt, the due queue);
@@ -19,13 +22,16 @@ namespace Puck.SdfVm;
 // read the frame's own journals, and every group enters the list through GroupList.Set. A change to what a pixel reads
 // (a new input to MeasurePixel) must add its route here, or a group keeps a stale tier.
 //
-// The tier decisions read only the groups the watch measured since they last stood (the attention list, Attend): a
-// group whose demanded tier is the one it draws, with no first detail owed and no replacement in flight, has nothing a
-// decision can do until its pixel or its drawn tier moves, and both pass through a measure or a Set.
+// The tier decisions read only the groups whose demanded tier a measure moved or the list set since they last stood
+// (the attention list, Attend): a group whose demanded tier is the one it draws, with no first detail owed and no
+// replacement in flight, has nothing a decision can do until its demanded or its drawn tier moves, and both pass
+// through a measure or a Set.
 public sealed partial class SdfMeshPathBake {
     // The groups due by travel, each at the travel it falls due; an entry whose group was measured since (its due moved)
-    // or left the list is passed over.
+    // or left the list is passed over. Each clearing starts an epoch, and a group's due counts as queued only when it
+    // was queued in the current one (Group.DemandQueuedEpoch).
     private readonly PriorityQueue<Group, double> m_demandDue = new();
+    private long m_demandEpoch;
     // The revision the watch last read of the demand points, and the bias it measured under.
     private long m_demandRevision = -1L;
     private int m_demandBias = -1;
@@ -60,7 +66,7 @@ public sealed partial class SdfMeshPathBake {
             m_demandBias = bias;
             m_demandSweepLeft = m_groups.Count;
             m_demandResetAt = m_preparedFrames;
-            m_demandDue.Clear();
+            ClearQueue();
             SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.DemandResets);
         }
 
@@ -68,13 +74,21 @@ public sealed partial class SdfMeshPathBake {
         var groups = 0;
         var boxes = 0L;
         var due = 0;
+        var stood = 0;
 
         foreach (var group in m_groups.TakeFresh()) { Measure(group: group); }
         if (!slotsWhole) {
             for (var run = 0; (run < m_demandSlots.Count); run++) {
                 var end = (m_demandSlots.Start(index: run) + m_demandSlots.Length(index: run));
 
-                for (var slot = m_demandSlots.Start(index: run); (slot < end); slot++) { MeasureOwners(dynamic: true, key: slot); }
+                for (var slot = m_demandSlots.Start(index: run); (slot < end); slot++) {
+                    for (var index = m_groups.FirstOf(dynamic: true, key: slot); (index >= 0); index = m_groups.NextOf(index: index)) {
+                        var group = m_groups[index];
+
+                        if (!Moved(group: group)) { stood++; continue; }
+                        _ = Measure(group: group);
+                    }
+                }
             }
         }
         if (!m_copiesWhole) {
@@ -118,37 +132,74 @@ public sealed partial class SdfMeshPathBake {
         // Entries the measures passed over pile up while groups move faster than the travel reaches them: the queue is
         // made again from the listed groups once it holds twice their number.
         if (m_demandDue.Count > ((2 * m_groups.Count) + 64)) {
-            m_demandDue.Clear();
+            ClearQueue();
             foreach (var group in m_groups) {
-                if (double.IsFinite(d: group.DemandDueAt) && !group.Retired) { m_demandDue.Enqueue(element: group, priority: group.DemandDueAt); }
+                if (!group.Retired) { Queue(group: group); }
             }
         }
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandGroups, amount: groups);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandBoxes, amount: boxes);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandDue, amount: due);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandStood, amount: stood);
 
         void MeasureOwners(bool dynamic, int key) {
             for (var index = m_groups.FirstOf(dynamic: dynamic, key: key); (index >= 0); index = m_groups.NextOf(index: index)) { _ = Measure(group: m_groups[index]); }
         }
-        // Measures one listed group, once a frame, and queues it at the travel its tier may next move at.
+        // Whether a group whose slot moved may demand another tier: its box moved by no more than the distance between the
+        // world box its latest measure read and the one it stands at now, so its pixel moved by no more than that over the
+        // points' fewest pixels a metre, with the points' own travel since. A shared geometry's copies, a changed scale,
+        // a point bounded to its view (whose frustum a box crosses) or a group never measured say it may.
+        bool Moved(Group group) {
+            if (!group.Listed || group.Retired || !group.HasDemandBox || (group.DemandMeasuredAt == stamp) || double.IsNaN(d: group.DemandDueAt)) { return true; }
+            if (!float.IsFinite(f: group.DemandSlack)) { return false; }
+            if ((group.DemandUnits == 0f) || Demand.AnyWithinView || (UnitsOf(group: group) != group.DemandUnits)) { return true; }
+
+            var (center, half) = WorldBox(group: group);
+            var drift = ((Vector3.Distance(value1: center, value2: group.DemandWorldCenter) + Vector3.Distance(value1: half, value2: group.DemandWorldHalf)) / Demand.LeastPixelsPerMetre);
+
+            return (((travel - group.DemandMeasuredTravel) + drift) >= group.DemandSlack);
+        }
+        // Measures one listed group, once a frame, and queues it at the travel its tier may next move at. A group whose
+        // demanded tier stands is not read by the next decision for it, and keeps the earlier of its queued dues.
         bool Measure(Group group) {
             if (!group.Listed || group.Retired || !group.HasDemandBox || (group.DemandMeasuredAt == stamp)) { return false; }
 
             var before = group.DemandPixel;
-            var pixel = MeasurePixel(boxes: out var read, group: group, point: out _, units: out var units);
+            var pixel = MeasurePixel(boxes: out var read, group: group, point: out _, units: out var units, box: out var box);
             var slack = (DemandSlack(bias: bias, group: group, pixel: pixel) * units);
+            var dueAt = (travel + slack);
+            var queued = group.DemandDueAt;
 
             group.DemandPixel = pixel;
             group.DemandMeasuredAt = stamp;
-            group.DemandDueAt = (travel + slack);
-            if (double.IsFinite(d: group.DemandDueAt)) { m_demandDue.Enqueue(element: group, priority: group.DemandDueAt); }
+            group.DemandMeasuredTravel = travel;
+            group.DemandSlack = slack;
+            (group.DemandWorldCenter, group.DemandWorldHalf, group.DemandUnits) = ((box is { } held) ? (held.Center, held.Half, units) : (default, default, 0f));
+            // An entry already queued earlier than the new due stays valid: popped, it measures again sooner than needed.
+            if ((group.DemandQueuedEpoch != m_demandEpoch) || double.IsNaN(d: queued) || !(queued <= dueAt) || (queued < travel)) {
+                group.DemandDueAt = dueAt;
+                Queue(group: group);
+            }
             if ((bias > 0) && (float.IsNaN(f: before) || (FinerTierOf(bias: bias, group: group, pixel: before) != FinerTierOf(bias: bias, group: group, pixel: pixel)))) { m_finerDemandRevision++; }
-            Attend(group: group);
+            if (float.IsNaN(f: before) || (DemandedTierOf(group: group, pixel: before) != DemandedTierOf(group: group, pixel: pixel))) { Attend(group: group); }
             groups++;
             boxes += read;
             return true;
         }
     }
+    // Queues a group at its due, in this epoch of the queue, when any travel can move its tier.
+    private void Queue(Group group) {
+        if (!double.IsFinite(d: group.DemandDueAt)) { return; }
+        group.DemandQueuedEpoch = m_demandEpoch;
+        m_demandDue.Enqueue(element: group, priority: group.DemandDueAt);
+    }
+    // Empties the due queue and starts its next epoch, so no group takes its old due as still queued.
+    private void ClearQueue() {
+        m_demandDue.Clear();
+        m_demandEpoch++;
+    }
+    // The tier a group demands at a pixel under the bias, held to its rungs.
+    private int DemandedTierOf(Group group, float pixel) => SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: TierOf(pixel: pixel));
     // The tier half a rung finer than the bias asks, held to the group's rungs: what the bias would demand one step back.
     private static int FinerTierOf(int bias, Group group, float pixel) =>
         SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: SdfMeshTier.Of(pixel: SdfMeshTier.Biased(halfRungs: (bias - 1), pixel: pixel)));

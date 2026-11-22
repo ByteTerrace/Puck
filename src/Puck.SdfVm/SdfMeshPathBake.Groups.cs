@@ -180,6 +180,8 @@ public sealed partial class SdfMeshPathBake {
         private long m_boxes;
         private long m_sweep;
 
+        // The boxes the last whole sweep read.
+        public readonly long Boxes => m_boxes;
         // The boxes the next frame's share reads at most.
         public readonly long Share => Math.Max(val1: SdfMeshTier.MeasureBoxes, val2: m_boxes.CeilingDivide(divisor: ((long)SdfMeshTier.MeasureFrames)));
 

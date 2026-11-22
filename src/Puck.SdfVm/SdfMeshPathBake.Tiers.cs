@@ -129,7 +129,7 @@ public sealed partial class SdfMeshPathBake {
         (SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: tiers(arg: group)) != group.Tier);
     // The metres one display pixel covers at a group's demand box, in the group's own units, from the demand point that
     // sees it finest: a shared geometry where its copies stand, as its priority is measured (MeasureDemand).
-    private float MeasurePixel(Group group, out int point) => MeasurePixel(boxes: out _, group: group, point: out point, units: out _);
+    private float MeasurePixel(Group group, out int point) => MeasurePixel(boxes: out _, group: group, point: out point, units: out _, box: out _);
     // The metres one display pixel covers at a group's planned box while a plan is choosing its tier, in the group's own
     // units: a shared geometry's where the frame's copies of it stand, and any other group's at its planned box. On the
     // frame's thread, with the copy index at the planned program's frame (PrepareFrame indexes before it plans).
@@ -151,21 +151,26 @@ public sealed partial class SdfMeshPathBake {
         return false;
     }
     // MeasurePixel, the demand point that sees the group finest, -1 with none, the boxes the measure read (one, or a
-    // shared geometry's copies) and the fewest units any of them is measured in, which bounds how far the pixel moves
-    // as the demand points travel (SdfMeshDemand.Travel).
-    private float MeasurePixel(Group group, out int point, out int boxes, out float units) {
+    // shared geometry's copies), the fewest units any of them is measured in, which bounds how far the pixel moves as
+    // the demand points travel (SdfMeshDemand.Travel), and the one world box it read; null for a shared geometry's.
+    private float MeasurePixel(Group group, out int point, out int boxes, out float units, out (Vector3 Center, Vector3 Half)? box) {
         boxes = 1;
         if (CopiesOf(group: group) is not { } copies) {
             var (center, half) = WorldBox(group: group);
 
-            units = ((group.Dynamic && (group.Slot < m_demandTransforms.Count)) ? SdfMeshGeometryBuilder.UnitsOf(transform: m_demandTransforms[group.Slot]) : 1f);
+            units = UnitsOf(group: group);
+            box = (center, half);
 
             return (Demand.PixelAt(center: center, half: half, point: out point) / units);
         }
 
         boxes = Math.Max(val1: 1, val2: copies.Count);
+        box = null;
         return CopiesPixel(center: group.DemandCenter, copies: copies, half: group.DemandHalf, point: out point, units: out units);
     }
+    // The units a group's lattice is in: its slot's for a dynamic group (SdfMeshGeometryBuilder.UnitsOf), metres for any
+    // other.
+    private float UnitsOf(Group group) => ((group.Dynamic && (group.Slot < m_demandTransforms.Count)) ? SdfMeshGeometryBuilder.UnitsOf(transform: m_demandTransforms[group.Slot]) : 1f);
     // The metres one display pixel covers at a shared geometry's box, given in the geometry's own frame, from the demand
     // point that sees one of its copies finest, in the geometry's units; infinity, and no point, with no copy. Also the
     // fewest units a copy is measured in.
