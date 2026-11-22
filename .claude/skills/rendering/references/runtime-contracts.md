@@ -170,6 +170,30 @@ instead of racing. A recorder that shares state it does not name is caught only 
 review. `render.record` counts `waves`, `partitions`, `jobs.worker`,
 `passes.worker` and `lists`.
 
+**A node's passes are decided in order and emitted side by side.** A recording
+walks its passes once, in order (`ShaderPipelineRenderNode.RecordPasses`): every
+skip, stand, cadence step, barrier-tracker move, ledger pass, history cursor,
+alias and readback arming is decided there, and a pass whose recorder is an
+`IRenderGraphPackageEmitter` is decided (`Decide`: its pass block, everything a
+later pass or the commit reads) and queued, while every other pass records into
+the frame's current serial list. Once the walk ends, each run of queued passes is
+cut into lanes by last frame's emission times, and each lane emits its passes into
+a list of its own (`ShaderPipelineRenderNode.EmitLane`) as the second fork of the
+wave (`RenderGraphRuntime.EmitWave`), which runs every recording's lanes side by
+side, domains notwithstanding. The lists are submitted in the walk's order, so the
+queue sees passes in pass order. A lane reads only what the walk captured for it
+(resolved barrier targets, a copy of the pass block) and the recorder's own state;
+the ledger counts its calls under its pass (`GpuWorkLedger.EnterLane`). Each list
+after a slot's first takes the slot's next pool (`FrameSlot.Lists`), so every
+list in flight has its own allocator, reset only after `WaitSlot`. The walk is
+serial (one lane, every pass in order) outside a runtime with a multi-thread pool
+and on a frame that initializes storage. `SdfWorldPassRecorder` is the emitter
+today; `render.record` counts `lanes` and `passes.emitted`, and
+`pipeline.inspect <instance>` prints a node's `last-walk-us`, `last-lanes` and
+`last-longest-piece-us`. `gpu.faults record <n>` takes its count as each node
+prepares its frame on the frame thread (`GpuCreationFaults.TakeRecordingDue`), so
+the recording it fails is the same whatever runs side by side.
+
 ## 2. Nothing resolves silently to nothing
 
 **Rule.** A read, alias, package, source or capture that cannot be served

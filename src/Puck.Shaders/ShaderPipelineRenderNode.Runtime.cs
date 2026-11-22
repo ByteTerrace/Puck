@@ -3,14 +3,25 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-// The installed graph's runtime objects: each frame slot's fence and the command pool its one command list records in,
-// each storage's instances, and each pass's compiled objects, sets and regions.
+// The installed graph's runtime objects: each frame slot's fence and command pools, each storage's instances, and each
+// pass's compiled objects, sets and regions.
 public sealed partial class ShaderPipelineRenderNode {
     private sealed class FrameSlot {
         public IGpuSubmissionFence? Fence;
         public long Submission;
-        // The slot's command list: every pass, the preview, the export copy and the presentation, in order.
+        // The slot's first command list, which a frame's passes start in.
         public IGpuCommandPool? Commands;
+        // The pools of the slot's further lists, taken in order by a frame that spreads its passes across lists
+        // (ShaderPipelineRenderNode.Emission.cs): one allocator per list in flight, reset only by the slot's next frame.
+        public readonly List<IGpuCommandPool> Lists = [];
+
+        // Disposes the slot's command pools, once no submission records or reads them.
+        public void DisposeCommands() {
+            Commands?.Dispose();
+            Commands = null;
+            foreach (var pool in Lists) { pool.Dispose(); }
+            Lists.Clear();
+        }
 
         // The leases this slot's latest submission sampled, retired after its fence.
         public readonly LeaseRetireList Leases = new();

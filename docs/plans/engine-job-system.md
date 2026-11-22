@@ -729,6 +729,18 @@ its recording by name. The [runtime contracts](../../.claude/skills/rendering/re
 hold the contract and `world.counters render.record` counts waves, partitions and
 the jobs workers recorded.
 
+One node's passes spread across threads too. A recording walks its passes in
+order and decides each one; a pass whose recorder is an
+`IRenderGraphPackageEmitter` (the SDF world parts) is only decided there, and
+its commands are emitted later into a command list of its own, as the wave's
+second fork (`RenderGraphRuntime.EmitWave`) runs every recording's lanes side by
+side. The lists are submitted in pass order, each list in flight has its own
+command pool (`ShaderPipelineRenderNode.FrameSlot.Lists`), and the ledger counts
+a lane's calls under its pass (`GpuWorkLedger.EnterLane`). The walk itself still
+runs on whichever thread its partition gets, the frame thread when a wave holds
+one recording; `pipeline.inspect <instance>` prints its `last-walk-us` beside the
+lanes'.
+
 ### What 36 % means
 
 Recording is 2.4 ms of a 6.5 ms produce at the lobby and 5.3 ms of a slow frame.

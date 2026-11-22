@@ -875,12 +875,43 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <returns>The screens bound an image, one bit per screen index.</returns>
     internal uint BindScreenImages(int view, ReadOnlySpan<bool> shown, in RenderGraphPackageRecording recording, IGpuBindings bindings,
         uint binding, nint set, nint filler, Span<nint> bound) {
+        Span<nint> images = stackalloc nint[SdfWorldTables.MaxScreenSurfaces];
+
+        TakeScreenImages(images: images, recording: in recording, shown: shown, view: view);
+        return WriteScreenImages(images: images, binding: binding, bindings: bindings, bound: bound, filler: filler, set: set);
+    }
+    /// <summary>Takes the image (<see cref="ScreenImage"/>) of each screen a filter marks, holding its lease in the
+    /// recording's lease list, and zero at every other screen: the half of <see cref="BindScreenImages"/> that changes the
+    /// recording's leases and the residency, which a pass's decision takes in pass order.</summary>
+    /// <param name="view">The view's index in the residency's frame.</param>
+    /// <param name="shown">The screens whose images the pass samples, one flag per screen index.</param>
+    /// <param name="recording">The recording whose reads and lease list the images come from.</param>
+    /// <param name="images">The image view each screen index samples, or zero; <see cref="SdfWorldTables.MaxScreenSurfaces"/>
+    /// long.</param>
+    internal void TakeScreenImages(int view, ReadOnlySpan<bool> shown, in RenderGraphPackageRecording recording, Span<nint> images) {
+        for (var screen = 0; (screen < SdfWorldTables.MaxScreenSurfaces); screen++) {
+            images[screen] = (((screen < shown.Length) && shown[screen])
+                ? ScreenImage(latch: recording.Latch, leases: recording.Leases, reads: recording.Reads, screen: screen, view: view)
+                : 0);
+        }
+    }
+    /// <summary>Writes into a pass set's screen array the images <see cref="TakeScreenImages"/> took, and the filler at
+    /// every screen it took none for: a host's image on every call, since its handle is unique only among live objects, and
+    /// the filler only where the set does not already hold it. It changes nothing but the set and
+    /// <paramref name="bound"/>, so a pass's emission writes it beside other passes'.</summary>
+    /// <param name="images">The image view each screen index samples, or zero.</param>
+    /// <param name="bindings">The writer of the set's descriptors.</param>
+    /// <param name="binding">The screen array's binding in <paramref name="set"/>.</param>
+    /// <param name="set">The pass set.</param>
+    /// <param name="filler">The image view a screen that shows nothing samples.</param>
+    /// <param name="bound">The image view the set holds at each screen, which this updates, or empty for a set whose
+    /// holdings are not tracked, which is written at every screen.</param>
+    /// <returns>The screens bound an image, one bit per screen index.</returns>
+    internal static uint WriteScreenImages(ReadOnlySpan<nint> images, IGpuBindings bindings, uint binding, nint set, nint filler, Span<nint> bound) {
         var imaged = 0u;
 
         for (var screen = 0; (screen < SdfWorldTables.MaxScreenSurfaces); screen++) {
-            var image = (((screen < shown.Length) && shown[screen])
-                ? ScreenImage(latch: recording.Latch, leases: recording.Leases, reads: recording.Reads, screen: screen, view: view)
-                : 0);
+            var image = images[screen];
 
             if (image != 0) {
                 imaged |= (1u << screen);

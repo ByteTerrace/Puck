@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using System.Text;
+using Puck.Abstractions.Memory;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -23,6 +24,11 @@ public sealed partial class ShaderPipelineRenderNode {
         // The slot's frame list and region-copy list while open; zero once ended or never begun.
         public nint Frame;
         public nint Copies;
+        // The frame's further lists (FrameSlot.Lists), in the order taken, and whether each is still open. Only the
+        // recording's walk takes one; a lane ends its own, writing only its own element.
+        public int ExtraCount;
+        private nint[] m_extraLists = [];
+        private bool[] m_extraOpen = [];
         // When the job's phases began and ended, in Stopwatch ticks. A recording run on another thread may begin well after
         // its preparation ended and end well before its commit begins.
         public long PreparedAt;
@@ -30,6 +36,41 @@ public sealed partial class ShaderPipelineRenderNode {
         public long RecordedAt;
         public long RecordEndedAt;
         public long CommittedAt;
+
+        public void OpenExtra(nint list) {
+            ArrayCapacity.EnsureLength(array: ref m_extraLists, required: (ExtraCount + 1));
+            ArrayCapacity.EnsureLength(array: ref m_extraOpen, required: (ExtraCount + 1));
+            m_extraLists[ExtraCount] = list;
+            m_extraOpen[ExtraCount] = true;
+            ExtraCount++;
+        }
+        // Forgets a list as open once its end is attempted: a further list by its place (`extra`), else the slot's frame
+        // or copy list.
+        public void CloseList(nint list, int extra) {
+            if (extra >= 0) {
+                m_extraOpen[extra] = false;
+                return;
+            }
+            if (Frame == list) { Frame = 0; }
+            if (Copies == list) { Copies = 0; }
+        }
+        // The place of a further list among the frame's, or -1 for the slot's frame or copy list.
+        public int ExtraOf(nint list) {
+            for (var extra = 0; (extra < ExtraCount); extra++) {
+                if (m_extraLists[extra] == list) { return extra; }
+            }
+            return -1;
+        }
+        public bool IsOpen(int extra) => m_extraOpen[extra];
+        public nint ExtraList(int extra) => m_extraLists[extra];
+        public bool Ended {
+            get {
+                for (var extra = 0; (extra < ExtraCount); extra++) {
+                    if (m_extraOpen[extra]) { return false; }
+                }
+                return ((Frame == 0) && (Copies == 0));
+            }
+        }
     }
 
     // The frame between BeginFrame and EndFrame (or AbandonFrame): what Produce prepared, and what the recording left for
@@ -51,10 +92,14 @@ public sealed partial class ShaderPipelineRenderNode {
         // What the recording threw, and what a pass's preparation threw, which the recording throws once its lists began.
         public ExceptionDispatchInfo? Error;
         public ExceptionDispatchInfo? PrepareFailure;
+        // The operator's armed recording fault this recording fails partway (GpuCreationFaults.TakeRecordingDue), or zero.
+        public long RecordingFault;
     }
 
-    // The passes the latest recording recorded, as against stood or skipped.
+    // The passes the latest recording recorded, as against stood or skipped, and those of them it recorded in its walk
+    // rather than queued for lanes.
     internal int LastPassesRecorded { get; private set; }
+    internal int LastPassesRecordedSerially => m_passesRecordedSerially;
 
     // A frame in three steps, which ProduceFrame takes in a row and the runtime takes across a wave of instances: BeginFrame
     // on the frame thread prepares it (everything up to the record job, which takes the slot, its leases and its
@@ -109,6 +154,10 @@ public sealed partial class ShaderPipelineRenderNode {
         try {
             if (!m_open.Recorded) {
                 throw new InvalidOperationException(message: $"Instance '{m_name}' ended a frame whose record job never ran.");
+            }
+            if (m_open.Error is null) {
+                EmitOwedLanes();
+                m_open.Error = LaneError();
             }
             if (m_open.Error is { } failed) {
                 if (!ContainsRecordFailure(error: failed.SourceException)) {
@@ -187,8 +236,14 @@ public sealed partial class ShaderPipelineRenderNode {
     /// <summary>Gets the reason the node's latest frame recording failed and was abandoned, or <see langword="null"/>
     /// once a later recording committed. The node kept its last published image for that frame.</summary>
     public string? LastRecordError { get; private set; }
-    /// <summary>Gets the duration of the node's latest committed recording, in <see cref="Stopwatch"/> ticks.</summary>
+    /// <summary>Gets the host time the node's latest committed recording took, in <see cref="Stopwatch"/> ticks: its walk
+    /// over the passes and every lane that emitted its passes, summed.</summary>
     public long LastRecordTicks { get; private set; }
+    // The latest committed recording's walk alone, and its longest single piece: the walk or one lane.
+    internal long LastWalkTicks { get; private set; }
+    internal long LastLongestRecordTicks { get; private set; }
+    // The lanes the latest committed recording emitted its passes in.
+    private int m_lastLanes;
     /// <summary>Gets the number of record jobs the node has committed.</summary>
     public long RecordJobs { get; private set; }
 
@@ -202,7 +257,8 @@ public sealed partial class ShaderPipelineRenderNode {
     private long m_longestRecordTicks;
 
     /// <summary>Appends the node's record jobs' host time, in microseconds, as one run of <c>key=value</c> pairs: the
-    /// jobs committed, the latest job's prepare, record and commit time, the mean of each over every job, and the
+    /// jobs committed, the latest job's prepare, record and commit time, its walk over the passes, the lanes it emitted
+    /// passes in and its longest single piece (the walk or a lane), the mean of each phase over every job, and the
     /// longest single recording. The one reading the live budget's instance rows and the graph inspection share, so the
     /// instance behind <c>render.record</c>'s critical path is named wherever the engine already reports a node.
     /// Wall-clock readings: pacing counts, never compared between runs.</summary>
@@ -215,6 +271,9 @@ public sealed partial class ShaderPipelineRenderNode {
         _ = into.Append(value: " record-jobs=").Append(value: RecordJobs)
             .Append(value: " last-prepare-us=").Append(value: Microseconds(ticks: m_lastPrepareTicks))
             .Append(value: " last-record-us=").Append(value: Microseconds(ticks: LastRecordTicks))
+            .Append(value: " last-walk-us=").Append(value: Microseconds(ticks: LastWalkTicks))
+            .Append(value: " last-lanes=").Append(value: m_lastLanes)
+            .Append(value: " last-longest-piece-us=").Append(value: Microseconds(ticks: LastLongestRecordTicks))
             .Append(value: " last-commit-us=").Append(value: Microseconds(ticks: m_lastCommitTicks))
             .Append(value: " mean-prepare-us=").Append(value: Microseconds(ticks: (m_totalPrepareTicks / jobs)))
             .Append(value: " mean-record-us=").Append(value: Microseconds(ticks: (m_totalRecordTicks / jobs)))
@@ -233,17 +292,17 @@ public sealed partial class ShaderPipelineRenderNode {
         m_recording.Slot = slot;
         m_recording.Frame = 0;
         m_recording.Copies = 0;
+        m_recording.ExtraCount = 0;
     }
     // Ends a list the recording began. Once the end is attempted the list is no longer recording, whatever the end
     // reports, so it is forgotten first.
     private void EndRecordedList(nint command) {
-        if (m_recording.Frame == command) { m_recording.Frame = 0; }
-        if (m_recording.Copies == command) { m_recording.Copies = 0; }
+        m_recording.CloseList(extra: m_recording.ExtraOf(list: command), list: command);
         m_gpu.Recorder.EndCommandBuffer(commandBufferHandle: command);
     }
     // Requires the recording's lists to be ended before their submission and releases the slot's lists to the queue.
     private void HandOverRecording() {
-        if (!m_recording.Active || (m_recording.Frame != 0) || (m_recording.Copies != 0)) {
+        if (!m_recording.Active || !m_recording.Ended) {
             throw new InvalidOperationException(message: $"Instance '{m_name}' submitted a recording whose lists are not all ended.");
         }
         m_recording.Active = false;
@@ -271,6 +330,20 @@ public sealed partial class ShaderPipelineRenderNode {
                 pools[slot] = m_gpu.CommandPoolFactory.Create(name: new GpuObjectName(index: slot, owner: m_name, part: "region copies"));
             }
         }
+        for (var extra = 0; (extra < m_recording.ExtraCount); extra++) {
+            if (!m_recording.IsOpen(extra: extra)) { continue; }
+
+            var list = m_recording.ExtraList(extra: extra);
+
+            m_recording.CloseList(extra: extra, list: list);
+            if (!TryEnd(command: list)) {
+                var lists = m_slots[slot].Lists;
+
+                lists[extra].Dispose();
+                lists[extra] = CommandsOf(gpu: m_gpu, list: (extra + 1), owner: m_name, slot: slot);
+            }
+        }
+        m_laneCount = 0;
         RenderRecordWork.Process.Abandoned();
     }
     private bool TryEnd(nint command) {
@@ -295,9 +368,13 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     private void NoteCommitted() {
         var now = Stopwatch.GetTimestamp();
+        var (laneTicks, longestLane) = LaneTicks();
 
         LastRecordError = null;
-        LastRecordTicks = (m_recording.RecordEndedAt - m_recording.RecordedAt);
+        LastWalkTicks = (m_recording.RecordEndedAt - m_recording.RecordedAt);
+        LastRecordTicks = (LastWalkTicks + laneTicks);
+        LastLongestRecordTicks = Math.Max(val1: LastWalkTicks, val2: longestLane);
+        m_lastLanes = m_laneCount;
         m_lastCommitTicks = (now - m_recording.CommittedAt);
         m_lastPrepareTicks = (m_recording.PrepareEndedAt - m_recording.PreparedAt);
         RecordJobs++;

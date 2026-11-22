@@ -750,35 +750,10 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         );
     }
 
-    // The resource's clear slot for the view (DirectXShaderVisibleHeaps.ClearOf), whose two descriptors, the view-heap
-    // slot the GPU handle names and the CPU-only mirror the CPU handle names, are written the first time a clear asks the
-    // view of the resource.
-    private DirectXClearDescriptor ClearDescriptor(D3D12_UNORDERED_ACCESS_VIEW_DESC view, nint resource) {
-        var descriptors = deviceContext.DescriptorHeaps.ClearOf(
-            created: out var created,
-            resource: resource,
-            view: in view
-        );
-
-        if (created) {
-            var device = ((ID3D12Device*)deviceContext.Device.Handle);
-
-            device->CreateUnorderedAccessView(
-                DestDescriptor: descriptors.ViewCpuHandle,
-                pCounterResource: null,
-                pDesc: &view,
-                pResource: ((ID3D12Resource*)resource)
-            );
-            device->CreateUnorderedAccessView(
-                DestDescriptor: descriptors.ClearCpuHandle,
-                pCounterResource: null,
-                pDesc: &view,
-                pResource: ((ID3D12Resource*)resource)
-            );
-        }
-
-        return descriptors;
-    }
+    // The resource's clear slot for the view (DirectXShaderVisibleHeaps.ClearOf): the view-heap slot the GPU handle names
+    // and the CPU-only mirror the CPU handle names, both holding the view.
+    private DirectXClearDescriptor ClearDescriptor(D3D12_UNORDERED_ACCESS_VIEW_DESC view, nint resource) =>
+        deviceContext.DescriptorHeaps.ClearOf(resource: resource, view: in view);
     private static void SetTable(ID3D12GraphicsCommandList* commandList, GpuBindPoint bindPoint, int rootParameterIndex, ulong gpuBase) {
         var handle = new D3D12_GPU_DESCRIPTOR_HANDLE { ptr = gpuBase };
 

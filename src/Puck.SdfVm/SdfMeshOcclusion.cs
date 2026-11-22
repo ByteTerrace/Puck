@@ -16,9 +16,10 @@ namespace Puck.SdfVm;
 /// one table owner, including across buffer growth;
 /// changing owners clears selection history, and a capture ignores prior levels.
 /// Each phase preserves staged draw order. A coplanar tie across phases can depend on the prior visible set.
-/// No host draw walk is involved. One stage in <see cref="SdfWorldTables.SelectionMarkFrames"/> marks the draws its
-/// phases select, with the level each draws, and reads the marks back with the portal sight verdicts once the node
-/// proves the slot complete (<see cref="SdfWorldTables.ObserveSelectionMarks"/>). KEEP IN SYNC with
+/// No host draw walk is involved. While a reading of the selection stands (<see cref="SdfWorldTables.MarksSelections"/>),
+/// one stage in <see cref="SdfWorldTables.SelectionMarkFrames"/> marks the draws its phases select, with the level each
+/// draws, and reads the marks back with the portal sight verdicts once the node proves the slot complete
+/// (<see cref="SdfWorldTables.ObserveSelectionMarks"/>). KEEP IN SYNC with
 /// sdf-mesh-selection.hlsli and the occlusion kernel.
 /// </summary>
 internal sealed class SdfMeshOcclusion : IDisposable {
@@ -170,8 +171,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         m_receiverWidth = receiverWidth;
         m_receiverHeight = receiverHeight;
         m_lateFollows = (occlude && !skipsDepth);
-        m_marking = (++m_stagesSinceMark >= SdfWorldTables.SelectionMarkFrames);
-        if (m_marking) { m_stagesSinceMark = 0; }
+        var markDue = (++m_stagesSinceMark >= SdfWorldTables.SelectionMarkFrames);
+
+        if (markDue) { m_stagesSinceMark = 0; }
+        m_marking = (markDue && tables.MarksSelections);
         m_rowEpoch = tables.MeshRowEpoch;
         var sightSlot = m_readbackSlots[slot];
         Span<System.Numerics.Vector4> rows = stackalloc System.Numerics.Vector4[SdfKernelInterfaces.MeshSightRow + (4 * SdfPortalSight.Capacity)];

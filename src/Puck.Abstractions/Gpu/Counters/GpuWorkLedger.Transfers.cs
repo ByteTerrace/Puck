@@ -39,7 +39,10 @@ public sealed partial class GpuWorkLedger {
             _ => default,
         };
         if (delta == default) { return; }
-        record.Transfers += delta;
+        // Emission lanes count transfers side by side (EnterLane).
+        lock (m_transferGate) {
+            record.Transfers += delta;
+        }
     }
     private void DiscardTransfers(Record? record) {
         if (record is null) { return; }

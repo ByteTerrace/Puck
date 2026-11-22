@@ -7,16 +7,16 @@ public sealed partial class ShaderPipelineRenderNode {
     private static ulong PackageReadbackBytes(RuntimePass[] passes) => passes.Aggregate(0UL,
         static (bytes, pass) => checked((bytes + ((pass?.Package as IRenderGraphPackageReadback)?.ReadbackBytes ?? 0UL))));
     // A package asks for ranges, never a barrier. The node tracks each transfer like every other unplanned access.
-    private void RecordPackageReadback(RuntimePass pass, int slot, nint command, IGpuRecorder recorder) {
+    private void RecordPackageReadback<TSink>(RuntimePass pass, int slot, ref TSink sink) where TSink : struct, IRecordSink {
         if (pass.Package is not IRenderGraphPackageReadback source) {
             return;
         }
 
         for (var index = 0; source.TryReadback(index: index, readback: out var readback, slot: slot); index++) {
-            RecordPackageCopy(command: command, pass: pass, readback: in readback, recorder: recorder, slot: slot);
+            RecordPackageCopy(pass: pass, readback: in readback, sink: ref sink, slot: slot);
         }
     }
-    private void RecordPackageCopy(RuntimePass pass, in RenderGraphBufferReadback readback, int slot, nint command, IGpuRecorder recorder) {
+    private void RecordPackageCopy<TSink>(RuntimePass pass, in RenderGraphBufferReadback readback, int slot, ref TSink sink) where TSink : struct, IRecordSink {
         foreach (var access in pass.Accesses) {
             if (!access.ReferencesVersion(version: readback.Version)) {
                 continue;
@@ -39,14 +39,8 @@ public sealed partial class ShaderPipelineRenderNode {
 
             var transfer = new ShaderPipelineAccessState(Access: GpuAccess.TransferRead, Layout: GpuImageLayout.Undefined, Stage: GpuStage.Transfer);
 
-            RecordBarrier(
-                barrier: ShaderPipelineBarrier.Always(kind: resource.Spec.Kind, prior: access.Use, use: transfer),
-                command: command, instance: instance, recorder: recorder, resource: resource
-            );
-            recorder.CopyBuffer(commandBufferHandle: command, destinationBufferHandle: readback.Destination.BufferHandle,
-                sourceBufferHandle: buffer.BufferHandle, sizeBytes: readback.SizeBytes, sourceOffsetBytes: readback.SourceOffsetBytes,
-                destinationOffsetBytes: readback.DestinationOffsetBytes);
-            GpuReadbackCopy.MakeHostVisible(recorder: recorder, commandBuffer: command, destinationBufferHandle: readback.Destination.BufferHandle);
+            sink.Barrier(barrier: ShaderPipelineBarrier.Always(kind: resource.Spec.Kind, prior: access.Use, use: transfer), instance: instance, resource: resource);
+            sink.Copy(readback: in readback, source: buffer);
             resource.SetOverride(instance: instance, state: transfer);
             return;
         }

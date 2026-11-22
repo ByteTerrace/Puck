@@ -17,7 +17,12 @@ namespace Puck.SdfVm;
 // the planner's are the instance's, and the node's orders the work counters. The one exception is the mesh part's
 // occlusion (SdfMeshOcclusion), which orders its own buffers and moves the mesh target between its two phases, leaving it
 // in its attachment layout as the planner expects.
-internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
+//
+// The recording splits in two (IRenderGraphPackageEmitter): Decide changes, in pass order, whatever another pass of the
+// instance, its commit or its residency reads, and keeps the values the draw needs in m_decided; Emit records them and may
+// run beside the instance's other passes' emissions, so it reads only m_decided, the recorder's own state and the
+// residency's staged tables and frame, and writes only the recorder's own state, its own sets and the command buffer.
+internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackageEmitter, IRenderGraphPackageReadback {
     // Views attribute analytic sky lighting by layer; the bins pass counts each bin's tiles (sdf-world-views-bins.comp.hlsl),
     // a row for every bin a plan gives a width (SdfShadeDispatch.PlanBins).
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part switch {
@@ -199,6 +204,30 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     private SdfShadeDispatch? m_shadePlan;
 
     private readonly SdfShadeSlots m_shade;
+
+    // What the frame's decision chose for its emission.
+    private struct Decided {
+        public SdfWorldTables? Tables;
+        // The glass clear's range of its sums.
+        public IGpuBuffer? Sums;
+        public ulong ClearStart;
+        public ulong ClearEnd;
+        // A raster part's draw.
+        public int CascadeTexels;
+        public System.Numerics.Vector2 Jitter;
+        public bool Occlude;
+        public SdfMeshCull Cull;
+        public SdfMeshDetail Detail;
+        public SdfFarStaticUse StaticUse;
+        public SdfFarLayers Layers;
+        public SdfMeshMotion Motion;
+        public SdfDistantDraw? Share;
+        // The views pass's kernels, pinned for the recording's submission.
+        public SdfShadeSelection Selection;
+    }
+    private Decided m_decided;
+    // The image each screen index samples this frame, which a compute part's decision took, or zero.
+    private readonly nint[] m_screenImages = new nint[SdfWorldTables.MaxScreenSurfaces];
 
     public SdfWorldPassRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) : base(owner: owner, instance: context.Instance, view: view) {
         m_context = context;
@@ -653,12 +682,17 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         }
         return -1;
     }
-    public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
+    // Decides the pass's frame: everything the instance's later passes, its commit or its residency read (the rows and hits
+    // it notes, the view's history, the far and distant cameras it stages, the shading plan it commits, the screens'
+    // leases) changes here, in pass order, and the values the emission draws by are kept in m_decided.
+    public RenderGraphPackageOutcome Decide(in RenderGraphPackageRecording recording) {
         m_recordedLayers = null;
         m_recordedOpticalInitialization = null;
 
         var residency = m_view.Residency;
         var tables = residency.Staged(context: recording.Context);
+
+        m_decided = new Decided { Tables = tables };
 
         if (m_part == SdfWorldPackage.Parts.Mesh) {
             m_previousMeshRows = m_owner.NoteMeshRows(instance: m_context.Instance, stamp: tables.RowStamp);
@@ -682,9 +716,9 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             var rowBytes = ((ulong)recording.RenderWidth * SdfWorldPackage.GlassSumWords * sizeof(uint));
 
             m_owner.NoteGlassExtent(instance: m_context.Instance, width: recording.RenderWidth, height: recording.RenderHeight);
-            if (end > start) {
-                recording.Recorder.ClearStorageBuffer(recording.CommandBuffer, sums.BufferHandle, (end - start), start);
-            }
+            m_decided.Sums = sums;
+            m_decided.ClearStart = start;
+            m_decided.ClearEnd = end;
             m_glassPending = ((rows is { } span) ? (sums, (span.First * rowBytes), ((span.Last + 1UL) * rowBytes)) : (sums, 0UL, 0UL));
 
             return RenderGraphPackageOutcome.Drew;
@@ -795,30 +829,57 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             var (cullWidth, cullHeight) = (IsShadowCascade ? (recording.RenderWidth, recording.RenderHeight) : (width, height));
 
             m_owner.NoteDrawn(distantTexels: boundDistantTexels, height: cullHeight, instance: m_context.Instance, part: m_part, texels: boundTexels, width: cullWidth);
+            m_decided.CascadeTexels = cascadeTexels;
+            m_decided.Jitter = temporal.Jitter;
+            m_decided.Occlude = ((frame.MeshCull == SdfMeshCullLevel.Occlusion) || (!IsShadowCascade && (frame.MeshCull == SdfMeshCullLevel.Camera)));
+            // The distant map is held across camera turns and moves, so it keeps every caster in its light's box rather
+            // than those that may shadow what the view shows now. Every other pass draws under the cull its motion scope
+            // judges changes by (SdfWorldPasses.CullOf).
+            m_decided.Cull = (distant
+                ? ((frame.MeshCull == SdfMeshCullLevel.Off) ? SdfMeshCull.None : SdfMeshCull.OfLightBox(cascade: drawCamera))
+                : SdfWorldPasses.CullOf(cascade: (IsShadowCascade ? cascade : -1), cascades: in cascades, frame: frame, height: cullHeight, view: view, width: cullWidth));
+            // The glass pass's thickness is the sums of its own triangles' ray distances, so glass draws its own.
+            m_decided.Detail = (IsGlass
+                ? SdfMeshDetail.Finest
+                : (frame.MeshDetail switch {
+                    SdfMeshDetailLevel.Auto => (IsShadowCascade
+                        ? SdfMeshDetail.Of(cascade: drawCamera, texels: cascadeTexels)
+                        : SdfMeshDetail.Of(camera: frame.Views[view].Camera, displayHeight: recording.FrameHeight)),
+                    _ => SdfMeshDetail.Forced(level: (((int)frame.MeshDetail) - 1)),
+                }));
+            m_decided.StaticUse = staticUse;
+            m_decided.Layers = layers;
+            m_decided.Motion = (distant ? SdfMeshMotion.Static : (((staticUse == SdfFarStaticUse.Reuses) || (staticUse == SdfFarStaticUse.Draws)) ? SdfMeshMotion.Dynamic : SdfMeshMotion.Any));
+            m_decided.Share = ((distantDraw is { IsShare: true } share) ? share : null);
+        } else {
+            DecideCompute(recording: in recording, tables: tables);
+        }
+
+        return RenderGraphPackageOutcome.Drew;
+    }
+    // Records what the frame's decision chose (Decide): only the recorder's own state, its own sets and the command buffer
+    // change here, and the residency's staged tables and frame are only read, so the instance's passes emit side by side.
+    public void Emit(in RenderGraphPackageRecording recording) {
+        var tables = m_decided.Tables!;
+
+        if (m_part == SdfWorldPackage.Parts.GlassClear) {
+            if (m_decided.ClearEnd > m_decided.ClearStart) {
+                recording.Recorder.ClearStorageBuffer(recording.CommandBuffer, m_decided.Sums!.BufferHandle, (m_decided.ClearEnd - m_decided.ClearStart), m_decided.ClearStart);
+            }
+            return;
+        }
+        if (IsMesh) {
             RecordMesh(
-                cascadeTexels: cascadeTexels,
-                jitter: temporal.Jitter,
-                occlude: ((frame.MeshCull == SdfMeshCullLevel.Occlusion) || (!IsShadowCascade && (frame.MeshCull == SdfMeshCullLevel.Camera))),
-                // The distant map is held across camera turns and moves, so it keeps every caster in its light's box
-                // rather than those that may shadow what the view shows now. Every other pass draws under the cull its
-                // motion scope judges changes by (SdfWorldPasses.CullOf).
-                cull: (distant
-                    ? ((frame.MeshCull == SdfMeshCullLevel.Off) ? SdfMeshCull.None : SdfMeshCull.OfLightBox(cascade: drawCamera))
-                    : SdfWorldPasses.CullOf(cascade: (IsShadowCascade ? cascade : -1), cascades: in cascades, frame: frame, height: cullHeight, view: view, width: cullWidth)),
-                // The glass pass's thickness is the sums of its own triangles' ray distances, so glass draws its own.
-                detail: (IsGlass
-                    ? SdfMeshDetail.Finest
-                    : (frame.MeshDetail switch {
-                        SdfMeshDetailLevel.Auto => (IsShadowCascade
-                            ? SdfMeshDetail.Of(cascade: drawCamera, texels: cascadeTexels)
-                            : SdfMeshDetail.Of(camera: frame.Views[view].Camera, displayHeight: recording.FrameHeight)),
-                        _ => SdfMeshDetail.Forced(level: (((int)frame.MeshDetail) - 1)),
-                    })),
-                staticUse: staticUse,
-                layers: layers,
-                motion: (distant ? SdfMeshMotion.Static : (((staticUse == SdfFarStaticUse.Reuses) || (staticUse == SdfFarStaticUse.Draws)) ? SdfMeshMotion.Dynamic : SdfMeshMotion.Any)),
+                cascadeTexels: m_decided.CascadeTexels,
+                cull: in m_decided.Cull,
+                detail: in m_decided.Detail,
+                jitter: m_decided.Jitter,
+                layers: m_decided.Layers,
+                motion: m_decided.Motion,
+                occlude: m_decided.Occlude,
                 recording: in recording,
-                share: ((distantDraw is { IsShare: true } share) ? share : null),
+                share: m_decided.Share,
+                staticUse: m_decided.StaticUse,
                 tables: tables
             );
         } else {
@@ -827,8 +888,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                 tables: tables
             );
         }
-
-        return RenderGraphPackageOutcome.Drew;
     }
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) {
         // Each index takes the next prepared copy: the pick's, then the diagnostic pick's.
@@ -917,6 +976,39 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         }
     }
     private void DeclareScreens(SdfWorldResidency residency) => residency.DeclareScreens(declared: m_declaredScreens);
+    // Decides a compute part's frame: the screens' images it samples (taking their leases), the views' and filter's
+    // shading plans and the kernels they record with, the bins' committed plan in the pass block, and the tables' World
+    // set, written now so the emission only binds it.
+    private void DecideCompute(in RenderGraphPackageRecording recording, SdfWorldTables tables) {
+        var residency = m_view.Residency;
+
+        residency.TakeScreenImages(images: m_screenImages, recording: in recording, shown: m_declaredScreens, view: m_view.View);
+        switch (m_part) {
+            case SdfWorldPackage.Parts.Views: {
+                    // The views kernels are the residency's shading selection, pinned for this recording's submission. A
+                    // binned graph's plan is the one whose arguments its bins pass last wrote (ShadePlanOf).
+                    m_shadePlan = (m_binned
+                        ? m_owner.ShadePlanOf(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount)
+                        : SdfShadeDispatch.For(previous: m_shadePlan, frame: residency.Frame!, width: recording.Width, height: recording.Height,
+                            screens: tables.PassValues.ScreenCount, glass: false, tier: residency.ShadeTier));
+                    m_decided.Selection = m_shade.RecordSelection(plan: m_shadePlan, residency: residency, slot: recording.Slot);
+                    break;
+                }
+            case SdfWorldPackage.Parts.ViewsFilter: {
+                    // The filter runs no program: one job of views' groups, whose pushed ordinal its entry remaps as views'
+                    // does.
+                    m_shadePlan = SdfShadeDispatch.ForEngine(previous: m_shadePlan, width: recording.Width, height: recording.Height);
+                    break;
+                }
+            case SdfWorldPackage.Parts.ViewsBins: {
+                    var plan = m_owner.CommitShadePlan(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount);
+
+                    SdfFrameBlock.WriteShadeBins(block: recording.PassBlock, plan: plan);
+                    break;
+                }
+        }
+        _ = tables.WorldSet(slot: tables.CurrentSlot);
+    }
     // Binds the pass set and dispatches the part's kernel: the pyramid one invocation a texel of its first level, and the
     // surface and views passes one invocation a pixel of the render extent.
     private void RecordCompute(in RenderGraphPackageRecording recording, SdfWorldTables tables) {
@@ -924,7 +1016,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         var set = m_sets!.PassSet(slot: slot);
         var recorder = recording.Recorder;
         var commandBuffer = recording.CommandBuffer;
-        var residency = m_view.Residency;
 
         BindPorts(
             recording: in recording,
@@ -952,15 +1043,9 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
 
         switch (m_part) {
             case SdfWorldPackage.Parts.Views: {
-                    // The views kernels are the residency's shading selection, pinned for this recording's submission. A
-                    // binned graph's plan is the one whose arguments its bins pass last wrote (ShadePlanOf).
-                    m_shadePlan = (m_binned
-                        ? m_owner.ShadePlanOf(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount)
-                        : SdfShadeDispatch.For(previous: m_shadePlan, frame: residency.Frame!, width: recording.Width, height: recording.Height,
-                            screens: tables.PassValues.ScreenCount, glass: false, tier: residency.ShadeTier));
-                    var selection = m_shade.RecordSelection(plan: m_shadePlan, residency: residency, slot: slot);
+                    var selection = m_decided.Selection;
 
-                    if (!m_shadePlan.Binned) {
+                    if (!m_shadePlan!.Binned) {
                         var pipeline = selection.Pipeline(kernel: SdfKernel.Views);
 
                         BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
@@ -979,9 +1064,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                     return;
                 }
             case SdfWorldPackage.Parts.ViewsFilter: {
-                    // The filter runs no program: one job of views' groups, whose pushed ordinal its entry remaps as views'
-                    // does. The bins' counts start from zero before any group adds to them.
-                    m_shadePlan = SdfShadeDispatch.ForEngine(previous: m_shadePlan, width: recording.Width, height: recording.Height);
+                    // The bins' counts start from zero before any group adds to them.
                     var bins = recording.Outputs[OutputIndexOf(member: SdfWorldPackage.ShadeTilesWritten)].Buffer!;
                     var pipeline = tables.Pipeline(kernel: SdfKernel.ViewsFilter);
 
@@ -993,20 +1076,19 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                         sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
                         destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
                     BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
-                    m_shadePlan.Record(pipeline: pipeline, recording: in recording);
+                    m_shadePlan!.Record(pipeline: pipeline, recording: in recording);
                     return;
                 }
             case SdfWorldPackage.Parts.ViewsBins: {
                     // Step zero (one group) turns the counts into offsets and writes every job's arguments at the plan's
-                    // widths; step one (an invocation a tile) scatters the tiles once every offset is written.
-                    var plan = m_owner.CommitShadePlan(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount);
+                    // widths (the pass block the decision wrote); step one (an invocation a tile) scatters the tiles once
+                    // every offset is written.
                     var bins = recording.Outputs[OutputIndexOf(member: SdfWorldPackage.ShadeTilesWritten)].Buffer!;
                     var pipeline = tables.Pipeline(kernel: SdfKernel.ViewsBins);
                     var tiles = (recording.Width.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels) * recording.Height.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels));
                     Span<byte> step = stackalloc byte[sizeof(uint)];
 
                     System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: step, value: 0u);
-                    SdfFrameBlock.WriteShadeBins(block: recording.PassBlock, plan: plan);
                     BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
                     recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, data: step, offset: 0,
                         pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
@@ -1456,9 +1538,9 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         }
         Array.Clear(array: m_screens[slot]);
     }
-    // Writes each declared screen's image into the slot's pass set.
+    // Writes each declared screen's image, which the decision took (DecideCompute), into the slot's pass set.
     private void BindScreens(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) =>
-        _ = m_view.Residency.BindScreenImages(view: m_view.View, shown: m_declaredScreens, recording: in recording, bindings: tables.Bindings,
+        _ = SdfWorldResidency.WriteScreenImages(images: m_screenImages, bindings: tables.Bindings,
             binding: ScreenSourcesBinding, set: set, filler: tables.SampledFiller.ImageViewHandle, bound: m_screens[recording.Slot]);
     // Where a part counts its march steps and texels written: every one counts
     // (RenderGraphFragmentPass.CountsKernelWork), so its node always hands it a row.

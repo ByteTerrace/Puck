@@ -512,9 +512,11 @@ public sealed partial class ShaderPipelineRenderNode {
         owner: owner,
         part: "rows"
     );
-    // A frame slot's command pool, whose one command list every pass of the slot's frame records into.
-    private static IGpuCommandPool CommandsOf(GpuDeviceServices gpu, string owner, int slot) =>
+    // A frame slot's command pool: its first list (`list` zero), which a frame's passes start in, or a further one a frame
+    // spreads its passes across (ShaderPipelineRenderNode.Emission.cs).
+    private static IGpuCommandPool CommandsOf(GpuDeviceServices gpu, string owner, int slot, int list = 0) =>
         gpu.CommandPoolFactory.Create(name: new GpuObjectName(
+            detail: ((list == 0) ? null : $"list {list}"),
             index: slot,
             owner: owner,
             part: "commands"

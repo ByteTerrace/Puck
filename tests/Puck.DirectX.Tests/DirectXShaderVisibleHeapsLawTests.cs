@@ -204,14 +204,13 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
 
         // Both recordings cleared through the one slot the buffer holds for that view, written by the first; another view
         // of it takes a slot of its own.
-        var whole = heaps.ClearOf(created: out var created, resource: buffer.BufferHandle, view: RawView(words: 64U));
+        var whole = heaps.ClearOf(resource: buffer.BufferHandle, view: RawView(words: 64U));
 
-        Assert.False(condition: created);
+        Assert.Equal(actual: heaps.ClearOf(resource: buffer.BufferHandle, view: RawView(words: 64U)).Slot, expected: whole.Slot);
         Assert.NotEqual(
-            actual: heaps.ClearOf(created: out created, resource: buffer.BufferHandle, view: RawView(words: 32U)).Slot,
+            actual: heaps.ClearOf(resource: buffer.BufferHandle, view: RawView(words: 32U)).Slot,
             expected: whole.Slot
         );
-        Assert.True(condition: created);
 
         // Released, the buffer returns its slots, and the next resource's first clear takes the first of them.
         buffer.Dispose();
@@ -222,10 +221,9 @@ public sealed class DirectXShaderVisibleHeapsLawTests {
         );
 
         Assert.Equal(
-            actual: heaps.ClearOf(created: out created, resource: next.BufferHandle, view: RawView(words: 64U)).Slot,
+            actual: heaps.ClearOf(resource: next.BufferHandle, view: RawView(words: 64U)).Slot,
             expected: whole.Slot
         );
-        Assert.True(condition: created);
     }
 
     private static D3D12_UNORDERED_ACCESS_VIEW_DESC RawView(uint words) => new() {

@@ -38,7 +38,7 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
 
     // Each cleared resource's clear views, by the tag it carries under ClearKey, never by its address, which a later
     // resource may reuse.
-    private static readonly ConcurrentDictionary<long, List<(DirectXShaderVisibleHeaps Heaps, D3D12_UNORDERED_ACCESS_VIEW_DESC View, DirectXClearDescriptor Descriptor)>> Cleared = [];
+    private static readonly ConcurrentDictionary<long, ClearViews> Cleared = [];
 
     private static long ClearTags;
 
@@ -279,18 +279,17 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
         }
     }
     /// <summary>Returns a resource's clear slot for a view: a descriptor in the view heap for a clear's GPU handle and its
-    /// mirror in the CPU-only heap for its CPU handle. The first clear to ask that view of the resource takes the slot,
-    /// and the caller writes the view into both descriptors then; the slot stays the resource's until it is released
-    /// (<see cref="ForgetClears"/>).</summary>
+    /// mirror in the CPU-only heap for its CPU handle, both holding the view. The first clear to ask that view of the
+    /// resource takes the slot and writes the view into both descriptors before any other clear can find it; a later
+    /// clear finds it without a lock. The slot stays the resource's until it is released (<see cref="ForgetClears"/>).</summary>
     /// <param name="resource">The <c>ID3D12Resource*</c> the clear writes.</param>
     /// <param name="view">The view the clear names.</param>
-    /// <param name="created">Whether the slot is new, its descriptors not yet written.</param>
     /// <returns>The slot.</returns>
     /// <exception cref="GpuRangeExhaustedException"><see cref="ClearDescriptors"/> clear views are held by live
     /// resources.</exception>
     /// <exception cref="ObjectDisposedException">The heaps were released.</exception>
     /// <exception cref="COMException">The resource refused its clear tag.</exception>
-    public DirectXClearDescriptor ClearOf(nint resource, in D3D12_UNORDERED_ACCESS_VIEW_DESC view, out bool created) {
+    public DirectXClearDescriptor ClearOf(nint resource, in D3D12_UNORDERED_ACCESS_VIEW_DESC view) {
         var calls = new DirectXDeviceCommandCalls(device: null);
 
         if (!calls.TryReadTag(key: ClearKey, resource: ((ID3D12Resource*)resource), value: out var tag)) {
@@ -298,28 +297,38 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
             calls.Tag(key: ClearKey, resource: ((ID3D12Resource*)resource), value: tag).ThrowOnFailure();
         }
 
-        var clears = Cleared.GetOrAdd(key: tag, valueFactory: static _ => []);
-        var asked = MemoryMarshal.AsBytes(span: new ReadOnlySpan<D3D12_UNORDERED_ACCESS_VIEW_DESC>(reference: in view));
+        var clears = Cleared.GetOrAdd(key: tag, valueFactory: static _ => new ClearViews());
 
+        if (FindClear(views: clears.Views, view: in view) is { } found) {
+            return found;
+        }
         lock (clears) {
-            foreach (var clear in clears) {
-                if (
-                    ReferenceEquals(objA: clear.Heaps, objB: this) &&
-                    MemoryMarshal.AsBytes(span: new ReadOnlySpan<D3D12_UNORDERED_ACCESS_VIEW_DESC>(reference: in clear.View)).SequenceEqual(other: asked)
-                ) {
-                    created = false;
-
-                    return clear.Descriptor;
-                }
+            if (FindClear(views: clears.Views, view: in view) is { } raced) {
+                return raced;
             }
 
             var descriptor = AllocateClear();
+            var device = ((ID3D12Device*)m_device);
+            var written = view;
 
-            clears.Add(item: (this, view, descriptor));
-            created = true;
-
+            device->CreateUnorderedAccessView(DestDescriptor: descriptor.ViewCpuHandle, pCounterResource: null, pDesc: &written, pResource: ((ID3D12Resource*)resource));
+            device->CreateUnorderedAccessView(DestDescriptor: descriptor.ClearCpuHandle, pCounterResource: null, pDesc: &written, pResource: ((ID3D12Resource*)resource));
+            // Published whole, after its descriptors are written: a reader holds either the old array or this one.
+            clears.Views = [.. clears.Views, new ClearView(descriptor: descriptor, heaps: this, view: view)];
             return descriptor;
         }
+    }
+    // The slot these heaps hold for a view among a resource's clear views, or null.
+    private DirectXClearDescriptor? FindClear(ClearView[] views, in D3D12_UNORDERED_ACCESS_VIEW_DESC view) {
+        var asked = MemoryMarshal.AsBytes(span: new ReadOnlySpan<D3D12_UNORDERED_ACCESS_VIEW_DESC>(reference: in view));
+
+        foreach (ref readonly var clear in views.AsSpan()) {
+            if (ReferenceEquals(objA: clear.Heaps, objB: this) &&
+                MemoryMarshal.AsBytes(span: new ReadOnlySpan<D3D12_UNORDERED_ACCESS_VIEW_DESC>(reference: in clear.View)).SequenceEqual(other: asked)) {
+                return clear.Descriptor;
+            }
+        }
+        return null;
     }
     /// <summary>Returns the clear slots a resource holds, as it is released. Does nothing for a resource no clear
     /// wrote.</summary>
@@ -334,8 +343,19 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
         }
 
         lock (clears) {
-            foreach (var clear in clears) { clear.Descriptor.Dispose(); }
+            foreach (var clear in clears.Views) { clear.Descriptor.Dispose(); }
+            clears.Views = [];
         }
+    }
+
+    // One resource's clear views, an array replaced whole under the holder's lock so a clear reads it without one.
+    private sealed class ClearViews {
+        public volatile ClearView[] Views = [];
+    }
+    private readonly struct ClearView(DirectXShaderVisibleHeaps heaps, D3D12_UNORDERED_ACCESS_VIEW_DESC view, DirectXClearDescriptor descriptor) {
+        public readonly DirectXShaderVisibleHeaps Heaps = heaps;
+        public readonly D3D12_UNORDERED_ACCESS_VIEW_DESC View = view;
+        public readonly DirectXClearDescriptor Descriptor = descriptor;
     }
 
     private DirectXClearDescriptor AllocateClear() {
