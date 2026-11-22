@@ -38,7 +38,7 @@ public sealed partial class WorldBody {
         FixedVector3 right;
         FixedVector3 up;
 
-        if (m_bodyMotionProgram.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)) {
+        if (m_usesLocalTargetVelocity) {
             facing = ((m_tuning.MoveFrame == MotionMoveFrame.World)
                 ? -FixedVector3.UnitZ
                 : m_orientation.Rotate(vector: -FixedVector3.UnitZ)

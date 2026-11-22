@@ -164,6 +164,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     /// <summary>Invalidates observations captured against a replaced arena while preserving edge latch state.</summary>
     internal void InvalidateArenaScheduling() {
         ConfigureGrowthAdmission();
+        ForgetValueFacts();
         m_ruleGateHeld.InvalidateScheduler();
         m_interactionGateHeld.InvalidateScheduler();
     }

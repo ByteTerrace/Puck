@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 using Puck.Physics;
 
@@ -37,72 +38,93 @@ public sealed partial class WorldBody {
     /// tick's pair passes.</summary>
     internal void EndSweepTick() => m_sweepRefusedThisTick = false;
 
-    // Everything a step writes, captured before it begins and restored when its sweep is refused. The snapshot is the
-    // body's two whole state records, not a list of fields: the transfer state (velocities, attitude, rate
-    // accumulators, followers, tape, timers, action state) and the integration residue (previous position, the
-    // position, rotation and up-turn remainders, up, frame, grounded, sleep, hold, tether and rigid state). A field
-    // added to either record is covered here without a change. The rest are the facts both records leave to be
-    // re-derived from the pose after a discontinuous restore, which a refused step is not: the pose itself, the contact
-    // count, the obstruction witness and the medium facts. The residue restores exact pending input after the
-    // transfer state seeds its arrival-held image.
-    internal readonly record struct MotionFacts(
-        FixedVector3 Position,
-        FixedQ4816 Yaw,
-        int LastContactCount,
-        FixedVector3 ObstructionWitness,
-        ulong ObstructionWitnessGraceTicks,
-        FixedVector3 ObstructionWitnessPosition,
-        bool InMedium,
-        bool AtMediumBand
-    );
+    // Everything a step writes, captured before it begins and restored when its sweep is refused: the body's own
+    // sections into reusable scratch arrays, its register file, and the process-local observation and read-back
+    // witnesses that sit beside the sections.
     /// <summary>The scratch a step restores from when its sweep is refused: one snapshot, captured when a step begins and
     /// read only until that step ends. It belongs to whoever runs the steps, not to a body: a population steps its
-    /// bodies one at a time and owns one, which each step it runs takes. A capture writes into the buffers the last one
+    /// bodies one at a time and owns one, which each step it runs takes. A capture writes into the arrays the last one
     /// left, so steady state allocates nothing.</summary>
-    /// <remarks>The two records and the facts are separate fields, each assigned whole: a capture runs for every body on
-    /// every tick, and one composite record built around the residue's kilobytes of intent images would be zeroed,
-    /// assembled and copied again into this heap object on each.</remarks>
     internal sealed class StepScratch {
-        internal CaptureBuffers Buffers { get; } = new();
-
-        internal WorldBodyIntegrationResidue Residue;
-        internal WorldBodyTransferState Transfer;
-        internal MotionFacts Facts;
+        internal WorldBodySections Sections;
+        internal ulong[] MotionRecency = [];
+        internal ulong[] LaneRecency = [];
+        internal WorldRegisterWriteImage[] RegisterWrites = [];
+        internal long[] Registers = [];
+        internal int RegisterCount;
+        internal WorldTapeSegmentImage[] Tape = [];
+        internal ulong LastContactFieldVersion;
+        internal int LastContactCount;
+        internal FixedVector3 ObstructionWitness;
+        internal ulong ObstructionWitnessGraceTicks;
+        internal FixedVector3 ObstructionWitnessPosition;
     }
 
     // Captures this body into the scratch, overwriting whatever the last step left there. Every local is written before
     // it is read, so the frame skips the zero fill.
     [System.Runtime.CompilerServices.SkipLocalsInit]
     internal void CaptureMotion(StepScratch scratch) {
-        scratch.Buffers.Reset();
-        scratch.Residue = CaptureIntegrationResidue();
-        scratch.Transfer = CaptureTransferStateInto(buffers: scratch.Buffers);
-        scratch.Facts = new(
-            AtMediumBand: m_atMediumBand,
-            InMedium: m_inMedium,
-            LastContactCount: m_lastContactCount,
-            ObstructionWitness: m_obstructionWitness,
-            ObstructionWitnessGraceTicks: m_obstructionWitnessGraceTicks,
-            ObstructionWitnessPosition: m_obstructionWitnessPosition,
-            Position: m_position,
-            Yaw: m_yaw
-        );
-    }
-    // The transfer state, then the residue over it (which undoes the transfer state's own wake and latch writes), then
-    // the pose and the re-derived facts, which a program switch inside ApplyTransferState may have re-pinned.
-    internal void RestoreMotion(StepScratch scratch) {
-        ref readonly var motion = ref scratch.Facts;
+        ref var sections = ref scratch.Sections;
 
-        ApplyTransferState(state: scratch.Transfer);
-        ApplyIntegrationResidue(residue: scratch.Residue);
-        m_atMediumBand = motion.AtMediumBand;
-        m_inMedium = motion.InMedium;
-        m_lastContactCount = motion.LastContactCount;
-        m_obstructionWitness = motion.ObstructionWitness;
-        m_obstructionWitnessGraceTicks = motion.ObstructionWitnessGraceTicks;
-        m_obstructionWitnessPosition = motion.ObstructionWitnessPosition;
-        m_position = motion.Position;
-        m_yaw = motion.Yaw;
+        CaptureCoreSections(clocks: out sections.Clocks, motion: out sections.Motion, pose: out sections.Pose, program: out sections.Program);
+        var motionRecencyLength = m_motionRecency.Length;
+        var motionRecency = ArrayCapacity.EnsureScratch(ref scratch.MotionRecency, motionRecencyLength);
+        m_motionRecency.AsSpan().CopyTo(destination: motionRecency);
+        sections.MotionRecency = new(Clocks: motionRecency.AsMemory(length: motionRecencyLength, start: 0));
+
+        sections.InputImages = InputImages;
+        sections.InputReadbacks = InputReadbacks;
+        sections.Action = Action;
+
+        var laneRecencyLength = m_laneRecency.Count;
+        var laneRecency = ArrayCapacity.EnsureScratch(ref scratch.LaneRecency, laneRecencyLength);
+        m_laneRecency.Read.CopyTo(destination: laneRecency);
+        sections.LaneRecency = new(Clocks: laneRecency.AsMemory(length: laneRecencyLength, start: 0));
+
+        var registerWritesLength = m_registerWrites.Count;
+        var registerWrites = ArrayCapacity.EnsureScratch(ref scratch.RegisterWrites, registerWritesLength);
+        m_registerWrites.Read.CopyTo(destination: registerWrites);
+        sections.RegisterWrites = new(Rows: registerWrites.AsMemory(length: registerWritesLength, start: 0));
+
+        sections.DurableInput = DurableInput;
+        sections.ScriptActors = ScriptActors;
+
+        var tape = ArrayCapacity.EnsureScratch(ref scratch.Tape, m_tapeCount);
+        for (var offset = 0; (offset < m_tapeCount); offset++) {
+            ref readonly var segment = ref m_tape[((m_tapeHead + offset) % m_tape.Length)];
+
+            tape[offset] = new(Actor: segment.Actor, Intent: segment.Intent, RemainingTicks: segment.RemainingTicks);
+        }
+        sections.Tape = new(Segments: tape.AsMemory(length: m_tapeCount, start: 0));
+        sections.Contacts = default;
+
+        var registerCount = m_actionStateDefinitions.Length;
+        var registers = ArrayCapacity.EnsureScratch(ref scratch.Registers, registerCount);
+        for (var slot = 0; (slot < registerCount); slot++) {
+            registers[slot] = ((m_stateLane is { } lane) ? lane.Read(ordinal: m_stateOrdinal, slot: slot) : 0L);
+        }
+        scratch.RegisterCount = registerCount;
+        scratch.LastContactFieldVersion = m_lastContactFieldVersion;
+        scratch.LastContactCount = m_lastContactCount;
+        scratch.ObstructionWitness = m_obstructionWitness;
+        scratch.ObstructionWitnessGraceTicks = m_obstructionWitnessGraceTicks;
+        scratch.ObstructionWitnessPosition = m_obstructionWitnessPosition;
+    }
+
+    internal void RestoreMotion(StepScratch scratch) {
+        if (m_scale != scratch.Sections.Pose.Scale) {
+            SetScale(value: scratch.Sections.Pose.Scale);
+        }
+        RestoreSections(
+            contactFieldObservationCurrent: true,
+            contactFieldVersion: scratch.LastContactFieldVersion,
+            registers: scratch.Registers.AsSpan(length: scratch.RegisterCount, start: 0),
+            sections: in scratch.Sections
+        );
+        m_lastContactCount = scratch.LastContactCount;
+        m_obstructionWitness = scratch.ObstructionWitness;
+        m_obstructionWitnessGraceTicks = scratch.ObstructionWitnessGraceTicks;
+        m_obstructionWitnessPosition = scratch.ObstructionWitnessPosition;
     }
     /// <summary>Takes the transition this body's sweep refusal made since the population last reported it, marking it
     /// reported: the refusal it now holds, or <see cref="ContactRefusal.None"/> for a recovery.</summary>

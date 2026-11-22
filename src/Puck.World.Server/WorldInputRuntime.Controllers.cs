@@ -13,8 +13,8 @@ public sealed partial class WorldInputRuntime {
         ((target.Source.ProducerName == source) && m_host.Population.SupportsSource(body, target.Source, out _))));
 
     internal PlayerIntent AdmitScriptSnapshot(Principal actor, int body, PlayerIntent image, ulong tick) {
-        if (TryPublishSnapshot(actor, body, BodyScriptSource, image, tick, out var principal, out var batch, out var reason) &&
-            TryAdmit(batch: batch, bodyIndex: body, principal: principal, reason: out reason)) { return ProjectSnapshot(batch: batch, body: body); }
+        if (TryPublishSnapshotCore(actor, body, BodyScriptSource, image, tick, default, out var owner, out var principal, out var batch, out var reason) &&
+            TryAdmitSynchronized(alreadyPermitted: (actor.Kind == PrincipalKind.World), batch: in batch, owner: owner!, reason: out reason)) { return ProjectSnapshot(batch: batch, body: body); }
         RejectControllerBatch(principal: principal);
         m_host.Output.Narrate("input.refused", reason);
         return default;
@@ -48,9 +48,9 @@ public sealed partial class WorldInputRuntime {
     /// <summary>Admits a world's own compiled producer before its body consumes the resulting image. The
     /// structural actor is local-only; external submissions cannot claim the World principal.</summary>
     internal PlayerIntent AdmitProgramSnapshot(int body, PlayerIntent image, ulong tick) {
-        if (m_host.Body(index: body) is not { Source.ProducerName: { } source } target) { return default; }
-        if (!TryPublishSnapshot(Principal.World, body, source, image, tick, out var principal, out var batch, out var reason) ||
-            !TryAdmit(batch: batch, bodyIndex: body, principal: principal, reason: out reason)) {
+        if (m_host.Body(index: body) is not { Source.ProducerName: { } source }) { return default; }
+        if (!TryPublishSnapshotCore(Principal.World, body, source, image, tick, default, out var owner, out var principal, out var batch, out var reason) ||
+            !TryAdmitSynchronized(alreadyPermitted: true, batch: in batch, owner: owner!, reason: out reason)) {
             RejectControllerBatch(principal: principal);
             m_host.Output.Narrate("input.refused", reason);
             return default;
@@ -59,13 +59,16 @@ public sealed partial class WorldInputRuntime {
     }
 
     private PlayerIntent ProjectSnapshot(int body, in WorldInputBatch batch) {
+        if (batch.Image == default) { return default; }
         var target = m_host.Body(index: body)!;
-        var channels = Catalog.Mappings[batch.Mapping].Channels;
+        var mapping = Catalog.Mappings[batch.Mapping];
+        var channels = mapping.Channels;
+        if (ReferenceEquals(objA: channels, objB: target.Channels)) { return batch.Image; }
         var accepted = default(ChannelValues);
         var remap = channels.RemapTo(target: target.Channels);
 
-        foreach (var logical in Catalog.Mappings[batch.Mapping].Live) {
-            var address = Catalog.Mappings[batch.Mapping].Address(logicalId: logical);
+        foreach (var logical in mapping.Live) {
+            var address = mapping.Address(logicalId: logical);
 
             if (address < 0) { continue; }
             var destination = remap[address];
@@ -84,7 +87,12 @@ public sealed partial class WorldInputRuntime {
     /// still submits under the actual actor for grants and contribution consent; the session owns only its history.
     /// The returned batch borrows producer storage and must be admitted synchronously before another publication.</summary>
     public bool TryPublishSnapshot(Principal actor, int body, string source, PlayerIntent image, ulong tick,
-        out Principal principal, out WorldInputBatch batch, out string reason, ReadOnlySpan<WorldInputEvent> observations = default) {
+        out Principal principal, out WorldInputBatch batch, out string reason, ReadOnlySpan<WorldInputEvent> observations = default) =>
+        TryPublishSnapshotCore(actor, body, source, image, tick, observations, out _, out principal, out batch, out reason);
+
+    private bool TryPublishSnapshotCore(Principal actor, int body, string source, PlayerIntent image, ulong tick,
+        ReadOnlySpan<WorldInputEvent> observations, out Owner? resolvedOwner, out Principal principal, out WorldInputBatch batch, out string reason) {
+        resolvedOwner = null;
         principal = default;
         batch = default;
         reason = "input.owner: invalid snapshot producer or route";
@@ -108,19 +116,20 @@ public sealed partial class WorldInputRuntime {
             m_controllers.Remove(key: key);
             owner = null;
         }
+        var catalog = Catalog;
         if (owner is null) {
             if (m_ordered.Count == ushort.MaxValue) { reason = "input.capacity: too many input owners"; return false; }
-            var sources = Catalog.SnapshotSources(prefix: "$snapshot:");
+            var sources = catalog.SnapshotSources(prefix: "$snapshot:");
             var session = m_host.GrantTable.AdmitInputControllerSession();
 
             try { owner = PrepareOwner(session, body, sources, 1, controller: new(actor, source)); } catch (ArgumentException error) { m_host.GrantTable.MarkObserverEnded(session: session); reason = error.Message; return false; }
             // Adding a local observation stream does not detach the body's existing scripted durations.
-            InstallOwner(owner, Catalog.Mappings[target.InputMappingId], reset: false, recompiled: true);
+            InstallOwner(owner, catalog.Mappings[target.InputMappingId], reset: false, recompiled: true);
             m_controllers.Add(key: key, value: owner);
         }
         if (!TrySynchronize(activation: 0, owner: owner, reason: out reason)) { return false; }
         var input = owner.Input;
-        var producer = owner.Producer ??= WorldInputProducer.FromAccepted(Catalog, input.Mapping, input.Sources,
+        var producer = owner.Producer ??= WorldInputProducer.FromAccepted(catalog, input.Mapping, input.Sources,
             (m_host.Definition.InputHistory?.MaximumEventsPerStep ?? 128), input.Revision, input.Epoch, input.Sequence, input.Image);
 
         producer.Reconcile(input.Revision, input.Epoch, input.Mapping, input.Image, input.Sources);
@@ -137,17 +146,33 @@ public sealed partial class WorldInputRuntime {
 
                 if (!accepted) { reason = "input.observation: recorded observation does not belong to the current semantic profile"; return false; }
             }
-        }
-        foreach (var state in (continuingOnly ? ReadOnlySpan<WorldInputSourceState>.Empty : input.Sources)) {
-            var contract = state.Source;
-            var declaration = Catalog.Channels[contract.Channel];
-            var raw = (!observedChannels.TryGetOrdinal(name: declaration.Name, ordinal: out var address) ? 0 :
-                ((declaration.Shape == ChannelShape.Relative) ? image.Channels.Relative(ordinal: address).Value : image[address].Value));
-            // A snapshot's newly nonzero channel is one activation; all its later samples retain that origin.
-            _ = producer.ObserveSnapshot(contract.Handle, raw, tick, ref activationSequence);
+            var inputSources = input.Sources;
+            if (!ReferenceEquals(objA: owner.SnapshotChannels, objB: observedChannels) ||
+                !ReferenceEquals(objA: owner.SnapshotCatalog, objB: catalog) ||
+                (owner.SnapshotAddresses.Length != inputSources.Length)) {
+                var addresses = ((owner.SnapshotAddresses.Length == inputSources.Length) ? owner.SnapshotAddresses : new int[inputSources.Length]);
+
+                for (var sourceIndex = 0; (sourceIndex < inputSources.Length); sourceIndex++) {
+                    addresses[sourceIndex] = (observedChannels.TryGetOrdinal(name: catalog.Channels[inputSources[sourceIndex].Source.Channel].Name, ordinal: out var resolved) ? resolved : -1);
+                }
+                owner.SnapshotAddresses = addresses;
+                owner.SnapshotChannels = observedChannels;
+                owner.SnapshotCatalog = catalog;
+            }
+            var cachedAddresses = owner.SnapshotAddresses;
+
+            for (var sourceIndex = 0; (sourceIndex < inputSources.Length); sourceIndex++) {
+                var address = cachedAddresses[sourceIndex];
+                var declaration = catalog.Channels[inputSources[sourceIndex].Source.Channel];
+                var raw = ((address < 0) ? 0 :
+                    ((declaration.Shape == ChannelShape.Relative) ? image.Channels.Relative(ordinal: address).Value : image[address].Value));
+                // A snapshot's newly nonzero channel is one activation; all its later samples retain that origin.
+                _ = producer.ObserveSnapshotAt(index: sourceIndex, rawValue: raw, tick: tick, activationSequence: ref activationSequence);
+            }
         }
         owner.Controller = origin with { ActivationSequence = activationSequence, ObservationTick = tick };
         if (producer.CaptureLost) { Reset(owner.Principal); reason = "input.capacity: synthetic snapshot exceeds the event allowance"; return false; }
+        resolvedOwner = owner;
         principal = owner.Principal;
         batch = producer.PublishBorrowed(tick, (continuingOnly ? input.Image.SourceRay : image.SourceRay));
         reason = string.Empty;

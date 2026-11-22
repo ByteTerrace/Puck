@@ -215,29 +215,36 @@ public sealed partial class WorldRuleHost {
         SyncIdentityFactLanes();
         FreezeDecisionPerception(rules: m_rules);
         m_ruleGateHeld.CountTick();
+        RefreshFacts();
+        m_evaluatingWorldRules = true;
 
-        var applied = m_evaluator.EvaluateDue(
-            latch: m_ruleGateHeld,
-            rules: m_ungroupedRules,
-            stepTicks: stepTicks
-        );
-
-        if (m_groups.Length != 0) {
-            applied |= m_evaluator.EvaluateGroups(
-                groups: m_groups,
+        bool applied;
+        try {
+            applied = m_evaluator.EvaluateDue(
                 latch: m_ruleGateHeld,
-                rules: m_rules,
-                state: m_groupState,
+                rules: m_ungroupedRules,
                 stepTicks: stepTicks
             );
-        }
 
-        if (m_interactions.Length != 0) {
-            applied |= m_evaluator.EvaluateDue(
-                latch: m_interactionGateHeld,
-                rules: m_interactions,
-                stepTicks: stepTicks
-            );
+            if (m_groups.Length != 0) {
+                applied |= m_evaluator.EvaluateGroups(
+                    groups: m_groups,
+                    latch: m_ruleGateHeld,
+                    rules: m_rules,
+                    state: m_groupState,
+                    stepTicks: stepTicks
+                );
+            }
+
+            if (m_interactions.Length != 0) {
+                applied |= m_evaluator.EvaluateDue(
+                    latch: m_interactionGateHeld,
+                    rules: m_interactions,
+                    stepTicks: stepTicks
+                );
+            }
+        } finally {
+            m_evaluatingWorldRules = false;
         }
         FlushIdentityFacts();
         applied |= Host.PublishArena();

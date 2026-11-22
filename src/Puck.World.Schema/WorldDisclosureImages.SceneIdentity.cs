@@ -53,13 +53,18 @@ public sealed partial class WorldDisclosureImages {
     // per audience while nothing it reads has moved, so the sessions of one audience share it.
     internal ContentPin SceneIdentity(WorldRecipientView view) {
         var audience = Audience(view);
-        var definition = Framed(audience);
-        var frame = definition.Frame;
         var arena = view.Arena;
         var source = view.Source;
         // Inside an open scope the identity is read from the store as it stands and no entry is read or kept.
         var settled = Settled(arena);
         var held = (settled ? m_scenes.GetValueOrDefault(audience.Text) : null);
+
+        if ((held is not null) && (held.RowsOf is not null) && ReferenceEquals(held.Source, source) && ReferenceEquals(held.Arena, arena) &&
+            (held.Revision == arena.DisclosureRevision) && (held.Moves == arena.MoveSequence)) {
+            return held.Identity;
+        }
+        var definition = Framed(audience);
+        var frame = definition.Frame;
 
         // A row elsewhere in the arena moves the sequence on most ticks, so an entry also stands while its own rows do.
         if ((held is not null) && ReferenceEquals(held.Source, source) && ReferenceEquals(held.Arena, arena) &&

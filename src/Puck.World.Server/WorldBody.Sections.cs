@@ -30,8 +30,8 @@ public sealed partial class WorldBody {
     /// <param name="held">Whether to leave out the sections a holder digests (<see cref="HeldDigests"/>): a fold's
     /// view, which reads those digests from the holders and never the sections.</param>
     [System.Runtime.CompilerServices.SkipLocalsInit]
-    internal void CaptureSections(bool alias, out WorldBodySections sections, out ReadOnlyMemory<long> registers, bool held = false) {
-        sections.Pose = new(
+    private void CaptureCoreSections(out BodyPoseSection pose, out BodyMotionSection motion, out BodyClocksSection clocks, out BodyProgramSection program) {
+        pose = new(
             Orientation: m_orientation,
             Position: m_position,
             PreviousPosition: m_previousPosition,
@@ -39,7 +39,7 @@ public sealed partial class WorldBody {
             Up: m_up,
             Yaw: m_yaw
         );
-        sections.Motion = new(
+        motion = new(
             AffectingSubject: m_affectingSubject,
             AtMediumBand: m_atMediumBand,
             AttachPreviousBit: m_attachPreviousBit,
@@ -85,7 +85,7 @@ public sealed partial class WorldBody {
             VerticalVelocity: m_verticalVelocity,
             VerticalVelocityRemainder: m_verticalVelocityAccumulator.Remainder
         );
-        sections.Clocks = new(
+        clocks = new(
             IdleSleepGravity: IdleSleepGravity,
             AsleepSinceTick: m_asleepSinceTick,
             ContactUpTurnRemainder: m_contactUpTurnAccumulator.Remainder,
@@ -99,6 +99,15 @@ public sealed partial class WorldBody {
             SleepIdleTicks: m_sleepIdleTicks,
             UpNeedsReseat: m_upNeedsReseat
         );
+        program = new(
+            BodyMotionProgramName: m_bodyMotionProgram.Name,
+            PendingContinuum: m_pendingContinuum
+        );
+    }
+
+    [System.Runtime.CompilerServices.SkipLocalsInit]
+    internal void CaptureSections(bool alias, out WorldBodySections sections, out ReadOnlyMemory<long> registers, bool held = false) {
+        CaptureCoreSections(clocks: out sections.Clocks, motion: out sections.Motion, pose: out sections.Pose, program: out sections.Program);
         sections.MotionRecency = new(Clocks: Table(alias: alias, live: m_motionRecency));
 
         // The two Input sections, the Action section, the lanes' clocks and the staged register writes live behind
@@ -133,10 +142,6 @@ public sealed partial class WorldBody {
             tape[offset] = new(Actor: segment.Actor, Intent: segment.Intent, RemainingTicks: segment.RemainingTicks);
         }
         sections.Tape = new(Segments: tape.AsMemory(length: m_tapeCount, start: 0));
-        sections.Program = new(
-            BodyMotionProgramName: m_bodyMotionProgram.Name,
-            PendingContinuum: m_pendingContinuum
-        );
 
         var occupied = CountRigidContactSlots();
         var contacts = alias ? ArrayCapacity.EnsureScratch(ref m_viewContacts, occupied) : (occupied == 0 ? [] : new WorldRigidContactSlotImage[occupied]);
@@ -260,7 +265,7 @@ public sealed partial class WorldBody {
         m_verticalVelocity = motion.VerticalVelocity;
         m_drivePitch = motion.DrivePitch;
         m_overlayVelocity = motion.OverlayVelocity;
-        m_timedMove = motion.TimedMove;
+        m_timedMove = (CanStartTimedMove ? motion.TimedMove : default);
         m_rigidVelocity = motion.RigidVelocity;
         m_angularVelocity = motion.RigidAngularVelocity;
         m_resting = motion.RigidResting;

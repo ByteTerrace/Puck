@@ -52,7 +52,7 @@ public sealed partial class WorldPopulation {
                 var held = (recompute ? 0U : body.HeldDigests(digests: work.HeldDigests, work: work.Held, writer: writer));
 
                 EntryCheckpoint(alias: true, body: body, entry: entry, held: (held != 0U), image: out var image, index: index);
-                if (!recompute) { held |= FoldMemo(index: index).Digest(digests: work.HeldDigests, image: ref image, work: work.Held, writer: writer); }
+                if (!recompute) { held |= FoldMemo(index: index).Digest(checkedNotes: m_slotNotes, digests: work.HeldDigests, image: ref image, work: work.Held, writer: writer); }
                 digests[index] = WorldAuthorityCheckpointCodec.ContinuationSlotDigest(entry: ref image, held: held, heldDigests: work.HeldDigests, work: work, writer: writer);
                 beside.Add(entry: in image, work: work, writer: writer);
                 work.Slots++;
@@ -88,11 +88,12 @@ public sealed partial class WorldPopulation {
         foreach (var index in bodies) {
             if ((((uint)index) < ((uint)Capacity)) && (m_entries[index] is { Active: true, Body: { } body } entry)) {
                 var held = body.HeldDigests(digests: work.HeldDigests, work: work.Held, writer: writer);
+                var memo = FoldMemo(index: index);
 
                 EntryCheckpoint(alias: true, body: body, entry: entry, held: (held != 0U), image: out var image, index: index);
-                held |= FoldMemo(index: index).Digest(digests: work.HeldDigests, image: ref image, work: work.Held, writer: writer);
+                held |= memo.Digest(checkedNotes: m_slotNotes, digests: work.HeldDigests, image: ref image, work: work.Held, writer: writer);
                 hash.Add(value: WorldAuthorityCheckpointCodec.ContinuationSlotDigest(entry: ref image, held: held, heldDigests: work.HeldDigests, work: work, writer: writer));
-                hash.Add(value: WorldAuthorityCheckpointCodec.ContinuationTailDigest(tail: in image.Tail, work: work, writer: writer));
+                hash.Add(value: memo.DigestTail(checkedNotes: m_slotNotes, slot: index, tail: in image.Tail, work: work, writer: writer));
                 work.Slots++;
             }
         }
@@ -166,23 +167,31 @@ public sealed partial class WorldPopulation {
     // The one statement of what a slot's checkpoint entry holds: the body's sections, the entry's sections and the
     // tail. A fold's view may leave out the sections the body's holders digest (held). A capture copies every table; a view aliases the slot's live tables and assembles the rest into scratch
     // the body and the population reuse, valid until the next view.
+    [System.Runtime.CompilerServices.SkipLocalsInit]
     private void EntryCheckpoint(int index, Entry entry, WorldBody body, bool alias, bool held, out WorldPopulationEntryCheckpoint image) {
-        List<(WorldCapability, GrantSubject)> revokedKeys;
+        IReadOnlyList<(WorldCapability, GrantSubject)> revokedKeys;
 
-        if (alias) {
-            (revokedKeys = (m_viewRevokedKeys ??= [])).Clear();
+        if (alias && (entry.AdmissionRevokedKeys.Count == 0)) {
+            revokedKeys = [];
         } else {
-            revokedKeys = new List<(WorldCapability, GrantSubject)>(capacity: entry.AdmissionRevokedKeys.Count);
-        }
+            List<(WorldCapability, GrantSubject)> sorted;
 
-        foreach (var key in entry.AdmissionRevokedKeys) {
-            revokedKeys.Add(item: (key.Capability, key.Subject));
-        }
-        revokedKeys.Sort(comparison: static (left, right) => {
-            var capability = Comparer<WorldCapability>.Default.Compare(x: left.Item1, y: right.Item1);
+            if (alias) {
+                (sorted = (m_viewRevokedKeys ??= [])).Clear();
+            } else {
+                sorted = new List<(WorldCapability, GrantSubject)>(capacity: entry.AdmissionRevokedKeys.Count);
+            }
 
-            return ((capability != 0) ? capability : WorldGrants.CompareSubjects(a: left.Item2, b: right.Item2));
-        });
+            foreach (var key in entry.AdmissionRevokedKeys) {
+                sorted.Add(item: (key.Capability, key.Subject));
+            }
+            sorted.Sort(comparison: static (left, right) => {
+                var capability = Comparer<WorldCapability>.Default.Compare(x: left.Item1, y: right.Item1);
+
+                return ((capability != 0) ? capability : WorldGrants.CompareSubjects(a: left.Item2, b: right.Item2));
+            });
+            revokedKeys = sorted;
+        }
 
         image.Index = index;
         body.CaptureSections(alias: alias, held: held, registers: out var registers, sections: out image.Body);
@@ -213,11 +222,15 @@ public sealed partial class WorldPopulation {
         image.Designations = new(Targets: (alias
             ? entry.Designations
             : entry.Designations.AsSpan().ToArray()));
-        image.Look = new(
-            BodyColor: entry.BodyColor,
-            CatalogRig: entry.CatalogRig,
-            SelectedLook: entry.SelectedLook
-        );
+        if (held) {
+            System.Runtime.CompilerServices.Unsafe.SkipInit(value: out image.Look);
+        } else {
+            image.Look = new(
+                BodyColor: entry.BodyColor,
+                CatalogRig: entry.CatalogRig,
+                SelectedLook: entry.SelectedLook
+            );
+        }
         image.Producer = new(
             AcquiredTarget: entry.ProducerState.AcquiredTarget,
             ActiveCurveIndex: entry.ProducerState.ActiveProducerCurveIndex,
@@ -487,6 +500,7 @@ public sealed partial class WorldPopulation {
         RebuildCarryRelationships();
         RestoreSleepingIslands(checkpoint: checkpoint);
         m_bodyCellDefinition = null;
+        m_factAllSlotsDirty = true;
     }
 
     /// <summary>Preflights caller-controlled population shape, counts, kits, cadence, and route addresses without mutating live state.</summary>

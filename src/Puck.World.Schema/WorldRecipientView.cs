@@ -30,6 +30,11 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     private string? m_recipientName;
     // The last audience key Images composed for this view, reused while the policies it reads answer the same.
     internal string? AudienceKey { get; set; }
+    internal StateArena? AudienceArena { get; set; }
+    internal long AudiencePolicyGeneration { get; set; } = -1L;
+    internal ulong AudienceReaderVersions { get; set; }
+    internal char AudienceCeilingKey { get; set; }
+    internal bool AudienceUnrestricted { get; set; }
 
     /// <summary>The admission tier; no operation can raise it.</summary>
     public WorldDisclosureTier Ceiling => ceiling;

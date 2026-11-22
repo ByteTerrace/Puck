@@ -31,40 +31,15 @@ public readonly record struct RoleChannelOrdinals(int MoveAdvance, int MoveStraf
     /// <summary>Builds an intent by writing values to the declared role ordinals.</summary>
     public PlayerIntent Intent(FixedQ4816 moveAdvance = default, FixedQ4816 moveStrafe = default, FixedQ4816 turn = default,
         FixedQ4816 moveUp = default, FixedQ4816 pitch = default, FixedQ4816 roll = default) {
-        var intent = default(PlayerIntent);
+        var channels = default(ChannelValues);
 
-        intent = Write(
-            intent: intent,
-            role: ChannelRole.MoveAdvance,
-            value: moveAdvance
-        );
-        intent = Write(
-            intent: intent,
-            role: ChannelRole.MoveStrafe,
-            value: moveStrafe
-        );
-        intent = Write(
-            intent: intent,
-            role: ChannelRole.Turn,
-            value: turn
-        );
-        intent = Write(
-            intent: intent,
-            role: ChannelRole.MoveUp,
-            value: moveUp
-        );
-        intent = Write(
-            intent: intent,
-            role: ChannelRole.Pitch,
-            value: pitch
-        );
-        intent = Write(
-            intent: intent,
-            role: ChannelRole.Roll,
-            value: roll
-        );
-
-        return intent;
+        if (MoveAdvance >= 0) { channels[MoveAdvance] = moveAdvance; }
+        if (MoveStrafe >= 0) { channels[MoveStrafe] = moveStrafe; }
+        if (Turn >= 0) { channels[Turn] = turn; }
+        if (MoveUp >= 0) { channels[MoveUp] = moveUp; }
+        if (Pitch >= 0) { channels[Pitch] = pitch; }
+        if (Roll >= 0) { channels[Roll] = roll; }
+        return new PlayerIntent(Channels: channels);
     }
     /// <summary>Reads a resolved role from <paramref name="intent"/>.</summary>
     public FixedQ4816 Read(in PlayerIntent intent, ChannelRole role) {

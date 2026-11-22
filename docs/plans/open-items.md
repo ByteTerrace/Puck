@@ -1297,33 +1297,16 @@ What an arrival and a hand-over still cost the frame:
 The frame thread's CPU work, largest first:
 
 - [high] The tick runs on the frame thread (`HostLoop.Run` through
-  `FixedStepPump.Step`), so a frame that steps carries a whole tick. The scan
-  that does not follow change is the rule host's fact derivation
-  (`WorldRuleHost.DeriveFacts` compares every population slot's pose and facts
-  on each pass, `world.counters world.tick`'s `fact-derives` and `fact-slots`:
-  about 11 passes over every slot a tick in the debug world, each slot's
-  `WorldBody.Facts` evaluating every publishable fact's `FactHolds`, a quarter
-  of rule evaluation in a trace), and a replay scope encodes each body's
-  continuation every tick (`WorldScopedReplayRuntime.AfterTick`); both wait on
-  [the body's write door](#test-runner-and-replay). The move off the frame
-  thread is the presentation view's last cut
-  ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
-  What a tick spends, from a `dotnet-sampled-thread-time` trace of a warm
-  headless debug World playing the seam walk's valley crossing at a walk
-  (shares of `WorldTick.StepCore`): body advance about
-  a third (field support queries through `FixedStepUp.TrySnap` and
+  `FixedStepPump.Step`), so a frame that steps carries a whole tick. The move
+  off the frame thread is the presentation view's last cut
+  ([runtime plan](runtime-and-delivery.md#the-presentation-view)). On a settled
+  tick, rule quiescence, candidate-only fact derivation, memoized scoped-replay
+  section/tail digests, collision pose tracking, reusable outbox loans and
+  direct step-section motion capture make rules, fact derivation, input
+  admission, collision events, delivery and scoped replay follow what changed;
+  body support queries over relieved ground (`FixedStepUp.TrySnap` and
   `BodySupportMemo.Query` into `FixedFieldColliderContact.Solve`, whose
-  `SdfBoundsCache` keys exact boxes and so misses on every box of a moving
-  body over relieved ground; and the step's capture copies,
-  `WorldBody.CaptureIntegrationResidue`, `TransferState` and
-  `ExecuteProducer`'s motion scratch, which sample as zero-fill and
-  write-barrier skid and want an untraced reading before any cut), rule
-  evaluation under a third, snapshot emission about a tenth (session sinks
-  bringing their audience's whole identity current after every snapshot,
-  `WorldDeliveryCursor.DeliveredRows` into `WorldDisclosureImages.Current`,
-  although only `DeliverDefinition` and `Holds` read it; and the session
-  mirrors' `WorldSessionMirror.FillImage`), the event feed and addon reads
-  about a twentieth each. No one cause holds more than a tenth.
+  `SdfBoundsCache` keys exact boxes) remain the main per-moving-body cost.
 - [medium] A composition of an audience's disclosed definition still
   serializes about 12 MB in the debug world (`world.counters
   world.disclosure`: 11 compositions and 140 MB of definition bytes over a

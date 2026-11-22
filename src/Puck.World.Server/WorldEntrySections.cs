@@ -132,17 +132,18 @@ public readonly record struct EntryAdmissionSection(
 }
 /// <summary>The targets a slot's occupant has designated, one per designation register.</summary>
 /// <param name="Targets">The designations, in register order.</param>
-public readonly record struct EntryDesignationsSection(ReadOnlyMemory<WorldTargetDesignation> Targets) : IContinuationSection<EntryDesignationsSection> {
+public readonly record struct EntryDesignationsSection(ReadOnlyMemory<WorldTargetDesignation> Targets) : IContinuationTableSection<EntryDesignationsSection, WorldTargetDesignation> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.Designations;
 
     /// <inheritdoc/>
-    public static void Write(WireWriter writer, in EntryDesignationsSection section) {
-        var targets = section.Targets.Span;
-
-        writer.WriteArrayCount(count: targets.Length);
-        for (var index = 0; (index < targets.Length); index++) {
-            WorldAuthorityCheckpointCodec.WriteTargetDesignation(target: targets[index], writer: writer);
+    public static void Write(WireWriter writer, in EntryDesignationsSection section) =>
+        WriteTable(elements: section.Targets.Span, writer: writer);
+    /// <inheritdoc/>
+    public static void WriteTable(WireWriter writer, ReadOnlySpan<WorldTargetDesignation> elements) {
+        writer.WriteArrayCount(count: elements.Length);
+        for (var index = 0; (index < elements.Length); index++) {
+            WorldAuthorityCheckpointCodec.WriteTargetDesignation(target: elements[index], writer: writer);
         }
     }
     /// <inheritdoc/>
@@ -347,16 +348,17 @@ public readonly record struct EntryNavigationSection(
 }
 /// <summary>A cached route's path.</summary>
 /// <param name="Path">The path's cells, from the start to the goal.</param>
-public readonly record struct EntryRouteSection(ReadOnlyMemory<int> Path) : IContinuationSection<EntryRouteSection> {
+public readonly record struct EntryRouteSection(ReadOnlyMemory<int> Path) : IContinuationTableSection<EntryRouteSection, int> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.Route;
 
     /// <inheritdoc/>
-    public static void Write(WireWriter writer, in EntryRouteSection section) {
-        var path = section.Path.Span;
-
-        writer.WriteArrayCount(count: path.Length);
-        for (var index = 0; (index < path.Length); index++) { writer.WriteInt32(value: path[index]); }
+    public static void Write(WireWriter writer, in EntryRouteSection section) =>
+        WriteTable(elements: section.Path.Span, writer: writer);
+    /// <inheritdoc/>
+    public static void WriteTable(WireWriter writer, ReadOnlySpan<int> elements) {
+        writer.WriteArrayCount(count: elements.Length);
+        for (var index = 0; (index < elements.Length); index++) { writer.WriteInt32(value: elements[index]); }
     }
     /// <inheritdoc/>
     public static EntryRouteSection Read(ref WireReader reader) => new(Path: reader.ReadArray(

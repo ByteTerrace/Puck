@@ -17,6 +17,7 @@ public sealed partial class WorldRuleHost {
     private const int TagPositionSource = 6;
     private const int OccupancySource = 7;
     private const int ValueSource = 8;
+    private const int FieldRowSource = 9;
 
     // The facts versioned by the value they answer: a read that names no binding (a literal seat, a compiled census)
     // and answers from host state alone, so its value moves only where the host's state does. Each is read again
@@ -28,7 +29,15 @@ public sealed partial class WorldRuleHost {
     // Whether the fact answers from input images, pointer rays or the grant table, which a commit's resynchronisation
     // can move; a census of the bodies moves only with them.
     private readonly List<bool> m_valueReadsInput = [];
+    private readonly List<bool> m_valueReadsArena = [];
+    private long m_seenValueMoves = -1L;
     private readonly Dictionary<(Type Kind, string Spelling), int> m_valueFactOf = [];
+    private readonly List<int> m_fieldRows = [];
+    private readonly List<(object? Lattice, ulong Revision)> m_seenFieldRows = [];
+    private readonly List<ulong> m_fieldRowVersions = [];
+    private readonly List<int> m_factSlotScratch = [];
+    private bool m_evaluatingWorldRules;
+    private string? m_staleFactDerivation;
 
     private readonly Dictionary<int, HashSet<int>> m_positionTags = [];
     private readonly List<(string Name, int Ordinal, ulong Version)> m_regions = [];
@@ -80,12 +89,17 @@ public sealed partial class WorldRuleHost {
             }
             var row = DocumentRowOrdinal(name: name);
             if (row < 0) { return false; }
-            rows.Add(row);
+            if (Arena.Layout[row].HasTraits) { return false; }
+            if (Arena.Catalog.Descriptors[row].HostOwned) {
+                if (!TryScheduleHostOwnedRow(facts: facts, rowOrdinal: row)) { return false; }
+            } else {
+                rows.Add(row);
+            }
             if (distance) {
                 WatchPoses();
                 facts.Add(new FactRead(TagPositionSource, row));
             }
-            return !Arena.Layout[row].HasTraits && !Arena.Catalog.Descriptors[row].HostOwned;
+            return true;
         }
     }
 
@@ -165,10 +179,42 @@ public sealed partial class WorldRuleHost {
         m_seenValues.Clear();
         m_valueVersions.Clear();
         m_valueReadsInput.Clear();
+        m_valueReadsArena.Clear();
+        m_seenValueMoves = -1L;
         m_valueFactOf.Clear();
+        m_fieldRows.Clear();
+        m_seenFieldRows.Clear();
+        m_fieldRowVersions.Clear();
         m_scheduleEpoch++;
         m_factMovesAll = true;
     }
+
+    /// <inheritdoc/>
+    public bool TryScheduleHostOwnedRow(int rowOrdinal, List<FactRead> facts) {
+        ArgumentNullException.ThrowIfNull(argument: facts);
+
+        if (!TryHostOwnedField(field: out _, rowOrdinal: rowOrdinal)) {
+            return false;
+        }
+
+        var scope = m_fieldRows.IndexOf(item: rowOrdinal);
+
+        if (scope < 0) {
+            scope = m_fieldRows.Count;
+            m_fieldRows.Add(item: rowOrdinal);
+            m_seenFieldRows.Add(item: ReadFieldRevision(rowOrdinal: rowOrdinal));
+            m_fieldRowVersions.Add(item: 1UL);
+            m_factMovesAll = true;
+        }
+        facts.Add(item: new FactRead(Body: scope, Source: FieldRowSource));
+        return true;
+    }
+
+    private (object? Lattice, ulong Revision) ReadFieldRevision(int rowOrdinal) => (
+        TryHostOwnedField(field: out var name, rowOrdinal: rowOrdinal) &&
+        Host.Population.TryFieldForRow(field: out var field, name: name, region: out var region))
+        ? ((object?)region!.Lattice, region.Lattice.ValueRevision(field: field))
+        : (null, 0UL);
 
     /// <inheritdoc/>
     /// <remarks>A body's action state is an arena row (its slot's row in the participant or identity lane); its pose
@@ -209,6 +255,16 @@ public sealed partial class WorldRuleHost {
                 facts.Add(item: new FactRead(Body: WatchValue(fact: bodyOperand, readsInput: false, spelling: bodyOperand.Describe), Source: ValueSource));
 
                 return true;
+            case NearestOperand nearest when (nearest.BodyA.Kind == CompiledBodyRefKind.Literal): {
+                var tagRow = OrdinalOf(handle: nearest.StateHandle);
+
+                if (tagRow >= 0) {
+                    rows.Add(item: tagRow);
+                }
+                facts.Add(item: new FactRead(Body: WatchValue(fact: bodyOperand, readsArena: true, readsInput: false, spelling: bodyOperand.Describe), Source: ValueSource));
+
+                return true;
+            }
             case WorldInputOperand input when TryInputScope(input: input, scope: out var inputScope):
                 facts.Add(item: new FactRead(Body: inputScope, Source: InputSource));
 
@@ -301,6 +357,14 @@ public sealed partial class WorldRuleHost {
 
             return true;
         }
+        if (source == FieldRowSource) {
+            if (((uint)body) >= ((uint)m_fieldRowVersions.Count)) {
+                return false;
+            }
+            version = m_fieldRowVersions[body];
+
+            return true;
+        }
         if (source == PlacementPoseSource) {
             var ordinal = ((body == FactRead.EachBody) ? EachPlacementOrdinal() : body);
 
@@ -345,6 +409,7 @@ public sealed partial class WorldRuleHost {
         TagPositionSource => "carrierPositions",
         OccupancySource => "regionOccupancy",
         ValueSource => "value",
+        FieldRowSource => "field",
         _ => $"source {source}",
     });
 
@@ -386,6 +451,9 @@ public sealed partial class WorldRuleHost {
     /// <remarks>Marks the derived versions stale; they are derived again before the next version read or drain
     /// (<see cref="DeriveFacts"/>), so several firings with arms in a row cost one comparison, not one each.</remarks>
     public void RefreshFacts() {
+        if (m_evaluatingWorldRules) {
+            return;
+        }
         m_factsStale = true;
         m_inputsStale = true;
     }
@@ -393,22 +461,26 @@ public sealed partial class WorldRuleHost {
     // Whether host state may have moved since the versions were last derived.
     private bool m_factsStale = true;
 
-    // Compares every population slot's liveness, and its pose and facts when a schedule names them, with what the slot
-    // answered when the versions were last derived, exactly as Read(BodyPositionOperand), Read(BoardCellOfOperand),
-    // Read(UprightOperand) and Read(BodyFactOperand) answer them. Every reader of a version or of the moved feed
-    // passes through here first, so a version is current wherever it is read.
+    // Compares candidate population slots' liveness, and their pose and facts when a schedule names them, with what each
+    // slot answered when the versions were last derived, exactly as Read(BodyPositionOperand), Read(BoardCellOfOperand),
+    // Read(UprightOperand) and Read(BodyFactOperand) answer them. Parked rigid islands, asleep bodies and inactive slots
+    // retain their seen answers until woken, disturbed or changed. Every reader of a version or of the moved feed passes
+    // through here first, so a version is current wherever it is read.
     private void DeriveFacts() {
         var inputsStale = m_inputsStale;
+        var arenaMoved = ((m_valueFacts.Count != 0) && (Arena.MoveSequence != m_seenValueMoves));
 
         DeriveInputs();
-        if (inputsStale || m_factsStale) {
-            DeriveValues(bodies: m_factsStale);
+        if (inputsStale || m_factsStale || arenaMoved) {
+            m_seenValueMoves = Arena.MoveSequence;
+            DeriveValues(arenaMoved: arenaMoved, bodies: m_factsStale, inputs: inputsStale);
         }
         if (!m_factsStale) {
             return;
         }
         m_factsStale = false;
         DeriveClocks();
+        DeriveFields();
         BindInteractionInputs();
         var regions = CollectionsMarshal.AsSpan(m_regions);
         foreach (ref var region in regions) {
@@ -428,6 +500,7 @@ public sealed partial class WorldRuleHost {
             Array.Resize(array: ref m_seenFacts, newSize: capacity);
             Array.Resize(array: ref m_poseVersions, newSize: capacity);
             Array.Resize(array: ref m_factsVersions, newSize: capacity);
+            population.ResetFactCandidateTracking();
             SeeEverything();
             m_factMovesAll = true;
 
@@ -436,12 +509,17 @@ public sealed partial class WorldRuleHost {
 
         var placementMoved = (m_watchPlacements && SeeInhabitants());
 
+        population.CollectFactCandidateSlots(fullScan: out var fullScan, into: m_factSlotScratch);
+        var slotCount = (fullScan ? capacity : m_factSlotScratch.Count);
+
         WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.FactDerives);
         if (m_watchPoses || m_watchFacts) {
-            WorldTickWork.Process.Add(amount: capacity, kind: WorldTickWork.FactSlots);
+            WorldTickWork.Process.Add(amount: slotCount, kind: WorldTickWork.FactSlots);
         }
 
-        for (var index = 0; (index < capacity); index++) {
+        for (var cursor = 0; (cursor < slotCount); cursor++) {
+            var index = (fullScan ? cursor : m_factSlotScratch[cursor]);
+
             _ = See(move: new FactRead(Body: index, Source: LiveBodiesSource), now: population.IsActive(index: index), seen: ref m_seenLive[index], version: ref m_liveVersion);
             if (!m_watchPoses && !m_watchFacts) {
                 continue;
@@ -462,8 +540,41 @@ public sealed partial class WorldRuleHost {
                 _ = See(move: new FactRead(Body: index, Source: BodyFactsSource), now: ((body is not null) ? body.Facts : BodyFacts.None), seen: ref m_seenFacts[index], version: ref m_factsVersions[index]);
             }
         }
+        if (!fullScan && QuiescenceChecked && (m_staleFactDerivation is null)) {
+            VerifyFactCandidates(capacity: capacity, population: population);
+        }
         if (placementMoved) {
             m_factMoves.Add(item: new FactRead(Body: FactRead.Whole, Source: PlacementPoseSource));
+        }
+    }
+
+    private void VerifyFactCandidates(WorldPopulation population, int capacity) {
+        for (var index = 0; (index < capacity); index++) {
+            if (population.IsActive(index: index) != m_seenLive[index]) {
+                m_staleFactDerivation = $"fact derivation skipped active-state transition on slot {index}";
+                return;
+            }
+            if (!m_watchPoses && !m_watchFacts) {
+                continue;
+            }
+            var body = Host.Body(index: index);
+            if (m_watchPoses && (BodyPose.Of(body: body) != m_seenPose[index])) {
+                m_staleFactDerivation = $"fact derivation skipped pose change on slot {index}";
+                return;
+            }
+            if (m_watchFacts && (((body is not null) ? body.Facts : BodyFacts.None) != m_seenFacts[index])) {
+                m_staleFactDerivation = $"fact derivation skipped body-fact change on slot {index}";
+                return;
+            }
+        }
+    }
+
+    private void DeriveFields() {
+        var seen = CollectionsMarshal.AsSpan(list: m_seenFieldRows);
+        var versions = CollectionsMarshal.AsSpan(list: m_fieldRowVersions);
+
+        for (var index = 0; (index < seen.Length); index++) {
+            _ = See(move: new FactRead(Body: index, Source: FieldRowSource), now: ReadFieldRevision(rowOrdinal: m_fieldRows[index]), seen: ref seen[index], version: ref versions[index]);
         }
     }
     // An input-history read is versioned when its owner is a literal identity (a seat or a session, never a body whose
@@ -489,7 +600,7 @@ public sealed partial class WorldRuleHost {
     private WorldInputOwner? InputOwner(Puck.Commands.Principal principal) => (Host.Input.TryGet(input: out var owner, principal: principal) ? owner : null);
     // Starts versioning a fact by its value, or finds the entry an operand spelling the same fact already has. A null
     // spelling names the operand instance alone.
-    private int WatchValue(WorldFactOperand fact, bool readsInput, string? spelling) {
+    private int WatchValue(WorldFactOperand fact, bool readsInput, string? spelling, bool readsArena = false) {
         var key = (fact.GetType(), spelling ?? string.Empty);
 
         if (spelling is not null) {
@@ -510,6 +621,7 @@ public sealed partial class WorldRuleHost {
         m_seenValues.Add(item: ReadValue(fact: fact));
         m_valueVersions.Add(item: 1UL);
         m_valueReadsInput.Add(item: readsInput);
+        m_valueReadsArena.Add(item: readsArena);
         if (spelling is not null) {
             m_valueFactOf.Add(key: key, value: index);
         }
@@ -529,14 +641,14 @@ public sealed partial class WorldRuleHost {
         }
     }
     // Reads every watched fact again and moves the version of each whose answer differs. Called wherever host state
-    // may have moved since the versions were derived: `bodies` when the bodies may have, otherwise only the facts
-    // that answer from input.
-    private void DeriveValues(bool bodies) {
+    // may have moved since the versions were derived: `bodies` when the bodies may have, `inputs` when input or grants
+    // may have, and `arenaMoved` when a fact also reads an arena row.
+    private void DeriveValues(bool bodies, bool inputs, bool arenaMoved) {
         var seen = CollectionsMarshal.AsSpan(list: m_seenValues);
         var versions = CollectionsMarshal.AsSpan(list: m_valueVersions);
 
         for (var index = 0; (index < seen.Length); index++) {
-            if (bodies || m_valueReadsInput[index]) {
+            if (bodies || (inputs && m_valueReadsInput[index]) || (arenaMoved && m_valueReadsArena[index])) {
                 _ = See(move: new FactRead(Body: index, Source: ValueSource), now: ReadValue(fact: m_valueFacts[index]), seen: ref seen[index], version: ref versions[index]);
             }
         }

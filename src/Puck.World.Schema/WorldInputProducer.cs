@@ -28,6 +28,9 @@ public sealed class WorldInputProducer {
     private WorldInputContribution[] m_published = [];
 
     private readonly WorldInputContribution[] m_borrowed;
+    private int m_borrowedCount = -1;
+    private bool m_hasNeutral;
+    private bool m_hasRelative;
 
     private int m_eventCount;
     private uint m_sequence;
@@ -106,13 +109,19 @@ public sealed class WorldInputProducer {
         var producer = new WorldInputProducer(catalog: catalog, epoch: epoch, mapping: mapping, maximumEventsPerStep: maximumEventsPerStep, revision: revision, sources: profile);
 
         sources.CopyTo(destination: producer.m_sources);
+        for (var index = 0; (index < sources.Length); index++) {
+            if ((sources[index].Source.Kind == WorldInputContributionKind.Relative) && (sources[index].RawValue != 0)) { producer.m_hasRelative = true; break; }
+        }
         producer.m_sequence = sequence;
         producer.m_image = image;
         return producer;
     }
     /// <summary>Records a physical or synthetic source observation in capture order, including explicit neutral.</summary>
-    public bool ObserveSnapshot(ushort handle, long rawValue, ulong tick, ref ulong activationSequence) {
-        if (!m_handles.TryGetValue(key: handle, value: out var index)) { return false; }
+    public bool ObserveSnapshot(ushort handle, long rawValue, ulong tick, ref ulong activationSequence) =>
+        m_handles.TryGetValue(key: handle, value: out var index) && ObserveSnapshotAt(index: index, rawValue: rawValue, tick: tick, activationSequence: ref activationSequence);
+    /// <summary>Records a synthetic source observation at a compiled source ordinal in capture order, including explicit neutral.</summary>
+    public bool ObserveSnapshotAt(int index, long rawValue, ulong tick, ref ulong activationSequence) {
+        if (((uint)index) >= ((uint)m_sources.Length)) { return false; }
         FlushNeutral(tick: tick);
         var prior = m_sources[index];
         var activation = prior.Activation;
@@ -122,7 +131,18 @@ public sealed class WorldInputProducer {
             if (activationSequence == ulong.MaxValue) { CaptureLost = true; return false; }
             activation = ++activationSequence;
         }
-        return Observe(handle, rawValue, tick, default, activation);
+        if (!CaptureLost && (rawValue == prior.RawValue) && (activation == prior.Activation) && !prior.AwaitingNeutral) {
+            var steadyAddress = Mapping.Address(logicalId: prior.Source.Channel);
+            var steadyShape = m_catalog.Channels[prior.Source.Channel].Shape;
+
+            if (((steadyShape == ChannelShape.Relative) || ((rawValue <= FixedQ4816.One.Value) && (rawValue >= ((steadyShape == ChannelShape.Bipolar) ? -FixedQ4816.One.Value : 0)))) &&
+                ((steadyAddress >= 0) || (rawValue == 0))) {
+                m_observed[index] = true;
+                m_observedRaw[index] = rawValue;
+                return true;
+            }
+        }
+        return Observe(prior.Source.Handle, rawValue, tick, default, activation);
     }
     /// <summary>Records a physical or synthetic source observation in capture order, including explicit neutral.</summary>
     public bool Observe(ushort handle, long rawValue, ulong tick, FixedQ4816 offset, ulong activation, ulong? processingTick = null) {
@@ -146,12 +166,14 @@ public sealed class WorldInputProducer {
         m_observed[index] = true;
         m_observedRaw[index] = rawValue;
         if (((address < 0) || previous.AwaitingNeutral) && (rawValue != 0)) { return false; }
-        if ((rawValue == 0) && previous.AwaitingNeutral) { m_neutral[index] = true; }
+        if ((rawValue == 0) && previous.AwaitingNeutral) { m_neutral[index] = true; m_hasNeutral = true; m_borrowedCount = -1; m_sourcesChanged = true; }
         var next = new WorldInputSourceState(previous.Source, rawValue, activation, false);
 
         if (next == previous) { return true; }
         m_sources[index] = next;
         m_sourcesChanged = true;
+        m_borrowedCount = -1;
+        if ((previous.Source.Kind == WorldInputContributionKind.Relative) && (rawValue != 0)) { m_hasRelative = true; }
         if (address < 0) { return true; }
         var value = Fold(channel: channel);
         var prior = m_image[address].Value;
@@ -196,13 +218,26 @@ public sealed class WorldInputProducer {
         if (CaptureLost) { return new(Revision, Epoch, Mapping.Id, tick, default, default, default, Mapping.NumericCount, CaptureLost: true); }
         ReadOnlyMemory<WorldInputContribution> published = m_published;
 
-        if (m_sourcesChanged || borrow) {
+        if (borrow) {
+            if (m_borrowedCount < 0) {
+                var count = 0;
+
+                for (var index = 0; (index < m_sources.Length); index++) {
+                    var state = m_sources[index];
+
+                    if ((state.RawValue == 0) && !m_neutral[index]) { continue; }
+                    m_borrowed[count++] = new(state.Source.Handle, state.Source.Channel, state.Source.Kind, state.RawValue, state.Activation, m_neutral[index]);
+                }
+                m_borrowedCount = count;
+            }
+            published = m_borrowed.AsMemory(length: m_borrowedCount, start: 0);
+        } else if (m_sourcesChanged) {
             var count = 0;
 
             for (var index = 0; (index < m_sources.Length); index++) {
                 if ((m_sources[index].RawValue != 0) || m_neutral[index]) { count++; }
             }
-            var contributions = (borrow ? m_borrowed : ((count == 0) ? [] : new WorldInputContribution[count]));
+            var contributions = ((count == 0) ? [] : new WorldInputContribution[count]);
             var destination = 0;
 
             for (var index = 0; (index < m_sources.Length); index++) {
@@ -212,26 +247,34 @@ public sealed class WorldInputProducer {
                 contributions[destination++] = new(state.Source.Handle, state.Source.Channel, state.Source.Kind, state.RawValue, state.Activation, m_neutral[index]);
             }
             published = contributions.AsMemory(length: count, start: 0);
-            if (!borrow) { m_published = contributions; }
-            m_sourcesChanged = borrow;
+            m_published = contributions;
+            m_sourcesChanged = false;
         }
         ReadOnlyMemory<WorldInputEvent> events = (borrow ? m_pending.AsMemory(length: m_eventCount, start: 0) :
             ((m_eventCount == 0) ? default : m_pending.AsSpan(length: m_eventCount, start: 0).ToArray()));
         var batch = new WorldInputBatch(Revision, Epoch, Mapping.Id, tick, m_image with { SourceRay = ray }, published, events, Mapping.NumericCount);
 
         m_eventCount = 0;
-        for (var index = 0; (index < m_neutral.Length); index++) {
-            if (!m_neutral[index]) { continue; }
-            m_neutral[index] = false;
-            m_sourcesChanged = true;
+        if (m_hasNeutral) {
+            m_hasNeutral = false;
+            for (var index = 0; (index < m_neutral.Length); index++) {
+                if (!m_neutral[index]) { continue; }
+                m_neutral[index] = false;
+                m_sourcesChanged = true;
+                m_borrowedCount = -1;
+            }
         }
-        for (var index = 0; (index < m_sources.Length); index++) {
-            if ((m_sources[index].Source.Kind != WorldInputContributionKind.Relative) || (m_sources[index].RawValue == 0)) { continue; }
-            m_sources[index] = m_sources[index] with { RawValue = 0 };
-            m_sourcesChanged = true;
-            var address = Mapping.Address(logicalId: m_sources[index].Source.Channel);
+        if (m_hasRelative) {
+            m_hasRelative = false;
+            for (var index = 0; (index < m_sources.Length); index++) {
+                if ((m_sources[index].Source.Kind != WorldInputContributionKind.Relative) || (m_sources[index].RawValue == 0)) { continue; }
+                m_sources[index] = m_sources[index] with { RawValue = 0 };
+                m_sourcesChanged = true;
+                m_borrowedCount = -1;
+                var address = Mapping.Address(logicalId: m_sources[index].Source.Channel);
 
-            if (address >= 0) { m_image = m_image.WithRelative(ordinal: address, value: FixedQ3232.Zero); }
+                if (address >= 0) { m_image = m_image.WithRelative(ordinal: address, value: FixedQ3232.Zero); }
+            }
         }
         return batch;
     }
@@ -259,6 +302,12 @@ public sealed class WorldInputProducer {
         m_image = image;
         sources.CopyTo(destination: m_sources);
         m_sourcesChanged = true;
+        m_borrowedCount = -1;
+        m_hasNeutral = false;
+        m_hasRelative = false;
+        for (var index = 0; (index < sources.Length); index++) {
+            if ((sources[index].Source.Kind == WorldInputContributionKind.Relative) && (sources[index].RawValue != 0)) { m_hasRelative = true; break; }
+        }
         m_eventCount = 0;
         m_sequence = 0;
         Array.Clear(array: m_deferred);

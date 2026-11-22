@@ -43,6 +43,8 @@ public sealed partial class WorldBody {
 
     private bool m_atMediumBand;
     private CompiledBodyMotionProgram m_bodyMotionProgram;
+    private bool m_usesLocalAttitude;
+    private bool m_usesLocalTargetVelocity;
     // The construction-validated program table and the program this body executes.
     private IReadOnlyDictionary<string, CompiledBodyMotionProgram> m_bodyMotionPrograms;
     // The input images that arrive and their routing, behind their write door (InputImages reads, InputImagesEdit
@@ -374,6 +376,7 @@ public sealed partial class WorldBody {
             tuning: tuning
         );
         m_bodyMotionProgram = (program ?? throw new ArgumentNullException(paramName: nameof(program)));
+        CacheProgramTraits(program: m_bodyMotionProgram);
         m_bodyMotionPrograms = (programs ?? throw new ArgumentNullException(paramName: nameof(programs)));
         SetChannelTable(channels: channels);
         CopyChannelBindings(

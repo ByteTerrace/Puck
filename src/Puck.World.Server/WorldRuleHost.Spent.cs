@@ -18,11 +18,14 @@ public sealed partial class WorldRuleHost {
     /// changing nothing (<see cref="RuleEvaluator.QuiescenceChecked"/>).</summary>
     internal bool QuiescenceChecked {
         get => m_evaluator.QuiescenceChecked;
-        set => m_evaluator.QuiescenceChecked = value;
+        set {
+            m_staleFactDerivation = null;
+            m_evaluator.QuiescenceChecked = value;
+        }
     }
-    /// <summary>Gets the first Level firing the check found that did not settle again
+    /// <summary>Gets the first Level firing or derived-fact skip the check found that did not settle again
     /// (<see cref="RuleEvaluator.StaleQuiescence"/>), or <see langword="null"/>.</summary>
-    internal string? StaleQuiescence => m_evaluator.StaleQuiescence;
+    internal string? StaleQuiescence => (m_evaluator.StaleQuiescence ?? m_staleFactDerivation);
 
     /// <summary>Spells the measured rule sheet: per rule and interaction, what the evaluator ran since the latches
     /// began (visits, evaluations, skips, the skips that stood for a settled Level firing, firings) and the work units that spent at the worst-case sheet's own

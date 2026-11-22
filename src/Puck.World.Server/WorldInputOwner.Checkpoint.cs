@@ -87,6 +87,7 @@ public sealed partial class WorldInputOwner {
         Mapping = mapping;
         Epoch = checkpoint.Epoch;
         Image = checkpoint.Image;
+        m_steadyImageVerified = false;
         Calibration = checkpoint.Calibration;
         LastSwitch = checkpoint.LastSwitch;
         RefusedBatches = checkpoint.RefusedBatches;

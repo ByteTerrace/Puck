@@ -51,47 +51,51 @@ public sealed partial class WorldOutputHub {
     // projection) overwrites its memory when it composes its next delivery, which may come before the collect, so a
     // record never holds a loan.
     private sealed class Loan {
-        private EntitySnapshot[]? m_entries;
-        private long[]? m_states;
-        private FieldCellDelta[]? m_cells;
-        private WorldInputPublication[]? m_inputs;
-        private WorldSolidScale[]? m_scales;
-        private WorldGameplayCue[]? m_cues;
-        private WorldInputAnswer[]? m_answers;
-        private int[]? m_moved;
+        private EntitySnapshot[] m_entries = [];
+        private int m_entriesLength;
+        private long[] m_states = [];
+        private FieldCellDelta[] m_cells = [];
+        private WorldInputPublication[] m_inputs = [];
+        private int m_inputsLength;
+        private WorldSolidScale[] m_scales = [];
+        private WorldGameplayCue[] m_cues = [];
+        private int m_cuesLength;
+        private WorldInputAnswer[] m_answers = [];
+        private int[] m_moved = [];
 
         public long Bytes { get; private set; }
 
-        public WorldSnapshot Hold(in WorldSnapshot snapshot) => snapshot with {
-            Entries = HoldEntries(snapshot.Entries),
-            FieldCells = Hold(snapshot.FieldCells, ref m_cells),
-            Inputs = Hold(snapshot.Inputs, ref m_inputs),
-            SolidScales = Hold(snapshot.SolidScales, ref m_scales),
-            Cues = Hold(snapshot.Cues, ref m_cues),
-            InputAnswers = Hold(snapshot.InputAnswers, ref m_answers),
-        };
-        public WorldStateStamp Hold(in WorldStateStamp stamp) => stamp with { MovedRows = Hold(stamp.MovedRows, ref m_moved) };
+        public WorldSnapshot Hold(in WorldSnapshot snapshot) {
+            Bytes = 0L;
+            return snapshot with {
+                Entries = HoldEntries(snapshot.Entries),
+                FieldCells = Hold(snapshot.FieldCells, ref m_cells),
+                Inputs = HoldReferences(snapshot.Inputs, ref m_inputs, out m_inputsLength),
+                SolidScales = Hold(snapshot.SolidScales, ref m_scales),
+                Cues = HoldReferences(snapshot.Cues, ref m_cues, out m_cuesLength),
+                InputAnswers = Hold(snapshot.InputAnswers, ref m_answers),
+            };
+        }
+        public WorldStateStamp Hold(in WorldStateStamp stamp) {
+            Bytes = 0L;
+            return stamp with { MovedRows = Hold(stamp.MovedRows, ref m_moved) };
+        }
         public void Release() {
-            Return(ref m_entries);
-            Return(ref m_states);
-            Return(ref m_cells);
-            Return(ref m_inputs);
-            Return(ref m_scales);
-            Return(ref m_cues);
-            Return(ref m_answers);
-            Return(ref m_moved);
+            if (m_entriesLength > 0) { m_entries.AsSpan(0, m_entriesLength).Clear(); m_entriesLength = 0; }
+            if (m_inputsLength > 0) { m_inputs.AsSpan(0, m_inputsLength).Clear(); m_inputsLength = 0; }
+            if (m_cuesLength > 0) { m_cues.AsSpan(0, m_cuesLength).Clear(); m_cuesLength = 0; }
             Bytes = 0L;
         }
 
         // An entry lends its action-state registers as well: each entry's slice moves into one copied register array.
         private ReadOnlyMemory<EntitySnapshot> HoldEntries(ReadOnlyMemory<EntitySnapshot> source) {
-            var held = Hold(source, ref m_entries);
+            var held = HoldReferences(source, ref m_entries, out m_entriesLength);
             var registers = 0;
             foreach (ref readonly var entry in source.Span) { registers += entry.State.Length; }
             if (registers == 0) { return held; }
 
-            var states = m_states = RentedArrays.Rent<long>(registers);
-            var entries = m_entries!;
+            var states = ArrayCapacity.EnsureScratch(ref m_states, registers);
+            var entries = m_entries;
             var offset = 0;
             Bytes += ((long)registers * sizeof(long));
             for (var index = 0; index < held.Length; index++) {
@@ -103,17 +107,20 @@ public sealed partial class WorldOutputHub {
             }
             return held;
         }
-        private ReadOnlyMemory<T> Hold<T>(ReadOnlyMemory<T> source, ref T[]? rented) {
+        private ReadOnlyMemory<T> Hold<T>(ReadOnlyMemory<T> source, ref T[] scratch) {
             if (source.IsEmpty) { return source; }
-            var copy = rented = RentedArrays.Rent<T>(source.Length);
+            var copy = ArrayCapacity.EnsureScratch(ref scratch, source.Length);
             source.Span.CopyTo(copy);
             Bytes += ((long)source.Length * Unsafe.SizeOf<T>());
             return copy.AsMemory(0, source.Length);
         }
-        private static void Return<T>(ref T[]? rented) {
-            if (rented is not { } array) { return; }
-            RentedArrays.Return(array);
-            rented = null;
+        private ReadOnlyMemory<T> HoldReferences<T>(ReadOnlyMemory<T> source, ref T[] scratch, out int length) {
+            length = source.Length;
+            if (source.IsEmpty) { return source; }
+            var copy = ArrayCapacity.EnsureScratch(ref scratch, source.Length);
+            source.Span.CopyTo(copy);
+            Bytes += ((long)source.Length * Unsafe.SizeOf<T>());
+            return copy.AsMemory(0, source.Length);
         }
     }
 

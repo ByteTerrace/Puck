@@ -126,6 +126,8 @@ public sealed partial class WorldRuleHost {
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0
         );
+        m_factsStale = true;
+        m_inputsStale = true;
     }
 
     // One row travels as itself, so its journal entry is the mutation it always was; several travel as one batch.
@@ -173,6 +175,7 @@ public sealed partial class WorldRuleHost {
                 } else if (m_preflightInput.TryGetValue(key: consume, value: out var prepared)) {
                     if (inputPrincipal != prepared.Owner) { return Refuse(code: RuleEffectRefusal.MutationRejected, reason: "input owner changed during the firing", refusal: out refusal); }
                     _ = input!.Consume(consume.Pattern, prepared.Match);
+                    m_inputsStale = true;
                 }
                 refusal = EffectRefusal.None;
                 return true;
@@ -182,35 +185,50 @@ public sealed partial class WorldRuleHost {
                     firing: in firing,
                     refusal: out refusal
                 );
-            case WorldBodyMotionEffect body:
-                return FireBodyMotion(
+            case WorldBodyMotionEffect body: {
+                var ok = FireBodyMotion(
                     effect: body,
                     preflight: firing.Preflight,
                     refusal: out refusal,
                     values: firing.Values
                 );
-            case WorldRigidImpulseEffect impulse:
-                return FireRigidImpulse(
+                if (ok && !firing.Preflight) { m_factsStale = true; m_inputsStale = true; }
+                return ok;
+            }
+            case WorldRigidImpulseEffect impulse: {
+                var ok = FireRigidImpulse(
                     effect: impulse,
                     preflight: firing.Preflight,
                     refusal: out refusal,
                     values: firing.Values
                 );
-            case WorldPaintFieldEffect paint:
-                return FireFieldPaint(
+                if (ok && !firing.Preflight) { m_factsStale = true; m_inputsStale = true; }
+                return ok;
+            }
+            case WorldPaintFieldEffect paint: {
+                var ok = FireFieldPaint(
                     effect: paint,
                     preflight: firing.Preflight,
                     refusal: out refusal
                 );
-            case WorldPoseCellEffect cellPose:
-                return FirePoseCell(effect: cellPose, preflight: firing.Preflight, refusal: out refusal, values: firing.Values);
-            case WorldPoseEffect pose:
-                return FirePose(
+                if (ok && !firing.Preflight) { m_factsStale = true; }
+                return ok;
+            }
+            case WorldPoseCellEffect cellPose: {
+                var ok = FirePoseCell(effect: cellPose, preflight: firing.Preflight, refusal: out refusal, values: firing.Values);
+                if (ok && !firing.Preflight) { m_factsStale = true; m_inputsStale = true; }
+                return ok;
+            }
+            case WorldPoseEffect pose: {
+                var ok = FirePose(
                     effect: pose,
                     preflight: firing.Preflight,
                     refusal: out refusal,
                     values: firing.Values
                 );
+                if (ok && !firing.Preflight) { m_factsStale = true; m_inputsStale = true; }
+                return ok;
+            }
             case WorldIdentityFactEffect fact:
                 return FireIdentityFact(
                     effect: fact,

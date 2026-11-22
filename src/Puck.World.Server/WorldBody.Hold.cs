@@ -783,7 +783,7 @@ public sealed partial class WorldBody {
         // A body-frame 6DOF flight program already owns scratch.Orientation in full via IntegrateLocalAttitude;
         // composing a yaw-only snap over it here would discard the pitch/roll that integration just built, for an
         // axis the program never asked this to draw a facing against.
-        if (m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)) {
+        if (m_usesLocalAttitude) {
             return;
         }
 

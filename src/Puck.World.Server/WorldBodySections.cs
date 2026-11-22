@@ -328,13 +328,16 @@ public readonly record struct BodyClocksSection(
 }
 /// <summary>The motion program's Recently-gate clocks, one per gate of the kit's shaping table.</summary>
 /// <param name="Clocks">The clocks, in the table's slot order.</param>
-public readonly record struct BodyMotionRecencySection(ReadOnlyMemory<ulong> Clocks) : IContinuationSection<BodyMotionRecencySection> {
+public readonly record struct BodyMotionRecencySection(ReadOnlyMemory<ulong> Clocks) : IContinuationTableSection<BodyMotionRecencySection, ulong> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.MotionRecency;
 
     /// <inheritdoc/>
     public static void Write(WireWriter writer, in BodyMotionRecencySection section) =>
-        WorldAuthorityCheckpointCodec.WriteULongs(values: section.Clocks.Span, writer: writer);
+        WriteTable(elements: section.Clocks.Span, writer: writer);
+    /// <inheritdoc/>
+    public static void WriteTable(WireWriter writer, ReadOnlySpan<ulong> elements) =>
+        WorldAuthorityCheckpointCodec.WriteULongs(values: elements, writer: writer);
     /// <inheritdoc/>
     public static BodyMotionRecencySection Read(ref WireReader reader) =>
         new(Clocks: WorldAuthorityCheckpointCodec.ReadULongArray(field: "motion recency", reader: ref reader));

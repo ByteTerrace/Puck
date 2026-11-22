@@ -42,6 +42,7 @@ public sealed partial class WorldInputOwner {
     private FixedQ4816 m_lastOffset;
     private ulong m_step;
     private int m_stepEvents;
+    private bool m_steadyImageVerified;
 
     /// <summary>Admits an owner and allocates its bounded storage. Source handles are immutable until a reset/re-admission.</summary>
     public WorldInputOwner(WorldInputCatalog catalog, WorldInputMapping mapping, WorldInputHistory policy,
@@ -222,6 +223,11 @@ public sealed partial class WorldInputOwner {
             return false;
         }
         if (batch.Contributions.Length > m_sources.Length) { reason = "input.sources: contribution count exceeds admitted profile"; return false; }
+        if (m_steadyImageVerified && batch.Events.IsEmpty && (batch.Image == Image) && ContributionsMatchAccepted(contributions: batch.Contributions.Span)) {
+            m_step = admission.Tick;
+            m_stepEvents = stepEvents;
+            return true;
+        }
         Array.Clear(array: m_seen);
         Array.Clear(array: m_sum);
         Array.Clear(array: m_maximum);
@@ -283,9 +289,12 @@ public sealed partial class WorldInputOwner {
             }
         }
         var eventImage = Image;
+        var hasEvents = !batch.Events.IsEmpty;
 
-        m_holds.CopyTo(array: m_holdScratch, index: 0);
-        m_crossingHeld.CopyTo(array: m_crossingScratch, index: 0);
+        if (hasEvents) {
+            m_holds.CopyTo(array: m_holdScratch, index: 0);
+            m_crossingHeld.CopyTo(array: m_crossingScratch, index: 0);
+        }
         var sequence = m_sequence;
         var lastCapture = m_lastCapture;
         var lastOffset = m_lastOffset;
@@ -392,20 +401,51 @@ public sealed partial class WorldInputOwner {
                 return false;
             }
         }
+        var imageChanged = (folded != Image);
+
         m_sourceScratch.CopyTo(array: m_sources, index: 0);
-        m_holdScratch.CopyTo(array: m_holds, index: 0);
-        m_crossingScratch.CopyTo(array: m_crossingHeld, index: 0);
-        for (var index = 0; (index < eventCount); index++) { m_history[((m_head + m_count++) % m_history.Length)] = m_eventScratch[index]; }
-        m_sequence = sequence;
-        m_lastCapture = lastCapture;
-        m_lastOffset = lastOffset;
-        m_eventId += ((ulong)eventCount);
-        RetimedEvents += moved;
+        if (hasEvents) {
+            m_holdScratch.CopyTo(array: m_holds, index: 0);
+            m_crossingScratch.CopyTo(array: m_crossingHeld, index: 0);
+            for (var index = 0; (index < eventCount); index++) { m_history[((m_head + m_count++) % m_history.Length)] = m_eventScratch[index]; }
+            m_sequence = sequence;
+            m_lastCapture = lastCapture;
+            m_lastOffset = lastOffset;
+            m_eventId += ((ulong)eventCount);
+            RetimedEvents += moved;
+        }
         m_step = admission.Tick;
         m_stepEvents = (stepEvents + eventCount);
         Image = folded;
-        Array.Clear(array: m_matchCached);
+        m_steadyImageVerified = true;
+        if (hasEvents || imageChanged) {
+            Array.Clear(array: m_matchCached);
+        }
         return true;
+    }
+
+    private bool ContributionsMatchAccepted(ReadOnlySpan<WorldInputContribution> contributions) {
+        var cursor = 0;
+
+        for (var index = 0; (index < m_sources.Length); index++) {
+            ref readonly var state = ref m_sources[index];
+
+            if ((cursor < contributions.Length) && (contributions[cursor].Handle == state.Source.Handle)) {
+                ref readonly var contribution = ref contributions[cursor];
+
+                if (contribution.NeutralObserved || state.AwaitingNeutral ||
+                    (contribution.Channel != state.Source.Channel) ||
+                    (contribution.Kind != state.Source.Kind) ||
+                    (contribution.RawValue != state.RawValue) ||
+                    (contribution.Activation != state.Activation)) {
+                    return false;
+                }
+                cursor++;
+            } else if (state.RawValue != 0) {
+                return false;
+            }
+        }
+        return (cursor == contributions.Length);
     }
 
     private bool TryStageEvent(WorldInputRecord record, ref int count, int prior, WorldInputInterval admission, out string reason) {
@@ -429,6 +469,7 @@ public sealed partial class WorldInputOwner {
             m_sources[index] = m_sources[index] with { RawValue = 0, AwaitingNeutral = true };
         }
         Image = default;
+        m_steadyImageVerified = false;
         Array.Clear(array: m_holds);
         Epoch = checked((previous.Epoch + 1));
         m_eventId = previous.m_eventId;
@@ -578,6 +619,7 @@ public sealed partial class WorldInputOwner {
         m_holdScratch.CopyTo(array: m_holds, index: 0);
         Mapping = next;
         Image = image;
+        m_steadyImageVerified = false;
         for (var crossing = 0; (crossing < m_crossings.Length); crossing++) {
             if (reset || !m_catalog.Keeps(previous, next, m_crossings[crossing].Channel)) { m_crossingHeld[crossing] = false; }
         }

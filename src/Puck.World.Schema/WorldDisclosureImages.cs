@@ -172,7 +172,9 @@ public sealed partial class WorldDisclosureImages {
     public IWorkCounterSource Work => m_work;
     private StateArena? m_arena;
     private long m_policyRevision = -1;
+    private long m_policyGeneration;
     private StateVisibility[] m_policies = [];
+    private int[] m_policyReaderRows = [];
     private int[][] m_dependencies = [];
     // Prepare's scratch, refilled on every revision: each row's own policies, and one row's policies and dependencies.
     private HashSet<StateVisibility>?[] m_rowPolicies = [];
@@ -313,6 +315,12 @@ public sealed partial class WorldDisclosureImages {
         }
         if (samePolicies && ReferenceEquals(dependencies, m_dependencies)) { return; }
         m_policies = [.. policies];
+        m_policyGeneration++;
+        var readerRows = new SortedSet<int>();
+        foreach (var policy in m_policies) {
+            if (policy.ReadersFrom is { } readers && arena.Catalog.TryResolve(StateLane.Document, readers, out var source)) { readerRows.Add(source.Ordinal); }
+        }
+        m_policyReaderRows = [.. readerRows];
         m_dependencies = dependencies;
         var dependents = new List<int>[arena.Rows.Count];
         for (var row = 0; row < dependents.Length; row++) { dependents[row] = []; }
@@ -347,18 +355,37 @@ public sealed partial class WorldDisclosureImages {
     }
     private string AudienceText(WorldRecipientView view) {
         Prepare(view);
+        var arena = view.Arena;
+        var settled = Settled(arena);
         var unrestricted = view.Unrestricted;
+        var ceilingKey = view.Observes ? (char)('1' + (int)view.Ceiling) : '0';
+        var readerVersions = 0UL;
+
+        foreach (var row in m_policyReaderRows) { readerVersions = checked(readerVersions + arena.RowVersion(row)); }
+        if (settled && (view.AudienceKey is { } cached) && ReferenceEquals(view.AudienceArena, arena) &&
+            (view.AudiencePolicyGeneration == m_policyGeneration) && (view.AudienceReaderVersions == readerVersions) &&
+            (view.AudienceCeilingKey == ceilingKey) && (view.AudienceUnrestricted == unrestricted)) {
+            return cached;
+        }
         var observer = view.ObserverAs(unrestricted);
         var length = (m_policies.Length + 2);
         var key = ((length <= 512) ? stackalloc char[length] : new char[length]);
-        key[0] = view.Observes ? (char)('1' + (int)view.Ceiling) : '0';
+        key[0] = ceilingKey;
         // An authority reads storage bookkeeping even on a declaration that can withhold cells. A recipient
         // admitted by every current policy still does not, so their definition caches cannot share a class.
         key[1] = unrestricted ? '1' : '0';
         for (var index = 0; index < m_policies.Length; index++) { key[index + 2] = observer.Allows(m_policies[index]) ? '1' : '0'; }
         // The key is a function of the answers alone, so a view whose answers stand keeps the string it was handed.
-        if ((view.AudienceKey is { } held) && key.SequenceEqual(held)) { return held; }
-        return view.AudienceKey = new string(key);
+        var text = ((view.AudienceKey is { } held) && key.SequenceEqual(held)) ? held : new string(key);
+        if (settled) {
+            view.AudienceKey = text;
+            view.AudienceArena = arena;
+            view.AudiencePolicyGeneration = m_policyGeneration;
+            view.AudienceReaderVersions = readerVersions;
+            view.AudienceCeilingKey = ceilingKey;
+            view.AudienceUnrestricted = unrestricted;
+        }
+        return text;
     }
     // The content identity of the recipient's disclosed definition. Two documents that disclose the same frame, rows and
     // row observations share it; work follows the rows that changed since the audience's last read.
