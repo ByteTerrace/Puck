@@ -242,7 +242,7 @@ public sealed class WorldDeliveryCursor {
         var authorityChanged = m_operator != view.IsAuthority;
         if (!authorityChanged && rows.IsEmpty && (m_metadataPrimers.Count == 0)) { return []; }
         List<WorldRowReplacement>? result = null;
-        string? audience = null;
+        WorldDisclosureImages.AudienceKey? audience = null;
         var cut = false;
         m_affected.Clear();
         view.Images.Affected(view, rows, m_affected);
@@ -263,7 +263,7 @@ public sealed class WorldDeliveryCursor {
                 if (!holds || !held.Whole || !ReferenceEquals(held.Keys, keys)) { m_rows[name] = new HeldRow(Image: null, Keys: keys); }
                 if (holds && !held.Whole) {
                     m_metadataPrimers.Remove(row);
-                    (result ??= []).Add(new(row, view.Images.Image(view, row, audience ??= view.Images.Audience(view))));
+                    (result ??= []).Add(new(row, view.Images.Image((audience ??= view.Images.Audience(view)), row)));
                 }
                 continue;
             }
@@ -272,8 +272,8 @@ public sealed class WorldDeliveryCursor {
             var owed = m_metadataPrimers.Remove(row);
 
             if (!owed && holds && (held.Image is { } delivered) &&
-                (delivered.Digest == view.Images.RowDigest(view, row, audience ??= view.Images.Audience(view)))) { continue; }
-            var image = view.Images.Image(view, row, audience ??= view.Images.Audience(view));
+                (delivered.Digest == view.Images.RowDigest((audience ??= view.Images.Audience(view)), row))) { continue; }
+            var image = view.Images.Image((audience ??= view.Images.Audience(view)), row);
 
             if (holds) { cut |= Loses(held, image); }
             m_rows[name] = new HeldRow(Image: image, Keys: WorldRowMembers.Empty);

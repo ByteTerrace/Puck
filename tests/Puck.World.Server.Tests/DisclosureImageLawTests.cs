@@ -231,6 +231,69 @@ public sealed class DisclosureImageLawTests {
         }
     }
 
+    // Row versions settle when the outermost journal scope commits, so inside one the table cannot tell what it keeps
+    // from what the store holds. A cell only seat 0 reads is inserted ahead of the hand's cells inside a scope: seat 2,
+    // whose kept mask says it reads the first cell, is still handed `open` alone, read from the store as it stands, and
+    // nothing of that reading outlives the rewind. Every other reading the table keeps follows the same rule.
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void ARowReadInsideAnOpenScopeIsReadAsTheStoreStandsAndLeavesNothingBehind(bool commit, bool held) {
+        var definition = Table();
+        var arena = Fixtures.Store(definition: definition);
+        var images = new WorldDisclosureImages();
+        var hand = Row(arena: arena, name: "hand");
+        var owner = View(definition: definition, arena: arena, images: images, seat: 0);
+        var view = View(definition: definition, arena: arena, images: images, seat: 2);
+        var cursor = new WorldDeliveryCursor();
+        static string Keys(WorldRecipientImage image) => string.Join(separator: ",", values: image.Cells.Select(selector: cell => cell.Key.Value));
+
+        Assert.NotNull(@object: cursor.DeliverDefinition(view: view));
+        var before = view.Image(row: hand);
+        var scene = view.SceneIdentity;
+
+        Assert.Equal(expected: "open", actual: Keys(image: before));
+        Assert.Equal(expected: "open,ours,mine", actual: Keys(image: owner.Image(row: hand)));
+        if (!held) {
+            // A committed write seat 2 may not read moves the row's version: its composition is written again and holds
+            // its mask and digest and no image, so the read inside the scope is the one that would build it.
+            Commit(arena: arena, write: () => Assert.True(condition: arena.TryWrite(rowOrdinal: hand, key: Key(arena: arena, name: "mine"), value: CellValue.Int(value: 5L), reason: out _)));
+            Assert.True(condition: cursor.Holds(view: view));
+        }
+        var mark = arena.BeginScope();
+
+        Assert.True(condition: arena.TryInsert(rowOrdinal: hand, name: Name(value: "first"), value: CellValue.Int(value: 9L), position: 0, key: out var first, reason: out var reason), userMessage: reason);
+        Assert.True(condition: arena.TryWriteVisibility(rowOrdinal: hand, key: first, visibility: Readers(0)));
+        var inside = view.Image(row: hand);
+
+        Assert.Equal(expected: "open", actual: Keys(image: inside));
+        Assert.DoesNotContain(expectedSubstring: "first", actualString: Content(image: inside), comparisonType: StringComparison.Ordinal);
+        Assert.Equal(expected: 3, actual: inside.Observation!.HiddenCount);
+        Assert.Equal(expected: "first,open,ours,mine", actual: Keys(image: owner.Image(row: hand)));
+        // The stream's document, its scene and its placements are read through the same store, and none is kept.
+        Assert.False(condition: cursor.Holds(view: view));
+        Assert.Single(collection: WorldDefinitionRows.FindStateRow(view.Definition.State, "hand")!.Cells!);
+        _ = view.SceneIdentity;
+        _ = view.Placements;
+        if (commit) { arena.Commit(mark: mark); } else { arena.Rewind(mark: mark); }
+
+        var after = view.Image(row: hand);
+
+        Assert.Equal(expected: "open", actual: Keys(image: after));
+        Assert.Equal(expected: (commit ? 3 : 2), actual: after.Observation!.HiddenCount);
+        Assert.Equal(expected: (commit ? "first,open,ours,mine" : "open,ours,mine"), actual: Keys(image: owner.Image(row: hand)));
+        Assert.Equal(expected: commit, actual: !cursor.Holds(view: view));
+        if (!commit) {
+            // The rewind left the table as the scope found it: the image it held before, when it held one, and the
+            // same content and scene either way.
+            if (held) { Assert.Same(expected: before, actual: after); }
+            Assert.Equal(expected: before.Identity, actual: after.Identity);
+            Assert.Equal(expected: scene, actual: view.SceneIdentity);
+        }
+    }
+
     // Below a replica a row no policy restricts crosses only while the document presents it. Whether it does is read
     // when the row is asked for, so a document that begins to bind the row is imaged with it at once, over the same
     // store and with no write to the row, and one that stops binding it is imaged without.

@@ -40,10 +40,11 @@ public sealed partial class WorldDisclosureImages {
     internal bool ShowsPlacement(WorldRecipientView view, string? id) => PlacementsOf(view).Shows(id);
 
     private PlacementReading PlacementsOf(WorldRecipientView view) {
-        var audience = Audience(view);
+        var audience = Audience(view).Text;
         var source = view.Source;
         var arena = view.Arena;
-        if (m_placementReadings.TryGetValue(audience, out var held) && Stands(held, source, arena)) { return held; }
+        // Inside an open scope the reading is taken from the store as it stands and kept nowhere.
+        if (Settled(arena) && m_placementReadings.TryGetValue(audience, out var held) && Stands(held, source, arena)) { return held; }
         return ComposePlacements(view, audience, source, arena);
     }
     private bool Stands(PlacementReading reading, WorldDefinition source, StateArena arena) {
@@ -73,6 +74,9 @@ public sealed partial class WorldDisclosureImages {
             dependencies[index] = DependencyVersions(arena, rows[index]);
         }
         m_work.Count(PlacementReadings);
-        return m_placementReadings[audience] = new PlacementReading(source, arena, revision, placements, rows, versions, dependencies);
+        var reading = new PlacementReading(source, arena, revision, placements, rows, versions, dependencies);
+
+        if (Settled(arena)) { m_placementReadings[audience] = reading; }
+        return reading;
     }
 }

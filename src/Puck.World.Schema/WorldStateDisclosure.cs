@@ -1,3 +1,4 @@
+using Puck.Assets;
 using Puck.Commands;
 using System.Text.Json.Serialization;
 
@@ -198,122 +199,123 @@ public static class WorldStateDisclosure {
         );
     }
     // What one reader of a row answers about it: whether the row's own policy admits the reader, and whether it may
-    // read each held cell. A live observer answers from the store's policies; a recorded mask answers what an observer
-    // answered when the mask was taken (WorldRowImageWriter), so one composer serves both and they cannot differ.
+    // read each held cell. A live observer answers from the store's policies; the image table's recorded mask answers
+    // what an observer answered when the mask was taken. VisitRow asks either the same questions.
     internal interface IRowReader {
         bool ReadsRow(StateRow row);
         // index counts the row's held cells in StateArena.TryNextCell order, the cell at key among them.
         bool ReadsCell(StateRow row, int rowOrdinal, CellKey key, int index);
     }
+    // What one walk of a row produces. Every part is optional and one walk fills them all, so a cell put into an image
+    // is a cell whose bytes that walk wrote: Bytes takes the canonical bytes of what the reader is shown, Keys the
+    // ordinal of each replica cell's key, Replica the replica cells (from Exported, the row's export, which stands in
+    // walk order) and Observed the observation's cells and anonymous backs. Hidden counts what the observation withholds.
+    internal struct RowPass {
+        public System.Buffers.IBufferWriter<byte>? Bytes;
+        public List<int>? Keys;
+        public IReadOnlyList<StateCell>? Exported;
+        public List<StateCell>? Replica;
+        public List<WorldObservedCell>? Observed;
+        public int Hidden;
+    }
+    // The tags VisitRow writes before a cell: whether it is a replica cell, an observed cell or both, or an anonymous back.
+    internal const byte ReplicaTag = 1;
+    internal const byte ObservedTag = 2;
+    internal const byte BackTag = 4;
+
+    // The one walk of a stored row's held cells for one reader: every disclosure of a row (the image table's bytes and
+    // images, and a one-off observation) decides here what the reader is shown. A held cell the reader may read is a
+    // replica cell when replicas are asked for and an observed cell when the observation crosses; whole makes every
+    // cell readable, and a replica cell of every member whether or not it holds a value. A cell the reader may not
+    // read is counted under Count and Placeholder and, under Placeholder, takes its place as an anonymous back.
+    internal static void VisitRow<TReader>(StateArena arena, StateRow row, int rowOrdinal, ref TReader reader, bool whole, bool replicas, bool observes, ref RowPass pass)
+        where TReader : struct, IRowReader {
+        var hiddenPolicy = (row.Visibility?.Hidden ?? HiddenCells.Omit);
+        var cursor = 0;
+        var index = 0;
+
+        while (arena.TryNextCellSlot(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal, slot: out var slot)) {
+            var holds = arena.SlotHoldsValue(slot: slot);
+            var reads = (whole || reader.ReadsCell(index: index, key: key, row: row, rowOrdinal: rowOrdinal));
+            var replica = (replicas && (whole || (holds && reads)));
+            var observed = (observes && holds && reads);
+
+            if (replica || observed) {
+                if (pass.Bytes is { } bytes) {
+                    bytes.WriteByte(value: ((byte)((replica ? ReplicaTag : 0) | (observed ? ObservedTag : 0))));
+                    arena.WriteCell(rowOrdinal: rowOrdinal, slot: slot, writer: bytes);
+                }
+                if (replica) {
+                    pass.Keys?.Add(item: key.Ordinal);
+                    if (pass.Replica is { } cells) {
+                        var cell = (((pass.Exported is { } exported) && (index < exported.Count)) ? exported[index] : null);
+
+                        if ((cell is null) || (cell.Key != arena.Keys[key: key])) {
+                            throw new InvalidOperationException(message: "A row's export does not hold the cell the store visits.");
+                        }
+                        cells.Add(item: ((cell.Value.Kind == CellKind.Vector) ? (cell with { Value = cell.Value.DetachedCopy() }) : cell));
+                    }
+                }
+                if (observed) { pass.Observed?.Add(item: ObservedCell(arena: arena, key: key, rowOrdinal: rowOrdinal)); }
+            } else if (observes && holds && (hiddenPolicy != HiddenCells.Omit)) {
+                pass.Hidden++;
+                if (hiddenPolicy == HiddenCells.Placeholder) {
+                    pass.Bytes?.WriteByte(value: BackTag);
+                    pass.Observed?.Add(item: new(string.Empty, 0L, Hidden: true));
+                }
+            }
+            index++;
+        }
+    }
+    // One held cell as an observation carries it: as it is stored, with the trait that governs it and the clock that
+    // trait reads.
+    private static WorldObservedCell ObservedCell(StateArena arena, int rowOrdinal, CellKey key) {
+        _ = arena.TryRead(key: key, rowOrdinal: rowOrdinal, value: out var value);
+        var behavior = arena.LiveBehavior(key: key, rowOrdinal: rowOrdinal);
+
+        return new(
+            arena.Keys[key: key].Value,
+            (value.Kind switch {
+                CellKind.Bool => (value.AsBool ? 1L : 0L),
+                CellKind.Fixed => value.AsFixed,
+                CellKind.Int => value.AsInt,
+                _ => 0L,
+            }),
+            ((value.Kind == CellKind.Text) ? value.AsText : null),
+            arena.Observation(key: key, rowOrdinal: rowOrdinal),
+            Hidden: false,
+            Vector: Vector(arena: arena, key: key, rowOrdinal: rowOrdinal, value: value),
+            Advance: behavior.Advance,
+            Cycle: behavior.Cycle,
+            Dynamics: behavior.Dynamics,
+            Clock: (behavior.IsNone ? null : arena.ReadClock(key: key, rowOrdinal: rowOrdinal))
+        );
+    }
+    // A row's observation over the cells one walk observed: its declaration's public shape and the count withheld.
+    internal static WorldObservedRow ObservedRow(StateRow row, IReadOnlyList<WorldObservedCell> cells, int hidden) => new(
+        row.Name.Value,
+        row.Kind,
+        cells,
+        // Presentation stores the disclosed cells without the authority's domain dependencies or cursors.
+        row.IsSlot ? StateDomain.Slot.Instance : StateDomain.Keys.Instance,
+        hidden,
+        ((row.Kind == CellKind.Vector) ? row.Space : null),
+        row.Min,
+        row.Max,
+        row.Capacity
+    );
     // One document row's observation as Compose composes it, or null when the row does not cross: it declares no policy
-    // and is not presented, or its own policy excludes the reader. The shared image table composes one row through it.
+    // and is not presented, or its own policy excludes the reader.
     internal static WorldObservedRow? ComposeRow<TReader>(StateArena arena, ref TReader reader, StateRow row, int rowOrdinal, bool presented)
         where TReader : struct, IRowReader {
         // Which rows cross is decided by declaration, never by whether a member is restricted now.
-        if (
-            (row.Visibility is null) &&
-            !arena.DeclaresCellVisibility(rowOrdinal: rowOrdinal) &&
-            !presented
-        ) {
-            return null;
-        }
-        if (!reader.ReadsRow(row: row)) {
-            return null;
-        }
+        if ((row.Visibility is null) && !arena.DeclaresCellVisibility(rowOrdinal: rowOrdinal) && !presented) { return null; }
+        if (!reader.ReadsRow(row: row)) { return null; }
         var cells = new List<WorldObservedCell>();
-        var hidden = 0;
-        var hiddenPolicy = (row.Visibility?.Hidden ?? HiddenCells.Omit);
-        var cursor = 0;
-        var index = -1;
+        var pass = new RowPass { Observed = cells };
 
-        while (arena.TryNextCell(
-            cursor: ref cursor,
-            key: out var key,
-            rowOrdinal: rowOrdinal
-        )) {
-            index++;
-            if (!arena.TryRead(
-                key: key,
-                rowOrdinal: rowOrdinal,
-                value: out var value
-            )) {
-                continue;
-            }
-            if (reader.ReadsCell(
-                index: index,
-                key: key,
-                row: row,
-                rowOrdinal: rowOrdinal
-            )) {
-                var behavior = arena.LiveBehavior(
-                    key: key,
-                    rowOrdinal: rowOrdinal
-                );
-
-                cells.Add(item: new(
-                    arena.Keys[key: key].Value,
-                    (value.Kind switch {
-                        CellKind.Bool => (value.AsBool
-                            ? 1L
-                            : 0L),
-                        CellKind.Fixed => value.AsFixed,
-                        CellKind.Int => value.AsInt,
-                        _ => 0L,
-                    }),
-                    ((value.Kind == CellKind.Text)
-                        ? value.AsText
-                        : null),
-                    arena.Observation(
-                        key: key,
-                        rowOrdinal: rowOrdinal
-                    ),
-                    Hidden: false,
-                    Vector: Vector(
-                        arena: arena,
-                        key: key,
-                        rowOrdinal: rowOrdinal,
-                        value: value
-                    ),
-                    Advance: behavior.Advance,
-                    Cycle: behavior.Cycle,
-                    Dynamics: behavior.Dynamics,
-                    Clock: (behavior.IsNone
-                        ? null
-                        : arena.ReadClock(
-                            key: key,
-                            rowOrdinal: rowOrdinal
-                        ))
-                ));
-
-                continue;
-            }
-            if (hiddenPolicy == HiddenCells.Omit) {
-                continue;
-            }
-
-            hidden++;
-            if (hiddenPolicy == HiddenCells.Placeholder) {
-                cells.Add(item: new(
-                    string.Empty,
-                    0L,
-                    Hidden: true
-                ));
-            }
-        }
-        return new(
-            row.Name.Value,
-            row.Kind,
-            cells,
-            // Presentation stores the disclosed cells without the authority's domain dependencies or cursors.
-            row.IsSlot ? StateDomain.Slot.Instance : StateDomain.Keys.Instance,
-            hidden,
-            ((row.Kind == CellKind.Vector)
-                ? row.Space
-                : null),
-            row.Min,
-            row.Max,
-            row.Capacity
-        );
+        VisitRow(arena: arena, observes: true, pass: ref pass, reader: ref reader, replicas: false, row: row, rowOrdinal: rowOrdinal, whole: false);
+        return ObservedRow(row: row, cells: cells, hidden: pass.Hidden);
     }
     /// <summary>Returns the live document as one recipient may read it: every authored state row keeps its
     /// declaration, and each keeps only the cells the recipient may read, with what was withheld recorded by row

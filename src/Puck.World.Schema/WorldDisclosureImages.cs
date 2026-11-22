@@ -9,17 +9,20 @@ using Puck.Assets;
 namespace Puck.World;
 
 /// <summary>World-owned row images and the disclosed definitions composed from them.
-/// <para>What an audience is disclosed of a row is read from the store and one <see cref="WorldRowMask"/>, the audience's
-/// answers about that row, and from nothing else about the audience (<see cref="WorldRowImageWriter"/>). The table
-/// asks an audience for its mask in one place (<see cref="Reading"/>) and shares a row's composition between two
-/// audiences only when their masks for the row are equal, byte for byte. A composition is the canonical bytes'
-/// digest, which costs no allocation and is all a steady tick asks for, and the image those bytes describe, built
-/// from the store only when a delivery carries it and dropped whenever the composition is written again. An image
-/// is never found by a digest: an audience is handed the one built from the store under its own mask, and a digest
-/// decides only whether a stream is sent a row again.</para>
-/// <para>A row every audience reads whole has one composition. The table learns of a replaced arena or policy index
-/// only when a read next brings it current, so until then it holds what it composed before; no read reaches that,
-/// since every lookup is keyed by an audience that bringing the table current produces.</para></summary>
+/// <para>What an audience is disclosed of a row is read from the store and one <see cref="RowMask"/>, the audience's
+/// answers about that row, and from nothing else about the audience: one pass (<see cref="Pass"/>) writes the
+/// canonical bytes of what the mask discloses and builds the image they describe, over one walk of the row
+/// (<see cref="WorldStateDisclosure.VisitRow"/>). Only this table can make a mask. It asks an audience for one in
+/// <see cref="Reading"/> and shares a row's composition between two audiences only when their masks for the row are
+/// equal, byte for byte. A composition is the bytes' digest, which costs no allocation and is all a steady tick asks
+/// for, and the image, built from the store only when a delivery carries it and dropped whenever the composition is
+/// written again. An image is never found by a digest: an audience is handed the one built from the store under its
+/// own mask, and a digest decides only whether a stream is sent a row again.</para>
+/// <para>A row is read through an <see cref="AudienceKey"/>, which names the view it was taken for, so no caller
+/// pairs one view with another's audience; a key taken before the store moved is taken again where it is used, which
+/// also brings the table current to a replaced arena or policy index. While a journal scope is open nothing the
+/// table keeps is read or written (<see cref="Unsettled"/>). A row every audience reads whole has one
+/// composition.</para></summary>
 public sealed partial class WorldDisclosureImages {
     /// <summary>The name a counters report heads this table's monotonic work with.</summary>
     public const string SourceName = "world.disclosure";
@@ -53,31 +56,6 @@ public sealed partial class WorldDisclosureImages {
     public static WorkKind PlacementReadings { get; } = new(name: "world.disclosure.placement-readings", unit: "count", workClass: WorkClass.Pacing);
     private static readonly WorkKind[] WorkKindOrder = [RowCompositions, RowBytes, RowSkips, IndexRebuilds, DefinitionCompositions, DefinitionBytes, RowVisits, RowImages, FullScans, HoldingRows, PlacementReadings];
 
-    // One row as every audience with one mask is disclosed it. Version is the row version its digest was last taken
-    // at; a reader holds it current through an Entry or, for a row read whole, by the row's version alone. The mask
-    // never changes, so the composition is written again in place when its row moves.
-    private sealed class Composition(WorldRowReading reading, byte[] mask, ulong maskHash) {
-        public WorldRowMask Mask => new(reading: reading, bits: mask, length: mask.Length);
-        public ulong MaskHash { get; } = maskHash;
-        public bool Composed { get; set; }
-        public ulong Version { get; set; }
-        public Sha256Digest Digest { get; set; }
-        public int Bytes { get; set; }
-        // The image built from the store under the mask, once a delivery asked for it; dropped at every write.
-        public WorldRecipientImage? Image { get; set; }
-        // The ordinals of the keys of its replica cells, which a key-change proof tests a write against.
-        public int[] Keys = [];
-        public int KeyCount { get; set; }
-        // The disclosure window that last looked it up, for letting go of a mask no audience answers with any more.
-        public long Window { get; set; }
-    }
-    // One audience's reading of a row it reads cell by cell: the composition its mask named, and the row and dependency
-    // versions the mask was taken at. While both stand, the mask an observer would answer is the one taken then.
-    private sealed class Entry {
-        public ulong Version;
-        public ulong Dependencies;
-        public Composition Composition = null!;
-    }
     // One audience's disclosed definition. Between whole compositions it changes only row by row: a keyed write changes
     // a row's cells, which its image carries, and every other write moves the arena's DisclosureRevision, after which a
     // changed row's skeleton (its declaration and storage, cells removed) is derived again. Everything else in the
@@ -266,7 +244,17 @@ public sealed partial class WorldDisclosureImages {
         }
         return $"disclosure images {images}, bytes {bytes}, tick compositions {Compositions}, composed bytes {ComposedBytes}, skipped {Skipped}, definitions {DefinitionsComposed}";
     }
+    // Whether no journal scope is open on a store. Row versions and the policy revision settle when the outermost
+    // scope commits, so while one is open the table reads the store as it stands and keeps nothing: no mask, digest,
+    // image, definition, scene or placement reading it holds can be told current, and none is written, so a rewind
+    // leaves the table as the scope found it.
+    private static bool Settled(StateArena arena) => (arena.Journal.Scopes == 0);
     private void Prepare(WorldRecipientView view) {
+        PrepareIndex(view);
+        // An index read inside an open scope describes policies a rewind may take back: the next read builds it again.
+        if (!Settled(view.Arena)) { m_policyRevision = -1; }
+    }
+    private void PrepareIndex(WorldRecipientView view) {
         var arena = view.Arena;
         if (ReferenceEquals(m_arena, arena) && m_policyRevision == arena.DisclosureRevision) { return; }
         var sameArena = ReferenceEquals(m_arena, arena);
@@ -357,7 +345,7 @@ public sealed partial class WorldDisclosureImages {
             }
         }
     }
-    internal string Audience(WorldRecipientView view) {
+    private string AudienceText(WorldRecipientView view) {
         Prepare(view);
         var observer = view.Observer;
         var length = (m_policies.Length + 2);
@@ -370,166 +358,6 @@ public sealed partial class WorldDisclosureImages {
         // The key is a function of the answers alone, so a view whose answers stand keeps the string it was handed.
         if ((view.AudienceKey is { } held) && key.SequenceEqual(held)) { return held; }
         return view.AudienceKey = new string(key);
-    }
-    /// <summary>Gets the image a view is disclosed of a row, building it from the store when the row's composition
-    /// holds none: for a delivery that carries the row. A caller that only compares takes the digest
-    /// (<see cref="RowDigest"/>), which builds nothing.</summary>
-    internal WorldRecipientImage Image(WorldRecipientView view, int row) => Image(view, row, Audience(view));
-    internal WorldRecipientImage Image(WorldRecipientView view, int row, string audience) {
-        var composition = Reading(view, row, audience);
-
-        // An image the composition holds was built since the composition was last written, and the row has since
-        // moved, if at all, only by writes this audience's key proof covers.
-        if (composition.Image is { } held) { return held; }
-        m_work.Count(RowImages);
-        return composition.Image = WorldRowImageWriter.Materialize(
-            arena: view.Arena,
-            bytes: composition.Bytes,
-            digest: composition.Digest,
-            export: ((composition.Mask.Reading == WorldRowReading.Absent) ? null : Export(view.Arena, row)),
-            mask: composition.Mask,
-            row: row
-        );
-    }
-    // The digest of what a view is disclosed of a row: no image is built, and a row whose content stands costs a
-    // version compare.
-    internal Sha256Digest RowDigest(WorldRecipientView view, int row, string audience) => Reading(view, row, audience).Digest;
-
-    private static readonly Composition AbsentRow = ComposeAbsent();
-    private static Composition ComposeAbsent() {
-        var bytes = new ArrayBufferWriter<byte>();
-        var composition = new Composition(reading: WorldRowReading.Absent, mask: [], maskHash: 0UL) { Composed = true };
-
-        WorldRowImageWriter.Write(arena: null!, bytes: bytes, keys: null, mask: WorldRowMask.Absent, row: -1);
-        composition.Digest = Sha256Digest.Compute(content: bytes.WrittenSpan);
-        composition.Bytes = bytes.WrittenCount;
-        composition.Image = WorldRowImageWriter.Materialize(arena: null!, bytes: composition.Bytes, digest: composition.Digest, export: null, mask: WorldRowMask.Absent, row: -1);
-        return composition;
-    }
-
-    // The one place an audience decides what it is disclosed of a row. It answers three questions of the view, each
-    // read live: whether the row reaches its ceiling at all, whether it reads the row whole, and otherwise its mask
-    // (WorldRowMask.Take). Everything after that is the store and the mask. An audience's mask is kept while the row's
-    // version and its dependencies' versions stand, since every answer in it has one of them as its witness: a cell
-    // policy and a member by the row's version, a containing zone's members and cell policies and a readers row's
-    // tokens by the dependencies', and the declared policies' answers by the audience key the entry is filed under.
-    private Composition Reading(WorldRecipientView view, int row, string audience) {
-        if (!view.Includes(row)) { return AbsentRow; }
-        var arena = view.Arena;
-        var observer = view.Observer;
-        var version = arena.RowVersion(row);
-
-        if (observer.ReadsWhole(row)) { return Written(arena, row, (m_whole[row] ??= new Composition(reading: WorldRowReading.Whole, mask: [], maskHash: 0UL)), version); }
-        var dependencies = DependencyVersions(arena, row);
-        var key = (row, audience);
-
-        if (m_rows.TryGetValue(key, out var entry) && (entry.Dependencies == dependencies)) {
-            if (entry.Version == version) { return entry.Composition; }
-            // A write that named no key the audience reads left its mask and its content as they were. Rows born after
-            // the window opened have no captured version to prove that against.
-            var keys = entry.Composition.Keys.AsSpan(0, entry.Composition.KeyCount);
-
-            if (ReferenceEquals(arena, m_windowArena) && ((uint)row < (uint)m_windowVersions.Length) && (entry.Version >= m_windowVersions[row]) &&
-                (m_changes is not null) && !m_changes.Overlaps(row, keys) && !arena.ChangedKeys.Overlaps(row, keys)) {
-                Skipped++;
-                m_work.Count(RowSkips);
-                entry.Version = version;
-                return entry.Composition;
-            }
-        }
-
-        var length = WorldRowMask.Take(arena: arena, observer: ref observer, row: row, scratch: ref m_maskScratch);
-        var composition = Written(arena, row, Masked(row, m_maskScratch.AsSpan(0, length)), version);
-
-        if (entry is null) { m_rows[key] = entry = new Entry(); }
-        entry.Version = version; entry.Dependencies = dependencies; entry.Composition = composition;
-        return composition;
-    }
-    // The composition of one mask over a row, found by the mask's bytes: equal bytes, never an equal hash, share it. A
-    // row's masks that no audience has answered with for a window are let go once the row holds more than a few; an
-    // audience that still holds one keeps reading it, and a later audience with the same mask composes its own.
-    private Composition Masked(int row, ReadOnlySpan<byte> mask) {
-        var hash = Puck.Maths.Fnv1aHash.Create();
-
-        hash.Add(values: mask);
-        var held = (m_masked[row] ??= []);
-        Composition? found = null;
-
-        for (var index = (held.Count - 1); index >= 0; index--) {
-            var candidate = held[index];
-
-            if ((candidate.MaskHash == hash.Value) && candidate.Mask.Bytes.SequenceEqual(mask)) {
-                found = candidate;
-            } else if ((held.Count > MaskedRetained) && (candidate.Window < (m_window - 1))) {
-                held.RemoveAt(index);
-            }
-        }
-        if (found is null) { held.Add(found = new Composition(reading: WorldRowReading.Restricted, mask: mask.ToArray(), maskHash: hash.Value)); }
-        found.Window = m_window;
-        return found;
-    }
-    private const int MaskedRetained = 8;
-
-    // Brings a composition current to its row: one pass of the one writer over the store and the mask, whose bytes are
-    // digested in the table's reused buffer and never kept. Every such write drops the composition's image, whether or
-    // not the digest moved, so an image is never carried from one state of the row to another on the strength of a
-    // digest: the next delivery to carry the row builds it from the store. A stream whose digest stands keeps the
-    // image it holds itself (WorldDeliveryCursor), which costs nothing.
-    private Composition Written(StateArena arena, int row, Composition composition, ulong version) {
-        if (composition.Composed && (composition.Version == version)) { return composition; }
-        var keyed = (composition.Mask.Reading == WorldRowReading.Restricted);
-
-        m_imageBytes.ResetWrittenCount();
-        m_keyScratch.Clear();
-        WorldRowImageWriter.Write(arena: arena, bytes: m_imageBytes, keys: (keyed ? m_keyScratch : null), mask: composition.Mask, row: row);
-        var digest = Sha256Digest.Compute(content: m_imageBytes.WrittenSpan);
-
-        Compositions++; ComposedBytes += m_imageBytes.WrittenCount;
-        m_work.Count(RowCompositions); m_work.Add(RowBytes, m_imageBytes.WrittenCount);
-        composition.Image = null;
-        composition.Digest = digest;
-        composition.Bytes = m_imageBytes.WrittenCount;
-        composition.Version = version;
-        composition.Composed = true;
-        Puck.Abstractions.Memory.ArrayCapacity.EnsureLength(ref composition.Keys, m_keyScratch.Count);
-        m_keyScratch.CopyTo(composition.Keys);
-        composition.KeyCount = m_keyScratch.Count;
-        return composition;
-    }
-    // A row's live export, sharing every cell its previous export from the same arena still holds unchanged.
-    private StateRow Export(StateArena arena, int row) {
-        if (!ReferenceEquals(m_exportArena, arena) || (m_exports.Length != arena.Rows.Count)) {
-            m_exportArena = arena;
-            m_exports = new StateRow?[arena.Rows.Count];
-        }
-        return m_exports[row] = arena.ToRow(row, previous: m_exports[row]);
-    }
-    // The keys a row holds, in order, as one list every stream that reads the row whole shares: the same list while
-    // the row's structure version stands, and after it moves for as long as the keys read the same.
-    internal WorldRowMembers Members(WorldRecipientView view, int row) {
-        Prepare(view);
-        if (!view.Includes(row)) { return WorldRowMembers.Empty; }
-        var arena = view.Arena;
-        var structure = arena.RowStructureVersion(row);
-
-        if ((m_members[row] is { } held) && (m_memberStructures[row] == structure)) { return held; }
-        m_memberStructures[row] = structure;
-        if (!arena.StoresCells(row)) { return m_members[row] = (arena.Rows[row].Cells is { Count: > 0 } declared) ? new WorldRowMembers([.. declared.Select(cell => cell.Key)]) : WorldRowMembers.Empty; }
-        var kept = ((m_members[row] is { } before) ? before.Keys : default);
-        var cursor = 0;
-        var count = 0;
-        var same = true;
-
-        while (arena.TryNextCell(row, ref cursor, out var key)) {
-            same &= (count < kept.Length) && (kept[count] == arena.Keys[key]);
-            count++;
-        }
-        if (same && (count == kept.Length) && (m_members[row] is { } standing)) { return standing; }
-        var keys = new CellName[count];
-
-        cursor = 0;
-        for (var index = 0; (index < count) && arena.TryNextCell(row, ref cursor, out var key); index++) { keys[index] = arena.Keys[key]; }
-        return m_members[row] = new WorldRowMembers(keys);
     }
     // The content identity of the recipient's disclosed definition. Two documents that disclose the same frame, rows and
     // row observations share it; work follows the rows that changed since the audience's last read.
@@ -649,10 +477,14 @@ public sealed partial class WorldDisclosureImages {
     // Only the source, the audience and the images of the rows the placements read (FrameRows) move it, so only those
     // rows are imaged here: every other changed row waits for the definition's own identity (Current), which a session
     // sink's per-tick check never asks for.
-    internal ContentPin FrameIdentity(WorldRecipientView view) {
-        var audience = Audience(view);
+    internal ContentPin FrameIdentity(WorldRecipientView view) => Framed(view, Audience(view)).Frame;
+    // The audience's definition with its frame current and digested.
+    private AudienceDefinition Framed(WorldRecipientView view, AudienceKey audience) {
         var entry = DefinitionFor(view, audience);
-        return FrameOf(FrameRowsMoved(view, audience, entry) ? Compose(view, audience) : entry);
+
+        if (FrameRowsMoved(view, audience, entry)) { entry = Compose(view, audience); }
+        _ = FrameOf(entry);
+        return entry;
     }
     internal bool TryAdvanceAppearance(WorldRecipientView view, ContentPin? held, Sha256Digest? heldIdentity, out ContentPin next, out Sha256Digest identity) {
         var entry = Current(view);
@@ -661,14 +493,14 @@ public sealed partial class WorldDisclosureImages {
         return (held == next && heldIdentity == identity) ||
             (held is not null && held == entry.BeforeAppearance && heldIdentity == entry.BeforeAppearanceIdentity);
     }
-    private bool FrameRowsMoved(WorldRecipientView view, string audience, AudienceDefinition entry) {
+    private bool FrameRowsMoved(WorldRecipientView view, AudienceKey audience, AudienceDefinition entry) {
         var arena = view.Arena;
         m_work.Add(RowVisits, entry.FrameRowOrdinals.Length);
         foreach (var row in entry.FrameRowOrdinals) {
             // The entry's row record changes only in Current, which refreshes skeletons with it; here a row whose image
             // stands is left to Current, and the image table answers its repeated reads from its own cache.
             if ((arena.RowVersion(row) == entry.Versions[row]) && (DependencyVersions(arena, row) == entry.Dependencies[row])) { continue; }
-            if (!entry.Holds(AudienceDefinition.ImageSlot(row), RowDigest(view, row, audience))) { return true; }
+            if (!entry.Holds(AudienceDefinition.ImageSlot(row), RowDigest(audience, row))) { return true; }
         }
         return false;
     }
@@ -681,7 +513,7 @@ public sealed partial class WorldDisclosureImages {
         var audience = Audience(view);
         var rows = new WorldStateRow[entry.Rows.Length];
 
-        for (var row = 0; row < rows.Length; row++) { rows[row] = entry.Rows[row] with { Cells = Image(view, row, audience).Cells }; }
+        for (var row = 0; row < rows.Length; row++) { rows[row] = entry.Rows[row] with { Cells = Image(audience, row).Cells }; }
         return entry.Disclosed = entry.Composed with { StateRaw = state with { World = rows } };
     }
     // Brings one audience's definition current: rows whose version and dependency versions stand are skipped without a
@@ -690,6 +522,8 @@ public sealed partial class WorldDisclosureImages {
         var audience = Audience(view);
         var entry = DefinitionFor(view, audience);
         var arena = view.Arena;
+        // Inside an open scope the definition was composed from the store as it stands and is kept nowhere.
+        if (!Settled(arena)) { return entry; }
         var moved = m_movedScratch;
         moved.Clear();
         // A row's version and its dependencies' versions move only through the arena's version moves, so the rows it
@@ -722,8 +556,8 @@ public sealed partial class WorldDisclosureImages {
 
     private readonly List<(int Row, int Holding)> m_holdingRows = [];
 
-    private AudienceDefinition DefinitionFor(WorldRecipientView view, string audience) {
-        if (!m_definitions.TryGetValue(audience, out var entry)) { return Compose(view, audience); }
+    private AudienceDefinition DefinitionFor(WorldRecipientView view, AudienceKey audience) {
+        if (!Settled(view.Arena) || !m_definitions.TryGetValue(audience.Text, out var entry)) { return Compose(view, audience); }
         var source = view.Source;
         if (ReferenceEquals(entry.Source, source)) { return entry; }
 
@@ -753,7 +587,7 @@ public sealed partial class WorldDisclosureImages {
     // A direct row can be patched even if the audience re-deals other placements. Reuse the existing composer for
     // derived children, transformed or omitted rows, and newly active bits that read restricted state. Apart from
     // DefinitionFor, which every tick calls, so the test below captures the view only when holdings moved.
-    private AudienceDefinition AdoptHoldings(WorldRecipientView view, string audience, AudienceDefinition entry, WorldDefinition source,
+    private AudienceDefinition AdoptHoldings(WorldRecipientView view, AudienceKey audience, AudienceDefinition entry, WorldDefinition source,
         ReadOnlySpan<(int Row, int Holding)> changes) {
         bool Restricted(string name, string? _) => !view.ReadsWhole(name);
         m_holdingRows.Clear();
@@ -778,14 +612,14 @@ public sealed partial class WorldDisclosureImages {
     // Brings one row of an audience's definition current, reporting false when the frame moved with it and the whole
     // definition must be composed again. A row beyond the authored rows, or one whose version and dependency versions
     // stand as recorded, is left as it is.
-    private bool Refresh(WorldRecipientView view, AudienceDefinition entry, string audience, int row) {
+    private bool Refresh(WorldRecipientView view, AudienceDefinition entry, AudienceKey audience, int row) {
         if ((uint)row >= (uint)entry.Rows.Length) { return true; }
         var arena = view.Arena;
         m_work.Count(RowVisits);
         var version = arena.RowVersion(row);
         var dependencies = DependencyVersions(arena, row);
         if ((version == entry.Versions[row]) && (dependencies == entry.Dependencies[row])) { return true; }
-        var digest = RowDigest(view, row, audience);
+        var digest = RowDigest(audience, row);
         if (entry.FrameRows[row] && !entry.Holds(AudienceDefinition.ImageSlot(row), digest)) { return false; }
         entry.Versions[row] = version; entry.Dependencies[row] = dependencies;
         entry.Store(AudienceDefinition.ImageSlot(row), digest);
@@ -802,7 +636,7 @@ public sealed partial class WorldDisclosureImages {
         }
         return true;
     }
-    private AudienceDefinition Compose(WorldRecipientView view, string audience) {
+    private AudienceDefinition Compose(WorldRecipientView view, AudienceKey audience) {
         var source = view.Source;
         var arena = view.Arena;
         var count = source.AuthoredState.Count;
@@ -816,7 +650,7 @@ public sealed partial class WorldDisclosureImages {
             versions[row] = arena.RowVersion(row);
             dependencies[row] = DependencyVersions(arena, row);
             structures[row] = arena.RowStructureVersion(row);
-            RowDigest(view, row, audience).CopyTo(digests.AsSpan(AudienceDefinition.ImageSlot(row), SHA256.HashSizeInBytes));
+            RowDigest(audience, row).CopyTo(digests.AsSpan(AudienceDefinition.ImageSlot(row), SHA256.HashSizeInBytes));
         }
         var fields = WorldStateDisclosure.DisclosedFields.For(source, arena, view.Recipient, view.Unrestricted);
         var disclosed = WorldStateDisclosure.DiscloseDocument(source, arena, view.Recipient, view.Unrestricted, fields);
@@ -834,8 +668,11 @@ public sealed partial class WorldDisclosureImages {
         var frameRows = rows.Select(row => disclosed.PlacementReads.Contains(row.Name.Value)).ToArray();
         DefinitionsComposed++;
         m_work.Count(DefinitionCompositions);
-        return m_definitions[audience] = new AudienceDefinition(source, composed, frame, fields, frameRows, rows, versions, dependencies,
+        var entry = new AudienceDefinition(source, composed, frame, fields, frameRows, rows, versions, dependencies,
             arena.DisclosureRevision, digests) { Arena = arena, MovesRead = moves, Structures = structures };
+
+        if (Settled(arena)) { m_definitions[audience.Text] = entry; }
+        return entry;
     }
     private byte[] DigestOf(WorldStateRow skeleton) => Digest(CanonicalJsonDocument.SerializeCompact(skeleton, WorldJsonContext.Default.WorldStateRow));
 }
