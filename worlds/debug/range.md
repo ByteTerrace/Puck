@@ -52,7 +52,10 @@ The far shadow cascade has no item to tint. `world.rates` reports it
 times a second whenever its lever is on.
 
 `world.rates` lists every item each lever rated on the latest frame, with its
-size on screen and its tier. A body is listed as `body:<n>=<px/m>@<hz>`, a
+size on screen and its tier. The bodies are listed as of the frames after the
+previous `world.rates`: a frame rates only the bodies it must pose unless
+something reads the list, so run it twice and read the second. A body is
+listed as `body:<n>=<px/m>@<hz>`, a
 window as `session$<screen>=<display px>@<hz>`, and a screen as
 `source$machine$…=<share of its own height>@<hz>`. At 1280x900, from the spawn
 with the camera at rest, it reads like this, each body taking the slowest tier

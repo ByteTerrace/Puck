@@ -147,13 +147,14 @@ public sealed partial class WorldCreationInstances {
     /// <para>
     /// A registration repacks only while restless: its root pose, pose epoch, body facts or replay cursor moved, a
     /// state mirror slot its reads hold (lanes, drivers, poses, effectors) changed, or its last repack still changed
-    /// its slots. Every live registration's volumes are appended each frame.
+    /// its slots. The pack visits only the registrations one of those woke (<see cref="VisitCount"/>), and each keeps
+    /// what its last visit found (its volumes, door clip and mesh draw) until the next.
     /// </para>
     /// <para>
-    /// The pack runs in three passes. A serial pass decides, in pool order, which registrations park, retain, hold or
-    /// pose in full; the full poses then run across <see cref="Jobs"/> as one <see cref="JobClass.Frame"/> fork, a
-    /// partition a registration, each writing only its own registration's state and slot range; a last serial pass
-    /// settles every registration in pool order. A registration whose rig reads another body
+    /// The pack runs in three passes over the registrations it visits. A serial pass decides, in pool order, which
+    /// park, retain, hold or pose in full; the full poses then run across <see cref="Jobs"/> as one
+    /// <see cref="JobClass.Frame"/> fork, a partition a registration, each writing only its own registration's state and
+    /// slot range; a last serial pass settles each in pool order. A registration whose rig reads another body
     /// (<see cref="CreationRigReadKind.Body"/>) is decided and posed in that last pass, so it reads every body it may read
     /// as this frame posed it.
     /// </para></summary>
@@ -634,7 +635,7 @@ public sealed partial class WorldCreationInstances {
         }
     }
     // The last pass for one pool entry: settles a full or held pose with the moved set and its rate records, then notes
-    // the registration's tier, volumes, door straddle and mesh draw, which every live registration contributes each frame.
+    // the registration's volumes, door straddle and mesh draw, which stand until its next visit, and keeps it awake or lets it sleep.
     private void EndStep(float deltaSeconds, IReadOnlyList<WorldPortalStraddle.Door> doors, int index, SdfMovedTransforms moved, Span<DynamicTransform> transforms) {
         ref var step = ref m_steps[index];
 

@@ -652,23 +652,25 @@ wait behind them.
    costs the frame nothing per world.
 2. **The frame fork.** Capture, pack and view recording run across one pool,
    partitioned by registration. Built: the pool's `Frame` and `Tick` classes,
-   whose forks run side by side, and the pose pack's fork, which poses each
-   woken registration in its own partition. Left:
-   - The pack still visits every registration every frame before it knows
-     anything moved (`WorldCreationInstances.BeginStep`: `RootPose`, `Wake`,
-     `NoteMotion`; `sdf.creations.registrations.visited`), and every live
-     registration rebuilds its volumes, straddle test, mesh draw and rate
-     every frame (`EndStep`). The replacement is an awake set: body pose
-     changes from the client's published poses, changed state cells from the
-     mirror's refresh, active drivers and followers, and a timer wheel on a
-     held pose's `RateSeconds`, with the per-frame outputs retained per
-     registration so a sleeping one costs nothing. It waits for the tick
-     thread's published per-frame state, which is where body pose changes
-     come from.
-   - Rating tests every view frustum and shadow cascade per registration
-     (`WorldCreationInstances.Shown`, `BodyPixelsPerMetre`); at a town's
-     hundreds of bodies that wants one cull pass over a grid or the GPU
-     cull's previous-frame visibility.
+   whose forks run side by side, the pose pack's fork, which poses each
+   woken registration in its own partition, and the awake sets: the stamp
+   pool, its rigid bodies and the catalog avatars each visit only what the
+   client's body journal, the mirror's change log, a due cursor or their own
+   continuation woke, and held poses out of every view's sight are culled a
+   cell at a time. Left:
+   - The mesh dresser still rebuilds the draw and its row for each moved
+     slot-riding copy and group (`SdfMeshDresser.DressHeld`), for the CPU
+     readers of `SdfMeshDraw.ObjectToWorld`, though the kernels place such a
+     draw from its slot's row. Deriving the CPU placement from the slot
+     leaves a moving body no dress work.
+   - The adjacency emitter asks every index of each neighbour's capacity each
+     frame (`WorldAdjacencySceneEmitter.SelectBand`, from its `PrepareFrame`,
+     `WriteRevision` and pack). A neighbour needs an active list and a body
+     journal of its own, as a stamp source has
+     (`IWorldStampSource.CopyActiveBodies`, `IWorldStampSource.BodyChanges`).
+   - A session scene's source keeps no body journal
+     (`WorldSessionStampSource`), so its pool and avatars read every body
+     they draw each pack.
    - Recording in dependency waves
      ([the memo's R1](engine-job-system.md#6-build-order)) waits on its
      admission reading, taken with four seats' views (M2) beside one.

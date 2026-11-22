@@ -1467,9 +1467,12 @@ world.counters render.record  # record jobs' host time per phase, serial sum and
 The bodies lever rates every stamp pool the presentation packs: the boot world's
 and each routed scene's (a shared session scene among them), each by the views and
 shadow cascades of its own frame (`WorldCreationInstances.ShadowBy`). A pool no view
-rates poses every registration every frame and re-stages each of its mesh rows, which
+rates poses every awake registration every frame and re-stages each of its mesh rows, which
 shows as `capture` and `pack` in `host.frames` and as `sdf.creations.slots.posed` far
-above the transform rows `sdf.transforms` packs.
+above the transform rows `sdf.transforms` packs. `world.rates` lists the bodies as of
+the frames after its previous read: the pool rates only what it must pose, and rates
+every body for the listing only for `SdfUpdateRateReadings.FramesPerRead` frames after
+a read or while the tier tint is on, so read twice and keep the second.
 
 Divide `gpu.queue` and `render.record` deltas by their `frames` deltas; [gpu
 cost](references/gpu-cost.md#count-queue-work-and-record-jobs) reads them, and
@@ -1635,7 +1638,20 @@ counts in `sdf.transforms`, never in `records.posed`.
   through the composition source's copy journal (`SdfFrame.MeshCopyChanges`, a `GpuChangedRows` read by a
   `GpuRowCursor`), which the dresser and the bake's layout check each read. `sdf.instances.dress.groups-visited`,
   `.groups-stood` and `.copies-visited` count it.
-- **The pose pack forks by registration.** `WorldCreationInstances.PackTransforms` decides every registration in a
+- **A pack visits only what woke.** The stamp pool, its rigid bodies (`WorldRigidAssets.Pack`) and the catalog
+  avatars (`WorldCatalogAvatars.Pack`) each keep an awake set, so a frame costs the registrations something woke, never
+  the pool: a body's presented inputs through the source's journal (`IWorldStampSource.BodyChanges`, which
+  `WorldClient` fills as it resolves poses and admits snapshots), a leased state cell through the mirror's change log
+  (`WorldLeaseWatch`, `WorldStateMirror.TryChangedSince`), a replay cursor or cue coming due (a deadline heap; nothing
+  walks the pool to tick it), and the registration's own continuation. The header of
+  `WorldCreationInstances.Awake.cs` lists every cause and its one door: an input a pose reads that neither the
+  journal nor the change log carries must wake its readers there, or a sleeping registration draws a stale pose. A
+  held pose (`RateOwed`) sits in a 32 m cell; each pack tests each occupied cell's box once against the views and
+  cascades, leaves the members of a cell nothing may show asleep and wakes the rest to rate themselves.
+  `WorldCreationInstances.VisitCount`, `WorldRigidAssets.VisitCount` and `sdf.creations.registrations.visited` count
+  the visits. The composition reads only the rigid copies a pack names (`ISdfSceneEmitter.MeshInstanceChanges`) while
+  every emitter's `MeshInstancesRevision` stands.
+- **The pose pack forks by registration.** `WorldCreationInstances.PackTransforms` decides every visited registration in a
   serial pass (`BeginStep`), poses the woken ones across the `JobPool` as one `JobClass.Frame` fork, one partition a
   registration (`Pose`, `PackRegistration`), and settles them in pool order (`EndStep`). A partition writes only its own
   registration and slot range and keeps its scratch on its own stack; anything shared it would write (a list, a pool
