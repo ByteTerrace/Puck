@@ -1130,6 +1130,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   function's guard cannot protect them. An ordinary material becomes a huge
   unsigned index otherwise, which can lose the Vulkan device while Direct3D 12
   returns zero for the out-of-bounds read.
+- **A fragment stage addresses per-pixel storage only from a covered lane.** A
+  quad that straddles the last row or column of a grid with an odd height or
+  width runs helper lanes outside the grid, and a helper's `SV_Position` names a record
+  past the end of the visibility records or glass sums. Read or write a buffer
+  addressed by the pixel only under `!IsHelperLane()`, as the glass raster
+  (`passes/sdf-mesh-glass.frag.hlsl`) and the cascade glass
+  (`passes/sdf-mesh-shadow-glass.frag.hlsl`) do; a texture `Load` there is
+  bounded. Vulkan on NVIDIA loses the device on the read once it passes the
+  allocation's slack, while Direct3D 12 returns zero, so an even-sized window
+  and Direct3D 12 both hide it.
 - **One `mapCore` call site.** The bake (`passes/sdf-mesh-bake.comp.hlsl`) is
   the only GPU kernel that walks the field, and it does so through one rolled
   `[loop]` over its samples. Every call site is a full inlined copy of the
