@@ -43,8 +43,7 @@ float3 sdfViewsStage(SdfPixel p, bool shadesPixel, out float coverage, out float
     }
     bool useFinalShading = worldFinalShadingMode(p.viewMode);
     bool curvatureShading = worldCurvatureShadingEnabled();
-    precise float3 rayTravel = p.rayDirection * s.t;
-    precise float3 surfacePoint = p.rayOrigin + rayTravel;
+    float3 surfacePoint = sdfPixelSurfacePoint(p, s.t);
     int material = s.material;
     // The view's mode is uniform across the group, so every lane reaches the tile's barriers or none does.
     SdfLightMasks lights = sdfViewsTileLights(p, useFinalShading, s.hit, surfacePoint, s.t);

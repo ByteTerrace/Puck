@@ -189,7 +189,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             // remain independent. The gather is the probe lookup's at the hit's geometric normal, shared across the
             // compatible pixels of its cell (sdfViewsProbesAt); the cubes are read along this pixel's shading normal.
             bool indirectSky = ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u);
-            SdfMeshProbes probes = sdfViewsProbesAt(p, surfacePoint, s.normal);
+            SdfMeshProbes probes = sdfViewsProbesAt(p);
 
             // Every light answers through the one interface (sdfLightResponse): its diffuse term joins the radiance the
             // material shade lights by, and its rim and specular terms and its attenuation of reflected light follow the
