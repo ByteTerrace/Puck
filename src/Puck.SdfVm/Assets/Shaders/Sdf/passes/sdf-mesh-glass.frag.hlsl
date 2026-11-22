@@ -26,11 +26,16 @@ GlassFragment PSMain(MeshRasterVertex input) {
     uint first = (3u * input.triangleIndex);
     float3 a = sdfMeshWorldPosition(record, first);
     bool front = (dot(cross((sdfMeshWorldPosition(record, (first + 1u)) - a), (sdfMeshWorldPosition(record, (first + 2u)) - a)), (input.world - view.position.xyz)) < 0.0);
-    SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, passGroup.imageExtent));
-    float opaque = (sdfVisibilityHit(visibility) ? visibility.t : worldFarDistance(view));
-    bool counts = (t < opaque);
+    bool counts = false;
 
+    // Only a covered pixel addresses the per-pixel records and sums: a helper lane of a quad that straddles the grid's
+    // last row or column lies outside the grid, where its record is past the end of the buffers. A helper's outputs
+    // are discarded, so it needs neither.
     if (!IsHelperLane()) {
+        SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, passGroup.imageExtent));
+        float opaque = (sdfVisibilityHit(visibility) ? visibility.t : worldFarDistance(view));
+
+        counts = (t < opaque);
         float3 ray = cameraRayDirection(view, (float2(pixel) + 0.5) / float2(passGroup.imageExtent));
         float start = worldSurfaceNearDistance(view) / dot(ray, view.forward.xyz);
         int materialId = sdfMeshRasterMaterial(input.draw, input.triangleIndex);

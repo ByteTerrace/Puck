@@ -77,6 +77,43 @@ public static class UnicodeCodePointRangeExpander {
         wildcardSelected = false;
         var expanded = new HashSet<int>();
 
+        foreach (var (start, end) in Spans(ranges: ranges)) {
+            if (start < 0) {
+                wildcardSelected = true;
+                continue;
+            }
+
+            for (var codePoint = start; (codePoint <= end); codePoint++) {
+                expanded.Add(item: codePoint);
+            }
+        }
+
+        return expanded;
+    }
+    /// <summary>Counts the scalar values a selection asks for without expanding it: each range and code point as
+    /// written, so one named twice counts twice, and the wildcard as the whole Basic Multilingual Plane. The count is
+    /// never less than the distinct set <see cref="Expand(IReadOnlyList{string}, out bool)"/> and the wildcard give, so
+    /// a caller bounds a selection by it before doing any work for it.</summary>
+    /// <param name="ranges">The range entries to parse. Empty or whitespace entries are ignored.</param>
+    /// <returns>The count.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="ranges"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">A token is malformed, as <see cref="Expand(IReadOnlyList{string}, out bool)"/> refuses it.</exception>
+    public static long CountRequested(IReadOnlyList<string> ranges) {
+        ArgumentNullException.ThrowIfNull(ranges);
+
+        var count = 0L;
+
+        foreach (var (start, end) in Spans(ranges: ranges)) {
+            count += ((start < 0)
+                ? ((0x10000 - 0x800))
+                : ((end - start) + 1));
+        }
+
+        return count;
+    }
+
+    // Each token of a selection as an inclusive span of scalar values; the wildcard is the span (-1, -1).
+    private static IEnumerable<(int Start, int End)> Spans(IReadOnlyList<string> ranges) {
         foreach (var entry in ranges) {
             if (string.IsNullOrWhiteSpace(value: entry)) {
                 continue;
@@ -89,38 +126,35 @@ public static class UnicodeCodePointRangeExpander {
 
             foreach (var token in tokens) {
                 if (token == "*") {
-                    wildcardSelected = true;
+                    yield return (-1, -1);
                     continue;
                 }
 
                 var separatorIndex = token.IndexOf(value: '-');
 
-                if (separatorIndex >= 0) {
-                    var startCodePoint = ParseCodePoint(token: token[..separatorIndex]);
-                    var endCodePoint = ParseCodePoint(token: token[(separatorIndex + 1)..]);
+                if (separatorIndex < 0) {
+                    var codePoint = ParseCodePoint(token: token);
 
-                    if (startCodePoint > endCodePoint) {
-                        throw new ArgumentException(message: $"Range '{token}' had a start value greater than its end value.");
-                    }
-
-                    if (RangeIncludesSurrogates(
-                        endCodePoint: endCodePoint,
-                        startCodePoint: startCodePoint
-                    )) {
-                        throw new ArgumentException(message: $"Range '{token}' included UTF-16 surrogate code points (U+D800-U+DFFF), which are not valid Unicode scalar values.");
-                    }
-
-                    for (var codePoint = startCodePoint; (codePoint <= endCodePoint); codePoint++) {
-                        expanded.Add(item: codePoint);
-                    }
-
+                    yield return (codePoint, codePoint);
                     continue;
                 }
 
-                expanded.Add(item: ParseCodePoint(token: token));
+                var startCodePoint = ParseCodePoint(token: token[..separatorIndex]);
+                var endCodePoint = ParseCodePoint(token: token[(separatorIndex + 1)..]);
+
+                if (startCodePoint > endCodePoint) {
+                    throw new ArgumentException(message: $"Range '{token}' had a start value greater than its end value.");
+                }
+
+                if (RangeIncludesSurrogates(
+                    endCodePoint: endCodePoint,
+                    startCodePoint: startCodePoint
+                )) {
+                    throw new ArgumentException(message: $"Range '{token}' included UTF-16 surrogate code points (U+D800-U+DFFF), which are not valid Unicode scalar values.");
+                }
+
+                yield return (startCodePoint, endCodePoint);
             }
         }
-
-        return expanded;
     }
 }

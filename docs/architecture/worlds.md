@@ -1120,9 +1120,20 @@ what it would show in the boot world, from that world's own sources, never the b
   frame, so cameras filming each other's screens never wait on each other within a frame.
 - Text draws through that world's own font catalog. A world this process loaded from a file reads
   its fonts beside that file. A world another authority delivered has no directory, and its font
-  paths are never opened: each font is read by its content pin from what this process already holds,
-  a font file a world it loaded named under the same pin, or the shared content store
-  (`WorldProjectionContent.Resolver`). Every catalog shares one font cache, keyed by font content.
+  paths are never opened: each font is read by its content pin (`WorldProjectionContent.Resolver`)
+  from a font file a world this process runs names under the same pin, or from a content store.
+  Every world this process runs has the content it names by pin indexed when its document becomes
+  live (`WorldContentIndex`), so a delivered world finds a font whether or not the world that ships
+  it has drawn any text. A font this process does not hold is fetched from the delivering authority
+  where the delivery is decoded (`WorldContentIndex.Fetch`), through the same door that serves
+  prototype bodies: the authority answers only a pin the recipient's current projection names, and
+  the recipient stores the bytes only when they hash to the pin and open as a font. What one
+  authority makes a process fetch is kept in that authority's own bounded store
+  (`WorldProjectionContent.AuthorityStore`), so it cannot evict another authority's content. A
+  delivered catalog is held to ceilings before any font is read or rasterized
+  (`TextFontCatalogLimits.Delivered`: its fonts, the glyphs its rows ask for, its font bytes and its
+  atlas pixels), and a catalog past one reports a text fault naming it. Every catalog shares one
+  font cache, keyed by font content.
   An unresolved delivery clears the drawn text and atlas, including a catalog that previously drew,
   and reports its text fault until a valid delivery arrives.
 - A probe shows nothing: only the boot world runs a probe host, so a probe of another world opens
@@ -1130,9 +1141,12 @@ what it would show in the boot world, from that world's own sources, never the b
 - A producer of the local device's content (a camera, a desktop capture) shows nothing, so being
   shown through a portal never opens the local user's camera or desktop.
 
-A world delivered from another authority runs its machines there, so its machines show nothing here,
-and its text shows only when this process holds its fonts: no message yet fetches a font it lacks,
-and a presentation-tier delivery carries no text catalog. `world.nesting` says why in each case. Its
+A world delivered from another authority runs its machines there, so its machines show nothing here.
+A presentation-tier delivery carries the world's font catalog and each machine's presentation half
+(`WorldProjectedMachine`: what it is and what it is cabled to, never its hardware bindings or
+content folders). `world.nesting` says why a screen is dark in each case; on a host that draws
+nothing it lists the delivered world as unread, with the fonts and machines its document carries and
+a text fault when a font is not held. Its
 session screens show nothing too: the authority holds a screen's session only for the worlds this
 process runs, and no message carries a remote world's screen session to the presenting process. A
 remote world's camera views and producers show.

@@ -60,7 +60,10 @@ public sealed partial class WorldDisclosureImages {
     public static WorkKind FullScans { get; } = new(name: "world.disclosure.full-scans", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting placement rows adopted through a proven holding-only move.</summary>
     public static WorkKind HoldingRows { get; } = new(name: "world.disclosure.holding-rows", unit: "count", workClass: WorkClass.Pacing);
-    private static readonly WorkKind[] WorkKindOrder = [RowCompositions, RowBytes, RowSkips, IndexRebuilds, DefinitionCompositions, DefinitionBytes, RowVisits, ContentVisits, FullScans, HoldingRows];
+    /// <summary>Gets the kind counting placement projections composed for a view's door (<see cref="WorldRecipientView.Placements"/>);
+    /// a reading whose inputs stand is answered from the table and counts nothing.</summary>
+    public static WorkKind PlacementReadings { get; } = new(name: "world.disclosure.placement-readings", unit: "count", workClass: WorkClass.Pacing);
+    private static readonly WorkKind[] WorkKindOrder = [RowCompositions, RowBytes, RowSkips, IndexRebuilds, DefinitionCompositions, DefinitionBytes, RowVisits, ContentVisits, FullScans, HoldingRows, PlacementReadings];
 
     private sealed record Entry(ulong Version, ulong Dependencies, WorldRecipientImage Image, int[] Keys);
     // One audience's disclosed definition. Between whole compositions it changes only row by row: a keyed write changes
@@ -264,7 +267,7 @@ public sealed partial class WorldDisclosureImages {
             rowSet.Clear(); rowDependencies.Clear();
             if (m_rowPolicies[row] is { } own) { foreach (var policy in own) { rowSet.Add(policy); } }
             var zones = arena.Catalog.ContainingZones(row);
-            for (var index = 0; index < zones.Count; index++) {
+            for (var index = 0; index < zones.Length; index++) {
                 var zone = zones[index];
                 if (!rowDependencies.Contains(zone)) { rowDependencies.Add(zone); }
                 if (m_rowPolicies[zone] is { } zonePolicies) { foreach (var policy in zonePolicies) { rowSet.Add(policy); } }
@@ -291,7 +294,7 @@ public sealed partial class WorldDisclosureImages {
         for (var row = 0; row < dependents.Length; row++) { dependents[row] = []; }
         for (var row = 0; row < dependencies.Length; row++) { foreach (var source in dependencies[row]) { dependents[source].Add(row); } }
         m_dependents = [.. dependents.Select(rows => rows.ToArray())];
-        m_rows.Clear(); m_definitions.Clear();
+        m_rows.Clear(); m_definitions.Clear(); m_placementReadings.Clear();
         m_work.Count(IndexRebuilds);
     }
     // Dependency versions are compared as an exact tuple through a monotone sum: versions only increase within this

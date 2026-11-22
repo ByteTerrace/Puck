@@ -165,9 +165,13 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
         }
         return result.Count == 0 ? null : result;
     }
-    /// <summary>The recipient's placement projection.</summary>
-    public IReadOnlyList<WorldPlacement> Placements => Observes
-        ? WorldStateDisclosure.PlacementProjection(Source, Arena, recipient, Unrestricted) : [];
+    /// <summary>The recipient's placement projection, composed again only when something it reads moved
+    /// (<see cref="WorldDisclosureImages"/>); read on the thread that steps the world.</summary>
+    public IReadOnlyList<WorldPlacement> Placements => Observes ? images.Placements(this) : [];
+    /// <summary>Returns whether the recipient's placement projection shows a placement.</summary>
+    /// <param name="id">The placement id, or <see langword="null"/> for none.</param>
+    /// <returns><see langword="true"/> when the view observes and its projection holds a placement with that id.</returns>
+    public bool ShowsPlacement(string? id) => Observes && images.ShowsPlacement(this, id);
     /// <summary>Gets the authored spawn points the recipient's document carries at every observing ceiling: disclosure
     /// withholds state, never a spawn point, so the read composes no disclosed document.</summary>
     public IReadOnlyList<WorldSpawnPoint> SpawnPoints => Observes ? Source.SpawnPoints : [];

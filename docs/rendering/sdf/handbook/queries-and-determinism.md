@@ -473,36 +473,73 @@ bounds query does, and drops three things against it:
   held one raw past the primer's upper end, because an instance it skips may
   stand before the primer in the stream, where an equal candidate would keep
   its own material.
-- **A chain whose joins are all inert.** The candidate the walk enclosed over
-  the cube stands at or past the accumulator's upper end for a union, and past
-  it by the smooth union's identity margin for a smooth union. This needs no
-  certificate, so it reaches the shapes and folds that carry none: a repeat's
-  copies are enclosed by the fold's own interval rule.
-
+- **An inert join.** The candidate the walk enclosed over the cube stands at
+  or past the accumulator's upper end for a union, and past it by the smooth
+  union's identity margin for a smooth union, so the join leaves every point's
+  distance and material as they were. This needs no certificate, so it reaches
+  the shapes and folds that carry none: a repeat's copies are enclosed by the
+  fold's own interval rule. A chain whose joins are all inert goes whole, its
+  point ops with it. In a chain that goes on to a join that is not inert, the
+  inert joins before that one go singly and the chain's point ops stay.
 - **Everything before a take-over.** The first two are skips at a chain's own
   place in the stream, so they keep every chain that stands before the nearest
-  geometry in stream order. A join whose candidate stands below the
-  accumulator's lower end by the same margin leaves the accumulator equal to
-  the candidate at every point of the cube, whatever the stream read before
-  that chain, so everything before it goes. A program emitted in rows needs
-  this: beside one shape of a grid of a thousand, it is the difference between
-  reading a few shapes and reading a few dozen.
+  geometry in stream order. The third applies at a chain's first join that is
+  not inert, at the root's scope depth. A walk that entered the stream at that
+  chain's `ResetPoint` reaches the join holding the far seed every walk starts
+  from, because the chain's earlier joins are already dropped. Where the
+  candidate stands below both the accumulator's lower end and the far seed by
+  the blend's margin, that walk and the whole stream's leave the join with the
+  candidate and its material, so everything before the chain goes. A program
+  emitted in rows needs this: beside one shape of a grid of a thousand, it is
+  the difference between reading a few shapes and reading a few dozen. The
+  rule stops at that first join. A chain that has already joined by another
+  blend (an exclusive or does not order its operands), edited the field or
+  crossed a scope holds something a walk from its `ResetPoint` does not, and
+  a tape always keeps a scope's push with its pop.
 
 Each drop leaves every point walk in the cube with the distance and material
 it had, so a regional evaluator answers what a plain one answers, to the bit.
 Nothing is dropped on a tolerance or on a value at one point, and a tape keeps
 the stream's order. `SdfFieldEvaluatorRegionLawTests` holds the two evaluators
 to each other on a fold across its seam, tied candidates, a staircase of
-smooth unions, relieved scopes and carves, and on the raws either side of
-every region face.
+smooth unions, relieved scopes and carves, a chain that joins by another blend
+or pops a scope before a join that would take over, and on the raws either
+side of every region face.
 
-Regions are immutable once published, so queries on any thread share them.
-The index holds a bounded number of regions and drops them all when it reaches
-its limit. `world.counters sdf.regions` reads regions recorded, the
+Regions are immutable once published, so queries on any thread share them. A
+region is recorded by the second query that reaches it: the first only marks
+it and reads the region around it (the whole stream, for a root cube), so
+queries scattered over a world record nothing and cost what a plain query
+costs. The index holds a bounded number of marks and regions and drops them
+all when it reaches its limit. `world.counters sdf.regions` reads regions recorded, the
 instructions the recording walks visited, the instructions the tapes hold and
 the drops. Regions pay for a program large enough that walking all of it is
 what a query costs; the presentation field is regional and the server's
 per-collider fields are not.
+
+### A surface normal in one walk
+
+A tape is recorded over its cube and 2⁻⁵ units either side, so it answers
+every point within that pad of the cube. That is what lets
+`SdfFieldEvaluator.TrySurfaceNormal` read the six central taps of a gradient
+as one walk of the tape of the point's cube, in place of six point walks. The
+walk is the wide reader: the stream read in double precision at several
+points at once, one point a lane of a hardware vector, with none of the point
+walk's skips.
+
+The wide reader is the third lowering of the shared formulas
+(`SdfFieldFormulas`), after the fixed-point C# and the kernels' HLSL, so it
+states no shape, blend or op again. What a formula calls that is not a formula
+(a shape with a hand-written reader, the lattice noises) it reads a lane at a
+time through the fixed-point reader. It reads distances alone and answers a
+float vector, for presentation: nothing decides a hit, a contact or a
+material on it, and a march's samples stay fixed point. A double holds every
+fixed-point operand exactly, but the two readers round differently, so a wide
+answer is held to the fixed one by an angle (`SdfFieldEvaluatorWideLawTests`),
+never by bits. Where the wide reader cannot answer (the point's cube is not
+recorded yet, its tape holds an op with no formula, the point stands within a
+step of the frame) the fixed-point gradient does. `world.counters sdf.wide`
+reads the walks, the instructions they visited and those refusals.
 
 Pruning research has different preservation contracts.
 [Barbier et al., Lipschitz Pruning (2025)](https://wbrbr.org/publications/LipschitzPruning/)

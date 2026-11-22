@@ -569,10 +569,15 @@ public sealed class RenderGraphPackageRecorders(GpuRegionCopyPass? regionCopy = 
     /// <param name="plan">The producer's plan.</param>
     /// <param name="storage">The planned storage.</param>
     /// <returns>Whether its buffer is supplied by an owning package.</returns>
-    public bool OwnsBuffer(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
-        ((storage.Declaration.Kind == ShaderPipelineResourceKind.Buffer) && plan.Passes.Any(predicate: pass =>
-            ((pass.Package is { } package) && pass.Outputs.Any(predicate: output => storage.Versions.Contains(value: output.Name)) &&
-            TryGetFactory(package.Package, out var factory) && factory.OwnsBuffer(part: package.Part))));
+    public bool OwnsBuffer(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) {
+        ArgumentNullException.ThrowIfNull(argument: plan);
+        ArgumentNullException.ThrowIfNull(argument: storage);
+        if (storage.Declaration.Kind != ShaderPipelineResourceKind.Buffer) { return false; }
+        foreach (var (package, part) in plan.Derived.Writers(storage: storage.Index)) {
+            if (TryGetFactory(package: package, factory: out var factory) && factory.OwnsBuffer(part: part)) { return true; }
+        }
+        return false;
+    }
 
     internal IRenderGraphPackageFactory FactoryFor(string instance, string pass, string package) => (m_factories.TryGetValue(
         key: package,

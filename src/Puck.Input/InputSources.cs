@@ -96,31 +96,24 @@ public static class InputSources {
 
         /// <summary>Gets the source for a number-row digit.</summary>
         /// <param name="number">The digit, from 0 through 9.</param>
-        public static string Digit(int number) {
-            ArgumentOutOfRangeException.ThrowIfNegative(number);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(
-                number,
-                9
-            );
+        public static string Digit(int number) => Numbered(names: Digits, number: number, first: 0);
+        // A numbered family's identifier, the family's first number naming its first identifier.
+        private static string Numbered(string[] names, int number, int first) {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value: number, other: first);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value: number, other: (first + names.Length - 1));
 
-            return $"keyboard.{number}";
+            return names[number - first];
         }
+        // Each family's identifiers, spelled once: a lamp legend composes them every frame.
+        private static readonly string[] Digits = [.. Enumerable.Range(start: 0, count: 10).Select(static number => $"keyboard.{number}")];
+        private static readonly string[] Functions = [.. Enumerable.Range(start: 1, count: 12).Select(static number => $"keyboard.f{number}")];
+        private static readonly string[] Letters = [.. Enumerable.Range(start: 'a', count: 26).Select(static letter => $"keyboard.{(char)letter}")];
+        private static readonly string[] NumpadDigits = [.. Enumerable.Range(start: 0, count: 10).Select(static number => $"keyboard.numpad{number}")];
         /// <summary>The source for function key F<paramref name="number"/> (F1, F2, …).</summary>
         /// <param name="number">The function-key number, from 1 through 12.</param>
         /// <returns>The physical source identifier for the function key.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="number"/> is outside the range 1 through 12.</exception>
-        public static string Function(int number) {
-            ArgumentOutOfRangeException.ThrowIfLessThan(
-                value: number,
-                other: 1
-            );
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(
-                value: number,
-                other: 12
-            );
-
-            return $"keyboard.f{number}";
-        }
+        public static string Function(int number) => Numbered(names: Functions, number: number, first: 1);
         /// <summary>The source for a letter key. A chord like <c>Ctrl+C</c> is a <see cref="Puck.Commands.BindingModifierDefinition"/>
         /// declaring <see cref="ControlLeft"/> (or <see cref="ControlRight"/>) alongside this source — modifiers are ordinary
         /// declared sources, not a mechanism this key pairs with.</summary>
@@ -136,19 +129,11 @@ public static class InputSources {
                 );
             }
 
-            return $"keyboard.{char.ToLowerInvariant(c: letter)}";
+            return Letters[char.ToLowerInvariant(c: letter) - 'a'];
         }
         /// <summary>Gets the source for a numpad digit.</summary>
         /// <param name="number">The digit, from 0 through 9.</param>
-        public static string NumpadDigit(int number) {
-            ArgumentOutOfRangeException.ThrowIfNegative(number);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(
-                number,
-                9
-            );
-
-            return $"keyboard.numpad{number}";
-        }
+        public static string NumpadDigit(int number) => Numbered(names: NumpadDigits, number: number, first: 0);
     }
     /// <summary>
     /// Mouse controls. Button numbers are provider-neutral and one-based: 1 is left, 2 right, 3 middle, and every

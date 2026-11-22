@@ -83,10 +83,38 @@
             <PublishDepsFilePath Condition="'$(PublishDepsFilePath)' == ''">$(PublishDir)$(ProjectDepsFileName)</PublishDepsFilePath>
         </PropertyGroup>
     </Target>
+    <!-- The precompiler's intermediate directory (obj/<config>/<tfm>/<rid>/R2R) is shared by every ReadyToRun shape, and the
+         SDK's _CreateR2RImages is up to date by timestamps alone, so a per-assembly publish after a composite one keeps the
+         composite's component stubs for every assembly that did not change and ships them without the composite image: the
+         folder fails fast at start (0xC0000602) and boots only with DOTNET_ReadyToRun=0. The directory holds one shape's
+         images: when the shape differs from the one recorded beside it, it is emptied before the images are made, so every
+         image is made again. Revalidate this SDK hook when updating global.json. -->
+    <Target Name="PuckReadyToRunShape" BeforeTargets="_CreateR2RImages" Condition="'$(PublishReadyToRun)' == 'true'">
+        <PropertyGroup>
+            <_PuckReadyToRunDirectory>$(_ReadyToRunOutputPath)</_PuckReadyToRunDirectory>
+            <_PuckReadyToRunDirectory Condition="'$(_PuckReadyToRunDirectory)' == ''">$(IntermediateOutputPath)R2R</_PuckReadyToRunDirectory>
+            <_PuckReadyToRunShapeFile>$(IntermediateOutputPath)R2R.shape</_PuckReadyToRunShapeFile>
+            <_PuckReadyToRunShape>composite=$(PublishReadyToRunComposite);self-contained=$(SelfContained);rid=$(RuntimeIdentifier);args=$(PublishReadyToRunCrossgen2ExtraArgs);composite-args=$(PublishReadyToRunCrossgen2CompositeExtraArgs);symbols=$(PublishReadyToRunEmitSymbols)</_PuckReadyToRunShape>
+            <_PuckReadyToRunRecordedShape />
+        </PropertyGroup>
+        <ReadLinesFromFile File="$(_PuckReadyToRunShapeFile)" Condition="Exists('$(_PuckReadyToRunShapeFile)')">
+            <Output TaskParameter="Lines" PropertyName="_PuckReadyToRunRecordedShape" />
+        </ReadLinesFromFile>
+        <Message Importance="high" Condition="'$(_PuckReadyToRunRecordedShape)' != '$(_PuckReadyToRunShape)'"
+                 Text="Puck.World: ReadyToRun shape changed ($(_PuckReadyToRunShape)); emptying $(_PuckReadyToRunDirectory) so every image is made again." />
+        <RemoveDir Directories="$(_PuckReadyToRunDirectory)" Condition="'$(_PuckReadyToRunRecordedShape)' != '$(_PuckReadyToRunShape)'" />
+        <MakeDir Directories="$(_PuckReadyToRunDirectory)" />
+        <WriteLinesToFile File="$(_PuckReadyToRunShapeFile)" Lines="$(_PuckReadyToRunShape)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+        <ItemGroup>
+            <FileWrites Include="$(_PuckReadyToRunShapeFile)" />
+        </ItemGroup>
+    </Target>
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
-    <Target Name="PuckPrewarmPlayerProducts" AfterTargets="Publish">
+    <!-- -p:PuckPrewarmPlayerProducts=false skips the player prewarm for a publish that boots from source state, such as
+         the tools' World build store, whose Worlds derive those products into their own cache at boot. -->
+    <Target Name="PuckPrewarmPlayerProducts" AfterTargets="Publish" Condition="'$(PuckPrewarmPlayerProducts)' != 'false'">
         <PropertyGroup>
             <_PuckPlayerProductDirectory>$(PublishDir.Replace('\', '/'))</_PuckPlayerProductDirectory>
         </PropertyGroup>

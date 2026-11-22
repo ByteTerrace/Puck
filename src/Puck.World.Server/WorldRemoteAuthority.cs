@@ -255,6 +255,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// <summary>Gets the intended first-hop transaction namespace supplied at construction.
     /// Reconnection checks this namespace before sending a request. It is distinct from a traveler's onward route.</summary>
     public string PeerAuthority => m_peerAuthority;
+    /// <summary>Gets the store the content fetched from this authority is kept in, bounded apart from every other
+    /// authority's (<see cref="WorldProjectionContent.AuthorityStore"/>).</summary>
+    public ContentAddressedStore FetchedContent => WorldProjectionContent.AuthorityStore(authority: m_peerAuthority);
     /// <summary>Gets a value indicating whether every established lane is outside its unreachable-peer backoff
     /// window. WALL-CLOCK transport lifecycle state (<see cref="PersistentRequestLane{TRequestKind,TResponseKind}.IsAvailable"/>),
     /// legitimate for a read-back to print and never for simulation to read — link liveness the sim acts on is
@@ -358,7 +361,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         if (answer.Kind != WorldFederationResponse.Route) { return (null, answer.Describe()); }
         var traveler = new WorldTravelerObservation(credential.SourceAuthority, mobility);
         return WorldFederationCodec.TryDecodeRoute(answer.Body.Span, out var route, out var failure,
-            pin => target.FetchPrototype(pin, traveler)) ? (route, string.Empty) : (null, failure.ToString());
+            pin => target.FetchPrototype(pin, traveler), target.FetchedContent) ? (route, string.Empty) : (null, failure.ToString());
     }
 
     public bool TryForwardIntent(int bodyIndex, in IntentSubmission submission, out string reason) {
@@ -664,7 +667,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         // generation of this one, starts from a whole projection again.
         byte[]? Fetch(ContentPin pin) => upstream.FetchPrototype(pin: pin, traveler: ((m_submissionCredential is { } credential)
             ? new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility) : null));
-        var hold = new WorldProjectionHold(fetch: Fetch);
+        var hold = new WorldProjectionHold(content: upstream.FetchedContent, fetch: Fetch);
         WorldDefinition? replica = null;
         WorldDocumentVersion replicaVersion = default;
         // The session's one door: every record it reads, a route included, passes this ingress on its stamp before
@@ -718,7 +721,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         routeBody,
                         out var route,
                         out _,
-                        fetch: Fetch
+                        fetch: Fetch,
+                        content: upstream.FetchedContent
                     )
                     ) {
                         return false;
@@ -732,7 +736,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         }
                         // The ended span's projection goes with it: the generation the cut opens starts from its whole
                         // projection, which nothing of the ended span can complete.
-                        hold = new WorldProjectionHold(fetch: Fetch);
+                        hold = new WorldProjectionHold(content: upstream.FetchedContent, fetch: Fetch);
                         bodies = new WorldSnapshotReceiver();
                         replica = null;
                         replicaVersion = default;
@@ -747,7 +751,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                             !Admits(record: frame.Body.Span, stamp: out var definitionStream, body: out var definitionBody, failure: out var definitionFailure) ||
                             !WorldFederationCodec.TryDecodeDocument(
                             body: definitionBody,
+                            content: upstream.FetchedContent,
                             definition: out var definition,
+                            fetch: Fetch,
                             hold: hold,
                             tier: out var definitionTier,
                             failure: out definitionFailure,
@@ -1219,6 +1225,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
 
         if (
             !WorldFederationCodec.TryDecodeReservationReply(
+            content: FetchedContent,
             fetch: pin => FetchPrototype(pin: pin, traveler: null),
             body: answer.Body.Span,
             reply: out var decoded,

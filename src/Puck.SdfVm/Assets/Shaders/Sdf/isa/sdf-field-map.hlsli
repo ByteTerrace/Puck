@@ -33,20 +33,20 @@ case SDF_OP_RESET_POINT:
 case SDF_OP_TRANSLATE:
 {
     SDF_VM_LOAD_DATA0;
-    localPosition -= data0.xyz;
+    localPosition = sdfTranslatePoint(localPosition, data0.xyz);
     break;
 }
 case SDF_OP_ROTATE:
 {
     SDF_VM_LOAD_DATA0;
-    localPosition = rotatePointByInverseQuaternion(localPosition, data0);
+    localPosition = sdfRotatePoint(localPosition, data0);
     break;
 }
 case SDF_OP_SCALE:
 {
     SDF_VM_LOAD_DATA0;
-    localPosition /= data0.xyz;
-    distanceScale *= data0.w;
+    localPosition = sdfScalePoint(localPosition, data0.xyz);
+    distanceScale = sdfScaleDistance(distanceScale, data0.w);
     break;
 }
 case SDF_OP_TRANSFORM_DYNAMIC:
@@ -85,7 +85,7 @@ case SDF_OP_ROTATE_PLANE:
 case SDF_OP_ELONGATE:
 {
     SDF_VM_LOAD_DATA0;
-    localPosition -= clamp(localPosition, -data0.xyz, data0.xyz);
+    localPosition = sdfElongatePoint(localPosition, data0.xyz);
     break;
 }
 case SDF_OP_SHAPE_BLEND:
@@ -160,33 +160,28 @@ case SDF_OP_SHAPE_BLEND:
 }
 case SDF_OP_REPEAT:
 {
-    // data0 arrives pre-clamped and data1 = 1/spacing, both HOST-BAKED by SdfProgramBuilder.Repeat.
     SDF_VM_LOAD_DATA0;
     SDF_VM_LOAD_DATA1;
-    localPosition -= (data0.xyz * round(localPosition * data1.xyz));
+    localPosition = sdfRepeatPoint(localPosition, data0.xyz, data1.xyz);
     break;
 }
 case SDF_OP_REPEAT_LIMITED:
 {
-    // data0.xyz = spacing, pre-clamped away from 0 exactly as SDF_OP_REPEAT's is (HOST-BAKED by
-    // SdfProgramBuilder.RepeatLimited); data1.xyz = the per-axis cell limit. Unlike Repeat there is no
-    // free lane for 1/spacing, so the divide stays — a per-instruction-uniform divisor lowers to one
-    // reciprocal anyway.
     SDF_VM_LOAD_DATA0;
     SDF_VM_LOAD_DATA1;
-    localPosition -= (data0.xyz * clamp(round(localPosition / data0.xyz), -data1.xyz, data1.xyz));
+    localPosition = sdfRepeatLimitedPoint(localPosition, data0.xyz, data1.xyz);
     break;
 }
 case SDF_OP_ONION:
 {
     SDF_VM_LOAD_DATA0;
-    result.distance = (abs(result.distance) - data0.x);
+    result.distance = sdfOnionField(result.distance, data0.x);
     break;
 }
 case SDF_OP_DILATE:
 {
     SDF_VM_LOAD_DATA0;
-    result.distance -= data0.x;
+    result.distance = sdfDilateField(result.distance, data0.x);
     break;
 }
 case SDF_OP_WALLPAPER_FOLD:
@@ -364,8 +359,7 @@ case SDF_OP_DOMAIN_WARP:
 case SDF_OP_SYMMETRY_PLANE:
 {
     SDF_VM_LOAD_DATA0;
-    float spT = (dot(localPosition, data0.xyz) + data0.w);
-    localPosition -= ((2.0 * min(spT, 0.0)) * data0.xyz);
+    localPosition = sdfSymmetryPlanePoint(localPosition, data0.xyz, data0.w);
     break;
 }
 case SDF_OP_PUSH_FIELD:
@@ -396,10 +390,9 @@ case SDF_OP_POP_FIELD:
     // parityMaterialDelta must NOT touch it (the fusion trap). Restore the parent accumulator as the
     // blend LHS, then fall into the SAME material-winner + blendShape tail a SHAPE uses. The compose blend
     // + smooth ride the POP instruction (header.z / data1.x, baked by SdfProgramBuilder.PushField).
-    // data1.y is the scope's baked 1/L candidate scale on every pop; a stairs pop carries its step count
-    // in data1.z (KEEP IN SYNC with AnalyzeLipschitz and the fixed-point mirror).
+    // data1.y is the scope's baked 1/L candidate scale on every pop. The pop's operand is a stairs pop's
+    // step count in data1.z, or a morph pop's weight from its lane.
     composeBlend = SDF_INSTRUCTION_BLEND(instructionHeader);
-    bool isStairs = (composeBlend == SDF_BLEND_STAIRS_UNION || composeBlend == SDF_BLEND_STAIRS_SUBTRACTION);
     float candidateScale = data1.y;
     composeCandidate = result.distance;
     if (candidateScale > 0.0) {
@@ -411,59 +404,17 @@ case SDF_OP_POP_FIELD:
         composeSlot = result.frameSlot;
     }
     composeSmooth = data1.x;
+    composeOperand = data1.z;
+    if (composeBlend == SDF_BLEND_MORPH) {
+        SDF_VM_LOAD_DATA0;
+        composeOperand = sdfMorphWeight(sdfFieldLane(currentSlot, (uint)data0.x), data0.y, data0.z);
+    }
     switch (fieldDepth) {
         case 0u: result = parent0; break;
         case 1u: result = parent1; break;
         case 2u: result = parent2; break;
         default: result = parent3; break;
     }
-
-    if (composeBlend == SDF_BLEND_MORPH) {
-        SDF_VM_LOAD_DATA0;
-        float lane = sdfFieldLane(currentSlot, (uint)data0.x);
-        float t = saturate((lane - data0.y) / (data0.z - data0.y));
-        result.distance = lerp(result.distance, composeCandidate, t);
-        if (trackMaterial && t >= 0.5) {
-            result.material = composeMaterial;
-            result.instanceIndex = composeInstance;
-            result.frameSlot = composeSlot;
-        }
-        break;
-    }
-
-    if (isStairs) {
-        float r = composeSmooth;
-        float n = data1.z;
-        if (n >= 1.0 && r > 0.0) {
-            float s = r / n;
-            float period = 2.0 * s;
-            bool isSub = (composeBlend == SDF_BLEND_STAIRS_SUBTRACTION);
-            float a = result.distance;
-            float b = composeCandidate;
-            float u = isSub ? (-b - r) : (b - r);
-            float arg = u - a + s;
-            float m = arg - period * floor(arg / period);
-            float w = m - s;
-            float dStairs = 0.5 * (u + a + abs(w));
-            if (isSub) {
-                result.distance = max(max(a, -b), -dStairs);
-                if (trackMaterial && -b > a) {
-                    // A cut face keeps the parent's frame slot (sdfComposeCandidate).
-                    result.material = composeMaterial;
-                    result.instanceIndex = composeInstance;
-                }
-            } else {
-                result.distance = min(min(a, b), dStairs);
-                if (trackMaterial && b < a) {
-                    result.material = composeMaterial;
-                    result.instanceIndex = composeInstance;
-                    result.frameSlot = composeSlot;
-                }
-            }
-            break;
-        }
-    }
-
     composePending = true;
     break;
 }
@@ -475,24 +426,8 @@ case SDF_OP_NOISE_DISPLACE:
     // ReliefRows.cs); malformed words that count past the segment's start or the row cap are refused here.
     uint reliefRows = SDF_INSTRUCTION_MATERIAL(instructionHeader);
     if ((reliefRows > SDF_MAX_RELIEF_ROWS) || (reliefRows > (index - segmentMeta.z))) { return sdfIsaErrorHit(); }
-    float maskProduct = ((reliefRows == 0u) ? 1.0 : sdfMaskProduct((index - reliefRows), reliefRows, localPosition, dataOffset));
-    // A weight of exactly zero adds no relief, so the noise is not evaluated.
-    if (maskProduct <= 0.0) { break; }
-    // Keep the field continuous, including outside the zero-set neighborhood: the bake's lattice,
-    // material points and gradient taps all consume these values (see SDF_OP_DISPLACE).
-    float3 q = (localPosition * data0.x);
-    float octaveAmplitude = 1.0;
-    float noiseSum = 0.0;
-    uint octaveCount = SDF_INSTRUCTION_BLEND(instructionHeader);
-    for (uint octave = 0u; octave < SDF_MAX_NOISE_OCTAVES; octave++) {
-        if (octave >= octaveCount) { break; }
-        uint octaveSeed = (SDF_INSTRUCTION_SHAPE(instructionHeader) + octave);
-        noiseSum += (octaveAmplitude * sdfValueNoise3(q, uint3(octaveSeed, (octaveSeed * SDF_HASH_STREAM_A), (octaveSeed * SDF_HASH_STREAM_B))));
-        q *= data0.w;
-        octaveAmplitude *= data0.z;
-    }
-    // A relief its masks left at weight one adds exactly what an unmasked one adds.
-    result.distance += (((data0.y * data1.x) * noiseSum) * maskProduct);
+    float weight = ((reliefRows == 0u) ? 1.0 : sdfMaskProduct((index - reliefRows), reliefRows, localPosition, dataOffset));
+    result.distance = sdfReliefField(result.distance, localPosition, weight, data0.x, data0.y, data0.z, data0.w, data1.x, SDF_INSTRUCTION_SHAPE(instructionHeader), SDF_INSTRUCTION_BLEND(instructionHeader));
     break;
 }
 case SDF_OP_AXIAL_PROFILE:
@@ -545,10 +480,7 @@ case SDF_OP_LANE_ERODE:
 case SDF_OP_CELL_DISPLACE:
 {
     SDF_VM_LOAD_DATA0;
-    float3 ignoredGradient;
-    float value = sdfCellDistanceGrad(localPosition * data0.x, SDF_INSTRUCTION_SHAPE(instructionHeader),
-        SDF_INSTRUCTION_BLEND(instructionHeader), data0.z, ignoredGradient);
-    result.distance += data0.y * (value - 0.5);
+    result.distance = sdfCellDisplaceField(result.distance, localPosition, data0.x, data0.y, data0.z, SDF_INSTRUCTION_SHAPE(instructionHeader), SDF_INSTRUCTION_BLEND(instructionHeader));
     break;
 }
 case SDF_OP_RELIEF_ROW:

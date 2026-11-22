@@ -20,24 +20,32 @@ namespace Puck.SignedDistance.Queries;
 //   interval's upper end, which is at least any point's accumulator. The primer's clearance is held one raw past the
 //   primer's upper end, since an instance it skips may stand before the primer in the stream, where an equal candidate
 //   would keep its own material.
-// - A chain whose every join the walk found inert (RegionJoinClears): the join's candidate, enclosed over the box by the
-//   interval rules, stands past the accumulator's upper end by the blend's identity margin. This needs no certificate,
-//   so it reaches the shapes and folds that have none.
-// - Everything before a chain whose join takes the root accumulator over (RegionJoinClears, the other way): the
-//   accumulator's lower end stands past the candidate by the same margin, so the accumulator after the join is the
-//   candidate at every point of the box, whatever the stream read before. The first two are skips at a chain's own
-//   place in the stream, which keep every chain that stands before the nearest geometry in stream order; this is the
-//   one that drops those, as a program emitted in rows needs.
+// - An inert join (RegionJoinClears): the join's candidate, enclosed over the box by the interval rules, stands past the
+//   accumulator's upper end by the blend's identity margin, so the join leaves every point's distance and material as
+//   they were. This needs no certificate, so it reaches the shapes and folds that have none. A chain whose every join
+//   is inert is dropped whole, its point ops with it; in a chain that goes on to a join that is not, the inert joins
+//   before that one are dropped singly and the chain's point ops stay.
+// - Everything before a chain whose first join that is not inert takes the root accumulator over (RegionJoinClears, the
+//   other way): the candidate stands below the accumulator's lower end, and below the far seed a walk starts from, by
+//   the same margin. A walk that enters the stream at that chain's ResetPoint reaches the join holding the far seed,
+//   since the chain's earlier joins are dropped, and leaves it holding the candidate and its material, as the whole
+//   stream's walk does. The rule holds only for that first join, at the root's depth: a chain that has joined by
+//   another blend, edited the field or crossed a scope holds what a walk from its ResetPoint does not. The first two
+//   drops are skips at a chain's own place in the stream, which keep every chain that stands before the nearest
+//   geometry in stream order; this is the one that drops those, as a program emitted in rows needs.
 //
-// A jump lands on a chain's or an instance's first instruction and an inert chain is dropped whole, so a tape holds
-// whole chains and a point walk's root frame finds its prefix on whichever chain it reads first. A point walk over a
-// tape still makes its own skips at its own point.
+// A jump lands on a chain's or an instance's first instruction, and a chain keeps its ResetPoint and point ops unless
+// it is dropped whole, so a point walk's root frame finds its prefix on whichever chain it reads first. A point walk
+// over a tape still makes its own skips at its own point.
 //
-// Regions are cubes of a power-of-two edge. A root region is recorded over the whole stream. A child, half its parent's
+// Regions are cubes of a power-of-two edge, each recorded over its cube and RegionPad either side, which is the box its
+// tape answers. A root region is recorded over the whole stream. A child, half its parent's
 // edge, is recorded over its parent's tape: what the parent dropped is dropped for every point of the child. A region
-// divides until its tape is short or its edge is the least. A region is immutable once published and is published by
-// compare and exchange, so walks on any thread share the index; two threads may record one region twice, to the same
-// tape. The index holds at most RegionLimit regions and drops them all on reaching it.
+// divides until its tape is short or its edge is the least. A region is recorded by the second walk that reaches it;
+// the first marks it and reads the region around it, so scattered points record nothing. A region is immutable once
+// published and is published by compare and exchange, so walks on any thread share the index; two threads may record
+// one region twice, to the same tape. The index holds at most RegionLimit marks and regions and drops them all on
+// reaching it.
 public sealed partial class SdfFieldEvaluator {
     // A root region's edge, 2⁴ units, and the least edge, 2¹ units, as shifts of a raw coordinate. A root is recorded
     // over the whole stream, so its edge sets what a first touch costs: at this edge the walk visits what stands within
@@ -47,6 +55,9 @@ public sealed partial class SdfFieldEvaluator {
     // A region whose tape holds no more instructions than this does not divide.
     private const int RegionShortTape = 32;
     private const int RegionLimit = (1 << 14);
+    // How far past its cube a region's tape is recorded: 2⁻⁵ units in raws. A tape answers every point within the pad
+    // of its cube, which is what lets one walk read the taps of a gradient around a point of the cube.
+    private const long RegionPad = (1L << (FixedQ4816.FractionBitCount - 5));
 
     // A tape that holds nothing: one empty range, since a walk reads an empty span as the whole stream.
     private static readonly int[] EmptyTape = [0, 0];
@@ -89,16 +100,30 @@ public sealed partial class SdfFieldEvaluator {
         return true;
     }
 
-    // The tape of the region a point of the frame lies in, recording the regions on the way to it that no walk has.
-    private ReadOnlySpan<int> RegionTape(FixedVector3 point) {
+    // The tape of the smallest recorded region a point of the frame lies in, or none when no walk has read the point's
+    // root region before. A region is recorded on the second walk that reaches it and only marked on the first, which
+    // reads the region around it (the whole stream, for a root): a point no later walk comes near costs one walk, and
+    // an index that drops its regions loses only those walks came back to.
+    private bool TryRegionTape(FixedVector3 point, out ReadOnlySpan<int> tape) {
         var regions = m_regions!;
         var (x, y, z) = (point.X.Value, point.Y.Value, point.Z.Value);
         var shift = RegionRootShift;
         var key = new RegionKey(X: (x >> shift), Y: (y >> shift), Z: (z >> shift));
 
+        tape = default;
+
         if (!regions.Roots.TryGetValue(key: key, value: out var node)) {
-            node = regions.Roots.GetOrAdd(key: key, value: RecordRegion(parent: null, shift: shift, x: key.X, y: key.Y, z: key.Z));
-            regions.Admit();
+            if (regions.Roots.TryAdd(key: key, value: RegionNode.Reached)) {
+                regions.Admit();
+            }
+
+            return false;
+        }
+
+        if (ReferenceEquals(objA: node, objB: RegionNode.Reached)) {
+            node = RecordRegion(parent: null, shift: shift, x: key.X, y: key.Y, z: key.Z);
+            // A walk that loses the race, or finds the index dropped, reads the tape it recorded itself.
+            _ = regions.Roots.TryUpdate(comparisonValue: RegionNode.Reached, key: key, newValue: node);
         }
 
         while ((shift > RegionLeafShift) && (node.Instructions > RegionShortTape)) {
@@ -106,19 +131,26 @@ public sealed partial class SdfFieldEvaluator {
 
             var children = (node.Children ?? (Interlocked.CompareExchange(comparand: null, location1: ref node.Children, value: new RegionNode?[8]) ?? node.Children!));
             var slot = ((int)((((x >> shift) & 1L) | (((y >> shift) & 1L) << 1)) | (((z >> shift) & 1L) << 2)));
-            var child = Volatile.Read(location: ref children[slot]);
+            var child = (Volatile.Read(location: ref children[slot]) ?? Interlocked.CompareExchange(comparand: null, location1: ref children[slot], value: RegionNode.Reached));
 
             if (child is null) {
-                var recorded = RecordRegion(parent: node, shift: shift, x: (x >> shift), y: (y >> shift), z: (z >> shift));
+                break;
+            }
 
-                child = (Interlocked.CompareExchange(comparand: null, location1: ref children[slot], value: recorded) ?? recorded);
+            if (ReferenceEquals(objA: child, objB: RegionNode.Reached)) {
+                var recorded = RecordRegion(parent: node, shift: shift, x: (x >> shift), y: (y >> shift), z: (z >> shift));
+                var held = Interlocked.CompareExchange(comparand: RegionNode.Reached, location1: ref children[slot], value: recorded);
+
+                child = (ReferenceEquals(objA: held, objB: RegionNode.Reached) ? recorded : held!);
                 regions.Admit();
             }
 
             node = child;
         }
 
-        return node.Tape;
+        tape = node.Tape;
+
+        return true;
     }
     // Records one region: the culling box walk over its box, over the whole stream for a root and over the parent's tape
     // for a child, with the primer chosen among the instances that walk can meet.
@@ -169,15 +201,19 @@ public sealed partial class SdfFieldEvaluator {
         RegionWork.Add(amount: walked, kind: RegionBuildInstructions);
         RegionWork.Add(amount: instructions, kind: RegionTapeInstructions);
 
-        return new RegionNode(bounds: BoundsIn(candidates: parent?.Bounds, tape: tape), instructions: instructions, tape: tape);
+        // Only a region that divides hands its instances to a child's record.
+        var divides = ((shift > RegionLeafShift) && (instructions > RegionShortTape));
+
+        return new RegionNode(bounds: (divides ? BoundsIn(candidates: parent?.Bounds, tape: tape) : []), instructions: instructions, tape: tape);
     }
-    // One side of a region's box: the cell's raws, less what lies outside the frame, whose points no walk reads.
+    // One side of a region's box: the cell's raws and the pad either side, less what lies outside the frame, whose
+    // points no walk reads.
     private static FixedInterval RegionSide(long cell, int shift, long frame) {
         var lower = (cell << shift);
 
         return new FixedInterval(
-            lower: FixedQ4816.FromRawBits(value: Math.Max(val1: lower, val2: -frame)),
-            upper: FixedQ4816.FromRawBits(value: Math.Min(val1: (lower + ((1L << shift) - 1L)), val2: frame))
+            lower: FixedQ4816.FromRawBits(value: Math.Max(val1: (lower - RegionPad), val2: -frame)),
+            upper: FixedQ4816.FromRawBits(value: Math.Min(val1: ((lower + ((1L << shift) - 1L)) + RegionPad), val2: frame))
         );
     }
     // A walk's record as a tape: its ranges in stream order, joined where they meet or overlap (the primer's own walk
@@ -265,20 +301,25 @@ public sealed partial class SdfFieldEvaluator {
 
         private int m_count;
 
-        // Counts one region recorded, and drops every region when the index has reached its limit. A walk that holds a
-        // dropped region reads it to its end; the next walk records afresh.
+        // Counts one region marked or recorded, and drops every region when the index has reached its limit. The walk
+        // that takes the count from the limit's far side back to zero is the one that drops them, so a count another
+        // walk adds meanwhile is kept. A walk that holds a dropped region reads it to its end.
         public void Admit() {
-            if (Interlocked.Increment(location: ref m_count) > RegionLimit) {
+            var count = Interlocked.Increment(location: ref m_count);
+
+            if ((count > RegionLimit) && (Interlocked.CompareExchange(comparand: count, location1: ref m_count, value: 0) == count)) {
                 Roots.Clear();
-                Volatile.Write(location: ref m_count, value: 0);
                 RegionWork.Count(kind: RegionResets);
             }
         }
     }
     // One region: its tape as pairs of a range's first instruction and the one after its last, the cullable instances
-    // the tape holds, the instructions it holds, and its eight children by the low bit of each axis's cell, each null
-    // until a walk reaches it.
+    // the tape holds (of a region that divides), the instructions it holds, and its eight children by the low bit of
+    // each axis's cell, each null until a walk reaches it and Reached until a second walk records it.
     private sealed class RegionNode(int[] tape, int[] bounds, int instructions) {
+        // The mark of a region one walk has reached and none has recorded.
+        public static readonly RegionNode Reached = new(bounds: [], instructions: 0, tape: EmptyTape);
+
         public readonly int[] Bounds = bounds;
         public readonly int Instructions = instructions;
         public readonly int[] Tape = tape;

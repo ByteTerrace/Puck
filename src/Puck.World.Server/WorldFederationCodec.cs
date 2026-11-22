@@ -1287,7 +1287,8 @@ public static partial class WorldFederationCodec {
     /// or <see langword="null"/> for a document no delta follows.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
     /// <param name="fetch">The authorized fetch door for uncached prototype bodies.</param>
-    public static bool TryDecodeDocument(ReadOnlySpan<byte> body, out WorldDefinition? definition, out WorldDocumentVersion version, out WorldDisclosureTier tier, out WireFailure failure, WorldProjectionHold? hold = null, Func<ContentPin, byte[]?>? fetch = null) {
+    /// <param name="content">The store the sender's content is kept in, or <see langword="null"/> for the process's.</param>
+    public static bool TryDecodeDocument(ReadOnlySpan<byte> body, out WorldDefinition? definition, out WorldDocumentVersion version, out WorldDisclosureTier tier, out WireFailure failure, WorldProjectionHold? hold = null, Func<ContentPin, byte[]?>? fetch = null, ContentAddressedStore? content = null) {
         definition = null;
         version = default;
         tier = WorldDisclosureTier.Frames;
@@ -1338,12 +1339,18 @@ public static partial class WorldFederationCodec {
         var payload = body[DocumentHeaderBytes..];
 
         if (tier == WorldDisclosureTier.Replica) {
-            return TryDeserializeDefinition(
+            if (!TryDeserializeDefinition(
                 bytes: payload.ToArray(),
                 field: "definition",
                 definition: out definition,
                 failure: out failure
-            );
+            )) {
+                return false;
+            }
+
+            WorldContentIndex.Fetch(definition: definition!, fetch: fetch, held: content);
+
+            return true;
         }
 
         if (tier == WorldDisclosureTier.Frames) {
@@ -1391,6 +1398,7 @@ public static partial class WorldFederationCodec {
         }
 
         if (!WorldProjection.TryToDefinition(
+            content: content,
             fetch: fetch,
             definition: out definition,
             projection: projection,
@@ -1515,7 +1523,8 @@ public static partial class WorldFederationCodec {
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
     /// <param name="fetch">The authorized prototype fetch door.</param>
-    public static bool TryDecodeReservationReply(ReadOnlySpan<byte> body, out WorldTransferReservationReply? reply, out WireFailure failure, Func<ContentPin, byte[]?>? fetch = null) {
+    /// <param name="content">The store the sender's content is kept in, or <see langword="null"/> for the process's.</param>
+    public static bool TryDecodeReservationReply(ReadOnlySpan<byte> body, out WorldTransferReservationReply? reply, out WireFailure failure, Func<ContentPin, byte[]?>? fetch = null, ContentAddressedStore? content = null) {
         var reader = new WireReader(bytes: body);
 
         reply = null;
@@ -1594,6 +1603,7 @@ public static partial class WorldFederationCodec {
         if (
             (definitionBytes.Length > 0) &&
             !TryDecodeDocument(
+            content: content,
             fetch: fetch,
             body: definitionBytes,
             definition: out definition,
@@ -1628,7 +1638,8 @@ public static partial class WorldFederationCodec {
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
     /// <param name="fetch">The authorized prototype fetch door.</param>
-    public static bool TryDecodeRoute(ReadOnlySpan<byte> body, out WorldAuthorityRouteDescription route, out WireFailure failure, Func<ContentPin, byte[]?>? fetch = null) {
+    /// <param name="content">The store the sender's content is kept in, or <see langword="null"/> for the process's.</param>
+    public static bool TryDecodeRoute(ReadOnlySpan<byte> body, out WorldAuthorityRouteDescription route, out WireFailure failure, Func<ContentPin, byte[]?>? fetch = null, ContentAddressedStore? content = null) {
         var reader = new WireReader(bytes: body);
 
         route = default;
@@ -1661,6 +1672,7 @@ public static partial class WorldFederationCodec {
 
         if (
             !TryDecodeDocument(
+            content: content,
             fetch: fetch,
             body: definitionBytes,
             definition: out var definition,

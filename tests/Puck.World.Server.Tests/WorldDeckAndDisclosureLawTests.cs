@@ -205,6 +205,35 @@ public sealed class WorldDeckAndDisclosureLawTests {
         Assert.Equal(expected: "rack", actual: WorldPlacementDeal.PickedId(id: WorldPlacementDeal.PlaceholderId(template: "rack", slot: 0)));
         Assert.Equal(expected: "rack/king", actual: WorldPlacementDeal.PickedId(id: "rack/king"));
     }
+    // A view's placement projection is held between reads, and the held reading never answers a recipient for a cell it
+    // has lost: a cell policy that withholds a dealt card moves the arena's disclosure revision and the dealt row's
+    // version, and the next read re-deals without it. Reads that find nothing moved allocate nothing.
+    [Fact]
+    public void AViewsHeldPlacementsFollowALostCellAndAllocateNothingWhileTheyStand() {
+        var definition = Rack(hidden: HiddenCells.Omit);
+        var arena = Fixtures.Store(definition: definition);
+        var images = new WorldDisclosureImages();
+        var view = new WorldRecipientView(() => definition, () => arena, Principal.Seat(slot: 1), WorldDisclosureTier.Replica,
+            static () => true, images, "test", static () => ArenaTime.Origin);
+        string Ids() => string.Join(separator: ",", values: view.Placements.Select(selector: p => p.Id));
+
+        Assert.Equal(expected: "rack,rack/king,rack/queen", actual: Ids());
+        Assert.True(condition: view.ShowsPlacement(id: "rack/queen"));
+        Assert.Equal(expected: 0L, actual: Puck.Abstractions.Counting.AllocationWindow.Least(window: () => {
+            _ = view.Placements;
+            _ = view.ShowsPlacement(id: "rack/king");
+        }));
+
+        Assert.True(condition: arena.Catalog.TryResolve(lane: StateLane.Document, name: "hand", handle: out var hand));
+        Assert.True(condition: arena.Keys.TryResolve(name: Name(value: "queen"), key: out var queen));
+        var mark = arena.BeginScope();
+
+        Assert.True(condition: arena.TryWriteVisibility(rowOrdinal: hand.Ordinal, key: queen, visibility: new StateVisibility(["seat1"])));
+        arena.Commit(mark: mark);
+
+        Assert.False(condition: view.ShowsPlacement(id: "rack/queen"));
+        Assert.Equal(expected: "rack,rack/king", actual: Ids());
+    }
     [Fact]
     public void ATemplateOverARowThatCanWithholdDealsNoPhysicalFacet() {
         var definition = Rack(hidden: HiddenCells.Placeholder, solidCard: "king");

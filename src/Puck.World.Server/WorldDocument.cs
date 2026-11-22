@@ -129,6 +129,7 @@ public sealed partial class WorldDocument {
         m_definition = definition;
         m_host = host;
         m_revision = new WorldSourceRevision(ContentHash: string.Empty, Definition: definition);
+        WorldContentIndex.Register(definition: definition);
     }
 
     /// <summary>Takes a revision of the world's source as the one later reloads are cut from.</summary>
@@ -145,12 +146,14 @@ public sealed partial class WorldDocument {
     /// <summary>Swaps the live definition and moves its install ordinal forward. It is the one door every live
     /// definition passes through, so it is also where a replaced <c>admission</c> section is announced: an install, an
     /// undo, a seek and a checkpoint restore all reach <see cref="WorldServer.AdmissionChanged"/> without each naming
-    /// it.</summary>
+    /// it. It is where the content the definition names by pin is indexed (<see cref="WorldContentIndex"/>) for the same
+    /// reason: every world this process runs has its content findable by pin before anything reads it.</summary>
     /// <param name="definition">The new live definition.</param>
     internal void AdoptDefinition(WorldDefinition definition) {
         var previous = m_definition;
 
         m_definition = definition;
+        WorldContentIndex.Register(definition: definition, previous: previous);
         if (Host.Arena is { } arena) { WorldStateReader.Bind(definition, arena); }
         m_sequence++;
         if (!ReferenceEquals(objA: previous.Admission, objB: definition.Admission)) {

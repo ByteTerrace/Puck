@@ -382,15 +382,8 @@ public readonly record struct WorldSurfaceQuery(SdfFieldEvaluator Field, Vector3
 
         // The march reports no normal, so the surface's own is the field gradient at the hit: the standoff is along the
         // surface's normal, not back along the probe, so a foot on a slope stands off perpendicular to it.
-        if (
-            Field.TryFieldGradient(
-                gradient: out var gradient,
-                position: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point))
-            ) &&
-            (gradient.ToVector3() is { } surface) &&
-            (surface.LengthSquared() > 0f)
-        ) {
-            normal = Vector3.Normalize(value: surface);
+        if (Field.TrySurfaceNormal(normal: out var surface, position: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point)))) {
+            normal = surface;
         }
 
         return new WorldSurfaceAnswer(Hit: true, Normal: normal, Point: point, HasNormal: true, Target: (point + (normal * MathF.Max(

@@ -695,7 +695,14 @@ Free Cam do not alter the logical movement basis.
   (`<level>$camera$<camera>`), a source instance (a machine's or probe's of that
   world's own host, followed by the fault that leaves it dark in parentheses),
   `source$color$<digest>` past the depth, `text`, or `none`; then
-  `text-fault <why>` when that world's fonts do not resolve.
+  `text-fault <why>` when that world's fonts do not resolve. A headless host
+  builds no scene for a world on another authority that a seat is routed to, and
+  lists it as `routed$<digest> depth 0 world <authority> unread fonts <n>
+  machines <n>` (what its delivered document carries), then `text-fault <why>`
+  when it does not hold one of those fonts by pin. `world.counters
+  assets.content` reads where content read by pin was found (`files`, `store`,
+  `fetched`), the fetched objects refused (`refused`), the reads nothing answered
+  (`missing`) and the bytes answered (`bytes`).
 - `views.nestingDepth` (document) — how many observations deep a world shown
   through screens or named infinity layers renders: 3 unauthored, 0 through 8,
   refused by name past either end. The boot world's governs the presentation

@@ -57,11 +57,15 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var normal = Vector3.UnitZ;
         var layout = typeof(SdfMeshIrradiance).GetField(name: "m_layout", bindingAttr: Private)!.GetValue(obj: volume);
         var lows = typeof(SdfMeshIrradiance).GetMethod(name: "Lows", bindingAttr: Private)!.Invoke(obj: volume, parameters: null);
-        object?[] arguments = [point, normal, layout, lows, null];
+        // Every probe cache read takes a hold of the volume's reader epochs.
+        var blocks = typeof(SdfMeshIrradiance).GetField(name: "m_blocks", bindingAttr: Private)!.GetValue(obj: volume)!;
+        var hold = blocks.GetType().GetMethod(name: "Enter")!.Invoke(obj: blocks, parameters: null);
+        object?[] arguments = [point, normal, layout, lows, hold, null];
 
         Assert.True((bool)typeof(SdfMeshIrradiance).GetMethod(name: "TryIncoming", bindingAttr: Private)!.Invoke(obj: volume, parameters: arguments)!);
+        ((IDisposable)hold!).Dispose();
 
-        var read = (Vector3)arguments[4]!;
+        var read = (Vector3)arguments[5]!;
 
         using var scene = SdfMeshIrradianceScene.Build(draws: draws);
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];

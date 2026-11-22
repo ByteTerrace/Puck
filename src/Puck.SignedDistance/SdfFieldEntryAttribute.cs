@@ -27,6 +27,30 @@ public readonly record struct SdfShaderAction(string? Code, SdfShaderOperands Op
     // The arm that calls a shared formula's generated function with the entry's operands.
     internal static SdfShaderAction Of(SdfFormula formula) =>
         new(Code: $"result = {formula.Dispatch(shader: true)}; break;", Operands: SdfShaderOperands.None);
+
+    // The walk state a stream formula reads and writes, under the names each kernel reader holds it by. The map reader
+    // decodes an instruction's data vectors only in the arms that read them; the rigid and part readers hold both.
+    private static readonly (string State, string Held)[] MapState = [("p", "localPosition"), ("distance", "result.distance")];
+    private static readonly (string State, string Held)[] RigidState = [("p", "p")];
+
+    /// <summary>The map reader's arm that writes each named state from its shared formula.</summary>
+    internal static SdfShaderAction Map(params (string State, SdfFormula Formula)[] writes) => Write(MapState, loads: true, writes);
+    /// <summary>The rigid fold reader's arm that writes each named state from its shared formula.</summary>
+    internal static SdfShaderAction Rigid(params (string State, SdfFormula Formula)[] writes) => Write(RigidState, loads: false, writes);
+    /// <summary>The part reader's arm that writes each named state from its shared formula.</summary>
+    internal static SdfShaderAction Part(params (string State, SdfFormula Formula)[] writes) => Write(MapState, loads: false, writes);
+
+    /// <summary>The same arm with hand-written statements ahead of it: a guard, or a value the formula reads.</summary>
+    internal SdfShaderAction After(string statements, SdfShaderOperands operands = SdfShaderOperands.None) =>
+        new(Code: statements.TrimEnd('\n') + "\n" + Code, Operands: Operands | operands);
+
+    private static SdfShaderAction Write((string State, string Held)[] held, bool loads, (string State, SdfFormula Formula)[] writes) {
+        var code = string.Concat(writes.Select(write =>
+            $"{held.FirstOrDefault(name => name.State == write.State).Held ?? write.State} = {write.Formula.Dispatch(shader: true, held)};\n"));
+        var operands = !loads ? SdfShaderOperands.None
+            : (code.Contains("data0") ? SdfShaderOperands.Data0 : SdfShaderOperands.None) | (code.Contains("data1") ? SdfShaderOperands.Data1 : SdfShaderOperands.None);
+        return new(Code: code + "break;", Operands: operands);
+    }
 }
 
 /// <summary>Inputs outside the instruction's own data vectors that a field entry reads.</summary>

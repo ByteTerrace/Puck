@@ -64,9 +64,9 @@ public sealed partial class WorldTick {
         cue.Tick == snapshot.Tick && ReferenceEquals(arena, Host.Arena);
 
     // One recipient's verdicts over a delivery's cues. A rule's cues share one CueReads, so the last verdict is kept;
-    // the placement projection and the field-region verdict are read at most once, and only when a cue needs them.
+    // the field-region verdict is read at most once, and only when a cue needs it. The placement projection is the
+    // view's own reading, which the image table composes again only when something it reads moved.
     private struct CueAdmission(WorldRecipientView view, bool fullBodies) {
-        private IReadOnlyList<WorldPlacement>? m_placements;
         private bool? m_fields;
         private WorldRuleHost.CueReads? m_last;
         private bool m_lastVerdict;
@@ -88,11 +88,8 @@ public sealed partial class WorldTick {
                 if (!view.HoldsMachine(screen)) { return false; }
             }
             if (reads.Fields && !(m_fields ??= view.ReadsEveryFieldRegion())) { return false; }
-            if (reads.Placements.Length != 0) {
-                var placements = m_placements ??= view.Placements;
-                foreach (var id in reads.Placements) {
-                    if (!Shows(placements, id)) { return false; }
-                }
+            foreach (var id in reads.Placements) {
+                if (!view.ShowsPlacement(id)) { return false; }
             }
             return true;
         }
@@ -102,24 +99,14 @@ public sealed partial class WorldTick {
     // is in its delivery and, for a region event, the region's placement is in its projection.
     private byte DisclosedMusicSenses(in WorldSnapshot snapshot, WorldRecipientView view, WorldBodyView? bodies = null) {
         byte senses = 0;
-        IReadOnlyList<WorldPlacement>? placements = null;
         foreach (var edge in Host.Events.Edges) {
             if (MusicDirectorFactory.SenseOf(edge.Family) is not { } sense) { continue; }
             var body = (int)edge.A;
             var generation = Host.Population.Generation(body);
             if (!(bodies?.Contains(body, generation) ?? snapshot.TryFindEntity(body, generation, out _))) { continue; }
-            if (edge.Family is WorldEventFamily.RegionEnter or WorldEventFamily.RegionExit &&
-                !Shows(placements ??= view.Placements, edge.GateA.Id)) { continue; }
+            if (edge.Family is WorldEventFamily.RegionEnter or WorldEventFamily.RegionExit && !view.ShowsPlacement(edge.GateA.Id)) { continue; }
             senses |= (byte)(1 << (int)sense);
         }
         return senses;
-    }
-
-    // Whether a placement projection shows the placement id.
-    private static bool Shows(IReadOnlyList<WorldPlacement> placements, string? id) {
-        for (var index = 0; (index < placements.Count); index++) {
-            if (string.Equals(placements[index].Id, id, StringComparison.Ordinal)) { return true; }
-        }
-        return false;
     }
 }

@@ -164,8 +164,11 @@ dotnet artifacts/world/Puck.World.dll --world worlds/debug
 Use `linux-x64` for a Linux desktop. World publishes with
 [ReadyToRun](https://learn.microsoft.com/en-us/dotnet/core/deploying/ready-to-run)
 precompilation to reduce first-use JIT work. This makes publishing slower and
-assemblies larger; ordinary `dotnet build` and `dotnet run` still use IL.
-`-p:PublishReadyToRun=false` opts out for a comparison. The plain restore
+assemblies larger; ordinary `dotnet build` and `dotnet run` still use IL, which
+compiles every method a boot calls. The tools' World build store (the World
+`puck_world_start`, `puck canary` and `puck test` boot) publishes the
+checkout's portable build this way, one image per assembly, each made again
+only when its assembly changed. `-p:PublishReadyToRun=false` opts out for a comparison. The plain restore
 prepares both desktop runtime graphs and the compiler pack in World's own
 restore, so the publish passes `--no-restore`. A publish that restores with
 `-r` fails with NU1004 in every library: `-r` reaches each project's restore,
@@ -176,11 +179,18 @@ over framework types to the JIT, `System.Text.Json`'s metadata for the document
 model most of them, because the precompiler cannot reach them outside the
 framework's version bubble. A composite image puts the framework and Puck in
 one bubble (`-p:PublishReadyToRunComposite=true` with a self-contained
-publish), and `puck world player` publishes that way. On the debug world
-headless (`--devices none`), `host.memory`'s `jit methods` read just after
-`world.status` on a warm cache is about 33,000 for a self-contained
-per-assembly publish and about 4,000 to 4,500 for the composite one. The
-composite artifact is about half again as large (one image,
+publish), and `puck world player` publishes that way. Read a boot's JIT work
+with `host.memory`'s `jit methods` just after `world.status`: an IL build
+compiles roughly twice what a per-assembly image leaves, and a composite image
+leaves about a tenth of that. The count keeps growing while the World runs,
+because it also counts the tiering thread recompiling hot precompiled methods
+(twice each under dynamic PGO: instrumented, then optimized); the tier of each
+compile is in the JIT's own summary (`DOTNET_JitStdOutFile` with
+`DOTNET_JitDisasmSummary=1`). Every ReadyToRun shape shares the precompiler's
+intermediate directory, so the project empties it when the shape changes
+(`PuckReadyToRunShape`): without that, a per-assembly publish after a composite
+one ships the composite's component stubs without their image, and the folder
+fails fast at start. The composite artifact is about half again as large (one image,
 `Puck.World.r2r.dll`, holds most of the difference) and takes several times
 longer to publish. Because that image holds the framework's code with Puck's,
 every Puck change rewrites it, so a release uploads it again whole. CI publishes the already-built portable assemblies with

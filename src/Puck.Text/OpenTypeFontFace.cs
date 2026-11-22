@@ -1120,6 +1120,20 @@ public sealed class OpenTypeFontFace {
             MetricGlyphId: outline.MetricGlyphId
         );
     }
+    /// <summary>Returns whether bytes open as a font file <see cref="Parse"/> reads, a TrueType or OpenType font or a
+    /// collection of them, judged by the four-byte signature alone. It is the check that keeps bytes of another kind
+    /// out of a font's place; a parse under a budget decides whether the font is well formed.</summary>
+    /// <param name="bytes">The candidate file.</param>
+    /// <returns><see langword="true"/> when the bytes open with a font or font collection signature.</returns>
+    public static bool HasFontSignature(ReadOnlySpan<byte> bytes) {
+        if (bytes.Length < 4) {
+            return false;
+        }
+
+        var signature = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(source: bytes);
+
+        return ((signature == 0x00010000) || (signature == Tag(value: "true")) || (signature == Tag(value: "OTTO")) || (signature == Tag(value: "ttcf")));
+    }
     public static OpenTypeFontFace Parse(ReadOnlyMemory<byte> fontBytes, int faceIndex, FontGenerationBudget? budget = null) {
         budget?.Work(amount: fontBytes.Length);
         var bytes = fontBytes.Span;

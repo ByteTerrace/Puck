@@ -313,14 +313,15 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             return false;
         }
 
-        var external = plan.Storages.Where(predicate: static storage => (storage.IsExternal && !storage.Declaration.IsHostBuffer)).ToDictionary(
-            comparer: StringComparer.Ordinal,
-            keySelector: static storage => storage.Name
-        );
+        var facts = plan.Derived;
+        var external = facts.External;
         var inputs = (graph.Inputs ?? []);
         var resolved = new Binding[inputs.Count];
-        var bound = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var storages = plan.Storages.Count;
+        // Which external storages an input binds, by storage index.
+        var bound = ((storages <= 256) ? stackalloc bool[storages] : new bool[storages]);
 
+        bound.Clear();
         for (var position = 0; (position < inputs.Count); position++) {
             var input = inputs[position];
 
@@ -329,7 +330,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     key: (input.Version ?? string.Empty),
                     value: out var storage
                 ) ||
-                !bound.Add(item: input.Version!)
+                bound[storage.Index]
             ) {
                 refusal = Refuse(
                     RenderGraphRuntimeRefusalCode.InputVersion,
@@ -340,6 +341,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
                 return false;
             }
+            bound[storage.Index] = true;
 
             var producer = set.IndexOf(name: (input.Producer ?? string.Empty));
             var edge = -1;
@@ -412,16 +414,14 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 return false;
             }
 
-            if (plan.Passes.Any(predicate: pass => pass.Accesses.Any(predicate: access =>
-                    ((access.Storage == storage.Index) && access.Use.Writes))) &&
+            if (facts.Writes(storage: storage.Index) &&
                 (set.Reads[index][edge].PreviousFrame || (publication is { Borrowed: false }))) {
                 refusal = Refuse(RenderGraphRuntimeRefusalCode.MutableInput,
                     $"Instance '{instance.Name}' updates '{input.Version}' from '{input.Producer}'; mutable inputs require a current edge to a package-owned shared buffer.",
                     instance.Name, input.Version!, input.Producer!);
                 return false;
             }
-            if (set.Reads[index][edge].PreviousFrame && plan.Passes.Any(predicate: pass => pass.Accesses.Any(predicate: access =>
-                ((access.Storage == storage.Index) && ((access.Use.Access & GpuAccess.TransferRead) != 0))))) {
+            if (set.Reads[index][edge].PreviousFrame && facts.TransferReads(storage: storage.Index)) {
                 refusal = Refuse(RenderGraphRuntimeRefusalCode.TransferInput,
                     $"Instance '{instance.Name}' transfer-reads '{input.Version}' from '{input.Producer}'; transfer inputs require a current buffer edge.",
                     instance.Name, input.Version!, input.Producer!);
@@ -442,14 +442,17 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             );
         }
 
-        var unbound = external.Keys.FirstOrDefault(predicate: name => !bound.Contains(item: name));
+        string? unbound = null;
 
+        foreach (var (name, storage) in external) {
+            if (!bound[storage.Index]) { unbound = name; break; }
+        }
         // Only an uploaded source's upload binds a host buffer port; any other instance would leave it unbound.
         if (
             (unbound is null) &&
             (instance.Kind != RenderGraphInstanceKind.External)
         ) {
-            unbound = plan.Storages.FirstOrDefault(predicate: static storage => storage.Declaration.IsHostBuffer)?.Name;
+            unbound = facts.HostBuffer;
         }
         if (unbound is not null) {
             refusal = Refuse(
@@ -771,8 +774,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             foreach (var binding in inputs[index]) {
                 var storage = graph.Pipeline.Plan.FindResource(name: binding.Version)!.Storage;
 
-                if (graph.Pipeline.Plan.Passes.Any(predicate: pass => pass.Accesses.Any(predicate: access =>
-                    ((access.Storage == storage) && access.Use.Writes)))) { mutableProducers[binding.Producer] = true; }
+                if (graph.Pipeline.Plan.Derived.Writes(storage: storage)) { mutableProducers[binding.Producer] = true; }
             }
         }
         foreach (var bindings in inputs) {

@@ -22,6 +22,6 @@ public static class SdfOpRoles {
     /// <summary>Returns the role of <paramref name="op"/>.</summary>
     /// <param name="op">A defined op.</param>
     /// <returns>The op's role.</returns>
-    /// <exception cref="InvalidOperationException"><paramref name="op"/> has no role.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="op"/> is not a defined op.</exception>
     public static SdfOpRole Of(SdfOp op) => SdfFieldOps.RoleOf(value: op);
 }
