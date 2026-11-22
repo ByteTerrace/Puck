@@ -19,16 +19,6 @@ public sealed partial class WorldBody {
     private WorldRigidContactSlotImage[] m_viewContacts = [];
     private WorldRegisterWriteImage[]? m_viewRegisterWrites;
 
-    /// <summary>Captures this body's sections, read live. A capture owns every table it holds. A view's tables are
-    /// the body's own live storage, or scratch the body reuses for the ones that need assembling, so a view allocates
-    /// nothing once that scratch has grown to this body's shape; it is valid only until the body next changes or is
-    /// viewed again.</summary>
-    /// <param name="alias">Whether to take a view instead of a capture.</param>
-    /// <param name="sections">The sections.</param>
-    /// <param name="registers">The body's register file as the arena's slot lanes hold it, one raw value per slot of
-    /// the kit's compiled definitions: state the arena owns, read beside the sections for an entry's tail.</param>
-    /// <param name="held">Whether to leave out the sections a holder digests (<see cref="HeldDigests"/>): a fold's
-    /// view, which reads those digests from the holders and never the sections.</param>
     [System.Runtime.CompilerServices.SkipLocalsInit]
     private void CaptureCoreSections(out BodyPoseSection pose, out BodyMotionSection motion, out BodyClocksSection clocks, out BodyProgramSection program) {
         pose = new(
@@ -105,6 +95,16 @@ public sealed partial class WorldBody {
         );
     }
 
+    /// <summary>Captures this body's sections, read live. A capture owns every table it holds. A view's tables are
+    /// the body's own live storage, or scratch the body reuses for the ones that need assembling, so a view allocates
+    /// nothing once that scratch has grown to this body's shape; it is valid only until the body next changes or is
+    /// viewed again.</summary>
+    /// <param name="alias">Whether to take a view instead of a capture.</param>
+    /// <param name="sections">The sections.</param>
+    /// <param name="registers">The body's register file as the arena's slot lanes hold it, one raw value per slot of
+    /// the kit's compiled definitions: state the arena owns, read beside the sections for an entry's tail.</param>
+    /// <param name="held">Whether to leave out the sections a holder digests (<see cref="HeldDigests"/>): a fold's
+    /// view, which reads those digests from the holders and never the sections.</param>
     [System.Runtime.CompilerServices.SkipLocalsInit]
     internal void CaptureSections(bool alias, out WorldBodySections sections, out ReadOnlyMemory<long> registers, bool held = false) {
         CaptureCoreSections(clocks: out sections.Clocks, motion: out sections.Motion, pose: out sections.Pose, program: out sections.Program);
