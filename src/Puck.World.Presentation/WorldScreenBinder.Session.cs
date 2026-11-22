@@ -4,7 +4,6 @@ using Puck.SdfVm;
 using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
-using Puck.World.Server;
 
 namespace Puck.World;
 
@@ -49,7 +48,7 @@ public sealed partial class WorldScreenBinder {
 
         return (Ok: true, Message: $"screen {index} showing session '{session.Destination}' -> instance '{feed.InstanceName}'");
     }
-    // Called once per produced frame. The authority owns each session screen's session (WorldInstanceHost.ScreenSession):
+    // Called once per produced frame. The authority owns each session screen's session (published at each collect, WorldObservationTable):
     // it opens one when the screen is declared, closes it when the screen is re-pointed or removed, and asks a
     // destination that ended one to admit the screen again. This follows it: a slot whose declared session the host now
     // answers with a different session object (a re-point, or one that was pending when the screen applied) rebinds
@@ -73,8 +72,8 @@ public sealed partial class WorldScreenBinder {
                 source: declared
             ) is not { } hosted) ||
                 ReferenceEquals(
-                objA: slot.Session?.Hosted,
-                objB: hosted
+                objA: slot.Session?.Hosted.Token,
+                objB: hosted.Token
             )
             ) {
                 continue;
@@ -91,10 +90,7 @@ public sealed partial class WorldScreenBinder {
             if (
                 (slot.Session is not { } feed) ||
                 feed.InstanceGone ||
-                (m_instanceHost.TryGet(
-                name: feed.InstanceName,
-                instance: out var destination
-            ) && (destination is not null))
+                Observations.Runs(instance: feed.InstanceName)
             ) {
                 continue;
             }
@@ -106,9 +102,9 @@ public sealed partial class WorldScreenBinder {
         }
     }
     // The session the boot world's authority holds for a screen, when it holds one for this very source.
-    private WorldObservationSession? HostedSession(int index, WorldScreenSource.Session source) => (((m_instanceHost.ScreenSession(
-        instanceName: WorldInstanceHost.BootInstanceName,
-        screenIndex: index
+    private WorldObservedSession? HostedSession(int index, WorldScreenSource.Session source) => (((Observations.Screen(
+        owner: WorldDefinitionLoader.BootInstanceName,
+        screen: index
     ) is { } hosted) && (hosted.Source == source))
         ? hosted
         : null);
@@ -125,7 +121,7 @@ public sealed partial class WorldScreenBinder {
             : null);
     }
     // Releases one slot's view of a session: its envelope and window registrations. The session itself is the
-    // authority's (WorldInstanceHost), which ends it when the screen is re-pointed or removed; the destination instance
+    // authority's, which ends it when the screen is re-pointed or removed; the destination instance
     // leaves the render graph once no slot holds the feed. A nested view passes no reason: the authority narrates the
     // sessions it opens and ends, and a portal crossing would otherwise narrate every view of every level it tears down.
     private void ReleaseSession(SessionFeed feed, int index, string? reason) {
@@ -234,6 +230,7 @@ public sealed partial class WorldScreenBinder {
         return new SessionFeed(
             depth: 1,
             destination: session.Destination,
+            current: Current,
             effectiveCamera: effectiveCamera,
             generationId: hosted.GenerationId,
             hosted: hosted,
@@ -249,13 +246,8 @@ public sealed partial class WorldScreenBinder {
             Row = BootRowOf(screen: index),
         };
     }
-    // The boot world's definition, as its authority holds it.
-    private WorldDefinition? BootDefinition() => (m_instanceHost.TryGet(
-        instance: out var boot,
-        name: WorldInstanceHost.BootInstanceName
-    )
-        ? boot?.Server.Definition
-        : null);
+    // The boot world's definition, as the client was delivered it.
+    private WorldDefinition? BootDefinition() => m_client.Definition;
     // The frame's shared scenes: each feed whose authority proved its stream is handed the same scene inputs as
     // another feed's of the same world, by the first such feed in feed order (its lead, whose mirror the scene
     // draws), and each group's first feed by its world and scene identity. A feed alone in its group shares nothing.
@@ -284,13 +276,10 @@ public sealed partial class WorldScreenBinder {
     }
     // The authority's current proof about a feed's stream, while the instance that issued it is the one the feed's
     // session observes.
-    private WorldSceneProof? SharedProofOf(SessionFeed feed) => (
+    // The collect checked the proof against the instance running under the name (ProofHolds).
+    private WorldSceneShare? SharedProofOf(SessionFeed feed) => (
         !feed.InstanceGone &&
-        (feed.Observation is { SceneProof: { } proof } observation) &&
-        m_instanceHost.TryGet(instance: out var instance, name: feed.InstanceName) &&
-        (instance is not null) &&
-        observation.Observes(server: instance.Server) &&
-        proof.IssuedBy(server: instance.Server)
+        (feed.Observation is { Proof: { } proof, ProofHolds: true })
             ? proof
             : null);
     // The scene a feed shares this frame: its group's, drawn from its lead's mirror, on a frame whose latched delivery
@@ -392,7 +381,7 @@ public sealed partial class WorldScreenBinder {
     // offscreen view. A mutable class so a lifecycle transition (re-point, teardown, instance-retired) updates it in
     // place; the constructor parameters are immutable facts about ONE resolution (a re-point builds a fresh instance
     // rather than mutating this one — see ApplySessionSource).
-    private sealed partial class SessionFeed(int depth, string destination, string? requestedCamera, string? effectiveCamera, string instanceName, ulong generationId, WorldObservationSession hosted, string registrationName, WorldScreenProjection projection, WorldScreenResolution? resolution, int screenIndex) : IDisposable {
+    private sealed partial class SessionFeed(int depth, string destination, string? requestedCamera, string? effectiveCamera, string instanceName, ulong generationId, WorldObservedSession hosted, string registrationName, WorldScreenProjection projection, WorldScreenResolution? resolution, int screenIndex, Func<WorldObservedSession?, WorldObservedSession?> current) : IDisposable {
         // How many screens deep the destination is seen: 1 for a boot or routed world's own screen, one more a level.
         public int Depth { get; } = depth;
         public string Destination { get; } = destination;
@@ -418,8 +407,9 @@ public sealed partial class WorldScreenBinder {
         public string? EffectiveCamera { get; } = effectiveCamera;
         public string InstanceName { get; } = instanceName;
         public ulong GenerationId { get; } = generationId;
-        // The authority's session this feed renders: its mirror, and the observation it currently holds.
-        public WorldObservationSession Hosted { get; } = hosted;
+        // The authority's session this feed renders, as the last collect published it: its mirror, and the observation
+        // it currently holds.
+        public WorldObservedSession Hosted => (current(arg: hosted) ?? hosted);
 
         public WorldSessionMirror Mirror => Hosted.Mirror;
 
@@ -429,7 +419,7 @@ public sealed partial class WorldScreenBinder {
 
         // The session the screen observes as, replaced by the authority when the destination ends it and admits
         // another; null once the destination refused another.
-        public WorldSessionObservation? Observation => Hosted.Observation;
+        public WorldObservationAdmission? Observation => Hosted.Observation;
 
         // The feed's access and route into its destination's endpoint scene and whether it renders as a view of the
         // World's own residency instead (its destination is the boot world), all settled every frame

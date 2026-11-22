@@ -19,19 +19,30 @@ public sealed partial class WorldScreenBinder : IWorldScreenImages {
     /// rebuilt from the rows <see cref="ReconcileScreens"/> last applied and the live binds over them;
     /// <see cref="Publish"/> publishes it each frame. Its <see cref="WorldScreenMappingSet.Sources"/> are the source
     /// instances the render graph runs for the screens.</summary>
-    public WorldScreenMappingSet Mappings { get; } = new(world: WorldInstanceHost.BootInstanceName);
+    public WorldScreenMappingSet Mappings { get; } = new(world: WorldDefinitionLoader.BootInstanceName);
 
     /// <inheritdoc/>
     long? IWorldScreenImages.ExtentRevision => m_extentRevision;
 
-    private void OnMachinesChanged() => m_extentRevision++;
+    // Follows the boot world's machine instance map as the published table shows it: a move re-reads every machine
+    // screen's extent and raises MachinesChanged. Called on the frame, as it publishes.
+    private void FollowMachines() {
+        var revision = (MachinesOf(world: WorldDefinitionLoader.BootInstanceName)?.InstanceRevision ?? 0UL);
+
+        if (revision == m_machineRevision) {
+            return;
+        }
+        m_machineRevision = revision;
+        m_extentRevision++;
+        MachinesChanged?.Invoke();
+    }
 
     /// <inheritdoc/>
     /// <remarks>A machine output's extent is its framebuffer's, and a producer's or a probe output's its feed's descriptor's
     /// (the feed its source instance opened: a probe's states its provisioned ring's).</remarks>
     public bool TryExtent(int screen, out int width, out int height) {
         (width, height) = ((ShownOf(screen: screen) is WorldScreenSource.Machine machine)
-            ? ExtentOf(output: MachinesOf(world: WorldInstanceHost.BootInstanceName)?.VideoOutput(
+            ? ExtentOf(output: MachinesOf(world: WorldDefinitionLoader.BootInstanceName)?.VideoOutput(
                 instance: machine.Instance,
                 output: machine.Output
             ))

@@ -9,7 +9,7 @@ namespace Puck.DirectX;
 /// <c>DXGI_FORMAT</c> values, and <see cref="DirectXExportableFence"/> instances.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed class DirectXGpuSurfaceExportFactory(DirectXDeviceContext deviceContext) {
+public sealed class DirectXGpuSurfaceExportFactory(DirectXDeviceContext deviceContext) : IGpuSurfaceExporter {
     private DirectXGpuExportableImage Create(GpuPixelFormat format, uint width, uint height, GpuImageUsage usage, DirectXExportableImageAccess access) =>
         new(
             access: access,

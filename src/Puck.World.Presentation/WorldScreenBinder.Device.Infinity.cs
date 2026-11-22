@@ -4,7 +4,6 @@ using Puck.Commands;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.World.Client;
-using Puck.World.Server;
 
 namespace Puck.World;
 
@@ -34,8 +33,8 @@ public sealed partial class WorldScreenBinder {
     }
     private void ReconcileInfinityRoots() {
         m_infinityEpoch++;
-        if (m_instanceHost.TryEndpoint(endpoint: out var boot, name: WorldInstanceHost.BootInstanceName) && (boot is not null)) {
-            _ = InfinityRootOf(boot.Mirror, WorldInstanceHost.BootInstanceName, 0, WorldViewGraphs.WorldInstance);
+        if (Observations.BootEndpoint is { } boot) {
+            _ = InfinityRootOf(boot.Mirror, WorldDefinitionLoader.BootInstanceName, 0, WorldViewGraphs.WorldInstance);
         }
         if (Presenter is { } presenter) {
             foreach (var scene in presenter.RoutedScenes) {
@@ -93,9 +92,11 @@ public sealed partial class WorldScreenBinder {
             if (!ReferenceEquals(objA: row.Mirror.Definition.Render?.Sky, objB: row.Sky)) { return true; }
         }
         foreach (var row in root.Observations) {
-            if (!ReferenceEquals(objA: m_instanceHost.InfinitySession(instanceName: row.Owner, layerName: row.Layer), objB: row.Hosted)
-                || !ReferenceEquals(objA: row.Hosted?.Observation, objB: row.Observation)
-                || (row.Available != (row.Hosted?.Observation is { Ended: false }))) {
+            var hosted = Observations.Infinity(layer: row.Layer, owner: row.Owner);
+
+            if (!ReferenceEquals(objA: hosted?.Token, objB: row.Hosted?.Token)
+                || !ReferenceEquals(objA: hosted?.Observation?.Token, objB: row.Observation?.Token)
+                || (row.Available != (hosted?.Observation is { Ended: false }))) {
                 return true;
             }
         }
@@ -121,7 +122,7 @@ public sealed partial class WorldScreenBinder {
             var ready = ((source.Mirror is not null) && ((source.Hosted is null) || (source.Hosted.Observation is { Ended: false })));
 
             if (root.Entries.TryGetValue(key: planned.Name, value: out var held)
-                && (!ready || !ReferenceEquals(objA: held.Mirror, objB: source.Mirror) || !ReferenceEquals(objA: held.Hosted, objB: source.Hosted)
+                && (!ready || !ReferenceEquals(objA: held.Mirror, objB: source.Mirror) || !ReferenceEquals(objA: held.Hosted?.Token, objB: source.Hosted?.Token)
                     || (held.Planned.Spec != planned.Spec) || !held.Prototypes.SequenceEqual(second: (prototypes ?? [])))) {
                 ReleaseInfinity(entry: held);
                 _ = root.Entries.Remove(key: planned.Name);
@@ -155,7 +156,7 @@ public sealed partial class WorldScreenBinder {
             if (spec.Kind == InfinityViewKind.Far) {
                 cached = new InfinitySource(Hosted: null, Instance: owner.Instance, Mirror: owner.Mirror);
             } else {
-                var hosted = m_instanceHost.InfinitySession(instanceName: owner.Instance, layerName: spec.Name);
+                var hosted = Observations.Infinity(layer: spec.Name, owner: owner.Instance);
 
                 root.Observations.Add(item: new InfinityObservation(owner.Instance, spec.Name, hosted,
                     hosted?.Observation, (hosted?.Observation is { Ended: false })));
@@ -179,14 +180,14 @@ public sealed partial class WorldScreenBinder {
         }
     }
     private InfinityEntry CreateInfinity(InfinityRoot root, WorldInfinityView planned, WorldSessionMirror mirror,
-        string instance, WorldObservationSession? hosted, IReadOnlyList<string>? prototypes) {
+        string instance, WorldObservedSession? hosted, IReadOnlyList<string>? prototypes) {
         var name = ((root.Name == WorldViewGraphs.WorldInstance) ? planned.Name : ((root.Name + Puck.State.GeneratedName.Joiner) + planned.Name));
         var emitter = new WorldSessionSceneEmitter(mirror: mirror, effectiveCameraName: null, domains: m_domains, jobs: m_stamps.Jobs,
             onlyPrototypes: ((planned.Spec.Kind == InfinityViewKind.Far) ? new HashSet<string>(collection: (prototypes ?? []), comparer: StringComparer.Ordinal) : null)) {
             SkyLayers = SkyLayers,
             Session = Settings,
         };
-        var entry = new InfinityEntry(emitter: emitter, hosted: hosted, instance: instance, mirror: mirror, name: name, planned: planned, prototypes: (prototypes ?? []), root: root);
+        var entry = new InfinityEntry(current: Current, emitter: emitter, hosted: hosted, instance: instance, mirror: mirror, name: name, planned: planned, prototypes: (prototypes ?? []), root: root);
         var scene = new WorldInfinityViewScene(emitter, () => entry.Views, planned.Spec) {
             FitSkyViews = (views, sky, width, height) => FilmInfinity(entry: entry, height: height, sky: sky, views: views, width: width),
         };
@@ -202,10 +203,10 @@ public sealed partial class WorldScreenBinder {
                 () => ((entry.Views.Count == 0) ? null : entry.Views[0].Camera.Position), null, null) { Infinity = entry });
             m_accessBindingsVersion++;
         }
-        if (m_instanceHost.TryGet(instance: out var destination, name: instance) && (destination is not null)) {
-            entry.Envelope = destination.Server.Envelope.Configure(
-                measure: candidate => ((hosted is null) ? emitter.MeasureCandidate(candidate: candidate)
-                    : ((hosted.Observation?.Disclose(candidate: candidate) is { } disclosed) ? emitter.MeasureCandidate(candidate: disclosed) : default)));
+        if (Observations.EnvelopeOf(instance: instance) is { } envelope) {
+            entry.Envelope = envelope.Configure(
+                measure: candidate => ((entry.Hosted is not { } session) ? emitter.MeasureCandidate(candidate: candidate)
+                    : ((session.Observation?.Disclose(arg: candidate) is { } disclosed) ? emitter.MeasureCandidate(candidate: disclosed) : default)));
         }
         m_feedsMoved = true;
         return entry;
@@ -296,12 +297,14 @@ public sealed partial class WorldScreenBinder {
         }
     }
     private sealed class InfinityEntry(InfinityRoot root, WorldInfinityView planned, WorldSessionMirror mirror, string instance,
-        WorldObservationSession? hosted, string name, WorldSessionSceneEmitter emitter, IReadOnlyList<string> prototypes) {
+        WorldObservedSession? hosted, string name, WorldSessionSceneEmitter emitter, IReadOnlyList<string> prototypes,
+        Func<WorldObservedSession?, WorldObservedSession?> current) {
         public InfinityRoot Root { get; } = root;
         public WorldInfinityView Planned { get; } = planned;
         public WorldSessionMirror Mirror { get; } = mirror;
         public string Instance { get; } = instance;
-        public WorldObservationSession? Hosted { get; } = hosted;
+        // The layer's session as the last collect published it.
+        public WorldObservedSession? Hosted => current(arg: hosted);
         public string Name { get; } = name;
         public WorldSessionSceneEmitter Emitter { get; } = emitter;
         public IReadOnlyList<string> Prototypes { get; } = prototypes;
@@ -343,9 +346,9 @@ public sealed partial class WorldScreenBinder {
             return fit;
         }
     }
-    private readonly record struct InfinitySource(WorldSessionMirror? Mirror, string? Instance, WorldObservationSession? Hosted);
-    private readonly record struct InfinityObservation(string Owner, string Layer, WorldObservationSession? Hosted,
-        WorldSessionObservation? Observation, bool Available);
+    private readonly record struct InfinitySource(WorldSessionMirror? Mirror, string? Instance, WorldObservedSession? Hosted);
+    private readonly record struct InfinityObservation(string Owner, string Layer, WorldObservedSession? Hosted,
+        WorldObservationAdmission? Observation, bool Available);
     private readonly record struct InfinityOutput(InfinityEntry Entry, int Index);
     private sealed class InfinityScreenSources(InfinityEntry entry) : ISdfScreenSources {
         public IReadOnlyList<int> Screens => AllScreens;

@@ -173,6 +173,10 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     /// <see cref="SetMasterVolume"/>).</summary>
     public int MasterGainQ16 { get; private set; } = 65536;
 
+    /// <summary>Gets the synthesizer a world's <c>tunes</c> row plays through, made from the tune's audio document; the
+    /// composition root supplies the machine that synthesizes it. Without one a tune plays silent and is reported.</summary>
+    public Func<Puck.Assets.Documents.AudioDocument, IAudioBlockSource>? TuneSources { get; init; }
+
     /// <summary>Initializes the director over the client view and the animated-placement pool. Both are nullable so
     /// the offline driver (the audio-mix proof) runs the same derivation headlessly: without a client, entity-anchored
     /// emitters resolve absent (honest silence); without an animator, placements resolve through the static stamp math.</summary>
@@ -497,7 +501,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                 b: host.Hash,
                 comparisonType: StringComparison.Ordinal
             )) {
-                host.Source.Dispose();
+                (host.Source as IDisposable)?.Dispose();
                 if (CreateTuneHost(documentDirectory: definition.DocumentDirectory, mixer: mixer, tune: tune) is { } replacement) {
                     m_tuneHosts[tuneId] = replacement;
                 } else {
@@ -508,7 +512,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
 
         foreach (var tuneId in (orphaned ?? [])) {
             mixer.RemoveSource(key: AudioSourceKey.Tune(id: tuneId));
-            m_tuneHosts[tuneId].Source.Dispose();
+            (m_tuneHosts[tuneId].Source as IDisposable)?.Dispose();
             _ = m_tuneHosts.Remove(key: tuneId);
         }
         foreach (var tuneId in (unloadable ?? [])) {
@@ -1523,7 +1527,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             lock (m_mixerGate) {
                 foreach (var host in m_tuneHosts.Values) {
                     m_mixer?.RemoveSource(key: AudioSourceKey.Tune(id: host.TuneId));
-                    host.Source.Dispose();
+                    (host.Source as IDisposable)?.Dispose();
                 }
 
                 m_tuneHosts.Clear();
@@ -2400,7 +2404,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         public ulong Seed;
         public long RemainingFrames;
     }
-    private readonly record struct TuneHost(string TuneId, string Hash, TuneMachineSource Source);
+    private readonly record struct TuneHost(string TuneId, string Hash, IAudioBlockSource Source);
     // One live machine binding: the drained machine (reference identity — the swap detector) and its block-source
     // wrapper (reused across attaches so a rebind is one SetSource, no allocation).
     private readonly record struct MachineBinding(IAudioMachine Machine, MachineBlockSource Source);

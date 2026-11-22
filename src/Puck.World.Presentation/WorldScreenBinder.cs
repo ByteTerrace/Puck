@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Platform;
@@ -6,7 +7,6 @@ using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Client;
-using Puck.World.Server;
 
 namespace Puck.World;
 
@@ -26,18 +26,13 @@ namespace Puck.World;
 /// rebuilding anything. A shared singleton so the render factory, the screen verbs, and <c>world.screens</c> read one instance.
 /// </summary>
 /// <remarks>
-/// This type is a pure reader of <see cref="Server.WorldMachineHost"/>'s outputs: a machine source instance's upload
-/// (<see cref="MachineSource"/>) writes an output's frames into its region, and the residency reduces the acquired GPU
-/// image for lighting. It also facades several read-only <see cref="WorldMachineHost"/> members (<c>HasMachine</c>,
-/// <c>HasEngine</c>, <c>TryMagazine</c>, <c>AudioMachine</c>, <c>TryPeek</c>,
-/// <c>LinkOf</c>, <c>DescribeLinks</c>, <c>TryReadLinkMembers</c>) so presentation-side
-/// callers (<c>PlayerCommandModule</c>, <c>WorldAudioDirector</c>,
-/// <c>ScreenCommandModule</c>'s read-only verbs) reach the host's state through the same reference they
-/// already hold. Machine lifecycle mutation (select/link/unlink) routes through
-/// <c>ScreenCommandModule</c> submitting a <c>WorldScreenOp</c> through
-/// <c>IServerLink.SubmitScreenOp</c> instead, landing in the ordered submission domain (see <c>WorldScreenOp</c>'s
+/// This type reads the authority only through what each collect publishes (<see cref="WorldPresentationFeed"/>): a machine
+/// source instance's upload (<see cref="MachineSource"/>) writes the output its world's machine table names into its
+/// region, and the residency reduces the acquired GPU image for lighting. Machine lifecycle mutation (select/link/unlink)
+/// routes through <c>ScreenCommandModule</c> submitting a <c>WorldScreenOp</c> through
+/// <c>IServerLink.SubmitScreenOp</c>, landing in the ordered submission domain (see <c>WorldScreenOp</c>'s
 /// own remarks). Producer, jumbotron-view and probe feeds belong to presentation. Session feeds render the
-/// authority-owned observations <see cref="WorldInstanceHost"/> admits and releases.
+/// authority-owned observations the instance host admits and releases, from the table each collect publishes (<see cref="WorldObservationTable"/>).
 /// <para>An unbound slot (a <see cref="WorldScreenSource.None"/> screen, or a live feed with no signal) binds 0, so the
 /// engine leaves its surface unbound. One webcam session is opened engine-wide per sensor and shared by every camera screen
 /// naming that sensor. A capture device may expose both streams while supporting only one at a time; a dual open must
@@ -76,16 +71,14 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     // The host's paper-white level, which an HDR capture's room glow is measured against.
     private readonly double m_paperWhiteNits;
     private readonly WorldValueDomainGuard m_domains;
-    // The process's running world instances. Its observation resolver door owns destination lookup, origin adoption,
-    // generation resolution and start/reuse, so a screen and a crossing cannot grow independent routing rules.
-    private readonly WorldInstanceHost m_instanceHost;
-    // The authoritative screen-machine host — owns every booted IMachineRuntime; this binder reads its outputs
-    // (Handle/Light/MachineAt) and facades several of its read-only members. Never mutated through here — see this
-    // type's own remarks.
-    private readonly WorldMachineHost m_machines;
-    // The values the authority published at the last collect, whose machine table every screen's output and clock is
-    // read from: a frame never reads a machine host.
+    // The values the authority published at the last collect: every screen's machine output and clock, and every
+    // session a screen or an infinity layer observes, are read from them, never from a machine host or the instance host.
     private readonly WorldPresentationFeed m_feed;
+    // The client whose delivered definition is the boot world's, as the frame draws it.
+    private readonly WorldClient m_client;
+    // The boot world's machine instance revision the last published frame saw: a move re-reads every machine screen's
+    // extent and tells the audio director to rebind.
+    private ulong m_machineRevision;
     private readonly WorldCreationInstances m_stamps;
     private readonly WorldPerceptionAnchor m_perception;
     // Resolved lazily: the facts read the input router, which the composition root registers after this binder.
@@ -116,6 +109,10 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     // platform's D3D11 decode device and the Vulkan render device both reach the same physical memory. Each target set
     // made on it is a dependent, so retiring it disposes the device only once the last of their images is released.
     private DisposeAfterDependents<IDisposable>? m_cameraTargetDevice;
+    // The exporter over m_cameraTargetDevice, made with it.
+    private IGpuSurfaceExporter? m_cameraTargetExporter;
+    // The host's shared-surface exporters, or null on a platform with none.
+    private readonly IGpuSurfaceExportProvider? m_surfaceExports;
 
     // The player roster — resolves a seat to its bound camera device (TryGetSeatDevice) and mints the camera<N>
     // tokens screen.camera/probe.status echo. A camera is an input device seated like a gamepad; this binder never
@@ -162,8 +159,21 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
 
     /// <summary>Gets the library every residency rendering a world of the presentation shares its baked meshes through:
     /// the world's own, each routed scene's, each session's and each infinity view's. The boot gives it the store of
-    /// meshes kept between runs (<see cref="WorldCacheRoots.Meshes"/>); without one it keeps them for the run.</summary>
+    /// meshes kept between runs (<c>WorldCacheRoots.Meshes</c>); without one it keeps them for the run.</summary>
     public SdfMeshLibrary MeshLibrary { get; init; } = new();
+
+    // The host's shared-surface exporters; reached only on a route m_exportsSurfaces or a Windows check admitted.
+    private IGpuSurfaceExportProvider SurfaceExports => (m_surfaceExports ?? throw new InvalidOperationException(message: "this host exports no shared surfaces"));
+    // The exporter over the binder's headless export device on the render adapter, opened on first use and held until
+    // its last dependent retires.
+    private IGpuSurfaceExporter TargetExporter(long adapterLuid) {
+        if ((m_cameraTargetDevice is null) || (m_cameraTargetExporter is null)) {
+            m_cameraTargetDevice = new DisposeAfterDependents<IDisposable>(resource: SurfaceExports.OpenExportDevice(adapterLuid: adapterLuid, exporter: out var exporter));
+            m_cameraTargetExporter = exporter;
+        }
+
+        return m_cameraTargetExporter;
+    }
 
     private DynamicTransform[] m_viewTransforms = [];
     private readonly Dictionary<int, ScreenSlot> m_slots = new();
@@ -198,10 +208,9 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     /// here: it is a source instance the render graph's runtime opens through the registered producers (an absent
     /// camera or an unopenable window leaves the screen unbound and the fault visible in
     /// <c>world.screens</c>/<c>screen.state</c> — loud data, no crash), and a machine's
-    /// <see cref="Server.WorldMachineHost"/> (a peer singleton, already booted by the time this constructor runs) owns
+    /// <c>WorldMachineHost</c> (a peer singleton, already booted by the time this constructor runs) owns
     /// the machine itself.</summary>
     /// <param name="screens">The world's diegetic screens (<see cref="WorldDefinition.Screens"/>).</param>
-    /// <param name="machines">The authoritative screen-machine host this binder reads outputs from.</param>
     /// <param name="cameraCapture">The platform webcam service (CPU tier) the camera screens share one session of.</param>
     /// <param name="windowCapture">The platform compositor window-capture service.</param>
     /// <param name="probeKernels">The platform service that opens the render adapter's probe kernel host, which runs a
@@ -215,8 +224,6 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     /// <param name="hostsOnDirectX">Whether the host backend is Direct3D 12 — selects the GPU capture transport for
     /// window/monitor captures (the Vulkan host keeps their CPU-pixel path). The shared camera rides its GPU tier on
     /// both hosts; this flag only picks how its shared targets are allocated and sampled.</param>
-    /// <param name="instanceHost">The process's running world instances — a session-sourced face's resolved
-    /// destination instance is found or started here.</param>
     /// <param name="roster">The player roster — resolves a seat to its bound camera device.</param>
     /// <param name="renderProbe">The render probe each offscreen view's GPU work is registered with while the view
     /// is registered, so <c>world.counters gpu</c> reports it; <see langword="null"/> when nothing reads it (a headless
@@ -230,16 +237,19 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     /// <param name="domains">The guard that holds the last valid value of a session view's bound value and reports its
     /// transitions.</param>
     /// <param name="screenMaterials">The boot definition's screen materials, which the screens name; absent is none.</param>
-    /// <param name="feed">The published values whose machine table every screen's machine output and clock is read
-    /// from.</param>
+    /// <param name="surfaceExports">The host's shared-surface exporters, which the camera, capture and view-export GPU
+    /// routes allocate through, or <see langword="null"/> on a platform with none.</param>
+    /// <param name="feed">The published values every screen's machine output and clock, and every session a screen or an
+    /// infinity layer observes, are read from.</param>
+    /// <param name="client">The client whose delivered definition is the boot world's.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, WorldPresentationFeed feed, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldCreationInstances stamps, WorldPerceptionAnchor perception, Func<IOverlayPredicateEvaluator> facts, WorldSpeechClock speech, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits, IReadOnlyList<WorldScreenMaterial>? screenMaterials = null) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldPresentationFeed feed, WorldClient client, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldCreationInstances stamps, WorldPerceptionAnchor perception, Func<IOverlayPredicateEvaluator> facts, WorldSpeechClock speech, bool hostsOnDirectX, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits, IReadOnlyList<WorldScreenMaterial>? screenMaterials = null, IGpuSurfaceExportProvider? surfaceExports = null) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: screens);
         m_domains = domains;
         m_renderProbe = renderProbe;
-        ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentNullException.ThrowIfNull(argument: feed);
+        ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: cameraCapture);
         ArgumentNullException.ThrowIfNull(argument: windowCapture);
         ArgumentNullException.ThrowIfNull(argument: probeKernels);
@@ -249,12 +259,10 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
         ArgumentNullException.ThrowIfNull(argument: perception);
         ArgumentNullException.ThrowIfNull(argument: facts);
         ArgumentNullException.ThrowIfNull(argument: speech);
-        ArgumentNullException.ThrowIfNull(argument: instanceHost);
         ArgumentNullException.ThrowIfNull(argument: roster);
 
-        m_machines = machines;
         m_feed = feed;
-        m_machines.MachinesChanged += OnMachinesChanged;
+        m_client = client;
         m_cameraCapture = cameraCapture;
         m_cameraDeviceScanner = new CameraDeviceScanner(
             cameraCapture,
@@ -270,12 +278,12 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
         m_facts = facts;
         m_speech = speech;
         m_hostsOnDirectX = hostsOnDirectX;
-        m_instanceHost = instanceHost;
         m_paperWhiteNits = DisplayOutput.RequirePaperWhite(nits: paperWhiteNits);
         m_roster = roster;
-        // Windows-10240 guarded because DirectXGpuSurfaceExportFactory is platform-attributed; hostsOnDirectX already
-        // implies that floor (Program.cs rejects the D3D12 backend below it), so the check only satisfies the analyzer.
-        m_exportsSurfaces = (hostsOnDirectX && OperatingSystem.IsWindowsVersionAtLeast(
+        m_surfaceExports = surfaceExports;
+        // Windows-10240 guarded because the shared surfaces are; hostsOnDirectX already implies that floor (Program.cs
+        // rejects the D3D12 backend below it), so the check only satisfies the analyzer.
+        m_exportsSurfaces = (hostsOnDirectX && (surfaceExports is not null) && OperatingSystem.IsWindowsVersionAtLeast(
             major: 10,
             minor: 0,
             build: 10240
@@ -447,6 +455,7 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     private void RetireCameraTargetDevice() {
         m_cameraTargetDevice?.Retire();
         m_cameraTargetDevice = null;
+        m_cameraTargetExporter = null;
     }
 
     /// <summary>Applies a non-machine magazine entry (a producer, a view, a probe, a session, text, or none) as a screen's live
@@ -455,7 +464,7 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     /// entry's selector move through the ordered domain (<c>WorldScreenOp.Select</c>) — the selector is
     /// authoritative server state; applying a non-machine entry's actual producer is genuinely presentation (see
     /// this type's own remarks). A <see cref="WorldScreenSource.Machine"/> entry is refused here — the caller must
-    /// route it through <c>WorldScreenOp.Select</c> instead, which <see cref="Server.WorldMachineHost"/> boots
+    /// route it through <c>WorldScreenOp.Select</c> instead, which <c>WorldMachineHost</c> boots
     /// authoritatively.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     /// <param name="source">The non-machine entry to apply.</param>
@@ -490,7 +499,6 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
         }
 
         m_disposed = true;
-        m_machines.MachinesChanged -= OnMachinesChanged;
 
         EnsureFeeds();
 

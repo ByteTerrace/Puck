@@ -19,6 +19,7 @@ namespace Puck.World;
 /// none.</param>
 internal sealed class WorldPresentationCollect(WorldServer server, WorldInstanceHost instances, WorldHistory history, WorldDiagnostics diagnostics, WorldPresentationFeed feed, Func<WorldDiagnosticReport?> drawnReport) {
     private WorldMachineTable m_machines = WorldMachineTable.Empty;
+    private WorldObservationTable m_observations = WorldObservationTable.Empty;
     private WorldTickRecord m_tick = WorldTickRecord.Empty;
 
     /// <summary>Copies and publishes one collect's values. Call on the pump inside the boundary window: after a host
@@ -26,6 +27,7 @@ internal sealed class WorldPresentationCollect(WorldServer server, WorldInstance
     public void Collect() => feed.Publish(
         diagnostics: diagnostics.Collect(drawn: drawnReport),
         machines: (m_machines = WorldPresentationCopy.Machines(held: m_machines, instances: instances)),
+        observations: (m_observations = WorldPresentationCopy.Observations(held: m_observations, instances: instances)),
         tick: CopyTick()
     );
 

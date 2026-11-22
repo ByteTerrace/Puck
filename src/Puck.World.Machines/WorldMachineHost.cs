@@ -519,6 +519,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     // instance map change (NotifyMachinesChanged, or a revision an operation moved) reads them again.
     private WorldMachinePresentation? m_presentation;
     private IReadOnlyDictionary<string, IReadOnlyDictionary<string, IMachineVideoOutput>>? m_presentedOutputs;
+    private IReadOnlyDictionary<string, IReadOnlyDictionary<string, IAudioMachine>> m_presentedAudio = new Dictionary<string, IReadOnlyDictionary<string, IAudioMachine>>(comparer: StringComparer.Ordinal);
     private ulong m_presentedRevision;
     private ulong m_stepBarrier;
     private ulong m_stepWidth;
@@ -579,12 +580,17 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         }
 
         var running = new Dictionary<string, IReadOnlyDictionary<string, IMachineVideoOutput>>(comparer: StringComparer.Ordinal);
+        var audio = new Dictionary<string, IReadOnlyDictionary<string, IAudioMachine>>(comparer: StringComparer.Ordinal);
 
         foreach (var (name, instance) in m_instances) {
             if (instance.Declaration.Running && (instance.Lease.Runtime is IMachineVideoOutputs videoOutputs)) {
                 running[name] = videoOutputs.VideoOutputs;
             }
+            if (instance.Lease.Runtime is IMachineAudioOutputs audioOutputs) {
+                audio[name] = audioOutputs.AudioOutputs;
+            }
         }
+        m_presentedAudio = audio;
         m_presentedRevision = m_instanceRevision;
 
         return m_presentedOutputs = running;
@@ -627,6 +633,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         }
 
         return m_presentation = new WorldMachinePresentation(
+            audio: m_presentedAudio,
             clock: m_presentClock,
             faults: (sameFaults ? m_presentation!.Faults : CaptureFaults()),
             instanceRevision: m_instanceRevision,

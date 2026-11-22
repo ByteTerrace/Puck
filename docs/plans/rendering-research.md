@@ -2934,7 +2934,7 @@ the bar as ruled.**
   frame delivered after its access changes (decision 2 with decision 14).
 - *Owns.* `src/Puck.World.Client/WorldSessionRoute.cs`, the binding and
   pausing code of `WorldViewGraphHost`,
-  `src/Puck.World/WorldScreenBinder.Availability.cs` and `.Views.cs`,
+  `src/Puck.World.Presentation/WorldScreenBinder.Availability.cs` and `.Views.cs`,
   `src/Puck.Shaders/Graph/RenderGraphRuntime.ExternalReads.cs`, the held
   reads of `RenderGraphScheduler`, and the point where a finished
   background job installs its result.

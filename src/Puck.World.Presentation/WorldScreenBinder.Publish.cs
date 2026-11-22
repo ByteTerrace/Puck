@@ -70,6 +70,7 @@ public sealed partial class WorldScreenBinder {
     /// <param name="context">The host's frame context, whose host resolves the live GPU device; a frame with no device publishes
     /// nothing.</param>
     public void Publish(in FrameContext context) {
+        FollowMachines();
         if (
             m_disposed ||
             (context.Host is not { } host) ||

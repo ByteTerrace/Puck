@@ -5,7 +5,7 @@ namespace Puck.World;
 
 /// <summary>
 /// The world's effective host-section values after the CLI window/backend flags override the world-doc defaults — the
-/// direct twin of <see cref="WorldStorageSettings"/> for the presentation host-section. Resolved once at boot by
+/// direct twin of <c>WorldStorageSettings</c> for the presentation host-section. Resolved once at boot by
 /// <see cref="Resolve"/> (a pure static) and registered as a singleton the <c>Program</c> registrations and the
 /// <c>world.host</c> read verb consume. Backend resolution is the one place authority differs by source: a CLI
 /// <c>--backend directx</c> the OS cannot satisfy is an operator assertion (<see cref="BackendUnsatisfiable"/> → the

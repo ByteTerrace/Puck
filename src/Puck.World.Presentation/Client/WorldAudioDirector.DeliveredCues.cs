@@ -1,6 +1,5 @@
 using Puck.Audio.Simulation;
 using Puck.World.Protocol;
-using Puck.World.Server;
 
 namespace Puck.World.Client;
 
@@ -76,7 +75,7 @@ public sealed partial class WorldAudioDirector {
         if (!string.Equals(score?.Hash, m_deliveredScoreHash, StringComparison.Ordinal)) {
             m_deliveredScoreHash = score?.Hash;
             m_deliveredMusic = score is not null && WorldAssetRowLoader.TryLoadMusic(definition.DocumentDirectory, score, out var document, out _)
-                ? new MusicDirector(MusicDirectorFactory.CompileGraph(document!)) : null;
+                ? new MusicDirector(MusicScoreCompiler.CompileGraph(document!)) : null;
         }
         if (m_deliveredMusic is not { } director) { SetActiveMusicLayers([]); return; }
 

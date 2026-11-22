@@ -7,8 +7,8 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>Publishes the same per-seat inspector text to the existing overlay and console.</summary>
-internal sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cursor, WorldSeatViewports viewports,
-    WorldClient client, WorldViewGraphHost views, WorldRenderProbe probe, WorldSourceWatch watch, FrameRateMonitor fps, WorldGpuTiming timing, WorldSeatAuthorityRouter? router = null) : IInspectorSource {
+public sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cursor, WorldSeatViewports viewports,
+    WorldClient client, WorldViewGraphHost views, WorldRenderProbe probe, Func<string?> reloadError, FrameRateMonitor fps, WorldGpuTiming timing, WorldSeatAuthorityRouter? router = null) : IInspectorSource {
     private readonly WorldInspectorText[] m_text = Enumerable.Range(count: PlayerRoster.MaxSlots, start: 0).Select(selector: static _ => new WorldInspectorText()).ToArray();
     private readonly List<GpuWorkNode> m_nodes = [];
     private readonly GpuWorkSample m_sample = new();
@@ -70,7 +70,7 @@ internal sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cur
             Slot = slot,
             Pick = pick,
             Camera = (pick?.Sample?.Camera ?? viewports.Seat(slot: slot).Camera),
-            Selection = seats.CurrentOf(slot: slot, world: (route?.Endpoint.Identity ?? WorldInstanceHost.BootInstanceName)),
+            Selection = seats.CurrentOf(slot: slot, world: (route?.Endpoint.Identity ?? WorldDefinitionLoader.BootInstanceName)),
             SimulationTick = mirror.Tick,
             PresentationTick = mirror.EngineTick,
             Settings = probe.Settings,
@@ -82,7 +82,7 @@ internal sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cur
             Words = (residency?.LiveProgramWords ?? 0),
             WordCapacity = (residency?.ProgramWordCapacity ?? 0),
             Instances = (residency?.LiveProgramInstances ?? 0),
-            ReloadError = (watch.LastError ?? "none"),
+            ReloadError = (reloadError() ?? "none"),
             WorldRoot = client.Definition.DocumentDirectory,
         };
         var text = m_text[slot];

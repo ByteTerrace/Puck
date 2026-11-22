@@ -58,7 +58,7 @@ public sealed partial class WorldScreenBinder {
         return Adapt(opening: (WorldSourceInstances.SourceOf(instance: instance) switch {
             WorldScreenSource.Probe probe when string.Equals(
                 a: world,
-                b: WorldInstanceHost.BootInstanceName,
+                b: WorldDefinitionLoader.BootInstanceName,
                 comparisonType: StringComparison.Ordinal
             ) => new WorldImageSourceOpening(
                 Context: context,

@@ -184,8 +184,8 @@
       },
       "Parlot": {
         "type": "Transitive",
-        "resolved": "2.3.1",
-        "contentHash": "wCNWERk46ATkXor8SK43dgpO8GCuH5BQnvwuVogEVWrYilDKA7QituNhq17iYyL0RAHTuIIyczfuV0AWSe8ZLw=="
+        "resolved": "2.4.0",
+        "contentHash": "4g+MoUrqaSpjdezwQs/wHegyi9FDw3r6Ey/UgrHaD7jn47zLjqNvHO0+dW1HJJNXHGnOE+DBH5c/O2ma1K8KTw=="
       },
       "System.Diagnostics.EventLog": {
         "type": "Transitive",
@@ -662,6 +662,7 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
           "Puck.Overlays": "[1.0.0, )",
+          "Puck.Platform": "[1.0.0, )",
           "Puck.SdfVm": "[1.0.0, )",
           "Puck.World.Client": "[1.0.0, )",
           "Puck.World.Protocol": "[1.0.0, )",
