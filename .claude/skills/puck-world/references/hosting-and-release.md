@@ -370,7 +370,12 @@ refuses with its cause when it cannot; abandons a Prepare operation or an uncapt
 any roots it saved unrecorded); and recovers every other pre-commit operation's source, finishing a drain's capture
 first. So every failed release leaves a group the next deploy can follow without a hand-run resume or an Azure change,
 except a committed release that cannot be admitted. `WorldReleaseCoordinatorSafetyLawTests.ADeploymentFollowsWhateverItsPredecessorLeftPending`
-drives each phase against a host fake that makes the worker's durable writes.
+drives each phase against a host fake that makes the worker's durable writes. A source export this build cannot decode
+resets instead of refusing (hosted data is scratch): `WorldReleaseCoordinator.FindStateReset` is the one decision,
+called by `WorldReleaseFixtureBuilder.BuildAsync` with the deploy's successor; `BeginResetAsync` qualifies the target
+alone and records a `WorldReleaseGroupHistoryEntry.ResetResult` entry (read back as `PendingStateReset`, in history so
+an older draining source still parses the record); Activate calls `WorldAuthorityBlobStore.PrepareReleaseResetAsync`
+per world instead of the metadata transition. Never add migration code or read tolerance for the old shape.
 Every pre-commit recovery outcome names its cause: `RecoverPreCommitAsync` is
 the one door, and it appends the failure that began recovery to every result. `world prepare` relocates
 provider-declared machine asset paths from nested origins to the common worlds

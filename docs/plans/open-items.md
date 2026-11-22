@@ -156,8 +156,14 @@ Fixed on `lead/rendering` since, and not yet deployed:
   ([CI](../development/ci.md#world-maintenance-and-recovery)): it accepts an
   admitted release in the write that claims the group, admits a committed one
   first, and abandons or recovers an unfinished one, so no failed release needs
-  a hand-run resume. The deploy after this push meets the admitted operation
-  the last release left and accepts it.
+  a hand-run resume. Run 44971428829 showed it working: it began over the
+  admitted operation, then refused at qualification because the hosted
+  checkpoints predate the irradiance budget's rename.
+- A source whose exported state this build cannot decode is reset rather than
+  refused (hosted data is scratch): the deploy qualifies and starts the new
+  release fresh and records the reset and its reason in the operation's history
+  ([CI](../development/ci.md#world-maintenance-and-recovery)). The next push's
+  deploy resets the hosted world this way.
 
 - Template Specs `world-silo` 0.0.7 and `public-flex-api` 0.0.6 are published.
   The lead publishes and republishes them in place (AGENTS.md), and

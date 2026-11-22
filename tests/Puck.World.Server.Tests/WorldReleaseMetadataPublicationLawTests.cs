@@ -316,6 +316,55 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
             )
         );
     }
+    // A reset operation replaces the drained root with the target's fresh state without reading the source's state: the
+    // target's definition, no checkpoint or receipts, a later writer epoch. The protected root is untouched, so recovery
+    // stays exact, a retry changes nothing, and an operation that carries its state cannot reset.
+    [Fact]
+    public async Task ResetReplacesTheDrainedRootWithTheTargetsFreshStateAndRetryIsReadOnly() {
+        using var scenario = await Scenario.CreateAsync(reset: "the source's 'amber' state does not decode under this build");
+
+        Assert.NotNull(@object: scenario.Operation.PendingStateReset);
+        var outcome = await scenario.ResetAsync();
+
+        Assert.True(
+            condition: outcome.Ok,
+            userMessage: outcome.Detail
+        );
+        var reset = (await scenario.Store.LoadRootAsync(
+            scenario.Identity,
+            Token
+        ))!.Value;
+
+        Assert.False(condition: reset.Root.HoldsGameplay);
+        Assert.True(condition: (reset.Root.Epoch > scenario.Protected.Root.Epoch));
+        Assert.True(condition: (reset.Root.Sequence > scenario.Protected.Root.Sequence));
+        Assert.Equal(
+            "B",
+            (await scenario.Store.LoadDefinitionAsync(
+                scenario.Identity,
+                Token
+            ))!.Metadata!.Title
+        );
+        Assert.Equal(
+            scenario.Protected,
+            await scenario.Store.LoadRecoveryRootAsync(
+                scenario.Identity,
+                scenario.Protected.Pin,
+                scenario.Operation.PendingOperationId!.Value,
+                Token
+            )
+        );
+        var writes = scenario.Blobs.Writes;
+
+        Assert.True(condition: (await scenario.ResetAsync()).Ok);
+        Assert.Equal(
+            writes,
+            scenario.Blobs.Writes
+        );
+        using var carried = await Scenario.CreateAsync();
+
+        Assert.False(condition: (await carried.ResetAsync()).Ok);
+    }
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
@@ -535,7 +584,14 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
                 Archive,
                 Token
             );
-        public static async Task<Scenario> CreateAsync(bool conflict = false, bool owned = false, bool tail = false, bool deferredDraw = false) {
+        public Task<WorldAuthorityStoreOutcome> ResetAsync() => Store.PrepareReleaseResetAsync(
+            Identity,
+            Operation,
+            Candidate,
+            Archive,
+            Token
+        );
+        public static async Task<Scenario> CreateAsync(bool conflict = false, bool owned = false, bool tail = false, bool deferredDraw = false, string? reset = null) {
             var scenario = new Scenario();
             var a = Fixtures.BuildDocument() with {
                 Metadata = new(
@@ -657,7 +713,8 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
                 created.Snapshot!.Value,
                 operationId,
                 scenario.Candidate.Identity,
-                Token
+                Token,
+                reset
             );
 
             scenario.Protected = (await scenario.Store.CaptureRecoveryRootAsync(
