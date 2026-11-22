@@ -989,6 +989,23 @@ what stages two and three must keep.
    the window, which throws; the windowed debug world plays the benchmark
    route with no throw (the lead's run).
 
+   What it starts from. The window exists: `WorldLinkBoundary` registers the
+   pump before the loop (`HostLoop`) and `FixedStepPump` opens it around the
+   control phase at a tick boundary and around every step, the resume from
+   the pacing wait included. Not built: the seam. `WorldServer.ThrowIfTickPending`
+   gains the window, so the registered pump throws outside it, and the
+   members [the boundary window](#from-the-client-to-the-authority-the-boundary-window-and-the-link)
+   lists gain the check. Each server needs its host's `WorldLinkBoundary`; the
+   instance host already hands it to each world's link. Three things then
+   replace their stand-ins: the outbox's test for the collecting thread
+   (`WorldOutputHub.Records`), the handing thread's refusal
+   (`WorldTick.HandedOverByCallingThread`), and `WorldHostStep`'s published
+   rate and stall flag, which today refresh at any read with no tick in
+   flight and must refresh only inside the window, as it closes, because
+   `FixedStepPump` reads the rate right after the control phase. The step is
+   shaken out by booting: every pump-side read outside the window throws on
+   its first frame, headless first and then windowed on both backends.
+
 **Stage three: the wait ends.** Built for a host with no frame
 ([the loop beside the tick](#the-loop-beside-the-tick)); a frame-producing
 host follows once step 9 and the loop's frame mechanics are built.
