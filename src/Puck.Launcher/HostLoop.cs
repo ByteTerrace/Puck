@@ -241,7 +241,6 @@ public sealed class HostLoop(
                         steps = (pump?.Advance(deltaTicks: interval, maxFrameTicks: FixedTickConversion.PerRate(ratePerSecond: 4U), stepTicks: stepTicks) ?? 0);
                     }
                 }
-                if ((produce is not null) && (pump is { StepPending: true })) { using (timeline.FrameWork.Bind()) { if (pump.Settle()) { steps++; } } } // TT-TEMP the waiting loop, for a before reading
                 timeline.NoteSteps(steps: steps);
                 frameSteps = ((produce is null) ? 0 : (frameSteps + steps));
                 timeline.Mark(phase: HostFramePhase.Simulate);

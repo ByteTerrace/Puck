@@ -138,6 +138,21 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private readonly ConcurrentDictionary<(WorldServer Server, WorldEntityAddress Incarnation), ForwardedBody> m_forwardedBodies = [];
     private readonly Queue<PendingTransfer> m_pendingTransfers = new();
     private readonly List<InDoubtTransfer> m_inDoubtTransfers = [];
+
+    /// <summary>Replays every delivery and callback recorded off the pump while the boundary window was closed: each
+    /// remote authority's stream and route updates, and each admitted server's outbox when no tick of that server
+    /// executes. Call on the pump inside a settled boundary window.</summary>
+    public void CollectDeliveries() {
+        foreach (var instance in m_instances.Values) {
+            instance.Server.Output.Collect();
+        }
+        foreach (var remote in m_remoteAuthorities.Values) {
+            remote.CollectDeliveries();
+        }
+        foreach (var remote in m_recoveredRemoteAuthorities.Values) {
+            remote.CollectDeliveries();
+        }
+    }
     // The transfer id a seat's crossing hold has already been announced under, so the held-crossing line prints
     // once per traversal rather than once per suppressed scan.
     private readonly Dictionary<(string Instance, int Seat), ulong> m_announcedCrossingHolds = [];

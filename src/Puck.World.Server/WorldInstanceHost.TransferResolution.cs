@@ -767,7 +767,8 @@ public sealed partial class WorldInstanceHost {
                             network: source.Federation.Network,
                             observerAuthority: source.Federation.Subject,
                             applicationStopping: m_applicationStopping,
-                            narrationHub: m_narration
+                            narrationHub: m_narration,
+                            boundary: m_linkBoundary
                         );
                         remote?.Dispose();
                         remote = replacement;
@@ -1089,7 +1090,8 @@ public sealed partial class WorldInstanceHost {
                     network: source.Federation.Network,
                     observerAuthority: source.Federation.Subject,
                     applicationStopping: m_applicationStopping,
-                    narrationHub: m_narration
+                    narrationHub: m_narration,
+                    boundary: m_linkBoundary
                 );
 
                 m_remoteAuthorities[instanceName] = remote;

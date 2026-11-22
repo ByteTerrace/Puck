@@ -12,6 +12,7 @@ public sealed partial class WorldServer {
     /// dimension carries each graph's planned passes, planned once per installed compilation.</summary>
     public WorldCostReport CostReport {
         get {
+            ThrowIfOutsideWindow();
             var compilation = (m_ruleCompilation
                 ?? throw new InvalidOperationException(message: "The server has no installed rule compilation."));
 
@@ -53,6 +54,12 @@ public sealed partial class WorldServer {
     }
     /// <summary>Gets the shared hazard analysis for the installed programs. Document installation replaces
     /// this analysis with its compilation; ordinary state writes do not recompile rules.</summary>
-    public IReadOnlyList<Puck.State.Rules.RuleHazard> RuleHazards => (m_ruleCompilation
-        ?? throw new InvalidOperationException(message: "The server has no installed rule compilation.")).Hazards;
+    public IReadOnlyList<Puck.State.Rules.RuleHazard> RuleHazards {
+        get {
+            ThrowIfOutsideWindow();
+
+            return (m_ruleCompilation
+                ?? throw new InvalidOperationException(message: "The server has no installed rule compilation.")).Hazards;
+        }
+    }
 }

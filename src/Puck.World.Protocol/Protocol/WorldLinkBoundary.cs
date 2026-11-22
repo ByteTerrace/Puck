@@ -43,6 +43,7 @@ public sealed class WorldLinkBoundary : IHostTickBoundary {
     // The managed id of the thread whose handed-over tick the host's step thread holds, from the hand-off until that
     // thread collects it; zero otherwise.
     private int m_lentBy;
+    private Action? m_draining;
     private Action? m_closing;
 
     /// <summary>Gets whether a loopback submission made now on the calling thread mints at once: no pump is registered
@@ -108,6 +109,16 @@ public sealed class WorldLinkBoundary : IHostTickBoundary {
     /// <summary>Marks the tick <see cref="HandedOver"/> marked as collected.</summary>
     public void Collected() => Volatile.Write(location: ref m_lentBy, value: 0);
 
+    /// <summary>Registers what the pump collects of off-pump deliveries as a settled boundary window opens, after
+    /// posted work runs and before the window's console lines or input snapshot read any mirror.</summary>
+    /// <param name="drain">The collector.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="drain"/> is <see langword="null"/>.</exception>
+    public void CollectOnOpen(Action drain) {
+        ArgumentNullException.ThrowIfNull(argument: drain);
+
+        m_draining += drain;
+    }
+
     /// <summary>Registers what the pump publishes of the authority for its readers outside the window: it runs on the
     /// pump each time the window closes with no tick in flight, while the authority may still be read, and never
     /// otherwise, so what it publishes is always a settled boundary's.</summary>
@@ -143,6 +154,7 @@ public sealed class WorldLinkBoundary : IHostTickBoundary {
 
         try {
             while (m_waiting.TryDequeue(out var submission)) { submission(); }
+            m_draining?.Invoke();
         } catch {
             Close();
             throw;

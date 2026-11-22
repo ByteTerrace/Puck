@@ -178,9 +178,17 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         return true;
     }
 
+    /// <summary>Replays deliveries recorded off the pump while the boundary window was closed and delivers any seat
+    /// route changes they seeded. Call on the pump inside a settled boundary window.</summary>
+    public void CollectDeliveries() {
+        m_instances.CollectDeliveries();
+        _ = m_seatRouter.DeliverRouteChanges();
+    }
+
     private void PrepareStep(in FixedStepContext context) {
         sourceWatch.Poll();
         reload.Poll();
+        m_instances.CollectDeliveries();
         // A seat claim can be published off this thread (a federated observer reporting an onward handoff) or by a
         // console verb in the drain just run. Its subscribers change seat state and bind state mirrors, so the edge is
         // delivered here, on the pump thread, at each point of the step after which a claim can have moved: before

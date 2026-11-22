@@ -197,6 +197,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     private readonly Lock m_observedRouteGate = new();
 
     private WorldAuthorityRouteDescription? m_observedRoute;
+    private bool m_routeDeliveryPending;
 
     // The physical entry stays fixed even when a traveler's logical destination changes.
     private readonly PublishedRoute m_route;
@@ -206,10 +207,15 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     // The local instance's own hub, so this lane's narration reaches whatever sink is attached to it — null for a
     // caller with no local server (leaves this lane's narration undelivered, never a fallback to Console.Error).
     private readonly WorldOutputHub? m_narrationHub;
+    // The outbox that holds stream deliveries and route updates arriving on socket workers while the host loop is
+    // outside its boundary window, replayed on the pump when the host collects.
+    private readonly WorldOutputHub m_outbox;
+    private readonly Action<byte>? m_deliverObservedRoute;
 
-    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, string expectedAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default, WorldPeerNetwork? network = null, WorldOutputHub? narrationHub = null) {
+    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, string expectedAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default, WorldPeerNetwork? network = null, WorldOutputHub? narrationHub = null, WorldLinkBoundary? boundary = null) {
         if (string.IsNullOrWhiteSpace(value: expectedAuthority)) { throw new ArgumentException(message: "an outbound authority requires its intended namespace", paramName: nameof(expectedAuthority)); }
         m_narrationHub = (narrationHub ?? submissionAuthority?.m_narrationHub);
+        m_outbox = new WorldOutputHub { Boundary = (boundary ?? submissionAuthority?.m_outbox.Boundary) };
         if (!PeerEndpoint.TryParse(
             endpoint: out var parsed,
             value: endpoint
@@ -233,6 +239,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         }
         m_observedRoute = initialRoute;
         m_routeChanged = routeChanged;
+        m_deliverObservedRoute = ((routeChanged is null) ? null : m_outbox.Route<byte>(action: _ => DeliverPendingRoute()));
         m_lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: applicationStopping);
         if (initialRoute is { } route) {
             // A logical destination can be a colocated world with no public listener. Keep the authenticated
@@ -248,6 +255,12 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// was attached — the seam its own <see cref="WorldFederatedServerLink"/> narrates a held credential through
     /// too, rather than carrying a second hub reference.</summary>
     public WorldOutputHub? NarrationHub => m_narrationHub;
+    /// <summary>Gets the number of deliveries recorded while the host's boundary window was closed and not yet replayed.</summary>
+    public int PendingDeliveries => m_outbox.PendingRecords;
+
+    /// <summary>Replays every delivery and route change recorded while the host's boundary window was closed. Call on
+    /// the host loop's thread inside its boundary window.</summary>
+    public void CollectDeliveries() => m_outbox.Collect();
     public string Authority => ((Volatile.Read(location: ref m_authority) is { Length: > 0 } observed)
         ? observed
         : PeerAuthority
@@ -626,12 +639,12 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     // A session that ended can no longer tell its reader of a cut, so the span it was showing closes: its reader drops
     // what that stream delivered and takes the next session's stream as a new admission. The close is the reader's own
     // transport speaking, never a record, so nothing about it is taken from the wire.
-    private static void CloseObserved(IClientSink sink, ObservedStream observed) {
+    private static void CloseObserved(WorldSinkRoute sink, ObservedStream observed) {
         if ((Interlocked.Exchange(location1: ref observed.Session, value: null) is { } session) && (session.Span.Stream is var stream and not 0UL)) {
             sink.CloseSpan(stream: stream);
         }
     }
-    private async Task<bool> ObserveSessionAsync(IClientSink sink, ObservedStream observed, CancellationToken ct) {
+    private async Task<bool> ObserveSessionAsync(WorldSinkRoute sink, ObservedStream observed, CancellationToken ct) {
         var upstream = (m_submissionAuthority ?? this);
         var observedEndpoint = upstream.m_route.Endpoint;
 
@@ -883,7 +896,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     // Reconnect the same held lease until its owner releases it. Each session is a stream of its own: when one ends,
     // by a lost connection, an invalidation or the lease's release, the span it held closes, so the reader shows
     // nothing of it while disconnected, and the authored unavailable policy remains the crossing-side safety net.
-    private async Task ObserveUntilCancelledAsync(IClientSink sink, CancellationToken ct) {
+    private async Task ObserveUntilCancelledAsync(WorldSinkRoute sink, CancellationToken ct) {
         var observed = new ObservedStream();
 
         while (!ct.IsCancellationRequested) {
@@ -958,7 +971,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
 
     /// <summary>Takes one observed route: the latest head of the traveler's route, which this authority's observation
     /// delivers frame by frame. It becomes the route a later <see cref="PublishClaim"/> redelivers, and is reported to the
-    /// route's owner at once. Serialized with <see cref="PublishClaim"/> by the route gate.</summary>
+    /// route's owner on the pump when this authority's outbox records, or at once otherwise. Serialized with
+    /// <see cref="PublishClaim"/> by the route gate.</summary>
     /// <param name="route">The observed route.</param>
     public void ObserveRoute(WorldAuthorityRouteDescription route) {
         lock (m_observedRouteGate) {
@@ -981,7 +995,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 location1: ref m_lastObservedTickBits,
                 value: unchecked((long)route.Tick)
             );
-            m_routeChanged?.Invoke(obj: route);
+            NotifyObservedRoute(route: route);
         }
     }
     /// <summary>Publishes the claim that makes a seat follow this route, then delivers the latest observed route to
@@ -997,9 +1011,36 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             publish();
 
             if (m_observedRoute is { } route) {
-                m_routeChanged?.Invoke(obj: route);
+                NotifyObservedRoute(route: route);
             }
         }
+    }
+
+    private void NotifyObservedRoute(WorldAuthorityRouteDescription route) {
+        if (m_routeChanged is not { } listener) {
+            return;
+        }
+        if (m_outbox.Records) {
+            if (!m_routeDeliveryPending) {
+                m_routeDeliveryPending = true;
+                m_deliverObservedRoute!(obj: 0);
+            }
+        } else {
+            m_routeDeliveryPending = false;
+            listener(obj: route);
+        }
+    }
+    private void DeliverPendingRoute() {
+        WorldAuthorityRouteDescription route;
+
+        lock (m_observedRouteGate) {
+            if (!m_routeDeliveryPending || (m_observedRoute is not { } observed)) {
+                return;
+            }
+            m_routeDeliveryPending = false;
+            route = observed;
+        }
+        m_routeChanged!(obj: route);
     }
 
     // A Completion body is one whole downstream frame, decoded in place over the answer's own buffer.
@@ -1073,10 +1114,22 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     public IDisposable AttachSink(IClientSink sink) {
         ArgumentNullException.ThrowIfNull(sink);
         var lease = new ObservationLease(parent: m_lifetime.Token);
+        var route = m_outbox.RouteTo(
+            sink: sink,
+            fault: exception => {
+                lease.Dispose();
+                if (m_narrationHub is { HasNarrationSink: true }) {
+                    m_narrationHub.Narrate(
+                        channel: "world.projection",
+                        text: $"[world.projection: remote observer '{Endpoint}' sink {sink.GetType().Name} threw — detached] {exception}"
+                    );
+                }
+            }
+        );
 
         _ = Task.Run(function: () => ObserveUntilCancelledAsync(
-            sink: sink,
-            ct: lease.Token
+            ct: lease.Token,
+            sink: route
         ));
         return lease;
     }

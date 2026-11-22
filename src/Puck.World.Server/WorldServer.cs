@@ -222,19 +222,20 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// Latched per mounted entry until that entry is replaced. Ordinary checkpoints capture supported hosts through
     /// <see cref="IWorldAddonHost"/>; a post-boot <c>replay.record</c> captures the same live guest image as an ordinary
     /// authority checkpoint, matching the replay's own initialization.</summary>
-    public bool AnyAddonEverPumped => (m_addons?.AnyEverPumped ?? false);
+    public bool AnyAddonEverPumped { get { ThrowIfOutsideWindow(); return (m_addons?.AnyEverPumped ?? false); } }
     /// <summary>Gets a value indicating whether any booted screen machine has ever had a step/segment actually
     /// submitted. The tape's embedded definition reconstructs a machine's boot image but never its accumulated core
     /// state, so a recording armed past this point starts from an authority checkpoint, which carries each core's
     /// image when the host supports it (<see cref="IWorldMachineCheckpointHost"/>) and refuses by name when it does
     /// not.</summary>
-    public bool AnyMachineEverPumped => m_machines.AnyEverPumped;
+    public bool AnyMachineEverPumped { get { ThrowIfOutsideWindow(); return m_machines.AnyEverPumped; } }
     /// <summary>Gets whether a screen operation reached host dispatch or a named provider operation reached its runtime
     /// commit barrier. This irreversible latch takes the live state off its boot image, even when a runtime operation
     /// faults after changing hardware, so a recording armed afterwards starts from an authority checkpoint, which
     /// carries the screen slots and machine cores the operation moved. Generic provider operations have no entry in
     /// the replay format and are refused while its screen-operation tap is attached.</summary>
-    public bool AnyScreenOpEverApplied { get; private set; }
+    public bool AnyScreenOpEverApplied { get { ThrowIfOutsideWindow(); return m_anyScreenOpEverApplied; } private set => m_anyScreenOpEverApplied = value; }
+    private bool m_anyScreenOpEverApplied;
     /// <summary>Gets the namespace used by durable entity addresses emitted by this authority. A federated
     /// authority uses its declared network identity so two processes whose local instance is named <c>boot</c>
     /// cannot publish colliding addresses; a loopback-only authority uses its process-local instance identity, or the
@@ -249,7 +250,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <summary>Gets the phases this world's state clocks read as it was admitted at boot
     /// (<see cref="WorldClockAnchors.Seeds"/>): what a presentation-tier recipient that joins while a clock's row holds
     /// no number seeds the clock from.</summary>
-    public IReadOnlyDictionary<string, ulong> ClockSeeds => m_clockSeeds;
+    public IReadOnlyDictionary<string, ulong> ClockSeeds { get { ThrowIfOutsideWindow(); return m_clockSeeds; } }
 
     private readonly Dictionary<string, ulong> m_clockSeeds = new(comparer: StringComparer.Ordinal);
 

@@ -1,3 +1,5 @@
+using Puck.World.Client;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -17,7 +19,9 @@ namespace Puck.World;
 /// <param name="feed">The feed the copies are published through.</param>
 /// <param name="drawnReport">Reads the report the overlay last drew, or <see langword="null"/> for a host that draws
 /// none.</param>
-internal sealed class WorldPresentationCollect(WorldServer server, WorldInstanceHost instances, WorldHistory history, WorldDiagnostics diagnostics, WorldPresentationFeed feed, Func<WorldDiagnosticReport?> drawnReport) {
+/// <param name="roster">The local seats' roster, whose principals each seat's edit badge asks about.</param>
+/// <param name="routes">The local seats' authority routes.</param>
+internal sealed class WorldPresentationCollect(WorldServer server, WorldInstanceHost instances, WorldHistory history, WorldDiagnostics diagnostics, WorldPresentationFeed feed, Func<WorldDiagnosticReport?> drawnReport, PlayerRoster? roster = null, WorldSeatAuthorityRouter? routes = null) {
     private WorldMachineTable m_machines = WorldMachineTable.Empty;
     private WorldObservationTable m_observations = WorldObservationTable.Empty;
     private WorldTickRecord m_tick = WorldTickRecord.Empty;
@@ -35,6 +39,7 @@ internal sealed class WorldPresentationCollect(WorldServer server, WorldInstance
         var held = m_tick;
         var places = held.SeatPlaces;
         string?[]? fresh = null;
+        byte editable = 0;
 
         for (var seat = 0; (seat < WorldBodiesLimits.LocalSeatCount); seat++) {
             var place = server.Events.SeatPlace(seat: seat);
@@ -48,6 +53,9 @@ internal sealed class WorldPresentationCollect(WorldServer server, WorldInstance
             if (fresh is not null) {
                 fresh[seat] = place;
             }
+            if (SeatMayEditPlacements(seat: seat)) {
+                editable |= ((byte)(1 << seat));
+            }
         }
 
         var population = server.Population;
@@ -56,7 +64,7 @@ internal sealed class WorldPresentationCollect(WorldServer server, WorldInstance
         var tick = (server.NextInputTick - 1UL);
         var window = WorldPresentationCopy.HistoryWindow(history: history);
 
-        if ((fresh is null) && (tick == held.Tick) && (version == held.DocumentVersion) && (window == held.History) &&
+        if ((fresh is null) && (editable == held.EditableSeats) && (tick == held.Tick) && (version == held.DocumentVersion) && (window == held.History) &&
             (population.SimulatedCount == held.SimulatedBodies) && (population.PeerCapacity == held.PeerCapacity) &&
             ReferenceEquals(objA: commands, objB: held.Commands)) {
             return held;
@@ -65,11 +73,37 @@ internal sealed class WorldPresentationCollect(WorldServer server, WorldInstance
         return m_tick = new WorldTickRecord(
             Commands: commands,
             DocumentVersion: version,
+            EditableSeats: editable,
             History: window,
             PeerCapacity: population.PeerCapacity,
             SeatPlaces: ((IReadOnlyList<string?>?)fresh ?? places),
             SimulatedBodies: population.SimulatedCount,
             Tick: tick
         );
+    }
+
+    private bool SeatMayEditPlacements(int seat) {
+        if (roster is null) {
+            return true;
+        }
+
+        var world = server;
+
+        if (
+            (routes?.TryRoute(slot: seat) is { } route) &&
+            !string.Equals(a: route.Endpoint.Identity, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)
+        ) {
+            if (!instances.TryGet(instance: out var instance, name: route.Endpoint.Identity) || (instance is null)) {
+                return true;
+            }
+
+            world = instance.Server;
+        }
+
+        return world.Grants.Allows(
+            capability: WorldCapability.Mutate,
+            principal: roster.PrincipalOf(slot: seat),
+            subject: GrantSubject.Section(section: WorldSection.Placements)
+        ).IsAllowed;
     }
 }

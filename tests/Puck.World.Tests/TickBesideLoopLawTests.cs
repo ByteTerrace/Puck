@@ -126,9 +126,22 @@ public sealed class TickBesideLoopLawTests {
                 Assert.Throws<InvalidOperationException>(() => _ = server.Population);
                 Assert.Throws<InvalidOperationException>(() => _ = server.Configuration);
                 Assert.Throws<InvalidOperationException>(() => _ = server.Grants);
+                Assert.Throws<InvalidOperationException>(() => _ = server.GrantTable);
+                Assert.Throws<InvalidOperationException>(() => _ = server.MutationBudget);
+                Assert.Throws<InvalidOperationException>(() => _ = server.Addons);
+                Assert.Throws<InvalidOperationException>(() => _ = server.Persistence);
+                Assert.Throws<InvalidOperationException>(() => _ = server.CostReport);
+                Assert.Throws<InvalidOperationException>(() => _ = server.RuleHazards);
+                Assert.Throws<InvalidOperationException>(() => _ = server.Time);
+                Assert.Throws<InvalidOperationException>(() => _ = server.InputHold);
+                Assert.Throws<InvalidOperationException>(() => _ = server.ClockSeeds);
+                Assert.Throws<InvalidOperationException>(() => _ = server.AnyAddonEverPumped);
+                Assert.Throws<InvalidOperationException>(() => _ = server.AnyMachineEverPumped);
+                Assert.Throws<InvalidOperationException>(() => _ = server.AnyScreenOpEverApplied);
                 Assert.Throws<InvalidOperationException>(() => _ = server.NextInputTick);
                 Assert.Throws<InvalidOperationException>(() => _ = server.DocumentVersion);
                 Assert.Throws<InvalidOperationException>(() => server.ExecuteAuthorityOperation(() => { }));
+                Assert.False(services.GetRequiredService<WorldEditorSeats>().IsReadOnly(slot: 0));
 
                 // Another thread is not the loop's: the authority's gate orders it.
                 var other = Task.Run(() => server.ExecuteAuthorityOperation(() => server.Population.Capacity));
@@ -152,6 +165,93 @@ public sealed class TickBesideLoopLawTests {
 
             // The loop has ended: its thread tears the host down and reads freely again.
             _ = server.Population;
+        });
+    }
+
+    [Fact]
+    public void AControlPhaseWithdrawalReachesTheNextFrameBeforeTheInFlightTickCollects() {
+        var basis = Fixtures.BuildDocument();
+        var room = basis with {
+            Admission = [new WorldAdmissionEntry(
+                Disclosure: WorldDisclosureTier.Presentation,
+                Domain: WorldAdmissionEntry.AnyAuthority,
+                Grants: [new WorldAdmissionGrant(Budget: 64, Capability: WorldCapability.Observe, Subject: GrantSubject.All)],
+                Mode: WorldAdmissionTrustMode.FederatedAuthority
+            )],
+        };
+        var template = basis.Screens.Single();
+        var bootDefinition = basis with {
+            Destinations = [new WorldDestination(Durability: WorldDestinationDurability.Ephemeral, Name: SafeName.Parse("room"), Reference: "room")],
+            References = [new WorldReference(Document: "room", Name: SafeName.Parse("room"))],
+            ScreensRaw = [template with { Index = 0, Source = new WorldScreenSource.Session(Destination: "room") }],
+        };
+
+        WorldBootCompositionLawTests.WithHeadlessHost(bootDefinition, services => {
+            var sourceDir = Path.GetDirectoryName(services.GetRequiredService<WorldDefinitionSource>().SourcePath)!;
+            File.WriteAllBytes(Path.Join(sourceDir, WorldDocumentName.DocumentFile("room")), WorldDefinitionSerialization.Serialize(room));
+            Assert.True(WorldPostBuildWiring.Install(services));
+
+            var server = services.GetRequiredService<WorldServer>();
+            var instances = services.GetRequiredService<WorldInstanceHost>();
+            var feed = services.GetRequiredService<WorldPresentationFeed>();
+            var roster = services.GetRequiredService<PlayerRoster>();
+            var registry = services.GetRequiredService<CommandRegistry>();
+            var simulation = services.GetRequiredService<IFixedStepSimulation>();
+            var boundary = services.GetRequiredService<WorldLinkBoundary>();
+            var revokeInControlPhase = false;
+            WorldGrant observeGrant = default;
+            WorldInstance? destination = null;
+            var seatPrincipal = roster.PrincipalOf(slot: 0);
+            var placementsSubject = GrantSubject.Section(section: WorldSection.Placements);
+            var placementsGrant = Assert.Single(server.GrantRows(seatPrincipal),
+                row => (row.Capability == WorldCapability.Mutate) && ((row.Subject == GrantSubject.All) || (row.Subject == placementsSubject)));
+
+            using var router = new InputRouter(bindings: new ConfirmBinding(), registry: registry, slotResolver: roster, principalResolver: roster);
+            var pump = new FixedStepPump(
+                simulation: simulation,
+                inputRouter: router,
+                registry: registry,
+                captureOriginTicks: 0,
+                beforeStep: atBoundary => {
+                    if (!atBoundary || !revokeInControlPhase) { return; }
+                    revokeInControlPhase = false;
+                    destination!.Server.Revoke(observeGrant, Principal.Console);
+                    server.Revoke(placementsGrant, Principal.Console);
+                },
+                holdsClock: false
+            );
+
+            boundary.RegisterPump();
+            try {
+                pump.BeginIteration();
+                Assert.True(pump.TryStep(Fixtures.StepTicks, Fixtures.StepTicks));
+
+                boundary.Open(drain: false);
+                try {
+                    var hosted = instances.ScreenSession(WorldInstanceHost.BootInstanceName, 0)!;
+                    Assert.True(instances.TryGet(hosted.InstanceName!, out destination));
+                    observeGrant = Assert.Single(destination!.Server.GrantRows(hosted.Observation!.Session),
+                        row => (row.Capability == WorldCapability.Observe) && (row.Subject == GrantSubject.All));
+                } finally {
+                    boundary.Close();
+                }
+
+                Assert.True(feed.Observations.Screens[(WorldInstanceHost.BootInstanceName, 0)].Observation!.CanObserve);
+                Assert.True(feed.Tick.SeatMayEditPlacements(seat: 0));
+
+                revokeInControlPhase = true;
+                pump.BeginIteration();
+                _ = pump.Advance(deltaTicks: Fixtures.StepTicks, maxFrameTicks: (Fixtures.StepTicks * 4UL), stepTicks: Fixtures.StepTicks);
+
+                // Here stands the frame, beside any in-flight step: the control-phase window already closed and collected,
+                // so both revocations are visible to the frame before the step settles.
+                Assert.False(feed.Observations.Screens[(WorldInstanceHost.BootInstanceName, 0)].Observation!.CanObserve);
+                Assert.False(feed.Tick.SeatMayEditPlacements(seat: 0));
+                Assert.True(services.GetRequiredService<WorldEditorSeats>().IsReadOnly(slot: 0));
+                Assert.True(pump.Settle());
+            } finally {
+                boundary.UnregisterPump();
+            }
         });
     }
 

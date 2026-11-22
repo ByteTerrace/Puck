@@ -617,29 +617,9 @@ public static class WorldBootComposition {
         // answers for its own edits by name when they reach it.
         services.AddSingleton(implementationFactory: static sp => {
             var roster = sp.GetRequiredService<PlayerRoster>();
-            var server = sp.GetRequiredService<WorldServer>();
-            var routes = sp.GetRequiredService<WorldSeatAuthorityRouter>();
+            var feed = sp.GetRequiredService<WorldPresentationFeed>();
             var seats = new WorldEditorSeats {
-                EditProbe = slot => {
-                    var world = server;
-
-                    if (
-                        (routes.TryRoute(slot: slot) is { } route) &&
-                        !string.Equals(a: route.Endpoint.Identity, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)
-                    ) {
-                        if (!sp.GetRequiredService<WorldInstanceHost>().TryGet(instance: out var instance, name: route.Endpoint.Identity) || (instance is null)) {
-                            return true;
-                        }
-
-                        world = instance.Server;
-                    }
-
-                    return world.Grants.Allows(
-                        capability: WorldCapability.Mutate,
-                        principal: roster.PrincipalOf(slot: slot),
-                        subject: GrantSubject.Section(section: WorldSection.Placements)
-                    ).IsAllowed;
-                },
+                EditProbe = slot => feed.Tick.SeatMayEditPlacements(seat: slot),
             };
 
             roster.SlotVacated += seats.Reset;
@@ -880,6 +860,8 @@ public static class WorldBootComposition {
                 feed: sp.GetRequiredService<WorldPresentationFeed>(),
                 history: sp.GetRequiredService<WorldHistory>(),
                 instances: sp.GetRequiredService<WorldInstanceHost>(),
+                roster: sp.GetRequiredService<PlayerRoster>(),
+                routes: sp.GetRequiredService<WorldSeatAuthorityRouter>(),
                 server: sp.GetRequiredService<WorldServer>()
             );
         });

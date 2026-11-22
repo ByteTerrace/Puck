@@ -272,6 +272,7 @@ public sealed partial class WorldInstanceHost {
                             initialRoute: initialRoute,
                             applicationStopping: m_applicationStopping,
                             narrationHub: m_narration,
+                            boundary: m_linkBoundary,
                             routeChanged: route => {
                                 if (
                                     (publishedEndpoint is not null) &&

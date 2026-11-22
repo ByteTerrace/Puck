@@ -20,8 +20,14 @@ internal sealed class WorldSimulation(WorldHostStep step, Action afterInstances,
     // follows hands its tick over. While a step is in progress the frame keeps the values of the boundary before it,
     // and the call that completes the step collects.
     private static WorldLinkBoundary Collecting(WorldLinkBoundary boundary, WorldHostStep step, Action collect) {
+        boundary.CollectOnOpen(drain: () => {
+            if (!step.StepInProgress) { step.CollectDeliveries(); }
+        });
         boundary.PublishOnClose(publish: () => {
-            if (!step.StepInProgress) { collect(); }
+            if (!step.StepInProgress) {
+                step.CollectDeliveries();
+                collect();
+            }
         });
 
         return boundary;
