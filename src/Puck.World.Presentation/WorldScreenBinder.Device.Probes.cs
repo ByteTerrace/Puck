@@ -3,9 +3,6 @@ using System.Numerics;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Sources;
-using Puck.DirectX;
-using Puck.DirectX.Apis;
-using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Hosting;
@@ -25,12 +22,8 @@ public sealed partial class WorldScreenBinder {
     [SupportedOSPlatform("windows10.0.10240")]
     private ImportedViewExport CreateImportedViewExport(IGpuDeviceContext device, uint width, uint height) {
         var adapterLuid = (m_renderAdapterLuid ?? throw new InvalidOperationException(message: "a view export needs the render adapter's LUID"));
-        var targetDevice = (m_cameraTargetDevice ??= new DisposeAfterDependents<IDisposable>(resource: new DirectXDeviceContext(
-            adapterLuid: adapterLuid,
-            deviceApi: new DirectXNativeDeviceApi(),
-            minimumFeatureLevel: DirectXFeatureLevel.Level110
-        )));
-        var export = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)targetDevice.Resource));
+        var export = TargetExporter(adapterLuid: adapterLuid);
+        var targetDevice = m_cameraTargetDevice!;
         var texture = export.CreateSharedComputeImage(
             format: ViewExportFormat,
             height: height,
@@ -339,7 +332,7 @@ public sealed partial class WorldScreenBinder {
     // on the Direct3D 12 host, or one the binder's headless Direct3D 12 device makes for the Vulkan host to import.
     [SupportedOSPlatform("windows10.0.10240")]
     private Func<IGpuDeviceContext, IGpuExportableImage> ExportFactory(uint width, uint height) => (m_hostsOnDirectX
-        ? device => new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)device)).CreateSharedComputeImage(
+        ? device => SurfaceExports.ExporterOn(device: device).CreateSharedComputeImage(
             format: ViewExportFormat,
             height: height,
             width: width

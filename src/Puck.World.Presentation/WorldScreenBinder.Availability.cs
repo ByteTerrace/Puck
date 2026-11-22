@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.World.Client;
-using Puck.World.Server;
 
 namespace Puck.World;
 
@@ -285,26 +284,26 @@ public sealed partial class WorldScreenBinder {
     }
     // A new session's route and a new infinity layer's access, settled from their observation as they are made, so a
     // view resolved before the next frame settles them reads the access they start with.
-    private static WorldSessionRoute SettledRoute(WorldSessionObservation? observation) {
+    private static WorldSessionRoute SettledRoute(WorldObservationAdmission? observation) {
         var route = new WorldSessionRoute();
 
-        _ = route.SettleAccess(access: AccessOf(observation: observation), admission: observation);
+        _ = route.SettleAccess(access: AccessOf(observation: observation), admission: observation?.Token);
         return route;
     }
-    private static WorldViewerAccess SettledAccess(WorldObservationSession? hosted) {
+    private static WorldViewerAccess SettledAccess(WorldObservedSession? hosted) {
         var access = new WorldViewerAccess();
 
-        _ = access.Settle(admission: hosted?.Observation, level: LayerAccessOf(hosted: hosted));
+        _ = access.Settle(admission: hosted?.Observation?.Token, level: LayerAccessOf(hosted: hosted));
         return access;
     }
     // An infinity layer with no hosted session shows its own world's sky, which no session gates.
-    private static WorldSessionAccess LayerAccessOf(WorldObservationSession? hosted) => ((hosted is null)
+    private static WorldSessionAccess LayerAccessOf(WorldObservedSession? hosted) => ((hosted is null)
         ? WorldSessionAccess.Everything
         : AccessOf(observation: hosted.Observation));
     // The access an observation gives its viewer now: everything its world holds, what it discloses, or nothing.
-    private static WorldSessionAccess AccessOf(WorldSessionObservation? observation) => ((observation is null)
+    private static WorldSessionAccess AccessOf(WorldObservationAdmission? observation) => ((observation is null)
         ? WorldSessionAccess.None
-        : ((observation.SceneProof is { SharesAuthority: true })
+        : ((observation.Proof is { SharesAuthority: true })
             ? WorldSessionAccess.Everything
             : (observation.CanObserve ? WorldSessionAccess.Disclosed : WorldSessionAccess.None)));
 }

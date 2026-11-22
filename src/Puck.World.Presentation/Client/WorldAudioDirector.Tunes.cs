@@ -1,12 +1,11 @@
 using Puck.Audio.Mixing;
-using Puck.World.Audio;
 
 namespace Puck.World.Client;
 
 public sealed partial class WorldAudioDirector {
     // The row passed a validating door, but its file can change on disk after validation and this runs on the frame
     // thread: a tune that no longer loads plays silent and is reported, never thrown.
-    private static TuneHost? CreateTuneHost(string? documentDirectory, WorldTune tune, AudioMixer mixer) {
+    private TuneHost? CreateTuneHost(string? documentDirectory, WorldTune tune, AudioMixer mixer) {
         if (!WorldAssetRowLoader.TryLoadTune(
             document: out var document,
             documentDirectory: documentDirectory,
@@ -18,7 +17,13 @@ public sealed partial class WorldAudioDirector {
             return null;
         }
 
-        var source = new TuneMachineSource(document: document!);
+        if (TuneSources is not { } tuneSources) {
+            Console.Error.WriteLine(value: $"[world.audio: tune[{tune.Name}] skipped: this host composes no tune synthesizer]");
+
+            return null;
+        }
+
+        var source = tuneSources(arg: document!);
 
         mixer.SetSource(
             key: AudioSourceKey.Tune(id: tune.Name),

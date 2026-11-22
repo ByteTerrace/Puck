@@ -205,20 +205,21 @@ public sealed class WorldScreenBinderLawTests {
         scene.RenderProbe.CopyNodes(nodes);
         Assert.Empty(nodes);
     }
+    // Why a screen's source shows nothing, from the binder's half of screen.state, or null for none or no screen.
+    private static string? FaultOf(WorldScreenBinder binder, int index) => (binder.TryPresentedState(fault: out var fault, handle: out _, index: index) ? fault : null);
+
     [Fact]
     public void EachScreenBindsItsRowOrNamesWhyItCannot() {
         using var scene = new BinderScene();
         var binder = scene.Binder;
 
         Assert.Equal(
-            actual: binder.State(index: BinderScene.MissingCamera)?.Fault,
+            actual: FaultOf(binder: binder, index: BinderScene.MissingCamera),
             expected: "camera 'missing' not declared"
         );
-        Assert.Equal(
-            actual: binder.State(index: BinderScene.Pattern),
-            expected: new WorldScreenState(Assigned: false, Engine: null, Handle: 0, FramesStepped: 0, PendingSteps: 0, MaximumPendingSteps: 0, BackpressureEvents: 0, Fault: null)
-        );
-        Assert.Null(@object: binder.State(index: 99));
+        Assert.True(condition: binder.TryPresentedState(fault: out var patternFault, handle: out var patternHandle, index: BinderScene.Pattern));
+        Assert.Equal(actual: (patternHandle, patternFault), expected: ((nint)0, (string?)null));
+        Assert.False(condition: binder.TryPresentedState(fault: out _, handle: out _, index: 99));
         Assert.Equal(
             actual: binder.TextSourceAt(index: BinderScene.Text)?.Lines,
             expected: ["hello"]
@@ -236,7 +237,7 @@ public sealed class WorldScreenBinderLawTests {
         Assert.Equal(actual: filmed.EffectiveCamera, expected: "cam");
         Assert.True(condition: binder.TryDescribeSession(description: out var ghost, index: BinderScene.GhostSession));
         Assert.Null(@object: ghost.EffectiveCamera);
-        Assert.NotNull(@object: binder.State(index: BinderScene.ClosedSession)?.Fault);
+        Assert.NotNull(@object: FaultOf(binder: binder, index: BinderScene.ClosedSession));
         Assert.False(condition: binder.TryDescribeSession(
             description: out _,
             index: BinderScene.Text
@@ -261,8 +262,7 @@ public sealed class WorldScreenBinderLawTests {
         Assert.Equal(actual: binder.CurrentHandle(index: BinderScene.Pattern), expected: 0);
         Assert.Null(@object: binder.FenceOrderAt(index: BinderScene.Probe));
         // A screen reads its world's machines from the table a collect publishes, never from a machine host.
-        Assert.Null(@object: binder.MachinesOf(world: WorldInstanceHost.BootInstanceName));
-        scene.Feed.Publish(diagnostics: WorldDiagnosticCopy.Off, machines: WorldPresentationCopy.Machines(held: WorldMachineTable.Empty, instances: scene.Host), tick: WorldTickRecord.Empty);
+        scene.Publish();
         Assert.Same(actual: binder.MachinesOf(world: WorldInstanceHost.BootInstanceName), expected: scene.Machines.CapturePresentation());
         Assert.Null(@object: binder.MachinesOf(world: "nowhere"));
         Assert.NotNull(@object: binder.MachinesOf(world: session.InstanceName));
@@ -271,16 +271,8 @@ public sealed class WorldScreenBinderLawTests {
             filter: static producer => (producer.Id == WorldImageProducerSettings.CaptureId)
         );
 
-        // The machine host's read-throughs, over a world that boots no machine.
-        Assert.False(condition: binder.HasMachine(index: BinderScene.Pattern));
-        Assert.False(condition: binder.HasEngine(engineId: "hgb"));
-        Assert.Null(@object: binder.LinkOf(index: BinderScene.Pattern));
-        Assert.Null(@object: binder.AudioMachine(index: BinderScene.Pattern));
+        // The published machine table's audio, over a world that boots no machine.
         Assert.Null(@object: binder.AudioOutput(instance: "cabinet", output: "audio"));
-        Assert.False(condition: binder.TryMagazine(index: BinderScene.Pattern, magazine: out _, selected: out _));
-        Assert.False(condition: binder.TryPeek(address: 0, index: BinderScene.Pattern, value: out _).Ok);
-        Assert.False(condition: binder.TryReadLinkMembers(members: out _, name: "cable"));
-        _ = binder.DescribeLinks();
 
         // No camera device is seated, then one is seated that no scan has seen.
         Assert.Null(@object: binder.DescribeCamera());
@@ -330,7 +322,7 @@ public sealed class WorldScreenBinderLawTests {
     public void AScreenShowingAMachineReadsItFromTheMachineHost() {
         using var scene = new BinderScene(options: new BinderOptions(Cabinet: true));
 
-        Assert.True(condition: scene.Binder.State(index: BinderScene.Cabinet)?.Assigned);
+        Assert.True(condition: scene.Machines.State(index: BinderScene.Cabinet)?.Assigned);
         Assert.True(condition: scene.Binder.TryExtent(height: out var height, screen: BinderScene.Cabinet, width: out var width));
         Assert.Equal(actual: (width, height), expected: (1, 1));
         // The cabinet's row names the CRT material, which reaches its treatment; every other display, and a screen with no
@@ -395,7 +387,7 @@ public sealed class WorldScreenBinderLawTests {
         Assert.False(condition: binder.ApplyNonMachineSource(index: BinderScene.None, source: new WorldScreenSource.View(CameraName: "cam")).Ok);
         Assert.False(condition: binder.ApplyNonMachineSource(index: BinderScene.None, source: new WorldScreenSource.Session(Destination: "garden")).Ok);
         Assert.Equal(
-            actual: binder.State(index: BinderScene.None)?.Fault,
+            actual: FaultOf(binder: binder, index: BinderScene.None),
             expected: "the session to destination 'garden' awaits its authority"
         );
         Assert.True(condition: binder.ApplyNonMachineSource(index: BinderScene.None, source: new WorldScreenSource.None()).Ok);
@@ -486,13 +478,13 @@ public sealed class WorldScreenBinderLawTests {
 
         // Every screen but the pattern goes: each slot is dropped, the session released, the camera's view with it.
         binder.ReconcileScreens(materials: [], screens: [rows[0]]);
-        Assert.Null(@object: binder.State(index: BinderScene.Session));
+        Assert.False(condition: binder.TryPresentedState(fault: out _, handle: out _, index: BinderScene.Session));
         Assert.Null(@object: binder.InstanceOf(screen: BinderScene.View));
 
         // A boot index comes back with a new source, and a new index waits for the next boot.
         binder.ReconcileScreens(materials: [], screens: [rows[0], (rows[BinderScene.Text] with { Source = new WorldScreenSource.Text(Lines: ["again"]) }), (rows[0] with { Index = 40 })]);
         Assert.Equal(actual: binder.TextSourceAt(index: BinderScene.Text)?.Lines, expected: ["again"]);
-        Assert.Null(@object: binder.State(index: 40));
+        Assert.False(condition: binder.TryPresentedState(fault: out _, handle: out _, index: 40));
 
         // The same rows again change nothing; a changed row's source applies, a machine's through its host.
         binder.ReconcileScreens(materials: [], screens: [rows[0], (rows[BinderScene.Text] with { Source = new WorldScreenSource.Text(Lines: ["again"]) })]);
@@ -597,11 +589,11 @@ public sealed class WorldScreenBinderLawTests {
         Assert.Equal(actual: binder.ActiveCameraViewCount, expected: 1);
         binder.ReconcileCameras(cameras: [(scene.Camera with { RenderWidth = 256U })]);
         binder.ReconcileCameras(cameras: [(scene.Camera with { RenderWidth = 256U }), (scene.Camera with { Name = "missing" })]);
-        Assert.Null(@object: binder.State(index: BinderScene.MissingCamera)?.Fault);
+        Assert.Null(@object: FaultOf(binder: binder, index: BinderScene.MissingCamera));
         binder.ReconcileCameras(cameras: [(scene.Camera with { Anchor = new WorldAnchor.Seat() }), (scene.Camera with { Name = "missing" })]);
         binder.ReconcileCameras(cameras: []);
         Assert.Equal(actual: binder.ActiveCameraViewCount, expected: 0);
-        Assert.Equal(actual: binder.State(index: BinderScene.View)?.Fault, expected: "camera 'cam' not declared");
+        Assert.Equal(actual: FaultOf(binder: binder, index: BinderScene.View), expected: "camera 'cam' not declared");
     }
     [Fact]
     public void EachAnchorKindPosesTheCameraViewItRegisters() {
@@ -970,21 +962,24 @@ public sealed class WorldScreenBinderLawTests {
                 .. boot.Screens.Skip(count: 2).Where(predicate: static row => (row.Index != Cabinet)),
                 cabinet,
             ];
+            var client = new WorldClient(
+                composition: new WorldCompositionState(),
+                definition: boot,
+                roster: Roster,
+                seatRouter: new WorldSeatAuthorityRouter()
+            );
+
+            // The binder renders sessions and machines from what a collect publishes.
+            Publish();
             Binder = new WorldScreenBinder(
-                anchors: new WorldClient(
-                    composition: new WorldCompositionState(),
-                    definition: boot,
-                    roster: Roster,
-                    seatRouter: new WorldSeatAuthorityRouter()
-                ),
+                anchors: client,
+                client: client,
                 cameraCapture: new FakeCameras(supported: options.CamerasSupported),
                 cameras: (options.Cameras ?? boot.Cameras),
                 domains: new WorldValueDomainGuard(),
                 facts: static () => new NoFacts(),
                 feed: Feed,
                 hostsOnDirectX: options.HostsOnDirectX,
-                instanceHost: Host,
-                machines: Machines,
                 perception: new WorldPerceptionAnchor(),
                 probeKernels: new NullProbeKernelHostService(),
                 renderProbe: RenderProbe,
@@ -1001,6 +996,14 @@ public sealed class WorldScreenBinderLawTests {
         public WorldScreenBinder Binder { get; }
         public WorldRenderProbe RenderProbe { get; } = new();
         public WorldPresentationFeed Feed { get; } = new();
+
+        // Publishes the machines and sessions of the scene's instances, as a host step's collect does.
+        public void Publish() => Feed.Publish(
+            diagnostics: WorldDiagnosticCopy.Off,
+            machines: WorldPresentationCopy.Machines(held: Feed.Machines, instances: Host),
+            observations: WorldPresentationCopy.Observations(held: Feed.Observations, instances: Host),
+            tick: WorldTickRecord.Empty
+        );
         public WorldInstance Boot { get; }
         public WorldCamera Camera { get; }
         public WorldInstanceHost Host { get; }

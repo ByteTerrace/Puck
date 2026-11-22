@@ -5,8 +5,6 @@ using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
-using Puck.DirectX;
-using Puck.DirectX.Interop;
 using Puck.Hosting;
 using Puck.Platform;
 using Puck.Shaders;
@@ -170,7 +168,7 @@ public sealed partial class WorldScreenBinder {
             return;
         }
 
-        var export = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)deviceContext));
+        var export = SurfaceExports.ExporterOn(device: deviceContext);
         var images = new IGpuExportableImage[SharedTargetCount];
         var handles = new nint[images.Length];
 

@@ -7,10 +7,6 @@ namespace Puck.World.Client;
 /// <summary>The narrow slice of the composition root's screen binder a frame source drives per frame. Declared here
 /// so a Client-side type can hold the binder without naming the root's concrete type.</summary>
 public interface IWorldScreenPresenter {
-    /// <summary>Gets the audio machine bound to a screen index, or <see langword="null"/> when the slot's current
-    /// source is not a machine.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    IAudioMachine? AudioMachine(int index);
     /// <summary>Gets a named machine's audio output, or <see langword="null"/> when the instance or output is not live.</summary>
     /// <param name="instance">The declared machine instance name.</param>
     /// <param name="output">The provider audio output name.</param>

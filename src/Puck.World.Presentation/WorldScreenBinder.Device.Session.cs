@@ -46,18 +46,13 @@ public sealed partial class WorldScreenBinder {
         // that gap for ordinary authored session screens. The candidate-aware emitter
         // measurement is load-bearing: returning the construction capacity for every candidate would make
         // WorldRenderEnvelope compare the ceiling to itself and admit every mutation.
-        if (
-            m_instanceHost.TryGet(
-            name: feed.InstanceName,
-            instance: out var destination
-        ) &&
-            (destination is not null)
-        ) {
+        if (Observations.EnvelopeOf(instance: feed.InstanceName) is { } envelope) {
             feed.EnvelopeRegistration?.Dispose();
-            feed.EnvelopeRegistration = destination.Server.Envelope.Configure(
+            feed.EnvelopeRegistration = envelope.Configure(
                 // The envelope sizes the observer's view from what the candidate's admission discloses this viewer,
-                // never the full candidate: what would render nothing measures nothing.
-                measure: candidate => ((feed.Observation?.Disclose(candidate: candidate) is { } disclosed)
+                // never the full candidate: what would render nothing measures nothing. The authority's capacity check
+                // runs it.
+                measure: candidate => ((feed.Observation?.Disclose(arg: candidate) is { } disclosed)
                     ? emitter.MeasureCandidate(candidate: disclosed)
                     : default)
             );
@@ -87,7 +82,7 @@ public sealed partial class WorldScreenBinder {
         foreach (var feed in m_feeds) {
             var access = AccessOf(observation: feed.Observation);
 
-            _ = feed.Route.SettleAccess(access: access, admission: feed.Observation);
+            _ = feed.Route.SettleAccess(access: access, admission: feed.Observation?.Token);
             if (feed.Content.Settle(access: access, delivered: feed.Mirror, holdsSource: (feed.FrameSource is not null))) {
                 WithdrawOwnSource(feed: feed);
             }
@@ -95,7 +90,7 @@ public sealed partial class WorldScreenBinder {
         foreach (var entry in InfinityEntries()) {
             var access = LayerAccessOf(hosted: entry.Hosted);
 
-            _ = entry.Access.Settle(admission: entry.Hosted?.Observation, level: access);
+            _ = entry.Access.Settle(admission: entry.Hosted?.Observation?.Token, level: access);
             if (entry.Content.Settle(access: access, delivered: entry.Mirror, holdsSource: (entry.Residency is not null))) {
                 WithdrawInfinityResidency(entry: entry);
             }
@@ -110,18 +105,12 @@ public sealed partial class WorldScreenBinder {
         GroupSharedScenes();
         foreach (var feed in m_feeds) {
             // Only the endpoint of the instance the session observes, and only on the authority's proof.
-            var endpoint = (((feed.Observation is { } observation) && m_instanceHost.TryWindowEndpoint(
-                endpoint: out var observed,
-                name: feed.InstanceName,
-                observation: observation
-            ))
-                ? observed
-                : null);
+            var endpoint = feed.Observation?.Window;
             var home = (
                 (endpoint is not null) &&
                 string.Equals(
                     a: feed.InstanceName,
-                    b: WorldInstanceHost.BootInstanceName,
+                    b: WorldDefinitionLoader.BootInstanceName,
                     comparisonType: StringComparison.Ordinal
                 )
             );

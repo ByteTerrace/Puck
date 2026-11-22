@@ -158,7 +158,7 @@ keeps showing it.
 Confirmed in the code. The epoch moves when the observation object changes, but
 the residency's guard is not told about the observation at all:
 
-`src/Puck.World/WorldScreenBinder.Availability.cs:268`
+`src/Puck.World.Presentation/WorldScreenBinder.Availability.cs:268`
 
 ```csharp
             return ((access != WorldSessionAccess.None) && (access < Source));
@@ -198,14 +198,14 @@ its next render. The SDF views restart their own temporal resolve through
 Confirmed, three ways.
 
 - An infinity layer's frame source is made when the layer is made
-  (`src/Puck.World/WorldScreenBinder.Device.Infinity.cs:192-194`) and the
+  (`src/Puck.World.Presentation/WorldScreenBinder.Device.Infinity.cs:192-194`) and the
   release drops only the residency
-  (`src/Puck.World/WorldScreenBinder.Device.Session.cs:145-150`). The settle
+  (`src/Puck.World.Presentation/WorldScreenBinder.Device.Session.cs:145-150`). The settle
   then reports that nothing is held
-  (`src/Puck.World/WorldScreenBinder.Device.Session.cs:95` passes
+  (`src/Puck.World.Presentation/WorldScreenBinder.Device.Session.cs:95` passes
   `entry.Residency is not null`), so the guard forgets what the source holds.
 - A view's export ring keeps the image a completed frame wrote
-  (`src/Puck.World/WorldScreenBinder.Device.Probes.cs:271-275`), and nothing
+  (`src/Puck.World.Presentation/WorldScreenBinder.Device.Probes.cs:271-275`), and nothing
   in a withdrawal reaches it. A probe that reads the ring holds its own
   acquisition and feeds its result back into the graph as a screen source.
 - A comparison hold is a CPU copy of a captured display frame

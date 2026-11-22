@@ -9,9 +9,6 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Commands;
-using Puck.DirectX;
-using Puck.DirectX.Apis;
-using Puck.DirectX.Interop;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Hosting;
@@ -648,15 +645,9 @@ public sealed partial class WorldScreenBinder : IWorldSeatCameras {
             // The targets are Direct3D 12 shared simultaneous-access textures on both hosts: the D3D12 host samples its
             // own resources, the Vulkan host allocates them on a headless device pinned to the render adapter and
             // imports each handle (one importer per slot).
-            var targetContext = (m_hostsOnDirectX
-                ? deviceContext
-                : ((DirectXDeviceContext)(m_cameraTargetDevice ??= new DisposeAfterDependents<IDisposable>(resource: new DirectXDeviceContext(
-                    adapterLuid: adapterLuid,
-                    deviceApi: new DirectXNativeDeviceApi(),
-                    minimumFeatureLevel: DirectXFeatureLevel.Level110
-                ))).Resource)
-            );
-            var export = new DirectXGpuSurfaceExportFactory(deviceContext: ((DirectXDeviceContext)targetContext));
+            var export = (m_hostsOnDirectX
+                ? SurfaceExports.ExporterOn(device: deviceContext)
+                : TargetExporter(adapterLuid: adapterLuid));
 
             for (var index = 0; (index < allocated.Length); index++) {
                 allocated[index] = export.CreateSimultaneousAccessImage(
@@ -1539,7 +1530,7 @@ public sealed partial class WorldScreenBinder : IWorldSeatCameras {
         public string Refusal { get; }
 
         [SupportedOSPlatform("windows10.0.10240")]
-        public static SharedRingFence Create(DirectXGpuSurfaceExportFactory export, bool hostsOnDirectX, IGpuDeviceContext renderDevice) {
+        public static SharedRingFence Create(IGpuSurfaceExporter export, bool hostsOnDirectX, IGpuDeviceContext renderDevice) {
             var exported = export.CreateExportableFence();
 
             if (hostsOnDirectX) {

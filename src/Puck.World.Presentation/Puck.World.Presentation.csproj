@@ -13,6 +13,7 @@
         <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
         <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
         <ProjectReference Include="../Puck.Overlays/Puck.Overlays.csproj" />
+        <ProjectReference Include="../Puck.Platform/Puck.Platform.csproj" />
         <ProjectReference Include="../Puck.SdfVm/Puck.SdfVm.csproj" />
         <ProjectReference Include="../Puck.Shaders/Puck.Shaders.csproj" />
         <ProjectReference Include="../Puck.World.Client/Puck.World.Client.csproj" />

@@ -3,12 +3,12 @@ using Xunit;
 
 using Puck.World.Authoring;
 
-namespace Puck.World.Server.Tests;
+namespace Puck.World.Tests;
 
 /// <summary>
 /// CONTRACT UNDER TEST: <c>WorldAudioCue.MusicWhenTokens</c> single-sources the <c>puck.music.v1</c> <c>when</c>
 /// vocabulary — <c>WorldDefinitionValidator</c> refuses a transition/layer/embellishment <c>when</c> outside it, and
-/// <c>MusicDirectorFactory.ParseFamily</c> maps every token in it — so a cue-only token (one with no sense family
+/// <c>MusicScoreCompiler.ParseFamily</c> maps every token in it — so a cue-only token (one with no sense family
 /// behind it) can never validate cleanly and then compile to a lane that cannot fire.
 /// </summary>
 public sealed class MusicWhenTokenLawTests {
@@ -95,7 +95,7 @@ public sealed class MusicWhenTokenLawTests {
         // The list↔mapping closure: a token added to MusicWhenTokens without a ParseFamily arm throws here, at test
         // time, instead of at the first world boot that authors it.
         foreach (var token in WorldAudioCue.MusicWhenTokens) {
-            _ = MusicDirectorFactory.ParseFamily(token: token);
+            _ = Puck.World.Client.MusicScoreCompiler.ParseFamily(token: token);
         }
     }
     [Fact]

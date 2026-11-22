@@ -23,7 +23,7 @@ public sealed partial class WorldScreenBinder : ISdfScreenSources {
     /// <inheritdoc/>
     public bool Emits(int screen) => (m_slots.TryGetValue(key: screen, value: out var slot) && (ShownOf(screen: screen) switch {
         WorldScreenSource.Machine or WorldScreenSource.Producer or WorldScreenSource.Probe => true,
-        WorldScreenSource.Session => ((slot.Session is { } feed) && (feed.InstanceName != WorldInstanceHost.BootInstanceName)),
+        WorldScreenSource.Session => ((slot.Session is { } feed) && (feed.InstanceName != WorldDefinitionLoader.BootInstanceName)),
         _ => false,
     }));
     /// <inheritdoc/>
@@ -70,6 +70,11 @@ public sealed partial class WorldScreenBinder : ISdfScreenSources {
     /// <returns>The presentation, or <see langword="null"/> for a world this process does not run, whose machines run on
     /// its own authority and reach no screen here.</returns>
     public WorldMachinePresentation? MachinesOf(string world) => m_feed.Machines.Of(world: world);
+    // The sessions, running instances and boot endpoint the last collect published.
+    private WorldObservationTable Observations => m_feed.Observations;
+    // A session's record as the last collect published it, or the record held when the authority no longer holds the
+    // session, whose last values the slot keeps until it lets the session go.
+    private WorldObservedSession? Current(WorldObservedSession? held) => ((held is null) ? null : (Observations.Current(token: held.Token) ?? held));
     /// <inheritdoc/>
     /// <remarks>A seat's or a camera's view of the world's residency shows the world's screens (<see cref="InstanceOf"/>); a
     /// session of the boot world, or a camera it shows, filmed into the world's frame shows its own level's.</remarks>

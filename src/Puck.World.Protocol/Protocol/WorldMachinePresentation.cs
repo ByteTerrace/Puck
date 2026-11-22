@@ -6,7 +6,7 @@ namespace Puck.World.Protocol;
 
 /// <summary>
 /// What a frame reads of one world's machines, captured whole by the machine host on the pump at a host step's collect:
-/// the video outputs of its running instances, each instance's fault, the revision of its instance map, and the
+/// the video outputs of its running instances, each instance's audio streams and fault, the revision of its instance map, and the
 /// presentation clock its machines' segments are stamped with. A screen holds this record, never the host, so a frame never reads a field the next tick
 /// writes. The outputs are the runtimes' own presentation objects, which the machines hand their completed frames to.
 /// </summary>
@@ -14,6 +14,10 @@ public sealed class WorldMachinePresentation {
     private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, IMachineVideoOutput>> NoOutputs =
         new Dictionary<string, IReadOnlyDictionary<string, IMachineVideoOutput>>(comparer: StringComparer.Ordinal);
     private static readonly IReadOnlyDictionary<string, string> NoFaults = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+    private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, IAudioMachine>> NoAudio =
+        new Dictionary<string, IReadOnlyDictionary<string, IAudioMachine>>(comparer: StringComparer.Ordinal);
+
+    private readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, IAudioMachine>> m_audio;
 
     private readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, IMachineVideoOutput>> m_outputs;
 
@@ -25,14 +29,19 @@ public sealed class WorldMachinePresentation {
     /// <param name="synchronous">Whether the latest step completed every machine's work before a screen reads it
     /// (lockstep), so a frame presents the step's end.</param>
     /// <param name="outputs">Each running instance's video outputs by provider-owned name, keyed by instance name.</param>
+    /// <param name="audio">Each instance's audio streams by provider-owned name, keyed by instance name; consumers of a
+    /// stream share its one drain.</param>
     /// <param name="faults">Each faulted instance's fault (a missing content file, an unresolved engine, a queue fault),
     /// keyed by instance name; an instance running cleanly has none.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="outputs"/> or <paramref name="faults"/> is
-    /// <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="outputs"/>, <paramref name="audio"/> or
+    /// <paramref name="faults"/> is <see langword="null"/>.</exception>
     public WorldMachinePresentation(ulong instanceRevision, ulong clock, ulong step, long stepTimestamp, bool synchronous,
-        IReadOnlyDictionary<string, IReadOnlyDictionary<string, IMachineVideoOutput>> outputs, IReadOnlyDictionary<string, string> faults) {
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, IMachineVideoOutput>> outputs,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, IAudioMachine>> audio, IReadOnlyDictionary<string, string> faults) {
         ArgumentNullException.ThrowIfNull(argument: outputs);
+        ArgumentNullException.ThrowIfNull(argument: audio);
         ArgumentNullException.ThrowIfNull(argument: faults);
+        m_audio = audio;
         Faults = faults;
         InstanceRevision = instanceRevision;
         Clock = clock;
@@ -43,7 +52,7 @@ public sealed class WorldMachinePresentation {
     }
 
     /// <summary>Gets the presentation of a host with no machines.</summary>
-    public static WorldMachinePresentation None { get; } = new(clock: 0UL, faults: NoFaults, instanceRevision: 0UL, outputs: NoOutputs, step: 0UL, stepTimestamp: 0L, synchronous: false);
+    public static WorldMachinePresentation None { get; } = new(audio: NoAudio, clock: 0UL, faults: NoFaults, instanceRevision: 0UL, outputs: NoOutputs, step: 0UL, stepTimestamp: 0L, synchronous: false);
 
     /// <summary>Gets the sum of the steps the host advanced, in engine ticks: the clock every machine's segments are
     /// stamped with.</summary>
@@ -80,6 +89,13 @@ public sealed class WorldMachinePresentation {
 
         return ((Clock - Step) + ((ulong)(fraction * Step)));
     }
+    /// <summary>Resolves one instance's audio stream.</summary>
+    /// <param name="instance">The authored instance name.</param>
+    /// <param name="output">The provider's stream name.</param>
+    /// <returns>The stream, or <see langword="null"/> when no instance of that name has it.</returns>
+    public IAudioMachine? AudioOutput(string instance, string output) => ((m_audio.TryGetValue(key: instance, value: out var streams) && streams.TryGetValue(key: output, value: out var selected))
+        ? selected
+        : null);
     /// <summary>Resolves one running instance's video output.</summary>
     /// <param name="instance">The authored instance name.</param>
     /// <param name="output">The provider's output name.</param>

@@ -6,7 +6,7 @@
 # ([Trait("Category", "Gpu")]) are the evidence for the GPU entries.
 # The screen binder's device work: what needs a GPU device or its shared resources, the frame presenter, the render
 # graph's running instances, or a camera or capture handing over frames. WorldScreenBinderLawTests covers the rest.
-src/Puck.World/WorldScreenBinder.Device.
+src/Puck.World.Presentation/WorldScreenBinder.Device.
 # world.slice's device work: queuing a slice on a live residency's bake, whose sampler only a GPU runs.
 # WorldSliceCommandModuleLawTests covers the parse, the file and the refusals; SdfFieldSliceLawTests the sampling.
 src/Puck.World/WorldSliceCommandModule.Device.

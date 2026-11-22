@@ -13,9 +13,9 @@ public sealed partial class WorldScreenBinder {
     };
     private void FitBootSky(List<SdfViewSnapshot> views, SdfSky sky, uint width, uint height) {
         if ((Presenter is not { } presenter)
-            || !m_instanceHost.TryEndpoint(endpoint: out var endpoint, name: WorldInstanceHost.BootInstanceName) || (endpoint is null)) { return; }
+            || (Observations.BootEndpoint is not { } endpoint)) { return; }
         BeginInfinityConsumers(target: presenter);
-        var root = InfinityRootOf(endpoint.Mirror, WorldInstanceHost.BootInstanceName, 0, WorldViewGraphs.WorldInstance);
+        var root = InfinityRootOf(endpoint.Mirror, WorldDefinitionLoader.BootInstanceName, 0, WorldViewGraphs.WorldInstance);
 
         for (var index = 0; (index < Math.Min(val1: m_hostViewCount, val2: views.Count)); index++) {
             if (presenter.TryRoutedView(index: out _, scene: out _, view: index)) { continue; }

@@ -14,7 +14,7 @@ public sealed class HistoryHudLawTests {
         var client = ClientFixtures.Client(definition: definition);
         var feed = new WorldPresentationFeed();
         // The collect's copy of the history window, published as a host step's collect publishes it.
-        void Publish() => feed.Publish(diagnostics: WorldDiagnosticCopy.Off, machines: WorldMachineTable.Empty,
+        void Publish() => feed.Publish(diagnostics: WorldDiagnosticCopy.Off, machines: WorldMachineTable.Empty, observations: WorldObservationTable.Empty,
             tick: WorldTickRecord.Empty with { History = WorldPresentationCopy.HistoryWindow(history: harness.History) });
         var resolver = new WorldHudBindingResolver(
             client: client,

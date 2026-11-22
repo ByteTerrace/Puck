@@ -479,16 +479,16 @@ public sealed partial class WorldScreenBinder {
     // authority holds that same session, and closes it, with every level beneath it, when the screen moves on.
     private sealed class NestedSessions(WorldScreenBinder binder) : IWorldNestedSessions<SessionFeed> {
         // The session the authority holds for a level's screen, when it holds one for this very source.
-        private WorldObservationSession? Hosted(WorldNestedScreens<SessionFeed> screens, int screen, WorldScreenSource.Session source) => ((
+        private WorldObservedSession? Hosted(WorldNestedScreens<SessionFeed> screens, int screen, WorldScreenSource.Session source) => ((
             binder.m_nestedOwners.TryGetValue(
                 key: screens,
                 value: out var owner
             ) &&
             ((owner.Feed is null) || (owner.Feed.Observation is { Ended: false })) &&
             ((owner.Infinity?.Hosted is null) || (owner.Infinity.Hosted.Observation is { Ended: false })) &&
-            (binder.m_instanceHost.ScreenSession(
-                instanceName: owner.Instance,
-                screenIndex: screen
+            (binder.Observations.Screen(
+                owner: owner.Instance,
+                screen: screen
             ) is { } hosted) &&
             (hosted.Source == source) &&
             (hosted.Observation is { Ended: false }) &&
@@ -512,6 +512,7 @@ public sealed partial class WorldScreenBinder {
                 depth: (screens.Depth + 1),
                 destination: source.Destination,
                 effectiveCamera: source.CameraName,
+                current: binder.Current,
                 generationId: hosted.GenerationId,
                 hosted: hosted,
                 instanceName: hosted.InstanceName!,
@@ -542,12 +543,12 @@ public sealed partial class WorldScreenBinder {
         }
         /// <inheritdoc/>
         public bool Holds(SessionFeed child, WorldNestedScreens<SessionFeed> screens, int screen, WorldScreenSource.Session source) => ReferenceEquals(
-            objA: child.Hosted,
+            objA: child.Hosted.Token,
             objB: Hosted(
                 screen: screen,
                 screens: screens,
                 source: source
-            )
+            )?.Token
         );
         /// <inheritdoc/>
         public void Close(SessionFeed child) {

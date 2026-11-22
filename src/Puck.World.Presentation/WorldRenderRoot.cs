@@ -13,7 +13,7 @@ namespace Puck.World;
 
 /// <summary>The overlay glyph pack a windowed presentation draws its overlay text with, loaded once. A pack that cannot
 /// be loaded leaves the overlay out of the default render graph, reported once, rather than failing the boot.</summary>
-internal sealed class WorldOverlayGlyphs {
+public sealed class WorldOverlayGlyphs {
     /// <summary>Initializes a new instance of the <see cref="WorldOverlayGlyphs"/> class, loading the shipped pack with
     /// the icon repertoire's extra code points.</summary>
     /// <param name="icons">The world's icon table, whose code points the pack carries beside the font's.</param>
