@@ -752,9 +752,13 @@ public sealed partial class WorldDisclosureImages {
             FrameRowsMoved(view, audience, entry)) {
             return Compose(view, audience);
         }
-
-        // A direct row can be patched even if the audience re-deals other placements. Reuse the existing composer
-        // for derived children, transformed or omitted rows, and newly active bits that read restricted state.
+        return AdoptHoldings(view, audience, entry, source, changes);
+    }
+    // A direct row can be patched even if the audience re-deals other placements. Reuse the existing composer for
+    // derived children, transformed or omitted rows, and newly active bits that read restricted state. Apart from
+    // DefinitionFor, which every tick calls, so the test below captures the view only when holdings moved.
+    private AudienceDefinition AdoptHoldings(WorldRecipientView view, string audience, AudienceDefinition entry, WorldDefinition source,
+        ReadOnlySpan<(int Row, int Holding)> changes) {
         bool Restricted(string name, string? _) => !view.ReadsWhole(name);
         m_holdingRows.Clear();
         foreach (var (row, holding) in changes) {
