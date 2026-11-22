@@ -36,6 +36,8 @@ public static class SdfResidencyWork {
     /// <summary>Counts the groups whose moved frustums all still answered as they did, their watch renewed with no
     /// measure (<see cref="SdfMeshDemand.Renew"/>).</summary>
     public static readonly WorkKind DemandRenewed = new(name: "sdf.residency.demand.renewed", unit: "groups", workClass: WorkClass.Pacing);
+    /// <summary>Counts the moved slots the bakes looked up groups under, each a frame it moved.</summary>
+    public static readonly WorkKind DemandSlots = new(name: "sdf.residency.demand.slots", unit: "slots", workClass: WorkClass.Pacing);
     /// <summary>Counts the groups whose slot moved by less than their tier band leaves, so the bakes measured nothing for
     /// them.</summary>
     public static readonly WorkKind DemandStood = new(name: "sdf.residency.demand.stood", unit: "groups", workClass: WorkClass.Pacing);
@@ -73,5 +75,5 @@ public static class SdfResidencyWork {
     public static readonly WorkKind MarkMeshes = new(name: "sdf.residency.marks.meshes", unit: "meshes", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the process's residency counts.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.residency", kinds: [Prepared, DemandGroups, DemandBoxes, DemandViews, DemandDue, DemandDueTravel, DemandDueScale, DemandWatched, DemandFramed, DemandRenewed, DemandStood, DemandMoved, DemandCopied, DemandChanges, DemandReached, DemandChanged, DemandRebiased, DemandResets, TierGroups, TierDecisions, TierStarts, MotionRows, MotionReaders, MarkMeshes]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.residency", kinds: [Prepared, DemandGroups, DemandBoxes, DemandViews, DemandDue, DemandDueTravel, DemandDueScale, DemandWatched, DemandFramed, DemandRenewed, DemandSlots, DemandStood, DemandMoved, DemandCopied, DemandChanges, DemandReached, DemandChanged, DemandRebiased, DemandResets, TierGroups, TierDecisions, TierStarts, MotionRows, MotionReaders, MarkMeshes]);
 }

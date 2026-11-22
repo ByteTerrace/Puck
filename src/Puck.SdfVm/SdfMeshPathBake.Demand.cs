@@ -254,6 +254,7 @@ public sealed partial class SdfMeshPathBake {
         var watched = 0;
         var framed = 0;
         var renewed = 0;
+        var slots = 0L;
         var stood = 0;
         var moved = 0;
         var copied = 0;
@@ -281,6 +282,7 @@ public sealed partial class SdfMeshPathBake {
             for (var run = 0; (run < m_demandSlots.Count); run++) {
                 var end = (m_demandSlots.Start(index: run) + m_demandSlots.Length(index: run));
 
+                slots += (end - m_demandSlots.Start(index: run));
                 for (var slot = m_demandSlots.Start(index: run); (slot < end); slot++) {
                     for (var index = m_groups.FirstOf(dynamic: true, key: slot); (index >= 0); index = m_groups.NextOf(index: index)) {
                         var group = m_groups[index];
@@ -408,6 +410,7 @@ public sealed partial class SdfMeshPathBake {
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandWatched, amount: watched);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandFramed, amount: framed);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandRenewed, amount: renewed);
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandSlots, amount: slots);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandViews, amount: (boxes * Demand.Count));
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandStood, amount: stood);
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandMoved, amount: moved);
@@ -566,7 +569,7 @@ public sealed partial class SdfMeshPathBake {
         var bias = m_chosenBias;
         ref var reading = ref m_readings[index];
         var copies = CopiesOf(group: group);
-        var pixel = ((copies is null) ? MeasurePixel(boxes: out reading.Boxes, group: group, point: out _, units: out reading.Units, box: out var box) : ReadCopies(boxes: out reading.Boxes, copies: copies, group: group, units: out reading.Units, box: out box));
+        var pixel = ((copies is null) ? ReadBox(boxes: out reading.Boxes, group: group, units: out reading.Units, box: out var box) : ReadCopies(boxes: out reading.Boxes, copies: copies, group: group, units: out reading.Units, box: out box));
         var slack = DemandSlack(bias: bias, group: group, pixel: pixel);
         var pinned = (float.IsFinite(f: pixel) && !float.IsFinite(f: slack));
         var top = (float.IsFinite(f: pixel) ? (pixel + slack) : CoarsestEdgeOf(bias: bias, group: group));
@@ -592,6 +595,15 @@ public sealed partial class SdfMeshPathBake {
         (reading.Center, reading.Half) = (box ?? default);
         reading.Bounds = bounds;
     }
+    // A group's pixel at its one world box, in its own units (MeasurePixel), with no demand point named.
+    private float ReadBox(Group group, out int boxes, out float units, out (Vector3 Center, Vector3 Half)? box) {
+        var (center, half) = WorldBox(group: group);
+
+        boxes = 1;
+        units = UnitsOf(group: group);
+        box = (center, half);
+        return (Demand.PixelAt(center: center, half: half) / units);
+    }
     // A shared geometry's pixel where its copies stand (CopiesPixel), each copy's box read once and held for its bounds
     // (SdfMeshDemand.ReadBoxes), with the copies' scales the bounds read them in.
     private float ReadCopies(Group group, IReadOnlyList<int> copies, out int boxes, out float units, out (Vector3 Center, Vector3 Half)? box) {
@@ -612,7 +624,7 @@ public sealed partial class SdfMeshPathBake {
         units = float.PositiveInfinity;
         for (var copy = 0; (copy < count); copy++) {
             units = MathF.Min(x: units, y: m_copyScales[copy]);
-            finest = MathF.Min(x: finest, y: (Demand.HeldPixelAt(box: copy, point: out _) / m_copyScales[copy]));
+            finest = MathF.Min(x: finest, y: (Demand.HeldPixelAt(box: copy) / m_copyScales[copy]));
         }
         if (!float.IsFinite(f: units)) { units = 1f; }
         boxes = Math.Max(val1: 1, val2: count);

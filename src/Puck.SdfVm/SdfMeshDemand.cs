@@ -410,7 +410,7 @@ public sealed class SdfMeshDemand {
     /// <param name="center">The box's center, in world space.</param>
     /// <param name="half">The box's half extents along the world axes, none negative.</param>
     /// <returns>The pixel's size in metres; infinity with no demand point.</returns>
-    public float PixelAt(Vector3 center, Vector3 half) => PixelAt(center: center, half: half, point: out _);
+    public float PixelAt(Vector3 center, Vector3 half) => ((Count == 0) ? float.PositiveInfinity : PixelOf(read: Read(center: center, half: half)));
     /// <summary>Returns the metres one display pixel covers at a box from the demand point that sees it finest
     /// (<see cref="PixelAt(Vector3, Vector3)"/>), and which point that is.</summary>
     /// <param name="center">The box's center, in world space.</param>
@@ -419,7 +419,13 @@ public sealed class SdfMeshDemand {
     /// <returns>The pixel's size in metres; infinity with no demand point.</returns>
     public float PixelAt(Vector3 center, Vector3 half, out int point) {
         point = -1;
-        return ((Count == 0) ? float.PositiveInfinity : PixelOf(point: out point, read: Read(center: center, half: half)));
+        if (Count == 0) { return float.PositiveInfinity; }
+
+        var read = Read(center: center, half: half);
+        var finest = PixelOf(read: read);
+
+        if (float.IsFinite(f: finest)) { point = read.Lanes!.Points[read.Demanded.AsSpan(start: 0, length: read.Lanes.Stride).IndexOf(value: finest)]; }
+        return finest;
     }
     /// <summary>Reads boxes against every point, once each, and holds the reads on this thread for
     /// <see cref="HeldPixelAt"/> and <see cref="HeldBoundsOf"/> until the next call: a shared geometry's copies, whose
@@ -439,12 +445,8 @@ public sealed class SdfMeshDemand {
     /// <summary>Returns <see cref="PixelAt(Vector3, Vector3, out int)"/> of a box this thread's latest
     /// <see cref="ReadBoxes"/> read.</summary>
     /// <param name="box">The box, below the count that call read.</param>
-    /// <param name="point">The demand point that sees the box finest; -1 with none.</param>
     /// <returns>The pixel's size in metres; infinity with no demand point.</returns>
-    public float HeldPixelAt(int box, out int point) {
-        point = -1;
-        return ((Count == 0) ? float.PositiveInfinity : PixelOf(point: out point, read: ThreadHeld![box]));
-    }
+    public float HeldPixelAt(int box) => ((Count == 0) ? float.PositiveInfinity : PixelOf(read: ThreadHeld![box]));
     /// <summary>Returns <see cref="BoundsOf"/> of a box this thread's latest <see cref="ReadBoxes"/> read.</summary>
     /// <param name="box">The box, below the count that call read.</param>
     /// <param name="units">The units the box's pixels are read in; positive.</param>
@@ -453,18 +455,15 @@ public sealed class SdfMeshDemand {
     /// <returns>The bounds.</returns>
     public Bounds HeldBoundsOf(int box, float units, float top, Span<float> watch) => BoundsOfRead(read: ThreadHeld![box], top: top, units: units, watch: watch);
     [ThreadStatic] private static List<BoxRead>? ThreadHeld;
-    // The finest pixel a read box is demanded at, and the point demanding it so.
-    private static float PixelOf(BoxRead read, out int point) {
+    // The finest pixel a read box is demanded at.
+    private static float PixelOf(BoxRead read) {
         var lanes = read.Lanes!;
         ref var demanded = ref MemoryMarshal.GetArrayDataReference(array: read.Demanded);
         var least = Vector256.Create(value: float.PositiveInfinity);
 
         for (var at = 0; (at < lanes.Stride); at += Vector256<float>.Count) { least = Vector256.Min(left: least, right: Vector256.LoadUnsafe(elementOffset: ((nuint)at), source: ref demanded)); }
 
-        var finest = Least(values: least);
-
-        point = (float.IsFinite(f: finest) ? lanes.Points[read.Demanded.AsSpan(start: 0, length: lanes.Stride).IndexOf(value: finest)] : -1);
-        return finest;
+        return Least(values: least);
     }
     /// <summary>Returns the metres one display pixel covers at a planned group's box (<see cref="PixelAt(Vector3, Vector3)"/>),
     /// in the group's own units: a dynamic group's box is carried into world space by its slot's transform among
