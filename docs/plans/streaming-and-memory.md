@@ -3114,8 +3114,22 @@ where it used to count as filling the display. And a world's shadows give
 every layer back once no upload decides them and no pass binds them for
 `SdfWorldShadows.UnseenSeconds`, served from the residency's upkeep, so a
 world no view shows stops holding them; before, only an upload answered a
-trim, and an unseen world submits none. Still to build, in order:
+trim, and an unseen world submits none. A trim also keeps an anchor a rated
+view read within the last few uploads, which it used to give back and take
+again a frame later, past the pool's limit. Still to build, in order:
 
+- detail given back by time and planned by demand. A group keeps a tier finer
+  than its demand asks until the budget presses, and a residency planned
+  before its views are observed plans every floor: a second scene of the boot
+  world behind a window a few hundred pixels across then names several
+  hundred megabytes that nothing coarsens while the pool has room. Under a
+  budget lowered to a smaller device's bar the spare tiers are coarsened a
+  few dozen at a time, each a bake where the store lacks the rung, and the
+  bias waits for the last of them, so the pool stands over the bar for
+  minutes. What is to build: a spare tier leaves once no demand has asked it
+  for a stated time, a windowed residency plans at its windows' demand once
+  they are observed, and the bias rises while a backlog of spares could not
+  fit the budget even coarsened;
 - the outward offset for a lattice past the floor, so a part thinner than its
   cell inside a group that still meshes is kept
   ([decision 5](#decision-5-the-unit-is-a-tier-and-the-coarsest-tier-is-the-floor));
