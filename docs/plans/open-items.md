@@ -3226,14 +3226,26 @@ grow:
   with no quota per connection, so one peer can queue work without limit.
   Decide each cap from the shard and interest design above, and give ingress
   a per-connection bound that refuses by name.
-- [high] Two population scans a tick follow the population, not what changed:
-  the rule host's fact derivation compares every slot
-  (`world.tick.fact-slots`, about one per body a tick) and the perception
-  image a flock or a decision freezes copies every body
-  (`world.tick.perception-points`, about two per body a tick). On
-  `worlds/debug/garden-throng.puck` (10,008 bodies) they read about 10,100
-  and 20,100 a tick. Feed both from the population's moved set, as the
-  client's body journal does.
+- [high] Two tick passes follow the awake population, not the bodies that
+  moved. On `worlds/debug/garden-throng.puck` (10,008 bodies, every one
+  awake, about 2,500 advancing a tick under its kits' autonomy cadence)
+  `world.tick.fact-slots` reads about 10,100 a tick and
+  `world.tick.perception-points` about 20,100.
+  - Fact derivation already visits only candidates
+    (`WorldPopulation.CollectFactCandidateSlots`: the awake bodies and the
+    disturbed slots), so a cadence-deferred body that did not move is still
+    compared. Narrowing it to the bodies that moved needs one door for a
+    body's pose and facts: every write of `WorldBody`'s position,
+    orientation and previous position (about twenty sites across its
+    partial files) goes through a setter that adds the slot to a
+    population-owned moved set. `puck test --reproduce` checks the narrowing
+    (`RuleEvaluator.QuiescenceChecked` runs `VerifyFactCandidates`).
+  - `WorldPerceptionImage.Freeze` copies every active body twice a tick (the
+    flock's image and the decision image), and each query width rebuilds its
+    `FixedSpatialNeighborhood` over every point. The copy can follow the same
+    moved set; the larger cost is the rebuild, which wants an incremental
+    neighbourhood that keeps each cell's occupants in slot order, so a
+    budget-limited query samples the same occupants a rebuild would.
 - [medium] The adjacency emitter keeps neighbour-body presentation state at a
   fixed stride (`WorldAdjacencySceneEmitter.BodyStride`): a neighbour body at
   or past it does not draw across the seam and narrates as truncated. Key the
@@ -3241,7 +3253,10 @@ grow:
   most `MaxEntitiesPerBand`), with the entity address guarding reuse.
 - [medium] `WorldSessionMirror.FillImage` copies every slot below the
   mirror's extent into each published image, once a delivery; copy only the
-  slots the delivery changed into the image it replaces.
+  slots changed since the image it replaces was filled. The mirror's body
+  journal cannot drive that yet: a delivery notes a slot changed for its
+  activity, facts, generation and endpoints, but not for its colour, kit,
+  look, rig, heading or placement, which the image also copies.
 
 Companions, beside the protocol's steps:
 

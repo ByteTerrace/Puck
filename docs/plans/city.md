@@ -38,7 +38,7 @@ Each row cites the code it was read from; recheck it before building on it.
 | Need | What the engine has | Limit at city scale |
 |---|---|---|
 | A federated world behind a painting | `debug.puck` `references`/`destinations` name `garden` and `night`; `paintings.puck` `wallPaintings` rows hang a canvas per destination; `night.puck` is the smallest destination document | `views.nestingDepth: 2` was sized on six paintings; a seventh window onto a crowd adds nested-view cost |
-| Many bodies | `placement { inhabit { count, kit, look, source, distribution } }` (`pond.puck` `pondFlocks`); kits with `autonomy { motionSeconds, steeringSeconds }` thin update rates | A world holds its authored capacity, bounded only by the body-index format (`WorldBodiesLimits.IndexLimit`), and client tables grow with it; `garden-throng.puck` runs 10,008 bodies headless, and its tick scans every body twice (gap 8) |
+| Many bodies | `placement { inhabit { count, kit, look, source, distribution } }` (`pond.puck` `pondFlocks`); kits with `autonomy { motionSeconds, steeringSeconds }` thin update rates | A world holds its authored capacity, bounded only by the body-index format (`WorldBodiesLimits.IndexLimit`), and client tables grow with it; `garden-throng.puck` runs 10,008 bodies headless, and two tick passes still visit every awake body (gap 8) |
 | Parallel tick | Snapshot rows fork in 256-row partitions (`WorldDocument.Apply.cs` `SnapshotPartitionRows`) | Kit bodies advance serially, one arena transaction each ([open items](open-items.md#engine-job-system), "Kit bodies' advance stays serial"): 2,000 citizens are 2,000 serial steps per tick |
 | Walking between places | Surface domains (`navigation.puck` `walkable`); the `navigated(domain, register)` target source (`BodyTargetSource.Navigated`) routes a body to a register; a `shared: true` domain's followers read goal fields, one per goal over the domain's `network` of districts (`NavigationRuntime.GoalField`) | `MaxDomains = 16`, `MaxCellsPerDomain = 65_536`; no crowd avoidance beyond flock separation (`FixedFlockSteering`) |
 | Daily schedules | `skies.puck` `dayCycle` authors a `day` clock row that advances per second, with lights and sky keyed on it; rules read it through `compareState`; decision policies with `periodSeconds` and `commitmentSeconds` | No routine construct: a schedule is composed from the clock, a decision and a destination, and the destination is the gap above |
@@ -169,9 +169,9 @@ the city, and is fixed in the engine, never sculpted around:
    at city counts it becomes the frame thread's largest garbage source.
 7. **Nested views.** The city painting's window draws a crowd through
    `views.nestingDepth`.
-8. **Whole-population tick scans.** Fact derivation and the perception image
-   visit every body each tick, not the ones that moved (open items, "Two
-   population scans a tick follow the population").
+8. **Awake-population tick passes.** Fact derivation and the perception image
+   visit every awake body each tick, not only the ones that moved (open items,
+   "Two tick passes follow the awake population").
 
 ## The lanes
 
