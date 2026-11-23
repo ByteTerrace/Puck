@@ -1683,6 +1683,35 @@ but visibility tests the actual biased receiver. Outside a window the facing
 fade eases to one over the first cell, so normals turned away from the window
 can still receive its measured light.
 
+**A view gathers once for what its pixels can show, across its cells and its
+frames.** The gather itself is the contract the CPU twin holds
+(`SdfMeshIrradiance.Gather`); how often a view runs it is presentation. The
+probe lookup gathers at one representative pixel of each 2×2 cell and shares
+the result with every pixel of the cell within a tolerance measured on the
+screen: two pixels along the surface (a pixel's footprint over the cosine at
+which the ray meets the surface, at most eight footprints) or the 5 cm normal
+bias where that is wider, half a pixel off the representative's tangent plane,
+and normals within about eleven degrees (`sdfViewsProbeTolerance`,
+`sdfViewsProbesCompatible`). A tolerance in metres alone would have every pixel
+of grazing or distant ground gather for itself, although a cell there shows
+light that varies over metres. A temporal view also keeps each representative's
+gather for the next frame (`sdf-views-probe-history.hlsli`): a receiver
+projected into the preceding view reuses a kept gather it passes the same
+tolerance against, measured from the receiver the gather was taken at, so reuse
+never drifts. A kept gather stands while the published geometry's serial is
+the one it was taken under (`SdfMeshIrradianceParameters.Geometry`, which a
+retrace of a held probe or a window laid out again moves), and past a window's
+move only where it read no stage another window's place decides and its level
+still holds the receiver inside one cage; a gather that met a missing probe is
+never kept, since the probe landing moves no serial. The blended light is read
+again every frame, so a relight shows at once. Views reads a traced light's
+probe visibility from the representative's record, which holds the light bits
+every measured corner sees and any sees with those corners' summed weight
+(`sdfViewsLightVisibility`), and visits the corners only for a light they
+disagree on. A gather costs each corner's angular surface test, so a lookup that
+gathers only what changed costs a pass in proportion to motion rather than to
+the view's pixels, the headroom heavier worlds' views need.
+
 **Coarser levels supply reach without overriding fine visibility.** A receiver
 uses the finest published window containing it within its boundary probes,
 or the coarsest published level beyond all windows. A coarser level never

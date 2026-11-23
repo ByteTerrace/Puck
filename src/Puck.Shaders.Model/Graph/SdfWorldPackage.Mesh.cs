@@ -82,6 +82,12 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-block array holding each irradiance level's window, finest first: its first cell in xyz and its
     /// probes along each axis in w, packed ten bits each, x lowest (<c>int4</c> a level).</summary>
     public const string MeshIrradianceLevels = "meshIrradianceLevels";
+    /// <summary>The pass-block serials of the irradiance volume's publications (<c>uint2</c>): in x its geometry's, which
+    /// moves with each publication that lays a window's slots out again or changes the surface maps, offsets or validity
+    /// of probes already held, and in y its windows' places, which moves with each window's move; neither moves with a
+    /// relight. A probe gather kept from an earlier frame stands only under the geometry serial it was taken at, and past
+    /// a window's move only where the windows still hold its receiver as they did.</summary>
+    public const string MeshIrradianceGeometry = "meshIrradianceGeometry";
     /// <summary>The irradiance volume's levels: nested windows about the camera, each coarser than the one inside it, so a
     /// surface past the finest window takes a coarser level's measured light rather than none.</summary>
     public const int MeshIrradianceLevelCount = 3;

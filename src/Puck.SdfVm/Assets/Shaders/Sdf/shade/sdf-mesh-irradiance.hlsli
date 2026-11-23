@@ -36,10 +36,10 @@ uint sdfMeshCubeFace(float3 normal, uint axis) {
 }
 // A six-axis cube about a normal, read from its words in `words`: the sky shares from `skyWord` (three words, an axis's
 // positive face in the low half and its negative face in the high), and the radiance and the sky light from `radianceWord`
-// and `skyLightWord` (nine words each, face f's channel c the half (3f + c) counting from the low half of the first word).
-// A probe's slot holds its cube so (SDF_MESH_IRRADIANCE_*_WORD), and a views probe record its cell's blended cube
-// (sdf-views-probes.hlsli).
-void sdfMeshCubeRead(StructuredBuffer<uint> words, uint skyWord, uint radianceWord, uint skyLightWord, float3 normal,
+// and `skyLightWord` (nine words each, face f's channel c the half (3f + c) counting from the low half of the first word),
+// each word `stride` words past the one before it. A probe's slot holds its cube so with a stride of one
+// (SDF_MESH_IRRADIANCE_*_WORD), and a views probe record its cell's blended cube a plane apart (sdf-views-probes.hlsli).
+void sdfMeshCubeRead(StructuredBuffer<uint> words, uint skyWord, uint radianceWord, uint skyLightWord, uint stride, float3 normal,
     out float sky, out float3 radiance, out float3 skyLight) {
     float3 squared = (normal * normal);
     sky = 0.0;
@@ -48,13 +48,13 @@ void sdfMeshCubeRead(StructuredBuffer<uint> words, uint skyWord, uint radianceWo
     [unroll] for (uint axis = 0u; (axis < 3u); axis++) {
         uint face = sdfMeshCubeFace(normal, axis);
         uint negative = (face & 1u);
-        sky += (squared[axis] * sdfMeshIrradianceHalf(words[skyWord + axis], negative));
+        sky += (squared[axis] * sdfMeshIrradianceHalf(words[skyWord + (axis * stride)], negative));
         float3 value;
         float3 open;
         [unroll] for (uint channel = 0u; (channel < 3u); channel++) {
             uint entry = ((3u * face) + channel);
-            value[channel] = sdfMeshIrradianceHalf(words[radianceWord + (entry >> 1)], (entry & 1u));
-            open[channel] = sdfMeshIrradianceHalf(words[skyLightWord + (entry >> 1)], (entry & 1u));
+            value[channel] = sdfMeshIrradianceHalf(words[radianceWord + ((entry >> 1) * stride)], (entry & 1u));
+            open[channel] = sdfMeshIrradianceHalf(words[skyLightWord + ((entry >> 1) * stride)], (entry & 1u));
         }
         radiance += (squared[axis] * value);
         skyLight += (squared[axis] * open);
@@ -63,7 +63,7 @@ void sdfMeshCubeRead(StructuredBuffer<uint> words, uint skyWord, uint radianceWo
 // A probe's sky share, its surfaces' radiance and its sky light, all read from its slot's words.
 void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out float3 radiance, out float3 skyLight) {
     sdfMeshCubeRead(sdfMeshIrradiance, (address + SDF_MESH_IRRADIANCE_SKY_WORD), (address + SDF_MESH_IRRADIANCE_RADIANCE_WORD),
-        (address + SDF_MESH_IRRADIANCE_SKY_LIGHT_WORD), normal, sky, radiance, skyLight);
+        (address + SDF_MESH_IRRADIANCE_SKY_LIGHT_WORD), 1u, normal, sky, radiance, skyLight);
 }
 
 // KEEP IN SYNC with SdfMeshIrradiance.Gather. A corner's weight is its cell's trilinear share times
@@ -317,9 +317,13 @@ struct SdfMeshProbes {
     // only by the surfaces they measured.
     bool measured;
     bool remainderMeasured;
-    // One more than the first word of a views probe record whose blended cube (sdfMeshProbeCube) these probes are, read in
-    // place of their corners where a reader holds the record; zero for none.
+    // One more than the views probe record whose blended cube (sdfMeshProbeCube) these probes are, read in place of their
+    // corners where a reader holds the record; zero for none.
     uint cube;
+    // One more than the views probe record whose words hold these probes' cages and weights, which this struct then leaves
+    // unread (sdfViewsProbesAt), and the record's word the gather starts at; zero where the struct holds them itself.
+    uint record;
+    uint recordAt;
 };
 
 // The two stages' cages a reader of the gathered probes resolves once before its corners (sdfMeshProbeAt).
@@ -463,23 +467,19 @@ SdfMeshProbes sdfMeshProbesNone() {
     probes.measured = false;
     probes.remainderMeasured = false;
     probes.cube = 0u;
+    probes.record = 0u;
+    probes.recordAt = 0u;
     [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
         probes.weight[corner] = 0.0;
     }
     return probes;
 }
-SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
-    SdfMeshProbes probes = sdfMeshProbesNone();
-
-    if (any(!isfinite(position))) {
-        return probes;
-    }
-
-    float3 pushed = (position + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS));
+// The level whose window a pushed receiver's gather chooses: the finest published level holding it, else the coarsest
+// published; SDF_MESH_IRRADIANCE_LEVELS where none is published.
+uint sdfMeshIrradianceChosen(float3 pushed) {
     uint chosen = SDF_MESH_IRRADIANCE_LEVELS;
     bool held = false;
 
-    // The finest published level holding the receiver, else the coarsest published.
     [unroll] for (uint level = 0u; (level < SDF_MESH_IRRADIANCE_LEVELS); level++) {
         float3 levelSpacing = sdfMeshIrradianceSpacing(level);
         int3 levelDims = sdfMeshIrradianceDims(level);
@@ -489,6 +489,30 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
             held = (sdfMeshIrradianceBeyond(pushed, levelSpacing, passGroup.meshIrradianceLevels[level].xyz, levelDims) <= 0.0);
         }
     }
+    return chosen;
+}
+// The metres past a level's window its boundary probes' surface maps reach a receiver (the gather's finer stages).
+float sdfMeshIrradianceReach(float3 spacing) {
+    return ((SDF_MESH_IRRADIANCE_SURFACE_REACH * length(spacing)) + SDF_MESH_IRRADIANCE_NORMAL_BIAS);
+}
+// The gather, and in `complete` whether every probe it consulted was present: no stage it read found a corner inside its
+// window whose slot holds no probe of that corner's cell. Only a complete gather is a function of the windows, the
+// published geometry and the receiver alone, since a probe landing in a missing corner changes it without either moving.
+// `windowBound` says whether it read a stage whose cage another window's place decides (a finer level's boundary probes
+// within their reach, or the finest level's extended read), so a move of that window can change it.
+SdfMeshProbes sdfMeshProbesAtComplete(float3 position, float3 normal, out bool complete, out bool windowBound) {
+    SdfMeshProbes probes = sdfMeshProbesNone();
+
+    complete = false;
+    windowBound = false;
+    if (any(!isfinite(position))) {
+        return probes;
+    }
+    complete = true;
+
+    float3 pushed = (position + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS));
+    uint chosen = sdfMeshIrradianceChosen(pushed);
+
     if (chosen == SDF_MESH_IRRADIANCE_LEVELS) {
         return probes;
     }
@@ -517,7 +541,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         float reachShare = 1.0;
         if (attempt < chosen) {
             float beyond = sdfMeshIrradianceBeyond(pushed, spacing, low, dims);
-            float reach = ((SDF_MESH_IRRADIANCE_SURFACE_REACH * length(spacing)) + SDF_MESH_IRRADIANCE_NORMAL_BIAS);
+            float reach = sdfMeshIrradianceReach(spacing);
             if (beyond > reach) {
                 continue;
             }
@@ -526,11 +550,13 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         if (found && (level == first)) {
             continue;
         }
+        windowBound = (windowBound || (attempt < chosen) || (attempt > SDF_MESH_IRRADIANCE_LEVELS));
 
         SdfMeshProbeCage cage;
         float front, missing;
         float total = sdfMeshProbesGather(level, spacing, low, dims, position, normal, pushed, bounded, ((level == 0u) ? SDF_MESH_IRRADIANCE_BEHIND_SHARE : 0.0), front, missing, cage);
         if (bounded && level >= chosen) { cold = missing > 0; }
+        complete = (complete && !(missing > 0.0));
         front += missing;
 
         if (!(total > 0.0)) {
@@ -569,6 +595,12 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     }
 
     return probes;
+}
+SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
+    bool complete;
+    bool windowBound;
+
+    return sdfMeshProbesAtComplete(position, normal, complete, windowBound);
 }
 // The sky visibility, reflected radiance and sky light the gathered probes hold, seen along `direction` (the normal for
 // the light a surface receives, the mirror direction for the light it reflects). A point with no answering probe has no

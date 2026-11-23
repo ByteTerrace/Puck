@@ -63,6 +63,7 @@ public sealed partial class SdfMeshIrradiance {
     // measured level republishes whole into the new tables.
     private void RepublishAll() {
         m_republishOwed = false;
+        m_geometryOwed = true;
         for (var level = 0; level < m_levels.Length; level++) {
             if (m_layout.Measures(level: level)) { OweSlots(level: level); }
         }

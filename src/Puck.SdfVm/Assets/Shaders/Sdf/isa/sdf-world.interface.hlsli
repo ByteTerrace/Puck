@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/3820252b07f21c8b18ef2fd7638d5b5eff1604a5640793fb34727059b4a0702d). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/33365528a62cc173af0ca0188f2791f3007023523e492a2cf09368b5114052ec). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -179,8 +179,7 @@ struct SdfWorldPass {
     [[vk::offset(304)]] uint4 lightMask;
     [[vk::offset(320)]] float localAdaptation;
     [[vk::offset(324)]] uint meshDraws;
-    [[vk::offset(328)]] uint _pad328;
-    [[vk::offset(332)]] uint _pad332;
+    [[vk::offset(328)]] uint2 meshIrradianceGeometry;
     [[vk::offset(336)]] int4 meshIrradianceLevels[3];
     [[vk::offset(384)]] float4 meshIrradianceSpacings[3];
     [[vk::offset(432)]] float4 meshShadowCascades[16];
@@ -250,8 +249,8 @@ struct SdfWorldPass {
     [[vk::offset(1852)]] uint _pad1852;
     [[vk::offset(1856)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa499D5F44 : register(b0, space3);
-#define passGroup passGroupIsa499D5F44
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaD65431E8 : register(b0, space3);
+#define passGroup passGroupIsaD65431E8
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);
@@ -280,6 +279,8 @@ struct SdfWorldPass {
 [[vk::binding(57, 3)]] RWStructuredBuffer<uint> sdfShadeTilesRW : register(u57, space3);
 [[vk::binding(58, 3)]] RWStructuredBuffer<uint> sdfShadeArgumentsRW : register(u58, space3);
 [[vk::binding(59, 3)]] StructuredBuffer<uint> historySurface : register(t59, space3);
+[[vk::binding(60, 3)]] StructuredBuffer<uint> sdfViewsProbeHistory : register(t60, space3);
+[[vk::binding(61, 3)]] RWStructuredBuffer<uint> sdfViewsProbeHistoryRW : register(u61, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfWorldPushedIndex {
