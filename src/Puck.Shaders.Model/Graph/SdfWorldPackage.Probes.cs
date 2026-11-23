@@ -33,10 +33,12 @@ public static partial class SdfWorldPackage {
     /// <summary>The words of one extra slot: two cages, sixteen UNORM16 weights and the share and measured flags.</summary>
     public const uint ViewsProbeExtraWords = 11;
 
-    /// <summary>The preceding frame's probe gathers a temporal view's probe lookup reuses: <see cref="ViewsProbeHistoryWords"/>
+    /// <summary>The preceding render's probe gathers a view's probe lookup reuses: <see cref="ViewsProbeHistoryWords"/>
     /// words a cell, the gather the cell's representative read and the receiver and volume state it was taken at
-    /// (<c>sdf-views-probe-history.hlsli</c> owns the packing). It is history, so it keeps two allocations: the one this
-    /// frame reads and the one it writes.</summary>
+    /// (<c>sdf-views-probe-history.hlsli</c> owns the packing). Every view keeps one at its own render extent, a nested
+    /// view's at the share of the display it is shown at, since a kept gather validates itself against the receiver it
+    /// was taken at and needs no jittered history. It is history, so it keeps two allocations: the one this render reads
+    /// and the one it writes.</summary>
     public const string ViewsProbeHistory = "sdfViewsProbeHistory";
     /// <summary>The probe gathers the probe lookup writes for the next frame.</summary>
     public const string ViewsProbeHistoryWritten = "sdfViewsProbeHistoryRW";
@@ -48,15 +50,27 @@ public static partial class SdfWorldPackage {
     // The cells of one tile of the extent, the basis the records are counted on.
     private const uint ViewsProbeCellsPerTile = ((ShaderPipelineStorageCounts.TileEdge / ViewsProbeRate) * (ShaderPipelineStorageCounts.TileEdge / ViewsProbeRate));
 
-    // The probe lookup's history: an entry a cell of the render extent, every view's cells, two allocations, zero until the
-    // lookup first writes it (a zero entry holds no gather).
+    // The probe lookup's history: an entry a cell, every view's cells, at the records' basis (a reduced or temporal view's
+    // render extent through AtRenderExtent), two allocations, zero until the lookup first writes it (a zero entry holds no
+    // gather).
     private static ShaderPipelineResource ProbeHistory => new(
-        Count: [Term((ViewsProbeHistoryWords * ViewsProbeCellsPerTile), ShaderPipelineCountBasis.RenderExtentTiles, ShaderPipelineCountBasis.Viewports)],
+        Count: [Term((ViewsProbeHistoryWords * ViewsProbeCellsPerTile), ShaderPipelineCountBasis.ExtentTiles, ShaderPipelineCountBasis.Viewports)],
         History: true,
         Initialization: ShaderPipelineInitialization.Zero,
         Kind: ShaderPipelineResourceKind.Buffer,
         Name: Parts.ProbeHistory,
         StrideBytes: sizeof(uint)
+    );
+
+    // The probe lookup pass: the visibility records and the preceding render's history in, the records and this render's
+    // history out.
+    private static RenderGraphFragmentPass ProbeLookup => new(
+        CountsKernelWork: true,
+        InputAccesses: [RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead],
+        Inputs: [new ResourceReference(Name: Parts.Visibility), new ResourceReference(Name: Parts.ProbeHistory, PreviousFrame: true)],
+        Name: Parts.ViewsProbes,
+        OutputAccesses: [RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite],
+        Outputs: [new ResourceReference(Name: Parts.Probes), new ResourceReference(Name: Parts.ProbeHistory)]
     );
 
     // The probe lookup's records: a record a cell, every view's cells, at the visibility record's extent basis.
@@ -73,7 +87,7 @@ public static partial class SdfWorldPackage {
         public const string ViewsProbes = "views-probes";
         /// <summary>The probe records the probe lookup pass writes.</summary>
         public const string Probes = "viewsProbes";
-        /// <summary>The probe lookup's history of gathers (<see cref="ViewsProbeHistory"/>), a temporal view's alone.</summary>
+        /// <summary>The probe lookup's history of gathers (<see cref="ViewsProbeHistory"/>).</summary>
         public const string ProbeHistory = "viewsProbeHistory";
     }
 }

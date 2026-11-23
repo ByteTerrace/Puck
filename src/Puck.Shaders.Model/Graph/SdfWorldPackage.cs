@@ -500,7 +500,7 @@ public static partial class SdfWorldPackage {
     /// <summary>Gets the fragment a native view runs as: one view's dispatch set, its scratch retained and counted, its
     /// one output the view's color. The mesh pass rasterizes the frame's mesh draws, the pyramid pass reduces the mesh target into the depth pyramid (<see cref="Parts.Pyramid"/>), the surface pass writes every pixel's visibility record from them (<see cref="Parts.Surface"/>), the probe
     /// lookup gathers the irradiance volume once a cell of <see cref="ViewsProbeRate"/> pixels (<see cref="Parts.ViewsProbes"/>),
-    /// views shades the records into the lit image (<see cref="Parts.Lit"/>), the sky evaluates its field runs where the lit image's
+    /// reusing the preceding render's gathers it keeps in <see cref="ViewsProbeHistory"/>, views shades the records into the lit image (<see cref="Parts.Lit"/>), the sky evaluates its field runs where the lit image's
     /// coverage is below one (<see cref="Parts.Sky"/>), and the composite writes the color (<see cref="Parts.Composite"/>).
     /// Every pass counts its kernels' work into the work counters (<see cref="RenderGraphFragmentPass.CountsKernelWork"/>):
     /// the raster passes each fragment they write to their target.</summary>
@@ -511,7 +511,7 @@ public static partial class SdfWorldPackage {
             Raster(depth: Parts.MeshDepth, name: Parts.Mesh, target: Parts.MeshTarget),
             Pass(inputs: [Parts.MeshTarget], name: Parts.Pyramid, outputs: [Parts.MeshPyramid]),
             Pass(inputs: [Parts.MeshTarget, Parts.MeshPyramid], name: Parts.Surface, outputs: [Parts.Visibility]),
-            Pass(inputs: [Parts.Visibility], name: Parts.ViewsProbes, outputs: [Parts.Probes]),
+            ProbeLookup,
             Pass(inputs: [Parts.Visibility, Parts.Probes], name: Parts.Views, outputs: [Parts.Lit]),
             Pass(inputs: [Parts.Lit], name: Parts.Sky, outputs: SkyRuns) with { Members = SkyMembers },
             Pass(inputs: [Parts.Lit, Parts.Visibility, .. SkyRuns], name: Parts.Composite, outputs: [Color]) with { Members = SkyMembers },
@@ -545,6 +545,7 @@ public static partial class SdfWorldPackage {
                 Retained: true
             ),
             ProbeRecords,
+            ProbeHistory,
         ]
     );
 

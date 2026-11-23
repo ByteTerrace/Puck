@@ -2,11 +2,11 @@
 // SDF_VIEWS_PROBE_RATE pixels of the render extent, in 8x8 groups. Each classifies its cell: the representative is the
 // cell's first pixel in raster order whose hit shades with the volume (sdfViewsProbesWanted), and every other such pixel
 // whose receiver is not compatible with the representative's (sdfViewsProbesCompatible) takes a gather of its own.
-// The group then runs every gather its cells asked for as one list, a gather a lane: a temporal view first reuses the
-// preceding frame's gather where one stands for the receiver (sdf-views-probe-history.hlsli), and the gathers no entry
+// The group then runs every gather its cells asked for as one list, a gather a lane: the view first reuses its
+// preceding render's gather where one stands for the receiver (sdf-views-probe-history.hlsli), and the gathers no entry
 // serves run as a second list, so a cell of foliage with four gathers costs the group four lanes rather than one lane
 // four gathers while its neighbours wait. Each gather is written into its cell's record (sdf-views-probes.hlsli), which
-// views reads in place of gathering, and each representative's into the history for the next frame.
+// views reads in place of gathering, and each representative's into the history for the next render.
 #define SDF_VIEWS_PROBES_PASS
 #include "sdf-pixel-pass.hlsli"
 #include "sdf-views-probes.hlsli"
@@ -83,9 +83,9 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
     ViewportData view = worldView();
     uint2 dims = worldViewDims(view);
     uint2 origin = (id.xy * SDF_VIEWS_PROBE_RATE);
-    // Uniform across the dispatch.
-    bool keeps = sdfViewsProbeHistoryKeeps();
-    bool reads = sdfViewsProbeHistoryReads(dims);
+    // Uniform across the view.
+    bool keeps = sdfViewsProbeHistoryKeeps(viewIndex);
+    bool reads = sdfViewsProbeHistoryReads(dims, viewIndex);
 
     if (groupLane == 0u) {
         sdfProbeJobCount = 0u;

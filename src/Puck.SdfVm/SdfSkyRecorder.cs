@@ -89,7 +89,7 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
         var fragment = owner.FragmentOf(instance: context.Instance)!;
 
         m_resolved = fragment.Passes.Any(predicate: static pass => (pass.Name == SdfWorldPackage.Resolve));
-        m_temporal = fragment.Resources.Any(predicate: static resource => resource.History);
+        m_temporal = SdfWorldPackage.IsTemporal(fragment: fragment);
         m_fragmentPass = fragment.Passes.Single(predicate: pass => string.Equals(a: pass.Name, b: context.Part, comparisonType: StringComparison.Ordinal));
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
         m_portLit = new nint[context.InFlightFrames];

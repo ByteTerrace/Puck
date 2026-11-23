@@ -218,7 +218,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         ];
         var fragment = owner.FragmentOf(instance: context.Instance)!;
 
-        m_temporal = fragment.Resources.Any(predicate: static resource => resource.History);
+        m_temporal = SdfWorldPackage.IsTemporal(fragment: fragment);
         m_resolved = m_outputs.Contains(value: SdfWorldPackage.CurrentColor);
         m_binned = SdfWorldPasses.ShadesInBins(context: context);
 

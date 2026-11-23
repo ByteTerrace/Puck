@@ -49,7 +49,7 @@ internal sealed class SdfResolveRecorder : SdfViewRecorder, IRenderGraphPackageR
     internal SdfResolveRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) : base(owner: owner, instance: context.Instance, view: view) {
         m_context = context;
         m_owner = owner;
-        m_temporal = owner.FragmentOf(instance: context.Instance)!.Resources.Any(predicate: static resource => resource.History);
+        m_temporal = SdfWorldPackage.IsTemporal(fragment: owner.FragmentOf(instance: context.Instance)!);
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
         m_portHistory = new (nint, nint, nint, nint, nint, nint)[context.InFlightFrames];
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: SdfKernel.Resolve).GroupLayoutHandles);
