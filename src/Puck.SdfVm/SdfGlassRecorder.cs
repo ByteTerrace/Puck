@@ -24,7 +24,6 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
     private readonly SdfWorldPasses m_owner;
     private readonly RenderGraphPackageSets m_sets;
     private readonly RenderGraphPackageWorkCounters m_work;
-    private readonly bool m_temporal;
     // Per frame slot, the tables the slot's pass set was written against.
     private readonly SdfWorldTables?[] m_portTables;
 
@@ -36,7 +35,6 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
         m_context = context;
         m_shade = new SdfShadeSlots(slots: context.InFlightFrames);
         m_owner = owner;
-        m_temporal = SdfWorldPackage.IsTemporal(fragment: owner.FragmentOf(instance: context.Instance)!);
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: SdfKernel.Glass).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);

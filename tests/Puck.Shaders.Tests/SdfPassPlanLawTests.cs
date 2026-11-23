@@ -64,11 +64,15 @@ public sealed partial class SdfPassPlanLawTests {
     private static ulong BytesOf(string buffer, ShaderPipelineStorageCounts counts) => buffer switch {
         SdfWorldPackage.Parts.Visibility => (((((ulong)counts.Width) * counts.Height) * counts.Viewports) * SdfWorldPackage.VisibilityRecordByteLength),
         SdfWorldPackage.Parts.MeshPyramid => ((((ulong)counts.Width) * counts.Height) * sizeof(uint)),
-        // One probe record a cell of every viewport, over whole tiles.
-        SdfWorldPackage.Parts.Probes => (((((ulong)counts.Width.CeilingDivide(divisor: ShaderPipelineStorageCounts.TileEdge)) * counts.Height.CeilingDivide(divisor: ShaderPipelineStorageCounts.TileEdge)) * counts.Viewports)
-            * ((ShaderPipelineStorageCounts.TileEdge / SdfWorldPackage.ViewsProbeRate) * (ShaderPipelineStorageCounts.TileEdge / SdfWorldPackage.ViewsProbeRate)) * SdfWorldPackage.ViewsProbeWords * sizeof(uint)),
+        // One probe record a cell of every viewport, over whole tiles, and one history entry a cell.
+        SdfWorldPackage.Parts.Probes => (ProbeCells(counts: counts) * SdfWorldPackage.ViewsProbeWords * sizeof(uint)),
+        SdfWorldPackage.Parts.ProbeHistory => (ProbeCells(counts: counts) * SdfWorldPackage.ViewsProbeHistoryWords * sizeof(uint)),
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(buffer), actualValue: buffer, message: "Not a fragment buffer."),
     };
+    // The probe cells of every viewport, over whole tiles.
+    private static ulong ProbeCells(ShaderPipelineStorageCounts counts) =>
+        ((((ulong)counts.Width.CeilingDivide(divisor: ShaderPipelineStorageCounts.TileEdge)) * counts.Height.CeilingDivide(divisor: ShaderPipelineStorageCounts.TileEdge)) * counts.Viewports)
+            * ((ShaderPipelineStorageCounts.TileEdge / SdfWorldPackage.ViewsProbeRate) * (ShaderPipelineStorageCounts.TileEdge / SdfWorldPackage.ViewsProbeRate));
 
     [Fact]
     public void ThePlannedOrderIsTheFragmentsDispatchOrder() {
@@ -105,7 +109,7 @@ public sealed partial class SdfPassPlanLawTests {
                 (SdfWorldPackage.Parts.Mesh, "", $"{SdfWorldPackage.Parts.MeshTarget},{SdfWorldPackage.Parts.MeshDepth}"),
                 (SdfWorldPackage.Parts.Pyramid, SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid),
                 (SdfWorldPackage.Parts.Surface, $"{SdfWorldPackage.Parts.MeshTarget},{SdfWorldPackage.Parts.MeshPyramid}", SdfWorldPackage.Parts.Visibility),
-                (SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Probes),
+                (SdfWorldPackage.Parts.ViewsProbes, $"{SdfWorldPackage.Parts.Visibility},{SdfWorldPackage.Parts.ProbeHistory}", $"{SdfWorldPackage.Parts.Probes},{SdfWorldPackage.Parts.ProbeHistory}"),
                 (SdfWorldPackage.Parts.Views, $"{SdfWorldPackage.Parts.Visibility},{SdfWorldPackage.Parts.Probes}", SdfWorldPackage.Parts.Lit),
                 (SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Lit, string.Join(separator: ",", values: runs)),
                 (SdfWorldPackage.Parts.Composite, string.Join(separator: ",", values: [SdfWorldPackage.Parts.Lit, SdfWorldPackage.Parts.Visibility, .. runs]), SdfWorldPackage.Color),
@@ -163,6 +167,7 @@ public sealed partial class SdfPassPlanLawTests {
             actual: Buffers.Select(selector: static storage => PartOf(storage: storage.Name)).Order(comparer: StringComparer.Ordinal),
             expected: new[] {
                 SdfWorldPackage.Parts.MeshPyramid,
+                SdfWorldPackage.Parts.ProbeHistory,
                 SdfWorldPackage.Parts.Probes,
                 SdfWorldPackage.Parts.Visibility,
             }.Order(comparer: StringComparer.Ordinal)
@@ -209,8 +214,9 @@ public sealed partial class SdfPassPlanLawTests {
     [Fact]
     public void EachBuffersFirstUseInTheFrameStartsFromTheFrameBefore() {
         // The planner gives each buffer's first use of a frame a cross-frame prior, whose barrier orders the one retained
-        // allocation after the frame before, and every later use a pass prior.
-        foreach (var storage in Buffers) {
+        // allocation after the frame before, and every later use a pass prior. The probe lookup's history is two
+        // allocations, the one a frame reads and the one it writes, each first used in the frame.
+        foreach (var storage in Buffers.Where(predicate: static storage => !storage.Declaration.History)) {
             var accesses = Plan.Pipeline.Passes.SelectMany(selector: static pass => pass.Accesses).Where(predicate: access => (access.Storage == storage.Index)).ToArray();
 
             Assert.Equal(

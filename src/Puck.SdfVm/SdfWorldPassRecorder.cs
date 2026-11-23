@@ -89,8 +89,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     private readonly IGpuBuffer?[][] m_boundHistory;
     private readonly SdfWorldPasses m_owner;
     private readonly string m_part;
-    // Whether the pass belongs to the temporal fragment (SdfWorldPackage.TemporalFragment).
-    private readonly bool m_temporal;
     private readonly bool m_resolved;
     // Whether the views pass's graph shades in bins (SdfWorldPasses.ShadesInBins); it records unsplit on a frame whose
     // plan does not bin.
@@ -216,9 +214,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             .. m_outputs.Select(selector: static (name, port) => (Port: port, Input: false, Name: name)).Where(predicate: static entry => IsHistory(version: entry.Name))
                 .Select(selector: static entry => (entry.Port, entry.Input, WrittenMemberOf(version: entry.Name)!)),
         ];
-        var fragment = owner.FragmentOf(instance: context.Instance)!;
 
-        m_temporal = SdfWorldPackage.IsTemporal(fragment: fragment);
         m_resolved = m_outputs.Contains(value: SdfWorldPackage.CurrentColor);
         m_binned = SdfWorldPasses.ShadesInBins(context: context);
 
