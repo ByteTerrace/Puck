@@ -486,14 +486,19 @@ internal sealed class SdfWorldShadows : IDisposable {
         m_bytes += bytes;
         _ = m_reservation.TryReserve(floor: m_bytes, peak: m_bytes);
     }
-    // Gives back what no view reads: the layers of every anchor no view reads.
+    // Gives back what no view reads: the layers of every anchor no view has read for TrimKeptUploads uploads. A view
+    // rated below the display reads its anchor only on the uploads that render it, so an anchor unread by one upload is
+    // often read by the next, and giving it back then would allocate its layers again a frame later, past the pool's
+    // limit, on every trim the pressure asks for.
     // The spare pairs stay: at most MaxSparePairs, and the next redraw would make them again.
     private void Trim() {
         m_trims++;
         foreach (var anchor in m_anchors) {
-            if (anchor.View < 0) { anchor.Release(); }
+            if ((anchor.View < 0) && ((m_uploads - anchor.LastUpload) > TrimKeptUploads)) { anchor.Release(); }
         }
     }
+    // The uploads an anchor no view reads keeps its layers through a trim: past the slowest rate a nested view renders at.
+    private const ulong TrimKeptUploads = 16;
     private void RequestTrim() => Volatile.Write(location: ref m_trimRequested, value: 1);
     // Lends a spare pair of layers at an entry's texels for a redraw, making one where the spares hold none and the account
     // has room; a spare of another size gives way to it. Null where the spares are all lent.
