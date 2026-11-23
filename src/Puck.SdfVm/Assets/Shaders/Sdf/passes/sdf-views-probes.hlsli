@@ -8,8 +8,8 @@
 // runs each gather and each resolve a lane.
 //
 // Which representatives a pixel blends is the reuse test (sdf-probe-reuse.hlsli): the lookup weighs each of the four by
-// its bilinear share and by how well the pixel's receiver passes the test against the representative's
-// (sdfViewsProbesBlend), so a blend never steps across a depth or crease edge the record shows, and a surface's pixels
+// its bilinear share and by how nearly the pixel's receiver lies on the representative's surface (sdfProbeBlend in the
+// lookup's kernel), so a blend never steps across a depth or crease edge the record shows, and a surface's pixels
 // read the volume's light interpolated between its cells, never a cell's edge. A pixel no representative about it
 // serves joins one of its cell's extras, a gather taken at the first such pixel that every later pixel of the cell
 // compatible with it shares; a cell holds at most SdfViewsProbeExtras, and a pixel past them blends the cells about it

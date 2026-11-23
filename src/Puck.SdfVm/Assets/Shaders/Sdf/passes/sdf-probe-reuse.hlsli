@@ -31,9 +31,8 @@ static const uint SdfViewsProbeRemainderMeasured = (1u << 17u);
 // representatives a pixel blends stand a cell apart about it and the preceding frame's stood anywhere in their cells,
 // and a pixel met at a grazing angle spans its footprint over the cosine along the surface (within SdfViewsProbeGrazing).
 // In `y`, its distance off the representative's tangent plane: SdfViewsProbePlane, or half a pixel where that is wider.
-// Where that reach spans more than the bias, a view shows the volume's light at its cells' resolution on the screen,
-// blended between them (sdfViewsProbesBlend), and the plane and facing tests still keep a receiver from reading a gather
-// across a crease or a depth edge.
+// Where that reach spans more than the bias, a kept gather serves a receiver at the lookup's own resolution on the
+// screen, and the plane and facing tests still keep a receiver from reading a gather across a crease or a depth edge.
 float2 sdfViewsProbeTolerance(float footprint, float cosine) {
     return float2(max(SdfViewsProbeReach, (((1.5 * float(SDF_VIEWS_PROBE_RATE)) * footprint) / max(cosine, SdfViewsProbeGrazing))), max(SdfViewsProbePlane, (0.5 * footprint)));
 }
@@ -46,17 +45,6 @@ bool sdfViewsProbesCompatible(float3 offset, float3 representativeNormal, float3
     return ((dot(offset, offset) <= (tolerance.x * tolerance.x))
         && (abs(dot(offset, representativeNormal)) <= tolerance.y)
         && (dot(normal, representativeNormal) >= SdfViewsProbeFacing));
-}
-// The share, zero to one, with which a receiver blends the gather of a representative it lies at `offset` from
-// (sdfViewsProbesAt): zero where sdfViewsProbesCompatible refuses it, and falling to zero over the outer half of the
-// reach, of the plane distance and of the facing's margin, so a representative leaves a pixel's blend as it leaves the
-// test rather than at a step.
-float sdfViewsProbesBlend(float3 offset, float3 representativeNormal, float3 normal, float2 tolerance) {
-    float reach = (dot(offset, offset) / (tolerance.x * tolerance.x));
-    float plane = (abs(dot(offset, representativeNormal)) / tolerance.y);
-    float facing = ((dot(normal, representativeNormal) - SdfViewsProbeFacing) / (0.5 * (1.0 - SdfViewsProbeFacing)));
-
-    return ((saturate(2.0 * (1.0 - sqrt(reach))) * saturate(2.0 * (1.0 - plane))) * saturate(facing));
 }
 // The cells a view's records cover along each axis: the view's 8x8 tiles at SDF_VISIBILITY_GROUP_EDGE /
 // SDF_VIEWS_PROBE_RATE cells a side, as SdfWorldPackage allocates them per tile of the extent.

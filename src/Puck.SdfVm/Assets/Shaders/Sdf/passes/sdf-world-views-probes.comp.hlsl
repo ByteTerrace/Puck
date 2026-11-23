@@ -3,8 +3,8 @@
 // the cell's centre outward, whose hit shades with the volume (sdfViewsProbesWanted); a group finds its own cells' and
 // those of the ring of cells about it, each the same function of the visibility records whichever group asks. Each
 // invocation then writes its cell's pixels' mixes (sdf-views-probes.hlsli): a pixel's shares of the representatives of
-// the four cells about it, each cell's bilinear share weighed by the reuse test against the representative
-// (sdfViewsProbesBlend), or, for a pixel none of them serves, one of the cell's extras, a gather of its own that the
+// the four cells about it, each cell's bilinear share weighed by how nearly the pixel lies on the representative's
+// surface (sdfProbeBlend), or, for a pixel none of them serves, one of the cell's extras, a gather of its own that the
 // cell's later unserved pixels compatible with it share.
 // The group then runs every gather its cells asked for as one list, a gather a lane: the view first reuses its
 // preceding render's gather where one stands for the receiver (sdf-probe-history.hlsli), and the gathers no entry
@@ -200,6 +200,25 @@ void sdfProbeStoreJob(SdfProbeJob job, SdfMeshProbes probes) {
         sdfViewsProbesStoreSlot(sdfViewsProbePoolSlot(first + (job.extra - 1u)), probes, 0u);
     }
 }
+// The share, zero to one, with which a receiver blends the gather of a representative of one of the four cells about it,
+// which it lies at `offset` from: by how far it stands off the representative's tangent plane and how far their normals
+// turn, each falling to zero over the outer half of what is allowed, so a representative leaves a pixel's blend
+// gradually rather than at a step. The reuse test's reach takes no part: the four cells stand within a cell and a half
+// of the pixel on the screen however far that is along a surface seen at a grazing angle, and blending them is the
+// lookup's resolution there. The distance allowed off the plane is the normal bias every receiver is already pushed by,
+// or a cell's pixels where those are wider, or what a smooth surface leaves its own tangent plane by over the distance
+// between the two: that distance along the surface times the sine of the turn between their normals, with
+// SdfProbeBlendSlope for the relief a baked surface carries. A depth edge between parallel surfaces has no turn to
+// allow it, so its two sides blend only where they stand within the bias of one plane.
+static const float SdfProbeBlendSlope = 0.02;
+float sdfProbeBlend(float3 offset, float3 representativeNormal, float3 normal, float2 tolerance) {
+    float plane = abs(dot(offset, representativeNormal));
+    float along = sqrt(max((dot(offset, offset) - (plane * plane)), 0.0));
+    float allowed = max(max(SdfViewsProbeReach, (float(SDF_VIEWS_PROBE_RATE) * tolerance.y)), (along * (SdfProbeBlendSlope + length(cross(normal, representativeNormal)))));
+    float facing = ((dot(normal, representativeNormal) - SdfViewsProbeFacing) / (0.5 * (1.0 - SdfViewsProbeFacing)));
+
+    return (saturate(2.0 * (1.0 - (plane / allowed))) * saturate(facing));
+}
 // The mix of a pixel that blends the four cells from `base`, by `weights`, which hold a positive share: each cell's share
 // of their sum in seven bits, the largest never rounding to nothing.
 uint sdfProbeMixOf(float4 weights) {
@@ -281,12 +300,9 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
                     float4 representative = sdfProbeRingPoint[ring];
 
                     if (representative.w != 0.0) {
-                        // A cell's representative reads its own gather alone.
-                        bool self = ((ring == own) && (place == lane));
-
                         held[corner] = bilinear[corner];
-                        weights[corner] = (self ? 1.0e6 : (bilinear[corner]
-                            * sdfViewsProbesBlend((surfacePoint - representative.xyz), sdfVisibilityUnpackNormal(sdfProbeRingNormal[ring]), normal, tolerance)));
+                        weights[corner] = (bilinear[corner]
+                            * sdfProbeBlend((surfacePoint - representative.xyz), sdfVisibilityUnpackNormal(sdfProbeRingNormal[ring]), normal, tolerance));
                     }
                 }
                 if (dot(weights, float4(1.0, 1.0, 1.0, 1.0)) > 1.0e-4) {

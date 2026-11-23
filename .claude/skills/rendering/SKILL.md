@@ -972,15 +972,24 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   see [temporal reconstruction](../../../docs/rendering/sdf/handbook/frame-rendering.md#temporal-reconstruction).
 - **The irradiance volume is gathered in the probe lookup and read once per shading sample.** The
   probe lookup pass (`views-probes`) runs `sdfMeshProbesAt` at one representative
-  pixel of each `SdfWorldPackage.ViewsProbeRate`-pixel cell, at its geometric
-  normal, and again at each other pixel of the cell whose receiver does not lie
-  within the screen-measured tolerance of the representative's (`sdfViewsProbeTolerance`:
-  two pixels along the surface or the normal bias, half a pixel off its tangent
-  plane, facing alike; `sdfViewsProbesCompatible`), and resolves each gather into a slot
-  (`sdfViewsProbesStoreSlot`): everything a shading sample reads of the volume. Views reads the
-  slot its cell's record names for its pixel (`sdfViewsProbesAt`) and holds no gather, so
-  the reuse never steps across a visibility edge the record shows and the shading
-  kernels carry none of the gather's code. Every view, a nested one included, first
+  pixel of each `SdfWorldPackage.ViewsProbeRate`-pixel cell (its first pixel, from
+  the centre outward, that shades with the volume), at its geometric normal, and
+  resolves each gather into a slot (`sdfViewsProbesStoreSlot`): everything a shading
+  sample reads of the volume. It also writes every pixel's mix, one word: the pixel's
+  shares of the representatives of the four cells about it, each cell's bilinear share
+  weighed by how nearly the pixel lies on the representative's surface (`sdfProbeBlend`:
+  off its tangent plane by no more than the normal bias, a cell's pixels, or what a
+  smooth surface turns by between the two, and facing alike). A pixel none of the four
+  serves joins one of its cell's extras, a gather taken at the first such pixel that
+  the cell's later unserved pixels compatible with it share (`sdfViewsProbesCompatible`,
+  at most `SdfViewsProbeExtras` a cell; a pixel past them blends by the bilinear
+  shares alone). Views blends the slots its pixel's mix names (`sdfViewsProbesAt`) and
+  holds no gather, so a blend never steps across a visibility edge the record shows, a
+  surface reads the volume's light interpolated between cells rather than a cell's
+  edge, and the shading kernels carry none of the gather's code. A change to which
+  cells a pixel blends keeps the tile lights' rule: `sdfViewsCellLightsSeen` reads the
+  cells about a tile and `sdfViewsPixelLightsSeen` a pixel's extra, and between them
+  they hold every light a pixel of the tile can see. Every view, a nested one included, first
   reuses its preceding render's gather for a receiver that passes the same tolerance
   against the receiver it was taken at (`passes/sdf-probe-history.hlsli`, the
   native fragment's `viewsProbeHistory` history buffer at the view's own extent,
@@ -1010,10 +1019,11 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   made its whole wave pay for them, and the gather's arrays set every kernel's
   registers, so a new thing views needs of the volume is a word the lookup resolves
   into the slot, never a corner read in views. A cell's representative's slot lies in
-  the record's planes; a pixel with a gather of its own takes a slot from the pool that
+  the record's planes; an extra takes a slot from the pool that
   follows the planes in the same buffer (`sdfViewsProbePoolSlot`), whose count
   `SdfWorldPassRecorder` zeroes before the lookup's dispatch, and a group of cells the
-  pool has no room for keeps no extra, its pixels reading their representatives'.
+  pool has no room for keeps no extra, its pixels reading their representatives'. The
+  mixes follow the pool, a word a pixel (`sdfViewsProbeMixWord`).
   A slot lists at most `SdfViewsProbePartialLights` lights its corners disagree on and
   rounds the rest to seen or unseen. The gather
   supplies indirect light, reflections and traced static-light visibility. Glass
