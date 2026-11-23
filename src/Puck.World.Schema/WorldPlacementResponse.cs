@@ -147,18 +147,24 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
     /// <param name="after">The definition the delivery hands over.</param>
     /// <param name="solid">Set to whether a moved row is solid before or after, so a consumer of solid geometry alone
     /// holds across a lamp or a display swapping its creation.</param>
+    /// <param name="holdings">Set to whether the change is an <see cref="WorldPlacementChange.Appearance"/> whose every
+    /// moved row moved only its <see cref="WorldPlacement.Holding"/> (a row present in both whose replacement differs from
+    /// it in nothing else, as the response sweep's install leaves it), which a reader keeping every response's shape at
+    /// hand presents without composing again.</param>
     /// <returns>The kind of change; <see cref="WorldPlacementChange.None"/> when the rows are the same section or the
     /// reader held none (a first delivery is a definition delivery).</returns>
     /// <exception cref="ArgumentNullException"><paramref name="after"/> is <see langword="null"/>.</exception>
-    public static WorldPlacementChange ComparePlacements(WorldDefinition? before, WorldDefinition after, out bool solid) {
+    public static WorldPlacementChange ComparePlacements(WorldDefinition? before, WorldDefinition after, out bool solid, out bool holdings) {
         ArgumentNullException.ThrowIfNull(argument: after);
 
         solid = false;
+        holdings = false;
         if ((before is null) || ReferenceEquals(objA: before.PlacementsRaw, objB: after.PlacementsRaw)) {
             return WorldPlacementChange.None;
         }
 
         var change = WorldPlacementChange.None;
+        var holdsOnly = true;
         var rows = before.Placements;
         var next = after.Placements;
         // Rows keep their order across a projection install, which only replaces in place, appends or removes; the
@@ -176,6 +182,7 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
                 previous = earlier.GetValueOrDefault(key: row.Id);
             }
             if (ReferenceEquals(objA: previous, objB: row)) { continue; }
+            holdsOnly &= ((previous is not null) && (previous.Holding != row.Holding) && (previous with { Holding = row.Holding }).Equals(obj: row));
             change = Moved(change: change, definitions: (before, after), next: row, previous: previous, solid: ref solid);
         }
         // A row the delivery took away moved as much as one it added.
@@ -183,9 +190,13 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
             var kept = WorldPlacementIndex.ById(placements: next);
 
             foreach (var row in rows) {
-                if (!kept.ContainsKey(key: row.Id)) { change = Moved(change: change, definitions: (before, after), next: null, previous: row, solid: ref solid); }
+                if (!kept.ContainsKey(key: row.Id)) {
+                    holdsOnly = false;
+                    change = Moved(change: change, definitions: (before, after), next: null, previous: row, solid: ref solid);
+                }
             }
         }
+        holdings = (holdsOnly && (change == WorldPlacementChange.Appearance));
 
         return change;
     }

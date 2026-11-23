@@ -529,6 +529,10 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     // non-inhabited row — an inhabited row roots through the body-stamp census instead.
     private static bool PoolRooted(WorldPlacement row, WorldPrototype creation) =>
         ((row.Inhabit is null) && (WorldPlacementStamper.IsAnimated(creation: creation) || (row.Attach is not null)));
+    // Whether the pool registers a row: one it roots that the rigid catalog does not copy. A responding row riding a body
+    // is a rigid copy there (WorldRigidAssets.ReconcileStatic, which a reconcile runs first), so its responses swap a
+    // template rather than recreating a registration and composing the program again.
+    private bool PoolOwns(WorldPlacement row, WorldPrototype creation) => (PoolRooted(row: row, creation: creation) && !Rigid.ContainsPlacement(placement: row));
     private static Registration RegisterBody(BodyStamp stamp, bool guessLayer = false) {
         var registration = new Registration(rig: stamp.Creation.Rig) {
             BodyIndex = stamp.BodyIndex,
@@ -768,24 +772,9 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         var row = live.Row!;
 
         if (row.Attach is { } attach) {
-            // PRESENTATION float, deliberately: this rides the client's INTERPOLATED body pose so an attached row is as
-            // smooth as the body it sits on. The authoritative answer is the fixed-point one
-            // (WorldPlacementAttachment.TryResolve, what world.attachments echoes); this is its render-side image, the
-            // same relationship every avatar pose already has to the tick pose it interpolates. Same composition order:
-            // rotate the local offset into the body's own frame, then add.
-            var bodyOrientation = client.Orientation(index: attach.BodyIndex);
+            var (position, orientation) = WorldAttachedPose.Root(attach: attach, source: client);
 
-            return (
-                (client.Position(index: attach.BodyIndex) + Vector3.Transform(
-                value: attach.LocalOffset,
-                rotation: bodyOrientation
-            )),
-                Quaternion.Normalize(value: (bodyOrientation * Quaternion.CreateFromAxisAngle(
-                axis: Vector3.UnitY,
-                angle: float.DegreesToRadians(degrees: attach.LocalYawDegrees)
-            ))),
-                row.Scale
-            );
+            return (position, orientation, row.Scale);
         }
 
         return (live.StaticFrame.Position, live.StaticFrame.Rotation, live.StaticFrame.Scale);
@@ -1045,7 +1034,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
                 creations: creations,
                 id: presentRow.ShownPrototypeId
             ) is not { } presentCreation) ||
-                !PoolRooted(
+                !PoolOwns(
                 creation: presentCreation,
                 row: presentRow
             )
@@ -1141,7 +1130,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
                 creations: creations,
                 id: placement.ShownPrototypeId
             ) is not { } creation) ||
-                !PoolRooted(
+                !PoolOwns(
                 creation: creation,
                 row: placement
             ) ||
