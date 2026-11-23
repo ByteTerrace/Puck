@@ -55,6 +55,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer.WriteInt32(value: policy.BeginBudget);
         }
         writer.WriteArray(items: section.CollisionPending, writeItem: static (w, index) => w.WriteInt32(value: index));
+        writer.WriteBoolean(value: section.CollisionListenAll);
+        writer.WriteArray(items: section.CollisionListened, writeItem: static (w, index) => w.WriteInt32(value: index));
 
         writer.WriteArray(
             items: section.Edges,
@@ -109,6 +111,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         var policy = (reader.ReadBoolean() ? new WorldCollisionEvents(CandidateBudget: reader.ReadInt32(),
             MaxPairsPerBody: reader.ReadInt32(), BeginBudget: reader.ReadInt32()) : null);
         var pending = reader.ReadArray(field: "event feed discovery work", maximum: WorldBodiesLimits.IndexLimit,
+            readItem: static (ref WireReader r) => r.ReadInt32());
+        var listenAll = reader.ReadBoolean();
+        var listened = reader.ReadArray(field: "event feed collision listeners", maximum: WorldBodiesLimits.IndexLimit,
             readItem: static (ref WireReader r) => r.ReadInt32());
         var edges = reader.ReadArray(
             field: "event feed edges",
@@ -177,6 +182,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
 
         return new WorldEventFeedCheckpoint(
+            CollisionListenAll: listenAll,
+            CollisionListened: listened,
             CollisionPending: pending,
             CollisionPolicy: policy,
             Edges: edges,

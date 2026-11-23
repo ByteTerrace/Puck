@@ -230,6 +230,20 @@ public static class WorldEffect {
         [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? Expression = null
     ) : ActionEffect;
+    /// <summary>Holds a world-addressed body's producer: it stands down, its body coasting to rest under its motion
+    /// program, until a rule releases it with <see cref="ReleaseProducer"/>. A hold is one reason a producer stands
+    /// down and possession another; the producer starts again, from where the body stands, once neither holds. A rule
+    /// reads both through <c>producer(each, held|possessed|down)</c>.</summary>
+    /// <param name="Key">The body — an index, a <c>$cell:</c> indirection, or a bound key.</param>
+    public sealed record HoldProducer(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef Key
+    ) : ActionEffect;
+    /// <summary>Releases a world-addressed body's producer from a <see cref="HoldProducer"/> hold; releasing a body
+    /// that is not held does nothing.</summary>
+    /// <param name="Key">The body — an index, a <c>$cell:</c> indirection, or a bound key.</param>
+    public sealed record ReleaseProducer(
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] StateChannelRef Key
+    ) : ActionEffect;
     /// <summary>Places a body at a live cell of an anchored topology, plus an authored offset, upright or rolled.</summary>
     /// <param name="Key">A body reference, including placement:$each.</param>
     /// <param name="Topology">The declared topology.</param>

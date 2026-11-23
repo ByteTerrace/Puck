@@ -157,6 +157,14 @@ seat→body resolution (`PlayerCommandModule.ResolveTarget`, `WorldEngagement`,
 grant subjects, intent routing) — the ruling covers the perceived world only,
 never authority or simulation.
 
+Possession also stands the target's producer down. `WorldEngagement.FoldTick`
+collects every body target whose applying participant holds Drive over it and
+hands the list to `WorldPopulation.SyncPossession`, which sets
+`BodyProducerStandDown.Possessed` on exactly those bodies; the producer runs
+again, from where the body stands, on the first tick no such route remains. The
+mechanism and its rule reads are in [the skill](../SKILL.md#contracts-that-bite)
+("A body's producer stands down and resumes through one door").
+
 ## Application storage — one table, one derivation
 
 `WorldGrants` holds `Dictionary<Principal, List<ControlApplication>>`,

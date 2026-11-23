@@ -1,13 +1,17 @@
-// The standard's cel styles, a library. A style is the `cel` shade program's values (shading.puck) and the style row the
-// engine keeps beside a program, its ink: the outline that reads neighbouring depth and normals, which no per-pixel
-// program can. `celMaterial` writes both onto a palette row, so the row bands and inks while its neighbours keep theirs:
+// The standard's cel styles, a library. A style is the `cel` shade program's values (shading.puck) and an ink (ink.puck)
+// laid over the band. `celMaterial` writes both onto a palette row, so the row bands and inks while its neighbours keep
+// theirs:
 //
 //   import "../standard/styles"
 //   palette [celMaterial({ color: "#C9A27E", wrap: 0.35 }, celStyle)]
 //
-// `celLook` is the same pair as a case of a palette row's `toonSelect`, which swaps a slot's look live by a state cell;
-// `plainLook` is the continuous case. A world that wants every material styled names the program as its `render.shade`
-// and the ink as its `render.toon`. The live `world.toon off` shades every styled material continuously and uninked.
+// `celHatched` is the same with the ink's strokes in the shade, for the rows a place wants hatched, and `celPaint` the
+// band alone, for a row a painter would leave unlined (a cliff, a glacier). Each marks its row styled, which is all the
+// engine keeps of a style: the live `world.toon off` shades every styled row continuously and uninked.
+//
+// `celLook` is `celMaterial` as a case of a palette row's `toonSelect`, which swaps a slot's look live by a state
+// cell; `plainLook` is the continuous case. A world that wants every material styled names the program as its
+// `render.shade` and turns its `render.toon` on.
 //
 // `celStyle` bands each light's cosine and multiplies the shadow after the band, so the cascades' soft penumbra and its
 // colour survive under the band's edge; `celHardStyle` bands the cosine and the shadow together (`combined`), the
@@ -17,10 +21,11 @@
 // bounces. Neither tones its light: the view's display pass (`render.tone`) does, once.
 
 import "shading"
+import "ink"
 // The row's own program, if it has one, runs first and cel lights what it wrote: a weathered or terrain row keeps its
 // surface under the band.
-function celMaterial(base, style) = base with {
-  toon: style.ink
+function celPaint(base, style) = base with {
+  toon: styledMark
   shade [base.shade, cel(
       style.threshold,
       style.softness,
@@ -33,7 +38,11 @@ function celMaterial(base, style) = base with {
     )
   ]
 }
+function celMaterial(base, style) = inked(celPaint(base, style), style.ink)
+function celHatched(base, style) = hatched(celPaint(base, style), style.ink)
 function celLook(style) = celMaterial({}, style)
+
+let styledMark = { enabled: true }
 
 let celStyle = {
   threshold: 0.2
@@ -44,12 +53,7 @@ let celStyle = {
   restore: 0.6
   bleed: 0.3
   form: 0.35
-  ink {
-    outlineWidth: 1.5
-    outlineDistance: 12
-    outlineNormal: 0.65
-    outlineTint [0.08, 0.1, 0.16]
-  }
+  ink: standardInk
 }
 
 let celHardStyle = {
@@ -61,12 +65,7 @@ let celHardStyle = {
   restore: 0.5
   bleed: 0.2
   form: 0
-  ink {
-    outlineWidth: 2
-    outlineDistance: 12
-    outlineNormal: 0.65
-    outlineTint [0.06, 0.07, 0.12]
-  }
+  ink: boldInk
 }
 
 let continuousStyle = { enabled: false }

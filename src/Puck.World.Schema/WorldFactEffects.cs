@@ -327,6 +327,39 @@ public sealed class WorldBodyMotionEffect : WorldFactEffect {
             + RuleWorkBudget.ExpressionCost(point.Z!, context))
         : 1L);
 }
+/// <summary>Holds or releases a world-addressed body's producer (<see cref="WorldEffect.HoldProducer"/>,
+/// <see cref="WorldEffect.ReleaseProducer"/>).</summary>
+public sealed class WorldProducerHoldEffect : WorldFactEffect {
+    /// <summary>Initializes a new instance of the <see cref="WorldProducerHoldEffect"/> class.</summary>
+    /// <param name="key">The addressed body's literal key, or the invalid default.</param>
+    /// <param name="keyFrom">The addressed body's live indirection, or <see langword="null"/>.</param>
+    /// <param name="hold">Whether the effect holds the producer (<see langword="true"/>) or releases it.</param>
+    /// <param name="describe">The authored spelling, for the rules read-back.</param>
+    public WorldProducerHoldEffect(CellKey key, CompiledCellRef? keyFrom, bool hold, string describe) : base(describe: describe, reach: WorldDisclosureReach.Bodies) {
+        Hold = hold;
+        KeyFrom = keyFrom;
+        m_sources = [EffectSource.Key(keyFrom: keyFrom, literal: key)];
+    }
+
+    private readonly EffectSource[] m_sources;
+
+    /// <summary>The position of the addressed body's index among the sources.</summary>
+    public const int BodySource = 0;
+
+    /// <inheritdoc/>
+    public override EffectSource[] Sources => m_sources;
+    /// <summary>Gets whether the effect holds the producer (<see langword="true"/>) or releases it.</summary>
+    public bool Hold { get; }
+    /// <summary>Gets the addressed body's live indirection, or <see langword="null"/>.</summary>
+    public CompiledCellRef? KeyFrom { get; }
+    /// <inheritdoc/>
+    public override bool SubmitsMutation => false;
+
+    /// <inheritdoc/>
+    public override void CollectReads(List<CellAccess> into) => CompiledCellRef.CollectReference(into: into, reference: KeyFrom);
+    /// <inheritdoc/>
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
+}
 /// <summary>Applies a rigid-body impulse to a live-resolved struck body, along a second live-resolved heading body's
 /// own forward facing, scaled by a live state cell.</summary>
 public sealed class WorldRigidImpulseEffect : WorldFactEffect {

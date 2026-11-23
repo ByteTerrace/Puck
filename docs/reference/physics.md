@@ -669,6 +669,26 @@ with the network's whole domains in place of that chapter's tiles and portal
 graph. Bottleneck reservations, local avoidance at crowd density and a portal
 graph for networks too large to field whole are not provided.
 
+Cells carry area types, and a cost profile prices them per kind of agent, as a
+navmesh's area costs do. A runtime's `NavigationAreaSet` holds the types (ordinals
+its host names; the kernel gives none a meaning) and the marked volumes in
+precedence order: a cell takes the type of the last volume holding the point a
+body standing on it stands at (`Domain.Foot`), else its domain's own
+`NavigationDomainInput.Area`, else none. A `NavigationCostProfile` multiplies each
+step's cost by the fixed-point multiplier of the area it steps onto (rounded down
+once), costs an unmarked cell and an unnamed type one, and never steps onto a type
+it excludes; a body already standing on one may step off it. `FindRoute`,
+`Domain.FindPath` and `GoalField` take the profile; a route search scales its
+distance heuristic by the profile's least multiplier
+(`NavigationCostProfile.Minimum`, at most one), so the heuristic stays a lower
+bound. A goal field is keyed by its goal cell and its profile, which compare by
+their costs, so bodies that price areas alike share a field and bodies that do
+not read their own. Areas price routes and never change a bake: each domain derives
+its cells' types once per bake and area set (`Domain.AreaOf`), and a replacement
+runtime whose area set is equal keeps its goal fields. The neutral profile
+(`NavigationCostProfile.Neutral`) charges every step its length, the search
+without areas.
+
 `NavigationSearchWork` counts the work (`physics.navigation` in
 `world.counters`): independent searches and their expansions, cross-domain
 routes and theirs, goal fields derived and the cells they settled, steps read

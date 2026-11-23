@@ -27,7 +27,9 @@ import "studio"
 import "controls"
 import "devices"
 import "desktop"
-// The portal's host-mesh witness takes the added highest slot; every existing body keeps its index.
+// The launch field's ship takes the added highest slot (launch.puck), and the portal's host-mesh witness the one below
+// it; every existing body keeps its index.
+import "launch"
 import "portal-rows"
 // The free camera's body, ahead of the remaining inhabitants (free-camera.puck).
 import "free-camera"
@@ -123,6 +125,10 @@ references [
     document: "city"
     name: "city"
   }
+  {
+    document: "moon"
+    name: "moon"
+  }
 ]
 
 destinations [
@@ -142,6 +148,12 @@ destinations [
     durability: persisted
     name: "city"
     reference: "city"
+    scope: global
+  }
+  {
+    durability: persisted
+    name: "moon"
+    reference: "moon"
     scope: global
   }
 ]
@@ -204,11 +216,12 @@ commands: galleryCommands
 
 // The board game room's Go and Reversi bodies take the top slots (go.puck, reversi.puck); below them the development
 // fuzzer and traversal bot take bodies 44 and 43 and the companion keeps 42. The gallery hall and chess imports keep
-// their existing indices. Each import names its population; this body settles the total. The rate range's six
+// their existing indices. Each import names its population; this body settles the total, the last one the launch
+// field's ship (launch.puck). The rate range's six
 // walkers, imported last, take the free slots below the pieces (range.puck). Each body's size is its `size` register
 // (size.puck).
 bodies {
-  capacity: (galleryPopulation + 2 + boardRoomBodies + cardBodies + freeCameraBodies + 1)
+  capacity: (galleryPopulation + 2 + boardRoomBodies + cardBodies + freeCameraBodies + 1 + 1)
 }
 
 placements {

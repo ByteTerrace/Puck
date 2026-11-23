@@ -50,7 +50,11 @@ public static class WorldInfinityViewSpecs {
                         scale: view.Scale,
                         shadows: view.Shadows,
                         turn: view.Turn
-                    ));
+                    ) with {
+                        Bound = ((view.Bound is { } bound) ? new InfinityViewBound(Center: bound.Center.Value, Radius: bound.Radius) : null),
+                        Follows = (view.Follow == true),
+                        GeometryCoverage = (view.Coverage == true),
+                    });
 
                     break;
                 case WorldRenderSkyLayer.Far far:

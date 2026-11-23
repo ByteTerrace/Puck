@@ -24,7 +24,8 @@ namespace Puck.World;
 /// collider's shape — it never reads <see cref="Mass"/>. <see cref="Tether"/> is a further distinct facet: presence
 /// admits the kit's bodies to <c>body.attach</c>/<c>body.detach</c>/<c>body.reel</c>, an aimed distance-cap rope
 /// anchored through <see cref="Puck.Physics.IContactField.TryNearestSurfaceAlongDirection"/> and
-/// <see cref="Puck.Physics.FixedTetherConstraint"/>.</remarks>
+/// <see cref="Puck.Physics.FixedTetherConstraint"/>. <see cref="Mount"/> is where the participant driving a body of
+/// this kit rides (<see cref="WorldMount"/>); absent, a driven body carries no one.</remarks>
 public sealed record WorldKit(
     [property: DocumentText("a kit name")] string Name,
     [property: DocumentText("a body motion program name")] string BodyMotionProgram,
@@ -38,7 +39,8 @@ public sealed record WorldKit(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCarry? Carry = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTether? Tether = null,
     [property: JsonPropertyName("pad"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldPadElement>? PadRaw = null,
-    [property: JsonPropertyName("autonomy"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAutonomyCadence? AutonomyRaw = null
+    [property: JsonPropertyName("autonomy"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAutonomyCadence? AutonomyRaw = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMount? Mount = null
 ) {
     /// <summary>Gets the kit's composition bindings, keyed by declared channel name (validated against the world's
     /// channel table — a kit naming an undeclared channel is a dead name; a declared composition channel with no
@@ -121,6 +123,7 @@ public enum WorldBodyContactMode : byte {
 /// rigid body.</param>
 /// <param name="Channels">The compiled typed input table.</param>
 /// <param name="Tether">The kit's compiled tether facet, or <see langword="null"/> for a kit that carries no rope.</param>
+/// <param name="Mount">The kit's compiled mount facet, or <see langword="null"/> for a kit whose bodies carry no rider.</param>
 public readonly record struct FixedWorldKit(
     CompiledBodyMotionProgram BodyMotionProgram,
     IReadOnlyDictionary<string, CompiledBodyProducer> Producers,
@@ -140,7 +143,8 @@ public readonly record struct FixedWorldKit(
     FixedWorldRigid? Rigid = null,
     FixedWorldCarry? Carry = null,
     FixedWorldTether? Tether = null,
-    WorldChannelTable? Channels = null
+    WorldChannelTable? Channels = null,
+    FixedWorldMount? Mount = null
 ) {
     /// <summary>Compiles the world's named action-state register file: every <c>state.body</c> declaration in
     /// document order, then every <c>state.identity</c> one.</summary>
@@ -238,8 +242,7 @@ public readonly record struct FixedWorldKit(
     /// <param name="dynamics">The world's declared <c>dynamics</c> rows, resolved against <paramref name="kit"/>'s
     /// motion row's own declared dynamics row name (validation has already refused a dangling name).</param>
     /// <param name="simulationRateHz">The world's own simulation rate — the step width a resolved dynamics row's
-    /// propagator compiles against (validation has already refused a resolved name at rate 0), and a curve-follow
-    /// producer's per-tick arc step divisor.</param>
+    /// propagator compiles against (validation has already refused a resolved name at rate 0).</param>
     public static FixedWorldKit Compile(WorldKit kit, WorldChannelTable channels, WorldTargetRegisterTable targets, WorldCurveTable curves, WorldNavigationDomainTable navigation, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState, IReadOnlyList<DynamicsRow> dynamics, int simulationRateHz) {
         var actions = new CompiledActionSpec?[ChannelLimits.MaxChannels];
         var thresholds = new FixedQ4816[ChannelLimits.MaxChannels];
@@ -306,8 +309,7 @@ public readonly record struct FixedWorldKit(
                     channels: channels,
                     targets: targets,
                     curves: curves,
-                    navigation: navigation,
-                    simulationRateHz: simulationRateHz
+                    navigation: navigation
                 )
             );
         }
@@ -372,7 +374,10 @@ public readonly record struct FixedWorldKit(
             : 0UL),
             Rigid: rigid,
             Carry: carry,
-            Tether: tether
+            Tether: tether,
+            Mount: ((kit.Mount is { } mountRow)
+            ? FixedWorldMount.Compile(mount: mountRow)
+            : (FixedWorldMount?)null)
         );
     }
 }

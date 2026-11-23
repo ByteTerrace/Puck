@@ -146,6 +146,14 @@
               "null"
             ],
             "default": null
+          },
+          "area": {
+            "description": "The area type of the domain\u0027s cells no area marks, one of AreaTypes; absent leaves them unmarked, costing one under every profile.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [
@@ -162,6 +170,110 @@
         ],
         "additionalProperties": false,
         "title": "WorldNavigationDomain"
+      },
+      "default": null
+    },
+    "areaTypes": {
+      "description": "The area type names the world\u0027s areas, domains and profiles use, in a stable order. The engine gives no type a meaning: a type costs what each profile says.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "default": null
+    },
+    "areas": {
+      "description": "Marked volumes in precedence order: a cell takes the type of the last area holding the point a body standing on it stands at, else its domain\u0027s own Area.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One marked navigation area: a volume whose cells take an area type. Exactly one of Placement and Region is authored.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "type": {
+            "description": "The area type, one of AreaTypes.",
+            "type": "string"
+          },
+          "placement": {
+            "description": "A static placement whose Region is the area\u0027s volume, so one authored region both senses bodies and marks the ground under it.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "region": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementRegion",
+            "description": "The area\u0027s own volume in world space: a sphere of Radius or a box of HalfExtents about Center, turned by YawDegrees.",
+            "default": null
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false,
+        "title": "WorldNavigationArea"
+      },
+      "default": null
+    },
+    "profiles": {
+      "description": "Named cost profiles a navigated producer target selects (Profile). A target with no profile pays one for every area.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A named navigation cost profile: what one kind of agent pays to cross each area type. A step costs its length (and the route search\u0027s clearance surcharge) times the multiplier of the area it steps onto.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The name a navigated target\u0027s profile selects.",
+            "type": "string"
+          },
+          "costs": {
+            "description": "Each priced area type\u0027s multiplier, positive and at most MaxAreaCost; a type left out, and an unmarked cell, cost one.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": null
+          },
+          "exclude": {
+            "description": "The area types the agent never steps onto. A body already standing on one may step off it.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "default": null
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "title": "WorldNavigationProfile"
       },
       "default": null
     }

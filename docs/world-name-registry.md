@@ -594,7 +594,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.exposure.compensation.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.exposure.hold` | State | Binding | Binding | `WorldRenderExposure.Hold` |
 | `render.exposure.hold.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
-| `render.toon.outlineTint` | State | Binding | Binding | `ToonStyleDocument.OutlineTint` |
 | `render.lanes` | State | Binding | Binding | `WorldRenderDefaults.Lanes` |
 | `render.lanes[].clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `screens[].origin` | State | Binding | Binding | `WorldScreen.Origin` |
@@ -2263,9 +2262,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].field.material.weathering.turn` | State | Binding | Binding | `PaletteWeatheringDocument.Turn` |
 | `state.world[].field.material.inset.origin` | State | Binding | Binding | `PaletteInsetDocument.Origin` |
 | `state.world[].field.material.inset.rotation` | State | Binding | Binding | `PaletteInsetDocument.Rotation` |
-| `state.world[].field.material.toon.outlineTint` | State | Binding | Binding | `ToonStyleDocument.OutlineTint` |
 | `state.world[].field.material.toonSelect.state` | State | Binding | Binding | `PaletteToonSelectDocument.State` |
-| `state.world[].field.material.toonSelect.cases[].toon.outlineTint` | State | Binding | Binding | `ToonStyleDocument.OutlineTint` |
 | `state.world[].field.material.flow.velocity` | State | Binding | Binding | `PaletteFlowDocument.Velocity` |
 | `state.world[].field.material.flow.region.center` | State | Binding | Binding | `PaletteFlowRegionDocument.Center` |
 | `state.world[].field.material.flow.region.velocity` | State | Binding | Binding | `PaletteFlowRegionDocument.Velocity` |

@@ -429,6 +429,12 @@ public sealed partial class WorldInstanceHost {
 
             var arrivedTransferId = transfer.TransferId;
             var arrivedSource = transfer.SourceInstance;
+            // What a traveller that rode across drives where it landed: the handed-on body and the kit it runs there.
+            var drives = (((transfer.Rides is not null) && (targetAuthority.Local is { } ridden))
+                ? ridden.Server.ExecuteAuthorityOperation(operation: () => ((ridden.Server.Engagement.DrivenBody(index: member.TargetSlot) is var driven and >= 0)
+                    ? $", driving body:{driven} (kit '{ridden.Server.Population.KitName(index: driven)}')"
+                    : ", driving nothing: the body it rode was not handed on"))
+                : string.Empty);
 
             if (m_narration.HasNarrationSink) {
                 m_narration.Narrate(
@@ -436,7 +442,7 @@ public sealed partial class WorldInstanceHost {
                     channel: "world.transfer",
                     text: $"[world.transfer: transfer={arrivedTransferId} '{arrivedSource}' {TravellerName(index: member.SourceSlot, localSeatCount: sourceInstance!.Server.Population.LocalSeatCount)} departed -> '{targetName}' {TravellerName(index: member.TargetSlot, localSeatCount: targetAuthority.Definition.Population.LocalSeats)} arrived{((member.Profile is not null)
                     ? $" as {member.Profile.Id}"
-                    : " (anonymous)")} — {arrival.Text}]"
+                    : " (anonymous)")}{drives} — {arrival.Text}]"
                 );
             }
         }

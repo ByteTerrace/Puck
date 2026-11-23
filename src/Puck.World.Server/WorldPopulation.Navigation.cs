@@ -107,6 +107,21 @@ public sealed partial class WorldPopulation {
 
         return $"[world.navigation map: no domain named '{name}']";
     }
+    /// <summary>Resolves a navigation cost profile by its authored name.</summary>
+    /// <param name="name">The profile's name.</param>
+    /// <param name="profile">The profile, when the method returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the world declares the profile.</returns>
+    public bool TryNavigationProfile(string name, out NavigationCostProfile profile) {
+        var index = m_navigationTable.ProfileOf(name: name);
+
+        profile = NavigationProfile(index: index);
+        return (index >= 0);
+    }
+    /// <summary>Gets the area type name of a route node's cell: the type a cost profile prices it by, or <c>none</c>.</summary>
+    /// <param name="node">The route node.</param>
+    public string NavigationAreaName(NavigationRouteNode node) => (m_navigationAreas?.TypeName(type: m_navigation[node.Domain].AreaOf(node: node.Cell)) ?? "none");
+    // The profile a navigated target's compiled ordinal selects; neutral for none.
+    private NavigationCostProfile NavigationProfile(int index) => (m_navigationAreas?.Profile(index: index) ?? NavigationCostProfile.Neutral);
     /// <summary>Gets a navigation domain's authored name.</summary>
     /// <param name="index">The domain's index.</param>
     public string NavigationDomainName(int index) => m_navigation[index].Name;
@@ -164,8 +179,9 @@ public sealed partial class WorldPopulation {
     /// <param name="work">The search's work.</param>
     /// <param name="samples">The samples the contact check stood a body at.</param>
     /// <param name="walls">The samples where that body met geometry, in route order.</param>
+    /// <param name="profile">The cost profile the route prices areas by, or <see langword="null"/> for none.</param>
     /// <returns>The search's status.</returns>
-    public NavigationStatus FindCheckedRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, List<NavigationRouteNode> route, out NavigationRouteWork work, out int samples, List<FixedVector3> walls) {
+    public NavigationStatus FindCheckedRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, List<NavigationRouteNode> route, out NavigationRouteWork work, out int samples, List<FixedVector3> walls, NavigationCostProfile? profile = null) {
         ArgumentNullException.ThrowIfNull(argument: walls);
         walls.Clear();
         samples = 0;
@@ -176,6 +192,7 @@ public sealed partial class WorldPopulation {
             goal: goal,
             maxExpanded: checked((int)Math.Min(val1: m_navigation.CellCount, val2: int.MaxValue)),
             maxNodes: WorldNavigationCapacity.MaxPathNodes * WorldNavigationCapacity.MaxDomains,
+            profile: profile,
             route: route,
             work: out work
         );
@@ -238,7 +255,7 @@ public sealed partial class WorldPopulation {
     // Compiles the authored navigation rows into the kernel's own plain input shape once at resolve time; the
     // kernel parses no document, so every authoring enum crosses the seam through an explicit mapping rather than
     // a numeric cast that would silently drift if either side's member order ever changed.
-    internal static NavigationDomainInput[] CompileNavigationDomains(WorldDefinition definition) {
+    internal static NavigationDomainInput[] CompileNavigationDomains(WorldDefinition definition, WorldNavigationAreas areas) {
         var rows = definition.Navigation.Rows;
         var domains = new NavigationDomainInput[rows.Count];
 
@@ -278,7 +295,8 @@ public sealed partial class WorldPopulation {
                 Medium: compiled.Medium,
                 Shared: row.Shared,
                 YawRadians: FixedQ4816.FromDegrees(degrees: frame.YawDegrees),
-                Network: row.Network
+                Network: row.Network,
+                Area: areas.TypeOf(type: row.Area)
             );
         }
         return domains;

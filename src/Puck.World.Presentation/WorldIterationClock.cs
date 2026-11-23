@@ -68,6 +68,9 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
         public WorldDocumentVersion After { get; } = after;
         public long ShaderInstalls { get; } = shaderInstalls;
         public bool Named { get; } = named;
+        // For a live state edit, the simulation tick the loop began at: a frame carries the edit once the feed has
+        // collected a tick after it. Null for a document or kernel edit.
+        public ulong? LiveTick { get; init; }
         public long ShaderRequest { get; set; }
         // The first produced frame observed since the loop began.
         public long? First { get; set; }
@@ -81,6 +84,10 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
         public long? Lit { get; set; }
         // The bake readiness's frame count when the frame stage held: the mark the meshes stage measures from.
         public long ContentMark { get; set; }
+        // The irradiance volume's lighting matches and captures when the frame stage held: the marks the lit stage
+        // measures from.
+        public long LightingMark { get; set; }
+        public int CaptureMark { get; set; }
         public long PresentedAtStart { get; set; } = -1;
         public long Presented { get; set; }
         public long BuildsAtStart { get; set; } = -1;
@@ -121,9 +128,11 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
     /// <param name="named">Whether a script named the loop (<c>world.iteration begin</c>), so the reload or kernel reload
     /// that follows joins it; <see langword="false"/> for a loop an edit verb begins itself.</param>
     /// <param name="shaderRequest">The kernel reload request the edit made, or zero for a document edit.</param>
+    /// <param name="live">Whether the edit is a live state edit (a state cell a rule or a light reads), which moves no
+    /// document: its frame stage holds once a frame presents a tick after the one the loop began at.</param>
     /// <returns>The loop's number.</returns>
     /// <exception cref="ArgumentException"><paramref name="name"/> is empty or white space.</exception>
-    public long Begin(string name, bool named, long shaderRequest = 0L) {
+    public long Begin(string name, bool named, long shaderRequest = 0L, bool live = false) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
         if (!named && (Latest is { Named: true, Frame: null, Ended: null } joined)) {
             if (shaderRequest > 0L) { joined.ShaderRequest = shaderRequest; }
@@ -140,7 +149,7 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
             number: ++m_count,
             shaderInstalls: (m_probe?.Residency?.ShaderBatchesInstalled ?? 0L),
             started: Stopwatch.GetTimestamp()
-        ) { ShaderRequest = shaderRequest, PresentedAtStart = (m_probe?.Root?.FramesProduced ?? -1L), BuildsAtStart = (m_probe?.Composition?.ProgramBuilds ?? -1L), AppearancesAtStart = (m_probe?.Composition?.AppearanceBuilds ?? -1L), WorkAtStart = ReadWork() };
+        ) { LiveTick = (live ? feed.Tick.Tick : null), ShaderRequest = shaderRequest, PresentedAtStart = (m_probe?.Root?.FramesProduced ?? -1L), BuildsAtStart = (m_probe?.Composition?.ProgramBuilds ?? -1L), AppearancesAtStart = (m_probe?.Composition?.AppearanceBuilds ?? -1L), WorkAtStart = ReadWork() };
 
         m_loops.Add(item: loop);
         if (m_loops.Count > Kept) { m_loops.RemoveAt(index: 0); }
@@ -199,6 +208,8 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
             if (composition.Building || !ReferenceEquals(objA: frame.Program, objB: composition.Program)) { return; }
             loop.Frame = now;
             loop.ContentMark = bakes.Frames;
+            loop.LightingMark = residency.MeshIrradiance.LightingMatches;
+            loop.CaptureMark = residency.MeshIrradiance.LightingCaptures;
         }
         // The edit's look: every shading program the frame runs draws with its own kernel, not as a material with no
         // program while the specialization that holds it compiles.
@@ -214,17 +225,27 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
             if (!bakes.IsResidentSince(mark: loop.ContentMark) || ShaderPending(loop: loop, residency: residency)) { return; }
             loop.Meshes = now;
         }
-        if (!residency.MeshIrradiance.Converged) { return; }
+        if (!Lit(loop: loop, volume: residency.MeshIrradiance)) { return; }
         loop.Lit = now;
         loop.WorkAtLit = ReadWork();
         Console.Error.WriteLine(value: $"[world.iteration] {Line(loop: loop, probe: probe)}");
     }
 
+    // The lighting captures after the frame stage that mark a lighting changing every frame (a day clock): then the volume
+    // is lit once its relight keeps within its age bound (SdfMeshIrradiance.Converged); a lighting that came to rest after
+    // the edit is lit only once the volume settles.
+    private const int MovingCaptures = 8;
+
+    // Whether the volume shows the loop's light: it answered a frame after the one that carried the edit, so it captured
+    // the edit's lighting, and it settled, or under a lighting still moving since, its relight keeps within its age bound.
+    private static bool Lit(Loop loop, SdfMeshIrradiance volume) =>
+        (volume.LightingMatches > loop.LightingMark) && (!volume.Settling || (volume.Converged && ((volume.LightingCaptures - loop.CaptureMark) >= MovingCaptures)));
+
     // Whether the frame carries the loop's edit: a document past the one installed when it began (any delivered document
-    // for the boot), or a kernel batch installed since.
-    private static bool Reaches(SdfFrame frame, Loop loop, SdfWorldResidency residency) =>
+    // for the boot), a kernel batch installed since, or for a live state edit a tick collected after the one it began at.
+    private bool Reaches(SdfFrame frame, Loop loop, SdfWorldResidency residency) =>
         ((frame.DiagnosticSource is WorldDocumentVersion version) && version.IsDelivered && !loop.After.Covers(other: version)) ||
-        (residency.ShaderBatchesInstalled > loop.ShaderInstalls);
+        (residency.ShaderBatchesInstalled > loop.ShaderInstalls) || ((loop.LiveTick is { } live) && (feed.Tick.Tick > (live + 1UL)));
 
     // Ends a loop whose only edit is a kernel reload that changed no pipeline or failed: no frame will ever show it.
     private static bool EndedUnchanged(Loop loop, SdfWorldResidency residency) {
