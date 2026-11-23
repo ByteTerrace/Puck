@@ -2513,10 +2513,15 @@ the toon and curvature built-ins the standard package no longer reads; no
 other lane renames that vocabulary meanwhile. The ink phase, the edge search
 and the standard's ink are built ([what is built](ink.md#what-is-built)).
 
-- [medium] The search's cost against [the frame budget](frame-budget.md#the-budget)'s
-  ink share is a lane's attribution only; the lead's quiet window reads
-  `views-filter` and `views` on the benchmark route with ink on and with a
-  world whose programs read no edge.
+- [high] The edge search is over [the frame budget](frame-budget.md#the-budget)'s
+  ink share: about 0.9 ms at 2560 by 1440 against 0.4, scaled from a lane's
+  reading in a smaller window. The lead's quiet window reads `views-filter`
+  and `views` at the bar's size with and without `SDF_VIEWS_OMIT_INK`; the
+  cut is the search's memory traffic, as the budget says.
+- [medium] `world.shaders.reload` and `world.reload` reach the boot world
+  alone: a federated world a seat has crossed into (the city) keeps its
+  kernels and its documents, so its look cannot be iterated without a
+  restart. Found styling the city's ink.
 - [medium] A fold seen at a grazing angle can read as an occlusion
   ([the neighbour pass](ink.md#the-neighbour-pass)): the two classes are told
   apart by the nearer surface's tangent plane alone. A look that weighs
