@@ -75,10 +75,10 @@ function gardenSeam(name, pace) = {
     stand(1)
   ]
 }
-// The city painting (city.puck): through the canvas on the wing's south wall onto the avenue, into the market, down a
-// terrace lane, along the quay and up the works road, then back to the arrival frame and through it into the wing. The
-// points stand in the open between buildings: the lane at x -106 between two columns of houses, the quay's edge before
-// the river, the works road's middle.
+// The city painting (city.puck): through the canvas on the wing's south wall onto the city's arrival ground, west along
+// the lane between the terraces' second and third rows (z -24), south down the lane at x -106 between two columns of
+// houses, and back the same way to the arrival frame and through it into the wing. The steps walk straight lines through
+// open lanes, since a route's plan is read from the boot world's navigation even after the seat crosses into the city.
 function citySeam(name, pace) = {
   name: name
   steps [
@@ -86,11 +86,12 @@ function citySeam(name, pace) = {
     stand(1)
     { $type: "cross", headingDegrees: 0, pace: pace, metres: 11 }
     stand(1)
-    goTo([0, 0, -40], pace)
-    goTo([-106, 0, -80], pace)
-    goTo([60, 0, -200], pace)
-    goTo([95, 0, -50], pace)
-    goTo([0, 0, -9], pace, 0.15)
+    step([-24, 0, -24], 0.5)
+    step([-106, 0, -24], 0.5)
+    step([-106, 0, -80], 0.5)
+    step([-106, 0, -24], 0.5)
+    step([-24, 0, -24], 0.5)
+    step([0, 0, -10], 0.15)
     face(180, 0.5)
     { $type: "cross", headingDegrees: 180, until: "place-city-painting", pace: pace, metres: 8 }
     stand(1)

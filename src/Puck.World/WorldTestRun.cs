@@ -265,7 +265,7 @@ internal sealed class WorldTestRun {
                     m_worlds.Exists(match: armed => string.Equals(a: armed.World, b: name, comparisonType: StringComparison.Ordinal)) ||
                     !m_instances.TryGet(instance: out var started, name: name) ||
                     (started is not { } running) ||
-                    string.Equals(a: name, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal) ||
+                    WorldDefinitionLoader.IsBootInstance(name: name) ||
                     !running.Server.Configuration.State.Any(predicate: static row => (row?.Verdict is not null))
                 ) {
                     continue;

@@ -64,8 +64,11 @@ public sealed partial class WorldScreenBinder {
     // device, published with the value it signals on the ring's shared fence, which the adapter hands out through the
     // capture gate as external content when the probe reads a device (a camera or a capture, directly or through another
     // probe) and as presentation content when only in-world views and recorded tracks feed it. The binder provisions and services the ring each publish, and retires it on
-    // device loss, so the feed publishes, recovers and releases nothing of its own. A probe lights nothing.
-    private sealed class ProbeSourceFeed(ProbeFeed feed) : IWorldImportFeed {
+    // device loss, so the feed publishes, recovers and releases nothing of its own. A probe lights nothing. A probe whose
+    // run cannot start until something it reads changes (its world has no host, its host does not declare it, its ring
+    // cannot be provisioned, its run's socket or kernel is refused) stands its capture fill in and names why, so it never
+    // holds the frames that show it; one whose run is coming waits, naming what it waits on.
+    private sealed class ProbeSourceFeed(ProbeFeed feed, string world, WorldScreenBinder binder) : IWorldImportFeed {
         private ImageSourceDescriptor m_descriptor = new(
             Cadence: ImageSourceCadence.Tick,
             Color: ImageColorEncoding.Srgb,
@@ -106,15 +109,30 @@ public sealed partial class WorldScreenBinder {
         }
         public FrameRender Answer => (feed.Live
             ? FrameRender.Rendered
-            : ((feed.Refusal is { } refusal)
+            : ((Refusal is { } refusal)
                 ? FrameRender.Refused(reason: refusal)
-                : FrameRender.Waiting(reason: (feed.Fault ?? "probe awaiting a first frame"))));
+                : FrameRender.Waiting(reason: Waiting)));
         public string? Fault => (feed.Live
             ? null
-            : (feed.Fault ?? "probe awaiting a first frame")
+            : (Refusal ?? Waiting)
         );
         public ProbeFeed Feed => feed;
         public Vector3 Light => Vector3.Zero;
+        public bool ShowsFill => (!feed.Live && (Refusal is not null));
+
+        // Why the probe cannot show an image until something it reads changes, or null.
+        private string? Refusal => (feed.Refusal ?? feed.RunRefusal ?? (binder.m_probeWorlds.TryGetValue(
+            key: world,
+            value: out var hostRefusal
+        )
+            ? (hostRefusal is { } refused
+                ? $"no probe host runs for world '{world}': {refused}"
+                : (feed.Declared ? null : $"world '{world}' declares no probe '{feed.Id}' that writes a texture"))
+            : null));
+        // What the probe waits on while nothing refuses it.
+        private string Waiting => (binder.m_probeWorlds.ContainsKey(key: world)
+            ? (feed.RunWaiting ?? feed.Fault ?? "probe awaiting a first frame")
+            : $"no probe host has reconciled world '{world}' yet");
 
         public GpuImageLease AcquireFrame() => feed.AcquireFrame();
         public void Dispose() { }

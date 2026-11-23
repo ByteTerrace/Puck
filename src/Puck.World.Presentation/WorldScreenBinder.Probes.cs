@@ -4,20 +4,89 @@ using Puck.Abstractions.Gpu;
 using Puck.Platform;
 using Puck.Platform.Probes;
 using Puck.Shaders;
+using Puck.World.Client;
 
 namespace Puck.World;
 
 public sealed partial class WorldScreenBinder {
-    // One feed per declared probe that writes a texture, keyed by probe id. The probes host declares the feed at its
-    // own construction and asks for a ring of the kind's output extent when its kernel run starts; the ring is
-    // provisioned here, on the render thread, at the next publish (the exportable targets need the render device).
+    // One feed per declared probe that writes a texture, keyed by ProbeKey. The probes host of the probe's world
+    // declares the feed at its own construction and asks for a ring of the kind's output extent when its kernel run
+    // starts; the ring is provisioned here, on the render thread, at the next publish (the exportable targets need the
+    // render device).
     private readonly Dictionary<string, ProbeFeed> m_probeFeeds = new(comparer: StringComparer.Ordinal);
+    // Each world a probe host has reconciled, with why none runs for it, or null while one does. The boot world's host
+    // runs from boot. A feed of a world no host has reconciled yet waits; one of a world whose host refused stands its
+    // capture fill in, naming the refusal.
+    private readonly Dictionary<string, string?> m_probeWorlds = new(comparer: StringComparer.Ordinal) {
+        [WorldDefinitionLoader.BootInstanceName] = null,
+    };
 
-    // One export state per named camera whose view a probe socket reads, shared by every probe socket naming the
-    // same camera (mirrors ProbeFeed's own id-keyed sharing). Reference counting keeps the export alive until the
-    // final live probe instance releases that camera.
+    // One export state per camera whose view a probe socket reads, keyed by ViewExportKey and shared by every probe
+    // socket naming the same camera of the same world. Reference counting keeps the export alive until the final live
+    // probe instance releases that camera.
     private readonly Dictionary<string, ViewExportFeed> m_viewExports = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, int> m_viewExportReferences = new(comparer: StringComparer.Ordinal);
+    // The export each camera view of another world renders into, by the view's name (WorldViewNames.NestedCamera).
+    private readonly Dictionary<string, ViewExportFeed> m_nestedViewExports = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>Returns the key a probe's output ring, or the export of a camera a probe's view socket reads, is held
+    /// under: the name itself for the boot world, whose host the boot runs, and the world-qualified generated name
+    /// (<see cref="GeneratedName.Join"/>) for a world shown through a screen, whose own host runs it, so two worlds' equal
+    /// names are two rings or exports.</summary>
+    /// <param name="world">The name of the world instance whose probe host runs the probe.</param>
+    /// <param name="id">The <c>probes[].id</c>, a seat-relative instance's key, or a <c>cameras[]</c> row name.</param>
+    /// <returns>The key.</returns>
+    public static string ProbeKey(string world, string id) => (WorldDefinitionLoader.IsBootInstance(name: world)
+        ? id
+        : GeneratedName.Join(world, id));
+    /// <summary>Records that a probe host runs for a world shown through a screen, or why none can, so every probe source
+    /// of that world either reads its host's rings or stands its capture fill in, naming the refusal, rather than waiting
+    /// for a host that never comes.</summary>
+    /// <param name="world">The name of the world instance.</param>
+    /// <param name="refusal">Why no host runs for the world, or <see langword="null"/> when one does.</param>
+    public void HostProbeWorld(string world, string? refusal) => m_probeWorlds[world] = refusal;
+    /// <summary>Forgets a world shown through a screen whose probe host was retired, so its probe sources wait for the next
+    /// host that reconciles it.</summary>
+    /// <param name="world">The name of the world instance.</param>
+    public void ForgetProbeWorld(string world) {
+        if (!WorldDefinitionLoader.IsBootInstance(name: world)) {
+            _ = m_probeWorlds.Remove(key: world);
+        }
+    }
+    /// <summary>Records why a probe's kernel run cannot start until something it reads changes (a socket no host can bind,
+    /// a kernel its host refused, a run that ended on a fault), so a screen showing the probe stands its capture fill in
+    /// and names the reason rather than waiting for a first frame that never comes; <see langword="null"/> clears it once
+    /// the run attaches.</summary>
+    /// <param name="id">The probe's ring key (<see cref="ProbeKey"/>).</param>
+    /// <param name="refusal">Why the run cannot start, or <see langword="null"/>.</param>
+    /// <param name="waiting">Why the run has not started yet while it waits on something that is coming, or
+    /// <see langword="null"/>; read only when <paramref name="refusal"/> is <see langword="null"/>.</param>
+    public void ReportProbeRun(string id, string? refusal, string? waiting) {
+        var feed = GetOrAddProbeFeed(id: id);
+
+        feed.RunRefusal = refusal;
+        feed.RunWaiting = waiting;
+    }
+    /// <summary>Collects the worlds the presentation shows through screens other than the boot world, each once, with the
+    /// definition its first level last reconciled: the worlds whose probes a host of their own runs.</summary>
+    /// <param name="worlds">Receives each world's instance name and definition; cleared first.</param>
+    public void CollectPresentedWorlds(Dictionary<string, WorldDefinition> worlds) {
+        ArgumentNullException.ThrowIfNull(argument: worlds);
+
+        worlds.Clear();
+
+        foreach (var screens in m_nestedOwners.Keys) {
+            if (
+                !WorldDefinitionLoader.IsBootInstance(name: screens.World) &&
+                (screens.Definition is { } definition)
+            ) {
+                _ = worlds.TryAdd(
+                    key: screens.World,
+                    value: definition
+                );
+            }
+        }
+    }
 
     // The render adapter's own kernel host, opened the first time a probe whose trigger reads a rendered source starts,
     // on the adapter the render device reported; woken once per publish.
@@ -111,6 +180,8 @@ public sealed partial class WorldScreenBinder {
         )) {
             feed.Request = null;
             feed.Run = null;
+            feed.RunRefusal = null;
+            feed.RunWaiting = null;
             feed.Release();
         }
     }
@@ -148,14 +219,18 @@ public sealed partial class WorldScreenBinder {
     /// probe kernel host's Direct3D 11 <c>OpenSharedResource1</c> opens, and each frame is published with the value its
     /// write signals on a shared fence the kernel waits for: on the Direct3D 12 host the render device's own texture and
     /// fence, and on the Vulkan host a texture and fence made on the binder's headless Direct3D 12 device, which the
-    /// render device imports to write and signal (<see cref="IGpuSurfaceTransferFactory.TryImportWritable"/>).</summary>
+    /// render device imports to write and signal (<see cref="IGpuSurfaceTransferFactory.TryImportWritable"/>). A camera of
+    /// the boot world exports its camera registration's view; a camera of a world shown through a screen exports the view
+    /// a level presenting that world films it through for its probes (<see cref="WorldNestedScreens{TChild}.TryProbeCamera"/>),
+    /// moving to another level's when that one closes, which is a new generation.</summary>
     /// <param name="cameraName">The <c>cameras[]</c> row name.</param>
     /// <param name="ring">The exported ring, set only when this returns <see langword="true"/>.</param>
     /// <param name="generation">The export's identity — fresh on every (re)creation, for example after device loss —
     /// set only when this returns <see langword="true"/>.</param>
     /// <param name="fault">Why no export is available yet, set only when this returns <see langword="false"/>.</param>
+    /// <param name="world">The name of the world instance whose camera it is: the boot world's by default.</param>
     /// <returns><see langword="true"/> when the view is exported and has rendered at least once.</returns>
-    public bool TryGetViewExport(string cameraName, [NotNullWhen(true)] out ProbeKernelInput.Ring? ring, out object? generation, out string fault) {
+    public bool TryGetViewExport(string cameraName, [NotNullWhen(true)] out ProbeKernelInput.Ring? ring, out object? generation, out string fault, string world = WorldDefinitionLoader.BootInstanceName) {
         ring = null;
         generation = null;
 
@@ -165,8 +240,29 @@ public sealed partial class WorldScreenBinder {
             return false;
         }
 
-        if (ResolveCamera(name: cameraName) is not { } camera) {
+        var boot = WorldDefinitionLoader.IsBootInstance(name: world);
+        WorldCamera? camera = null;
+        WorldNestedCamera presented = default;
+
+        if (boot && ((camera = ResolveCamera(name: cameraName)) is null)) {
             fault = $"camera '{cameraName}' not declared";
+
+            return false;
+        }
+        if (!boot && !TryPresentedProbeCamera(
+            camera: out presented,
+            cameraName: cameraName,
+            world: world
+        )) {
+            if (m_viewExports.Remove(
+                key: ProbeKey(id: cameraName, world: world),
+                value: out var stale
+            )) {
+                Detach(feed: stale);
+                ReconcileViews();
+            }
+
+            fault = $"no level presenting world '{world}' films camera '{cameraName}' yet";
 
             return false;
         }
@@ -178,7 +274,12 @@ public sealed partial class WorldScreenBinder {
         }
 
         var feed = (OperatingSystem.IsWindowsVersionAtLeast(major: 10, minor: 0, build: 10240)
-            ? GetOrAddViewExport(camera: camera)
+            ? (boot
+                ? GetOrAddViewExport(camera: camera!)
+                : GetOrAddPresentedViewExport(
+                    camera: presented,
+                    key: ProbeKey(id: cameraName, world: world)
+                ))
             : null);
         var image = ((feed is null)
             ? null
@@ -200,9 +301,13 @@ public sealed partial class WorldScreenBinder {
         return (ring is not null);
     }
     /// <summary>Retains one live probe instance's use of a named view export.</summary>
-    public void RetainViewExport(string cameraName) {
-        m_viewExportReferences[cameraName] = (m_viewExportReferences.TryGetValue(
-            key: cameraName,
+    /// <param name="cameraName">The <c>cameras[]</c> row name.</param>
+    /// <param name="world">The name of the world instance whose camera it is: the boot world's by default.</param>
+    public void RetainViewExport(string cameraName, string world = WorldDefinitionLoader.BootInstanceName) {
+        var key = ProbeKey(id: cameraName, world: world);
+
+        m_viewExportReferences[key] = (m_viewExportReferences.TryGetValue(
+            key: key,
             value: out var count
         )
             ? (count + 1)
@@ -210,34 +315,109 @@ public sealed partial class WorldScreenBinder {
         );
     }
     /// <summary>Drops a view export requested through <see cref="TryGetViewExport"/>, so the view's node renders into
-    /// images of its own again from its next film. A camera still filmed by a jumbotron screen keeps rendering (the release
-    /// only stops the export); one no screen films is released entirely, matching
-    /// <see cref="ReleaseOrphanedCameraView"/>'s own orphan contract.</summary>
+    /// images of its own again from its next film. A boot camera still filmed by a jumbotron screen keeps rendering (the
+    /// release only stops the export); one no screen films is released entirely, matching
+    /// <see cref="ReleaseOrphanedCameraView"/>'s own orphan contract. A camera of a world shown through a screen keeps
+    /// the view its level films while the level shows it, demanded only by the screens that show it.</summary>
     /// <param name="cameraName">The <c>cameras[]</c> row name.</param>
-    public void ReleaseViewExport(string cameraName) {
+    /// <param name="world">The name of the world instance whose camera it is: the boot world's by default.</param>
+    public void ReleaseViewExport(string cameraName, string world = WorldDefinitionLoader.BootInstanceName) {
+        var key = ProbeKey(id: cameraName, world: world);
+
         if (
             m_viewExportReferences.TryGetValue(
-            key: cameraName,
+            key: key,
             value: out var references
         ) &&
             (references > 1)
         ) {
-            m_viewExportReferences[cameraName] = (references - 1);
+            m_viewExportReferences[key] = (references - 1);
 
             return;
         }
 
-        _ = m_viewExportReferences.Remove(key: cameraName);
+        _ = m_viewExportReferences.Remove(key: key);
 
         if (!m_viewExports.Remove(
-            key: cameraName,
+            key: key,
             value: out var feed
         )) {
             return;
         }
 
         Detach(feed: feed);
-        ReleaseOrphanedCameraView(name: feed.Name);
+
+        if (WorldDefinitionLoader.IsBootInstance(name: world)) {
+            ReleaseOrphanedCameraView(name: feed.Name);
+        } else if (!m_disposed) {
+            ReconcileViews();
+        }
+    }
+    // The view a level presenting a world films one of its cameras through for its probes: the first such level's.
+    private bool TryPresentedProbeCamera(string world, string cameraName, out WorldNestedCamera camera) {
+        foreach (var level in m_nestedOwners.Keys) {
+            if (
+                string.Equals(
+                    a: level.World,
+                    b: world,
+                    comparisonType: StringComparison.Ordinal
+                ) &&
+                level.TryProbeCamera(
+                    camera: out camera,
+                    cameraName: cameraName
+                )
+            ) {
+                return true;
+            }
+        }
+
+        camera = default;
+
+        return false;
+    }
+    // Exports the view a level films a presented world's camera through for its probes: the view's node copies each
+    // frame into the export (SetNestedCameraViews sets it on the node), and the view is shown outside the world while it
+    // exports, so it renders at its refresh whether or not a screen shows it. An export of a level that no longer films
+    // the camera moves to the one that does.
+    [SupportedOSPlatform("windows10.0.10240")]
+    private ViewExportFeed GetOrAddPresentedViewExport(string key, WorldNestedCamera camera) {
+        if (m_viewExports.TryGetValue(
+            key: key,
+            value: out var existing
+        )) {
+            if (string.Equals(
+                a: existing.Name,
+                b: camera.Name,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return existing;
+            }
+
+            Detach(feed: existing);
+        }
+
+        var width = camera.Camera.RenderWidth;
+        var height = camera.Camera.RenderHeight;
+        var feed = new ViewExportFeed(
+            create: ExportFactory(
+                height: height,
+                width: width
+            ),
+            height: height,
+            name: camera.Name,
+            width: width
+        );
+
+        m_viewExports[key] = feed;
+        m_nestedViewExports[camera.Name] = feed;
+
+        if (Runtime?.NodeOf(instance: camera.Name) is { } node) {
+            node.Export = feed;
+        }
+
+        ReconcileViews();
+
+        return feed;
     }
 
     private bool HasViewExportReferences(string cameraName) => m_viewExportReferences.ContainsKey(key: cameraName);
@@ -250,9 +430,10 @@ public sealed partial class WorldScreenBinder {
         }
     }
     // Retires the export's publication, so no reader acquires the image again, and stops its registration exporting: the
-    // view's node stops copying into the exported image from its next frame, so nothing writes it again.
-    // It never waits: a reader still holding the image finishes with it on its own device, which keeps its own reference
-    // to the shared texture and fence.
+    // view's node stops copying into the exported image from its next frame (FilmViews for a boot camera, FilmLevel for
+    // a camera of another world, each of which sets the node's export), so nothing writes it again. It never touches a
+    // node, which a teardown may already have disposed, and never waits: a reader still holding the image finishes with
+    // it on its own device, which keeps its own reference to the shared texture and fence.
     private void Detach(ViewExportFeed feed) {
         feed.Slots.Retire();
 
@@ -261,6 +442,18 @@ public sealed partial class WorldScreenBinder {
             value: out var registration
         )) {
             registration.Export = null;
+        }
+        if (
+            m_nestedViewExports.TryGetValue(
+                key: feed.Name,
+                value: out var nested
+            ) &&
+            ReferenceEquals(
+                objA: nested,
+                objB: feed
+            )
+        ) {
+            _ = m_nestedViewExports.Remove(key: feed.Name);
         }
     }
     // Registers (idempotent) the camera's view for export — the same registration a screen would show
@@ -389,6 +582,7 @@ public sealed partial class WorldScreenBinder {
 
         m_viewExports.Clear();
         m_viewExportReferences.Clear();
+        m_nestedViewExports.Clear();
     }
 
     // Retires a shared ring, when there is one; disposed once no submitted frame samples it.
@@ -403,6 +597,9 @@ public sealed partial class WorldScreenBinder {
         public string? Fault { get; set; }
         // Why the probe's ring could not be provisioned, until a later provision succeeds.
         public string? Refusal { get; set; }
+        // Why its host's kernel run cannot start, or what it waits on, as the host last reported (ReportProbeRun).
+        public string? RunRefusal { get; set; }
+        public string? RunWaiting { get; set; }
         public string Id { get; } = id;
         public bool Live { get; set; }
         public ProbeKernelOutput? Output { get; set; }
