@@ -28,6 +28,9 @@ bool sdfViewsFiltersShadows(int viewMode) {
 // (SdfShadeReads.Edges, which the pass block carries as inkEdges). It reads only the pass block and the view's mode, so
 // every pass of one view agrees.
 bool sdfViewsSearchesEdges(int viewMode) {
+#if defined(SDF_VIEWS_OMIT_INK)
+    return false;
+#endif
     return ((passGroup.inkEdges != 0u) && worldFinalShadingMode(viewMode));
 }
 

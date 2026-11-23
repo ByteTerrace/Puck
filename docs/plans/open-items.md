@@ -2507,11 +2507,21 @@ migrated to standard programs.
 ### Ink
 
 Owner: rendering, one lane a step · ordinary · Next:
-[the plan](ink.md#build-order)'s step 1, one unit for a line's width (display
-pixels per view), then steps 2 and 3 in sequence, since they touch the same
-generated tables. Nothing of the plan is built. Its step 6 deletes the
-built-in toon and curvature lines once the standard package has moved off
-them, so no other lane renames that vocabulary meanwhile.
+[the plan](ink.md#build-order)'s step 1, the presented bursts that say whether
+a searched line and the hatching hold in motion, then step 2, which deletes
+the toon and curvature built-ins the standard package no longer reads; no
+other lane renames that vocabulary meanwhile. The ink phase, the edge search
+and the standard's ink are built ([what is built](ink.md#what-is-built)).
+
+- [medium] The search's cost against [the frame budget](frame-budget.md#the-budget)'s
+  ink share is a lane's attribution only; the lead's quiet window reads
+  `views-filter` and `views` on the benchmark route with ink on and with a
+  world whose programs read no edge.
+- [medium] A fold seen at a grazing angle can read as an occlusion
+  ([the neighbour pass](ink.md#the-neighbour-pass)): the two classes are told
+  apart by the nearer surface's tangent plane alone. A look that weighs
+  silhouettes and creases very differently shows a line that changes weight
+  along such a fold.
 
 - [low] The material cut now shares the contour's crease threshold. A chamfer
   whose faces meet between that threshold and the old one has not been looked

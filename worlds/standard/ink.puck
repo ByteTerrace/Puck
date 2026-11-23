@@ -18,10 +18,13 @@
 // holds still as the camera moves. The line multiplies what is under it by
 // `tint`, so a dark ink keeps the hue of its surface.
 //
-// A hatched ink adds strokes in the shade: where the key light does not reach (past the band at `hatchThreshold` over
-// `hatchSoftness`, or in a cast shadow) the surface takes parallel strokes `hatchPitch` metres apart, widening to
-// `hatchWidth` in the deepest shade, at `hatch` of the ink's strength. The strokes ride the surface too, and blend to
-// their even tone where they are finer than a pixel.
+// A hatched ink adds strokes in the shade: where a directional light does not reach (past the band at `hatchThreshold`
+// over `hatchSoftness`, or in a cast shadow) the surface takes parallel strokes `hatchPitch` metres apart, widening to
+// `hatchWidth` in the deepest shade, at `hatch` of the ink's strength. Only a light strong enough leaves a shade worth
+// hatching: `hatchLevel` is the weight (its illuminance over pi) at which a light's shade hatches whole, so a sun
+// hatches, a moon does not, and the strokes thin out as the sun goes down. The strokes ride the surface too, and blend
+// to their even tone where they are finer than a pixel. Two strong directional lights from opposite sides each shade
+// what the other lights, and both shades hatch.
 
 import "shading"
 
@@ -70,13 +73,15 @@ shade template ink(weight, thin, bold, tint, silhouette = 1, crease = 1, objects
     coverage: inkEdges(width, inkPresence(weight, thin), silhouette, crease, objects, materials, fold, far)
   }
 }
-shade template inkHatched(weight, thin, bold, tint, hatch, hatchPitch, hatchWidth, hatchThreshold, hatchSoftness, silhouette = 1, crease = 1, objects = 1, materials = 0, fold = 0.5, far = 0, wobble = 0, wobbleScale = 1, structural uneven = 0) {
+shade template inkHatched(weight, thin, bold, tint, hatch, hatchPitch, hatchWidth, hatchThreshold, hatchSoftness, hatchLevel, silhouette = 1, crease = 1, objects = 1, materials = 0, fold = 0.5, far = 0, wobble = 0, wobbleScale = 1, structural uneven = 0) {
   light {
     let cosine = max((light.cosine + surface.wrap) / (1 + surface.wrap), 0)
-    // The shade the key light leaves, as far as the light reaches the surface's surroundings: a closed room hatches
-    // nothing for a sun outside it.
+    // The shade a strong directional light leaves, as far as the light reaches the surface's surroundings: a closed
+    // room hatches nothing for a sun outside it.
+    let strength = saturate(light.weight * dot(light.color, [0.2126, 0.7152, 0.0722]) / hatchLevel)
     line: (light.kind == uint(0)) ? (1 - celBand(cosine, light.visibility, hatchThreshold, hatchSoftness, 0)) *
-      light.probeShare : 0
+      light.probeShare *
+      strength : 0
   }
   ink {
     let width = inkWidth(weight, thin, bold) * (uneven ? inkWobble(wobble, wobbleScale) : 1)
@@ -119,6 +124,7 @@ function hatched(base, pen) = base with {
       pen.hatchWidth,
       pen.hatchThreshold,
       pen.hatchSoftness,
+      pen.hatchLevel,
       silhouette: pen.silhouette,
       crease: pen.crease,
       objects: pen.objects,
@@ -153,6 +159,7 @@ let standardInk = {
   hatchWidth: 0.07
   hatchThreshold: 0.2
   hatchSoftness: 0.25
+  hatchLevel: 1500
 }
 // A heavier line for a harder look.
 let boldInk = standardInk with { weight: 0.05, bold: 3.2, tint [0.06, 0.07, 0.12], crease: 0.8 }

@@ -289,7 +289,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             // with no style takes the stylized curvature terms (cavity darkening, ridge light) at the strength the
             // surface's exposed illumination reaches against a white surface the meter aims for, so a lit room keeps
             // its edge highlights and a dim room's edges stay dim.
+#if !defined(SDF_VIEWS_OMIT_INK)
             color = sdfShadeInkPhase(shadeBinding, shadeStamp, color, linework, edges);
+#endif
             if (!sdfToonStyled(shadeMaterial) && curvatureShading) {
                 float lit = saturate(((incoming * localGain) * passGroup.exposure) / SDF_REFERENCE_WHITE);
 

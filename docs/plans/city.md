@@ -73,8 +73,8 @@ Each row cites the code it was read from; recheck it before building on it.
 | Lights | `point(...)` and `spot(...)` in `render.lighting.lights`, powered from state cells, riding bodies by `anchor: entity(...)`, made in arrays by `map` | `SdfLights.MaxLights = 128` per frame; point and spot lights shadow only through the irradiance probes; 500 lights needs [illumination](illumination.md)'s many-lights step |
 | A market | Escrow, refund and settle compose from ordinary effects (schema README, "A market"); `auction.puck` is the nearest content | None known |
 | Repeated buildings | `for`/`map` placements; a rigid creation bakes once and each copy costs a transform and a draw ([rendering decision](../decisions/rendering.md)) | One near copy sets every copy's baked detail ([virtual geometry](virtual-geometry.md)) |
-| Toon look | `standard/shading.puck` `cel`, `standard/styles.puck` `celMaterial`/`celStyle`, `standard/tones.puck` | The outline is the fixed detector in `shade/sdf-toon-outline.hlsli` |
-| Ink and hatching | `ink-checks.puck` draws a terminator and a broken contour from today's stamp | [Ink](ink.md) steps 1 to 9 are open; `SdfShadePhase { Surface, Light, Compose }` has no ink phase; no hatching exists |
+| Toon look | `standard/shading.puck` `cel`, `standard/styles.puck` `celMaterial`/`celStyle`, `standard/tones.puck` | None known |
+| Ink and hatching | A program's `ink` phase over the view's edge search; `standard/ink.puck` `inked`, `hatched` and `standardInk`, which `celMaterial` and `celHatched` lay over the band; the city's `cityStyle` carries its own ink | No line on glass or water, no seam of a smooth blend, and no part boundary inside one bake group ([ink](ink.md#build-order)) |
 | The benchmark | `benchmark-route.puck` chapters; `gardenSeam` already crosses a painting with a `cross` step, and `go` plans over the destination's navigation | Against a remote authority the route does not yet arrive in every chapter ([benchmark](benchmark.md)) |
 
 ## The city
