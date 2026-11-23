@@ -1,22 +1,24 @@
 # Debug world portals
 
-The debug world's portals are five paintings in the gallery hall's east wing
+The debug world's portals are six paintings in the gallery hall's east wing
 ([paintings.puck](paintings.puck), notes in [paintings.md](paintings.md)), each a
-framed canvas that is a door: walk or jump into it. Two lead to other lands, the
-garden ([garden.puck](garden.puck)), a small plot under a sunset sky with a green
-floor and a golden obelisk, and the night field ([night.puck](night.puck)), a
-snowfield under stars. The garden holds a frame of its own onto a third land,
-the hearth ([hearth.puck](hearth.puck)), a warm room round a glowing ember that
-no painting here shows: from this world it stands behind two windows, so it
-bakes only while the hidden windows on the way to it keep rendering. Two face each other across the room, and the fifth is the
-endless fall, a painting in the floor under its twin in the ceiling. A canvas
-shows where it leads as a window and ripples like an event horizon, and walking
-through it crosses there with no load. The garden holds two frames of its own
-that lead back, and the far one stands in view through the garden painting, so
-the wing shows a portal seen through a portal. West of its frames the garden
-grows a pond plot of hounds, spiders, dragonflies and fish
-([garden.md](garden.md)). A sixth painting, onto a bustling city of its own,
-is planned in [the city](../../docs/plans/city.md).
+framed canvas that is a door: walk or jump into it. Three lead to other lands:
+the garden ([garden.puck](garden.puck)), a small plot under a sunset sky with a
+green floor and a golden obelisk; the night field ([night.puck](night.puck)), a
+snowfield under stars; and, on the wing's south wall, the city
+([city.puck](city.puck)), a town on a river bend that grows into the stress test
+of how Puck scales with content ([the city](../../docs/plans/city.md)). The
+garden holds a frame of its own onto a further land, the hearth
+([hearth.puck](hearth.puck)), a warm room round a glowing ember that no painting
+here shows: from this world it stands behind two windows, so it bakes only while
+the hidden windows on the way to it keep rendering. Two paintings face each other
+across the room, and the last is the endless fall, a painting in the floor under
+its twin in the ceiling. A canvas shows where it leads as a window and ripples
+like an event horizon, and walking through it crosses there with no load. The
+garden holds two frames of its own that lead back, and the far one stands in view
+through the garden painting, so the wing shows a portal seen through a portal.
+West of its frames the garden grows a pond plot of hounds, spiders, dragonflies
+and fish ([garden.md](garden.md)).
 
 ## Open it
 
@@ -161,7 +163,7 @@ It uses the same platform pose and hidden-overlay commands.
 
 ## Painting wing
 
-[paintings.puck](paintings.puck) hangs the five paintings in the east end of the
+[paintings.puck](paintings.puck) hangs the six paintings in the east end of the
 gallery hall's level 0 (x 51 to 69.7, z 12.3 to 39.7), behind a doorway in a
 partition wall. [paintings.md](paintings.md) lists them, says how to get in, what
 to watch, how to get out of the endless fall and what the ripple does.
@@ -328,6 +330,8 @@ commands the Tour page adds.
 | Garden, `arrival` at (3, 0, -8), facing -Z | The frame you came out of, glass showing the debug world | Turn round and walk +Z into it: you arrive back out of the garden painting, walking -Z into the wing. |
 | Garden, `far` at (5.5, 0, -20), facing +Z | The frame ahead of you, glass showing the debug world | Walk -Z into it: the pair (`far`, `painting-garden`) faces each other, so you come out of the painting walking -Z. |
 | Night field, `arrival` at (0, 0, -6), facing -Z | The frame you came out of | Walk +Z into it: you come back out of the night painting. |
+| Debug world, `painting-city` at (60, 0.05, 12.6), facing +Z on the wing's south wall | The ornate painting, glass showing the city | Walk -Z into it: you arrive in the city at its `arrival` frame, walking -Z onto the avenue. |
+| City, `arrival` at (0, 0, -6), facing -Z | The teal frame you came out of | Turn round and walk +Z into it: you come back out of the city painting, walking +Z into the wing. |
 | Debug world, `painting-link-west` and `painting-link-east` at z = 34.5 | Two brass-framed paintings facing each other | Walk into either: you come out of the other, in place, walking on across the room. |
 | Debug world, `painting-fall-floor` and `painting-fall-ceiling` at (66, 22.6) | A painting in the floor and one in the ceiling | Step onto the floor glass: you fall forever ([paintings.md](paintings.md#the-endless-fall)). |
 | Garden, `obelisk` at (9, 0, -30) | The landmark | |
@@ -402,6 +406,7 @@ blocking in the driver at worst ([open item](../../docs/plans/rendering.md#gpu-s
   (`body.pose 3 - -12 180 0 0`, `body.fly -1 0 0 0 0 0 2`): you come back out of
   the garden painting walking -Z, into the wing.
 - Walk into the night painting (`debug.go portal-night`) for the night field,
+  the city painting (`debug.go portal-city`) for the city,
   across the room (`debug.go portal-link`) for the linked pair, and onto the
   floor painting (`debug.go portal-fall`) for the endless fall.
 - Run `world.row.set views nestingDepth 1`: the depth changes live, with no
@@ -411,7 +416,7 @@ blocking in the driver at worst ([open item](../../docs/plans/rendering.md#gpu-s
 - Edit [garden.puck](garden.puck), then `world.instance.stop 6~global6~garden`:
   the garden retires, and the next crossing resolves a fresh garden from the
   edited source. `world.reload` recompiles only the debug world. The same holds for
-  [night.puck](night.puck).
+  [night.puck](night.puck) and [city.puck](city.puck).
 
 `body.fly` moves along the seat's heading, which a headless boot keeps at -Z,
 so there `body.fly -1` walks +Z whichever way the body faces.

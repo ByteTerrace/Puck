@@ -13,6 +13,7 @@ documentId: "night"
 import "moth-controls"
 import "suit"
 import "size"
+import "painting-kit"
 import "place-kit"
 
 // The night field draws no HUD panels; controls.puck supplies its cursor.
@@ -161,53 +162,10 @@ prototypes {
     }
   }
 
-  // A black frame round a canvas whose bottom reaches the ground, so a body's feet cross the glass. Face 0, the rim,
-  // names the glass, which shows through the opening carved out of it.
+  // The way back: the shared arrival frame (painting-kit.puck) in black.
   prototype "frame" {
     document {
-      behavior {
-        faces [
-          {
-            name: "glass"
-            shapeId: 0
-          }
-        ]
-      }
-      name: "frame"
-      palette [
-        {
-          color: "#15171B"
-          roughness: 0.45
-          specular: 0.2
-        }
-      ]
-      schema: "puck.creation.v1"
-      shape Box "rim" {
-        material: 0
-        position [0, 1.3, 0]
-        scale [1.12, 1.42, 0.04]
-      }
-      shape Box "opening" {
-        blend: Subtraction
-        material: 0
-        position [0, 1.3, 0]
-        scale [1.1, 1.4, 0.3]
-      }
-      shape Box "frame-left" {
-        material: 0
-        position [-1.2, 1.38, 0]
-        scale [0.08, 1.48, 0.08]
-      }
-      shape Box "frame-right" {
-        material: 0
-        position [1.2, 1.38, 0]
-        scale [0.08, 1.48, 0.08]
-      }
-      shape Box "frame-top" {
-        material: 0
-        position [0, 2.78, 0]
-        scale [1.1, 0.08, 0.08]
-      }
+      arrivalFrame(color: "#15171B")
     }
   }
 
