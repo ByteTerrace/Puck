@@ -216,8 +216,14 @@ internal sealed partial class PlayerCommandModule {
             );
         }
 
-        // No mode: a read-back — echo the target's current source. Always surfaced (a query answer), like body.motion.
-        return new CommandResult(Output: $"[body.control: body:{index} is {SourceWord(source: player!.Source)}]");
+        // No mode: a read-back — echo the target's current source and why its producer stands down, if it does. Always
+        // surfaced (a query answer), like body.motion.
+        var standDown = Population.ProducerStandDown(index: index);
+        var reasons = ((standDown == BodyProducerStandDown.None)
+            ? string.Empty
+            : $", producer stands down: {(standDown.HasFlag(flag: BodyProducerStandDown.Held) ? "held" : string.Empty)}{((standDown == (BodyProducerStandDown.Held | BodyProducerStandDown.Possessed)) ? " and " : string.Empty)}{(standDown.HasFlag(flag: BodyProducerStandDown.Possessed) ? "possessed" : string.Empty)}");
+
+        return new CommandResult(Output: $"[body.control: body:{index} is {SourceWord(source: player!.Source)}{reasons}]");
     }
     // The other of the two quantization doors — see MoveRouter's remarks.
     // A held presentation flag on the dispatching seat: press/active edges set it, release/cancel edges clear it.

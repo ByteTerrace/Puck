@@ -2737,6 +2737,33 @@ refresh advances by the exact share of a second it covered. Human bodies, live s
 external input remain full-rate. `bodyContact: solid` requires full-rate motion;
 large crowds that batch motion use the default `overlap` contact mode.
 
+### A producer stands down: holds and possession
+
+A body's producer (whatever its target source: a curve, a navigated route, a
+designated register, a sensed target or a flock) stands down for a set of
+reasons, `BodyProducerStandDown`, and runs again once none holds:
+
+| Reason | Set by | Cleared by |
+|---|---|---|
+| `held` | a rule's `holdProducer(key: <body>)` | a rule's `releaseProducer(key: <body>)` |
+| `possessed` | a participant whose control set names the body (`body.engage body:<n>`) and who holds Drive over it (`world.grant seatN drive body:<n>`) | the route dissolving (`body.disengage`) or the Drive grant going |
+
+While its producer stands down the body stages the inert intent, as a body
+naming no producer does, and coasts to rest under its motion program unless a
+possessing participant drives it; its route, curve station and flock seed are
+cleared, and a possessed body moves at the full rate. When the producer runs
+again it starts from where the body stands, as selecting a producer does: a
+curve follower joins its curve at the station nearest the body, a navigated body
+routes again to its register's goal, a flock seeds again. A rule reads the
+reasons with `producer(<bodyRef>, held|possessed|down)` (`$producer:`): a
+schedule skips a possessed body with `producer(each, possessed) == 0`, and a
+crossing holds and releases a vehicle on any route (the standard's
+`vehicleCrossings`). Possession is settled at the end of each tick, after the
+rules, so a rule reads it from the tick after the route reaches the body; a hold
+is read from the firing that delivers it. Both reasons are part of the body's
+checkpointed producer state, so a replay reproduces them. `holdProducer` and
+`releaseProducer` are world-rule effects and refuse in a kit.
+
 ### Body scale
 
 `bodies.scale` names a `state.body` Counter register (declared with a `range`
@@ -3063,7 +3090,7 @@ the eye/pivot along the curve by arc-length fraction, `Puck.World.Client`'s
 evaluates—never a second solver) and a
 body-motion program's `curve` target source
 (`Puck.Physics.Motion.BodyTargetSource.CurveFollow`, `Puck.World.Server`'s
-per-tick arc advance)—the seed the kart-track charter inherits. A follower
+arc advance over the engine ticks each producer step covers)—the seed the kart-track charter inherits. A follower
 joins its curve at the station nearest where it stands when its producer is
 selected (`CompiledCurvatureSpline.NearestStationRaw`), so bodies placed along
 one curve keep their spacing.

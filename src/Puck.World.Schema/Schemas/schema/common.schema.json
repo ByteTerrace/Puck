@@ -9752,6 +9752,40 @@
       "additionalProperties": false,
       "title": "WorldEffectSetBodyState"
     },
+    "WorldEffectHoldProducer": {
+      "description": "Holds a world-addressed body\u0027s producer: it stands down, its body coasting to rest under its motion program, until a rule releases it with ReleaseProducer. A hold is one reason a producer stands down and possession another; the producer starts again, from where the body stands, once neither holds. A rule reads both through producer(each, held|possessed|down).",
+      "properties": {
+        "$type": {
+          "const": "holdProducer"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key."
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectHoldProducer"
+    },
+    "WorldEffectReleaseProducer": {
+      "description": "Releases a world-addressed body\u0027s producer from a HoldProducer hold; releasing a body that is not held does nothing.",
+      "properties": {
+        "$type": {
+          "const": "releaseProducer"
+        },
+        "key": {
+          "$ref": "#/$defs/StateChannelRefNonNullable",
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key."
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectReleaseProducer"
+    },
     "ActionEffect": {
       "description": "An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns \u2014 every one addresses a state row and nothing else; a document project appends its own derived arms (a participant\u0027s kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.",
       "type": [
@@ -9860,6 +9894,12 @@
         },
         {
           "$ref": "#/$defs/WorldEffectSetBodyState"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectHoldProducer"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectReleaseProducer"
         }
       ],
       "title": "ActionEffect"

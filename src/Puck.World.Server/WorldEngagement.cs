@@ -112,6 +112,8 @@ public sealed partial class WorldEngagement {
     // WorldServer.Step right after FoldTick returns (queued for the NEXT tick's intent drain through the ordinary
     // co-drive/StageContribution path; see the class remarks on replay visibility for why this is never taped here).
     private readonly List<BodyRouteContribution> m_bodyContributions = new();
+    // This tick's possessed bodies (FoldTick's write, WorldPopulation.SyncPossession's read), reused scratch.
+    private readonly List<int> m_possessed = [];
 
     // Zeroes every ordinal the mask does not reach — the application's reach, applied once before an intent reaches
     // ITS TARGET (never applied to the source body's own integration, which always sees the full unmasked intent).
@@ -597,6 +599,7 @@ public sealed partial class WorldEngagement {
         m_screenPads.Clear();
         m_bodyContributions.Clear();
         m_portalForwards.Clear();
+        m_possessed.Clear();
 
         for (var index = 0; (index < m_population.Capacity); index++) {
             if (m_population.EntryBody(index: index) is not { } body) {
@@ -718,6 +721,10 @@ public sealed partial class WorldEngagement {
                         m_screenPads[screen] = pad;
                     }
                 } else if (application.Target.Kind == GrantSubjectKind.Body) {
+                    // A route the participant may drive possesses its target: the target's producer stands down.
+                    if (m_grants.Allows(principal: principal, capability: WorldCapability.Drive, subject: application.Target).IsAllowed) {
+                        m_possessed.Add(item: application.Target.Value);
+                    }
                     m_bodyContributions.Add(item: new BodyRouteContribution(
                         SourceBody: index,
                         TargetBody: application.Target.Value,
@@ -730,6 +737,7 @@ public sealed partial class WorldEngagement {
                 }
             }
         }
+        m_population.SyncPossession(possessed: m_possessed);
     }
     // A timeline held for one tick, from the spares.
     private MachinePadTimeline RentTimeline(in MachinePadState start) {
