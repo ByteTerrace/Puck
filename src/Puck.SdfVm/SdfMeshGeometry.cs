@@ -58,13 +58,17 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     private const float OperandSlot = -3f;
     // The bytes before each fact's payload: its kind, then the payload's length in bytes.
     private const int FactHeaderBytes = (sizeof(byte) + sizeof(int));
-    // The most hashers sealed builders keep for later ones: every group of a plan takes two, and a program restart plans
-    // thousands.
-    private const int MaxSpareHashers = 8192;
+    // The bounds on the hashers sealed builders keep for later ones: every group of a plan takes two, a program restart
+    // plans thousands, and the pool keeps as many as the most builders that were alive at once, within these bounds.
+    private const int MinSpareHashers = 8192;
+    private const int MaxSpareHashers = (1 << 16);
 
     private static readonly System.Collections.Concurrent.ConcurrentQueue<XxHash128> SpareHashers = new();
 
     private static int SpareHasherCount;
+    // The hashers builders hold now, and the most they ever held at once.
+    private static int OutstandingHashers;
+    private static int MostOutstandingHashers;
 
     private XxHash128? m_hash = RentHasher();
     // Everything m_hash takes but the poses of the slots skin members ride.
@@ -186,6 +190,13 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     }
 
     private static XxHash128 RentHasher() {
+        // The most builders alive at once, as a plan holds every group's builder until it seals them all, sizes the spares
+        // the pool keeps, so the next plan rents its hashers rather than allocating them.
+        var outstanding = Interlocked.Increment(location: ref OutstandingHashers);
+
+        for (var most = Volatile.Read(location: ref MostOutstandingHashers); (outstanding > most); most = Volatile.Read(location: ref MostOutstandingHashers)) {
+            if (Interlocked.CompareExchange(location1: ref MostOutstandingHashers, value: outstanding, comparand: most) == most) { break; }
+        }
         if (SpareHashers.TryDequeue(result: out var hasher)) {
             _ = Interlocked.Decrement(location: ref SpareHasherCount);
 
@@ -195,7 +206,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         return new XxHash128();
     }
     private static void ReturnHasher(XxHash128 hasher) {
-        if (Interlocked.Increment(location: ref SpareHasherCount) > MaxSpareHashers) {
+        _ = Interlocked.Decrement(location: ref OutstandingHashers);
+        if (Interlocked.Increment(location: ref SpareHasherCount) > Math.Clamp(value: Volatile.Read(location: ref MostOutstandingHashers), min: MinSpareHashers, max: MaxSpareHashers)) {
             _ = Interlocked.Decrement(location: ref SpareHasherCount);
 
             return;

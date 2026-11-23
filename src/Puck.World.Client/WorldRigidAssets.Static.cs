@@ -85,14 +85,13 @@ public sealed partial class WorldRigidAssets {
             }
             var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: seed);
             if (stamp.Count == 0) { row.Stamp = stamp; row.Copies = []; continue; }
-            var key = creation.Id.Value;
-            if (!variants.TryGetValue(key, out var asset)) {
-                if (!m_staticVariants.TryGetValue(key, out asset) || !ReferenceEquals(asset.Creation, creation)) { asset = new StaticAsset(creation); }
-                asset.MaxScale = 0f;
-                variants.Add(key, asset);
-                m_staticAssets.Add(asset);
+            // A responding row holds a template for every creation it can show, in its authored order, so a sweep that
+            // moves its holding swaps the copies' template and leaves the template set, and the program, standing.
+            if (placement.Respond is { Count: > 0 } responses) {
+                AdmitVariant(definition: definition, placement: placement, prototypeId: placement.PrototypeId, variants: variants);
+                foreach (var response in responses) { AdmitVariant(definition: definition, placement: placement, prototypeId: response.PrototypeId, variants: variants); }
             }
-            asset.MaxScale = MathF.Max(asset.MaxScale, placement.Scale);
+            var asset = AdmitAsset(creation: creation, scale: placement.Scale, variants: variants);
             if (!ReferenceEquals(objA: row.Stamp, objB: stamp) || !ReferenceEquals(objA: row.Asset, objB: asset)) {
                 var copies = new StaticCopy[stamp.Count];
                 var visitor = new StaticCopyVisitor(copies, asset, placement, stamp, scope);
@@ -109,9 +108,82 @@ public sealed partial class WorldRigidAssets {
         m_staticRowsNext = met;
         m_staticVariants.Clear();
         foreach (var (key, asset) in variants) { m_staticVariants.Add(key, asset); }
+        if (!StaticTemplatesStand) { StaticTemplateRevision++; }
         WorldCreationWork.ProcessWork.Count(WorldCreationWork.StaticReconciles);
         WorldCreationWork.ProcessWork.Add(WorldCreationWork.StaticCopiesRebuilt, rebuilt);
     }
+    // The template a creation's copies share, admitted once a reconcile and scaled to the largest row showing it.
+    private StaticAsset AdmitAsset(WorldPrototype creation, float scale, Dictionary<string, StaticAsset> variants) {
+        var key = creation.Id.Value;
+
+        if (!variants.TryGetValue(key, out var asset)) {
+            if (!m_staticVariants.TryGetValue(key, out asset) || !ReferenceEquals(asset.Creation, creation)) { asset = new StaticAsset(creation); }
+            asset.MaxScale = 0f;
+            variants.Add(key, asset);
+            m_staticAssets.Add(asset);
+        }
+        asset.MaxScale = MathF.Max(asset.MaxScale, scale);
+        return asset;
+    }
+    // Admits the template of one creation a responding row can show, when that creation would be a rigid copy there.
+    private void AdmitVariant(WorldDefinition definition, WorldPlacement placement, string prototypeId, Dictionary<string, StaticAsset> variants) {
+        if ((WorldDefinitionRows.FindCreation(definition.Creations, prototypeId) is not { } creation) || !WorldPlacementStamper.IsStaticStamp(placement, creation) || (Refusal(creation: creation, placement: placement) is not null)) { return; }
+        _ = AdmitAsset(creation: creation, scale: placement.Scale, variants: variants);
+    }
+    /// <summary>Gets whether the static templates the latest reconcile admitted are the ones the latest emission wrote, at
+    /// the same scales, so the copies it placed can be placed again (<see cref="PlaceStaticCopies"/>) without composing
+    /// the program again.</summary>
+    public bool StaticTemplatesStand {
+        get {
+            if (m_staticAssets.Count != m_emittedStaticAssets.Count) { return false; }
+            for (var index = 0; (index < m_staticAssets.Count); index++) {
+                var (asset, scale) = m_emittedStaticAssets[index];
+
+                if (!ReferenceEquals(objA: m_staticAssets[index], objB: asset) || (m_staticAssets[index].MaxScale != scale)) { return false; }
+            }
+            return true;
+        }
+    }
+    /// <summary>Gets a counter that moves when a reconcile admits a static template set other than the one the latest
+    /// emission wrote: a program-rebuild watch component of the scene that composes this catalog.</summary>
+    public int StaticTemplateRevision { get; private set; }
+    /// <summary>Gets a counter that moves when a holding moved on a responding row this catalog cannot present by its copies
+    /// (<see cref="PresentHoldings"/>): a program-rebuild watch component of the scene that composes this catalog.</summary>
+    public int HoldingComposeRevision { get; private set; }
+    // Each responding row's holding as the latest PresentHoldings presented it.
+    private readonly Dictionary<string, int> m_presentedHoldings = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>Presents the responses the latest reconcile met. A responding row that is a rigid static copy keeps a
+    /// template for every creation it can show (<see cref="ReconcileStatic"/>), so while the templates stand its copies
+    /// alone move (<see cref="PlaceStaticCopies"/>). A holding that moved on any other row (an attached or animated row,
+    /// one left to the visual emission) moves <see cref="HoldingComposeRevision"/>, and a template set the latest emission
+    /// did not write moves <see cref="StaticTemplateRevision"/>; either composes the program again.
+    /// <para>The invariant: a delivery that moved holdings alone reaches the program only through these two counters,
+    /// since the readers that deliver it keep such a delivery out of their rebuild watch (<c>WorldClient.HoldingRevision</c>,
+    /// <c>WorldSessionMirror.ComposingRevision</c>). Call after every reconcile of the rows.</para></summary>
+    /// <param name="placements">The placement rows the latest reconcile read.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="placements"/> is <see langword="null"/>.</exception>
+    public void PresentHoldings(IReadOnlyList<WorldPlacement> placements) {
+        ArgumentNullException.ThrowIfNull(argument: placements);
+        var compose = false;
+
+        for (var index = 0; (index < placements.Count); index++) {
+            var placement = placements[index];
+
+            if (placement.Respond is not { Count: > 0 }) { continue; }
+            if (m_presentedHoldings.TryGetValue(key: placement.Id, value: out var held) && (held == placement.Holding)) { continue; }
+            m_presentedHoldings[placement.Id] = placement.Holding;
+            compose |= !ContainsPlacement(placement: placement);
+        }
+        if (compose) {
+            HoldingComposeRevision++;
+        } else if (StaticTemplatesStand) {
+            PlaceStaticCopies();
+        }
+    }
+    // The templates the latest emission wrote, with the scale each baked at.
+    private readonly List<(StaticAsset Asset, float Scale)> m_emittedStaticAssets = [];
+
     // Why a static row is left to the ordinary visual emission, or null when it is a rigid static copy.
     private static string? Refusal(WorldPrototype creation, WorldPlacement placement) {
         var document = creation.EngineDocument;
@@ -172,6 +244,20 @@ public sealed partial class WorldRigidAssets {
             picks.Instances(first, builder.InstanceCount, scratch.Target);
             WorldCreationWork.ProcessWork.Count(WorldCreationWork.StaticTemplates);
         }
+        m_emittedStaticAssets.Clear();
+        foreach (var asset in m_staticAssets) { m_emittedStaticAssets.Add(item: (asset, asset.MaxScale)); }
+        PlaceStaticCopies();
+    }
+    /// <summary>Writes every static copy's row from the templates the latest emission wrote: its pose, its scale against its
+    /// template's baked scale, and the template range it draws. An emission places them; a reconcile whose templates stand
+    /// (<see cref="StaticTemplatesStand"/>) places them again, so a response that swaps a row between creations it keeps a
+    /// template for moves its copies alone.</summary>
+    /// <exception cref="InvalidOperationException">The templates the latest reconcile admitted are not the ones the latest
+    /// emission wrote.</exception>
+    public void PlaceStaticCopies() {
+        if (!StaticTemplatesStand) { throw new InvalidOperationException(message: "Static copies are placed only over the templates the latest emission wrote."); }
+        var isolation = m_isolation;
+
         m_staticVolumes.Clear();
         StaticVisibleCopies = 0;
         for (var index = 0; index < m_staticCopies.Count; index++) {
@@ -190,5 +276,6 @@ public sealed partial class WorldRigidAssets {
         }
         m_volumesDirty = true;
         WorldCreationWork.ProcessWork.Add(WorldCreationWork.StaticCopies, m_staticCopies.Count);
+        m_copiesRevision++;
     }
 }

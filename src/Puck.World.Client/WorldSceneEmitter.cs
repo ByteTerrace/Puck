@@ -295,13 +295,17 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         Span<int> revision = stackalloc int[WorldClient.RevisionComponentCount];
 
         m_client.WriteRevision(destination: revision);
-        if (m_prepared && revision.SequenceEqual(other: m_preparedRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && (m_preparedCode == Puck.Abstractions.CodeRevision.Current) && !m_census.TryTakeMove()) { return; }
+        if (m_prepared && revision.SequenceEqual(other: m_preparedRevision) && (m_preparedHolding == m_client.HoldingRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && (m_preparedCode == Puck.Abstractions.CodeRevision.Current) && !m_census.TryTakeMove()) { return; }
         revision.CopyTo(destination: m_preparedRevision);
         m_prepared = true;
+        m_preparedHolding = m_client.HoldingRevision;
         m_preparedPresentation = m_continuum.PresentationRevision;
         m_preparedCode = Puck.Abstractions.CodeRevision.Current;
         ReconcileStamps();
+        m_animator.Rigid.PresentHoldings(placements: m_client.Definition.Placements);
     }
+    // The holding revision the latest reconcile read (WorldClient.HoldingRevision).
+    private int m_preparedHolding;
 
     private void ReconcileStamps() {
         var definition = m_client.Definition;
@@ -450,6 +454,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         }
 
         destination[(WorldClient.RevisionComponentCount + 5)] = m_carriedRevision;
+        destination[(WorldClient.RevisionComponentCount + 6)] = m_animator.Rigid.HoldingComposeRevision;
+        destination[(WorldClient.RevisionComponentCount + 7)] = m_animator.Rigid.StaticTemplateRevision;
     }
 
     private void RefreshCarryableScreens() {
@@ -577,7 +583,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// composed words are byte-identical to the unscoped build.</summary>
     public bool OwnsMaterialScope => true;
     /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 6);
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 8);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
     /// <summary>Gets a monotonic revision bumped whenever <see cref="StaticVolumes"/> is rebuilt.</summary>

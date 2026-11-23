@@ -284,7 +284,7 @@ internal static class WorldBenchmarks {
             var bytes = AllocationWindow.Total(window: () => server.Advance(stepTicks: stepTicks));
             var elapsed = (Stopwatch.GetTimestamp() - start);
 
-            if (WorldPlacementResponse.ComparePlacements(after: server.Definition, before: before, solid: out _) == WorldPlacementChange.None) { throw new InvalidOperationException(message: "a hall light change moved no responding row"); }
+            if (WorldPlacementResponse.ComparePlacements(after: server.Definition, before: before, holdings: out _, solid: out _) == WorldPlacementChange.None) { throw new InvalidOperationException(message: "a hall light change moved no responding row"); }
             for (var tick = 0; (tick < 4); tick++) {
                 Advance();
             }

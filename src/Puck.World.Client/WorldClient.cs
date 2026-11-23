@@ -184,6 +184,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private WorldChannelTable m_channels;
     private int m_definitionRevision;
     private int m_responseRevision;
+    private int m_holdingRevision;
     private int m_solidResponseRevision;
     private WorldDocumentVersion m_documentVersion;
 
@@ -227,6 +228,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// placement is among the rows the delivery moved, so a consumer of solid geometry alone (the static query field)
     /// holds across a lamp or a display swapping its creation.</summary>
     public int SolidResponseRevision => m_solidResponseRevision;
+    /// <summary>Gets the monotonic holding counter: bumped instead of the response revision (<see cref="WriteRevision"/>)
+    /// when a delivery moved only placement holdings, so the scene reconciles its rows and composes again only for a row
+    /// whose shown response it does not keep at hand.</summary>
+    public int HoldingRevision => m_holdingRevision;
     /// <summary>The version of the latest delivered definition, or <see langword="default"/> before the first delivery.</summary>
     public WorldDocumentVersion DocumentVersion => m_documentVersion;
     /// <summary>The client seat table.</summary>
@@ -1232,9 +1237,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         var previous = Definition;
         var adopted = m_stateView.Adopt(delivered: definition, valuesFollow: (stamp.ArenaValues && (version.Activation == m_documentVersion.Activation)));
 
-        switch (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, solid: out var solid)) {
+        switch (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, holdings: out var holdings, solid: out var solid)) {
             case WorldPlacementChange.Appearance:
-                m_responseRevision++;
+                // A sweep that moved only holdings leaves the composition to the scene, which presents a row whose every
+                // response it keeps at hand by its copies and composes again only for the rest (WorldSceneEmitter).
+                if (holdings) { m_holdingRevision++; } else { m_responseRevision++; }
                 if (solid) { m_solidResponseRevision++; }
 
                 break;

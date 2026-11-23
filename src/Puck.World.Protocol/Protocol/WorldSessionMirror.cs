@@ -52,6 +52,7 @@ public sealed class WorldSessionMirror : IClientSink {
 
     private WorldDeliveredDocument m_document;
     private int m_definitionRevision;
+    private int m_composingRevision;
 
     // The rows state deliveries moved since the presentation last followed them: written by the delivering thread,
     // taken by FollowState, both under m_stampGate. m_followGate serializes followers over the one state mirror.
@@ -407,6 +408,10 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>The monotonic definition-delivery counter — bumped each time the destination delivers a new
     /// definition, the rebuild-watch component <c>WorldSessionSceneEmitter</c> reads.</summary>
     public int DefinitionRevision => Volatile.Read(location: ref m_definitionRevision);
+    /// <summary>Gets the counter that moves with <see cref="DefinitionRevision"/> except for a delivery that moved only
+    /// placement holdings: the program-rebuild watch component of a scene that presents responses without composing
+    /// again (<c>WorldSessionSceneEmitter</c>).</summary>
+    public int ComposingRevision => Volatile.Read(location: ref m_composingRevision);
     /// <summary>The honest presentation fraction through the currently delivered snapshot interval. Remote and
     /// colocated mirrors derive it from the snapshot's own step width and arrival time, never from whichever world
     /// happens to be drawing them.</summary>
@@ -707,6 +712,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 if (!rows.TryApply(Document.Definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the mirror's creation roster."); }
                 _ = Publish(changed, version);
                 _ = Interlocked.Increment(ref m_definitionRevision);
+                _ = Interlocked.Increment(location: ref m_composingRevision);
             }
         }
         DocumentDelivered?.Invoke(Document);
@@ -735,6 +741,7 @@ public sealed class WorldSessionMirror : IClientSink {
                     value: CompileBodyContacts(definition: adopted)
                 );
                 _ = Interlocked.Increment(location: ref m_definitionRevision);
+                _ = Interlocked.Increment(location: ref m_composingRevision);
                 m_observedSnapshotInstall = true;
                 m_observedDefinitionEngineTick = EngineTick;
                 PublishObservedState(Tick, EngineTick);
@@ -993,9 +1000,10 @@ public sealed class WorldSessionMirror : IClientSink {
             );
 
             // A delivery that moved placement rows is a scene change to this mirror's readers, which watch the definition
-            // revision alone.
-            if (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, solid: out _) != WorldPlacementChange.None) {
+            // revision; one that moved holdings alone leaves the composing revision to the scene that presents them.
+            if (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, holdings: out var holdings, solid: out _) != WorldPlacementChange.None) {
                 _ = Interlocked.Increment(location: ref m_definitionRevision);
+                if (!holdings) { _ = Interlocked.Increment(location: ref m_composingRevision); }
             }
 
             lock (m_stampGate) {

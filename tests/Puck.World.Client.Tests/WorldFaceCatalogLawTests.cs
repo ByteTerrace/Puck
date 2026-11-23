@@ -822,18 +822,18 @@ public sealed class WorldFaceCatalogLawTests {
         Assert.Same(expected: catalog, actual: WorldFaceCatalog.For(definition: swapped));
         Assert.Same(expected: frames, actual: WorldPlacementFrameCompilation.Resolve(section: swapped.PlacementsRaw, worldSeed: 0UL));
         Assert.Same(expected: spatial, actual: WorldSpatialQueryCompilation.Resolve(section: swapped.PlacementsRaw, worldSeed: 0UL));
-        Assert.Equal(expected: WorldPlacementChange.Appearance, actual: WorldPlacementResponse.ComparePlacements(after: swapped, before: before, solid: out _));
-        Assert.Equal(expected: WorldPlacementChange.None, actual: WorldPlacementResponse.ComparePlacements(after: swapped, before: swapped, solid: out _));
-        Assert.Equal(expected: WorldPlacementChange.None, actual: WorldPlacementResponse.ComparePlacements(after: swapped, before: null, solid: out _));
+        Assert.Equal(expected: WorldPlacementChange.Appearance, actual: WorldPlacementResponse.ComparePlacements(after: swapped, before: before, holdings: out _, solid: out _));
+        Assert.Equal(expected: WorldPlacementChange.None, actual: WorldPlacementResponse.ComparePlacements(after: swapped, before: swapped, holdings: out _, solid: out _));
+        Assert.Equal(expected: WorldPlacementChange.None, actual: WorldPlacementResponse.ComparePlacements(after: swapped, before: null, holdings: out _, solid: out _));
         // A row a projection removes, adds or replaces in place (a dealt child, a contribution) moves the scene.
-        Assert.Equal(expected: WorldPlacementChange.Appearance, actual: WorldPlacementResponse.ComparePlacements(after: (before with { PlacementRowsRaw = [before.Placements[0]] }), before: before, solid: out _));
-        Assert.Equal(expected: WorldPlacementChange.Appearance, actual: WorldPlacementResponse.ComparePlacements(after: before, before: (before with { PlacementRowsRaw = [before.Placements[0]] }), solid: out _));
-        Assert.Equal(expected: WorldPlacementChange.Appearance, actual: WorldPlacementResponse.ComparePlacements(after: (before with { PlacementRowsRaw = [before.Placements[0], (crate with { Scale = 2f })] }), before: before, solid: out _));
+        Assert.Equal(expected: WorldPlacementChange.Appearance, actual: WorldPlacementResponse.ComparePlacements(after: (before with { PlacementRowsRaw = [before.Placements[0]] }), before: before, holdings: out _, solid: out _));
+        Assert.Equal(expected: WorldPlacementChange.Appearance, actual: WorldPlacementResponse.ComparePlacements(after: before, before: (before with { PlacementRowsRaw = [before.Placements[0]] }), holdings: out _, solid: out _));
+        Assert.Equal(expected: WorldPlacementChange.Appearance, actual: WorldPlacementResponse.ComparePlacements(after: (before with { PlacementRowsRaw = [before.Placements[0], (crate with { Scale = 2f })] }), before: before, holdings: out _, solid: out _));
 
         var faced = before.WithPlacementHoldings(holdings: [(0, 1)]);
 
         Assert.NotSame(expected: catalog, actual: WorldFaceCatalog.For(definition: faced));
-        Assert.Equal(expected: WorldPlacementChange.Facets, actual: WorldPlacementResponse.ComparePlacements(after: faced, before: before, solid: out _));
+        Assert.Equal(expected: WorldPlacementChange.Facets, actual: WorldPlacementResponse.ComparePlacements(after: faced, before: before, holdings: out _, solid: out _));
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => before.WithPlacementHoldings(holdings: [(2, 1)]));
     }
     // THE LAW: a session mirror, whose readers watch its definition revision alone, moves it for a value delivery that
