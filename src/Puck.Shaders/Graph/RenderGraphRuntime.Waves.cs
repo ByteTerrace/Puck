@@ -476,7 +476,7 @@ public sealed partial class RenderGraphRuntime {
     // One wave's fork: the jobs in groups, each group a partition that records its jobs in schedule order. Grouping and
     // ordering reuse the same arrays every wave, so a steady frame allocates nothing here.
     private sealed class WaveRecording : IJobPartitions {
-        private List<WaveJob> m_jobs = [];
+        private List<WaveJob>? m_jobs;
         // The jobs by partition: partition p records m_order[m_starts[p]] to m_order[m_starts[p + 1] - 1].
         private int[] m_order = [];
         private int[] m_starts = [];
@@ -538,7 +538,7 @@ public sealed partial class RenderGraphRuntime {
             var offThread = (Environment.CurrentManagedThreadId != ForkingThread);
 
             for (var at = m_starts[partition]; (at < m_starts[(partition + 1)]); at++) {
-                var node = m_jobs[m_order[at]].Node;
+                var node = m_jobs![m_order[at]].Node;
 
                 node.RecordPendingFrame();
                 if (offThread) {
@@ -547,7 +547,7 @@ public sealed partial class RenderGraphRuntime {
             }
         }
         // Lets go of the wave's jobs once its fork has joined.
-        public void Release() => m_jobs = [];
+        public void Release() => m_jobs = null;
     }
     // One wave's emission fork: every lane its recordings left, heaviest first, a partition each.
     private sealed class WaveEmission : IJobPartitions {

@@ -116,6 +116,8 @@ internal sealed class SdfWorldShadows : IDisposable {
     private ulong m_uploads;
     // Each view's anchor, -1 for none, and the cascade set it reads; the cascade set of a view with no anchor is empty.
     private int[] m_viewAnchors = [];
+    // Assign's scratch: each view's anchor before the upload's assignment.
+    private int[] m_previousAnchors = [];
     private SdfMeshShadowCascades[] m_viewReaders = [];
     private long m_contentRevision;
     private long m_bindingRevision;
@@ -365,7 +367,7 @@ internal sealed class SdfWorldShadows : IDisposable {
     // anchor whose eye lies nearest.
     private void Assign(SdfFrame frame) {
         var views = frame.Views.Count;
-        var previous = new int[views];
+        var previous = ArrayCapacity.EnsureScratch(array: ref m_previousAnchors, required: views);
 
         Array.Copy(sourceArray: m_viewAnchors, destinationArray: previous, length: views);
         foreach (var anchor in m_anchors) { anchor.View = -1; }
@@ -375,7 +377,12 @@ internal sealed class SdfWorldShadows : IDisposable {
 
             var eye = frame.Views[view].Camera.Position;
             var cell = SdfMeshShadowCascades.CellOf(eye: eye, reach: SdfMeshShadowCascades.ReachOf(frame: frame, index: SdfMeshShadowCascades.NearEntry));
-            var chosen = m_anchors.FindIndex(match: anchor => ((anchor.View >= 0) && (anchor.Cell == cell)));
+            var chosen = -1;
+
+            // A loop rather than FindIndex: a predicate over this view's cell would allocate a closure each view and frame.
+            for (var at = 0; ((at < m_anchors.Count) && (chosen < 0)); at++) {
+                if ((m_anchors[at].View >= 0) && (m_anchors[at].Cell == cell)) { chosen = at; }
+            }
 
             if ((chosen < 0) && (previous[view] is var held and >= 0) && (held < m_anchors.Count) && (m_anchors[held].View < 0)) {
                 chosen = held;
@@ -449,7 +456,11 @@ internal sealed class SdfWorldShadows : IDisposable {
     // Lends a spare pair of layers at an entry's texels for a redraw, making one where the spares hold none and the account
     // has room; a spare of another size gives way to it. Null where the spares are all lent.
     private Pair? Lend(int texels) {
-        var at = m_spares.FindIndex(match: pair => (pair.Texels == texels));
+        var at = -1;
+
+        for (var spare = 0; ((spare < m_spares.Count) && (at < 0)); spare++) {
+            if (m_spares[spare].Texels == texels) { at = spare; }
+        }
 
         if (at >= 0) {
             var pair = m_spares[at];
@@ -509,7 +520,7 @@ internal sealed class SdfWorldShadows : IDisposable {
         }
         Decide(frame: frame);
 
-        var timed = ((m_timestamps is not null) && Entries().Any(predicate: static entry => entry.Draws));
+        var timed = ((m_timestamps is not null) && AnyDraws());
 
         if (timed) {
             m_timestamps!.Reset(command: commandBuffer, count: 2, first: (uint)(2 * slot));
@@ -527,12 +538,40 @@ internal sealed class SdfWorldShadows : IDisposable {
         }
         m_timed[slot] = timed;
     }
-    // Every entry the world holds: the distant entry, then each anchor's.
-    private IEnumerable<Entry> Entries() {
-        yield return m_distant;
-        foreach (var anchor in m_anchors) {
-            foreach (var entry in anchor.Entries) { yield return entry; }
+    // Every entry the world holds: the distant entry, then each anchor's. The walk is a struct, so the per-frame loops over
+    // it allocate nothing.
+    private EntryWalk Entries() => new(anchors: m_anchors, distant: m_distant);
+    private struct EntryWalk(List<Anchor> anchors, Entry distant) {
+        // The anchor being walked, -1 before the distant entry; the next entry of that anchor.
+        private int m_anchor = -1;
+        private int m_entry;
+
+        public Entry Current { get; private set; } = null!;
+
+        public readonly EntryWalk GetEnumerator() => this;
+        public bool MoveNext() {
+            if (m_anchor < 0) {
+                m_anchor = 0;
+                Current = distant;
+                return true;
+            }
+            for (; (m_anchor < anchors.Count); m_anchor++, m_entry = 0) {
+                var entries = anchors[m_anchor].Entries;
+
+                if (m_entry < entries.Length) {
+                    Current = entries[m_entry++];
+                    return true;
+                }
+            }
+            return false;
         }
+    }
+    // Whether any entry draws in the decided upload.
+    private bool AnyDraws() {
+        foreach (var entry in Entries()) {
+            if (entry.Draws) { return true; }
+        }
+        return false;
     }
     // The GPU time the upload's shadow work took, measured where the device can: a timestamp pair a ring slot, read back
     // once the slot's upload is known complete; the total, the count and the most of those measured.
