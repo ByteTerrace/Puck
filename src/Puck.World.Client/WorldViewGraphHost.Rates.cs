@@ -87,8 +87,9 @@ public sealed partial class WorldViewGraphHost {
     private RenderGraphInstanceSet? m_portalIndexSet;
     private int m_portalIndexVersion = -1;
     private (string Name, int Index)[] m_portalIndices = [];
-    // The consecutive schedules that left each session view unread, beside m_portalIndices: a view the display reaches
-    // again, or one the set is composed again around, starts from zero.
+    // The consecutive schedules that rendered each session view nothing, beside m_portalIndices: unread, or waiting
+    // because the consumer that shows its glass asked no footprint of it. A render, or the set composed again, starts it
+    // from zero, so a view rated to a few renders a second never counts far.
     private int[] m_portalParked = [];
 
     private sealed class RatedProducer {
@@ -289,14 +290,12 @@ public sealed partial class WorldViewGraphHost {
             }
             for (var position = 0; (position < m_portalIndices.Length); position++) {
                 var (portal, rendered) = m_portalIndices[position];
-                var scheduled = ((rendered >= 0) && (rendered < latest.Instances.Count));
+                var renders = ((rendered >= 0) && (rendered < latest.Instances.Count) && (latest.Instances[rendered].Status == RenderGraphInstanceStatus.Rendered));
 
-                if (scheduled && (latest.Instances[rendered].Status == RenderGraphInstanceStatus.Rendered)) {
+                if (renders) {
                     _ = m_portalsRendered.Add(item: portal);
                 }
-                m_portalParked[position] = ((scheduled && (latest.Instances[rendered].Status == RenderGraphInstanceStatus.Unread))
-                    ? (m_portalParked[position] + 1)
-                    : 0);
+                m_portalParked[position] = (renders ? 0 : (m_portalParked[position] + 1));
             }
 
             foreach (var (name, rated) in m_ratedProducers) {

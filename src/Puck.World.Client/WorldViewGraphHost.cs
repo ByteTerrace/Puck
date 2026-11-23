@@ -1631,8 +1631,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // extent it was last seen at (ReserveShrinks).
     private bool RendersAtLeastShare(string view) => (m_arrivalKept.Contains(item: view) || m_shrinkKept.Contains(item: view));
 
-    /// <summary>The consecutive frames a session view stays unread before the host shrinks the storage it holds to its
-    /// least share.</summary>
+    /// <summary>The consecutive frames a session view renders nothing before the host shrinks the storage it holds to
+    /// its least share.</summary>
     public const int ParkedShrinkFrames = 120;
     /// <summary>The pixels a session view's image holds at or above which shrinking its storage is worth the rebuild.</summary>
     public const long ParkedShrinkPixels = (512L * 512L);
@@ -1649,14 +1649,15 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private const int ShrinkAbandoned = -1;
 
     // Chooses the session views that render at their least share this frame so their storage follows what is shown. A
-    // view's per-pixel storage is allocated at the extent its glass was last seen at, and a view no schedule reaches
+    // view's per-pixel storage is allocated at the extent its glass was last seen at, and a view no footprint asks for
     // renders nothing, so it would keep that extent for good: a window the player walked up to, or through, holds a
-    // display's worth of storage from then on. A view unread for ParkedShrinkFrames whose installed image holds
-    // ParkedShrinkPixels or more renders at its least share (WorldPortalVisibility.ArrivalShare) until its node installs
-    // that extent, which retires the larger graph as any resize does and leaves a small image for the light its face
-    // emits and for the frame it is next seen in. The node's installed extent decides, never the schedule's, which names
-    // the extent last asked for. A view on the way to a shrinking one renders with it, since a nested view renders only
-    // when its consumer does.
+    // display's worth of storage from then on. A view no schedule rendered for ParkedShrinkFrames whose installed image
+    // holds ParkedShrinkPixels or more renders at its least share (WorldPortalVisibility.ArrivalShare) until its node
+    // installs that extent, which retires the larger graph as any resize does and leaves a small image for the light
+    // its face emits and for the frame it is next seen in. The node's installed extent decides, never the schedule's,
+    // which names the extent last asked for. A view on the way to a shrinking one renders with it, since a nested view
+    // renders only when its consumer does. Only the sights that ask no footprint read the choice (RendersAtLeastShare),
+    // so a window in sight that stands on an unchanged scene keeps its extent however long it renders nothing.
     private void ReserveShrinks() {
         m_shrinkKept.Clear();
         if (

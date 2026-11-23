@@ -400,11 +400,7 @@ laws exercise that boundary.
   its own image's pixels, `SdfViewSnapshot.DemandHeight`; a window fitted to
   its glass measures in the display pixels the glass spans from the viewer's
   eye, `WorldWindowFrustumFit.ShownHeight`, and demands nothing of a box
-  outside its frustum, `SdfViewSnapshot.DemandWithinView`; a session view no
-  fit measures, and any the display shows smaller than its fit says, measures
-  in the display pixels it is presented over, at least the least share of its
-  own image, `WorldRenderSettings.NestedDemandHeight`, so a world no window
-  shows holds coarse tiers only). A group whose
+  outside its frustum, `SdfViewSnapshot.DemandWithinView`). A group whose
   planned box (`Group.TakeDemandBox`, kept before `Begin` cubes it) projects
   past a pixel ranks by the pixels a metre covers at the box, nearest first
   whatever its size; one under a pixel ranks after. Ranking by projected size

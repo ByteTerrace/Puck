@@ -1720,16 +1720,15 @@ counts in `sdf.transforms`, never in `records.posed`.
   background work binds. In `world.residency`, a residency
   whose `uploads` stand still while `unbound` in its `gpu-work` counts every pump and `owed` stays above zero is one
   nobody renders. `gpu.faults lose` makes every residency land again, a quick check of that path.
-- **A view's storage and its world's detail follow what is shown.** A session view no schedule reaches for
-  `WorldViewGraphHost.ParkedShrinkFrames` renders at its least share until its node installs that extent
-  (`ReserveShrinks`, which reads the node's installed `Extent`, never the schedule's, and keeps every window on the
-  way to a nested one rendering with it), so a window walked through gives back the per-pixel storage of the extent it
-  was last seen at; the small image stays for the face's emission. A session view measures mesh demand in the display
-  pixels it is presented over (`WorldRenderSettings.NestedDemandHeight`), so a residency no window shows keeps coarse
-  tiers. In `host.memory families 0` the `session` and `routed` families fall a few seconds after their windows leave
-  sight, and `world.residency`'s `region-named` of a world seen through nothing is a fraction of the same world's
-  while a seat stands in it. A new view kind that renders into an image of its own takes both rules, or it holds a
-  display's storage and a world's meshes for a glass nobody sees.
+- **A view's storage follows what is shown.** A session view no schedule renders for
+  `WorldViewGraphHost.ParkedShrinkFrames`, while its glass asks no footprint (out of sight, held or occluded), renders
+  at its least share until its node installs that extent (`ReserveShrinks`, which reads the node's installed `Extent`,
+  never the schedule's, and keeps every window on the way to a nested one rendering with it), so a window walked
+  through gives back the per-pixel storage of the extent it was last seen at; the small image stays for the face's
+  emission. A view the display reaches through a consumer that asks nothing of it reads `waiting`, not `unread`, so
+  the count is of schedules that did not render it. In `host.memory families 0` the `session` family falls a few
+  seconds after its windows leave sight. A new view kind that renders into an image of its own takes the same rule, or
+  it holds a display's storage for a glass nobody sees.
 - **A pass that reads far above its kernel's cost names memory first.** When the process's device ledger
   (`host.memory`'s `pool device` `peak`, plus `usage-beyond-ledger`) passes what the system budgets it (`segment local`
   `budget`), passes that touch moved memory wait for it, and `world.gpu-timing` charges the wait to whichever pass
