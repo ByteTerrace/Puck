@@ -116,7 +116,7 @@ what a federated world is for.
 | The portal | The painting wing's `paintingFace` and the shared `arrivalFrame`; references, destinations and sessions | None |
 | The moon in the sky | `WorldRenderSkyLayer.View` and the infinity-view machinery (`InfinityViewSpec`, `InfinityViewFit`) | A view that moves with the viewer, bounds itself by a sphere and draws geometry alone |
 | The ship | A kit and a `fly` program in `worlds/standard/ship.puck`: three holds (`WorldHold`) over the walk program's operations | None |
-| Boarding | `ControlApplication` and `WorldEngagement.Compose` (possession), `WorldPerceptionAnchor` | The kit's `mount` facet (`WorldMount`): the pilot's own body rides the body it drives |
+| Boarding | `ControlApplication` and `WorldEngagement.Compose` (possession), `WorldPerceptionAnchor`, the context button's engage probe | The kit's `mount` facet (`WorldMount`): the pilot's own body rides the body it drives, and `mount.board` (`WorldMountBoard`) boards it on a press from beside it |
 | The seam | `WorldAdjacency` rows, `WorldAdjacencyOwnership.Sweep`, the transfer escrow | A rider crosses behind the body it rides, and the destination hands it that body to drive again |
 | A ship that stays a ship | `kits.assignment.select` and `looks.assignment.select` by a body register, as the Moth's suit crosses | None |
 
@@ -143,14 +143,24 @@ Built by this feature:
 - A collider read from a creation in an adjacency's reach proof (`WorldAdjacencyPolicy.TryBodyReach`).
 - A hold's probe from the middle of the collider along the body's own up, so a hold takes ground all round a
   sphere (`WorldBody`'s hold probe origin).
+- Boarding on a seat's own press (`WorldMountBoard`, through the engage probe every screen and tabletop uses).
+- A landing across a seam that puts a body where it left: its carried registers select its kit before its segment
+  is swept, the sweep meets no neighbour body (`WorldPopulation.LandingArrival`), every arrival pins the tick's
+  adjacency input again (`WorldServer.PrepareAdjacencyContacts`), and a rider takes its seat as it lands
+  (`WorldPopulation.SeatRider`).
+- An adjacency that resolves its neighbours at a host boundary (`WorldAdjacencyFields.ResolveNeighbours`), so two
+  adjacent worlds step in one wave.
 
 Left open, in the order they matter to the trip:
 
 1. **The moon in the sky is unlit.** The view draws the moon where the frame
-   puts it, with the valley's sky round it, but only the moon's faint sky light
-   reaches it: the sun that lights the same ground through the painting's
-   window does not light it in the sky view's instance. The cause is not found.
-   The check is a capture from the launch field in which the moon's sunlit side
+   puts it, with the valley's sky round it, as a black disc: the sun that
+   lights the same ground for a body standing on it does not light it in the
+   sky view's instance. Publishing the view's image unexposed
+   (`SdfFrameBlock`'s expose share for a geometry-only view) did not change
+   it, so the image itself holds no light. Untried: the layer's
+   `shadows: false`, and the lights the sky view's instance is handed. The
+   check is a capture from the launch field in which the moon's sunlit side
    is as bright as the valley's sunlit walls.
 2. **The valley is not in the moon's sky.** A view of the debug world from the
    moon draws that whole world again, every exhibit included, as one more
@@ -162,14 +172,24 @@ Left open, in the order they matter to the trip:
    own, the device's memory account refused a mesh region's growth and the
    frame threw (`SdfWorldTables.EnsureMeshRegionCapacity`). A refusal has to
    shed detail, not end the run.
-4. **No key boards the ship.** Boarding and leaving are `body.engage` and
-   `body.disengage`. A seat's own press beside a body it may drive, and the
-   pilot's camera and bindings, are the possession work the city's driver
-   needs too ([the city plan](city.md)).
+4. **The pilot has no camera of her own.** The context button boards and
+   leaves the ship, but the camera is the Moth's chase rig on the ship: a
+   4.2 m boom on a 3 m hull, which fills the frame. A rig the seat takes while
+   it drives a body (a longer boom, the hull's pivot) is the possession work
+   the city's driver needs too ([the city plan](city.md)).
 5. **The air has no altitude.** The valley's sky is the same blue at the seam
    as on the floor, and the moon's sky is black, so the sky changes in one frame
    at the crossing. Phase 5's shell atmosphere is the fix: the air's layers and
-   the fog thin with the viewer's height, and exposure follows.
+   the fog thin with the viewer's height, and exposure follows. The authored
+   surface is a third kind of `timeline.clocks` row beside the tick clock and
+   the state clock: a view clock, whose phase is how far the viewer stands
+   from a point, along an axis for a flat world or in any direction for a
+   round one, over an authored span. Every keyed look already reads a clock
+   through `WorldKeyResolver` and the state mirror, so a sky layer's opacity,
+   a star field's luminance, the fog and the exposure key on altitude as they
+   key on the day, and a last key eased `Step` holds past the span. One
+   environment resolves a frame (`WorldEnvironmentResolve`), so the clock
+   reads the frame's first view; seats sharing a split screen share it.
 6. **A crossing turns a body about up only.** `WorldFrameIsometry` and the
    adjacency validator admit a yaw, so the two worlds' axes agree and the side of
    the moon that faces the valley has its up pointing down in the shared frame.
@@ -183,6 +203,27 @@ Left open, in the order they matter to the trip:
    waits for the companion plan's roles.
 9. **The moon's cell.** The sectors bake at the terrain pass's cell, so the
    ground shows facets underfoot, as the valley's walls do.
+10. **The pilot's view past the seam.** Across the seam the window shows a
+    grey gradient and the pilot and ship as bare part primitives, where a
+    walker out of the painting sees the moon's ground and sky (and the same
+    primitives over the Moth). The crossing also bakes the whole debug world a
+    second time, as the moon's neighbour across the seam, and skips eight
+    presentations. The neighbour a seam shows has to be the far product of
+    gap 2, not the world again.
+11. **A re-drive reads the neighbour as it stands.** The tape carries when a
+    neighbour delivered, never what it showed (`WorldEventFeed`'s remarks), so
+    a re-drive of a tick in which a body met a neighbour's bodies or ground
+    across a seam reads them as they are when it runs. The ship's own
+    crossing no longer depends on them; two bodies meeting across a seam
+    still do. The tape needs the contact band's content: the neighbour's
+    bodies within reach of the seam, and its definition's identity.
+12. **A re-drive of the tick a seat boards on diverges** in the boot world's
+    input: the routed input from the pilot to the ship records the
+    population's revision, 2 live and 3 replayed
+    (`WorldTick.AppendRoutedInputHash`). Until it reproduces, the trip has no
+    committed scenario.
+13. **A scripted flight ends at a crossing.** `body.fly` holds its input for
+    the body's source world only, so a scripted trip is one line per leg.
 
 ## The owner's rulings
 

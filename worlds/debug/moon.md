@@ -30,9 +30,11 @@ centre everywhere.
 
 `debug.go launch` stands a body beside the launch field's pad
 ([launch.puck](launch.puck)), where the standard's ship
-([ship.puck](../standard/ship.puck)) stands. `body.engage body:<n> capture:on`
-boards it, with the ship's body number from `world.population` (the highest
-slot), and `body.disengage` steps out beside it. While a seat drives the ship
+([ship.puck](../standard/ship.puck)) stands. The context button boards it
+from within five metres and steps out beside it again;
+`body.engage body:<n> capture:on` and `body.disengage` are the console's
+forms, with the ship's body number from `world.population` (the highest
+slot). While a seat drives the ship
 its own body rides in the cockpit (`body.where` reads `anchor=body:<n>`), and
 the ship flies as she walks: the movement channels fly it where the camera
 looks, the rise channel climbs and sinks, and the run channel is the boost.
@@ -59,6 +61,7 @@ its rise along the ship's own up, which is away from the moon inside its reach.
 ## What it does not do yet
 
 The plan's [engine gaps](../../docs/plans/valley-and-moons.md#engine-gaps-on-the-path)
-lists them: the sky changes in one frame at the seam, the arrival frame stands
-on the side away from the valley, the valley is not drawn in the moon's sky,
-and no key or button boards the ship.
+lists them: the moon in the valley's sky is unlit, the sky changes in one frame
+at the seam and the pilot's view past it is not the moon's yet, the arrival
+frame stands on the side away from the valley, and the valley is not drawn in
+the moon's sky.
