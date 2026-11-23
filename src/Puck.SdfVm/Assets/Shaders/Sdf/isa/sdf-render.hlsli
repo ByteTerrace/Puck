@@ -121,9 +121,10 @@
 #define SDF_SHADE_TILE_LIGHT_WORDS    5u
 #define SDF_VIEWS_FILTER_WORDS        3u
 #define SDF_EDGE_REACH                4u
-#define SDF_VIEWS_PROBE_RATE          2u
-#define SDF_VIEWS_PROBE_WORDS         43u
+#define SDF_VIEWS_PROBE_RATE          4u
+#define SDF_VIEWS_PROBE_WORDS         73u
 #define SDF_VIEWS_PROBE_RECORD_WORDS  29u
+#define SDF_VIEWS_PROBE_POOL_WORDS    28u
 #define SDF_VIEWS_PROBE_SLOT_WORDS    28u
 #define SDF_VIEWS_PROBE_HISTORY_WORDS 17u
 #define SDF_SHADOW_BITS               8u

@@ -64,7 +64,8 @@ uint sdfRateCell(ViewportData view, uint viewIndex, uint2 origin, uint2 tile, ui
 }
 
 uint sdfRateTile(ViewportData view, uint viewIndex, uint2 cell, uint2 origin) {
-    uint tileSize = passGroup.viewsRate.y;
+    // A tile holds whole probe cells: one narrower than a cell is judged as the cell.
+    uint tileSize = max(passGroup.viewsRate.y, SDF_VIEWS_PROBE_RATE);
     uint2 tile = origin & ~(tileSize - 1u);
     uint rate = 0u;
     // Uniform across this dispatch, including the lanes beyond a partial workgroup.
