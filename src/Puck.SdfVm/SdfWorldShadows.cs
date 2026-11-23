@@ -433,17 +433,13 @@ internal sealed class SdfWorldShadows : IDisposable {
         m_bytes += bytes;
         _ = m_reservation.TryReserve(floor: m_bytes, peak: m_bytes);
     }
-    // Gives back what no view reads: the layers of every anchor no view reads and the spare pairs not lent.
+    // Gives back what no view reads: the layers of every anchor no view reads.
+    // The spare pairs stay: at most MaxSparePairs, and the next redraw would make them again.
     private void Trim() {
         m_trims++;
         foreach (var anchor in m_anchors) {
             if (anchor.View < 0) { anchor.Release(); }
         }
-        foreach (var spare in m_spares) {
-            RetirePair(pair: spare);
-            m_sparePairs--;
-        }
-        m_spares.Clear();
     }
     private void RequestTrim() => Volatile.Write(location: ref m_trimRequested, value: 1);
     // Lends a spare pair of layers at an entry's texels for a redraw, making one where the spares hold none and the account
@@ -542,6 +538,9 @@ internal sealed class SdfWorldShadows : IDisposable {
     private double m_gpuSum;
     private double m_gpuMost;
     private long m_gpuSamples;
+    // The last RecentSamples measured uploads, so the report tells a world's steady cost from its arrival.
+    private const int RecentSamples = 600;
+    private readonly double[] m_gpuRecent = new double[RecentSamples];
     /// <summary>Commits the decided work once the upload that records it is submitted: the cameras and revisions each
     /// entry drew, the rectangles it drew, the layers a completed redraw replaced, and the next share of a redraw in
     /// progress.</summary>
@@ -576,6 +575,7 @@ internal sealed class SdfWorldShadows : IDisposable {
 
             m_gpuSum += milliseconds;
             m_gpuMost = Math.Max(m_gpuMost, milliseconds);
+            m_gpuRecent[(int)(m_gpuSamples % RecentSamples)] = milliseconds;
             m_gpuSamples++;
             m_timed[slot] = false;
         }
@@ -585,7 +585,23 @@ internal sealed class SdfWorldShadows : IDisposable {
     /// each serves, and each entry's camera, texels, holds, redraw, owed rectangles and measured triangles.</summary>
     /// <returns>The description.</returns>
     public string Describe() => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
-        handler: $"uploads={m_uploads} gpu={((m_gpuSamples > 0) ? (m_gpuSum / m_gpuSamples) : 0d):0.000}ms/{m_gpuSamples}timed/most{m_gpuMost:0.000}ms moved={m_movedChanges}changes/{m_movedJudged}judged/{m_movedUnbounded}unbounded finest={m_finestTexel * 1000f:0.#}mm bytes={m_bytes} spares={m_spares.Count}/{m_sparePairs} trims={m_trims} anchors={m_anchors.Count(predicate: static anchor => (anchor.View >= 0))}/{m_anchors.Count} views={string.Join(separator: ',', values: m_viewAnchors)} {m_distant.Describe()} {string.Join(separator: ' ', values: m_anchors.SelectMany(selector: static anchor => anchor.Entries).Select(selector: static entry => entry.Describe()))}");
+        handler: $"uploads={m_uploads} gpu={((m_gpuSamples > 0) ? (m_gpuSum / m_gpuSamples) : 0d):0.000}ms/{m_gpuSamples}timed/most{m_gpuMost:0.000}ms recent={RecentMean():0.000}ms/most{RecentMost():0.000}ms moved={m_movedChanges}changes/{m_movedJudged}judged/{m_movedUnbounded}unbounded finest={m_finestTexel * 1000f:0.#}mm bytes={m_bytes} spares={m_spares.Count}/{m_sparePairs} trims={m_trims} anchors={m_anchors.Count(predicate: static anchor => (anchor.View >= 0))}/{m_anchors.Count} views={string.Join(separator: ',', values: m_viewAnchors)} {m_distant.Describe()} {string.Join(separator: ' ', values: m_anchors.SelectMany(selector: static anchor => anchor.Entries).Select(selector: static entry => entry.Describe()))}");
+
+    // The mean and the most of the recent measured uploads.
+    private double RecentMean() {
+        var count = (int)Math.Min(val1: m_gpuSamples, val2: RecentSamples);
+        var sum = 0d;
+
+        for (var at = 0; (at < count); at++) { sum += m_gpuRecent[at]; }
+        return ((count > 0) ? (sum / count) : 0d);
+    }
+    private double RecentMost() {
+        var count = (int)Math.Min(val1: m_gpuSamples, val2: RecentSamples);
+        var most = 0d;
+
+        for (var at = 0; (at < count); at++) { most = Math.Max(val1: most, val2: m_gpuRecent[at]); }
+        return most;
+    }
 
     /// <inheritdoc/>
     public void Dispose() {
@@ -1108,7 +1124,11 @@ internal sealed class SdfWorldShadows : IDisposable {
                 var paced = (((rates & SdfUpdateRates.ShadowFar) == 0) || (Index != SdfMeshShadowCascades.FarEntry) || ((upload % (ulong)FarPeriodOf(frame: frame)) == 0UL));
 
                 // A layer drawn anew answers every move its redraw saw; what moved while it drew is owed when it lands.
-                // A layer owed whole waits for the redraw that owing it wants.
+                // Rectangles whose share of the layer would draw more than one upload's budget, by the entry's measured
+                // whole, are owed whole instead; a layer owed whole waits for the scheduled redraw that owing it wants.
+                if (!m_owed.All && (Estimate is var whole and > 0L) && (((whole * (double)m_owed.Area) / ((double)m_texels * m_texels)) > UploadVertices)) {
+                    m_owed.OweAll();
+                }
                 if ((ReaderCamera.HalfHeight > 0f) && paced && !completes && !m_owed.All) {
                     m_taken.Merge(other: m_owed, texels: m_texels);
                     m_work.Rectangles = m_taken.Count;

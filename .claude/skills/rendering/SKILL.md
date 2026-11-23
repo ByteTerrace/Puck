@@ -472,7 +472,9 @@ records the options weighed.
   drops the change. `Moved` skips a change whose box lies within the finest judged texel of the box the entries last
   judged the row by (`m_judged`); a passed change goes to each entry, which judges the row against its `Footprint` from
   where it last drew it (`MoveTexels`) and owes at most `MaxRectangles` merged rectangles (`OwedRects`); a redraw under
-  way also owes its own layers (`m_pending`), handed over when it lands. A decision takes the owed rectangles into its
+  way also owes its own layers (`m_pending`), handed over when it lands. Rectangles whose share of the layer would draw
+  more than `UploadVertices` by the measured whole are owed whole, and a layer owed whole is redrawn by the schedule,
+  never by one rectangle in one upload. A decision takes the owed rectangles into its
   work and an unsubmitted decision gives them back (`Restore`). A change no box bounds (`MovedEverywhere`, a seeded
   history) owes the whole layer, and a moved glass caster owes the extinction. A rectangle draws through a viewport of its own from the camera of that rectangle of the plane (aspect in
   `SdfFrameBlock.WriteShadowCamera`), keeping the casters in that box (`SdfMeshCull.OfLightBox`).
@@ -481,8 +483,7 @@ records the options weighed.
 - **Glass.** An entry's glass extinction (`Optical`) is drawn with each whole redraw, against the front depth, from a
   selection of every draw (`OpticalKind`).
 - **Memory.** Every layer and extinction buffer is held under one fixed `MemoryAccount` reservation (`Hold`,
-  `TryHold`), counted in `SdfWorldTables.TableBytes`; a trim request gives back the anchors no view reads and the spare
-  pairs.
+  `TryHold`), counted in `SdfWorldTables.TableBytes`; a trim request gives back the anchors no view reads.
 - **Evidence.** `world.residency`'s `shadows` line prints the uploads, the measured GPU time of the shadow pass
   (timestamps around it, read when the slot completes), moved changes and how many reached the entries, the bytes held
   and the spares, anchors, each view's anchor and each entry's state: its redraw (`2of5lent`), its last whole redraw's

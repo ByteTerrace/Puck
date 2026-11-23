@@ -1619,20 +1619,28 @@ the surface pass. A view whose quality skips shadows takes no anchor.
 The entries are cached. Each is drawn whole only when the light turns past the
 entry's tolerance (`farShadows.turnDegrees` and `distantShadows.turnDegrees`
 where authored, otherwise the turn that moves the shadow of a caster as tall as
-the entry's reach by one texel), its eye crosses into another cell, its texels
-change or a static draw changes (`SdfWorldTables.StaticDrawRevision`). The far
-entry spreads such a redraw over the frames of one period of its authored rate
-(`farShadows { hertz, turnDegrees }`, `SdfFrame.FarShadows`, while
-`world.rates shadow-far` is on), into back layers copied into the layers
-receivers read only when the last share lands, so receivers always read a
-complete layer through the camera it was drawn from. `world.rates
+the entry's reach by a quarter of the penumbra the surface pass draws for it and
+a texel besides, `SdfWorldShadows.PenumbraShare`), its eye crosses into another
+cell or its texels change; the distant map also when a static draw changes
+(`SdfWorldTables.StaticDrawRevision`). A whole redraw is drawn in shares, and
+the world schedules every entry's shares together under one vertex budget an
+upload (`SdfWorldShadows.UploadVertices`), each entry's shares sized by the
+vertices its last redraw measured and never fewer than the far rate's period
+(`farShadows { hertz }`, `SdfFrame.FarShadows`, while `world.rates shadow-far`
+is on) or the distant map's `frames`. A world first shown fills its shadows
+over a few frames, the far entry first, then the near, secondary and distant.
+A standing entry's redraw draws into a pair of layers lent from the world's
+spares, which takes the entry's place when its last share lands, so receivers
+always read a complete layer through the camera it was drawn from. `world.rates
 shadow-distant off` redraws every entry whole on every upload, the comparison
 for the cache's worth.
 
 Between whole redraws the near, far and secondary entries follow what moves.
 Every draw record a staging changes reports the box it held and the box it holds
-(`SdfWorldTables.NoteMotion`); each entry judges the caster against where it
-last drew it, in its own texels, and once it has moved a texel across the plane
+(`SdfWorldTables.NoteMotion`); a change that stays within the finest standing
+entry's texel of where the entries last judged it stops there, and each entry
+judges the rest against where it last drew the caster, in its own texels, and
+once it has moved a texel across the plane
 or along the light, owes the rectangles where it was and where it is, merged
 into at most four. The upload clears each rectangle and draws every caster in
 its box again through a viewport of its own, from the camera of that rectangle
@@ -1642,7 +1650,8 @@ nothing; the far entry draws its rectangles at its authored rate. `world.rates`
 counts each entry's whole redraws (`shadow-<entry>.static`), shares
 (`.share`), rectangle redraws (`.live`) and holds (`.held`), once per world
 upload, and `world.residency`'s `shadows` line prints the shadow work's GPU
-time, the anchors and each entry's state.
+time, the anchors and each entry's state, with its last whole redraw's measured
+triangles and what ended its holds.
 
 ### The distant shadow map
 
@@ -1658,7 +1667,7 @@ down to 256. It draws only the static scene (`SdfMeshDraw.IsStatic`, derived
 from the draw: never a skinned or displaced draw, which moves without its record
 changing; the selection rejects a record carrying `SdfMeshRecord.DynamicFlag`),
 at the coarsest level whose error fits its texel, follows no motion, and spreads
-each redraw over `frames` frames (`SdfDistantShadows.Slices`).
+each redraw over at least `frames` frames (`SdfDistantShadows.Slices`), more where its measured work asks.
 
 A shadow handoff (`SdfShadowHandoff`) is a pass value: while one runs, the
 outgoing light fades from its stable slot's cascade by the handoff's weight, and
