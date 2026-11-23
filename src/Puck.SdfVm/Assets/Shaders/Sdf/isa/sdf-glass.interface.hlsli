@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-glass' (sha256/2dcc60412ee7ebb32c853c048a48e69e0f79bb304a6bb274cee2a52a5a22fb7c). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-glass' (sha256/b7b852ee9685a24f0f2f1d31694508c7b56aeeb4629efa033c56febf0c1b1eef). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_GLASS
 #define PUCK_SHADER_INTERFACE_SDF_GLASS
 
@@ -249,8 +249,8 @@ struct SdfGlassPass {
     [[vk::offset(1852)]] uint _pad1852;
     [[vk::offset(1856)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfGlassPass> passGroupIsa351B9EFF : register(b0, space3);
-#define passGroup passGroupIsa351B9EFF
+[[vk::binding(0, 3)]] ConstantBuffer<SdfGlassPass> passGroupIsa85F57361 : register(b0, space3);
+#define passGroup passGroupIsa85F57361
 [[vk::binding(1, 3)]] Texture2D<float4> lit : register(t1, space3);
 [[vk::binding(2, 3)]] Texture2D<float4> glassVisibility : register(t2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);

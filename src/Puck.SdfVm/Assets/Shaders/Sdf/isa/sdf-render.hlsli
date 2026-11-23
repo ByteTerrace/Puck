@@ -13,6 +13,7 @@
 #define SDF_PROBE_GEOMETRY_WORD                      25u
 #define SDF_PROBE_IDENTITY_WORD                      29u
 #define SDF_PROBE_INSTANCE_INDEX_WORD                30u
+#define SDF_PROBE_SOLID_WORD                         31u
 #define SDF_PROBE_INSTANCE_WORDS                     32u
 #define SDF_PROBE_INSTANCE_BASE_WORD                 1u
 #define SDF_PROBE_STACK_DEPTH                        64u

@@ -326,10 +326,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         return totals;
     }
 
-    // The probes one batch takes before it looks again at the camera, the lighting and the budget.
+    // The probes one trace batch takes before it looks again at the camera, the lighting and the budget: a scene change
+    // drops the batch in flight, so a trace batch stays small while bakes land.
     private const int BatchProbes = 384;
-    // A converged frame already waits for the whole window. Larger bounded batches amortize completion/pump latency
-    // without submitting the entire High window as one long-running dispatch. CPU reference uses the same boundaries.
+    // The probes a relight batch takes at most, within the frame's relight credit, and a converged frame's batch. A batch
+    // is one round trip through the probe service, which cuts it into jobs within the live allowance, so a batch's size
+    // bounds probes per round trip, not GPU time per frame: a batch smaller than the frame's credit leaves the GPU idle
+    // between round trips and the authored relightPerFrame unspent. Larger bounded batches amortize completion/pump
+    // latency without submitting the entire High window as one long-running dispatch. CPU reference uses the same
+    // boundaries.
     private const int DrainBatchProbes = 2048;
 
     // The trace's workers: a lighting-converged frame waits for its window traced to the end, so it traces on all but two of the
@@ -1918,7 +1923,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             frame.Sky.Pack(captureLights, frame.FarDistance, m_skyDetails, out skyBlock, m_skyLayers);
             sameSky = SdfSkyEnvironment.SameMap(block: skyBlock, layers: m_skyLayers, otherBlock: m_lightingSky, otherLayers: m_lightingSkyLayers);
         }
-        if ((key == m_lightingKey) && sameSky && (m_lighting is not null)) { return; }
+        if ((key == m_lightingKey) && sameSky && (m_lighting is not null)) {
+            Interlocked.Increment(location: ref m_lightingMatches);
+            return;
+        }
         if (!frame.ConvergesLighting && (m_lighting is not null) && (Time.GetElapsedTime(startingTimestamp: m_lightingCheckedAt) < LightingInterval)) { return; }
 
         var skyOnly = ((key == m_lightingKey) && (m_lighting is not null));
@@ -1938,8 +1946,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_lightingKey = key;
         m_lightingSky = skyBlock;
         m_skyLayers.CopyTo(array: m_lightingSkyLayers, index: 0);
+        Interlocked.Increment(location: ref m_lightingMatches);
         if (skyOnly && captured.SkyMatches(other: m_lighting!, exact: (frame.ConvergesLighting || grid.Enabled))) { return; }
-        m_lightingVersion++;
+        Volatile.Write(location: ref m_lightingVersion, value: (m_lightingVersion + 1));
         m_lighting = captured;
         m_versionTimes.Add(item: captured.CapturedAt);
         if (m_versionTimes.Count > MaxVersionTimes) {
@@ -1948,6 +1957,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
         Owe();
     }
+    private long m_lightingMatches;
+    /// <summary>Gets how many staged frames the volume's lighting answered: each frame whose lighting it had captured
+    /// already, or captured then. A frame whose changed lighting waits for the capture interval is not counted, so a
+    /// count past one read at a frame that carried an edit says the volume holds the lighting of that edit or a later one.
+    /// Safe to read from any thread.</summary>
+    public long LightingMatches => Interlocked.Read(location: ref m_lightingMatches);
+    /// <summary>Gets how many lightings the volume has captured and relights under, counting from one. Safe to read from any
+    /// thread.</summary>
+    public int LightingCaptures => Volatile.Read(location: ref m_lightingVersion);
     // The part of a program's materials the relight reads (Shade: what each reflects and emits), hashed once per program
     // and scene: the materials the static scene's triangles carry (SdfMeshIrradianceScene.Materials), by id. A program
     // rebuilt with one of them changed in place (a bound color's move, a placement showing another creation over the same
@@ -2326,7 +2344,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     var credits = (trace ? traceCredits : relightCredits);
 
                     take = 0;
-                    while (((index + take) < end) && (take < BatchProbes) && (take < credits)) { take++; }
+                    var most = (trace ? BatchProbes : DrainBatchProbes);
+
+                    while (((index + take) < end) && (take < most) && (take < credits)) { take++; }
                     if (trace) {
                         if (m_budget.TracePerFrame > 0) { m_traceCredits -= take; }
                     } else if (m_budget.RelightPerFrame > 0) {
