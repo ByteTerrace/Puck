@@ -1,7 +1,7 @@
 namespace Puck.Storage.Azure;
 
 /// <summary>
-/// The Azure Blob storage target: a service URI (credentialed via <c>DefaultAzureCredential</c>) or a connection
+/// The Azure Blob storage target: a service URI (credentialed via <see cref="AzureAmbientCredential"/>) or a connection
 /// string (a dev/Azurite emulator, or an account whose keys the caller holds). <see cref="EdgeNamespace"/> selects
 /// how an address projects into the store's container/name space — see the property for the two shapes.
 /// </summary>

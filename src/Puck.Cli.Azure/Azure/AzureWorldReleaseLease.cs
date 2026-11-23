@@ -1,7 +1,7 @@
 using Azure;
-using Azure.Identity;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Specialized;
+using Puck.Storage.Azure;
 using Puck.World.Server;
 
 namespace Puck.Cli.Azure;
@@ -82,7 +82,7 @@ public static partial class AzureCommand {
         options.Retry.NetworkTimeout = Timeout.InfiniteTimeSpan;
         var blob = new BlobClient(
             blobUri: new Uri(uriString: $"{endpoint.TrimEnd(trimChar: '/')}/{owner:D}/{WorldOwnedWorldSync.HostedPrivateNamespace}/release-groups/{group}.controller"),
-            credential: new DefaultAzureCredential(),
+            credential: AzureAmbientCredential.Create(),
             options: options
         );
 

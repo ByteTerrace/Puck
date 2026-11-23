@@ -1099,7 +1099,9 @@ recovery objects while accepting a release.
 
 For a managed release group, `puck world release status` reads the group directly
 from the world owner's private store, using the existing deployment outputs and
-Azure credentials. The group name is the configured world silo name. It reports
+Azure credentials. The release verbs sign in through `AzureAmbientCredential`, which asks a person's or
+runner's own sign-in (an `az login` session included) before the machine's managed identity, so a
+workstation needs no credential setting. The group name is the configured world silo name. It reports
 release identities, admission, the pending phase, recovery scope, and the next
 operator action. `--json` includes the full record; an optional group-file argument
 allows offline inspection. An older deployment without a managed group returns

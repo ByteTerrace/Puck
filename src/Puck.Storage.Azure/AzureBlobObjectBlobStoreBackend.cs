@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using Azure;
-using Azure.Identity;
+using Azure.Core;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 
@@ -17,7 +17,7 @@ namespace Puck.Storage.Azure;
 /// the edge cannot serve List at all), addressing the account's stored layout rather than the edge's view of it (see
 /// <see cref="GetContainerProjection"/>), and refusing by name when none is authored. One process-wide instance owns the
 /// lazily-created credential and the service-client cache for the process's lifetime: one
-/// <c>DefaultAzureCredential</c> covers both deployment shapes without an app registration — a player's machine signs
+/// <see cref="AzureAmbientCredential"/> covers both deployment shapes without an app registration — a player's machine signs
 /// in ambiently (developer tooling, the OS broker, a shared token cache) and a hosted server runs as a user-assigned
 /// managed identity.
 /// </summary>
@@ -29,7 +29,7 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
 
     // NOTE: initializer order is load-bearing; do not alphabetize.
     private readonly ConcurrentDictionary<string, BlobServiceClient> m_blobServiceClients = new(comparer: StringComparer.Ordinal);
-    private readonly Lazy<DefaultAzureCredential> m_defaultAzureCredential = new(valueFactory: static () => new DefaultAzureCredential());
+    private readonly Lazy<TokenCredential> m_credential = new(valueFactory: AzureAmbientCredential.Create);
     private readonly ConcurrentDictionary<string, Task> m_createdContainers = new(comparer: StringComparer.Ordinal);
 
     private BlobClient GetBlobClient(AzureBlobObjectStorageTarget target, ObjectBlobAddress address) {
@@ -133,7 +133,7 @@ internal sealed class AzureBlobObjectBlobStoreBackend : IObjectBlobStoreBackend 
             return m_blobServiceClients.GetOrAdd(
                 key: $"service-uri:{serviceUri.AbsoluteUri}",
                 valueFactory: _ => new BlobServiceClient(
-                    credential: m_defaultAzureCredential.Value,
+                    credential: m_credential.Value,
                     options: BlobClientOptionsField,
                     serviceUri: serviceUri
                 )
