@@ -15,15 +15,26 @@ public sealed partial class SdfMeshPathBake {
     // The list also keeps each listed group's index under the key its demand box moves by (OwnerKey): a dynamic group's
     // slot, a static group's first instance, so a moved slot or copy finds the groups it moves without a walk; and the
     // groups set into a place since the demand last measured (TakeFresh), each of which the demand measures before its
-    // next tier decision (MeasureDemands). Set being the one door into the list is what keeps both whole.
+    // next tier decision (MeasureDemands). Set being the one door into the list is what keeps both whole. The list is
+    // written only on the frame's thread inside PrepareFrame, after it joins the demand measure that reads it from a lane
+    // of its own (Frozen).
     private sealed class GroupList : IReadOnlyList<Group> {
         private readonly List<Group> m_items = [];
         private readonly GpuRowIndex<(bool Dynamic, int Key)> m_byOwner = new();
         private readonly MarkedGroups m_fresh = new(mark: GroupMarks.Fresh);
 
+        private bool m_frozen;
+
         public int Count => m_items.Count;
 
         public Group this[int index] => m_items[index];
+
+        // Whether a demand measure reads the list off the frame's thread (SdfMeshPathBake.PostMeasure): the list does not
+        // change until PrepareFrame joins the measure, and a change tried meanwhile throws rather than move under it.
+        public bool Frozen {
+            get => Volatile.Read(location: ref m_frozen);
+            set => Volatile.Write(location: ref m_frozen, value: value);
+        }
 
         // Whether the group stands at an index of the list.
         public static bool Holds(Group group) => group.Listed;
@@ -38,6 +49,8 @@ public sealed partial class SdfMeshPathBake {
 
         // Puts a group at an index, taking the group it displaces out of the list.
         public void Set(int index, Group group) {
+            ThrowIfFrozen();
+
             var displaced = m_items[index];
 
             if (!ReferenceEquals(objA: displaced, objB: group)) { displaced.Listed = false; }
@@ -49,6 +62,7 @@ public sealed partial class SdfMeshPathBake {
         }
         // Takes every group out of the list.
         public void Clear() {
+            ThrowIfFrozen();
             foreach (var group in m_items) { group.Listed = false; }
             m_items.Clear();
             m_byOwner.Clear();
@@ -57,6 +71,8 @@ public sealed partial class SdfMeshPathBake {
         public List<Group> TakeFresh() => m_fresh.Take();
         // Appends planned groups, unlisted until Set puts each into its place.
         public void Plan(IEnumerable<Group> groups) {
+            ThrowIfFrozen();
+
             var first = m_items.Count;
 
             m_items.AddRange(collection: groups);
@@ -67,6 +83,10 @@ public sealed partial class SdfMeshPathBake {
         }
 
         public List<Group>.Enumerator GetEnumerator() => m_items.GetEnumerator();
+
+        private void ThrowIfFrozen() {
+            if (Frozen) { throw new InvalidOperationException(message: "The bake's group list changes only while no demand measure reads it: PrepareFrame joins the measure first."); }
+        }
 
         IEnumerator<Group> IEnumerable<Group>.GetEnumerator() => GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -86,6 +106,10 @@ public sealed partial class SdfMeshPathBake {
         Fresh = 8,
         // Owed a measure a change of the points could only coarsen (SdfMeshPathBake.Demand.cs).
         Deferred = 16,
+        // The demand watch's marks, kept apart from the rest (Group.DemandMarks): the measure moves them off the frame's
+        // thread, and a byte written whole beside another never loses the other's write, where one byte written by
+        // both would.
+        Demand = (Attended | Fresh | Deferred),
     }
 
     // A list of groups, each in it at most once, by a mark the group carries for this list alone (Group.Marks): adding,
@@ -97,12 +121,16 @@ public sealed partial class SdfMeshPathBake {
 
         public int Count => m_items.Count;
 
+        // The group's marks this list's mark is kept in: the demand watch's own field for its lists, which its measure
+        // writes off the frame's thread while workers move the gate's marks (Touch) under the gate.
+        private ref GroupMarks MarksOf(Group group) => ref (((mark & GroupMarks.Demand) != 0) ? ref group.DemandMarks : ref group.Marks);
+
         public Group this[int index] => m_items[index];
 
         // Adds a group the list does not hold; false for one it does.
         public bool Add(Group group) {
-            if ((group.Marks & mark) != 0) { return false; }
-            group.Marks |= mark;
+            if ((MarksOf(group: group) & mark) != 0) { return false; }
+            MarksOf(group: group) |= mark;
             m_items.Add(item: group);
             return true;
         }
@@ -113,23 +141,23 @@ public sealed partial class SdfMeshPathBake {
             m_items = m_spare;
             m_items.Clear();
             m_spare = taken;
-            foreach (var group in taken) { group.Marks &= ~mark; }
+            foreach (var group in taken) { MarksOf(group: group) &= ~mark; }
 
             return taken;
         }
         // Empties the list, unmarking its groups.
         public void Clear() {
-            foreach (var group in m_items) { group.Marks &= ~mark; }
+            foreach (var group in m_items) { MarksOf(group: group) &= ~mark; }
             m_items.Clear();
         }
         // A walk that keeps some groups in order: each kept group is placed at the next kept index (Keep), each dropped one
         // unmarked (Drop), and the list cut to the kept count at the end (Truncate).
         public void Keep(int at, Group group) => m_items[at] = group;
-        public void Drop(Group group) => group.Marks &= ~mark;
+        public void Drop(Group group) => MarksOf(group: group) &= ~mark;
         public void Truncate(int count) => m_items.RemoveRange(index: count, count: (m_items.Count - count));
         // Takes the first groups out, in order, unmarking them: a queue a consumer drains a share at a time.
         public void Shift(int count) {
-            for (var index = 0; (index < count); index++) { m_items[index].Marks &= ~mark; }
+            for (var index = 0; (index < count); index++) { MarksOf(group: m_items[index]) &= ~mark; }
             m_items.RemoveRange(index: 0, count: count);
         }
     }

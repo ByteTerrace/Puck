@@ -45,6 +45,7 @@ public sealed class JobLane : IDisposable {
     // A monitor rather than a System.Threading.Lock, which has no Monitor.Wait.
     private readonly object m_gate = new();
     private readonly string m_name;
+    private readonly ThreadPriority m_priority;
 
     private WaitConsumer? m_consumer;
     private ExecutionContext? m_context;
@@ -57,11 +58,14 @@ public sealed class JobLane : IDisposable {
     /// <summary>Initializes a new instance of the <see cref="JobLane"/> class. No thread starts until a unit is
     /// posted.</summary>
     /// <param name="name">The lane thread's diagnostic name.</param>
+    /// <param name="priority">The lane thread's priority: <see cref="JobPool.WorkerPriority"/> for a unit the frame
+    /// would otherwise run itself, so the frame's work offloaded keeps the frame's standing among the host's threads.</param>
     /// <exception cref="ArgumentException"><paramref name="name"/> is <see langword="null"/> or empty.</exception>
-    public JobLane(string name) {
+    public JobLane(string name, ThreadPriority priority = ThreadPriority.Normal) {
         ArgumentException.ThrowIfNullOrEmpty(argument: name);
 
         m_name = name;
+        m_priority = priority;
     }
 
     /// <summary>Gets whether the lane holds a unit its owner has not collected: posted, running, or finished and
@@ -99,7 +103,8 @@ public sealed class JobLane : IDisposable {
     /// <exception cref="InvalidOperationException">The lane already holds a unit.</exception>
     /// <exception cref="ObjectDisposedException">The lane has been stopped.</exception>
     /// <exception cref="TimeoutException">The lane's thread did not start within the synchronous budget.</exception>
-    [Replaces(root: typeof(object))]
+    /// <remarks>Carries no replacement mark of its own: what a unit replaces (<see cref="IJobLaneUnit.Run"/>) its owner's
+    /// post and collect carry, so a lane whose unit replaces nothing makes its owner no replacer.</remarks>
     public void Post(IJobLaneUnit unit) {
         ArgumentNullException.ThrowIfNull(argument: unit);
 
@@ -113,6 +118,7 @@ public sealed class JobLane : IDisposable {
                 m_thread = new Thread(start: Work) {
                     IsBackground = true,
                     Name = m_name,
+                    Priority = m_priority,
                 };
                 m_thread.Start();
             }
@@ -143,7 +149,6 @@ public sealed class JobLane : IDisposable {
     /// <exception cref="InvalidOperationException">The lane holds no unit.</exception>
     /// <remarks>What the unit threw is rethrown here, on the owner's thread, with its original stack; the lane is free
     /// for the next unit either way.</remarks>
-    [Replaces(root: typeof(object))]
     public WaitOutcome Collect(in WaitReason reason, WaitDeadline deadline) {
         ExceptionDispatchInfo? fault;
 

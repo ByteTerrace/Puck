@@ -1270,14 +1270,15 @@ manifest parts it met (`world.boot.manifest.parts-walked` +275, `.replayed`
   steady chapters (median 30 to 140 KB). The largest remaining sites, by
   allocation tick: the irradiance volume replaced whole on resize
   (`SdfMeshIrradiance.TryReplaceVolume`, `MemoryAccount.Owner.AllocateArray`),
-  render-graph reconfiguration (`ShaderPipelineRenderNode.InstallPass`,
-  `GpuGroupLayoutDescription`, `DirectXGpuBindings.PlaceGroupSet`,
-  `SdfWorldPassRecorder`), `SdfMeshOcclusion`'s sighting arrays, route labels
-  (`DeliveryLabel.Of` from `WorldScreenBinder.ResolveInstanceView`), the
-  document rebind (`WorldDocumentWalker.Cursor.RewriteItems`' object arrays) and
-  `FixedQ4816.FromDegreesExact`'s `BigInteger` work, and
-  `WorldScreenBinder.SharedSceneOf`'s name, built a feed a frame. Each is a per-change
-  rebuild of something derivable from what changed.
+  render-graph reconfiguration on a secondary view's resize
+  (`ShaderPipelineRenderNode.InstallPending`: its resources, the pass recorders
+  `SdfWorldPassRecorder` and their group sets `DirectXGpuBindings.PlaceGroupSet`,
+  about half of the frame thread's allocation in a 40 s window of the route),
+  `SdfMeshOcclusion`'s sighting arrays, the document rebind
+  (`WorldDocumentWalker.Cursor.RewriteItems`' object arrays) and
+  `FixedQ4816.FromDegreesExact`'s `BigInteger` work. Each is a per-change
+  rebuild of something derivable from what changed: an install that keeps what
+  the resize did not change is the graph's fix.
 - [medium] A mesh region whose growth is refused holds its limit to what it
   holds (`SdfWorldTables.HoldsRefusedGrowth`, `sdf.rows.check.region.refusal-holds`)
   until the region's size, a release, the pool's room or a trim moves, or a
@@ -1342,25 +1343,22 @@ What an arrival and a hand-over still cost the frame:
 
 The frame thread's CPU work, largest first:
 
-- [high] The world residency's bake prepares on the frame thread inside its
-  capture (`SdfMeshPathBake.PrepareFrame`, through `SdfMeshDresser.Dress`),
-  and its demand measure (`MeasureDemands`, `MeasureChosen`) is its largest
-  part on the benchmark route: the moved-slot route judges every group on a
-  moved slot (`sdf.residency.demand.stood`), each frame reads every frustum
-  watch (`demand.watched`), and each measure reads every box against every
-  demand point (`demand.views`). The measure decides only the tier a group
-  asks for, which no frame's draws read until a replacement lands, so it can
-  run beside the frame on a worker once its inputs (the frame's transforms,
-  copies and demand points, which the source rewrites at its next capture) are
-  its own and the frame thread's later reads of the bake (`Pending`,
-  `ServeAhead`, `ObserveResidency`) no longer wait on its gate. Check:
-  `sdf.residency.demand.*` unchanged per frame, and the frame thread's
-  `PrepareFrame` share in a sampled trace of the route.
+- [high] During a cold bake the frame thread waits on the bake's gate while
+  workers hold it: in a cold route's first chapter `ObserveResidency` waited
+  about 1.7 ms a frame and `TryTake` 0.65 ms (a sampled trace,
+  `Lock.TryEnterSlow` under them). The demand measure and the priority share now
+  run on the measure's lane and `Pending` takes no gate; what is left needs the
+  gate's holds attributed by site on a cold bake (`gate=[...]` in the done line)
+  and the workers' longest sections shortened, or the frame's entries made to
+  publish rather than wait as `Pending` does.
 - [medium] `SdfWorldTables.NoteMovedSlots` judges each row riding a moved slot
-  (`sdf.residency.motion.rows`), decoding its record's box. Rows riding one
-  slot move rigidly, as its readers do (`ReachBySlot`), but each row's held box
-  (`m_slotBoxes`) is what a later restage judges from; judging a slot once
-  needs that held box derived from the slot's last judged pose instead.
+  (`sdf.residency.motion.rows`, about 3,500 a staging across the route's
+  residencies), decoding its record's box. Rows riding one slot move rigidly,
+  as its readers do (`ReachBySlot`), but each row's held box (`m_slotBoxes`) is
+  what a later restage judges from; judging a slot once needs that held box
+  derived from the slot's last judged pose instead, and a per-slot reach must
+  group a slot's rows by their record's carry and scale (`SdfMeshBox.Ridden`
+  reads both per record), since rows on one slot need not share them.
 
 - [high] The tick runs on the frame thread (`HostLoop.Run` through
   `FixedStepPump.Step`), so a frame that steps carries a whole tick. The move

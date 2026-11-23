@@ -128,9 +128,11 @@ public sealed class ShaderInterfaceLayout {
     /// <returns>The pipeline layout.</returns>
     /// <exception cref="ArgumentException"><paramref name="stages"/> is not compute alone or graphics stages
     /// alone.</exception>
+    /// <remarks>The layout is built once for each set of stages and shared: it is immutable, and a graph install asks it
+    /// for every pass it places.</remarks>
     public GpuPipelineLayoutDescription PipelineLayout(GpuShaderStage stages) =>
-        new(
-            groups: Groups.Select(selector: static group => new GpuGroupLayoutDescription(
+        m_pipelineLayouts.GetOrAdd(key: stages, valueFactory: static (stages, layout) => new(
+            groups: layout.Groups.Select(selector: static group => new GpuGroupLayoutDescription(
                 bindings: group.Bindings.Select(selector: static binding => new GpuGroupBinding(
                     binding: binding.Binding,
                     count: binding.Count,
@@ -138,9 +140,11 @@ public sealed class ShaderInterfaceLayout {
                 )).ToArray(),
                 ordinal: group.Set
             )).ToArray(),
-            pushesIndex: Interface.PushesIndex,
+            pushesIndex: layout.Interface.PushesIndex,
             stages: stages
-        );
+        ), factoryArgument: this);
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<GpuShaderStage, GpuPipelineLayoutDescription> m_pipelineLayouts = new();
     /// <summary>Returns why a compiled module binds something other than this layout places, or <see langword="null"/>
     /// when every binding it reads sits where the layout puts it. The module's bindings are held to one backend's view
     /// at a time, <see cref="Bindings"/> as SPIR-V reflects the layout or <see cref="DxilBindings"/> as DXIL does, and

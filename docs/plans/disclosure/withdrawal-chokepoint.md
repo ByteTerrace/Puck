@@ -158,7 +158,7 @@ keeps showing it.
 Confirmed in the code. The epoch moves when the observation object changes, but
 the residency's guard is not told about the observation at all:
 
-`src/Puck.World.Presentation/WorldScreenBinder.Availability.cs:268`
+`src/Puck.World.Presentation/WorldScreenBinder.Availability.cs:289`
 
 ```csharp
             return ((access != WorldSessionAccess.None) && (access < Source));

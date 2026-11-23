@@ -127,6 +127,7 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null, WorldLinkB
     // the last one was collected, and answers its index; -1 when preparing cancelled a replay drive and left nothing to
     // execute. The calling thread must hold no authority gate: the slice takes its server's gate where it runs, so a
     // caller that held one would wait for a tick that waits for it.
+    [Replaces(root: typeof(object))]
     internal int Prepare(WorldServer server, WorldReplayTape? tape, in FixedStepContext context, WaitDeadline deadline, string? narration = null) {
         if (server.GateHeldByCallingThread) {
             throw new InvalidOperationException(message: "A thread that holds an authority gate cannot hand a tick to the step thread: the tick takes the gate to run.");
@@ -202,6 +203,7 @@ public sealed class WorldStepThread(WorldOutputHub? narration = null, WorldLinkB
     // Waits for the wave in flight until collectBy or the stall budget from its hand-off, whichever is sooner, and
     // takes it; its slices' results are then read with Result. A collectBy already passed polls. False while the wave
     // is still executing.
+    [Replaces(root: typeof(object))]
     internal bool TryCollect(WaitDeadline collectBy) {
         if (!m_lane.InFlight) {
             throw new InvalidOperationException(message: "The step thread holds no wave to collect.");

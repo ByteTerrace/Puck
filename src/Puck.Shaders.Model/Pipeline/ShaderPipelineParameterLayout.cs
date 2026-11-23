@@ -305,6 +305,15 @@ public sealed class ShaderPipelineParameterLayout {
             )
         );
     }
+    /// <summary>Gets the values every default binds (<see cref="TryBind"/> with no config), bound once and shared:
+    /// values are immutable, and a graph install binds them for every pass it places.</summary>
+    /// <exception cref="InvalidDataException">The defaults do not bind.</exception>
+    public ShaderPipelineParameterValues Defaults => (m_defaults ??= (TryBind(config: null, reason: out var reason, values: out var values)
+        ? values
+        : throw new InvalidDataException(message: $"The parameter defaults do not bind: {reason}")));
+
+    private ShaderPipelineParameterValues? m_defaults;
+
     /// <summary>Binds authored values and returns a complete frame block holding them at their offsets, with every
     /// frame member zero.</summary>
     /// <param name="config">The authored config object, or <see langword="null"/> for every default.</param>
