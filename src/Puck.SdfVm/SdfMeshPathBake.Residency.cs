@@ -849,7 +849,10 @@ public sealed partial class SdfMeshPathBake {
             var groups = new int[(count + 1)];
             var triangles = new long[(count + 1)];
             var finest = new int[(count + 1)];
-            var top = new List<(long Triangles, string Line)>();
+            // The largest groups as the walk finds them, most triangles first; only these are spelled, since the read
+            // holds the bake's gate and a world holds thousands of groups.
+            var top = new (long Triangles, Group Group, int Tier, float Pixel, int Point)[Math.Max(val1: 0, val2: largest)];
+            var topCount = 0;
 
             Array.Fill(array: finest, value: SdfMeshTier.Last);
             foreach (var group in m_groups) {
@@ -863,7 +866,14 @@ public sealed partial class SdfMeshPathBake {
                 groups[slot]++;
                 triangles[slot] += mesh.TriangleCount;
                 finest[slot] = Math.Min(val1: finest[slot], val2: tier);
-                top.Add(item: (mesh.TriangleCount, string.Create(provider: CultureInfo.InvariantCulture, handler: $"demand-group={group.Selector}{(group.Dynamic ? "/dynamic" : ((group.Instances > 1) ? $"/union{group.Instances}" : "/static"))} triangles={mesh.TriangleCount} tier={tier}@{(1000f * SdfMeshTier.Cell(tier: tier)):0.###}mm rungs={group.FinestTier}..{group.CoarsestTier} pixel={(1000f * pixel):0.###}mm point={point} box={(group.High - group.Low).X:0.##}x{(group.High - group.Low).Y:0.##}x{(group.High - group.Low).Z:0.##}")));
+
+                var at = topCount;
+
+                while ((at > 0) && (top[(at - 1)].Triangles < mesh.TriangleCount)) { at--; }
+                if (at >= top.Length) { continue; }
+                Array.Copy(sourceArray: top, sourceIndex: at, destinationArray: top, destinationIndex: (at + 1), length: (Math.Min(val1: topCount, val2: (top.Length - 1)) - at));
+                top[at] = (mesh.TriangleCount, group, tier, pixel, point);
+                topCount = Math.Min(val1: (topCount + 1), val2: top.Length);
             }
 
             var lines = new List<string>();
@@ -879,8 +889,11 @@ public sealed partial class SdfMeshPathBake {
 
                 lines.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"demand-point={index} eye={eye.X:0.##},{eye.Y:0.##},{eye.Z:0.##} pixels-a-metre={Demand.PixelsPerMetre(index: index):0.#} within-view={(Demand.WithinView(index: index) ? 1 : 0)} groups={groups[index]} triangles={triangles[index]} finest-tier={finest[index]}"));
             }
-            top.Sort(comparison: static (left, right) => right.Triangles.CompareTo(value: left.Triangles));
-            for (var index = 0; ((index < top.Count) && (index < largest)); index++) { lines.Add(item: top[index].Line); }
+            for (var index = 0; (index < topCount); index++) {
+                var (groupTriangles, group, tier, pixel, point) = top[index];
+
+                lines.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"demand-group={group.Selector}{(group.Dynamic ? "/dynamic" : ((group.Instances > 1) ? $"/union{group.Instances}" : "/static"))} triangles={groupTriangles} tier={tier}@{(1000f * SdfMeshTier.Cell(tier: tier)):0.###}mm rungs={group.FinestTier}..{group.CoarsestTier} pixel={(1000f * pixel):0.###}mm point={point} box={(group.High - group.Low).X:0.##}x{(group.High - group.Low).Y:0.##}x{(group.High - group.Low).Z:0.##}"));
+            }
 
             return lines;
         }

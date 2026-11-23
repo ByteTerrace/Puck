@@ -2753,8 +2753,9 @@ public sealed partial class SdfMeshPathBake {
         if (m_reported) { return; }
         m_seconds = m_clock.Elapsed.TotalSeconds;
         m_reported = true;
-        // The bake's workers have no more large scratch to reuse; the pool's arrays go back to the collector.
-        RentedArrays.TrimLarge();
+        // The large pool keeps its arrays past the bake: a world in play restarts a bake at every program change, in each
+        // residency, and the next one rents the same scratch. The process account trims the pool under pressure
+        // (MemoryAccount.TrimCaches), which is what bounds the memory it holds.
         SdfMeshBakeReport.Done(accounts: m_accounts, dispatches: DispatchReport, groups: [.. m_groups.Select(selector: static group => new SdfMeshBakeReport.Finished(Mesh: group.Mesh, Outcome: group.Outcome, Selector: group.Selector))], residency: Residency, residencyId: ResidencyId, seconds: m_seconds);
     }
 
