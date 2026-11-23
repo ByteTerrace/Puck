@@ -401,7 +401,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// stamped body's live scale moves (<see cref="WorldBodyStampCensus.TryTakeMove"/>), the continuum's pinned
     /// presentation decisions (<see cref="WorldContinuum.PresentationRevision"/>), the operator's shape isolation
     /// (<see cref="WorldShapeIsolation.Revision"/>), and a counter that moves when the set of screens a body carries
-    /// moves (<see cref="WorldCreationInstances.TryCarriedScreen"/>).
+    /// moves (<see cref="WorldCreationInstances.TryCarriedScreen"/>), then the two counters through which a response composes
+    /// again (<see cref="WorldRigidAssets.HoldingComposeRevision"/>, <see cref="WorldRigidAssets.StaticTemplateRevision"/>).
     /// <para>
     /// Separate components, not their sum, and the client's three stay split too. One of them — the client's server
     /// revision — is assigned from a snapshot and can move down, so any addition anywhere on this path can cancel: a
