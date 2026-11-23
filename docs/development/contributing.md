@@ -1039,7 +1039,9 @@ unverified when no device run exists.
 - Under a Remote Desktop session an NVIDIA GPU can hold its idle clocks (P8 or P5,
   a few hundred MHz) through a whole windowed run, so `host.frames` and
   `world.gpu-timing` read there are no frame-time verdict. Check the clocks with
-  `nvidia-smi --query-gpu=pstate,clocks.gr --format=csv -l 5` beside the run, and
+  `nvidia-smi --query-gpu=pstate,clocks.gr --format=csv -l 5` beside the run
+  (`puck benchmark` records them itself and marks a run whose clock was held
+  down DISTURBED, [the conditions](../plans/benchmark.md#comparing-runs)), and
   take a timing on a console session. A capture's replay runs the GPU at its
   working clocks there, so RenderDoc's per-event GPU durations
   (`GPUCounter.EventGPUDuration`) compare one kernel across two builds or two

@@ -648,6 +648,7 @@ intermediate publications is correct.
 | View scheduling | `RenderGraphInstance`, `RenderGraphInstanceSet`, `RenderGraphScheduler`, `RenderGraphExtent`, `RenderGraphSourceState` | Which views and sources render in a frame, at what extent, rate or cadence, and price |
 | Nested hits | `RenderGraphHitWalk`, `IRenderGraphHitScene`, `RenderGraphHitPath` | Where a pick through views that show other views lands |
 | Child processes (`Puck.Abstractions`) | `ChildProcess`, `ChildProcessResult` | Tool runs and driven companions started from an argument vector |
+| Adapter telemetry | `IAdapterTelemetry`, `AdapterTelemetry`, `AdapterTelemetryRecorder`, `AdapterTelemetrySummary` | A graphics adapter's clocks, power, utilization, performance state and clock events, read through the provider the machine has (NVML today), recorded on a timer and summarized over a span; absent hardware or library reads unknown |
 
 `ChildProcess` starts the tools that the CLI, the shader compiler and the
 emulator diagnostics run. `RunAsync` takes an argument
@@ -674,6 +675,17 @@ streams. A timeout is reported as `TimedOut` in the result, while cancellation
 throws `OperationCanceledException`. `StartRedirected` starts a companion that
 the caller drives itself. That caller owns all three redirected streams and must
 drain every output stream it keeps open.
+
+`AdapterTelemetry.Open` names no vendor above its provider list: it tries each
+provider in turn, matches the adapter the renderer names (or reads the busiest),
+and returns a reader whose every field is unknown, with the reason, when none opens.
+A reading never throws. The NVML provider loads `nvml.dll` or `libnvidia-ml.so.1` at
+run time and binds each entry point by name, so an older driver loses only the fields
+its missing entry points would read. `AdapterTelemetryRecorder` reads on its own
+timer so a frame thread never waits on the driver, and `AdapterTelemetrySummary`
+judges a span: the adapter's graphics clock held below its ceiling while loaded, with
+no power or thermal clock event to explain it, is what a profiler's clock lock looks
+like. The benchmark's conditions use it ([the verdict](../plans/benchmark.md#comparing-runs)).
 
 Extension discovery and its load contexts (`PuckExtensionDiscovery`,
 `PuckExtensionLoadContext`) and the `HostedControl` contribution also live in

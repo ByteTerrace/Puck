@@ -7,6 +7,7 @@ using Puck.Abstractions;
 using Puck.Abstractions.Presentation;
 using Puck.Assets;
 using Puck.Commands;
+using Puck.Hosting.Telemetry;
 using Puck.Launcher;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -67,6 +68,8 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     public const int SampleTicks = 30;
     /// <summary>The most hitches a chapter lists, the longest first; its count is the whole count.</summary>
     public const int MaxHitchesListed = 32;
+    /// <summary>The time between readings of the adapter's clocks, power and utilization while a run plays.</summary>
+    public static readonly TimeSpan AdapterSampleInterval = TimeSpan.FromMilliseconds(milliseconds: 500);
 
     // The readings taken at both ends of every chapter: console lines whose raw answers the report keeps, so the change
     // across the chapter is read from the answers themselves. A line a host cannot answer (a renderer's, headless) keeps
@@ -134,6 +137,10 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         public WorldTickScript.Line? Hash { get; set; }
         public int BeginIndex { get; set; } = -1;
         public int EndIndex { get; set; } = -1;
+        // The adapter's state across the chapter: the timestamps its span is read between and the summary of the readings in it.
+        public long BeginStamp { get; set; }
+        public long EndStamp { get; set; }
+        public AdapterTelemetrySummary? Adapter { get; set; }
         public long ShedAtBegin { get; set; }
         public long Shed { get; set; }
         // A route chapter's outcome, copied from the seat driver as it ends.
@@ -166,6 +173,8 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     // The lines whose raw, multi-line answers the report keeps, each with its answer once it has run.
     private readonly Dictionary<WorldTickScript.Line, string> m_raw = [];
     private HostFrameRecording? m_recording;
+    // Reads the adapter on a timer for the run's life, off the frame thread, so each chapter's state is a span of its readings.
+    private AdapterTelemetryRecorder? m_adapter;
     private string m_route = string.Empty;
     private string m_routeIdentity = string.Empty;
     private string m_directory = string.Empty;
@@ -618,6 +627,8 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             };
             m_deadline = (frames.Time.GetTimestamp() + (timeout * frames.Time.TimestampFrequency));
         }
+        m_adapter?.Dispose();
+        m_adapter = new AdapterTelemetryRecorder(telemetry: AdapterTelemetry.Open(adapter: deviceProfile?.Current.Adapter), interval: AdapterSampleInterval);
         m_running = true;
         m_overlayAtEntry = OverlayVisible;
         m_overlayChanged = false;
@@ -773,13 +784,16 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             }
 
             chapter.BeginIndex = (m_recording?.Count ?? 0);
+            chapter.BeginStamp = Stopwatch.GetTimestamp();
             chapter.ShedAtBegin = (timeline?.ShedSteps ?? 0L);
 
             return new CommandResult(Output: $"[world.benchmark: chapter {index} \"{chapter.Name}\" begins]");
         }
 
         chapter.EndIndex = (m_recording?.Count ?? 0);
+        chapter.EndStamp = Stopwatch.GetTimestamp();
         chapter.Shed = ((timeline?.ShedSteps ?? 0L) - chapter.ShedAtBegin);
+        chapter.Adapter = m_adapter?.Summarize(from: chapter.BeginStamp, to: chapter.EndStamp);
 
         if (!chapter.LastOfLoop) {
             return new CommandResult(Output: $"[world.benchmark: chapter {index} \"{chapter.Name}\" {Verdict(chapter: chapter, statistics: null)}]");
@@ -926,6 +940,9 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         }
         if (statistics is { LongestStall: > StallMilliseconds }) {
             reasons.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"the simulation stepped no tick for {statistics.LongestStall:0} ms (a pause, a hold or a stall)"));
+        }
+        if (chapter.Adapter?.HeldReason is { } held) {
+            reasons.Add(item: held);
         }
 
         return reasons;

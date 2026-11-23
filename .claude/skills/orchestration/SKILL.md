@@ -209,6 +209,23 @@ direction:
   judged by what it measures and what it makes possible, never by its isolated
   delta alone (AGENTS.md, "Changes pay dividends";
   [measured changes](../dotnet-performance/references/measured-changes.md)).
+- **A report carries the conditions it was taken under, and a disturbed run is
+  not a timing verdict** (the owner's ruling: measurements must never be
+  tainted by competing agents). `puck benchmark` records, for every run, the
+  adapter's clocks, power, utilization and clock events through each chapter
+  and the CPU that processes outside its own tree used, with the top few named
+  and any other World or lease holder seen, all read from the operating system
+  and the driver. A run is marked DISTURBED (in the summary line, `conditions`
+  of `report.json` and `machine.verdict` of the run) when other processes
+  used more than the stated share of the CPU, another World was live, or the
+  adapter's clock was held down under load (a profiler's clock lock left in
+  place). `compare` and `--against` refuse a disturbed run (`disturbed-run`).
+  The lead reads `conditions` before using any figure from a window and reruns
+  a disturbed run once the machine is clear; a lane takes no timing at all, so
+  it reads one of these only to see that its counted work and arrival held
+  ([thresholds and rationale](../../../docs/plans/benchmark.md#comparing-runs)).
+  A newly found source of untrustworthy readings is added to what the report
+  records, never to a note.
 - **Every lane's claims are checked against the code, whatever its family**:
   each family has shipped wrong claims and regressions that a check caught.
   The lead reads them at landing and checks them in the batch pass
