@@ -155,9 +155,7 @@ public sealed partial class WorldPopulation {
     }
     private void RequireCapturePoint() {
         if (
-            (m_effectOutputs.Count != 0) ||
-            (m_designationOutputs.Count != 0) ||
-            (m_generatorInvocations.Count != 0) ||
+            (!m_outputs.IsEmpty) ||
             (m_durableStateOutputs.Count != 0)
         ) {
             throw new InvalidOperationException(message: "a population checkpoint requires every pending-output list to be empty — capture only between a completed Step and the next StepInstances.");

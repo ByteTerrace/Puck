@@ -254,7 +254,6 @@ public sealed class SdfAppearance {
                 !SdfLanes.IsLane(lane: material.EmissiveLane) ||
                 (material.Paints is { Count: > MaxPaintsPerMaterial }) ||
                 !material.IsGlassValid ||
-                (material.Toon is { Enabled: true, IsValid: false }) ||
                 !SdfMaterialLayers.IsValid(
                 inset: material.Inset,
                 weathering: material.Weathering,
@@ -353,10 +352,10 @@ public sealed class SdfAppearance {
     // emissive, a glass's contact: its reach in the low half and its coverage in the high, half floats, zero for none) as
     // uint bits; 21 the glass: (absorption per world unit, index of refraction), zero for an opaque material, so a positive
     // index says glass; 31 the glass's medium: (scatter colour, scattering per world unit), zero for none (KEEP IN SYNC
-    // with sdfGlassContact and the medium in passes/sdf-glass.comp.hlsl); 22 and 25 the material's own cel style (SdfToon.WriteRows; KEEP IN SYNC with
-    // sdfToonStyle in shade/sdf-toon.hlsli and sdfShadeBinding's suppression), all zero to inherit the world's default, a
-    // mode of 1 for a styled material and -1 for one kept unstyled; 23 and 24 are free. Row 25.w carries glass shadow
-    // extinction per world unit, independent of cel ink RGB.
+    // with sdfGlassContact and the medium in passes/sdf-glass.comp.hlsl); 22.x the material's own style mode (KEEP IN SYNC with
+    // sdfToonStyled in shade/sdf-toon.hlsli and sdfShadeBinding's suppression), zero to inherit the world's default,
+    // 1 for a styled material and -1 for one kept unstyled; 23 and 24 are free. Row 25.w carries glass shadow
+    // extinction per world unit.
     // Bleed occupies 2.w/7.zw, and indirect receive is 3.w. Weathering pattern XYZ uses
     // 15.w/17.w/19.z; noise coverage is 19.w; reveal softness is 17.z. The second octave's frequency ratio is 15.z and
     // its gain 18.w (zero reads one octave); the turn is row 26 as a unit quaternion (x, y, z, w). A reveal stage is
@@ -376,7 +375,6 @@ public sealed class SdfAppearance {
         var paintCursor = (materialVector + (MaterialVectorsPerEntry * m_materials.Length));
         var tableCursor = checked((paintCursor + m_materials.Sum(selector: static m => ((m.Paints?.Count ?? 0) * PaintVectorsPerEntry))));
         var shadeCursor = checked((tableCursor + m_materials.Sum(selector: static m => (m.Paints?.Sum(selector: PaintSideVectors) ?? 0))));
-        Span<Vector4> toonRows = stackalloc Vector4[2];
 
         for (var index = 0; (index < m_materials.Length); index++) {
             var m = m_materials[index];
@@ -426,9 +424,7 @@ public sealed class SdfAppearance {
                 paintCursor += PaintVectorsPerEntry;
             }
             if (m.Toon is { } toon) {
-                toon.WriteRows(inkW: (m.Glass?.ShadowDensity ?? 0f), mode: (toon.Enabled ? 1f : -1f), rows: toonRows);
-                Row(words: section, row: 22, value: toonRows[0]);
-                Row(words: section, row: 25, value: toonRows[1]);
+                Row(words: section, row: 22, value: new Vector4((toon.Enabled ? 1f : -1f), 0f, 0f, 0f));
             }
             if (m.Flow is { } flow) {
                 var revealed = (flow.Surface ?? default);
@@ -454,8 +450,7 @@ public sealed class SdfAppearance {
             if (m.Glass is { } glass) {
                 Row(words: section, row: 21, value: new(value: glass.Absorption(tint: m.Albedo), w: glass.Ior));
                 Row(words: section, row: 31, value: new(value: glass.Scatter, w: glass.Scattering));
-                // Row 25.w is independent of the cel ink's RGB; keep the existing table stride.
-                if (m.Toon is null) { Row(words: section, row: 25, value: new Vector4(0f, 0f, 0f, glass.ShadowDensity)); }
+                Row(words: section, row: 25, value: new Vector4(0f, 0f, 0f, glass.ShadowDensity));
             }
             if (m.Inset is { } inset) {
                 var paint = inset.Paint;

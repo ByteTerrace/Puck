@@ -204,7 +204,8 @@ public sealed partial class SdfMeshIrradiance {
                         var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
                         var visible = InAnyView(center, in snapshot);
                         candidates.Add(new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: present ? probe.LitAt : 0, Trace: (token == 0),
-                            Overdue: bound > 0 && age >= bound, Stale: present && change != InputChange.None, Urgency: AgePriority(age, bound, visible, probe.Moved), Visible: visible));
+                            Overdue: bound > 0 && age >= bound, Stale: present && change != InputChange.None, Urgency: AgePriority(age, bound, visible, probe.Moved), Visible: visible,
+                            Seen: visible && present && change == InputChange.Due && probe.Lighting < snapshot.Lighting.Jump));
                     }
                 }
             }
@@ -404,14 +405,18 @@ public sealed partial class SdfMeshIrradiance {
     }
 
     // The rays sdfProbeShade traces from one valid probe, for each of its hit texels at most, and the light loop after
-    // them: one toward each shadowing directional light, and unless the probe reuses its local cube, one toward each point
-    // light whose range reaches the probe's origin (a hit's own distance is not known before the trace answers).
+    // them: one toward each shadowing directional light from each, and unless the probe reuses its local cube, one toward
+    // each point light whose range reaches the probe's origin from each hit (a hit's own distance is not known before the
+    // trace answers) and one toward every point light from the centre, for its visibility bit.
     private static long RelightRays(Lighting lighting, Vector3 origin, bool reuses) {
         var lights = 0L;
         foreach (var light in lighting.Lights) { if (light.CastsShadow) { lights++; } }
+        var rays = (lights * (SdfMeshProbeDepth.HitCount + 1));
         if (!reuses) {
-            foreach (var point in lighting.Points) { if (Vector3.DistanceSquared(point.Position, origin) < (point.Range * point.Range)) { lights++; } }
+            foreach (var point in lighting.Points) {
+                rays += ((Vector3.DistanceSquared(point.Position, origin) < (point.Range * point.Range)) ? (SdfMeshProbeDepth.HitCount + 1) : 1);
+            }
         }
-        return (lights * (SdfMeshProbeDepth.HitCount + 1));
+        return rays;
     }
 }

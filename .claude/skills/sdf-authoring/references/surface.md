@@ -19,7 +19,7 @@
 | `fill` | `#RRGGBB` or a state binding | black | an artistic tint on the side the key light misses, scaled by ambient occlusion |
 | `bleed` | `#RRGGBB` or a state binding | white | scales diffuse reflectance and emission sent into indirect lighting |
 | `receive` | finite ≥ 0 | 1 | scales indirect light received by the surface |
-| `toon` | a cel style, the `render.toon` fields | the world's default style | the material's own cel style, on unless `enabled: false` (which keeps it continuous); the standard's `celStyle`, `celHardStyle` and `continuousStyle` (`worlds/standard/styles.puck`) |
+| `toon` | a style mark, `{ enabled }` | the world's default (`render.toon`) | whether the material is styled, on unless `enabled: false` (which keeps it continuous under `world.toon` and a styled default). It carries no look: the band and the ink are the row's `shade` program, which the standard's `celMaterial`, `celHatched` and `celPaint` write with the mark (`worlds/standard/styles.puck`, `ink.puck`) |
 | `weathering` | see below | absent | |
 | `inset` | see below | absent | |
 | `paints` | see below | absent | |

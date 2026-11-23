@@ -14,6 +14,9 @@ namespace Puck.World;
 /// <see cref="Add"/> and <see cref="Remove"/>.</para></remarks>
 public sealed class WorldPortalOccupancy {
     private readonly HashSet<(string PlacementId, string FaceName, int Seat)> m_inside = [];
+    // The bodies a destination refused at a face, held from it until they stand clear. Host-side retry state: a
+    // checkpoint carries none, so a restored body may ask once more.
+    private readonly HashSet<(string PlacementId, string FaceName, int Seat)> m_refused = [];
     // The inside rows each seat holds, indexed by seat; a seat past the end holds none.
     private int[] m_seatRows = [];
 
@@ -70,6 +73,7 @@ public sealed class WorldPortalOccupancy {
         ArgumentNullException.ThrowIfNull(argument: rows);
 
         m_inside.Clear();
+        m_refused.Clear();
         Array.Clear(array: m_seatRows);
 
         foreach (var row in rows) {
@@ -84,6 +88,26 @@ public sealed class WorldPortalOccupancy {
     /// <param name="seat">The local seat index.</param>
     public void SeedInside(string placementId, string faceName, int seat) =>
         _ = Add(key: (placementId, faceName, seat));
+    /// <summary>Holds a body from a face whose destination refused it for good, until the scan sees it stand clear of the
+    /// face and calls <see cref="Release"/>: a body pressed against the glass crosses the region's edge back and forth,
+    /// and each entry would otherwise ask the destination again.</summary>
+    /// <param name="placementId">The face's owning placement id.</param>
+    /// <param name="faceName">The declared face name.</param>
+    /// <param name="seat">The body's index.</param>
+    public void Refuse(string placementId, string faceName, int seat) => _ = m_refused.Add(item: (placementId, faceName, seat));
+    /// <summary>Reports whether a body is held from a face by a refusal.</summary>
+    /// <param name="placementId">The face's owning placement id.</param>
+    /// <param name="faceName">The declared face name.</param>
+    /// <param name="seat">The body's index.</param>
+    /// <returns><see langword="true"/> when the body is held.</returns>
+    public bool IsRefused(string placementId, string faceName, int seat) => ((m_refused.Count > 0) && m_refused.Contains(item: (placementId, faceName, seat)));
+    /// <summary>Lets a held body try the face again.</summary>
+    /// <param name="placementId">The face's owning placement id.</param>
+    /// <param name="faceName">The declared face name.</param>
+    /// <param name="seat">The body's index.</param>
+    public void Release(string placementId, string faceName, int seat) {
+        if (m_refused.Count > 0) { _ = m_refused.Remove(item: (placementId, faceName, seat)); }
+    }
 
     private bool Add((string PlacementId, string FaceName, int Seat) key) {
         if (!m_inside.Add(item: key)) { return false; }

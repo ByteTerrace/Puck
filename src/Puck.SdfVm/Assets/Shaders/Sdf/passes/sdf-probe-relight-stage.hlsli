@@ -65,17 +65,18 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         float4 mode = sdfProbeLighting[row + 3];
         uint index = (uint)mode.y;
         if (index >= 32 * SDF_MESH_IRRADIANCE_LIGHT_WORDS || (reuse && mode.w != 0)) { continue; }
+        // A point light's bit is whether the probe sees its position, at any distance and whatever its power or range:
+        // geometry alone decides it, so a light switched on or brightened shows at once (KEEP IN SYNC with Relight).
         bool visible = true;
         float3 direction = position.xyz;
         float reach = counts.w;
         if (mode.w != 0) {
             float3 toward = position.xyz - origin;
             float length = sqrt(dot(toward, toward));
-            visible = length < position.w;
             direction = toward / max(length, 0.0001);
             reach = length - SDF_MESH_IRRADIANCE_LIGHT_BIAS;
         }
-        if (visible && mode.z != 0 && reach > 0) { visible = probeClear(origin, direction, reach, lane); }
+        if (mode.z != 0 && reach > 0) { visible = probeClear(origin, direction, reach, lane, mode.w != 0); }
         uint bit = 1u << (index & 31);
         if (visible) { InterlockedOr(probeSet[index >> 5], bit); }
         else { InterlockedOr(probeCleared[index >> 5], bit); }

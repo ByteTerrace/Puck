@@ -571,7 +571,7 @@ the grid the views pass runs on (`sdfPixelAt`), which is the render grid. A
 width written against it is in render pixels, so it doubles on screen when the
 render grid halves. The current outline corrects for this by scaling its
 authored width by the grid (`SdfFrameBlock.Write` passes
-`SdfViewSnapshot.RenderGrid` to `SdfToon.WriteRows`). An ink phase needs the
+`SdfViewSnapshot.RenderGrid` into the outline's style rows). An ink phase needs the
 same correction made once, in the footprint it is given. Below one render
 pixel, a line cannot be drawn thinner, only fainter, which is what the current
 code does for widths under one.

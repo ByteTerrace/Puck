@@ -25,10 +25,11 @@ float3 sdfViewsStage(SdfPixel p, bool shadesPixel, out float coverage, out float
     // barrier or none does.
     bool ambientFilter = sdfViewsFiltersAmbient(p.viewMode);
     bool shadowFilter = sdfViewsFiltersShadows(p.viewMode);
+    bool edgeSearch = sdfViewsSearchesEdges(p.viewMode);
 
 #ifndef SDF_VIEWS_BINNED
-    if (ambientFilter || shadowFilter) {
-        sdfViewsGatherFilter(p, shadowFilter);
+    if (ambientFilter || shadowFilter || edgeSearch) {
+        sdfViewsGatherFilter(p, shadowFilter, edgeSearch);
     }
 #endif
 
@@ -70,7 +71,19 @@ float3 sdfViewsStage(SdfPixel p, bool shadesPixel, out float coverage, out float
         s.shadows = (shadowFilter ? shadows : s.shadows);
     }
 
-    float3 color = sdfLightStage(p, s, meshHit, surfacePoint, useFinalShading, curvatureShading, material, lights, coverage, reactivity);
+    // The pixel's edges, which its program's edge.* members read: the filter record's in a binned view, the group's own
+    // search otherwise, and none in a view no program of which reads one.
+    SdfShadeEdges edges = sdfShadeNoEdges();
+
+    if (edgeSearch && s.hit) {
+#ifdef SDF_VIEWS_BINNED
+        edges = sdfViewsEdgesUnpack(sdfViewsFilterRecords[sdfViewsFilterRecord(p.pixel, p.viewIndex) + 2u]);
+#else
+        edges = sdfViewsEdgesUnpack(sdfViewsEdgesWord(p));
+#endif
+    }
+
+    float3 color = sdfLightStage(p, s, meshHit, surfacePoint, useFinalShading, curvatureShading, material, lights, edges, coverage, reactivity);
     float3 viewColor = sdfDebugView(p, s, color);
 
     if (!sdfDebugComposesFinal((uint)p.viewMode) && (p.viewMode != SDF_DEBUG_VIEW_SKY_COST)) {

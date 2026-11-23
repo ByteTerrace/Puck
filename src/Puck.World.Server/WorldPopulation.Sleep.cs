@@ -45,6 +45,7 @@ public sealed partial class WorldPopulation {
     private bool m_factAllSlotsDirty = true;
 
     internal void NoteBodyFactChanged(int index) {
+        ThrowIfPartitioned();
         if (((uint)index) < ((uint)m_entries.Length)) {
             m_factDirtySlots.Add(index: index);
         }
@@ -94,6 +95,7 @@ public sealed partial class WorldPopulation {
     /// glide, a rest-latch break) means whatever rests on it or holds it must solve again.</summary>
     /// <param name="index">The body's population index.</param>
     internal void BodyWoke(int index) {
+        ThrowIfPartitioned();
         m_factDirtySlots.Add(index: index);
         WakeBodyIsland(index: index);
         m_eventBodies.Add(item: index);
@@ -109,6 +111,7 @@ public sealed partial class WorldPopulation {
     /// slot releases its body.</summary>
     /// <param name="index">The slot's population index.</param>
     internal void DisturbBody(int index) {
+        ThrowIfPartitioned();
         m_factDirtySlots.Add(index: index);
         WakeBodyIsland(index: index);
         ForgetRigidContacts(index: index, keepReferred: false);

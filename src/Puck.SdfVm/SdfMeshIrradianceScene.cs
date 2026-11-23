@@ -503,7 +503,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     public bool Intersect(Vector3 origin, Vector3 direction, float maximum, out float distance, out Vector3 normal, out int material, out float bakeHalfDiagonal, out int instance, out int triangle) {
         var content = m_content;
         var inverse = Reciprocal(direction: direction);
-        var nearest = new DrawLeaves(any: false, direction: direction, entries: content.Entries, instances: content.Instances, inverse: inverse, origin: origin, counters: Counters);
+        var nearest = new DrawLeaves(any: false, direction: direction, entries: content.Entries, instances: content.Instances, inverse: inverse, origin: origin, counters: Counters, toward: false);
 
         distance = maximum;
         bakeHalfDiagonal = 0;
@@ -541,10 +541,21 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// <param name="direction">The ray's unit direction.</param>
     /// <param name="maximum">The distance it must reach, in metres.</param>
     /// <returns><see langword="true"/> when nothing blocks the ray.</returns>
-    public bool Unblocked(Vector3 origin, Vector3 direction, float maximum) {
+    public bool Unblocked(Vector3 origin, Vector3 direction, float maximum) => Unblocked(direction: direction, maximum: maximum, origin: origin, toward: false);
+    /// <summary>Returns whether a ray from a point reaches a point light: what blocks it is an open sheet it meets or a
+    /// solid it leaves, a face of an enclosed solid that faces the light (<see cref="SdfMeshProbeTrace.SolidWord"/>). A
+    /// solid that holds the light, its fixture, is entered and never left short of it, so it never hides the light,
+    /// however deep in it the light sits; a solid between the point and the light is left on its far side and blocks it.
+    /// The answer depends on the geometry and the light's position alone, never on its power.</summary>
+    /// <param name="origin">The ray's origin, in world space, outside every solid.</param>
+    /// <param name="direction">The ray's unit direction, toward the light.</param>
+    /// <param name="maximum">The distance it must reach, in metres: the light's.</param>
+    /// <returns><see langword="true"/> when nothing blocks the ray.</returns>
+    public bool ReachesLight(Vector3 origin, Vector3 direction, float maximum) => Unblocked(direction: direction, maximum: maximum, origin: origin, toward: true);
+    private bool Unblocked(Vector3 origin, Vector3 direction, float maximum, bool toward) {
         var content = m_content;
         var inverse = Reciprocal(direction: direction);
-        var any = new DrawLeaves(any: true, direction: direction, entries: content.Entries, instances: content.Instances, inverse: inverse, origin: origin, counters: Counters);
+        var any = new DrawLeaves(any: true, direction: direction, entries: content.Entries, instances: content.Instances, inverse: inverse, origin: origin, counters: Counters, toward: toward);
         var distance = maximum;
 
         if ((content.NodeCount > 0) && Slab(low: content.Nodes[0].Low, high: content.Nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
@@ -646,7 +657,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     }
     // The top level's leaves: a braid subtree of a draw's geometry each, walked by the ray in the geometry's frame. A ray
     // carried through an affine transform keeps its parameter, so distances compare across draws.
-    private struct DrawLeaves(Entry[] entries, Instance[] instances, Vector3 origin, Vector3 direction, Vector3 inverse, bool any, WorkCounterSet counters) : ILeaves {
+    // `toward`: the ray goes toward a point light, and a solid instance blocks it only where it leaves the solid.
+    private struct DrawLeaves(Entry[] entries, Instance[] instances, Vector3 origin, Vector3 direction, Vector3 inverse, bool any, WorkCounterSet counters, bool toward) : ILeaves {
         public int Instance = -1;
         public int Triangle = -1;
 
@@ -655,7 +667,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 var entry = entries[index];
                 ref readonly var instance = ref instances[entry.Instance];
                 var local = (instance.Identity ? direction : Vector3.TransformNormal(normal: direction, matrix: instance.WorldToObject));
-                var triangles = new TriangleLeaves(any: any, direction: local, geometry: instance.Geometry, origin: (instance.Identity ? origin : Vector3.Transform(position: origin, matrix: instance.WorldToObject)));
+                var triangles = new TriangleLeaves(any: any, direction: local, geometry: instance.Geometry, origin: (instance.Identity ? origin : Vector3.Transform(position: origin, matrix: instance.WorldToObject)), leaving: (toward && instance.Solid));
 
                 Walk(distance: ref distance, inverse: (instance.Identity ? inverse : Reciprocal(direction: local)), leaves: ref triangles, nodes: new PackedNodes(frame: instance.Geometry.Frames[entry.Braid], nodes: instance.Geometry.Nodes), origin: triangles.Origin, start: entry.Node, counters: counters);
                 if (triangles.Hit >= 0) {
@@ -669,8 +681,9 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         }
     }
     // A geometry's leaves: its triangles, Möller-Trumbore and two-sided, since a probe inside geometry must see the back
-    // faces it would otherwise leak through.
-    private struct TriangleLeaves(Geometry geometry, Vector3 origin, Vector3 direction, bool any) : ILeaves {
+    // faces it would otherwise leak through. `leaving` keeps only the faces the ray leaves through, those whose outward
+    // normal (the winding's cross product in the mesh's frame) points along the ray. KEEP IN SYNC with sdfProbeWalk.
+    private struct TriangleLeaves(Geometry geometry, Vector3 origin, Vector3 direction, bool any, bool leaving) : ILeaves {
         public readonly Vector3 Origin = origin;
         public readonly Vector3 Direction = direction;
         public int Hit = -1;
@@ -682,6 +695,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
             for (var index = first; (index < (first + count)); index++) {
                 Geometry.Corner(e1: out var e1, e2: out var e2, indices: indices, positions: positions, triangle: triangles[index], v0: out var v0);
+                if (leaving && (Vector3.Dot(vector1: Vector3.Cross(vector1: e1, vector2: e2), vector2: Direction) <= 0f)) { continue; }
                 if (HitTriangle(distance: out var t, e1: e1, e2: e2, maximum: distance, v0: v0)) {
                     distance = t;
                     Hit = index;
@@ -757,6 +771,9 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         public required Matrix4x4 WorldToObject { get; init; }
         public required Matrix4x4 NormalToWorld { get; init; }
         public required bool Identity { get; init; }
+        // Whether the mesh encloses a solid, outward faces wound counter-clockwise through a transform that keeps the
+        // winding (SdfMeshDraw.EnclosesSolid): a ray toward a light is blocked only where it leaves it (TriangleLeaves).
+        public required bool Solid { get; init; }
         public required int Material { get; init; }
         public required ReadOnlyMemory<uint> TriangleMaterials { get; init; }
         public float BakeHalfDiagonal { get; init; }
@@ -776,6 +793,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 Mesh = draw.Mesh,
                 Geometry = geometry,
                 Identity = matrix.IsIdentity,
+                Solid = draw.EnclosesSolid,
                 Material = draw.Material,
                 NormalToWorld = normalToWorld,
                 ObjectToWorld = matrix,

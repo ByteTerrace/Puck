@@ -78,8 +78,8 @@ Each row cites the code it was read from; recheck it before building on it.
 | Lights | `point(...)` and `spot(...)` in `render.lighting.lights`, powered from state cells, riding bodies by `anchor: entity(...)`, made in arrays by `map` | `SdfLights.MaxLights = 128` per frame; point and spot lights shadow only through the irradiance probes; 500 lights needs [illumination](illumination.md)'s many-lights step |
 | A market | Escrow, refund and settle compose from ordinary effects (schema README, "A market"); `auction.puck` is the nearest content | None known |
 | Repeated buildings | `for`/`map` placements; a rigid creation bakes once and each copy costs a transform and a draw ([rendering decision](../decisions/rendering.md)) | One near copy sets every copy's baked detail ([virtual geometry](virtual-geometry.md)) |
-| Toon look | `standard/shading.puck` `cel`, `standard/styles.puck` `celMaterial`/`celStyle`, `standard/tones.puck` | The outline is the fixed detector in `shade/sdf-toon-outline.hlsli` |
-| Ink and hatching | `ink-checks.puck` draws a terminator and a broken contour from today's stamp | [Ink](ink.md) steps 1 to 9 are open; `SdfShadePhase { Surface, Light, Compose }` has no ink phase; no hatching exists |
+| Toon look | `standard/shading.puck` `cel`, `standard/styles.puck` `celMaterial`/`celStyle`, `standard/tones.puck` | None known |
+| Ink and hatching | A program's `ink` phase over the view's edge search; `standard/ink.puck` `inked`, `hatched` and `standardInk`, which `celMaterial` and `celHatched` lay over the band; the city's `cityStyle` carries its own ink | No line on glass or water, no seam of a smooth blend, and no part boundary inside one bake group ([ink](ink.md#build-order)) |
 | The benchmark | `benchmark-route.puck` chapters; `gardenSeam` already crosses a painting with a `cross` step, and `go` plans over the destination's navigation | Against a remote authority the route does not yet arrive in every chapter ([benchmark](benchmark.md)) |
 
 ## The city
@@ -148,13 +148,16 @@ size and topology.
    - A player walking through a crowd is not blocked; citizens step around
      (captures from the square at three hours of the day).
    - `puck test --reproduce` on the city's scenario agrees bit for bit.
-3. **Vehicles and market.** About 100 vehicles on the ring and cross streets,
-   and the market's trade.
-   - Every vehicle completes its loop and stops at each stop (state reading
-     per vehicle).
-   - No vehicle and walker share a cell (counted over a day).
-   - A player buys at a stall: the escrow, payment and goods rows change as
-     the market's rules say.
+3. **Vehicles and market.** About 100 vehicles lapping the road loops, and the
+   market's trade.
+   - Every vehicle laps its loop (`vehicleStop` advancing per vehicle).
+   - A vehicle in a crossing's approach box holds while the crossing's region
+     has an occupant, and resumes once it is empty (`vehicleHeld` per
+     vehicle), so no vehicle drives through a walker.
+   - A player buys at a stall: the purse, goods, stock and till rows change
+     as the market's rules say.
+   - The vehicles move onto road `curve` targets once a curve follower can
+     stand down and resume, the mechanism possession also needs.
 4. **Look and night.** The city to the visual bar.
    - About 500 lights over the night (the lights table's count read from
      `world.counters` or the render report).

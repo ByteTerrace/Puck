@@ -16,6 +16,7 @@ public sealed partial class WorldInputRuntime {
 
     /// <summary>Opens a body step's lazy input undo scope; unchanged ticks retain no checkpoint arrays.</summary>
     internal void BeginKitStep() {
+        m_host.Population.ThrowIfPartitioned();
         m_kitStep = true;
         m_kitPopulationRevision = m_host.Population.Revision;
         m_kitUndo.Clear();
@@ -32,6 +33,7 @@ public sealed partial class WorldInputRuntime {
 
     /// <summary>Commits input barriers with an admitted step, or restores them with a refused sweep.</summary>
     internal void CompleteKitStep(bool accepted) {
+        m_host.Population.ThrowIfPartitioned();
         m_kitStep = false;
         if (accepted) { m_host.Arena.Commit(mark: m_kitStateMark); } else { m_host.Arena.Rewind(mark: m_kitStateMark); }
         if (!accepted && (m_kitUndo.Count != 0)) {
@@ -56,6 +58,7 @@ public sealed partial class WorldInputRuntime {
     }
     /// <summary>Applies an already validated firing's foreign state member inside the same body-step undo scope.</summary>
     internal void ApplyKitForeignState(int sourceIndex, int targetIndex, CompiledBodyInstruction instruction) {
+        m_host.Population.ThrowIfPartitioned();
         if (m_host.Body(index: targetIndex) is not { } target) { return; }
         if (m_kitStep && (sourceIndex != targetIndex)) {
             var captured = false;
@@ -72,6 +75,7 @@ public sealed partial class WorldInputRuntime {
     }
     /// <summary>Installs a successful kit firing's selector changes before another input consumer runs.</summary>
     internal void CommitKitEffects(int body, int logicalChannel = -1) {
+        m_host.Population.ThrowIfPartitioned();
         if ((m_ordered.Count == 0) || (m_host.Population.InputCatalog.Families.Length == 0)) { return; }
         // Synchronize the owner before retuning a kit: its old bank and edge state are the barrier's source.
         foreach (var owner in m_ordered) {
@@ -90,6 +94,7 @@ public sealed partial class WorldInputRuntime {
     }
     /// <summary>Checks a kit firing's complete proposed register writes before any motion or delivery happens.</summary>
     internal bool TryValidateEffects(int body, ReadOnlySpan<CompiledBodyInstruction> effects, BodyEffectTargets targets, out string reason) {
+        m_host.Population.ThrowIfPartitioned();
         reason = string.Empty;
         if ((m_ordered.Count == 0) || (m_host.Population.InputCatalog.Families.Length == 0)) { return true; }
         var writesState = false;

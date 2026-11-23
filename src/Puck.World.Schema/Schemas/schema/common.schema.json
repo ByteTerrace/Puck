@@ -2602,7 +2602,7 @@
       "title": "WorldRenderAirHeight"
     },
     "ToonStyleDocument": {
-      "description": "A cel style on the wire (SdfToon): the world\u0027s default style (render.toon) and a palette row\u0027s own (Toon) are this one shape, so a style authored once (the standard\u0027s styles.puck) serves both. A style marks its material styled and carries its ink; the banding is the material\u0027s shade program (the standard\u0027s celMaterial writes both), and the live world.toon off shades every styled material continuously and uninked. The engine holds no look of its own: a style that is on authors every value, and one that says enabled: false needs none. Presentation only; no field enters simulation state or the bake.",
+      "description": "A style mark on the wire (SdfToon): the world\u0027s default (render.toon) and a palette row\u0027s own (Toon) are this one shape. A style marks its material styled and carries no look: the banding and the ink are the material\u0027s shade program (the standard\u0027s celMaterial writes both), and the live world.toon off shades every styled material continuously and uninked. Presentation only; no field enters simulation state or the bake.",
       "type": [
         "object",
         "null"
@@ -2614,35 +2614,6 @@
             "boolean",
             "null"
           ],
-          "default": null
-        },
-        "outlineWidth": {
-          "description": "The close outline radius in output pixels, in [0, 4]; zero disables outlines.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "outlineDistance": {
-          "description": "The distance in metres at which the outline radius halves, in [0.1, 1000].",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "outlineNormal": {
-          "description": "The crease normal cosine, in [0, 0.95].",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "outlineTint": {
-          "$ref": "#/$defs/DocumentVector3",
-          "description": "The outline multiplier, three linear RGB values in [0, 1].",
           "default": null
         }
       },
@@ -2709,11 +2680,12 @@
       "title": "SdfShadeParameter"
     },
     "SdfShadePhase": {
-      "description": "The three entry points of a material\u0027s presentation program.",
+      "description": "The entry points of a material\u0027s presentation program, in the order a pixel runs them: the surface, each light of its walk, the composition of the lit colour, then the ink drawn over it.",
       "enum": [
         "Surface",
         "Light",
-        "Compose"
+        "Compose",
+        "Ink"
       ],
       "title": "SdfShadePhase"
     },

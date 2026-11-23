@@ -86,21 +86,39 @@ views {
 }
 
 // The city's cel look (../standard/styles.puck): the standard band with a warmer held shade, a dusky mauve a step
-// below the lit cream and ochre, so the town reads painted rather than lit.
-let cityStyle = celStyle with { shadowTint [0.78, 0.62, 0.74], restore: 0.65 }
+// below the lit cream and ochre, so the town reads painted rather than lit. Its ink is the standard line at a town's
+// scale: a heavier weight, so a house across the square keeps a drawn outline, and a skyline that stays lined. The
+// walls and the timber take the ink's strokes in their shade (cityWall); the ground, the awnings and the roofs are
+// lined and left clean (cityCel), so the hatching marks the masses and the streets stay open.
+let cityStyle = celStyle with {
+  shadowTint [0.78, 0.62, 0.74]
+  restore: 0.65
+  ink: standardInk with {
+    weight: 0.07
+    bold: 3
+    far: 0.6
+    fold: 0.7
+    tint [0.13, 0.1, 0.16]
+    hatch: 0.5
+    hatchPitch: 0.55
+    hatchWidth: 0.2
+    hatchSoftness: 0.3
+  }
+}
 function cityCel(base) = celMaterial(base, cityStyle)
+function cityWall(base) = celHatched(base, cityStyle)
 
 // The palette every city prototype shares, by slot: cel paint on everything but the river, and the warm glow of a lit
 // window.
 let cityPalette = [
-  cityCel({ color: "#EBDDBF", roughness: 0.85 })
-  cityCel({ color: "#D9A55B", roughness: 0.85 })
+  cityWall({ color: "#EBDDBF", roughness: 0.85 })
+  cityWall({ color: "#D9A55B", roughness: 0.85 })
   cityCel({ color: "#2F7F7A", roughness: 0.6, specular: 0.15 })
-  cityCel({ color: "#B9A88E", roughness: 0.9 })
+  cityWall({ color: "#B9A88E", roughness: 0.9 })
   cityCel({ color: "#5C5A58", roughness: 0.95 })
   cityCel({ color: "#C9BFAE", roughness: 0.9 })
   { color: "#3D7C8C", roughness: 0.15, specular: 0.5 }
-  cityCel({ color: "#8A5A3C", roughness: 0.8 })
+  cityWall({ color: "#8A5A3C", roughness: 0.8 })
   { color: "#FFD9A0", emissive: 160, roughness: 0.4 }
 ]
 let cream = 0
@@ -266,20 +284,20 @@ vehicleCrossings(
 
 
 // The street lamps: a 4.2 m post with a lantern on each road's outer pavement and round the fountain, each a point light
-// of `cityLampLumens` lumens that the city's clock (city-day.puck) turns on from dusk to dawn: 7 along the north and
-// south of the ring and 6 along its east and west, 7 down the avenue, 15 along the cross street, 6 by the works road,
-// 10 on the quay's edge and 8 round the fountain.
-let cityLampLumens = 1800
+// of `cityLampLumens` lumens that the city's clock (city-day.puck) turns on from dusk to dawn: 6 along each side of the
+// ring, 7 down the avenue, 15 along the cross street, 6 by the works road, 10 on the quay's edge and 8 round the
+// fountain. No lamp stands within 6 m of x 0, where the avenue runs and a traveller walks out of the arrival frame.
+let cityLampLumens = 4500
 let cityLampSpots = concat(
-  map(range(0, 7), k => [(-36 + 12 * k), -8.5]),
-  map(range(0, 7), k => [(-36 + 12 * k), -91.5]),
+  map(range(0, 6), k => [(-30 + 12 * k), -8.5]),
+  map(range(0, 6), k => [(-30 + 12 * k), -91.5]),
   map(range(0, 6), k => [41.5, (-80 + 12 * k)]),
   map(range(0, 6), k => [-41.5, (-80 + 12 * k)]),
   map(range(0, 7), k => [6.5, (-100 - 15 * k)]),
-  map(range(0, 15), k => [(-140 + 20 * k), -123.5]),
+  map(range(0, 15), k => [(-150 + 20 * k), -123.5]),
   map(range(0, 6), k => [(46 + 20 * k), -43.5]),
-  map(range(0, 10), k => [(-40 + 20 * k), -202.5]),
-  map(range(0, 8), k => [(24 * sine(k * 0.7853981633974483)), (-50 + 24 * cosine(k * 0.7853981633974483))])
+  map(range(0, 10), k => [(-50 + 20 * k), -202.5]),
+  map(range(0, 8), k => [(24 * sine((k + 0.5) * 0.7853981633974483)), (-50 + 24 * cosine((k + 0.5) * 0.7853981633974483))])
 )
 
 // The lamps' power: on (`cityLampLumens`) from half past six in the evening to six in the morning, off by day.
@@ -784,7 +802,8 @@ prototypes {
     }
   }
 
-  // A street lamp: a timber post with a glowing lantern under a teal cap; its light is the city's, keyed on the clock.
+  // A street lamp: a timber post with a glowing lantern under a teal cap; its light is the city's, keyed on the clock,
+  // and sits in the lantern, which as the solid holding it never hides it.
   prototype "street-lamp" {
     document {
       name: "street-lamp"

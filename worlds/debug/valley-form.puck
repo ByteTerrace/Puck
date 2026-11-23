@@ -13,14 +13,8 @@ let valleyRockStyle = celStyle with {
   specularSize: 0.02
   restore: 0.5
   form: 0.5
-  ink {
-    outlineWidth: 0
-    outlineDistance: 12
-    outlineNormal: 0.65
-    outlineTint [1, 1, 1]
-  }
 }
-function celRock(base) = celMaterial(base, valleyRockStyle)
+function celRock(base) = celPaint(base, valleyRockStyle)
 
 // Each sector's macro form: its bearing, where the floor plane cuts its main mass, how high that mass rises, the mass's
 // half-extents out from the centre and along the ring, and the seed of its relief.

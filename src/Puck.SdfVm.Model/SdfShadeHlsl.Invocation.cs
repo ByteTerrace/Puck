@@ -28,8 +28,26 @@ bool sdfShadeBound(SdfShadeBinding binding) { return binding.range.y != 0u; }
 float3 sdfShadeDiagnostic(int material, int mode) {
     SdfShadeBinding binding = sdfShadeBinding(material);
     if (mode == SDF_DEBUG_VIEW_SHADE_TIER) return sdfShadeBound(binding) ? (binding.arm != 0u ? float3(0.0, 1.0, 0.2) : float3(0.0, 0.8, 1.0)) : 0.15;
-    float work = float(sdfShadeRead(binding.range.xy, 0u).z + sdfShadeRead(binding.range.xy, 1u).z + sdfShadeRead(binding.range.xy, 2u).z) / float(SDF_SHADE_MAX_PHASE_WORK);
+    float work = float(sdfShadeRead(binding.range.xy, 0u).z + sdfShadeRead(binding.range.xy, 1u).z + sdfShadeRead(binding.range.xy, 2u).z + sdfShadeRead(binding.range.xy, 3u).z) / float(SDF_SHADE_MAX_PHASE_WORK);
     return float3(work, work * work, 0.0);
+}
+// A pixel's edges, which a program reads as its edge.* members: the distance in display pixels to the nearest edge of
+// each class on the pixel's own surface (x an occlusion, y a crease, z an object boundary, w a material boundary), each
+// SDF_SHADE_EDGE_FAR where none lies within the search's reach, and the cosine between the two faces at the nearest
+// crease. A pixel whose view searched no edge has none, as every glass interface has.
+struct SdfShadeEdges { float4 distance; float creaseCosine; };
+SdfShadeEdges sdfShadeNoEdges() {
+    SdfShadeEdges edges;
+    edges.distance = SDF_SHADE_EDGE_FAR;
+    edges.creaseCosine = 1.0;
+    return edges;
+}
+void sdfShadeSetEdges(inout SdfShadeStamp stamp, SdfShadeEdges edges) {
+    sdfShadeSet_edge_depth(stamp, edges.distance.x);
+    sdfShadeSet_edge_crease(stamp, edges.distance.y);
+    sdfShadeSet_edge_object(stamp, edges.distance.z);
+    sdfShadeSet_edge_material(stamp, edges.distance.w);
+    sdfShadeSet_edge_creaseCosine(stamp, edges.creaseCosine);
 }
 SdfShadeStamp sdfShadeStamp(SdfMaterialData material, float3 position, float3 layerPosition, float3 normal,
     float3 ray, float curvature, float footprint, float4 lanes, float contact, float thickness, float4 rotation, int frameSlot, SdfMeshHit hit) {
@@ -46,6 +64,8 @@ SdfShadeStamp sdfShadeStamp(SdfMaterialData material, float3 position, float3 la
     sdfShadeSet_surface_normal(stamp, normal);
     sdfShadeSet_surface_curvature(stamp, curvature);
     sdfShadeSet_surface_footprint(stamp, footprint);
+    sdfShadeSet_surface_pixel(stamp, footprint / max(passGroup.displayPixels, 1.0e-6));
+    sdfShadeSetEdges(stamp, sdfShadeNoEdges());
     sdfShadeSet_surface_rayDirection(stamp, ray);
     sdfShadeSet_surface_contact(stamp, contact);
     sdfShadeSet_surface_thickness(stamp, thickness);
@@ -133,11 +153,15 @@ SdfLightResponse sdfShadeLightPhase(SdfShadeBinding binding, SdfShadeStamp stamp
     if ((o.assigned & 2u) != 0u) response.rim = sdfShadeColor(o.o1, response.rim);
     if ((o.assigned & 4u) != 0u) response.specular = sdfShadeColor(o.o2, response.specular);
     if ((o.assigned & 8u) != 0u) response.attenuation = sdfShadeUnit(o.o3, response.attenuation);
+    if ((o.assigned & 16u) != 0u) response.linework = sdfShadeUnit(o.o4, 0.0);
     return response;
 }
+// `line` enters as the largest line any light of the walk raised and leaves as the compose phase's own when it assigns
+// one: the channel the ink phase reads as ink.line.
 float3 sdfShadeComposePhase(SdfShadeBinding binding, SdfShadeStamp stamp, float3 radiance, float3 rim, float3 specular,
-    float attenuation, float3 indirect, float3 reflection, float3 environment, float adaptation, float3 fallback) {
+    float attenuation, float3 indirect, float3 reflection, float3 environment, float adaptation, float3 fallback, inout float linework) {
     if (!sdfShadeHas(binding, 2u)) return fallback;
+    sdfShadeSet_compose_line(stamp, linework);
     sdfShadeSet_compose_radiance(stamp, radiance);
     sdfShadeSet_compose_rim(stamp, rim);
     sdfShadeSet_compose_specular(stamp, specular);
@@ -149,7 +173,24 @@ float3 sdfShadeComposePhase(SdfShadeBinding binding, SdfShadeStamp stamp, float3
     sdfShadeSet_compose_exposure(stamp, passGroup.exposure);
     SdfShadeOutputs o;
     sdfShadeExecute(binding, 2u, stamp, (SdfShadeCarry)0, o);
+    if ((o.assigned & 2u) != 0u) linework = sdfShadeUnit(o.o1, linework);
     return (o.assigned & 1u) != 0u ? sdfShadeColor(o.o0, fallback) : fallback;
+}
+// The ink phase, the one door a program's ink is drawn through: it runs only where one of its line inputs is live (an
+// edge of any class within the search's reach, or a line the light or compose phase raised), and shows the colour under
+// it moved toward its colour by its coverage. Elsewhere the pixel keeps the colour under it and no ink instruction runs.
+float3 sdfShadeInkPhase(SdfShadeBinding binding, SdfShadeStamp stamp, float3 under, float linework, SdfShadeEdges edges) {
+    if (!sdfShadeHas(binding, 3u)) return under;
+    if (!(linework > 0.0) && all(edges.distance >= SDF_SHADE_EDGE_FAR)) return under;
+    sdfShadeSetEdges(stamp, edges);
+    sdfShadeSet_ink_under(stamp, under);
+    sdfShadeSet_ink_line(stamp, linework);
+    sdfShadeSet_ink_exposure(stamp, passGroup.exposure);
+    SdfShadeOutputs o;
+    sdfShadeExecute(binding, 3u, stamp, (SdfShadeCarry)0, o);
+    float3 color = (o.assigned & 1u) != 0u ? sdfShadeColor(o.o0, under) : under;
+    float coverage = (o.assigned & 2u) != 0u ? sdfShadeUnit(o.o1, 0.0) : 0.0;
+    return lerp(under, color, coverage);
 }
 """;
 }
