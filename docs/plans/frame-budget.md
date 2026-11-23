@@ -110,6 +110,74 @@ needing it, at the occupancy its largest input leaves it
 ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#registers-set-occupancy-occupancy-is-not-speed)),
 and that each input keeps storage sized for its worst pixel.
 
+## Where the memory goes
+
+The route's worst reading was not a pass's cost. In the garden painting chapter
+a nested view's `surface` pass read 21 ms, where the same kernel shades the
+whole display in under 2 ms. The device had run out of local memory. The
+process's ledger (`host.memory`'s `pool device`) peaked past what the operating
+system budgets the process (`segment local`'s `budget`), and from then a pass
+that touches memory the system has moved waits for it, whichever pass that is.
+Over the route on both backends and both loops, only the chapter whose peak
+crossed that budget read so; on a smaller window, or with the peak under the
+budget, the same walk reads like every other chapter. The paging itself was not
+captured, so the mechanism is an inference from that correspondence. A pass
+that reads far above its kernel's cost is read beside `host.memory` first.
+
+The RTX 4070's profile authors a device budget of 8 GiB (`deviceMemoryMiB`).
+Storage that a view or a world cannot render without is granted past the limit
+(`over-limit-grants`), so the budget did not hold: the families below
+(`host.memory families 0`, MiB) held 5.8 GiB at boot and 8.3 GiB by the second
+loop, under 10.4 GiB of device blocks, and a resize or a second large view on
+top of that crossed what the system gives the process.
+
+| Owner | Boot | Second loop | What it is |
+|---|---|---|---|
+| Mesh regions | 2,430 | 2,100 | The debug world's meshes, resident twice at about 1 GiB each |
+| The main view | 2,020 | 2,020 | The storage table above |
+| Irradiance volumes, traced scenes and programs | 620 | 1,370 | One set a residency |
+| Nested views | 0 | 1,050 | A window once walked up to kept a display's worth |
+| Other worlds' shadows and views | 0 | 950 | Three entries, spare pairs and glass extinction a residency |
+| The world's shadows | 335 | 370 | |
+| The root | 250 | 250 | |
+| Room in device blocks no family names | 700 | 2,000 | Blocks the churn of resizes and shadow layers leaves part filled |
+
+Four causes. This memo owns the per-pixel storage a view holds (the table
+above and the first cause); [the memory plan](streaming-and-memory.md#the-build-order)
+owns residency, the mesh budget and shadow allocation, which the other three
+are evidence for.
+
+1. **A view out of sight kept the storage of the extent it was last seen at.**
+   A window fills the display as a body walks through it, and nothing shrank it
+   afterwards, since a view no schedule reaches renders nothing. Such a view
+   now renders at its least share until its node installs that extent
+   (`WorldViewGraphHost.ReserveShrinks`).
+2. **A world no window shows was resident at full detail.** A session view no
+   fit measures demanded meshes at its whole image from wherever its camera
+   stands, so the debug world's second residency, seen through a window inside
+   a painting, held the same gibibyte as the one the seat stands in, and the
+   one detail bias coarsened both to fit. Holding such a view's demand to the
+   display pixels it is presented over did not shrink that region
+   (`world.residency`'s `region-named` read the same, above its
+   `region-budget`, with the bias at its ceiling), so the lever is one
+   residency a world, not demand
+   ([nested views](streaming-and-memory.md#nested-views-fitted-windows-authored-quality-and-standing-feeds)).
+3. **The debug world is resident twice.** A session whose stream is not what a
+   whole reader is handed (`WorldSceneShare.SharesAuthority`) renders a scene of
+   its own, and every such session of one world shares one
+   (`WorldSharedScene`). That scene is a residency with its own mesh region,
+   shadows and irradiance volume, though nearly all its meshes are the first
+   residency's: the library shares a mesh on the host (`SdfMeshLibrary`) and
+   each residency places its own copy on the device (`SdfMeshRegionArena`).
+4. **Resizes and shadow layers churn the blocks.** A window's extent moves in
+   sixteen steps an octave (`RenderGraphExtent.StepsPerOctave`), each a whole
+   new graph beside the old one until it retires, and a pressure trim gives
+   back shadow layers the next frame takes again (`world.residency`'s `shadows`
+   line counts the `trims`, and `host.memory`'s `over-limit-by` names the
+   layers granted past the limit). The window's part is this memo's: an
+   allocation at the octave with the render grid moving inside it, as the main
+   view's does, once the storage table's rows shrink what an octave holds.
+
 ## The design
 
 **Each lighting input is resolved once, by a lean kernel of its own, into a
@@ -217,6 +285,47 @@ from the cells its frustum meets.
 
 Each step lands with the check that shows it worked, read at the stage standing
 and over the route, before and after, in one World session each.
+
+The device fits its budget first, since a frame over it reads as a stall in
+whichever pass touches moved memory ([where the memory goes](#where-the-memory-goes)).
+The memory plan owns that; this memo's share of it is one step:
+
+- **Windows allocate by octave.** The render grid moves inside the allocation,
+  so a window grows without a second graph beside the first. Check: over the
+  route the `session` family's `allocated` stays within twice its `peak`.
+
+  The mechanism exists for the main view and does not carry over as it stands.
+  A view's graph allocates at its ceiling and records each frame at a grid
+  inside it (`IShaderPipelineRenderExtent.CeilingAt`, `FrameAt`), but a view
+  whose grid is under its output runs the reconstructing fragment
+  (`SdfViewSnapshot.Reconstructs`, `SdfWorldPackage.Fragment`), which upscales
+  to the whole output. A window allocated at an octave that way would be
+  resampled twice, once up to the octave and once down by its consumer, and
+  its output-sized passes would run at up to four times the pixels its glass
+  spans. Two shapes avoid that, and the step chooses between them by storage
+  held and rebuilds counted over the route:
+
+  1. The native fragment records at the grid into the corner of its
+     allocation, and the consumer maps that part of the image, as it already
+     maps the part of the glass a fitted image spans (`SdfViewSnapshot.ImageWindow`,
+     which `SdfWorldPasses` writes for the sampling view). Every reader of a
+     session image's whole extent takes the same mapping: the screen emission
+     kernel, which sizes its grid by the image's dimensions, picking and the
+     capture path.
+  2. Fewer steps an octave for a window's allocation alone
+     (`RenderGraphExtent.StepsPerOctave` divides every footprint in sixteen),
+     with no grid inside. Two steps cut rebuilds eightfold with no kernel
+     change, but a window then renders and holds nearly half as many pixels
+     again as its glass spans on average, and over twice as many just past a
+     step, which is the cost this memo exists to remove.
+
+  The first is the step. The second is a fallback only if the mapping proves
+  unworkable for one of those readers.
+
+The route's report writes a chapter disturbed when the device's memory rose in
+it to what the system budgets the process
+([the benchmark](benchmark.md#it-plays-as-a-player-takes-it)), so a stall is not read as a
+pass's cost. Then the time:
 
 1. **A coarser lookup with interpolation.** A cell of four pixels a side; views
    blends the four cells about a pixel, weighing each by the reuse test, and a

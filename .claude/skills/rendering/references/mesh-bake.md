@@ -704,8 +704,18 @@ laws exercise that boundary.
   `SdfMeshTier.Of`; at 1080 lines and a 60-degree field, 2 mm within 3.7 m,
   4 mm to 7.5 m, 8 mm to 15 m, 16 mm to 30 m), held between the rungs that
   change its mesh (`FinestTier`, the finest spacing any member asks;
-  `CoarsestTier`, the planned final cell, past which nothing refines). With
-  no demand point a group plans at its coarsest; an offline bake
+  `FloorTier`, the planned final cell, past which nothing refines;
+  `CoarsestTier`, the last rung whose cell fits `SdfMeshTier.CoarsestCells`
+  times along the planned box). Past its floor a tier coarsens the lattice
+  itself (`FinalLongest`, `SdfMeshTier.LatticeSamples`): the sheet refinement
+  still runs but splits no finer than `PastFloorThinShare` of the tier's cell
+  (`ThinSplit`), a rung that meshes nothing owes the rung below it
+  (`MeshedNothingPastFloor`), and a part thinner than a cell inside a group
+  that still meshes is lost at that rung. Every floor role (arrival, the kept
+  floor, eviction, the trace mesh, the band a small view draws) reads
+  `AtFloor` and `FloorTier`, never `CoarsestTier`. With no demand point a
+  group plans at its coarsest, and a plan made before any view was observed
+  asks the floor (`Tiers`); an offline bake
   (`MeshCpuBake`, `puck mesh audit --cpu`) sets `SdfMeshPathBake.PlannedTier`
   and takes each group's finest unless `--tier` or `--eye` says otherwise. A
   landed group whose demanded tier has been finer than its own for

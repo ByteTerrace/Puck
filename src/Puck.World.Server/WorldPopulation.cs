@@ -513,6 +513,8 @@ public sealed partial class WorldPopulation {
         // The goal field this tick's kit plan resolved for the body's shared navigated producer (PrepareGoalField), the
         // only field its kit partition reads; derived scratch, never state.
         public Puck.Physics.Navigation.NavigationGoalField? PreparedGoalField;
+        // The cell the plan located the body on for that field's read.
+        public (int Domain, int Cell) PreparedGoalFrom;
         public required int Index { get; init; }
         public required WorldActionStateLane Lane { get; init; }
         // The occupant's implicit procedural rig, separate from its authority-local slot. Explicit authored looks can

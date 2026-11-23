@@ -99,7 +99,9 @@ public sealed partial class NavigationRuntime {
     /// <returns>The field.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="goalDomain"/> is not a domain index, or
     /// <paramref name="goalCell"/> is not a walkable cell of it.</exception>
+    /// <exception cref="InvalidOperationException">The runtime is read-only (<see cref="EnterReadOnly"/>).</exception>
     public NavigationGoalField GoalField(int goalDomain, int goalCell, NavigationCostProfile? profile = null) {
+        ThrowIfReadOnly(operation: "a goal field read");
         profile ??= NavigationCostProfile.Neutral;
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: ((uint)goalDomain), other: ((uint)m_domains.Length), paramName: nameof(goalDomain));
         if (!m_domains[goalDomain].IsWalkable(node: goalCell)) {

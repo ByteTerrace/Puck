@@ -224,7 +224,7 @@ a research report disagrees with the code, the code wins.
 | A selector across residencies | Built for bytes and background GPU time (`SdfResidencySelector`): one detail bias, a budget for each residency's bake, a reservation for each mesh region and one budget of background GPU work. Each residency still owns its `SdfWorldResidency.MeshDemand` and its mesh region. Background GPU work is weighed across residencies by display share (`SdfGpuWorkBudget.Weigh`); memory and bake admission are not yet ordered across them. |
 | Lighting on the same demand points | Partly built. Each level of the probe window already centres on the box of every view's camera when it fits (`SdfMeshIrradiance.WindowLow`), and probe urgency reads every view. What remains: the window is anchored on the first view (`SdfMeshIrradiance.WindowCamera`), the lighting derives its own view list (`SdfMeshIrradiance.CaptureViewCameras`), the trace scene is built from every static draw of the frame (`SdfMeshIrradiance.StaticKey`), and `SdfMeshIrradiance.ProbeCache` is bounded by window cells, not bytes. |
 | Demand mapped through portal faces | The mapping is built; its use is not. A fitted window's view is the viewer's eye taken through the glass, measured in the display pixels the glass spans and held to its frustum (`SdfViewSnapshot.DemandHeight`, `SdfViewSnapshot.DemandWithinView`), and every attached window's view is a demand point whether or not it renders (`SdfMeshDemand.Observe` leaves out only a view that is elsewhere, has no region or no valid camera). What is missing is arrival without a render: a residency's upload is submitted only for a scheduled render (`SdfWorldPasses.PrepareRender`), so an unseen window still renders at the least share (`WorldViewGraphHost.ReserveArrivals`, `WorldPortalVisibility.ArrivalShare`). |
-| Eviction under a byte budget | Not built. Under pressure a group is planned again at a coarser tier or every demand is coarsened half a rung (`SdfMeshTier.Biased`); no group ever leaves. A mesh the arena cannot place is refused and its draws leave the frame (`SdfMeshRegionArena.Refused`), which shows as a hole unless its group keeps a floor; only a group that arrived in view keeps one ([step 5](#step-5-the-floor-and-eviction)). A growth the account or the device refuses leaves the region as it is, and the placements it could not hold are refused the same way (`SdfMeshRegionArena.Clip`). |
+| Eviction under a byte budget | Not built. Under pressure a group is planned again at a coarser tier or every demand is coarsened half a rung (`SdfMeshTier.Biased`); no group ever leaves. The coarsening now has somewhere to go: the ladder runs past each group's floor to a rung of a few cells (`SdfMeshTier.Coarsest`), so the bias lowers what the draws name at any distance, and it is given back within seconds of the room returning (`SdfMeshTier.BiasQuietFrames`). A mesh the arena cannot place is refused and its draws leave the frame (`SdfMeshRegionArena.Refused`), which shows as a hole unless its group keeps a floor; only a group that arrived in view keeps one ([step 5](#step-5-the-floor-and-eviction)). A growth the account or the device refuses leaves the region as it is, and the placements it could not hold are refused the same way (`SdfMeshRegionArena.Clip`). |
 | Authored areas | Not built. |
 | Terrain tiles, then the moons | Not built: a bake group is an instance, a slot or a union, so one large instance has one tier and one demand box. |
 
@@ -381,6 +381,47 @@ The account controls engine allocations that pass its doors. The CLR,
 driver and other uninstrumented allocations can grow between samples. A
 headless boot exercises host admission without a renderer. Qualification
 requires the physical rows and peak private bytes during a windowed run.
+
+### Budgets by class
+
+A bar says what a device's process may hold; a budget by class says who may
+hold it, so a class that grows has an owner instead of taking detail's room.
+The figures are forcing functions, in GiB, for play in the debug world with
+its paintings in view. Each is read from the row that already prints it, and a
+class over its figure is that class's defect, fixed at its cause.
+
+Device memory (`host.memory`'s device pool, by class and family):
+
+| Class | RTX 4070, 8 | RTX 2060, 4.5 | Read from | Owner |
+|---|---|---|---|---|
+| The main view's per-pixel storage | 1.0 | 0.5 | `host.memory families`, the `world` graph's rows | [The frame budget](frame-budget.md#the-budget) |
+| The occupied world's lighting, trace scene, shadows and tables | 1.2 | 0.8 | The families of its residency; `world.residency`'s fixed-cost and shadows lines | This plan, steps 5 and 9 |
+| Every other world in view together, by what its glass shows | 0.8 | 0.4 | The routed residencies' families | This plan, step 5 |
+| Nested views' pass storage | 0.5 | 0.3 | The session and routed graphs' rows | The frame budget's nested views |
+| Mesh detail, every residency | 3.0 | 1.6 | The selector's line: elastic, grants, named | The selector |
+| Workspace, staging and room inside blocks | 0.7 | 0.4 | Workspace class; the device-blocks residual | This plan, step 7 |
+| Headroom under the bar | 0.8 | 0.5 | The pool's room | The account |
+
+Host memory (`host.memory`'s physical rows), read on resident private bytes:
+
+| Row | RTX 4070, 8 | RTX 2060, 6 | Owner |
+|---|---|---|---|
+| Managed heap | 2.0 | 1.5 | Step 11 and the heap walk's tenants |
+| Native allocator: mesh payloads and its slack | 2.0 | 1.4 | Steps 6 and 2 |
+| Lighting on the CPU: the volume, the probe cache, the trace scene | 0.6 | 0.4 | Step 9 |
+| Device blocks in system memory, region host copies and staging | 0.6 | 0.5 | Steps 2 and 7 |
+| Runtime, loader and driver | 1.0 | 0.8 | Named; the player build's composite image |
+| Headroom under the bar | 1.8 | 1.4 | The account |
+
+The Steam Deck's one pool holds both tables' rows under its 10 GiB bar at its
+own panel's size; its figures wait for the device.
+
+A walk of the debug route on the RTX 4070 before the ladder ran past the floor
+read the fixed classes together at about five thirds of their figures, mesh
+detail's peak over its figure, the room inside blocks at more than twice its
+figure, and on the host the managed heap near three times its figure and the
+native allocator about twice **[reading]**. What each step below moves is
+judged against these rows.
 
 ## How the research was weighed
 
@@ -1195,17 +1236,28 @@ mesh's draws are filtered out of the staged list, and a group's first mesh has
 nothing to draw meanwhile **[opened]**; the rendering reference says plainly
 that this "shows as a hole". Every tier is a complete mesh identified from its
 inputs, cached in the library and the store on its own, and each group's
-coarsest tier is its own unrefined lattice (`SdfMeshTier.Coarsest`)
-**[opened]**. Baked offline at its coarsest tier
-(`puck mesh audit --world worlds/debug --cpu --tier 24`), the debug world is
-about a twentieth of the triangles it has at its finest, a few hundred
-megabytes of vertex, index and material words **[reading]**. That is a partial
-estimate of payload and no more. It leaves out the groups the CPU evaluator
-refuses, skin attributes and member tables, draw records
-(`SdfMeshRecord.DrawWords` words each), block granularity and every body past
-one standing at rest for each look, and it says nothing of whether a coarse
-mesh still covers what it stands for. The floor is probably affordable and is not
-yet shown to be **[inference]**.
+floor tier is its own unrefined lattice (`SdfMeshTier.Floor`) **[opened]**.
+
+The floor was read in a windowed debug World at the hero spawn, by class
+(`world.residency`'s floor line) **[reading]**. It is not small: the floors
+are a little under half of the main world's mesh region there, six groups in
+seven draw theirs because their demand asks something coarser still, and
+raising the bias through eleven half rungs on the route left the bytes the
+draws name where they were. An unrefined lattice holds the same samples along
+a group's longest axis however small the group is on screen, so a ladder that
+ended at the floor priced every far group, and every world seen through a
+small glass, at its floor. That is the cause behind three readings taken
+apart: the mesh regions standing over their share, a bias that moved and
+changed nothing, and a second residency of the boot world costing about what
+the first does.
+
+So the ladder continues past the floor (`SdfMeshTier.Coarsest`,
+`SdfMeshTier.LatticeSamples`): a tier past it coarsens the lattice itself,
+each rung halving the samples along every axis, down to a rung whose cell
+fits a few times along the group. The floor keeps its roles (arrival, the
+kept product a small view draws, the mesh an eviction falls back to, the
+lighting's trace mesh), and a group whose demand asks a rung past its floor
+draws that rung and keeps no floor beside it (`SdfMeshBakeGroup.AtFloor`).
 
 | Option | Closes | Fails at |
 |---|---|---|
@@ -1217,16 +1269,29 @@ yet shown to be **[inference]**.
 **Favoured: B.** A tier already owns its vertices, so the floor is a tier and
 option C is not built. Under it:
 
-- **A floor must be admissible.** `SdfMeshTier.Coarsest` bounds a lattice's
+- **A floor must be admissible.** `SdfMeshTier.Floor` bounds a lattice's
   spacing; it certifies neither that the mesh is non-empty nor that it covers
   what the finer tiers cover. A thin wall or a line of lettering can contour
-  to nothing at its coarsest rung, and keeping an empty mesh resident fixes
+  to nothing at a coarse rung, and keeping an empty mesh resident fixes
   nothing. A group's floor is therefore the coarsest tier that passes a
   coverage check made when it is baked, as the mesh audit's `uncovered` and
   `open` metrics check a prototype offline; for most groups that is the
-  coarsest rung. The check is part of the bake, so the floor tier follows from
+  floor tier. The check is part of the bake, so the floor tier follows from
   the group's inputs like any identity, and both products come from the one
   contouring path: there is no second mesher for floors.
+- **A rung past the floor keeps what the contour can find, and no more.**
+  Built: the lattice's sheet refinement still runs there, held to a share of
+  the tier's cell, and a rung that meshes nothing owes the rung below it down
+  to the floor (`SdfMeshPathBake`'s tier decision), so a whole group never
+  vanishes because its cells grew. Not built: a part thinner than a cell
+  inside a group that still meshes is lost at that rung, at the distance where
+  the cell is under half a pixel. The remedy is the outward offset the field
+  levels experiment aimed its contours with
+  ([virtual geometry's D1](virtual-geometry.md#d1-the-unit-of-detail),
+  `SdfMeshPathBake.ContourLevel`), applied only past the floor: a lattice
+  that contours the field dilated by half its cell's diagonal cannot step over
+  a part. It is the next step of this decision and is judged on a presented
+  walk across the valley toward the gallery.
 - **A group in reach draws its floor until its demanded tier stands, and again
   the moment that tier is evicted or refused.** Evicting is handing the draws
   back and forgetting the detail's words, in the selector's priority order,
@@ -3035,8 +3100,39 @@ there is about a quarter more work before its detail and no view waits on it,
 so a refusal there falls back through coarser tiers instead. The floor line
 prints floors shown, pending, empty and kept, groups with none, evictions and
 their bytes, holes in reach and the frames that had any, and floor bytes by
-class, in logical words. Still to build, in order:
+class, in logical words.
 
+The ladder now runs past the floor
+([decision 5](#decision-5-the-unit-is-a-tier-and-the-coarsest-tier-is-the-floor)):
+a group whose demand asks a rung past its floor bakes a lattice of that rung's
+cell and keeps no floor beside it, a rung there that meshes nothing steps down
+toward the floor, and the bias coarsens such groups like any other. Two
+smaller pieces went with it. A scene shown through windows alone is weighed
+and lit by its largest window (`WorldRoutedScene`'s frame takes its windows'
+`WorldRoutedWindow.DisplayShare` and `WorldRoutedWindow.IndirectLevels`),
+where it used to count as filling the display. And a world's shadows give
+every layer back once no upload decides them and no pass binds them for
+`SdfWorldShadows.UnseenSeconds`, served from the residency's upkeep, so a
+world no view shows stops holding them; before, only an upload answered a
+trim, and an unseen world submits none. A trim also keeps an anchor a rated
+view read within the last few uploads, which it used to give back and take
+again a frame later, past the pool's limit. Still to build, in order:
+
+- detail given back by time and planned by demand. A group keeps a tier finer
+  than its demand asks until the budget presses, and a residency planned
+  before its views are observed plans every floor: a second scene of the boot
+  world behind a window a few hundred pixels across then names several
+  hundred megabytes that nothing coarsens while the pool has room. Under a
+  budget lowered to a smaller device's bar the spare tiers are coarsened a
+  few dozen at a time, each a bake where the store lacks the rung, and the
+  bias waits for the last of them, so the pool stands over the bar for
+  minutes. What is to build: a spare tier leaves once no demand has asked it
+  for a stated time, a windowed residency plans at its windows' demand once
+  they are observed, and the bias rises while a backlog of spares could not
+  fit the budget even coarsened;
+- the outward offset for a lattice past the floor, so a part thinner than its
+  cell inside a group that still meshes is kept
+  ([decision 5](#decision-5-the-unit-is-a-tier-and-the-coarsest-tier-is-the-floor));
 - a coverage check and a finer rung for a floor that meshes nothing or misses
   what its detail covers. The lighting already compares a floor with its
   group's first finer mesh, witness by witness at a stated tolerance
@@ -3051,7 +3147,33 @@ class, in logical words. Still to build, in order:
   of what gives way counted;
 - a residency's tables built on demand and given back, which now retire
   through the device's one retirement without draining the device
-  (`GpuDeviceRetirement`);
+  (`GpuDeviceRetirement`). The fixed storage a routed residency holds whatever
+  its glass shows (its irradiance tables and hit cache, its shadows'
+  selections, its program tables) is the largest class left over the device
+  bar, and nothing gives it back while the world stays attached. The door is
+  the one a device loss already uses: a residency that keeps its bake,
+  lighting and meshes and rebuilds its tables at its next preparation
+  (`SdfWorldResidency.OnDeviceLost`). What is to build is its use on a live
+  device: the tables retired behind their readers, the views that bind them
+  rebound, the trigger (rung 4: pressure, and no view observing for a stated
+  time) and the lead that wakes the world before its glass is seen
+  ([step 4](#step-4-staged-by-demand));
+- the irradiance volume holding only the levels its frame measures
+  (`SdfFrame.IndirectLevels`): every level keeps its slots today, so a world
+  behind a small glass measures one level and stores them all;
+- one mesh store for a presentation
+  ([decision 3](#decision-3-one-reservation-across-residencies-with-floors-and-classes)'s
+  option C), so a mesh several residencies name is placed once. It is what
+  makes a second scene of one world cheap where disclosure requires one: the
+  debug world's own sessions are handed a scene that differs from a whole
+  reader's by one row a card game withholds, which is a different scene and
+  rightly a second residency (`WorldSessionRoute`), and nearly every mesh the
+  two name is the same;
+- draw rows shed when the device refuses a region's draw records. Today that
+  refusal is raised as a lost device (`SdfWorldTables`' mesh region), which
+  rebuilds the presentation under the limit the refusal left and does not end
+  the World; the proper answer stages the rows that fit and owes the rest,
+  decided before the arena's transaction opens;
 - relocation by a copy within the device.
 
 The readings above are owed to a GPU leg, and they decide most on the RTX
@@ -3239,7 +3361,7 @@ than the authored far distance.
 | The fixed cost of one residency, and of one character | Step 2, then step 5 | Whether a hub of many portals needs a session-scale design beyond this plan |
 | Sparse binding, page alignment, actual binding queues, address/view limits and physical release on the three bar devices | Step 7 hardware lanes: the 4070 support reading is taken; qualify the implementation on both backends, read the 2060 from the player build, and verify the Deck's driver-source column on hardware ([design](#sparse-backing-design-for-review)) | Sparse-path availability and its automatic contiguous fallback; priority remains optional |
 | Sparse block slack, partly live pages, map/compaction cost and enhanced-barrier reuse spelling | Step 7 allocator/backend implementers, lifetime reviewer and lead's quiet window ([design](#sparse-backing-design-for-review)) | Physical-block size and qualification of the pressure transaction, without changing the direct shader read |
-| The floor's bytes by class, and the groups whose floor is finer than their coarsest rung | Step 5's first reading | The floor class's size; whether the floor is affordable on each device |
+| What the rungs past the floor lose, and where a player sees it | A presented walk across the valley toward the gallery and through the painting wing, read for a part that vanishes or a group that turns up coarse (step 5) | Whether the outward offset lands before or with the lowered-budget walk |
 | Which tier the lighting traces, and what it must keep beyond recent hits | Step 9's first reading | Whether the floor and the trace tier are one product; what observation may evict |
 | How long detail may go unobserved before it is speculative, and the granularity of the mark | Step 8, with a turn's captures | The grace interval, the first owner question, and whether a mark per draw pays |
 | How long a place stays coarse after pressure ends (`SdfMeshTier.BiasQuietFrames`) | Step 3, on the lowered budget path and back | The quiet interval, once one bias serves every residency |
