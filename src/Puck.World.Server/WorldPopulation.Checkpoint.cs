@@ -239,6 +239,7 @@ public sealed partial class WorldPopulation {
             ActivityPhaseRemainder: entry.ProducerState.ActivityPhaseRemainder,
             ActivityRate: entry.ProducerState.ActivityRate,
             CurveArcRaw: entry.ProducerState.CurveArcRaw,
+            CurveArcRemainder: entry.ProducerState.CurveArcRemainder,
             Flock: new WorldPopulationFlockCheckpoint(
                 Desired: entry.ProducerState.FlockDesired,
                 Generation: entry.ProducerState.FlockGeneration,
@@ -426,6 +427,7 @@ public sealed partial class WorldPopulation {
                 ActivityPhaseRemainder = producer.ActivityPhaseRemainder,
                 ActivityRate = producer.ActivityRate,
                 CurveArcRaw = producer.CurveArcRaw,
+                CurveArcRemainder = producer.CurveArcRemainder,
                 FlockDesired = producer.Flock.Desired,
                 FlockGeneration = producer.Flock.Generation,
                 FlockRemainingTicks = producer.Flock.RemainingTicks,

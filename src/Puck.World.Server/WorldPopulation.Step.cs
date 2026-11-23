@@ -25,6 +25,7 @@ public sealed partial class WorldPopulation {
         if (resetPhase) {
             entry.ProducerState.AcquiredTarget = -1;
             entry.ProducerState.CurveArcRaw = 0L;
+            entry.ProducerState.CurveArcRemainder = 0L;
             entry.NavigationState.Clear();
             entry.ProducerState.Phase = phase;
             entry.ProducerState.PhaseRemainder = 0L;
@@ -89,7 +90,7 @@ public sealed partial class WorldPopulation {
             AffectingSubject: (entry.Body?.AffectingSubject ?? -1)
         );
     }
-    private BodyProducerSensors ReadProducerSensors(int selfIndex, Entry entry, int currentTarget, in FixedVector3 self, CompiledBodyProducer producer) {
+    private BodyProducerSensors ReadProducerSensors(int selfIndex, Entry entry, int currentTarget, in FixedVector3 self, CompiledBodyProducer producer, ulong stepTicks) {
         var candidate = BodySensorTarget.None;
         var targetSource = producer.Target;
         var frozen = (producer.Flock is not null);
@@ -137,7 +138,9 @@ public sealed partial class WorldPopulation {
 
                 entry.ProducerState.CurveArcRaw = AdvanceCurveArc(
                     arcRaw: entry.ProducerState.CurveArcRaw,
-                    stepRaw: fixedSource.ArcStepRaw,
+                    rate: fixedSource.ArcRate,
+                    remainder: ref entry.ProducerState.CurveArcRemainder,
+                    stepTicks: stepTicks,
                     totalLengthRaw: compiled.TotalLengthRaw,
                     closed: compiled.Closed
                 );
@@ -369,13 +372,19 @@ public sealed partial class WorldPopulation {
 
         return m_navigation.TryLocate(cell: out cell, domain: out domain, network: network, position: in position);
     }
-    // Advances a curve-follow arc position by one compiled step, then wraps (closed) or clamps (open) it back inside
-    // [0, totalLengthRaw] — the persisted state never grows past the curve's own length, so it stays bounded across
-    // an arbitrarily long run and CompiledCurvatureSpline.EvaluateRaw's own wrap/clamp is redundant with, never a
-    // substitute for, this one (EvaluateRaw wraps its ARGUMENT; this wraps the STORED accumulator). Both arcRaw and
-    // stepRaw arrive already bounded well under long's range (CurvatureSpline's own MaxCoordinate/
-    // MaxTangentChordRatio caps bound totalLengthRaw far below 2^62), so the addition itself cannot overflow.
-    private static long AdvanceCurveArc(long arcRaw, long stepRaw, long totalLengthRaw, bool closed) {
+    // Advances a curve-follow arc position by its rate over the engine ticks a producer step covers (the remainder
+    // carried in `remainder`, so a batched steering cadence travels what the same span of single ticks would), then
+    // wraps (closed) or clamps (open) it back inside [0, totalLengthRaw] — the persisted state never grows past the
+    // curve's own length, so it stays bounded across an arbitrarily long run and CompiledCurvatureSpline.EvaluateRaw's
+    // own wrap/clamp is redundant with, never a substitute for, this one (EvaluateRaw wraps its ARGUMENT; this wraps the
+    // STORED accumulator). The rate is Q16 and the arc Q32, so the integrated step widens by 16 bits; a step covers at
+    // most a cadence of a second at a validated rate, and CurvatureSpline's own MaxCoordinate/MaxTangentChordRatio caps
+    // bound totalLengthRaw far below 2^62, so the addition cannot overflow.
+    private static long AdvanceCurveArc(long arcRaw, FixedQ4816 rate, ref long remainder, ulong stepTicks, long totalLengthRaw, bool closed) {
+        var accumulator = FixedRateAccumulator.FromRemainder(remainder: remainder, ticksPerSecond: ((long)FixedTickConversion.TicksPerSecond));
+        var stepRaw = (accumulator.Integrate(elapsedTicks: stepTicks, ratePerSecond: rate).Value << FixedQ4816.FractionBitCount);
+
+        remainder = accumulator.Remainder;
         var next = unchecked((arcRaw + stepRaw));
 
         if (!closed) {
@@ -637,6 +646,7 @@ public sealed partial class WorldPopulation {
                 entry.ProducerState.ActiveProducerCurveIndex = -1;
                 entry.ProducerState.ActiveProducerNavigationDomainIndex = -1;
                 entry.ProducerState.CurveArcRaw = 0L;
+                entry.ProducerState.CurveArcRemainder = 0L;
                 entry.NavigationState.Clear(status: NavigationStatus.NoTarget);
                 entry.ProducerState.FlockSeeded = false;
             }
@@ -671,6 +681,7 @@ public sealed partial class WorldPopulation {
             entry.ProducerState.CurveArcRaw = ((((uint)curveIndex) < ((uint)m_curveRows.Count))
                 ? m_curveRows[curveIndex].Compiled.NearestStationRaw(position: body.FixedPosition)
                 : 0L);
+            entry.ProducerState.CurveArcRemainder = 0L;
             entry.ProducerState.ActiveProducerNavigationDomainIndex = navigationDomainIndex;
             entry.NavigationState.Clear();
             entry.ProducerState.FlockSeeded = false;
@@ -692,7 +703,8 @@ public sealed partial class WorldPopulation {
             entry: entry,
             currentTarget: entry.ProducerState.AcquiredTarget,
             self: body.FixedPosition,
-            producer: producer
+            producer: producer,
+            stepTicks: stepTicks
         );
 
         if (producer.Flock is not null) {

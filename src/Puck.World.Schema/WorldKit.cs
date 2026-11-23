@@ -238,8 +238,7 @@ public readonly record struct FixedWorldKit(
     /// <param name="dynamics">The world's declared <c>dynamics</c> rows, resolved against <paramref name="kit"/>'s
     /// motion row's own declared dynamics row name (validation has already refused a dangling name).</param>
     /// <param name="simulationRateHz">The world's own simulation rate — the step width a resolved dynamics row's
-    /// propagator compiles against (validation has already refused a resolved name at rate 0), and a curve-follow
-    /// producer's per-tick arc step divisor.</param>
+    /// propagator compiles against (validation has already refused a resolved name at rate 0).</param>
     public static FixedWorldKit Compile(WorldKit kit, WorldChannelTable channels, WorldTargetRegisterTable targets, WorldCurveTable curves, WorldNavigationDomainTable navigation, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState, IReadOnlyList<DynamicsRow> dynamics, int simulationRateHz) {
         var actions = new CompiledActionSpec?[ChannelLimits.MaxChannels];
         var thresholds = new FixedQ4816[ChannelLimits.MaxChannels];
@@ -306,8 +305,7 @@ public readonly record struct FixedWorldKit(
                     channels: channels,
                     targets: targets,
                     curves: curves,
-                    navigation: navigation,
-                    simulationRateHz: simulationRateHz
+                    navigation: navigation
                 )
             );
         }

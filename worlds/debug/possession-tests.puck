@@ -61,29 +61,33 @@ citizenDesign(domain: "pad")
 citizenLooks(coats: ["#3E6E8E"], hats: ["#2F2A26"])
 
 // The crossing spans x 4.5 .. 7.5 of the south straight; the vehicle's approach box is the 4.5 m of road before it.
-vehicleCrossings(
-  vehicles: [{ key: 3, group: "loop" }],
-  crossings: [{ region: "crossing", group: "loop", x0: 0, x1: 4.5, z0: -10, z1: -6, cx0: 4.5, cx1: 7.5, cz0: -11, cz1: -5 }]
-)
+let possessionVehicles = [{ key: 3, group: "loop" }]
+let possessionCrossings = [{ region: "crossing", group: "loop", x0: 0, x1: 4.5, z0: -10, z1: -6, cx0: 4.5, cx1: 7.5, cz0: -11, cz1: -5 }]
+vehicleCrossings(vehicles: possessionVehicles, crossings: possessionCrossings)
 
 // The day: home until noon, work after it. It starts at 09:36 and runs a fiftieth of a day a second, so noon comes at
 // tick 50.
 state {
-  world {
-    slot day = 0.4
-  }
+  world [
+    { name: "day", kind: "Fixed", value: "0.4" }
+  ]
 }
 rule "day-runs" {
   when $tick >= 1
   mode: Level
   day = day + 0.002
 }
-citizenSchedule(
-  people: [{ key: 4, home: [20, 20], work: [30, 20], market: [25, 30], group: 0 }],
-  phases: [{ from: 0, to: 12, anchor: "home" }, { from: 12, to: 24, anchor: "work" }],
-  clock: day,
-  groups: 1
-)
+let possessionPeople = [
+  {
+    key: 4
+    home [20, 20]
+    work [30, 20]
+    market [25, 30]
+    group: 0
+  }
+]
+let possessionPhases = [{ from: 0, to: 12, anchor: "home" }, { from: 12, to: 24, anchor: "work" }]
+citizenSchedule(people: possessionPeople, clock: day, phases: possessionPhases, groups: 1)
 
 prototypes {
   prototype "floor" {
@@ -221,13 +225,15 @@ test "a released citizen resumes its schedule from where it stands" {
   }
 }
 
-// Possessed at tick 30 and driven off the road for two seconds, the vehicle stands well off its loop when released.
+// Possessed at tick 30, the vehicle drives as a vehicle does: forward along its facing, turning on the yaw channel. The
+// seat turns it off the road for half a second and drives it straight on, so it stands well off its loop.
 test "a possessed curve vehicle leaves its loop under the seat" {
   when {
     ticks 30
     seat1: body.engage body:3
     ticks 5
-    seat1: body.fly 1 1 0 0 0 0 2
+    seat1: body.fly 1 0 0 1 0 0 0.5
+    seat1: body.fly 1 0 0 0 0 0 1.5
     ticks 70
   }
   expect {
@@ -242,7 +248,8 @@ test "a released curve vehicle rejoins its loop at the nearest station" {
     ticks 30
     seat1: body.engage body:3
     ticks 5
-    seat1: body.fly 1 1 0 0 0 0 2
+    seat1: body.fly 1 0 0 1 0 0 0.5
+    seat1: body.fly 1 0 0 0 0 0 1.5
     ticks 70
     seat1: body.disengage
     ticks 600

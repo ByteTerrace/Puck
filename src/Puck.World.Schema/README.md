@@ -3086,7 +3086,7 @@ the eye/pivot along the curve by arc-length fraction, `Puck.World.Client`'s
 evaluates—never a second solver) and a
 body-motion program's `curve` target source
 (`Puck.Physics.Motion.BodyTargetSource.CurveFollow`, `Puck.World.Server`'s
-per-tick arc advance)—the seed the kart-track charter inherits. A follower
+arc advance over the engine ticks each producer step covers)—the seed the kart-track charter inherits. A follower
 joins its curve at the station nearest where it stands when its producer is
 selected (`CompiledCurvatureSpline.NearestStationRaw`), so bodies placed along
 one curve keep their spacing.

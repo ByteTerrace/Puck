@@ -347,7 +347,7 @@ export type WorldDefinition = {
 /**
  * An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns — every one addresses a state row and nothing else; a document project appends its own derived arms (a participant's kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.
  */
-export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectSetBodyState | null;
+export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectSetBodyState | WorldEffectHoldProducer | WorldEffectReleaseProducer | null;
 
 /**
  * Adds to a named state cell — the same shape as SetState, here the source is the addend rather than the replacement.
@@ -7737,6 +7737,17 @@ export type WorldEffectEmitCue = {
 };
 
 /**
+ * Holds a world-addressed body's producer: it stands down, its body coasting to rest under its motion program, until a rule releases it with ReleaseProducer. A hold is one reason a producer stands down and possession another; the producer starts again, from where the body stands, once neither holds. A rule reads both through producer(each, held|possessed|down).
+ */
+export type WorldEffectHoldProducer = {
+  $type?: "holdProducer";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
+};
+
+/**
  * Paints one lattice field cell, or the cube of Radius around it.
  */
 export type WorldEffectPaintField = {
@@ -7830,6 +7841,17 @@ export type WorldEffectPoseCell = {
    * The pitch a teleport stands the body at, about its right axis: a creation authored standing on its edge (a playing card, whose face looks along its forward axis) is laid flat at 90 or -90. A glide keeps the body's attitude and ignores it.
    */
   pitchDegrees?: number;
+};
+
+/**
+ * Releases a world-addressed body's producer from a HoldProducer hold; releasing a body that is not held does nothing.
+ */
+export type WorldEffectReleaseProducer = {
+  $type?: "releaseProducer";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
 };
 
 /**
