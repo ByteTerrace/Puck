@@ -1,0 +1,22 @@
+// The walking envelope the debug world's navigation domains are sized for, and the surface domain over it, shared by
+// the debug world's own domains (navigation.puck) and the city's (city.puck). A module library: it hands its importers
+// lets and functions and emits no document.
+
+import "../standard/domains"
+
+// The Moth's walking envelope (avatars/moth.puck): her capsule's 2.06 m height and 0.35 m radius, her 0.3 m step, and a
+// 50 degree slope, under the standard's 60 so a route never leans on the limit.
+let mothWalker = { height: 2.06, radius: 0.35, step: 0.3, slope: 50 }
+
+// A surface domain (../standard/domains.puck) for the Moth's envelope.
+function walkable(name, origin, cellSize, width, depth, probeUp, probeDown, maxPathNodes) = surfaceDomain(
+  name,
+  origin,
+  cellSize,
+  width,
+  depth,
+  probeUp,
+  probeDown,
+  maxPathNodes,
+  mothWalker
+)

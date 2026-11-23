@@ -196,6 +196,8 @@ literal's properties and on a block's property lines alike.
 setState(state: mancalaBoard, key: 6, expression: final0)
 transform sort(row: heartsHand, by: [{ row: heartsRank, descending: false }])
 designate(key: $each, register: "companion", targetKey: $right)
+designate(key: $each, kind: Point, register: "errand", placement: office, position: [0, 0, 2])
+designate(key: $each, kind: Point, register: "errand", pointX: marketX, pointY: 0, pointZ: marketZ)
 
 rule "advance" {
   mode: Level

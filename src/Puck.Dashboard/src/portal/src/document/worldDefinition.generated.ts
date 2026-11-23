@@ -6399,7 +6399,7 @@ export type WorldBodyContactPolicy = {
 /**
  * How a rule-triggered body designation chooses its target.
  */
-export type WorldBodyDesignationKind = "Body" | "Clear";
+export type WorldBodyDesignationKind = "Body" | "Clear" | "Point";
 
 export type WorldCamera = {
   /**
@@ -7663,7 +7663,7 @@ export type WorldEffectConsumeInput = {
 };
 
 /**
- * Designates a subject into a body's named target register, or clears the register. A kit's action designates into its own body the participant that last affected it; a world rule names the body with Key and the subject with TargetKey.
+ * Designates a subject into a body's named target register, or clears the register. A kit's action designates into its own body the participant that last affected it; a world rule names the body with Key and the subject with TargetKey, or a world point with Placement, Position and the pointX/pointY/pointZ expressions: the same point designation body.designate <register> at:x,y,z makes, which a body program's designated or navigated target walks to.
  */
 export type WorldEffectDesignate = {
   $type?: "designate";
@@ -7672,7 +7672,7 @@ export type WorldEffectDesignate = {
    */
   register: string;
   /**
-   * Whether the register is filled or cleared; only a world rule clears.
+   * Whether the register is filled with a body or a point, or cleared; only a world rule clears or designates a point.
    */
   kind?: WorldBodyDesignationKind;
   /**
@@ -7680,9 +7680,29 @@ export type WorldEffectDesignate = {
    */
   key?: StateChannelRefNonNullable;
   /**
-   * The body a world rule designates, required when Kind is Body and refused when it is Clear. A kit's action names none.
+   * The body a world rule designates, required when Kind is Body and refused otherwise. A kit's action names none.
    */
   targetKey?: StateChannelRefNonNullable;
+  /**
+   * For Point, the placement whose document position is the point's base (its frame composed over its parent, as every consumer reads it), read when the effect fires, so a moved placement is followed; the point is the origin when none is named.
+   */
+  placement?: string | null;
+  /**
+   * For Point, the literal point, or its offset from Placement when one is named. Exclusive with the point expressions.
+   */
+  position?: DocumentVector3;
+  /**
+   * For Point, a fixed-point expression for the point's x axis, evaluated when the effect fires; PointY and PointZ accompany it, and together they are the point, or its offset from Placement.
+   */
+  pointX?: ExpressionProgramNonNullable2;
+  /**
+   * The y axis of the computed point.
+   */
+  pointY?: ExpressionProgramNonNullable2;
+  /**
+   * The z axis of the computed point.
+   */
+  pointZ?: ExpressionProgramNonNullable2;
 };
 
 /**

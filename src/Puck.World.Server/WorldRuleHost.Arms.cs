@@ -353,18 +353,48 @@ public sealed partial class WorldRuleHost {
                 return true;
             }
 
-            var targetIndex = BodyIndexOf(source: values[WorldBodyMotionEffect.TargetSource]);
+            WorldDesignation designation;
 
-            if (
-                (targetIndex == bodyIndex) ||
-                (Host.Body(index: targetIndex) is null)
-            ) {
-                return Refuse(
-                    code: WorldRuleEffectRefusal.BodyTargetInvalid,
-                    reason: ((targetIndex == bodyIndex)
-                        ? $"body:{bodyIndex} cannot designate itself"
-                        : $"target body:{targetIndex} is inactive"),
-                    refusal: out refusal
+            if (operation.Designation == WorldBodyDesignationKind.Point) {
+                if (!TryDesignatedPoint(
+                    point: out var point,
+                    reason: out var pointReason,
+                    target: operation.Point!,
+                    values: in values
+                )) {
+                    return Refuse(
+                        code: WorldRuleEffectRefusal.BodyTargetInvalid,
+                        reason: pointReason,
+                        refusal: out refusal
+                    );
+                }
+
+                designation = new WorldDesignation(
+                    EntityIndex: bodyIndex,
+                    Point: point,
+                    Register: operation.Register!,
+                    Subject: default
+                );
+            } else {
+                var targetIndex = BodyIndexOf(source: values[WorldBodyMotionEffect.TargetSource]);
+
+                if (
+                    (targetIndex == bodyIndex) ||
+                    (Host.Body(index: targetIndex) is null)
+                ) {
+                    return Refuse(
+                        code: WorldRuleEffectRefusal.BodyTargetInvalid,
+                        reason: ((targetIndex == bodyIndex)
+                            ? $"body:{bodyIndex} cannot designate itself"
+                            : $"target body:{targetIndex} is inactive"),
+                        refusal: out refusal
+                    );
+                }
+
+                designation = new WorldDesignation(
+                    EntityIndex: bodyIndex,
+                    Register: operation.Register!,
+                    Subject: GrantSubject.Body(index: targetIndex)
                 );
             }
             if (preflight) {
@@ -374,11 +404,7 @@ public sealed partial class WorldRuleHost {
             _ = Host.Document.ApplyDesignationCore(
                 connectionId: SubmissionEnvelope.LocalConnectionId,
                 correlationId: 0,
-                designation: new WorldDesignation(
-                    EntityIndex: bodyIndex,
-                    Register: operation.Register!,
-                    Subject: GrantSubject.Body(index: targetIndex)
-                ),
+                designation: designation,
                 knownSubject: true,
                 principal: Principal.World
             );
@@ -421,6 +447,64 @@ public sealed partial class WorldRuleHost {
             instruction: instruction,
             sourceIndex: -1
         );
+
+        return true;
+    }
+    // The point a rule designates: the named placement's document position as it stands now (the origin when none is
+    // named) plus the literal offset or the three axes the evaluator read, all in Q48.16 so the register holds exactly what
+    // body.designate's at:x,y,z would.
+    private bool TryDesignatedPoint(WorldPointTarget target, in EffectValues values, out FixedVector3 point, out string reason) {
+        var origin = default(FixedVector3);
+
+        point = default;
+        reason = string.Empty;
+        if (target.Placement is { } placementId) {
+            if (WorldDefinitionRows.FindPlacement(
+                id: placementId,
+                placements: Host.Definition.Placements
+            ) is not { } placement) {
+                reason = $"placement '{placementId}' is not declared";
+
+                return false;
+            }
+
+            origin = WorldDefinitionRows.ResolvedFrame(
+                definition: Host.Definition,
+                placement: placement
+            ).FixedPosition;
+        }
+
+        var offset = target.Offset;
+
+        if (target.IsComputed) {
+            if (
+                !values[WorldBodyMotionEffect.PointSource].TryFinite(raw: out var x) ||
+                !values[(WorldBodyMotionEffect.PointSource + 1)].TryFinite(raw: out var y) ||
+                !values[(WorldBodyMotionEffect.PointSource + 2)].TryFinite(raw: out var z)
+            ) {
+                reason = "a point axis names no number";
+
+                return false;
+            }
+
+            offset = new FixedVector3(
+                X: FixedQ4816.FromRawBits(value: x),
+                Y: FixedQ4816.FromRawBits(value: y),
+                Z: FixedQ4816.FromRawBits(value: z)
+            );
+        }
+
+        try {
+            point = new FixedVector3(
+                X: checked((origin.X + offset.X)),
+                Y: checked((origin.Y + offset.Y)),
+                Z: checked((origin.Z + offset.Z))
+            );
+        } catch (OverflowException) {
+            reason = "the point is outside the Q48.16 range";
+
+            return false;
+        }
 
         return true;
     }
