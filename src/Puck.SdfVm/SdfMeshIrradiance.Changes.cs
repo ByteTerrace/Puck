@@ -158,9 +158,23 @@ public sealed partial class SdfMeshIrradiance {
         return (outside.LengthSquared() <= (radius * radius));
     }
     // Whether any change newer than a geometry reaches a world box: a change of every probe does, and a change's
-    // hierarchy does where one of its leaves overlaps the box. False when the geometry is older than the changes
+    // hierarchy does where one of its leaves overlaps the box. True when the geometry is older than the changes
     // remember, since the caller cannot know what lies between.
-    private static bool MeetsChange((int Geometry, ChangeTree? Tree)[] changes, int since, Vector3 low, Vector3 high) {
+    private static bool MeetsChange((int Geometry, ChangeTree? Tree)[] changes, int since, Vector3 low, Vector3 high) =>
+        Meets(changes: changes, region: new BoxRegion(High: high, Low: low), since: since);
+    // Whether any change newer than a geometry comes within a margin of a segment: a change's hierarchy does where one of
+    // its leaves, grown by the margin, meets the segment. Answers as MeetsChange does otherwise.
+    private static bool MeetsSegment((int Geometry, ChangeTree? Tree)[] changes, int since, Vector3 from, Vector3 to, float margin) {
+        var toward = (to - from);
+        var length = toward.Length();
+
+        return (length > 0f)
+            ? Meets(changes: changes, region: new SegmentRegion(From: from, Grow: new Vector3(value: margin), Inverse: (Vector3.One / (toward / length)), Length: length), since: since)
+            : MeetsChange(changes: changes, high: (from + new Vector3(value: margin)), low: (from - new Vector3(value: margin)), since: since);
+    }
+    // The one walk of the remembered changes newer than a geometry: true for a change of every probe, a leaf the region
+    // meets, or a geometry older than the changes remember; a node the region misses skips its subtree.
+    private static bool Meets<TRegion>((int Geometry, ChangeTree? Tree)[] changes, int since, TRegion region) where TRegion : struct, IChangeRegion {
         if ((changes.Length == 0) || (since < (changes[0].Geometry - 1))) { return true; }
         foreach (var (geometry, tree) in changes) {
             if (geometry <= since) { continue; }
@@ -171,7 +185,7 @@ public sealed partial class SdfMeshIrradiance {
             for (var at = 0; (at < nodes.Length);) {
                 ref readonly var node = ref nodes[at];
 
-                if (!Overlaps(high: node.High, low: node.Low, otherHigh: high, otherLow: low)) {
+                if (!region.Meets(high: node.High, low: node.Low)) {
                     at = node.Escape;
                     continue;
                 }
@@ -180,6 +194,17 @@ public sealed partial class SdfMeshIrradiance {
             }
         }
         return false;
+    }
+    // A region a change's box may meet: a box, or a segment against boxes grown by a margin.
+    private interface IChangeRegion {
+        bool Meets(Vector3 low, Vector3 high);
+    }
+    private readonly record struct BoxRegion(Vector3 Low, Vector3 High) : IChangeRegion {
+        public bool Meets(Vector3 low, Vector3 high) => Overlaps(high: high, low: low, otherHigh: High, otherLow: Low);
+    }
+    // A segment from a point along a unit direction, given by its reciprocal, for a length.
+    private readonly record struct SegmentRegion(Vector3 From, Vector3 Inverse, float Length, Vector3 Grow) : IChangeRegion {
+        public bool Meets(Vector3 low, Vector3 high) => SdfMeshIrradianceScene.Slab(entry: out _, high: (high + Grow), inverse: Inverse, low: (low - Grow), maximum: Length, origin: From);
     }
     // Whether a probe relit under an earlier geometry keeps the cube its point and spot lights and emission send, and
     // the visibility of those lights from its centre: it traces no new hits, the local lighting it was relit under
@@ -211,40 +236,6 @@ public sealed partial class SdfMeshIrradiance {
         }
         return true;
     }
-    // Whether any change newer than a geometry comes within a margin of a segment: a change of every probe does, and a
-    // change's hierarchy does where one of its leaves, grown by the margin, meets the segment. True when the geometry is
-    // older than the changes remember, as MeetsChange answers.
-    private static bool MeetsSegment((int Geometry, ChangeTree? Tree)[] changes, int since, Vector3 from, Vector3 to, float margin) {
-        if ((changes.Length == 0) || (since < (changes[0].Geometry - 1))) { return true; }
-
-        var toward = (to - from);
-        var length = toward.Length();
-
-        if (!(length > 0f)) { return MeetsChange(changes: changes, high: (from + new Vector3(value: margin)), low: (from - new Vector3(value: margin)), since: since); }
-
-        var inverse = (Vector3.One / (toward / length));
-        var grow = new Vector3(value: margin);
-
-        foreach (var (geometry, tree) in changes) {
-            if (geometry <= since) { continue; }
-            if (tree is null) { return true; }
-
-            var nodes = tree.Nodes;
-
-            for (var at = 0; (at < nodes.Length);) {
-                ref readonly var node = ref nodes[at];
-
-                if (!SdfMeshIrradianceScene.Slab(entry: out _, high: (node.High + grow), inverse: inverse, low: (node.Low - grow), maximum: length, origin: from)) {
-                    at = node.Escape;
-                    continue;
-                }
-                if (node.Leaf) { return true; }
-                at++;
-            }
-        }
-        return false;
-    }
-
     // A selection's rows as sdf-probe-select reads them, exactly sized: the header rows (the volume's geometry; the
     // change count, node count, oldest change's geometry and reach; each level's spacing), then a row a change (its
     // geometry, its first node's row, its node count, and its flags: bit 0 a change of every probe, the deepest leaf from
