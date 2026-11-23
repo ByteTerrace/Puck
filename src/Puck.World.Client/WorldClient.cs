@@ -185,6 +185,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private int m_definitionRevision;
     private int m_responseRevision;
     private int m_holdingRevision;
+    // The definition the latest state delivery handed over, before live state values were bound into it.
+    private WorldDefinition? m_lastDelivered;
     private int m_solidResponseRevision;
     private WorldDocumentVersion m_documentVersion;
 
@@ -1029,6 +1031,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         // its program and re-reads scene/screens on its next capture. Poses still flow only through snapshots.
         var adopted = m_stateView.Adopt(delivered: definition);
 
+        m_lastDelivered = definition;
+
         BeginVersion(version: version);
         m_channels = WorldChannelTable.For(definition: adopted);
         m_targets = WorldTargetRegisterTable.Compile(
@@ -1045,6 +1049,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (!rows.TryApply(Definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the client's creation roster."); }
         _ = m_stateView.Adopt(delivered: changed, valuesFollow: true);
+        m_lastDelivered = changed;
         BeginVersion(version);
         m_definitionRevision++;
     }
@@ -1235,12 +1240,17 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         var previous = Definition;
+        var previousDelivered = m_lastDelivered;
         var adopted = m_stateView.Adopt(delivered: definition, valuesFollow: (stamp.ArenaValues && (version.Activation == m_documentVersion.Activation)));
 
-        switch (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, holdings: out var holdings, solid: out var solid)) {
+        m_lastDelivered = definition;
+        switch (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, holdings: out _, solid: out var solid)) {
             case WorldPlacementChange.Appearance:
                 // A sweep that moved only holdings leaves the composition to the scene, which presents a row whose every
-                // response it keeps at hand by its copies and composes again only for the rest (WorldSceneEmitter).
+                // response it keeps at hand by its copies and composes again only for the rest (WorldSceneEmitter). The
+                // delivered rows are judged, since binding live state values rebuilds an adopted row's state references.
+                var holdings = ((WorldPlacementResponse.ComparePlacements(after: definition, before: previousDelivered, holdings: out var held, solid: out _) == WorldPlacementChange.Appearance) && held);
+
                 if (holdings) { m_holdingRevision++; } else { m_responseRevision++; }
                 if (solid) { m_solidResponseRevision++; }
 

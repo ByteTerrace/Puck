@@ -53,6 +53,10 @@ public sealed class WorldSessionMirror : IClientSink {
     private WorldDeliveredDocument m_document;
     private int m_definitionRevision;
     private int m_composingRevision;
+    // The definitions the latest two publications were handed, before live state values were bound into them: a delivery
+    // that moved holdings alone is judged on these, since binding rebuilds an adopted row's state references.
+    private WorldDefinition? m_lastDelivered;
+    private WorldDefinition? m_previousDelivered;
 
     // The rows state deliveries moved since the presentation last followed them: written by the delivering thread,
     // taken by FollowState, both under m_stampGate. m_followGate serializes followers over the one state mirror.
@@ -666,6 +670,9 @@ public sealed class WorldSessionMirror : IClientSink {
     private WorldDefinition Publish(WorldDefinition definition, WorldDocumentVersion version) {
         lock (m_followGate) {
             var adopted = m_stateView.Adopt(delivered: definition);
+
+            m_previousDelivered = m_lastDelivered;
+            m_lastDelivered = definition;
             var current = Volatile.Read(location: ref m_document);
 
             if (ReferenceEquals(objA: current.Definition, objB: adopted) && (current.Version == version)) {
@@ -1001,7 +1008,9 @@ public sealed class WorldSessionMirror : IClientSink {
 
             // A delivery that moved placement rows is a scene change to this mirror's readers, which watch the definition
             // revision; one that moved holdings alone leaves the composing revision to the scene that presents them.
-            if (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, holdings: out var holdings, solid: out _) != WorldPlacementChange.None) {
+            if (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, holdings: out _, solid: out _) != WorldPlacementChange.None) {
+                var holdings = ((WorldPlacementResponse.ComparePlacements(after: definition, before: m_previousDelivered, holdings: out var held, solid: out _) == WorldPlacementChange.Appearance) && held);
+
                 _ = Interlocked.Increment(location: ref m_definitionRevision);
                 if (!holdings) { _ = Interlocked.Increment(location: ref m_composingRevision); }
             }
