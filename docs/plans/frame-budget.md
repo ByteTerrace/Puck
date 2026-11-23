@@ -93,6 +93,71 @@ needing it, at the occupancy its largest input leaves it
 ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#registers-set-occupancy-occupancy-is-not-speed)),
 and that each input keeps storage sized for its worst pixel.
 
+## Where the memory goes
+
+The route's worst reading was not a pass's cost. In the garden painting chapter
+a nested view's `surface` pass read 21 ms, where the same kernel shades the
+whole display in under 2 ms. The device had run out of local memory. The
+process's ledger (`host.memory`'s `pool device`) peaked past what the operating
+system budgets the process (`segment local`'s `budget`), and from then a pass
+that touches memory the system has moved waits for it, whichever pass that is.
+Over the route on both backends and both loops, only the chapter whose peak
+crossed that budget read so; on a smaller window, or with the peak under the
+budget, the same walk reads like every other chapter. The paging itself was not
+captured, so the mechanism is an inference from that correspondence. A pass
+that reads far above its kernel's cost is read beside `host.memory` first.
+
+The RTX 4070's profile authors a device budget of 8 GiB (`deviceMemoryMiB`).
+Storage that a view or a world cannot render without is granted past the limit
+(`over-limit-grants`), so the budget did not hold: the families below
+(`host.memory families 0`, MiB) held 5.8 GiB at boot and 8.3 GiB by the second
+loop, under 10.4 GiB of device blocks, and a resize or a second large view on
+top of that crossed what the system gives the process.
+
+| Owner | Boot | Second loop | What it is |
+|---|---|---|---|
+| Mesh regions | 2,430 | 2,100 | The debug world's meshes, resident twice at about 1 GiB each |
+| The main view | 2,020 | 2,020 | The storage table above |
+| Irradiance volumes, traced scenes and programs | 620 | 1,370 | One set a residency |
+| Nested views | 0 | 1,050 | A window once walked up to kept a display's worth |
+| Other worlds' shadows and views | 0 | 950 | Three entries, spare pairs and glass extinction a residency |
+| The world's shadows | 335 | 370 | |
+| The root | 250 | 250 | |
+| Room in device blocks no family names | 700 | 2,000 | Blocks the churn of resizes and shadow layers leaves part filled |
+
+Four causes, in the order they are fixed:
+
+1. **A view out of sight kept the storage of the extent it was last seen at.**
+   A window fills the display as a body walks through it, and nothing shrank it
+   afterwards, since a view no schedule reaches renders nothing. Built: such a
+   view renders at its least share until its node installs that extent
+   (`WorldViewGraphHost.ReserveShrinks`).
+2. **A world no window shows was resident at full detail.** A session view no
+   fit measures demanded meshes at its whole image from wherever its camera
+   stands, so the debug world's second residency, seen through a window inside
+   a painting, held the same gibibyte as the one the seat stands in, and the
+   one detail bias coarsened both to fit. Built: a session view demands at the
+   display pixels it is presented over (`WorldRenderSettings.NestedDemandHeight`).
+3. **The debug world is resident twice.** A session whose stream is not what a
+   whole reader is handed (`WorldSceneShare.SharesAuthority`) renders a scene of
+   its own, and every such session of one world shares one
+   (`WorldSharedScene`). That scene is a residency with its own mesh region,
+   shadows and irradiance volume, though nearly all its meshes are the first
+   residency's: the library shares a mesh on the host (`SdfMeshLibrary`) and
+   each residency places its own copy on the device (`SdfMeshRegionArena`).
+   The step is one device mesh pool a process's residencies place in, keyed by
+   mesh identity, with each residency keeping only its draw records.
+4. **Resizes and shadow layers churn the blocks.** A window's extent moves in
+   sixteen steps an octave (`RenderGraphExtent.StepsPerOctave`), each a whole
+   new graph beside the old one until it retires, and a pressure trim gives
+   back shadow layers the next frame takes again (`world.residency`'s `shadows`
+   line counts the `trims`, and `host.memory`'s `over-limit-by` names the
+   layers granted past the limit). The step is
+   an allocation at the octave with the render grid moving inside it, as the
+   main view's does, once the storage table's rows shrink what an octave
+   holds, and a trim that gives back only what no view has read for the
+   anchors' own keep time.
+
 ## The design
 
 **Each lighting input is resolved once, by a lean kernel of its own, into a
@@ -200,6 +265,26 @@ from the cells its frustum meets.
 
 Each step lands with the check that shows it worked, read at the stage standing
 and over the route, before and after, in one World session each.
+
+The device fits its budget first, since a frame over it reads as a stall in
+whichever pass touches moved memory ([where the memory goes](#where-the-memory-goes)):
+
+- **One device mesh pool.** A process's residencies place meshes in one pool by
+  mesh identity. Check: with the garden painting in view from the painting
+  room, the mesh regions hold one copy of the debug world, and
+  `world.residency`'s `detail-bias` of the world the seat stands in reads zero
+  at the stage.
+- **Windows allocate by octave, and a trim keeps what a view read.** Check: over
+  the route the `session` and `routed` families' `allocated` stay within twice
+  their `peak`, the room in device blocks no family names stays under half a
+  gibibyte, and `pool device` reads `over-limit=0` at every chapter's end.
+- **The benchmark names a frame over the device's budget.** A chapter whose
+  device ledger peaked past the segment's budget is written disturbed with that
+  reason (`WorldBenchmarkCommandModule`'s disturbances), so a stall is never
+  read as a pass's cost. Check: the route's report at a display the budget
+  cannot hold says so in the chapter that crossed it.
+
+Then the time:
 
 1. **A coarser lookup with interpolation.** A cell of four pixels a side; views
    blends the four cells about a pixel, weighing each by the reuse test, and a

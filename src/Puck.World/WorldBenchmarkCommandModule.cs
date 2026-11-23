@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Puck.Abstractions;
+using Puck.Abstractions.Memory;
 using Puck.Abstractions.Presentation;
 using Puck.Assets;
 using Puck.Commands;
@@ -143,6 +144,10 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         public AdapterTelemetrySummary? Adapter { get; set; }
         public long ShedAtBegin { get; set; }
         public long Shed { get; set; }
+        // The device's own memory across the chapter (DeviceLedger): the most its ledger had held at once as the chapter
+        // began and as it ended, with what the system budgeted the process and used beyond the ledger at its end.
+        public long DevicePeakAtBegin { get; set; }
+        public (long Peak, long Budget, long Beyond) Device { get; set; }
         // A route chapter's outcome, copied from the seat driver as it ends.
         public bool Arrived { get; set; }
         public string? Failure { get; set; }
@@ -786,6 +791,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             chapter.BeginIndex = (m_recording?.Count ?? 0);
             chapter.BeginStamp = Stopwatch.GetTimestamp();
             chapter.ShedAtBegin = (timeline?.ShedSteps ?? 0L);
+            chapter.DevicePeakAtBegin = DeviceLedger().Peak;
 
             return new CommandResult(Output: $"[world.benchmark: chapter {index} \"{chapter.Name}\" begins]");
         }
@@ -793,6 +799,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         chapter.EndIndex = (m_recording?.Count ?? 0);
         chapter.EndStamp = Stopwatch.GetTimestamp();
         chapter.Shed = ((timeline?.ShedSteps ?? 0L) - chapter.ShedAtBegin);
+        chapter.Device = DeviceLedger();
         chapter.Adapter = m_adapter?.Summarize(from: chapter.BeginStamp, to: chapter.EndStamp);
 
         if (!chapter.LastOfLoop) {
@@ -944,8 +951,37 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         if (chapter.Adapter?.HeldReason is { } held) {
             reasons.Add(item: held);
         }
+        // A chapter that raised the most the device ever held to what the system budgets the process is one in which
+        // the system moved memory: a pass that touched it waited for it, so a pass's reading there is not its cost.
+        var (peak, budget, beyond) = chapter.Device;
+
+        if ((budget > 0L) && (peak > chapter.DevicePeakAtBegin) && ((peak + beyond) >= budget)) {
+            reasons.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"the device's memory held {(peak >> 20)} MiB at once with {(beyond >> 20)} MiB beyond the ledger, past the {(budget >> 20)} MiB the system budgets the process (a pass that touched moved memory waited for it)"));
+        }
 
         return reasons;
+    }
+    // The device's own memory now: the most its ledger has held at once, what the system budgets the process there, and
+    // what the system counts in use beyond what the ledger holds (the driver's and the swapchain's). Zeroes on unified
+    // memory and without a device.
+    private static (long Peak, long Budget, long Beyond) DeviceLedger() {
+        var pools = Puck.Hosting.Jobs.MemoryAccount.Shared.ReadPools();
+        var (peak, held, budget, usage) = (0L, 0L, 0L, 0L);
+
+        foreach (var segment in pools.SegmentAdmissions) {
+            if (segment.Segment.Pool == PhysicalMemory.Device) {
+                peak += segment.Peak;
+                held += segment.Held;
+            }
+        }
+        foreach (var segment in pools.DeviceReading.Segments) {
+            if (segment.Segment.Pool == PhysicalMemory.Device) {
+                budget += (long)segment.Budget;
+                usage += (long)(segment.Usage ?? 0UL);
+            }
+        }
+
+        return (peak, budget, Math.Max(val1: 0L, val2: (usage - held)));
     }
 
     // The gates the body's pose fails, the gates this read cannot judge, and whether the chapter ended at all.
