@@ -335,8 +335,9 @@ public sealed partial class WorldBody {
         m_position = next;
     }
 
-    // One body step's support-distance answer, so the step's two ground snaps (the support search before integration
-    // and the crest snap after the move) ask their field once where the body has not moved between them. It is keyed by
+    // One body step's support-distance answer, so the step's two ground snaps (the support search before integration,
+    // when the body does not rest where it stands, and the crest snap after the move) ask their field once where the
+    // body has not moved between them. It is keyed by
     // everything the query reads: the field, the volumes' derivation (BroadphaseRadiusComputations moves on every write
     // of the scale or the collider, RescaleColliderVolumes), the start, the orientation, the up axis and the reach, and
     // it lives in the step's BodyMotionScratch, so no answer outlives the step that asked. BodyContactStep reaches the

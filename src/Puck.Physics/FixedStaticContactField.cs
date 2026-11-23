@@ -71,7 +71,7 @@ public sealed class FixedStaticContactField : IRegionalContactField, IEquatable<
             swept = swept.Enclose(other: FixedColliderBounds.WorldBounds(orientation: in orientation, position: previousPosition, volume: in volume));
             swept = swept.Enclose(other: FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume));
         }
-        return m_grid.Candidates(boxes: Set.Boxes, region: swept.Grow(margin: RegionMargin), scratch: scratch, skin: m_solver.ContactSkin);
+        return m_grid.Candidates(boxes: Set.Boxes, region: swept.Grow(margin: RegionMargin), scratch: scratch, skin: m_solver.ContactReach);
     }
 
     /// <inheritdoc/>

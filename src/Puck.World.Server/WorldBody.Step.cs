@@ -915,7 +915,7 @@ public sealed partial class WorldBody {
             var contactStep = new BodyContactStep(field: field, entityIndex: scratch.EntityIndex, memo: ref scratch.SupportMemo,
                 orientation: scratch.Orientation, up: scratch.Up, volumes: ScaledColliderVolumes(), volumesRevision: BroadphaseRadiusComputations);
 
-            if (FixedStepUp.TrySnap(step: ref contactStep, start: in m_position, velocity: in m_planarVelocity,
+            if (FixedStepUp.TryFollowSupport(step: ref contactStep, start: in m_position, velocity: in m_planarVelocity,
                 up: in scratch.Up, distance: GroundSnap, result: out var support)) {
                 scratch.Velocity = support.Velocity;
             }

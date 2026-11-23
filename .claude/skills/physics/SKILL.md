@@ -90,6 +90,13 @@ same change.
   travel. `WorldBody.ProposeTimedMove` updates the proposal before the contact
   phase, and the refused-step snapshot includes the move's progress.
   [Authoring](../puck-world/references/documents-motion.md#timed-moves)
+- **A body at its skin is in contact.** Every solve asks at the skin plus
+  `FixedContactPushMath.RestingBand`, and `Classify` reads walkable ground in
+  the band as a resting contact that grounds without moving, so a body walking
+  level ground grounds in its own sweep and pays no snap, and its support
+  search (`FixedStepUp.TryFollowSupport`) is one sweep that does not move it.
+  A cull ahead of a solve keeps every collider within
+  `FixedStaticContactSolver.ContactReach`, never the bare skin.
 - **Two snaps share one answer** where the body has not moved between them
   (`BodySupportMemo`, keyed by field, volume derivation, start, orientation, up
   and reach).

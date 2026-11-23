@@ -1,0 +1,16 @@
+// The city's scenarios (city.puck), its citizens and vehicles booted with the city as the world:
+// `puck test worlds/debug/city-tests.puck --reproduce --workers 1,4 --jobs 1` replays the whole town bit for bit at
+// both worker counts, the forcing workload for the parallel kit advance.
+
+schema: "puck.world.definition.v1"
+basis: "city"
+documentId: "city-tests"
+
+test "the town keeps its people walking through a working tick" {
+  when {
+    ticks 150
+  }
+  expect {
+    citizenGroupAnchor["0"] >= 0
+  }
+}
