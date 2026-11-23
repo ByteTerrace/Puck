@@ -9,6 +9,10 @@ public sealed partial class WorldPopulation {
         ? m_kits[ResolveKitIndex(index: index)].Mount
         : null
     );
+    /// <summary>Reads the name of the kit row a body runs.</summary>
+    /// <param name="index">The 0-based body index.</param>
+    /// <returns>The kit's name.</returns>
+    public string KitName(int index) => m_kitRows[ResolveKitIndex(index: index)].Name;
     /// <summary>Sets the body an active body rides this tick, or none.</summary>
     /// <param name="rider">The riding body's 0-based index.</param>
     /// <param name="mount">The ridden body's 0-based index, or -1 for none.</param>

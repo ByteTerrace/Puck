@@ -9,8 +9,9 @@ public sealed partial class WorldBody {
     private int m_mountIndex = -1;
 
     /// <summary>Gets the population index of the body this body rides, or <see langword="null"/> when it moves on its
-    /// own. A riding body's own <see cref="Advance"/> is a no-op: <see cref="FollowMount"/> gives it the pose and
-    /// velocity of the body it rides after that body has moved.</summary>
+    /// own. A riding body's control set leaves its own body out, so <see cref="Advance"/> resolves its intent for the
+    /// body it drives and integrates no pose; <see cref="FollowMount"/> gives it the pose and velocity of the body it
+    /// rides after that body has moved.</summary>
     public int? MountedOn => ((m_mountIndex >= 0)
         ? m_mountIndex
         : null

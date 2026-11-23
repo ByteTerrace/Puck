@@ -96,15 +96,16 @@ bodies {
   capacity: 16
 }
 
-// The pull: toward the centre at `moonGravity` everywhere inside `moonReach`, and nothing outside it, so a body out
-// in the open keeps the up it came with until the moon takes it.
+// The pull: toward the centre at `moonGravity` everywhere inside `moonReach`. Outside it only the valley's pull is
+// left, toward the seam and far too faint to turn a body: under a metre a second squared a field moves no body's up,
+// so a body out in the open keeps the up it came with until the moon takes it, and keeps the moon's on the way out.
 gravity {
   attractors []
   gravitationalConstant: 0
   isActive: true
   softeningLength: 0.5
   solver: Pairwise
-  uniform [0, 0, 0]
+  uniform [0, -0.05, 0]
   areas [
     {
       placementId: `moon-core`
@@ -114,6 +115,18 @@ gravity {
       acceleration: radial(magnitude: moonGravity)
     }
   ]
+}
+
+// Every surface of the moon is ground a hold can take, so a ship's touchdown hold settles it anywhere it is brought
+// down (the basis leaves that to the placements it marks).
+collision {
+  contactSkin: 0.02
+  defaultHold: true
+  gradientProbe: 0
+  gridCellSize: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements []
 }
 
 spawnPoints [

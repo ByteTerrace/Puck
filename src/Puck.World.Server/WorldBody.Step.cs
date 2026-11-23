@@ -52,12 +52,6 @@ public sealed partial class WorldBody {
         if (m_carriedByIndex >= 0) {
             return false;
         }
-        // A riding body takes the pose of the body it rides once that body has moved (WorldBody.FollowMount, called
-        // from WorldPopulation.FollowMounts), so its own motion program, gravity and contact do not run.
-        if (m_mountIndex >= 0) {
-            return false;
-        }
-
         // A rigid kit hands the whole step to the population's rigid solve instead of the grounded/free motion program:
         // no intent, action track, or hold list applies to a passive rigid entity. The step is prepared here and solved
         // with every other rigid body once all of them have advanced (WorldPopulation.Rigid.cs).

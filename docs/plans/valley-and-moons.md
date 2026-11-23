@@ -15,14 +15,14 @@ work in the debug world; quarantined worlds stay quarantined.
 | Static field contact | Exists, with admitted subsets | `GridCellSize` defaults to 0, which means exact evaluation with no distance grid (`WorldCollider.cs`); an oversized grid declines and falls back rather than throwing (`SdfDistanceGrid.TryCoverBox`). Solid placements skip authored sweeps and detail shapes (`CreationStampEmitter.EmitFixed`) and refuse non-detail revolve lifts (`CreationShapeLaw`), so walkable terrain is authored from admitted shapes. |
 | Gravity | Partial | Authored planet sources by surface gravity and radius and local gravity areas exist (`WorldGravity`); wide arithmetic at planetary distances needs widening and unrounded composition. |
 | Changing up | Exists | `WorldBodyUpPolicy` (Ambient, SurfaceFollowing) with the separate `GradientDerivedUp` contact requirement. |
-| Flight | Partial | The Moth's Free and Lift motion (`avatars/moth.puck`) is body-frame 6DOF free integration by design, with no ground pin or gravity; assisted leveling and cruise are new authored policy, not a defect. `World` and `Heading` intent are composed correctly and must not be swapped. Grounding facts are written under every motion program; the ownership gate controls only write-back. |
+| Flight | Partial | The Moth's Free and Lift motion (`avatars/moth.puck`) is body-frame 6DOF free integration by design, with no ground pin or gravity. The standard's ship (`worlds/standard/ship.puck`) authors the assisted kind: a `fly` program whose holds level it against the world's pull, settle it near ground and hover it elsewhere. `World` and `Heading` intent are composed correctly and must not be swapped. Grounding facts are written under every motion program; the ownership gate controls only write-back. |
 | Terrain bake | Partial | The bake's reach is `max(1, farDistance)`, and an instance's radius is clamped to it, which can clip a huge instance; post-contour chunks do not stream. Coarse sampling is 65 samples on a shape's longest axis with conditional refinement (4, detail 8). |
 | Draw distance | Partial | `farDistance` is capped at 8192 m (`WorldRenderDefaults.MaxFarDistance`); haze extinction is `-log(1 - haze) / farDistance`, which couples haze to draw distance. |
 | Shadows | Partial | Key-light receiver splits at 16 and 120 m, second light at 40 m, casters reaching 200 m beyond each cascade toward the light (`SdfMeshShadowCascades`, authored as `render.shadowCoverage`); macro terrain shadowing is missing, and stretching the far cascade to the walls costs 25 times its vertices ([illumination step 1](illumination.md#the-build-order)). |
 | Depth transport | Exists, to qualify | Reconstruction packs coverage-weighted inverse distance in half lanes for harmonic-mean filtering; single samples already carry float `t`. Longer ranges are qualified, and lanes widened together only if precision runs out. |
-| Sky | Exists | `Disc` and `View` layers, stars, clouds, panorama; a `World` infinity view is opaque, while a far view uses geometry coverage. |
+| Sky | Exists | `Disc` and `View` layers, stars, clouds, panorama. A `View` of another world stays at infinity and fills its region unless it asks to follow the viewer and to draw geometry alone (`InfinityViewSpec.Follows`, `GeometryCoverage`); a far view always uses geometry coverage. |
 | Atmosphere | Partial | A dome seen from the ground (`SdfAtmosphere`, `sdf-atmosphere.hlsli`); no altitude dependence, no spherical shell, no transition to vacuum. |
-| Worlds and portals | Partial | Portals are planes; adjacency seams are planar and horizontal, with prior art in the quarantined island root (four neighbours at 132 m); handoff of an arbitrary frame (orientation, up, velocities) is incomplete. |
+| Worlds and portals | Partial | Portals are planes; adjacency seams are planar, and the debug world's `sky` seam to the moon is the first live one. A crossing maps a body by a turn about up and carries its yaw and velocity; a body's whole frame (pitch, roll, up, angular velocity) is not carried. A rider crosses behind the body it rides (`WorldMount`). |
 | Regions | Partial | One physical field topology per world today (the combat and weather decisions widen it). |
 | Streaming | Missing | No predictive residency of surface tiles. |
 
@@ -86,6 +86,81 @@ which other plans cite:
    [the frame bar](../decisions/rendering.md#the-pipeline-foundation) on every
    bar device and both backends, with edit-to-running inside its bar. More moons
    and content follow it.
+
+## The trip to the moon
+
+The owner's request: "Can someone fly to the moon yet? We need a portal there
+AND we need to be able to fly in a ship from debug land to debug moon.
+Implement what is needed to make each perspective as seamless/natural as
+possible." This section is that feature's plan: what it is made of, how each
+stage is checked, the order it is built in and the engine gaps on the way.
+The phases above stay the long plan; this feature builds the parts of phases
+2, 3, 5 and 6 that one round trip needs.
+
+### What it is made of
+
+The moon is a world of its own, `worlds/debug/moon.puck`: a cratered sphere
+about its origin, with a pull toward its centre inside a reach and none beyond
+it. The debug world and the moon share one frame up to a shift
+(`moon-frame.puck`'s `moonCentre`), and that one relation places everything:
+the moon's image in the valley's sky, the valley's image in the moon's sky,
+and both sides of the seam a ship crosses. Each world stays within a few
+kilometres of its own origin, so presentation float is exact enough everywhere
+without a render origin: the seam is where the coordinates change, which is
+what a federated world is for.
+
+| Part | Built from | New engine work |
+|---|---|---|
+| The moon's ground | The standard terrain program with a radial mode; eight octant sectors of one description (`moon-surface.puck`) | None |
+| Its pull and a body's up | `WorldGravityArea` (a radial sphere), `WorldBodyUpPolicy`, `WorldUpTurnRates` | None |
+| The portal | The painting wing's `paintingFace` and the shared `arrivalFrame`; references, destinations and sessions | None |
+| The moon in the sky | `WorldRenderSkyLayer.View` and the infinity-view machinery (`InfinityViewSpec`, `InfinityViewFit`) | A view that moves with the viewer, bounds itself by a sphere and draws geometry alone |
+| The ship | A kit and a `fly` program in `worlds/standard/ship.puck`: three holds (`WorldHold`) over the walk program's operations | None |
+| Boarding | `ControlApplication` and `WorldEngagement.Compose` (possession), `WorldPerceptionAnchor` | The kit's `mount` facet (`WorldMount`): the pilot's own body rides the body it drives |
+| The seam | `WorldAdjacency` rows, `WorldAdjacencyOwnership.Sweep`, the transfer escrow | A rider crosses behind the body it rides, and the destination hands it that body to drive again |
+| A ship that stays a ship | `kits.assignment.select` and `looks.assignment.select` by a body register, as the Moth's suit crosses | None |
+
+### Stages and how each is checked
+
+| Stage | Done when | Check |
+|---|---|---|
+| The moon | A body stands anywhere on the sphere and keeps its feet toward the centre | `body.pose` above four points far apart, then `body.where`: grounded, at the sphere's radius give or take the relief |
+| The portal | Walking into the moon painting arrives out of the frame at the pole, and walking back into the frame arrives out of the painting | The two `world.transfer` lines and the instance `body.where` names |
+| The moon in the sky | From the valley floor the moon hangs where `moonCentre` puts it, drawn from the moon's own world, with the valley's sky round it | A capture from the launch field; the `sky$moon` instance in `world.counters gpu` |
+| The ship | A seat boards, lifts off, cruises, and letting go near the ground lands it | `body.where` on the ship and the seat (`anchor=body:<ship>`), `body.hold` reading `landed`, `touchdown` and `cruise` |
+| The seam | The ship and its pilot cross in one tick, land at the same point of the shared frame, and the pilot drives the ship again there | One `world.adjacency` line per body, and the seat's `world.transfer` line reading `driving body:<n> (kit 'ship')` |
+| The landing | Inside the moon's reach the ship rolls to stand against the pull and settles on the ground | `body.where` on the seat: grounded at the sphere's radius, its up along the radius |
+| The way home | The same flight downward crosses the seam back and lands in the valley | The same lines, reversed |
+| Each perspective | Walker: no load screen, the destination shows in the glass, held input carries. Pilot: the camera follows the ship across the seam with no jump. Watcher: the moon in the sky is the place the others stand on | Presented captures in motion across each crossing, on Direct3D 12 and one pass on Vulkan |
+
+### Engine gaps on the path
+
+Built by this feature:
+
+- A rider (`WorldMount`, `WorldBody.FollowMount`, `WorldEngagement.ResolveMounts`).
+- A rider's crossing (`WorldInstanceHost.RiddenMount`, `WorldTransferCommitMember.Drives`).
+- A view of a place at a distance (`InfinityViewSpec.Follows`, `Bound` and `GeometryCoverage`).
+- A collider read from a creation in an adjacency's reach proof (`WorldAdjacencyPolicy.TryBodyReach`).
+
+Left open, in the order they matter to the trip:
+
+1. **The air has no altitude.** The valley's sky is the same blue at the seam
+   as on the floor, and the moon's sky is black, so the sky changes in one frame
+   at the crossing. Phase 5's shell atmosphere is the fix: the air's layers and
+   the fog thin with the viewer's height, and exposure follows.
+2. **A crossing turns a body about up only.** `WorldFrameIsometry` and the
+   adjacency validator admit a yaw, so the two worlds' axes agree and the side of
+   the moon that faces the valley has its up pointing down in the shared frame.
+   The arrival frame therefore stands at the far pole. Phase 6's whole frame
+   (orientation, up, angular velocity) lets a frame stand anywhere and lets a
+   banked or pitched ship cross as it is.
+3. **A door does not take a rider.** A ship flown into a painting crosses
+   without its pilot; only an adjacency queues the rider.
+4. **The ship has no title.** It crosses as a body of whichever world holds it.
+   Custody for a vehicle (who may recall it, what a visited world may do to it)
+   waits for the companion plan's roles.
+5. **The moon's cell.** The sectors bake at the terrain pass's cell, so the
+   ground shows facets underfoot, as the valley's walls do.
 
 ## The owner's rulings
 

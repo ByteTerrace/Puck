@@ -15,7 +15,9 @@
 //   cruise      anywhere else it hovers where it is left, level with the world's up
 //
 // Its up is the world's pull: under a planet's or a moon's gravity the ship rolls to stand against it at `roll`
-// radians a second (half the turn the kit authors), and in open space it keeps the up it had.
+// radians a second (half the turn the kit authors), and where the pull is under a metre a second squared it keeps the
+// up it had. The touchdown hold takes ground a hold may take: a placement marked `grip { holdable: true }`, or any
+// surface of a world whose `collision.defaultHold` is on.
 //
 // A ship crosses a seam between two worlds as any body does, and its pilot crosses behind it. Both worlds declare the
 // `craft` register (`shipCraft`) and select the `ship` kit and look by it, so the body that arrives is the ship that
@@ -82,6 +84,26 @@ template shipFlight(kit = "ship", cruise = 60, boost = 4, taxi = 4, approach = 2
       mount {
         seat: seat
         exit: exit
+      }
+      // A body of this kit marks itself a craft the first tick it stands or flies, so the register that selects the
+      // kit wherever it lands needs no rule of the world it starts in.
+      actions {
+        run {
+          onFact [
+            {
+              fact: "Grounded"
+              mode: "Level"
+              gate: compareState(state: craft, comparison: Equal, value: 0)
+              effects [setState(state: craft, value: 1)]
+            }
+            {
+              fact: "Airborne"
+              mode: "Level"
+              gate: compareState(state: craft, comparison: Equal, value: 0)
+              effects [setState(state: craft, value: 1)]
+            }
+          ]
+        }
       }
       motion {
         facingSnap: false

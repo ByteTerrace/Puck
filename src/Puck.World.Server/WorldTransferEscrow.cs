@@ -1352,8 +1352,9 @@ public sealed partial class WorldTransferEscrow {
     }
     // Hands a landed participant the body it drove across: the live body here that holds the incarnation the commit
     // names takes the participant's control set, with its own body left out, under a Drive grant minted with it, as the
-    // camera application's is (WorldInputRuntime's camera mode). A body that has not landed here, or that the grant
-    // table refuses, leaves the participant driving itself.
+    // camera application's is (WorldInputRuntime's camera mode). The body crossed as every autonomous traveler does,
+    // idle, since its driver stayed behind until now; it wakes on live input again, which an idle body masks. A body
+    // that has not landed here, or that the grant table refuses, leaves the participant driving itself.
     private void ResumeDrive(int slot, WorldEntityAddress driven) {
         var population = m_server.Population;
         var principal = ((slot < population.LocalSeatCount)
@@ -1376,6 +1377,7 @@ public sealed partial class WorldTransferEscrow {
                 m_server.Engagement.Compose(actingPrincipal: Principal.Console, entityIndex: slot, exclusive: true, target: target, targetPrincipal: principal)
             ) {
                 grant!.Install();
+                population.EntryBody(index: index)?.SetIntentSource(source: IntentSource.Live);
             }
 
             return;

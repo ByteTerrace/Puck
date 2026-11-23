@@ -32,26 +32,6 @@ grants [
   { budget: 64, capability: Drive, grantee: "seat1", subject: $"body:{launchShipBody}" }
 ]
 
-// The ship's body, keyed by its body number, so the rule below marks it as a craft: the register the kit and look
-// selectors read wherever it flies (noclip.puck here, craft-form.puck on the moon).
-state {
-  world [
-    {
-      name: "launchShips"
-      kind: "Int"
-      capacity: 1
-      cells [{ key: $"{launchShipBody}", value: 1 }]
-    }
-  ]
-}
-
-rule "launch-ship-craft" {
-  when bodyState(each, craft) != 1
-  mode: Level
-  forEach: launchShips
-  setBodyState(key: $each, state: "craft", expression: 1)
-}
-
 // The seam under the moon: a level plane over the whole valley. A body that climbs through it is the moon's from
 // there, at the same point of the two worlds' shared frame, with its heading and its velocity.
 adjacencies [
@@ -104,8 +84,12 @@ prototypes {
 }
 
 placements {
+  // Ground a hold can take, so the ship's touchdown hold settles it onto the pad.
   placement "launch-pad" {
     prototype: "launch-pad"
+    grip {
+      holdable: true
+    }
     position [launchPad[0], 0, launchPad[1]]
     solid
   }
