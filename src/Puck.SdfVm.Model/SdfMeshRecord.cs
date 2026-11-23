@@ -74,8 +74,18 @@ public static class SdfMeshRecord {
     /// <summary>The word the mesh's first vertex sits at.</summary>
     public const int VertexWord = 15;
     /// <summary>The mesh's attribute flags (<see cref="NormalsFlag"/>, <see cref="MaterialsFlag"/>,
-    /// <see cref="SkinFlag"/>).</summary>
+    /// <see cref="SkinFlag"/>, <see cref="WorldMaterialFlag"/>, <see cref="ClipFlag"/>) in its low bits, and the draw's
+    /// object key from <see cref="ObjectKeyShift"/> up.</summary>
     public const int FlagsWord = 16;
+    /// <summary>The bit of <see cref="FlagsWord"/> the draw's object key starts at (<c>SdfMeshDraw.ObjectKey</c>): what a
+    /// view's edge search compares to find where two objects meet, the same for every draw of one object, a chunk of its
+    /// mesh included, so the search can see no draw.</summary>
+    public const int ObjectKeyShift = 8;
+    /// <summary>The object key's largest value.</summary>
+    public const uint ObjectKeyMask = (uint.MaxValue >> ObjectKeyShift);
+    /// <summary>The flag a record carries when its draw is clipped by a plane (a nonzero <see cref="ClipPlaneWord"/>),
+    /// so a reader that only asks whether a point lies beside the cut reads the plane for such a draw alone.</summary>
+    public const uint ClipFlag = 16u;
     /// <summary>The word the mesh's first triangle material sits at.</summary>
     public const int TriangleMaterialWord = 17;
     /// <summary>The dynamic-transform slot the draw rides and whose frame the mesh is stored in, or -1.</summary>

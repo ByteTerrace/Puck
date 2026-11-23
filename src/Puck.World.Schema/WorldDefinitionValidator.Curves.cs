@@ -106,6 +106,15 @@ public static partial class WorldDefinitionValidator {
                     name: new Subject(Member: ".curvature", Path: knotPath),
                     errors: errors
                 );
+                if (knot.IncomingCurvature is { } incoming) {
+                    RequireRange(
+                        value: incoming,
+                        min: -CurveMaxCurvature,
+                        max: CurveMaxCurvature,
+                        name: new Subject(Member: ".incomingCurvature", Path: knotPath),
+                        errors: errors
+                    );
+                }
 
                 var knotAdmitted = (
                     VectorFunctions.IsFinite(vector: position) &&
@@ -113,7 +122,8 @@ public static partial class WorldDefinitionValidator {
                     (MathF.Abs(x: position.Y) <= CurveMaxCoordinate) &&
                     (MathF.Abs(x: position.Z) <= CurveMaxCoordinate) &&
                     float.IsFinite(f: knot.TangentYaw) && (MathF.Abs(x: knot.TangentYaw) <= CurveMaxTangentYaw) &&
-                    float.IsFinite(f: knot.Curvature) && (MathF.Abs(x: knot.Curvature) <= CurveMaxCurvature)
+                    float.IsFinite(f: knot.Curvature) && (MathF.Abs(x: knot.Curvature) <= CurveMaxCurvature) &&
+                    ((knot.IncomingCurvature is not { } arriving) || (float.IsFinite(f: arriving) && (MathF.Abs(x: arriving) <= CurveMaxCurvature)))
                 );
 
                 if (!knotAdmitted) {

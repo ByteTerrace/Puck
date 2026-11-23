@@ -631,7 +631,10 @@ beside stick-in-camera is one document), and the seat rig's own `dynamics` op
 decomposition (longitudinal accel/reversalRate/coast via `along`, lateral
 convergence via `across`, a held drift row authored ahead of the ordinary one,
 `Turn`'s own speed-scaled steering authority, optional pitched flight)
-`ShapeVelocity` reads alongside `ResolveDriveFrame`. A kart is the same motion
+`ShapeVelocity` reads against the heading whichever frame op resolved it
+(`ResolveDriveFrame` for a kart, `ResolveYawAttitudeAndPlanarFrame` for a
+wheeled body under `walk`), its throttle the advance along that heading of the
+target `ComputePlanarTargetVelocity` resolves. A kart is the same motion
 row plus an `across` shaping row exactly as a swimmer is the same motion row
 plus a `Medium` hold row; a program selecting `ShapeVelocity` against a kit
 authoring no shaping row refuses by the `Shaping` tuning facet's name. An
@@ -3028,7 +3031,13 @@ author declares intent per knot (position, tangent direction, signed
 curvature); `WorldCurveRow.Compiled` derives the machinery—the cubic-Bézier
 tangent lengths that reproduce it exactly, via `Puck.Maths.CurvatureSpline`
 (Steven Wittens' curvature-continuous construction)—so no control-point
-document shape ever ships. Knot `tangentYaw`/`curvature` are validated against
+document shape ever ships. A knot's optional `incomingCurvature` is the
+curvature the segment arriving there reaches, so an arc can end into a
+straight with its tangent continuous and its curvature jumping. A segment
+whose end curvatures are both zero and whose tangents point along its chord
+within one yaw raw (`CurvatureSpline.StraightHeadingToleranceRaw`) compiles
+to the exact line, so a straight at a heading of π or ±π/2, which no Q16 yaw
+holds exactly, compiles. Knot `tangentYaw`/`curvature` are validated against
 `CurvatureSpline`'s own ceilings (`MaxCurvature`, `MaxCoordinate`), the ONE
 source both the document validator and the compiled primitive read; row/knot
 counts are validated against `WorldCurves`' own (`MaxKnots`, `MaxRows`). The
@@ -3050,7 +3059,10 @@ the eye/pivot along the curve by arc-length fraction, `Puck.World.Client`'s
 evaluates—never a second solver) and a
 body-motion program's `curve` target source
 (`Puck.Physics.Motion.BodyTargetSource.CurveFollow`, `Puck.World.Server`'s
-per-tick arc advance)—the seed the kart-track charter inherits.
+per-tick arc advance)—the seed the kart-track charter inherits. A follower
+joins its curve at the station nearest where it stands when its producer is
+selected (`CompiledCurvatureSpline.NearestStationRaw`), so bodies placed along
+one curve keep their spacing.
 
 ## The `bodyMotionPrograms` section—operations and their parameters
 
@@ -3075,7 +3087,10 @@ program that does not select both operations (`ParameterUnknown`).
 program whose target source is `{ "$type": "navigated", "domain": "…",
 "register": "…" }`. The register remains the authority-checked destination;
 navigation only replaces the direct bearing with deterministic intermediate
-waypoints. `surface` domains sample ground from the world's SDF, enforce step
+waypoints. While the register is empty or cleared (`designate(kind: Clear)`),
+or no route reaches it, the body holds still; a target source that states
+`"fallback": "Roam"` (also on `designated`) roams by its kit's roam scalars
+instead, and only such a producer may author them. `surface` domains sample ground from the world's SDF, enforce step
 and slope limits, and bake both vertical capsule clearance and swept clearance
 between adjacent cells from `maxStepHeight` above the foot up to the head. `volume` domains are collision-free 3D grids for
 airborne or otherwise unconstrained actors. `medium` domains are 3D grids that
@@ -3097,7 +3112,13 @@ no forward drive, or lacks the vertical channel/gain/consumer required by a
 volume or medium route.
 `world.navigation` reports compiled clear cells and budgets; `body.targets`
 reports route status/waypoint/search work; `$nav:<bodyRef>:<hasPath|active|
-arrived|unreachable|remaining>` exposes the same status to rules. Navigation
+arrived|unreachable|remaining>` exposes the same status to rules. A
+designation that changes the register a body's navigated producer routes
+toward (a rule's `designate`, `body.designate`) clears that body's route:
+every facet reads 0 for the rest of the tick, `arrived` included, until the
+producer reads the new goal on its next stage. A chain of Level rules
+"at stop s and arrived, designate stop s+1" therefore advances one stop per
+arrival, never round the whole loop in one tick. Navigation
 is withheld from presentation projections with the other authoritative AI and
 motion-program declarations.
 

@@ -180,7 +180,9 @@ What an edge looks like (which edges ink, width, taper, colour, breakup) is an
 authored ink phase of the shade program in the standard package, run only where
 an edge is near. No look's vocabulary names the mechanism: the cel and toon
 names in engine schemas, kernels, levers and verbs are a leak, removed by the
-[ink plan](../plans/ink.md).
+[ink plan](../plans/ink.md). The search and the phase are built
+([handbook](../rendering/sdf/handbook/lighting-and-shading.md#ink)); the
+engine draws no line of its own.
 
 - **Shadow where the response is.** The surface pass queries a light's cascades
   wherever that light's diffuse response is non-zero, a wrapped material's side
@@ -228,12 +230,12 @@ names in engine schemas, kernels, levers and verbs are a leak, removed by the
   cel response as in the continuous one; a style never discards a term.
 - **A style is material data, and its banding is a program.** Under
   [authored shading](#authored-shading) the banding is the standard's `cel`
-  shade program, the one implementation: no kernel bands. What a per-pixel
-  program cannot express stays engine code with a style row per material, the
-  outline that reads neighbouring depth and normals: a palette row's `toon`
-  opts its material in (or out, with `enabled: false`) and every other material
+  shade program, the one implementation: no kernel bands. Its ink is the
+  program's ink phase, over the edges the view searches. The engine keeps one
+  mark per material, whether it is styled: a palette row's `toon` opts its
+  material in (or out, with `enabled: false`) and every other material
   inherits the world's default `render.toon`, whose program is `render.shade`.
-  The standard's `celMaterial` writes both halves. One scene mixes cel-styled
+  The standard's `celMaterial` writes the mark, the band and the ink. One scene mixes cel-styled
   and continuous creations. The concrete styles are data in the standard
   package (`worlds/standard/styles.puck`), never an engine default.
 - **One lever suppresses every style.** `world.toon off` shades every styled
@@ -242,7 +244,7 @@ names in engine schemas, kernels, levers and verbs are a leak, removed by the
   surface phase and loses its light and compose phases, rather than any row
   being rewritten.
 - **A style can follow state.** A palette row's `toonSelect` binds its look, a
-  style row and a program per case, to a state cell, so a command that writes
+  style mark and a program per case, to a state cell, so a command that writes
   the cell swaps the look with no rebake and no compile (every case's program
   is declared). The Moth supports both cel and plain looks this way, swappable
   live for playtesting as binding layouts are (the owner's ruling): `moth.style
@@ -308,8 +310,8 @@ running where its light's `reach` is zero or where a traced light's
 ([the rule](#a-pixel-walks-the-lights-that-reach-it-and-that-its-probes-see)).
 A phase it omits takes the standard's default. The engine keeps what
 a per-pixel program cannot express: the shadow filter, the irradiance gather,
-the cel outline (it reads neighbour depth and normal), local adaptation and the
-atmosphere. One generated invocation serves opaque and glass shading. The
+the edge search (it reads neighbouring depth, normal, object and material, and
+hands a program the distances), local adaptation and the atmosphere. One generated invocation serves opaque and glass shading. The
 surface pass, the bake, the cascades and the irradiance trace never run a
 program.
 

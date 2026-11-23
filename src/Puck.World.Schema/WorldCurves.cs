@@ -64,16 +64,22 @@ public sealed class WorldCurveTable {
 /// angle.</param>
 /// <param name="Curvature">The signed planar curvature at this knot, under the <c>cross2(a, b) = a.X·b.Z − a.Z·b.X</c>
 /// convention: positive curvature turns from the tangent toward +Z faster than toward −Z. Must fall within
-/// ±<see cref="CurvatureSpline.MaxCurvature"/>.</param>
+/// ±<see cref="CurvatureSpline.MaxCurvature"/>. The segment leaving the knot reaches it, and so does the segment
+/// arriving unless <paramref name="IncomingCurvature"/> is authored.</param>
+/// <param name="IncomingCurvature">The signed curvature the segment arriving at this knot reaches there, when it differs
+/// from <paramref name="Curvature"/>; omitted, the curvature is continuous through the knot. An arc ending into a
+/// straight authors the arc's curvature here and zero as <paramref name="Curvature"/>: the tangent stays continuous
+/// while the curvature jumps. Must fall within ±<see cref="CurvatureSpline.MaxCurvature"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldCurveKnot(
     DocumentVector3 Position,
     float TangentYaw,
-    float Curvature
+    float Curvature,
+    float? IncomingCurvature = null
 );
 /// <summary>
 /// One named <c>curves</c> row: an ordered list of curvature-declaring knots that <see cref="Compiled"/> derives
-/// into a curvature-continuous cubic-Bézier spline (Steven Wittens' construction — see
+/// into a cubic-Bézier spline (Steven Wittens' construction — see
 /// <see cref="Puck.Maths.CurvatureSpline"/>). The author declares intent (positions, tangent directions, endpoint
 /// curvatures); the engine derives the machinery (tangent lengths) at compile time, exactly — no control-point
 /// document shape ever ships. The section is OPTIONAL and every reference to a row is nullable, so an unauthored
@@ -103,7 +109,7 @@ public sealed record WorldCurveRow(
     // instance serves every row of that shape.
     private static readonly ConcurrentDictionary<CurveShape, CompiledCurvatureSpline> CompiledByShape = new();
 
-    /// <summary>Gets this row's compiled, curvature-continuous spline — the SAME derivation
+    /// <summary>Gets this row's compiled spline — the SAME derivation
     /// <see cref="WorldDefinitionValidator"/> runs at the door, so a validated row always compiles here too. Derived
     /// once per distinct shape and cached.</summary>
     /// <exception cref="CurvatureSplineException">The row does not compile. Reachable only for an UNVALIDATED row (a
@@ -154,6 +160,7 @@ public sealed record WorldCurveRow(
             result[index] = new CurvatureSplineKnot(
                 Curvature: FixedQ4816.FromDouble(value: knot.Curvature),
                 Elevation: position.Y,
+                IncomingCurvature: ((knot.IncomingCurvature is { } incoming) ? FixedQ4816.FromDouble(value: incoming) : null),
                 TangentYaw: FixedQ4816.FromDouble(value: knot.TangentYaw),
                 X: position.X,
                 Z: position.Z

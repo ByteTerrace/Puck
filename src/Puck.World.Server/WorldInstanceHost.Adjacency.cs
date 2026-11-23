@@ -23,6 +23,30 @@ public sealed partial class WorldInstanceHost {
     // A drain-time refusal against an adjacency border, routed back to that border's own authored treatment. Portal
     // furniture has no such treatment: a refused portal crossing leaves the traveler standing where it was, and the
     // occupancy latch already stops the same door firing again.
+    // A portal crossing its destination refused for good holds each member it sent from the face it walked into, until
+    // the member stands clear of the face (ScanPortalFace). A portal transfer's border is "<placement>/<face>"; an
+    // adjacency's carries its counterpart, and a verb's transfer has no source frame.
+    private void HoldRefusedPortalCrossing(in PendingTransfer transfer, IReadOnlyList<int> members) {
+        if (
+            (transfer.AdjacencyCounterpart is not null) ||
+            (transfer.SourceFrame is null) ||
+            (transfer.Border.LastIndexOf(value: '/') is not (> 0 and var cut)) ||
+            !m_instances.TryGetValue(
+            key: transfer.SourceInstance,
+            value: out var instance
+        ) ||
+            (instance is null)
+        ) {
+            return;
+        }
+
+        var placementId = transfer.Border[..cut];
+        var faceName = transfer.Border[(cut + 1)..];
+
+        foreach (var slot in members) {
+            instance.PortalOccupancy.Refuse(faceName: faceName, placementId: placementId, seat: slot);
+        }
+    }
     private void CloseAdjacencyAfterRefusal(in PendingTransfer transfer, string reason) {
         if (
             (transfer.AdjacencyCounterpart is null) ||
@@ -418,6 +442,7 @@ public sealed partial class WorldInstanceHost {
                     faceName: face.Face,
                     seat: seat
                 );
+                occupancy.Release(placementId: placement.Id, faceName: face.Face, seat: seat);
 
                 continue;
             }
@@ -425,6 +450,14 @@ public sealed partial class WorldInstanceHost {
             var from = body.FixedPreviousPosition;
             var to = body.FixedPosition;
 
+            // A body this face's destination refused for good asks again only once it has stood a body's radius clear of
+            // the face, so one walk into the glass is one attempt however often its origin crosses the region's edge.
+            if (occupancy.IsRefused(placementId: placement.Id, faceName: face.Face, seat: seat)) {
+                if (bounds.Grow(margin: body.BroadphaseRadius).Contains(point: to)) {
+                    continue;
+                }
+                occupancy.Release(placementId: placement.Id, faceName: face.Face, seat: seat);
+            }
             if (!bounds.Intersects(other: FixedAabb.Empty.Enclose(point: from).Enclose(point: to))) {
                 if (occupancy.Holds(seat: seat)) {
                     _ = occupancy.Observe(placementId: placement.Id, faceName: face.Face, seat: seat, inside: false, crossed: false);

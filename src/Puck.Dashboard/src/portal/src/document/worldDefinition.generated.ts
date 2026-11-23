@@ -1116,6 +1116,8 @@ export type BodyProgramParameters = {
   flock?: WorldFlockProfile | null;
 };
 
+export type BodyTargetFallback = "Hold" | "Roam";
+
 export type BodyTargetScope = "Seats" | "Bodies";
 
 export type BodyTargetSource = BodyTargetSourceSensed | BodyTargetSourceDesignated | BodyTargetSourceCurveFollow | BodyTargetSourceNavigated | null;
@@ -1129,12 +1131,14 @@ export type BodyTargetSourceCurveFollow = {
 export type BodyTargetSourceDesignated = {
   $type?: "designated";
   register: string;
+  fallback?: BodyTargetFallback;
 };
 
 export type BodyTargetSourceNavigated = {
   $type?: "navigated";
   domain: string;
   register: string;
+  fallback?: BodyTargetFallback;
 };
 
 export type BodyTargetSourceSensed = {
@@ -3779,9 +3783,9 @@ export type SdfShadeParameter = {
 };
 
 /**
- * The three entry points of a material's presentation program.
+ * The entry points of a material's presentation program, in the order a pixel runs them: the surface, each light of its walk, the composition of the lit colour, then the ink drawn over it.
  */
-export type SdfShadePhase = "Surface" | "Light" | "Compose";
+export type SdfShadePhase = "Surface" | "Light" | "Compose" | "Ink";
 
 /**
  * A structural shape descriptor. Compilation uses the existing solid/paint emission and admission.
@@ -5647,29 +5651,13 @@ export type TextRunDocument = {
 export type TilingFamily = "Triangular" | "Kagome" | "TruncatedSquare" | "Rhombitrihexagonal" | "TruncatedHexagonal" | "ElongatedTriangular" | "TruncatedTrihexagonal" | "Penrose";
 
 /**
- * A cel style on the wire (SdfToon): the world's default style (render.toon) and a palette row's own (Toon) are this one shape, so a style authored once (the standard's styles.puck) serves both. A style marks its material styled and carries its ink; the banding is the material's shade program (the standard's celMaterial writes both), and the live world.toon off shades every styled material continuously and uninked. The engine holds no look of its own: a style that is on authors every value, and one that says enabled: false needs none. Presentation only; no field enters simulation state or the bake.
+ * A style mark on the wire (SdfToon): the world's default (render.toon) and a palette row's own (Toon) are this one shape. A style marks its material styled and carries no look: the banding and the ink are the material's shade program (the standard's celMaterial writes both), and the live world.toon off shades every styled material continuously and uninked. Presentation only; no field enters simulation state or the bake.
  */
 export type ToonStyleDocument = {
   /**
    * Whether the style is on; absent is on. False on a palette row keeps that material unstyled whatever the world's default is; false on render.toon leaves the world's default off.
    */
   enabled?: boolean | null;
-  /**
-   * The close outline radius in output pixels, in [0, 4]; zero disables outlines.
-   */
-  outlineWidth?: number | null;
-  /**
-   * The distance in metres at which the outline radius halves, in [0.1, 1000].
-   */
-  outlineDistance?: number | null;
-  /**
-   * The crease normal cosine, in [0, 0.95].
-   */
-  outlineNormal?: number | null;
-  /**
-   * The outline multiplier, three linear RGB values in [0, 1].
-   */
-  outlineTint?: DocumentVector3;
 };
 
 /**
@@ -7195,9 +7183,13 @@ export type WorldCurveKnot = {
    */
   tangentYaw: number;
   /**
-   * The signed planar curvature at this knot, under the cross2(a, b) = a.X·b.Z − a.Z·b.X convention: positive curvature turns from the tangent toward +Z faster than toward −Z. Must fall within ±MaxCurvature.
+   * The signed planar curvature at this knot, under the cross2(a, b) = a.X·b.Z − a.Z·b.X convention: positive curvature turns from the tangent toward +Z faster than toward −Z. Must fall within ±MaxCurvature. The segment leaving the knot reaches it, and so does the segment arriving unless IncomingCurvature is authored.
    */
   curvature: number;
+  /**
+   * The signed curvature the segment arriving at this knot reaches there, when it differs from Curvature; omitted, the curvature is continuous through the knot. An arc ending into a straight authors the arc's curvature here and zero as Curvature: the tangent stays continuous while the curvature jumps. Must fall within ±MaxCurvature.
+   */
+  incomingCurvature?: number | null;
 };
 
 export type WorldCurveRow = {
@@ -13081,6 +13073,10 @@ export type WorldRouteStepGo = {
    * Places the body may also stand in on the way.
    */
   corridor?: (string | null)[] | null;
+  /**
+   * The documentId of the world the step is played in, whose places Place and Corridor name, or null for the route's own document. The step fails when the seat stands in another world.
+   */
+  world?: string | null;
 };
 
 export type WorldRouteStepLine = {
@@ -13121,6 +13117,10 @@ export type WorldRouteStepPressAction = {
    * The time stood after the press with no Until, or the time past which the wait for it fails.
    */
   seconds?: number;
+  /**
+   * The documentId of the world whose place Until names, or null for the route's own document.
+   */
+  world?: string | null;
 };
 
 export type WorldRouteStepRest = {

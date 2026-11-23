@@ -18,6 +18,13 @@ public sealed class WorldBodyWork : WorkLedger<WorkCounterSet> {
 
     /// <summary>Gets the kind counting simulated body advances: one per non-seat body a tick's integration pass steps.</summary>
     public static WorkKind Advances { get; } = new(name: "physics.bodies.advances", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the simulated advances a kit partition ran: the bodies whose step is local, which
+    /// <see cref="Advances"/> also counts. The difference is the advances the serial loop ran.</summary>
+    public static WorkKind LocalAdvances { get; } = new(name: "physics.bodies.local-advances", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the producer runs a kit partition ran.</summary>
+    public static WorkKind LocalSteers { get; } = new(name: "physics.bodies.local-steers", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting kit partitions run: each partition holding a local body counts once a tick.</summary>
+    public static WorkKind KitPartitions { get; } = new(name: "physics.bodies.kit-partitions", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the number of neighbour responses (body pushes and geometry resolution) the local tick budget or
     /// an ownership face shortened, rejected or slowed. Delivery timing is not yet taped, so this count is
     /// pacing-dependent.</summary>
@@ -46,7 +53,7 @@ public sealed class WorldBodyWork : WorkLedger<WorkCounterSet> {
 
     /// <summary>Initializes a new instance of the <see cref="WorldBodyWork"/> class, every kind at zero.</summary>
     public WorldBodyWork() : base(counters: new(
-        kinds: [Advances, FieldWakes, FieldObserved, GyroscopicSteps, GyroscopicRefusals, GyroscopicRescaleSkips, AdjacencyCorrectionClamps],
+        kinds: [Advances, LocalAdvances, LocalSteers, KitPartitions, FieldWakes, FieldObserved, GyroscopicSteps, GyroscopicRefusals, GyroscopicRescaleSkips, AdjacencyCorrectionClamps],
         name: SourceName
     )) { }
 

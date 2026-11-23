@@ -11330,50 +11330,6 @@
                 "null"
               ],
               "default": null
-            },
-            "outlineWidth": {
-              "description": "The close outline radius in output pixels, in [0, 4]; zero disables outlines.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
-            },
-            "outlineDistance": {
-              "description": "The distance in metres at which the outline radius halves, in [0.1, 1000].",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
-            },
-            "outlineNormal": {
-              "description": "The crease normal cosine, in [0, 0.95].",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
-            },
-            "outlineTint": {
-              "description": "The outline multiplier, three linear RGB values in [0, 1].",
-              "default": null,
-              "title": "DocumentVector3",
-              "anyOf": [
-                {
-                  "type": "array",
-                  "items": {
-                    "type": "number"
-                  },
-                  "minItems": 3,
-                  "maxItems": 3
-                },
-                {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                }
-              ]
             }
           },
           "additionalProperties": false,
@@ -11561,7 +11517,8 @@
                         "enum": [
                           "Surface",
                           "Light",
-                          "Compose"
+                          "Compose",
+                          "Ink"
                         ],
                         "title": "SdfShadePhase"
                       },
@@ -12078,7 +12035,8 @@
                         "enum": [
                           "Surface",
                           "Light",
-                          "Compose"
+                          "Compose",
+                          "Ink"
                         ],
                         "title": "SdfShadePhase"
                       },
@@ -33822,50 +33780,6 @@
                             "null"
                           ],
                           "default": null
-                        },
-                        "outlineWidth": {
-                          "description": "The close outline radius in output pixels, in [0, 4]; zero disables outlines.",
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
-                        },
-                        "outlineDistance": {
-                          "description": "The distance in metres at which the outline radius halves, in [0.1, 1000].",
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
-                        },
-                        "outlineNormal": {
-                          "description": "The crease normal cosine, in [0, 0.95].",
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
-                        },
-                        "outlineTint": {
-                          "description": "The outline multiplier, three linear RGB values in [0, 1].",
-                          "default": null,
-                          "title": "DocumentVector3",
-                          "anyOf": [
-                            {
-                              "type": "array",
-                              "items": {
-                                "type": "number"
-                              },
-                              "minItems": 3,
-                              "maxItems": 3
-                            },
-                            {
-                              "type": "string",
-                              "minLength": 1,
-                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                            }
-                          ]
                         }
                       },
                       "additionalProperties": false,
@@ -33907,50 +33821,6 @@
                                       "null"
                                     ],
                                     "default": null
-                                  },
-                                  "outlineWidth": {
-                                    "description": "The close outline radius in output pixels, in [0, 4]; zero disables outlines.",
-                                    "type": [
-                                      "number",
-                                      "null"
-                                    ],
-                                    "default": null
-                                  },
-                                  "outlineDistance": {
-                                    "description": "The distance in metres at which the outline radius halves, in [0.1, 1000].",
-                                    "type": [
-                                      "number",
-                                      "null"
-                                    ],
-                                    "default": null
-                                  },
-                                  "outlineNormal": {
-                                    "description": "The crease normal cosine, in [0, 0.95].",
-                                    "type": [
-                                      "number",
-                                      "null"
-                                    ],
-                                    "default": null
-                                  },
-                                  "outlineTint": {
-                                    "description": "The outline multiplier, three linear RGB values in [0, 1].",
-                                    "default": null,
-                                    "title": "DocumentVector3",
-                                    "anyOf": [
-                                      {
-                                        "type": "array",
-                                        "items": {
-                                          "type": "number"
-                                        },
-                                        "minItems": 3,
-                                        "maxItems": 3
-                                      },
-                                      {
-                                        "type": "string",
-                                        "minLength": 1,
-                                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                                      }
-                                    ]
                                   }
                                 },
                                 "additionalProperties": false,
@@ -56035,7 +55905,8 @@
                   "enum": [
                     "Surface",
                     "Light",
-                    "Compose"
+                    "Compose",
+                    "Ink"
                   ],
                   "title": "SdfShadePhase"
                 },
@@ -56375,7 +56246,8 @@
                   "enum": [
                     "Surface",
                     "Light",
-                    "Compose"
+                    "Compose",
+                    "Ink"
                   ],
                   "title": "SdfShadePhase"
                 },

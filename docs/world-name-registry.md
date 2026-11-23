@@ -594,7 +594,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.exposure.compensation.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.exposure.hold` | State | Binding | Binding | `WorldRenderExposure.Hold` |
 | `render.exposure.hold.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
-| `render.toon.outlineTint` | State | Binding | Binding | `ToonStyleDocument.OutlineTint` |
 | `render.lanes` | State | Binding | Binding | `WorldRenderDefaults.Lanes` |
 | `render.lanes[].clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `screens[].origin` | State | Binding | Binding | `WorldScreen.Origin` |
@@ -2263,9 +2262,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].field.material.weathering.turn` | State | Binding | Binding | `PaletteWeatheringDocument.Turn` |
 | `state.world[].field.material.inset.origin` | State | Binding | Binding | `PaletteInsetDocument.Origin` |
 | `state.world[].field.material.inset.rotation` | State | Binding | Binding | `PaletteInsetDocument.Rotation` |
-| `state.world[].field.material.toon.outlineTint` | State | Binding | Binding | `ToonStyleDocument.OutlineTint` |
 | `state.world[].field.material.toonSelect.state` | State | Binding | Binding | `PaletteToonSelectDocument.State` |
-| `state.world[].field.material.toonSelect.cases[].toon.outlineTint` | State | Binding | Binding | `ToonStyleDocument.OutlineTint` |
 | `state.world[].field.material.flow.velocity` | State | Binding | Binding | `PaletteFlowDocument.Velocity` |
 | `state.world[].field.material.flow.region.center` | State | Binding | Binding | `PaletteFlowRegionDocument.Center` |
 | `state.world[].field.material.flow.region.velocity` | State | Binding | Binding | `PaletteFlowRegionDocument.Velocity` |
@@ -6809,6 +6806,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `schedule.instances[].document` | `WorldScheduleInstance.Document` | a path or document locator |
 | `curves[].name` | `WorldCurveRow.Name` | a curve name |
 | `navigation.domains[].name` | `WorldNavigationDomain.Name` | a navigation domain name |
+| `navigation.domains[].network` | `WorldNavigationDomain.Network` | a navigation network name |
 | `patterns[].symbols[].name` | `PatternSymbol.Name` | a symbol name is local to its pattern |
 | `patterns[].pattern[symbol].name` | `PatternNode.Symbol.Name` | a symbol name is local to its pattern |
 | `patterns[].pattern[except].name` | `PatternNode.Except.Name` | a symbol name is local to its pattern |
@@ -6936,10 +6934,12 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `routes[].chapters[].steps[][go].place` | `WorldRouteStep.Go.Place` | a route place or corridor |
 | `routes[].chapters[].steps[][go].pace` | `WorldRouteStep.Go.Pace` | a route pace |
 | `routes[].chapters[].steps[][go].corridor` | `WorldRouteStep.Go.Corridor` | a route place or corridor |
+| `routes[].chapters[].steps[][go].world` | `WorldRouteStep.Go.World` | a route world |
 | `routes[].chapters[].steps[][cross].until` | `WorldRouteStep.Cross.Until` | a route place or corridor |
 | `routes[].chapters[].steps[][cross].pace` | `WorldRouteStep.Cross.Pace` | a route pace |
 | `routes[].chapters[].steps[][press].action` | `WorldRouteStep.PressAction.Action` | a seat program action |
 | `routes[].chapters[].steps[][press].until` | `WorldRouteStep.PressAction.Until` | a route place or corridor |
+| `routes[].chapters[].steps[][press].world` | `WorldRouteStep.PressAction.World` | a route world |
 | `shades{*}.name` | `SdfShadeDefinition.Name` | a shade program's label, local to the material that carries it |
 | `shades{*}.parameters[].name` | `SdfShadeParameter.Name` | a parameter local to its shade program |
 | `shades{*}.outputs[].name` | `SdfShadeOutput.Name` | a stage output in the shading vocabulary |

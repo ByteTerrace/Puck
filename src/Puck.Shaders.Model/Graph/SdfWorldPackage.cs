@@ -88,13 +88,18 @@ public static partial class SdfWorldPackage {
     public const string ShadeIdentity = "shadeIdentity";
     /// <summary>The default's conservative shadow demand, including unassigned base wrap.</summary>
     public const string ShadeDemand = "shadeDemand";
-    /// <summary>The world's default cel style's first row (<c>SdfToon.WriteRows</c>, a material's row 22 alike): its mode
-    /// (<c>SdfToon.Mode</c>, negative while every style is suppressed), outline radius in output pixels, half-width
-    /// distance and crease cosine (<c>float4</c>).</summary>
-    public const string ToonOutline = "toonOutline";
-    /// <summary>Cel outline's linear RGB multiplier, and the view's render grid, which scales every style's outline radius
-    /// from output to render pixels (<c>float4</c>).</summary>
-    public const string ToonInk = "toonInk";
+    /// <summary>The world's default style's mode (<c>SdfToon.Mode</c>, a material's row 22 alike), negative while every
+    /// style is suppressed (<c>float</c>).</summary>
+    public const string ToonMode = "toonMode";
+    /// <summary>The display pixels one of the view's render pixels spans, the unit a shade program's widths are in
+    /// (<c>surface.pixel</c>, the <c>edge.*</c> distances), then the height that ratio was taken from when the view
+    /// renders into an image apart from the output (<c>SdfViewSnapshot.DemandHeight</c>), so a signature built without
+    /// the render extent still moves with it (<c>float2</c>).</summary>
+    public const string DisplayPixels = "displayPixels";
+    /// <summary>Whether a program of the frame reads an <c>edge.*</c> distance (<c>SdfShadeReads.Edges</c>), so the
+    /// view searches for edges (<c>sdf-views-filter.hlsli</c>); a view of a frame none does searches nothing
+    /// (<c>uint</c>).</summary>
+    public const string InkEdges = "inkEdges";
     /// <summary>The pass-group value holding the power the composite raises <see cref="Exposure"/> to before applying it
     /// to the view's output (<c>float</c>): one for a view the display shows, and the window share
     /// (<c>SdfPhotometry.WindowAdaptation</c>) for a view that publishes its luminance for a window onto it, whose
@@ -336,8 +341,9 @@ public static partial class SdfWorldPackage {
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: ShadeIdentity, type: ShaderValueType.Uint4, length: 2),
         Value(name: ShadeDemand, type: ShaderValueType.Float4),
         Value(name: ShadeBinWidths, type: ShaderValueType.Uint4),
-        Value(name: ToonOutline, type: ShaderValueType.Float4),
-        Value(name: ToonInk, type: ShaderValueType.Float4),
+        Value(name: ToonMode, type: ShaderValueType.Float),
+        Value(name: DisplayPixels, type: ShaderValueType.Float2),
+        Value(name: InkEdges, type: ShaderValueType.Uint),
         Value(name: WorldLanes, type: ShaderValueType.Float4),
         Value(name: ExposeShare, type: ShaderValueType.Float),
         Value(name: AirLight, type: ShaderValueType.Float),

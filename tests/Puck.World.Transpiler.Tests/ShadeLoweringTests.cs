@@ -54,6 +54,24 @@ public sealed class ShadeLoweringTests {
         Assert.Contains(collection: compiled.Diagnostics, filter: d => (d.Code == code));
     }
     [Fact]
+    public void AnInkPhaseIsAProgramsFourthPhaseAndMustReadALine() {
+        var inked = Compile(text: World("albedo = material.albedo } light { line = light.cosine } ink { color = ink.under * 0.5\n coverage = max(ink.line, 1 - edge.depth)"));
+        var plain = Compile(text: World("albedo = material.albedo"));
+
+        Assert.True(condition: inked.Authors(phase: SdfShadePhase.Ink));
+        Assert.True(condition: inked.Authors(phase: SdfShadePhase.Light));
+        Assert.Equal(expected: SdfShadeReads.Edges, actual: (inked.Reads & SdfShadeReads.Edges));
+        Assert.False(condition: plain.Authors(phase: SdfShadePhase.Ink));
+        Assert.Equal(expected: SdfShadeReads.None, actual: (plain.Reads & SdfShadeReads.Edges));
+        // The ink phase is priced as if every pixel ran it.
+        Assert.True(condition: (inked.PixelWork(lights: 0) > plain.PixelWork(lights: 0)));
+
+        // The stage runs an ink phase only where a line input is live, so one that reads none could never run.
+        var refused = WorldCompileSession.Shared.Compile(World("albedo = material.albedo } ink { coverage = 1"), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Contains(collection: refused.Diagnostics, filter: d => (d.Code == "PUCK126"));
+    }
+    [Fact]
     public void ReadsFollowOnlyLiveOpsAndPhaseInputsAreRestricted() {
         var program = Compile(text: World("roughness = clock\n roughness = lanes.world2\n albedo = material.albedo"));
 

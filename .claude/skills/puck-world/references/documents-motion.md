@@ -79,13 +79,21 @@ A row without `across` shapes the whole vector through the engage/release
 response law — `engage` while the stick is deflected, `release` while
 centered, with the shared recency clocks its `when` gate's `recently`
 predicates read. A row with `across` runs the anisotropic drive
-decomposition instead, the same body-frame longitudinal/lateral/residual
-lanes converging each at its own authored rate: `along.engage` while throttle commands
-more speed, `along.reversalRate` while back-throttle opposes forward travel,
-`along.release` toward rest with throttle centered (and the over-speed
-bleed), `along.backwardSpeed` the backward target speed full back-throttle
+decomposition instead, splitting velocity against the body's heading (the
+attitude the frame op resolved, which under `moveFrame: World` is not the
+world-axis translation basis) into longitudinal/lateral/residual lanes that
+each converge at their own authored rate. Throttle is the commanded target's
+advance along the heading, as `ComputePlanarTargetVelocity` resolved it, so a
+seat's throttle, a world-framed stick and a producer's steering all drive it
+under `walk` or a drive program alike: `along.engage` while the target asks for
+more speed, `along.reversalRate` while it asks backward against forward travel,
+`along.release` toward rest with nothing commanded (and the over-speed
+bleed), `along.backwardSpeed` the backward target speed full backward command
 converges on from rest, and `across.lateral` the lateral convergence rate
-toward zero slip. `turnScale` multiplies the turn tuning's own authority
+toward zero slip, whatever the target asks across the heading. A program
+selecting `ShapeVelocity` without `ComputePlanarTargetVelocity` or
+`ComputeLocalTargetVelocity` is refused (`OpcodeRequired`): nothing would
+resolve the target it shapes toward. `turnScale` multiplies the turn tuning's own authority
 curve while this row governs — `1` (the default) for an ordinary row, and a
 held drift row's own tightened arc. A `dynamics` row names a `dynamics`-
 section row (a pole-matched second-order follower — see

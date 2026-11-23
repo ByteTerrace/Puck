@@ -269,7 +269,7 @@ template pond() {
       kind: Producer
       name: "stalk"
       operations [SenseNearestInCone, ProduceSteeringIntent, FaceSensorTarget]
-      target: navigated(domain: "plot", register: "quarry")
+      target: navigated(domain: "plot", register: "quarry", fallback: Roam)
       version: "puck.body.program.v1"
     }
     // Every creature's body runs the same motion program over its own kit.

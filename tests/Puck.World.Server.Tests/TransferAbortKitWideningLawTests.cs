@@ -61,6 +61,7 @@ public sealed class TransferAbortKitWideningLawTests {
             Operations: [
                 BodyMotionOp.ResolveDriveFrame,
                 BodyMotionOp.ResolveHold,
+                BodyMotionOp.ComputePlanarTargetVelocity,
                 BodyMotionOp.ShapeVelocity,
                 BodyMotionOp.RunActionTriggers,
                 BodyMotionOp.ApplyHold,
