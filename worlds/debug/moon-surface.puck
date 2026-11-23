@@ -96,7 +96,8 @@ let moonOctant = ((moonRadius + 40) / 2)
 let moonLap = 6
 
 // The regolith: pale warm grey in the sun over lavender shade, darker in the bowls and on steep walls, paler on the
-// rims' crests, and broken by a slow mottling so no bowl is one flat value.
+// rims' crests, and broken by a slow mottling so no bowl is one flat value. Painted without ink, as the valley's rock
+// is.
 let moonRegolith = 0
 let moonStone = 1
 let moonStyle = celStyle with {
@@ -106,12 +107,6 @@ let moonStyle = celStyle with {
   specularSize: 0.015
   restore: 0.45
   form: 0.5
-  ink {
-    outlineWidth: 0
-    outlineDistance: 12
-    outlineNormal: 0.65
-    outlineTint [1, 1, 1]
-  }
 }
 let moonBands = [
   terrainBand("#8E8794", amount: 0.7, altitude: [0 - terrainOpen, -6], altitudeWidth: 10)
@@ -120,11 +115,11 @@ let moonBands = [
 ]
 let moonBreakup = { scale: 0.012, jitter [8, 5, 0], variation: 0.16, seed: 4273 }
 let moonPalette = [
-  celMaterial(
+  celPaint(
     terrainMaterial({ color: "#CFC8BC", roughness: 0.96, specular: 0.02 }, moonBands, moonBreakup, radial: 1, radius: moonRadius),
     moonStyle
   )
-  celMaterial({ color: "#E9E4D8", roughness: 0.7, specular: 0.08 }, moonStyle)
+  celPaint({ color: "#E9E4D8", roughness: 0.7, specular: 0.08 }, moonStyle)
 ]
 
 // One sector's creation: the sphere, the craters that reach the octant, the relief, then the cuts that leave the
