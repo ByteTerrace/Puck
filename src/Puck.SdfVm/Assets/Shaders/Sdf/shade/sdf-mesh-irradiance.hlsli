@@ -468,12 +468,17 @@ SdfMeshProbes sdfMeshProbesNone() {
     }
     return probes;
 }
-SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
+// The gather, and in `complete` whether every probe it consulted was present: no stage it read found a corner inside its
+// window whose slot holds no probe of that corner's cell. Only a complete gather is a function of the windows, the
+// published geometry and the receiver alone, since a probe landing in a missing corner changes it without either moving.
+SdfMeshProbes sdfMeshProbesAtComplete(float3 position, float3 normal, out bool complete) {
     SdfMeshProbes probes = sdfMeshProbesNone();
 
+    complete = false;
     if (any(!isfinite(position))) {
         return probes;
     }
+    complete = true;
 
     float3 pushed = (position + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS));
     uint chosen = SDF_MESH_IRRADIANCE_LEVELS;
@@ -531,6 +536,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         float front, missing;
         float total = sdfMeshProbesGather(level, spacing, low, dims, position, normal, pushed, bounded, ((level == 0u) ? SDF_MESH_IRRADIANCE_BEHIND_SHARE : 0.0), front, missing, cage);
         if (bounded && level >= chosen) { cold = missing > 0; }
+        complete = (complete && !(missing > 0.0));
         front += missing;
 
         if (!(total > 0.0)) {
@@ -569,6 +575,11 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     }
 
     return probes;
+}
+SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
+    bool complete;
+
+    return sdfMeshProbesAtComplete(position, normal, complete);
 }
 // The sky visibility, reflected radiance and sky light the gathered probes hold, seen along `direction` (the normal for
 // the light a surface receives, the mirror direction for the light it reflects). A point with no answering probe has no

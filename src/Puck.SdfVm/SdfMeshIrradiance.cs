@@ -30,7 +30,11 @@ public readonly record struct SdfMeshIrradianceWindow(Vector3 Spacing, (int X, i
 /// <param name="Finest">The finest level's window.</param>
 /// <param name="Middle">The second level's window.</param>
 /// <param name="Far">The coarsest level's window.</param>
-public readonly record struct SdfMeshIrradianceParameters(bool Enabled, SdfMeshIrradianceWindow Finest, SdfMeshIrradianceWindow Middle = default, SdfMeshIrradianceWindow Far = default) {
+/// <param name="Geometry">The serial of the published geometry: it moves with each publication that moves, resizes or
+/// withdraws a window, or that copies a retrace of a probe its slot already held or a republication of every slot; never
+/// with a relight or with a probe traced into a cell no slot held. A gather the probe lookup keeps between frames stands
+/// only under the serial it was taken at (<c>sdf-views-probe-history.hlsli</c>).</param>
+public readonly record struct SdfMeshIrradianceParameters(bool Enabled, SdfMeshIrradianceWindow Finest, SdfMeshIrradianceWindow Middle = default, SdfMeshIrradianceWindow Far = default, uint Geometry = 0) {
     /// <summary>Returns a level's window, finest first.</summary>
     /// <param name="level">The level, from zero to <see cref="SdfMeshIrradianceProbe.Levels"/> less one.</param>
     /// <returns>The window; a default window for a level out of range.</returns>
@@ -649,6 +653,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private bool m_wrote;
     private bool m_geometryWrote;
     private bool m_tracedLanded;
+    // The published geometry's serial (SdfMeshIrradianceParameters.Geometry), and whether a landed retrace or a
+    // republication owes it a step at the next publication that copies slots. It steps there and nowhere else, so a
+    // gather kept under a serial never saw the slots a later step published.
+    private uint m_geometrySerial;
+    private bool m_geometryOwed;
     private bool m_reported;
     private long m_traced;
     private long m_relit;
@@ -1156,7 +1165,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             level.Published = window;
             m_wrote = true;
         }
-        if (m_changedSlots.Count > 0) {
+        var copied = (m_changedSlots.Count > 0);
+
+        if (copied) {
             m_tracedLanded = false;
             write(obj: m_volume.AsMemory(length: (layout.TotalCount * SdfMeshIrradianceProbe.ProbeWords), start: 0));
             m_changedSlots.Clear();
@@ -1166,8 +1177,17 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         foreach (var level in m_levels) { enabled |= level.Published.Present; }
 
-        m_published = new SdfMeshIrradianceParameters(Enabled: enabled, Far: PublishedOf(layout: layout, level: 2), Finest: PublishedOf(layout: layout, level: 0),
-            Middle: PublishedOf(layout: layout, level: 1));
+        var published = new SdfMeshIrradianceParameters(Enabled: enabled, Far: PublishedOf(layout: layout, level: 2), Finest: PublishedOf(layout: layout, level: 0),
+            Middle: PublishedOf(layout: layout, level: 1), Geometry: m_geometrySerial);
+
+        // A moved, resized or withdrawn window reassigns slots and changes which level holds a receiver; a copied retrace
+        // changes a held probe. Either steps the serial with the publication that shows it.
+        if ((published with { Geometry = 0 }) != (m_published with { Geometry = 0 }) || (copied && m_geometryOwed)) {
+            m_geometryOwed = (m_geometryOwed && !copied);
+            m_geometrySerial++;
+            published = published with { Geometry = m_geometrySerial };
+        }
+        m_published = published;
     }
     // Where a level's window centres for the first view. The finest level's anchor is its camera moved ahead along its
     // horizontal forward by a quarter of the window's horizontal extent, so the finest probes cover what the view looks
@@ -2620,10 +2640,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 var candidate = candidates[(first + index)];
                 var result = results[index];
 
+                // A trace of a cell its slot already holds changes a published probe's surface map, offset or validity:
+                // the next publication moves the geometry serial (Publish). A cell no slot held answered no gather yet.
+                var held = (candidate.Trace && Holds(level: candidate.Level, cell: candidate.Cell));
                 if ((result.Hits is null) || !m_levels[candidate.Level].Cache.TrySet(key: candidate.Cell, value: in result)) { continue; }
                 relit++;
                 if (pass < 0) { m_drained = default; }
                 if (candidate.Trace) { traced++; }
+                m_geometryOwed |= held;
                 moved |= result.Moved;
                 m_landed.Add(item: (candidate.Level, candidate.Cell));
             }

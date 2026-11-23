@@ -382,6 +382,7 @@ public static partial class SdfWorldPackage {
         Value(name: MeshShadowTexels, type: ShaderValueType.Uint4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: MeshIrradianceLevelCount, name: MeshIrradianceLevels, type: ShaderValueType.Int4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: MeshIrradianceLevelCount, name: MeshIrradianceSpacings, type: ShaderValueType.Float4),
+        Value(name: MeshIrradianceGeometry, type: ShaderValueType.Uint),
         ShaderWorkCounters.RowMember,
         ShaderWorkCounters.DetailRowMember,
     ];
@@ -492,6 +493,8 @@ public static partial class SdfWorldPackage {
         Written(element: ShaderValueType.Uint, name: ShadeTilesWritten),
         Written(element: ShaderValueType.Uint, name: ShadeArgumentsWritten),
         Read(element: ShaderValueType.Uint, name: HistorySurface),
+        Read(element: ShaderValueType.Uint, name: ViewsProbeHistory),
+        Written(element: ShaderValueType.Uint, name: ViewsProbeHistoryWritten),
         .. Tables,
     ];
     /// <summary>Gets the fragment a native view runs as: one view's dispatch set, its scratch retained and counted, its

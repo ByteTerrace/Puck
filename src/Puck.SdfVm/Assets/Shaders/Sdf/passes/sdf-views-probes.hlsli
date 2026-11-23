@@ -9,7 +9,7 @@
 // shading normal and mirror direction.
 //
 // What a reused gather may differ in: the representative's trilinear shares, facing fade and surface visibility, taken at
-// a receiver within SdfViewsProbeReach of the pixel's, on the same tangent plane within SdfViewsProbePlane and facing within
+// a receiver within the reach of the pixel's, on the same tangent plane (both sdfViewsProbeTolerance) and facing within
 // SdfViewsProbeFacing of it. The shares move at the probes' spacing and the facing fade at half of it, both metres or more;
 // the surface test closes over SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE across a surface a probe measured, and a receiver
 // that stays on its own plane does not cross the plane of a surface beside it. A pixel across a depth or crease edge from
@@ -49,7 +49,10 @@
 // of the surface test's closing ramp; and the cosine its normal keeps with the pixel's.
 static const float SdfViewsProbeReach = SDF_MESH_IRRADIANCE_NORMAL_BIAS;
 static const float SdfViewsProbePlane = (0.25 * SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
-static const float SdfViewsProbeFacing = 0.995;
+static const float SdfViewsProbeFacing = 0.98;
+// The least cosine a pixel's footprint is stretched by along the surface it meets, so a surface seen edge-on shares no
+// farther than eight footprints.
+static const float SdfViewsProbeGrazing = 0.125;
 
 static const uint SdfViewsProbeStateWord = 10u;
 static const uint SdfViewsProbeSkyWord = 11u;
@@ -64,12 +67,26 @@ static const uint SdfViewsProbeExtraShift = 29u;
 static const uint SdfViewsProbeExtraWord = 32u;
 static const uint SdfViewsProbeExtraWords = 11u;
 
+// The tolerances a reused gather is held to at a receiver whose pixel spans `footprint` metres across its ray, met at
+// `cosine` (the absolute cosine between the ray and the receiver's geometric normal). In `x`, the reach it may lie from
+// the receiver: the normal bias, or two pixels measured along the surface where those are wider, since a cell's
+// representative stands up to a pixel's diagonal from any pixel of its cell and the preceding frame's a pixel further,
+// and a pixel met at a grazing angle spans its footprint over the cosine along the surface (within SdfViewsProbeGrazing).
+// In `y`, its distance off the representative's tangent plane: SdfViewsProbePlane, or half a pixel where that is wider.
+// Where two pixels span more than the bias, a cell's pixels show the volume's light at the cell's own resolution on the
+// screen, as the representative already shows it for the pixels it serves, and the plane and facing tests still keep a
+// receiver from reading a gather across a crease or a depth edge.
+float2 sdfViewsProbeTolerance(float footprint, float cosine) {
+    return float2(max(SdfViewsProbeReach, ((2.0 * footprint) / max(cosine, SdfViewsProbeGrazing))), max(SdfViewsProbePlane, (0.5 * footprint)));
+}
 // Whether a receiver at `offset` from a representative whose normal is `representativeNormal`, with its own geometric
-// normal `normal`, may read the representative's gather (the head of this file): within the reach, on its tangent plane
-// and facing as it does. The probe lookup decides with it which pixels of a cell gather for themselves.
-bool sdfViewsProbesCompatible(float3 offset, float3 representativeNormal, float3 normal) {
-    return ((dot(offset, offset) <= (SdfViewsProbeReach * SdfViewsProbeReach))
-        && (abs(dot(offset, representativeNormal)) <= SdfViewsProbePlane)
+// normal `normal`, may read the representative's gather (the head of this file): within the reach of `tolerance`
+// (sdfViewsProbeTolerance), on its tangent plane within the tolerance's plane distance, and facing as it does. The probe
+// lookup decides with it which pixels of a cell gather for themselves, and which receivers reuse a preceding frame's
+// gather (sdf-views-probe-history.hlsli).
+bool sdfViewsProbesCompatible(float3 offset, float3 representativeNormal, float3 normal, float2 tolerance) {
+    return ((dot(offset, offset) <= (tolerance.x * tolerance.x))
+        && (abs(dot(offset, representativeNormal)) <= tolerance.y)
         && (dot(normal, representativeNormal) >= SdfViewsProbeFacing));
 }
 // The extra slot a non-representative pixel of a cell reads: its place among the cell's pixels in raster order with the

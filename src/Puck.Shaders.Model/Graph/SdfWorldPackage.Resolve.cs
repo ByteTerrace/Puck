@@ -188,9 +188,17 @@ public static partial class SdfWorldPackage {
                 Buffer(count: [Term(HistoryWindowWords, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)], name: Parts.HistoryWindow, sizeBytes: null, strideBytes: sizeof(uint)) with {
                     Initialization = ShaderPipelineInitialization.Zero,
                 },
+                ProbeHistory,
             ],
             Passes: [
                 .. ResolveFragment.Value.Passes.Select(selector: static pass => pass.Name switch {
+                    // The probe lookup reuses the preceding frame's gathers and writes this frame's for the next.
+                    Parts.ViewsProbes => pass with {
+                        InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
+                        Inputs = [.. pass.Inputs, new ResourceReference(Name: Parts.ProbeHistory, PreviousFrame: true)],
+                        OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
+                        Outputs = [.. pass.Outputs, new ResourceReference(Name: Parts.ProbeHistory)],
+                    },
                     Parts.Views => pass with {
                         OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
                         Outputs = [.. pass.Outputs, new ResourceReference(Name: Parts.Reactivity)],
