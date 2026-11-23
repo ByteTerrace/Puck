@@ -2,7 +2,7 @@
 
 The owner's direction: the gallery and its surroundings sit in a relatively
 deep valley, under a sky with moons that carry portals and can be reached by
-flying up through the atmosphere into space. Phases 2 onward wait for
+flying up through the atmosphere into space, by ship or through a portal. Phases 2 onward wait for
 the [terrain pass](terrain-pass.md) and the
 [engine job system](open-items.md#engine-job-system). Each phase proves its
 work in the debug world; quarantined worlds stay quarantined.
@@ -97,10 +97,15 @@ which other plans cite:
 - **Two moons** that look relatively close in the sky, one lighter and one
   darker, both pocked by asteroid craters; no rings yet. Phase 2 finishes one
   and measures it before the second.
-- **Flight is the Moth's wings** for now; no craft, and no assistance in this
-  wave. Assisted flight (horizon leveling, cruise) is a later pass, so phase 5
-  reuses the Moth's existing free flight as it is. The later assistance is a
-  standard ability template that the Moth refines.
+- **A ship flies from the valley to the moon, and a portal reaches it too**
+  (the owner's ruling, superseding "the Moth's wings, no craft"): a player
+  can fly a ship from the debug world up through the atmosphere to the debug
+  moon and land, and can also step through a portal to it. Each way in is made
+  as seamless and natural as its perspective allows (the owner: "Implement what
+  is needed to make each perspective as seamless/natural as possible"), in
+  keeping with [one world, many perspectives](../decisions/play.md#the-game).
+  The ship is a real engine body a seat possesses; its flight is an authored
+  motion program in `worlds/standard/`, and the Moth's own free flight stays.
 - **Landing is open,** anywhere a body can stand, as it is now.
 - **Each moon is a federated world of its own**, beside the debug world rather
   than inside it: "it actually makes sense in Puck for a moon and the debug
