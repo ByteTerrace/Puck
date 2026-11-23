@@ -689,11 +689,23 @@ are unchanged; what changed is who draws them, from where, and when.
   shadows takes no anchor, and an anchor's texels follow its view's quality.
 - **Cached, and redrawn only for what changed the whole.** An entry's layers
   are drawn whole only when the light turns past the entry's tolerance, its eye
-  crosses a cell, its texels change or a static draw changes
-  (`SdfWorldTables.StaticDrawRevision`). The far entry spreads a redraw over
-  the frames of one period of its authored rate (`farShadows.hertz`), the
-  distant entry over its authored `frames`, each into a back layer copied into
-  the front only when the last share lands.
+  crosses a cell or its texels change; the distant entry, which follows no
+  motion, also when a static draw changes (`SdfWorldTables.StaticDrawRevision`),
+  while the others redraw a changed static caster by its rectangles.
+- **Scheduled for the world, never in one hitch.** Every whole redraw is drawn
+  in shares, each a part of the draw list (`SdfMeshOcclusion`'s slices), and
+  the world admits every entry's shares together: each upload draws the shares
+  that fit its vertex budget (`SdfWorldShadows.UploadVertices`), redraws under
+  way first, then entries no view has seen drawn, then by anchor and entry
+  (far, near, secondary, distant). An entry's shares follow the vertices its
+  last redraw measured (the selection's vertex words, read back with every
+  shadow drawing), never fewer than the authored far period or distant
+  `frames`. A world first shown therefore fills its shadows over a few frames,
+  the place the player stands in first. A redraw of an entry no view reads
+  draws into its own layers; one of a standing entry draws into a pair lent
+  from the world's spares, which takes the entry's place when its last share
+  lands, the old pair returning to the spares, so no copy and no per-entry
+  back layer exists.
 - **Moving casters cost the rectangles they sweep.** Every draw record a
   staging changes reports the box it held and holds (`SdfWorldTables.NoteMotion`,
   the motion scopes' one door). Each entry that follows motion judges the caster
@@ -702,18 +714,26 @@ are unchanged; what changed is who draws them, from where, and when.
   owes the rectangles where it was and where it is, merged into at most
   `MaxRectangles`. The upload clears each rectangle and draws every caster in
   its box again through a viewport of its own, from the camera of that
-  rectangle of the plane, so texels land where the whole camera puts them. A
-  grass blade swaying less than a texel costs nothing; the debug world's
-  staging reports thousands of such changes a frame (most of its draws carry
-  the dynamic flag), which is why capability (`SdfMeshDraw.IsStatic`) could
-  not be the split.
+  rectangle of the plane, so texels land where the whole camera puts them. The
+  debug world's staging reports thousands of changes a frame (most of its draws
+  carry the dynamic flag), which is why capability (`SdfMeshDraw.IsStatic`)
+  could not be the split; so a change first meets one comparison against the
+  box the entries last judged its row by, and one that stays within the finest
+  standing entry's texel of it reaches no entry. A grass blade swaying less
+  than a texel costs that comparison. A redraw under way owes its own layers
+  the places a caster was and is, which become the entry's owed rectangles when
+  it lands.
 
 **Authored, with neutral defaults.** The light turn an entry tolerates is the
 author's (`farShadows.turnDegrees`, `distantShadows.turnDegrees`); where none
 is authored it is the turn that moves the shadow of a caster as tall as the
-entry's reach by one texel. A held layer therefore steps by under a texel as
-the sun moves, and a far moving caster's shadow lags by at most the authored
-far period.
+entry's reach by a share of the penumbra the surface pass draws for it
+(`SdfWorldShadows.PenumbraShare` of the filter's radius, which follows the
+light's size up to `SdfKernelInterfaces.MeshShadowFilterTexels`) and a texel
+besides. A held layer's step is then a small part of the softest edge it
+shows, so a light with size holds for a second or more of a turning day where a
+one-texel rule redrew a few times a second; a light with no size holds through
+a texel. A far moving caster's shadow lags by at most the authored far period.
 
 **Options weighed.**
 
@@ -723,13 +743,16 @@ far period.
 | Shadows straight from the distance field: cone or soft traces against a global field or its bricks (Wright 2015, <https://advances.realtimerendering.com/s2015/DynamicOcclusionWithSignedDistanceFields.pdf>; Epic, distance field soft shadows, <https://dev.epicgames.com/documentation/unreal-engine/distance-field-soft-shadows-in-unreal-engine>) | Light motion is free; softness is the cone | The frame rasterizes baked meshes and keeps no world-space field ([the frame does not interpret SDF programs](#the-frame-does-not-interpret-sdf-programs)); a clipmap of bricks fine enough for 10 cm walls is a new content source, leaks through thin architecture at affordable voxel sizes ([illumination's rejected list](../plans/illumination.md#rejected-and-watched)), misses authored meshes and skinned bodies, and costs every pixel of every view every frame |
 | Hardware ray-traced shadows through the probe trace's acceleration structures | No light-direction cache at all | Cost follows pixels, not motion; soft shadows need a denoiser; the structures are the probe scene's, not rebuilt for moving bodies every frame; a fallback is still a shadow map. Kept as the answer where no map reaches ([GPU capabilities](../plans/rendering-research.md#gpu-capabilities-puck-does-not-use-yet)) |
 | Virtual shadow maps with cached pages (Epic, <https://dev.epicgames.com/documentation/unreal-engine/virtual-shadow-maps-in-unreal-engine>) | Resolution where receivers are; pages cached | Page tables and a physical pool are a large build; a moving sun invalidates every page as it does here. The rectangles are the page invalidation of that design at the granularity Puck can afford now; a paged pool is the next step if anchor memory binds |
-| **Cached world-anchored maps, shared by every view, updated by moved rectangles (chosen)** | Costs what moved and what the light's turn forces, once per world | Light turns still redraw whole layers, amortized over their tolerance and spread over frames |
+| **Cached world-anchored maps, shared by every view, updated by moved rectangles (chosen)** | Costs what moved and what the light's turn forces, once per world | Light turns still redraw whole layers, held through a share of the penumbra and spread over frames by the scheduler |
 
 **What enforces it.** `SdfWorldShadows.Decide` is the one door: it chooses each
 entry's work for the upload about to be submitted and the cameras receivers
 read after it; `Record` draws exactly that work; `Submitted` commits it, so a
 camera no submitted upload drew is never read, and the decision freezes for
-the rest of the frame once its upload is submitted. No view's fragment holds a
+the rest of the frame once its upload is submitted. The layers a view binds
+come from the same decision (`ViewOf`): a lent pair is bound only from the
+upload whose share completes its redraw, and the views' binding revision moves
+whenever the bound pair changes. No view's fragment holds a
 shadow pass or storage (`SdfWorldPackage.NativeFragment`), so nothing else can
 draw one. A view's surface pass folds `ContentRevision` into its signature, so
 it renders again exactly when a layer it reads changes. Where the guarantee

@@ -62,8 +62,6 @@ internal sealed class SdfWorldShadows : IDisposable {
     /// texels of radius, narrower where the light is small or the caster near) that a held layer's shadows may lag the
     /// light's turn by, with one texel besides, before an entry with no authored tolerance is drawn again.</summary>
     public const float PenumbraShare = 0.25f;
-    // The shares a redraw takes before the vertices of the entry it draws are measured.
-    private const int FirstSlices = 4;
     // The most pairs of layers the spares hold and lend at once: the standing entries one world redraws together.
     private const int MaxSparePairs = 2;
     // The uploads an anchor no view reads is kept for, so a view that leaves and comes back finds its layers.
@@ -876,6 +874,7 @@ internal sealed class SdfWorldShadows : IDisposable {
         private long m_endedByCell;
         private long m_endedByStatic;
         private long m_endedByFit;
+        private long m_endedByMotion;
 
         public Entry(int index, SdfWorldShadows owner, int ring, int anchor) {
             Index = index;
@@ -1049,7 +1048,9 @@ internal sealed class SdfWorldShadows : IDisposable {
                 (Vector3.Distance(value1: m_camera.Forward, value2: fresh.Forward) <= tolerance) &&
                 // An entry that follows motion redraws a changed static caster by the rectangles its change owes; only
                 // the distant map, which follows none, holds for the static revision.
-                (FollowsMotion || (m_revision == revision))
+                (FollowsMotion || (m_revision == revision)) &&
+                // A layer owed whole is drawn again by a scheduled redraw, never by one rectangle in one upload.
+                !m_owed.All
             );
 
             if (held) {
@@ -1061,6 +1062,7 @@ internal sealed class SdfWorldShadows : IDisposable {
                 if ((m_camera.HalfHeight != fresh.HalfHeight) || (m_camera.Far != fresh.Far)) { m_endedByFit++; }
                 else if (m_cell != cell) { m_endedByCell++; }
                 else if (!FollowsMotion && (m_revision != revision)) { m_endedByStatic++; }
+                else if (m_owed.All) { m_endedByMotion++; }
                 else if (holds) { m_endedByTurn++; }
             }
             // A redraw not yet under way follows the fit, keeping a pair already lent to it.
@@ -1106,14 +1108,10 @@ internal sealed class SdfWorldShadows : IDisposable {
                 var paced = (((rates & SdfUpdateRates.ShadowFar) == 0) || (Index != SdfMeshShadowCascades.FarEntry) || ((upload % (ulong)FarPeriodOf(frame: frame)) == 0UL));
 
                 // A layer drawn anew answers every move its redraw saw; what moved while it drew is owed when it lands.
-                if ((ReaderCamera.HalfHeight > 0f) && paced && !completes) {
-                    if (m_owed.All) {
-                        m_taken.OweAll();
-                        m_work.Rectangles = 1;
-                    } else {
-                        m_taken.Merge(other: m_owed, texels: m_texels);
-                        m_work.Rectangles = m_taken.Count;
-                    }
+                // A layer owed whole waits for the redraw that owing it wants.
+                if ((ReaderCamera.HalfHeight > 0f) && paced && !completes && !m_owed.All) {
+                    m_taken.Merge(other: m_owed, texels: m_texels);
+                    m_work.Rectangles = m_taken.Count;
                     m_owed.Clear();
                     m_takenOptical = m_owedOptical;
                     m_owedOptical = false;
@@ -1208,15 +1206,18 @@ internal sealed class SdfWorldShadows : IDisposable {
             if (now is { } current) { m_pending.Owe(footprint: current, texels: redraw.Texels); }
         }
         // The shares one redraw takes: the shares that keep each under the upload's budget by the entry's measured
-        // vertices (FirstSlices while unmeasured), never fewer than the distant map's authored frames or the far entry's
-        // refresh period (the authored far rate, farShadows.hertz, spreads a redraw over the frames of one of its periods).
+        // vertices, never fewer than the distant map's authored frames or the far entry's refresh period (the authored far
+        // rate, farShadows.hertz, spreads a redraw over the frames of one of its periods). Unmeasured, the near and
+        // secondary entries, whose light boxes hold a room's casters, take a few shares, and the far and distant entries,
+        // whose boxes hold a valley's, many.
         private int SlicesOf(SdfFrame frame, SdfUpdateRates rates) {
             var authored = Index switch {
                 SdfMeshShadowCascades.DistantEntry when ((rates & SdfUpdateRates.ShadowDistant) != 0) => frame.DistantShadows.Slices,
                 SdfMeshShadowCascades.FarEntry when ((rates & SdfUpdateRates.ShadowFar) != 0) => FarPeriodOf(frame: frame),
                 _ => 1,
             };
-            var measured = ((Estimate is var whole and > 0L) ? (int)Math.Min(val1: SdfMeshOcclusion.MaxSlices, val2: ((whole + UploadVertices - 1L) / UploadVertices)) : FirstSlices);
+            var unmeasured = (Index is SdfMeshShadowCascades.FarEntry or SdfMeshShadowCascades.DistantEntry) ? 16 : 4;
+            var measured = ((Estimate is var whole and > 0L) ? (int)Math.Min(val1: SdfMeshOcclusion.MaxSlices, val2: ((whole + UploadVertices - 1L) / UploadVertices)) : unmeasured);
 
             return Math.Clamp(value: Math.Max(val1: authored, val2: measured), min: 1, max: SdfMeshOcclusion.MaxSlices);
         }
@@ -1333,17 +1334,12 @@ internal sealed class SdfWorldShadows : IDisposable {
 
             var camera = ReaderCamera;
 
-            if (m_taken.All && (m_work.Rectangles > 0)) {
-                Draw(commandBuffer: commandBuffer, frame: frame, slot: slot, kind: FirstRectangleKind, camera: in camera, motion: motion,
-                    share: 0, slices: 1, pair: read, area: whole, clear: true, tag: 0L);
-            } else {
-                for (var at = 0; (at < m_work.Rectangles); at++) {
-                    var rect = m_taken[at];
-                    var area = new GpuPixelRect(Height: (uint)(rect.Y1 - rect.Y0), Width: (uint)(rect.X1 - rect.X0), X: rect.X0, Y: rect.Y0);
+            for (var at = 0; (at < m_work.Rectangles); at++) {
+                var rect = m_taken[at];
+                var area = new GpuPixelRect(Height: (uint)(rect.Y1 - rect.Y0), Width: (uint)(rect.X1 - rect.X0), X: rect.X0, Y: rect.Y0);
 
-                    Draw(commandBuffer: commandBuffer, frame: frame, slot: slot, kind: (FirstRectangleKind + at), camera: in camera, motion: motion,
-                        share: 0, slices: 1, pair: read, area: area, clear: true, tag: 0L);
-                }
+                Draw(commandBuffer: commandBuffer, frame: frame, slot: slot, kind: (FirstRectangleKind + at), camera: in camera, motion: motion,
+                    share: 0, slices: 1, pair: read, area: area, clear: true, tag: 0L);
             }
             if (m_work.Optical) {
                 Extinction(commandBuffer: commandBuffer, frame: frame, slot: slot, camera: in camera, area: whole, pair: read, optical: Optical!);
@@ -1593,7 +1589,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             m_rectDrawings++;
         }
         public string Describe() => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
-            handler: $"shadow.{EntryNames[Index]}=half{m_camera.HalfHeight:0.#}m/texels{m_texels}/stands{(m_stands ? 1 : 0)}/held{m_heldUploads}/redraw{(m_redraw is { } r ? $"{r.Next}of{r.Slices}{((r.Target is null) ? string.Empty : "lent")}" : "-")}/owed{(m_owed.All ? "all" : $"{m_owed.Count}:{m_owed.Area}texels")}/tri{m_lastWholeVertices / 3}in{m_slicesDrawn}/rect-tri{((m_rectDrawings > 0) ? ((m_rectVertices / m_rectDrawings) / 3) : 0)}x{m_rectDrawings}/ended-turn{m_endedByTurn}-cell{m_endedByCell}-static{m_endedByStatic}-fit{m_endedByFit}{((Optical is not null) ? "/optical" : string.Empty)}");
+            handler: $"shadow.{EntryNames[Index]}=half{m_camera.HalfHeight:0.#}m/texels{m_texels}/stands{(m_stands ? 1 : 0)}/held{m_heldUploads}/redraw{(m_redraw is { } r ? $"{r.Next}of{r.Slices}{((r.Target is null) ? string.Empty : "lent")}" : "-")}/owed{(m_owed.All ? "all" : $"{m_owed.Count}:{m_owed.Area}texels")}/tri{m_lastWholeVertices / 3}in{m_slicesDrawn}/rect-tri{((m_rectDrawings > 0) ? ((m_rectVertices / m_rectDrawings) / 3) : 0)}x{m_rectDrawings}/ended-turn{m_endedByTurn}-cell{m_endedByCell}-static{m_endedByStatic}-fit{m_endedByFit}-moved{m_endedByMotion}{((Optical is not null) ? "/optical" : string.Empty)}");
 
         public void Dispose() {
             ReleaseLayers();
