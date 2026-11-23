@@ -34,7 +34,8 @@ namespace Puck.SdfVm;
 /// <para>A mesh the draws are about to name is named ahead of them (<see cref="PlanAhead"/>): it is placed and kept
 /// like a mesh a draw names, so its words can land while the draws still read the mesh it replaces, and a list that
 /// then names it finds it where it lies. One no free run holds is refused ahead (<see cref="AheadRefused"/>), which
-/// refuses no draw and never relocates the arena.</para>
+/// refuses no draw and never relocates the arena. A mesh can be named both ways, and holds at most one placement
+/// either way: a placed mesh is in neither refusal set, whichever plan placed it.</para>
 /// </summary>
 public sealed class SdfMeshRegionArena : IDisposable {
     /// <summary>The fewest draw records the region reserves.</summary>
@@ -190,7 +191,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
     /// lifetime.</summary>
     public IReadOnlySet<SdfMesh> Ahead => m_ahead;
     /// <summary>Gets the meshes named ahead that no free run under the limit holds, the same set object for the
-    /// arena's lifetime: none has a placement unless a draw list placed it.</summary>
+    /// arena's lifetime: none has a placement, and a mesh a draw list places leaves it.</summary>
     public IReadOnlySet<SdfMesh> AheadRefused => m_aheadRefused;
 
     /// <summary>Returns whether the arena keeps a mesh's words for a reader: a draw of the latest list names it, or
@@ -356,13 +357,24 @@ public sealed class SdfMeshRegionArena : IDisposable {
             Unchanged = false;
         }
         if (m_unusedWords > m_retainedSlackWords) { _ = ForgetUnnamed(); Unchanged = false; }
+        // The meshes named ahead are placed again after the named ones when room may have opened for one refused ahead,
+        // before the first list (which finds the set recorded but unplaced), or when a grown reserve took one's words.
+        var placeAhead = (m_trimmed || m_firstRows);
+
         if (m_trimmed) { foreach (var mesh in m_refused) { m_toPlace.Add(item: mesh); } m_trimmed = false; }
         foreach (var mesh in m_toPlace) {
-            if (!m_named.ContainsKey(key: mesh) || m_placements.ContainsKey(key: mesh)) { continue; }
+            if (m_placements.ContainsKey(key: mesh)) { continue; }
+            if (!m_named.ContainsKey(key: mesh)) { placeAhead |= m_ahead.Contains(item: mesh); continue; }
             Unchanged = false;
-            if (TryPlace(mesh: mesh)) { m_refused.Remove(item: mesh); continue; }
+            if (TryPlace(mesh: mesh)) { continue; }
             _ = ForgetUnnamed();
-            if (TryPlace(mesh: mesh)) { m_refused.Remove(item: mesh); } else { m_refused.Add(item: mesh); }
+            if (!TryPlace(mesh: mesh)) { _ = m_refused.Add(item: mesh); }
+        }
+        if (placeAhead) {
+            var changes = m_placementChanges;
+
+            PlaceAhead();
+            if (m_placementChanges != changes) { Unchanged = false; }
         }
         var reserveWords = (((long)m_drawCapacity) * SdfMeshRecord.DrawWords);
         var packedFits = ((m_refused.Count > 0) && ((reserveWords + NamedWords) <= LimitWords) && !Unchanged);
@@ -474,7 +486,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
             m_scratch.Clear();
             m_scratch.AddRange(collection: m_refused);
             foreach (var mesh in m_scratch) {
-                if (TryPlace(mesh: mesh)) { _ = m_refused.Remove(item: mesh); placed++; }
+                if (TryPlace(mesh: mesh)) { placed++; }
             }
             m_scratch.Clear();
         }
@@ -520,34 +532,28 @@ public sealed class SdfMeshRegionArena : IDisposable {
         m_scratch.Clear();
         for (var index = 0; (index < meshes.Count); index++) { m_ahead.Add(item: meshes[index]); RefreshUnused(mesh: meshes[index]); }
         if (m_unusedWords > m_retainedSlackWords) { _ = ForgetUnnamed(); }
-        _ = PlaceAhead();
+        PlaceAhead();
     }
 
-    // Places each mesh named ahead that holds no words, once the reserve stands; the words it placed less those it
-    // forgot to make room.
-    private long PlaceAhead() {
-        var words = 0L;
-
+    // Places each mesh named ahead that holds no words, once the reserve stands.
+    private void PlaceAhead() {
         m_aheadRefused.Clear();
-        if (m_drawCapacity == 0) { return words; }
+        if (m_drawCapacity == 0) { return; }
         foreach (var mesh in m_ahead) {
-            if (m_placements.ContainsKey(key: mesh)) { continue; }
-            if (!TryPlace(mesh: mesh)) {
-                // The set names meshes without claiming them, so a mesh its owner has since released is not placed.
-                if (mesh.IsReleased) { continue; }
-                words -= ForgetUnnamed();
-                if (!TryPlace(mesh: mesh)) {
-                    _ = m_aheadRefused.Add(item: mesh);
-                    continue;
-                }
-            }
-            words += SdfMeshRegion.WordsOf(mesh: mesh);
+            if (m_placements.ContainsKey(key: mesh) || TryPlace(mesh: mesh)) { continue; }
+            // The set names meshes without claiming them, so a mesh its owner has since released is not placed.
+            if (mesh.IsReleased) { continue; }
+            _ = ForgetUnnamed();
+            if (!TryPlace(mesh: mesh)) { _ = m_aheadRefused.Add(item: mesh); }
         }
-
-        return words;
     }
     // Places a mesh at the lowest free run that holds it under a placement claim of its own; false when no free run
     // under the limit holds it, or when the mesh's storage was already released.
+    // The one door that gives a placement, so it keeps the invariant: a mesh holds at most one placement, and a mesh
+    // that holds one is in neither refusal set (Refused, AheadRefused). A placed mesh leaves both here, whichever plan
+    // placed it, and a refusal is recorded only after a TryPlace that failed or a Forget. A mesh a list names can also
+    // be named ahead (a group's kept floor, which a fallen-back draw names), so a refusal of one kind can meet a
+    // placement of the other.
     private bool TryPlace(SdfMesh mesh) {
         // A range is at least one word, so a mesh without words still has a place of its own.
         var words = ((ulong)Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh)));
@@ -569,6 +575,8 @@ public sealed class SdfMeshRegionArena : IDisposable {
         var vertexWord = ((int)start);
 
         m_placements.Add(key: mesh, value: PlacementAt(mesh: mesh, vertexWord: vertexWord));
+        _ = m_refused.Remove(item: mesh);
+        _ = m_aheadRefused.Remove(item: mesh);
         m_placed.Add(item: mesh);
         m_placementChanges++;
         m_placedWords += SdfMeshRegion.WordsOf(mesh: mesh);
@@ -620,7 +628,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
             if (m_placements.ContainsKey(key: mesh) || m_refused.Contains(item: mesh)) { continue; }
             if (!TryPlace(mesh: mesh)) { _ = m_refused.Add(item: mesh); }
         }
-        _ = PlaceAhead();
+        PlaceAhead();
     }
     // The reserve a list of drawCount draws takes: the current one while it holds the list, otherwise doubled, at least the
     // list and MinimumDrawCapacity, at most SdfMeshRegion.MaxDraws.

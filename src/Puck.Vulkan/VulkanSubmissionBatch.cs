@@ -9,7 +9,8 @@ namespace Puck.Vulkan;
 /// shared <see cref="GpuSubmissionBatch{TEntry}"/>, whose entries reach the device's graphics queue in one
 /// <c>vkQueueSubmit</c> a hand-over, one submit info each, in their order, each with the waits it was given. A
 /// <c>vkQueueSubmit</c> signals one fence, so a hand-over's owner fence (its last fenced submission's) is the one the
-/// submit arms, and a background job answered apart from the frame takes a hand-over, and so a submit, of its own. Every other
+/// submit arms, and a fenced submission whose category answers from its own signal (<see cref="GpuQueueWork.OwnsSignal"/>:
+/// a background job's, an upload's) takes a hand-over, and so a submit, of its own. Every other
 /// operation on the device's queue reads it through <see cref="VulkanLogicalDevice.GraphicsQueue"/> or
 /// <see cref="VulkanLogicalDevice.PresentQueue"/>, which split the batch first.
 /// <para>A deferred submission's command buffers and waits are copied into lists the batch keeps, and its entry names
@@ -25,8 +26,9 @@ internal sealed class VulkanSubmissionBatch(VulkanDeviceCommands device, VkQueue
     private Ranges m_handing = new();
 
     /// <summary>Defers a submission when the batch is open and the submission is not empty, as
-    /// <see cref="GpuSubmissionBatch{TEntry}.TryDefer"/> does (a background job's submission deferred ahead of it is
-    /// handed to the queue first, <see cref="GpuSubmissionBatch{TEntry}.Admit"/>), copying its command buffers and
+    /// <see cref="GpuSubmissionBatch{TEntry}.TryDefer"/> does (a fenced submission deferred ahead of it whose category
+    /// answers from its own signal, <see cref="GpuQueueWork.OwnsSignal"/>, is handed to the queue first when this one's
+    /// does not, <see cref="GpuSubmissionBatch{TEntry}.Admit"/>), copying its command buffers and
     /// waits.</summary>
     /// <param name="commandBuffers">The native <c>VkCommandBuffer</c> handles.</param>
     /// <param name="waitSemaphores">The timeline semaphores the submission waits on before any of its stages run.</param>
