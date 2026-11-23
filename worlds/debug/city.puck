@@ -268,7 +268,7 @@ vehicleRoutes(
 // of `cityLampLumens` lumens that the city's clock (city-day.puck) turns on from dusk to dawn: 7 along the north and
 // south of the ring and 6 along its east and west, 7 down the avenue, 15 along the cross street, 6 by the works road,
 // 10 on the quay's edge and 8 round the fountain.
-let cityLampLumens = 1800
+let cityLampLumens = 4500
 let cityLampSpots = concat(
   map(range(0, 7), k => [(-36 + 12 * k), -8.5]),
   map(range(0, 7), k => [(-36 + 12 * k), -91.5]),
