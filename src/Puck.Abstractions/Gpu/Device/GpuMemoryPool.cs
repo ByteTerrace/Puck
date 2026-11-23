@@ -66,6 +66,23 @@ public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
             }
         }
     }
+    /// <summary>Returns the bytes of a key's shared blocks that no placement holds: memory the device already holds for
+    /// the key, which only a placement of that key takes.</summary>
+    /// <param name="key">The key.</param>
+    /// <returns>The unplaced bytes; zero for a key with no shared block.</returns>
+    public ulong FreeBytes(TKey key) {
+        lock (m_gate) {
+            var free = 0UL;
+
+            if (m_pools.TryGetValue(key: key, value: out var pool)) {
+                foreach (var block in pool) {
+                    if (!block.Own) { free += block.Ranges.FreeCount; }
+                }
+            }
+
+            return free;
+        }
+    }
     /// <summary>Gets whether <see cref="FreeAll"/> retired the pool.</summary>
     public bool IsRetired {
         get {

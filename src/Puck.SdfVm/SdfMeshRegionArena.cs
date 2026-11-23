@@ -105,6 +105,12 @@ public sealed class SdfMeshRegionArena : IDisposable {
     private long m_chunkWords;
     private readonly List<int> m_crossedChunks = [];
     private long m_countedReserveWords;
+    // How many chunks hold a count above zero: the chunks a mapped region backs for the arena. CountChunks, the counts'
+    // one writer, keeps it.
+    private long m_coveredChunks;
+    // The meshes named ahead that replace a drawn mesh (PlanAhead's first meshes): the ones a lowered held limit sheds.
+    private readonly HashSet<SdfMesh> m_aheadProducts = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly List<(long Words, SdfMesh Mesh)> m_shedOrder = [];
 
     /// <summary>Gets whether the counts were taken afresh (<see cref="TrackChunks"/>) since the region last took the
     /// crossed chunks, so every chunk's backing is to be fitted again rather than only the crossed ones.</summary>
@@ -120,6 +126,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         m_chunkWords = chunkWords;
         m_crossedChunks.Clear();
         m_countedReserveWords = 0L;
+        m_coveredChunks = 0L;
         m_chunkCounts = ((chunkWords == 0L) ? [] : new int[(int)(((long)m_ranges.Size).CeilingDivide(divisor: chunkWords))]);
         if (chunkWords == 0L) { return; }
         CountReserve();
@@ -148,8 +155,24 @@ public sealed class SdfMeshRegionArena : IDisposable {
             var before = m_chunkCounts[chunk];
 
             m_chunkCounts[chunk] = (before + count);
-            if ((before == 0) != (m_chunkCounts[chunk] == 0)) { m_crossedChunks.Add(item: chunk); }
+            if ((before == 0) != (m_chunkCounts[chunk] == 0)) {
+                m_crossedChunks.Add(item: chunk);
+                m_coveredChunks += ((before == 0) ? 1L : -1L);
+            }
         }
+    }
+    // How many chunks words [word, word + words) touch hold exactly a count: zero counts the chunks a placement there
+    // would newly cover, and one the chunks a placement there alone keeps covered. Zero while nothing is counted.
+    private long ChunksCounting(long word, long words, int count) {
+        if ((m_chunkWords == 0L) || (words <= 0L)) { return 0L; }
+
+        var last = (int)Math.Min(val1: (m_chunkCounts.Length - 1), val2: ((word + words) - 1L) / m_chunkWords);
+        var chunks = 0L;
+
+        for (var chunk = (int)(word / m_chunkWords); (chunk <= last); chunk++) {
+            if (m_chunkCounts[chunk] == count) { chunks++; }
+        }
+        return chunks;
     }
     // The reserve's draw records are counted as one run from word zero, moved whenever the reserve grows.
     private void CountReserve() {
@@ -208,16 +231,80 @@ public sealed class SdfMeshRegionArena : IDisposable {
     /// The reserved draw records are held whatever it says.</summary>
     public long LimitWords { get; private set; }
 
-    /// <summary>Moves the limit, before a plan. A mesh placed under an earlier, higher limit keeps its words: a lowered
-    /// limit stops placements past it and takes nothing back. A raised limit lets the next plan try the meshes the
-    /// latest one refused.</summary>
-    /// <param name="limitBytes">The most bytes the arena places from now on, rounded down to whole words and held to
-    /// <see cref="SdfWorldTables.MostMeshRegionBytes"/>.</param>
-    public void SetLimit(ulong limitBytes) {
-        var words = ((long)(Math.Min(val1: limitBytes, val2: SdfWorldTables.MostMeshRegionBytes) / sizeof(uint)));
+    /// <summary>Gets the words the region holds in device memory for the arena: for a mapped region
+    /// (<see cref="TrackChunks"/>) the chunks a placed mesh, a moved mesh's old words or the draw reserve lies in, and
+    /// otherwise the words up to the last placed mesh (<see cref="Words"/>).</summary>
+    public long HeldWords => ((m_chunkWords > 0L) ? (m_coveredChunks * m_chunkWords) : Words);
+    /// <summary>Gets the words of every placed mesh, named by a draw, named ahead or kept as slack; what
+    /// <see cref="HeldWords"/> holds past them and the draw reserve is free words inside the chunks they lie in.</summary>
+    public long PlacedWords => m_placedWords;
+    /// <summary>Gets the most words the region may hold for the arena (<see cref="HeldWords"/>), as
+    /// <see cref="SetLimit"/> last set it; <see cref="long.MaxValue"/> for none.</summary>
+    public long HeldLimitWords { get; private set; } = long.MaxValue;
+    /// <summary>Gets how many meshes plans shed under a lowered held limit, over the arena's life
+    /// (<see cref="SetLimit"/>).</summary>
+    public long Shed { get; private set; }
 
-        if ((words > LimitWords) && ((m_refused.Count > 0) || (m_aheadRefused.Count > 0))) { m_trimmed = true; }
+    /// <summary>Moves the limits, before a plan. A raised limit lets the next plan try the meshes the latest one refused.
+    /// <para>Invariant: the storage the draws can do without never takes what the region holds
+    /// (<see cref="HeldWords"/>) past <paramref name="heldBytes"/>. That storage is the meshes no list names and the
+    /// meshes named ahead that replace a drawn mesh and wait beside it (<see cref="PlanAhead"/>'s products). No such
+    /// product is placed where it would pass the limit, which <c>TryPlace</c>, the one placing door, enforces, and a
+    /// held limit lowered under what the region already holds takes that storage back at the next plan, the unnamed
+    /// meshes first and then the products, largest first, which become refused ahead and take their draws without
+    /// waiting beside the mesh they replace. A mesh a draw names and a floor named ahead are placed and kept whatever the
+    /// held limit says, so it never takes a drawn mesh or its fallback out of a frame: the residency's budget coarsens
+    /// those (<see cref="SdfResidencyGrant.Budget"/>), and until it has the region holds more than its limit. The
+    /// address limit takes nothing back.</para></summary>
+    /// <param name="limitBytes">The most bytes of address range the arena places meshes in from now on, rounded down to
+    /// whole words and held to <see cref="SdfWorldTables.MostMeshRegionBytes"/>.</param>
+    /// <param name="heldBytes">The most bytes the region may hold for the arena; <see langword="null"/> for none.</param>
+    public void SetLimit(ulong limitBytes, ulong? heldBytes = null) {
+        var words = ((long)(Math.Min(val1: limitBytes, val2: SdfWorldTables.MostMeshRegionBytes) / sizeof(uint)));
+        var held = ((heldBytes is { } bytes) ? ((long)(Math.Min(val1: bytes, val2: SdfWorldTables.MostMeshRegionBytes) / sizeof(uint))) : long.MaxValue);
+
+        if (((words > LimitWords) || (held > HeldLimitWords)) && ((m_refused.Count > 0) || (m_aheadRefused.Count > 0))) { m_trimmed = true; }
         LimitWords = words;
+        HeldLimitWords = held;
+    }
+    // Whether the region would hold no more than its held limit with words [start, start + words) placed.
+    private bool FitsHeld(ulong start, ulong words) {
+        if (HeldLimitWords == long.MaxValue) { return true; }
+
+        return ((m_chunkWords > 0L)
+            ? (((m_coveredChunks + ChunksCounting(count: 0, word: ((long)start), words: ((long)words))) * m_chunkWords) <= HeldLimitWords)
+            : (((long)(start + words)) <= HeldLimitWords));
+    }
+    // Takes back what the draws can do without while the region holds more than its held limit, down to the limit less a
+    // sixteenth so a product placed again at once does not pass it: the meshes no list names, then the products named
+    // ahead that no draw names, largest first. True when a mesh was forgotten.
+    private bool ShedOverLimit() {
+        if (HeldWords <= HeldLimitWords) { return false; }
+
+        var forgotten = m_forgotten.Count;
+        var target = (HeldLimitWords - (HeldLimitWords / 16L));
+
+        _ = ForgetUnnamed();
+        if (HeldWords > target) {
+            m_shedOrder.Clear();
+            foreach (var mesh in m_aheadProducts) {
+                if (m_placements.ContainsKey(key: mesh) && !m_named.ContainsKey(key: mesh)) { m_shedOrder.Add(item: (SdfMeshRegion.WordsOf(mesh: mesh), mesh)); }
+            }
+            m_shedOrder.Sort(comparison: static (left, right) => right.Words.CompareTo(value: left.Words));
+            foreach (var (words, mesh) in m_shedOrder) {
+                if (HeldWords <= target) { break; }
+                // A product of a mapped region lying only in chunks other meshes keep covered gives nothing back.
+                if ((m_chunkWords > 0L) && (ChunksCounting(count: 1, word: m_placements[mesh].VertexWord, words: words) == 0L)) { continue; }
+                _ = Forget(mesh: mesh);
+                _ = m_moved.Remove(item: mesh);
+                m_forgotten.Add(item: mesh);
+                _ = m_aheadRefused.Add(item: mesh);
+            }
+            m_shedOrder.Clear();
+        }
+        Shed += (m_forgotten.Count - forgotten);
+
+        return (m_forgotten.Count != forgotten);
     }
     /// <summary>Takes back every placement whose words end past a bound, for a region that could not grow to hold them:
     /// a mesh the latest list names or one named ahead is refused, as if no free run had held it, and any other is
@@ -357,6 +444,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
             Unchanged = false;
         }
         if (m_unusedWords > m_retainedSlackWords) { _ = ForgetUnnamed(); Unchanged = false; }
+        if (ShedOverLimit()) { Unchanged = false; }
         // The meshes named ahead are placed again after the named ones when room may have opened for one refused ahead,
         // before the first list (which finds the set recorded but unplaced), or when a grown reserve took one's words.
         var placeAhead = (m_trimmed || m_firstRows);
@@ -518,20 +606,36 @@ public sealed class SdfMeshRegionArena : IDisposable {
     /// (<see cref="AheadRefused"/>). A mesh that leaves the set and no draw names is retained slack, and the meshes
     /// no list names are forgotten once their words pass the retained slack, as a list's plan forgets them. No
     /// named mesh moves, so the draws' records stand. Before the first list of draws it only records the set, which
-    /// that list's plan places.</summary>
+    /// that list's plan places. The first <paramref name="products"/> meshes are the ones that replace a drawn mesh and
+    /// wait beside it: storage the draws can do without, which a held limit lowered under what the region holds takes
+    /// back (<see cref="SetLimit"/>); the rest (a group's kept floor, which a fallen-back draw reads) keep their
+    /// words.</summary>
     /// <param name="meshes">The meshes named ahead; a mesh listed twice is named once.</param>
+    /// <param name="products">How many of <paramref name="meshes"/>, from the first, replace a drawn mesh.</param>
     /// <exception cref="ArgumentNullException"><paramref name="meshes"/> is <see langword="null"/>.</exception>
-    public void PlanAhead(IReadOnlyList<SdfMesh> meshes) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="products"/> is negative or more than the
+    /// meshes.</exception>
+    public void PlanAhead(IReadOnlyList<SdfMesh> meshes, int products = 0) {
         ArgumentNullException.ThrowIfNull(meshes);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: products);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(other: meshes.Count, value: products);
 
         m_forgotten.Clear();
         m_placed.Clear();
         m_scratch.Clear(); m_scratch.AddRange(collection: m_ahead);
         m_ahead.Clear();
+        m_aheadProducts.Clear();
         foreach (var mesh in m_scratch) { RefreshUnused(mesh: mesh); }
         m_scratch.Clear();
-        for (var index = 0; (index < meshes.Count); index++) { m_ahead.Add(item: meshes[index]); RefreshUnused(mesh: meshes[index]); }
+        for (var index = 0; (index < meshes.Count); index++) {
+            m_ahead.Add(item: meshes[index]);
+            if (index < products) { _ = m_aheadProducts.Add(item: meshes[index]); }
+            RefreshUnused(mesh: meshes[index]);
+        }
+        // A mesh named as a floor too keeps its words whatever else names it.
+        for (var index = products; (index < meshes.Count); index++) { _ = m_aheadProducts.Remove(item: meshes[index]); }
         if (m_unusedWords > m_retainedSlackWords) { _ = ForgetUnnamed(); }
+        _ = ShedOverLimit();
         PlaceAhead();
     }
 
@@ -540,11 +644,14 @@ public sealed class SdfMeshRegionArena : IDisposable {
         m_aheadRefused.Clear();
         if (m_drawCapacity == 0) { return; }
         foreach (var mesh in m_ahead) {
-            if (m_placements.ContainsKey(key: mesh) || TryPlace(mesh: mesh)) { continue; }
+            // A product no draw names yet is storage the draws can do without: the held limit refuses it.
+            var product = (m_aheadProducts.Contains(item: mesh) && !m_named.ContainsKey(key: mesh));
+
+            if (m_placements.ContainsKey(key: mesh) || TryPlace(mesh: mesh, product: product)) { continue; }
             // The set names meshes without claiming them, so a mesh its owner has since released is not placed.
             if (mesh.IsReleased) { continue; }
             _ = ForgetUnnamed();
-            if (!TryPlace(mesh: mesh)) { _ = m_aheadRefused.Add(item: mesh); }
+            if (!TryPlace(mesh: mesh, product: product)) { _ = m_aheadRefused.Add(item: mesh); }
         }
     }
     // Places a mesh at the lowest free run that holds it under a placement claim of its own; false when no free run
@@ -554,13 +661,13 @@ public sealed class SdfMeshRegionArena : IDisposable {
     // placed it, and a refusal is recorded only after a TryPlace that failed or a Forget. A mesh a list names can also
     // be named ahead (a group's kept floor, which a fallen-back draw names), so a refusal of one kind can meet a
     // placement of the other.
-    private bool TryPlace(SdfMesh mesh) {
+    private bool TryPlace(SdfMesh mesh, bool product = false) {
         // A range is at least one word, so a mesh without words still has a place of its own.
         var words = ((ulong)Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh)));
 
         if (!m_ranges.TryAllocate(count: words, start: out var start)) { return false; }
-        // Both the presentation grant and the diagnostic cap constrain the same lowest-run admission.
-        if (((start + words) > ((ulong)LimitWords)) ||
+        // The presentation grant's address and held limits and the diagnostic cap constrain the same lowest-run admission.
+        if (((start + words) > ((ulong)LimitWords)) || (product && !FitsHeld(start: start, words: words)) ||
             ((m_admissionBytes is { } cap) && ((start + words) > (cap / sizeof(uint))))) {
             _ = m_ranges.Free(start: start);
             return false;

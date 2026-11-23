@@ -924,6 +924,9 @@ public sealed unsafe class GpuRegion : IDisposable {
             return (words * sizeof(uint));
         }
     }
+    /// <summary>Gets how many flushes of a staged region staged nothing because the account or the device refused their
+    /// staging (<see cref="GpuMemoryRefusedException"/>): each left its words owed for the next flush.</summary>
+    public long StagingRefusals { get; private set; }
     /// <summary>Gets where the buffers the region's readers bind directly live: its ring's or in-place buffer's memory,
     /// and <see cref="GpuHostVisibleMemory.Host"/> for a staged region, whose staging buffers are host memory.</summary>
     public GpuHostVisibleMemory Memory { get; private set; }
@@ -1360,6 +1363,10 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <summary>Gets the bytes one mapping of a mapped region covers (<see cref="IGpuMappedBuffer.ChunkBytes"/>); zero for a
     /// region whose destination is not mapped.</summary>
     public long MappedChunkBytes => ((m_destination is IGpuMappedBuffer mapped) ? ((long)mapped.ChunkBytes) : 0L);
+    /// <summary>Gets the device bytes held for mapped chunks that no chunk is mapped to
+    /// (<see cref="IGpuMappedBuffer.SpareBytes"/>), which only a mapped region's growth takes; zero for a region whose
+    /// destination is not mapped.</summary>
+    public long MappedSpareBytes => ((m_destination is IGpuMappedBuffer mapped) ? ((long)mapped.SpareBytes) : 0L);
 
     /// <summary>Returns whether every chunk a range of a mapped region touches holds backing.</summary>
     /// <param name="offset">The range's first byte.</param>
@@ -2317,8 +2324,23 @@ public sealed unsafe class GpuRegion : IDisposable {
             m_stagedSlot = slot;
             return;
         }
-        var request = RequestFor(bytes: checked((((ulong)requestWords) * sizeof(uint))), slot: slot);
-        var (ring, offset) = TakeBlock(bytes: checked((words * sizeof(uint))), slot: slot);
+        IGpuStorageBuffer request;
+        IGpuStorageBuffer ring;
+        long offset;
+
+        // The one place a flush allocates. A flush whose request buffer or ring block the account or the device refuses
+        // stages nothing: its words stay owed, the destination keeps what it holds, and the next flush asks again.
+        try {
+            request = RequestFor(bytes: checked((((ulong)requestWords) * sizeof(uint))), slot: slot);
+            (ring, offset) = TakeBlock(bytes: checked((words * sizeof(uint))), slot: slot);
+        } catch (GpuMemoryRefusedException) {
+            StagingRefusals++;
+            m_copyRuns.Clear();
+            m_deferredCopies.Clear();
+            m_stagedSlot = slot;
+            return;
+        }
+
         var blockBase = ((int)(offset / sizeof(uint)));
         var prefix = 0;
 

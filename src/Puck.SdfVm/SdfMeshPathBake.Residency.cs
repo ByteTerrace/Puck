@@ -767,7 +767,10 @@ public sealed partial class SdfMeshPathBake {
 
                 for (var piece = 0; (piece < mesh.PieceCount); piece++) { m_aheadMeshes.Add(item: mesh.Piece(index: piece)); }
             }
-            // Only the groups that keep a floor hold one, and the walk drops the retired ones from that list, in order.
+            // The products come first, which the region gives back first when its share of the pool falls; the kept
+            // floors after them keep their words. Only the groups that keep a floor hold one, and the walk drops the
+            // retired ones from that list, in order.
+            var products = m_aheadMeshes.Count;
             var kept = 0;
 
             for (var at = 0; (at < m_keepers.Count); at++) {
@@ -781,7 +784,7 @@ public sealed partial class SdfMeshPathBake {
                 for (var piece = 0; (piece < floor.PieceCount); piece++) { m_aheadMeshes.Add(item: floor.Piece(index: piece)); }
             }
             m_keepers.Truncate(count: kept);
-            tables.NameMeshesAhead(meshes: m_aheadMeshes);
+            tables.NameMeshesAhead(meshes: m_aheadMeshes, products: products);
             m_aheadNamed = m_aheadRevision;
             m_floorsNamed = m_floorRevision;
             m_aheadTables = tables;

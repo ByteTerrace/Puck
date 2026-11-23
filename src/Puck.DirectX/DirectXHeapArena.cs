@@ -114,6 +114,14 @@ public sealed unsafe class DirectXHeapArena {
             return ((nint)resource);
         }));
     }
+    // The heaps kept for tiles alone.
+    private static (D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role, bool Tiles) TileKey =>
+        (D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS, GpuMemoryRole.DeviceLocal, true);
+
+    /// <summary>Gets the bytes of the heaps kept for tiles that no run of tiles holds: device memory the arena already
+    /// holds, which only <see cref="PlaceTiles"/> takes. A heap is freed only once every run in it is returned, so tiles
+    /// returned from many heaps leave this room behind them.</summary>
+    public ulong SpareTileBytes => m_pool.FreeBytes(key: TileKey);
     /// <summary>Places a run of 64 KiB tiles a reserved buffer maps (<see cref="DirectXGpuMappedBuffer"/>): a range of a
     /// default-heap buffer heap kept for tiles alone, admitted and counted as any heap is, and named to the family in the
     /// counts. The caller maps it and gives it back through <see cref="ReturnTiles"/> once no queue reads it.</summary>
@@ -126,7 +134,7 @@ public sealed unsafe class DirectXHeapArena {
     /// <exception cref="ObjectDisposedException">The arena was retired (<see cref="FreeAll"/>).</exception>
     public DirectXTilePlacement PlaceTiles(ulong bytes, string family) => m_pool.Place(
         alignment: DirectXGpuMappedBuffer.TileBytes,
-        key: (D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS, GpuMemoryRole.DeviceLocal, true),
+        key: TileKey,
         payer: family,
         size: bytes,
         bind: placement => new DirectXTilePlacement(

@@ -143,7 +143,25 @@ demand and priority rather than creating executors.
   and the residency's detail budget never passes the limit's share
   (`SdfResidencyGrant.Budget`): a list the region would refuse presses the
   budget, so the bake coarsens detail before it leaves a hole, on every
-  backend and whether the region is mapped or grows by copy.
+  backend and whether the region is mapped or grows by copy. Storage the
+  draws can do without (a product waiting beside the mesh it replaces, a
+  mesh no list names) is held to the residency's share of the elastic budget
+  (`SdfResidencyGrant.HeldLimitBytes`), never to the room the pool shows:
+  that room belongs to the fixed storage of views that have not opened yet,
+  and a region that filled it would push that storage past the pool's limit.
+  A share that falls under what the region holds takes that storage back
+  (`SdfMeshRegionArena.SetLimit`). A drawn mesh and a kept floor stay, since
+  refusing either leaves a hole, and the budget coarsens the drawn meshes.
+- **A refusal never ends the World.** The account refuses only storage whose
+  holder can do without it: an elastic, workspace or cached owner past its
+  floor, an allocation made as a replacement, or work that can wait. Storage
+  that cannot give way is admitted past its pool's limit and past a device
+  profile's authored bars, counted against its taker, and marks pressure
+  (`MemoryAccount`). A bar is a play budget the process degrades under. A
+  device profile's bar on device memory leaves headroom under it
+  (`MemoryAccount.SetDeviceBar`), as the host's does, so storage admitted
+  past the limit still lands under the bar while the elastic owners give
+  its room back.
 - **The unit that leaves is a bake tier.** Each group's coarsest tier that
   still covers it stays as its floor, and the tier a view demands is detail
   above it, so evicting hands the draws back to the floor and bakes nothing.

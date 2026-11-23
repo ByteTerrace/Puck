@@ -3134,7 +3134,7 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   its `hitches` (the count of iterations whose work passed the budget and the longest 32, each with its tick, the body's last
   sampled position, its phase split and its collections), each GPU pass's mean and maximum (`gpu`: the rolling window mean
   `world.gpu-timing` prints, sampled every 30 ticks), and the change across the chapter of each `world.residency` degradation
-  count, the `render.record`, `gpu.queue` and `sdf` counters and `host.memory`'s working set, private bytes and ledger peaks
+  count, the `render.record`, `gpu.queue` and `sdf` counters and `host.memory`'s working set, private bytes and ledger peaks, beside the raw answers of every chapter reading, the device memory families among them (`host.memory families 0`: every owner's device bytes at both ends of a chapter)
   (`readings`; a reading the host cannot answer is listed under `unmeasured`). The `boot` span is the statistics of the
   host's first iterations, from its first through the start of the first chapter, kept for the host's life in its boot
   recording (`HostFrameTimeline.Boot`, its first 16384 iterations); `truncated` says the host ran longer than that before the

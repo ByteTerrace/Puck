@@ -80,6 +80,9 @@ public sealed class SdfMeshBakeClosure {
         "Puck.SdfVm.SdfMeshBakeShare/Waiter",
         "Puck.SdfVm.SdfMeshLibrary",
         "Puck.SdfVm.SdfMeshStore",
+        // The selector budgets which tier a group bakes at and what its region holds, never what a tier meshes.
+        "Puck.SdfVm.SdfResidencyGrant",
+        "Puck.SdfVm.SdfResidencySelector",
         "Puck.SdfVm.SdfWorldInterfaces",
         "Puck.Shaders.SdfWorldPackage",
     ], comparer: StringComparer.Ordinal);

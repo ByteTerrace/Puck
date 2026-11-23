@@ -54,8 +54,18 @@ public readonly record struct MemoryReading(long Live, long Reserved, long Cache
 /// would end the presentation.
 /// </para>
 /// <para>
+/// Invariant: the account refuses only what its holder can do without. An admission that finds no room is refused when
+/// its storage gives way (an elastic, workspace or cached owner past its floor, or an allocation made inside a
+/// <see cref="GpuMemoryAdmissionScope"/>) or when it is work that can wait (the forced job, a progress floor); play
+/// storage that cannot give way (fixed storage, a reservation's floor, a device block no owner classed) is admitted
+/// past its pool's limit and past the authored host bar, counted against its taker, and marks pressure, so a bar is a
+/// budget the process degrades under and never one it fails at. The one place that decides it is
+/// <c>AdmitPastLimit</c>, which the ledger's grant, a host owner's charge and a device reservation's floor all reach.
+/// </para>
+/// <para>
 /// The host pool has two allowances (<see cref="MemoryAllowance"/>), fixed for each owner when it is created. Invariant:
-/// play storage (every device grant, and every owner created as <see cref="MemoryAllowance.Play"/>) fits the authored
+/// play storage that gives way (every such device grant, and every such owner created as
+/// <see cref="MemoryAllowance.Play"/>) fits the authored
 /// host bar on what play holds and has promised, and fits the machine's room, which counts the private bytes beyond
 /// every owner; play's part of those bytes, past the bar with what play holds, marks pressure rather than shrinking the
 /// bar's room, since no admission can shrink them; authoring storage fits the machine's room past play's entitlement (the larger of what play holds and
@@ -290,11 +300,32 @@ public sealed class MemoryAccount {
             NotePressure(pool: PhysicalMemory.Host);
         }
     }
+    /// <summary>Sets or clears the authored device-memory bar of a profile: a play budget, as the host's is
+    /// (<see cref="SetHostBar"/>). The device pool's limit under a bar is the bar less the larger of a tenth of it and
+    /// <see cref="Headroom"/>, as a segment's is under its budget, so storage that cannot give way and passes the limit
+    /// (a view that opens) still lands under the bar while the elastic owners give its room back. Selecting a profile
+    /// clears an operator's cap (<see cref="SetBudget(PhysicalMemory, long?)"/>). Nothing held is released.</summary>
+    /// <param name="bytes">The authored bar in bytes, or <see langword="null"/> for none.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative.</exception>
+    public void SetDeviceBar(long? bytes) {
+        if (bytes is < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(bytes)); }
+        bool lowered;
+
+        lock (m_gate) {
+            var state = m_pools[((int)PhysicalMemory.Device)];
+            var before = LimitOf(pool: PhysicalMemory.Device);
+
+            state.Bar = bytes;
+            state.BudgetOverride = null;
+            lowered = ((LimitOf(pool: PhysicalMemory.Device) is { } after) && ((before is not { } was) || (after < was)));
+        }
+        if (lowered) { TrimCaches(); }
+    }
     /// <summary>Lowers a pool's budget, or restores the value it derives. The budget is a cap, never a raise: the host
     /// pool's is at most <see cref="DefaultBudget"/>, and a discrete adapter's pool limit is the smaller of the value and
-    /// the sum of its segments' spend limits (the value alone where no reading names a segment). A device profile's
-    /// memory bar is this cap. Nothing held is released: a budget below what a pool holds refuses the next admission
-    /// that gives way, and a lowered budget asks the caches to release their claims.</summary>
+    /// the sum of its segments' spend limits (the value alone where no reading names a segment), and of what a device
+    /// profile's bar leaves (<see cref="SetDeviceBar"/>). Nothing held is released: a budget below what a pool holds
+    /// refuses the next admission that gives way, and a lowered budget asks the caches to release their claims.</summary>
     /// <param name="pool">The pool.</param>
     /// <param name="bytes">The budget, in bytes; <see langword="null"/> restores the derived budget.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative.</exception>
@@ -578,7 +609,7 @@ public sealed class MemoryAccount {
             var device = new MemoryPoolReading(
                 Admission: AdmissionOf(pool: PhysicalMemory.Device),
                 Admitted: 0L,
-                Budget: ((deviceLimits.Length == 0) ? m_pools[((int)PhysicalMemory.Device)].BudgetOverride : Math.Min(val1: deviceLimits.Sum(selector: static limit => limit.Budget), val2: (m_pools[((int)PhysicalMemory.Device)].BudgetOverride ?? long.MaxValue))),
+                Budget: DeviceBudget(segments: deviceLimits),
                 Pool: PhysicalMemory.Device,
                 Present: ((deviceLimits.Length != 0) || (deviceBlocks != 0)),
                 Reserved: 0L,
@@ -595,6 +626,14 @@ public sealed class MemoryAccount {
         }
     }
 
+    // Under m_gate: the device pool's budget as a reading names it: the smallest of its segments' budgets together, a
+    // profile's bar and an operator's cap; null where none bounds it.
+    private long? DeviceBudget(MemorySegmentLimit[] segments) {
+        var state = m_pools[((int)PhysicalMemory.Device)];
+        var named = ((state.Bar is { } bar) ? Math.Min(val1: bar, val2: (state.BudgetOverride ?? long.MaxValue)) : state.BudgetOverride);
+
+        return ((segments.Length == 0) ? named : Math.Min(val1: segments.Sum(selector: static limit => limit.Budget), val2: (named ?? long.MaxValue)));
+    }
     // The budget less the larger of a tenth of it and the headroom: what may be spent of a segment's budget.
     private long SpendLimitOf(long budget) => Math.Max(val1: 0L, val2: (budget - Math.Max(val1: (budget / 10), val2: Headroom)));
     // Reads the machine's free physical memory again once the last reading is AvailableInterval old, outside the
@@ -739,8 +778,13 @@ public sealed class MemoryAccount {
             limit = ((limit ?? 0L) + spend);
         }
 
-        // A cap lowers the limit the segments' readings derive and bounds a pool no reading names.
-        return (m_pools[((int)pool)].BudgetOverride is { } cap) ? Math.Min(val1: cap, val2: (limit ?? cap)) : limit;
+        // A cap, and what a profile's bar leaves once its headroom is taken, lower the limit the segments' readings
+        // derive and bound a pool no reading names.
+        var caps = m_pools[((int)pool)];
+
+        if (caps.Bar is { } deviceBar) { limit = Math.Min(val1: SpendLimitOf(budget: deviceBar), val2: (limit ?? long.MaxValue)); }
+
+        return (caps.BudgetOverride is { } cap) ? Math.Min(val1: cap, val2: (limit ?? cap)) : limit;
     }
     // Under m_gate: the room a pool has left for a new promise; null where nothing bounds it. Negative when the pool
     // holds and has promised more than its limit.
@@ -755,11 +799,33 @@ public sealed class MemoryAccount {
         return ((RoomOf(pool: pool) is not { } room) || (extra <= room));
     }
 
-    // Under m_gate: whether extra bytes of promise fit the authored host bar. Play's storage fits the bar on what play holds
-    // and has promised, headroom spent, whether it gives way or not: ordinary admission (Fits) leaves the headroom, and
-    // what cannot give way (fixed storage, a reservation's floor) and what work needs to progress at all (the forced job,
-    // an owner's progress floor) may spend it, so the presentation keeps its tables and work still settles, one job at a
-    // time, while every byte the owners name stays under the bar. Authoring storage apart from play reserves only past
+    // Under m_gate: the one answer to play storage that finds no room under its pool's limit or under the authored host
+    // bar. Storage that gives way is refused and counted. Storage that cannot (fixed storage, a reservation's floor, a
+    // device block no owner classed, such as a region's staging) is admitted past the limit and past the bar, counted
+    // against its taker, and marks pressure, so the caches trim and the elastic owners give back: no caller of such
+    // storage handles a refusal, so refusing it ends the presentation. True when the bytes are admitted. A promise (a
+    // reservation's floor) is admitted without a count: the ledger counts the grant when its bytes are allocated.
+    private bool AdmitPastLimit(PhysicalMemory pool, string taker, long bytes, bool givesWay, bool promise = false) {
+        if (givesWay) {
+            Refused(owner: taker, pool: pool);
+
+            return false;
+        }
+        if (promise) {
+            if (bytes > 0L) { m_pressure = 1; }
+
+            return true;
+        }
+        m_pools[((int)pool)].GrantOverLimit(bytes: bytes, taker: taker);
+        m_pressure = 1;
+
+        return true;
+    }
+    // Under m_gate: whether extra bytes of promise fit the authored host bar. Play's storage that gives way, and work
+    // that can wait, fit the bar on what play holds and has promised, headroom spent: ordinary admission (Fits) leaves
+    // the headroom, and what work needs to progress at all (the forced job, an owner's progress floor) may spend it, so
+    // work still settles, one job at a time, under the bar. Storage that cannot give way is not held to it
+    // (AdmitPastLimit). Authoring storage apart from play reserves only past
     // play's entitlement (Fits), but a charge past its reservation (a bake stage's scratch its peak does not cover) is
     // transient and needs only the machine: its measured room for storage that gives way, its budget for storage that
     // cannot, so a busy machine defers a bake's next group rather than restarting one already running.
@@ -953,14 +1019,15 @@ public sealed class MemoryAccount {
                 // admitted like fixed storage. The floor is measured in the owner's own bytes, so it covers a resource
                 // within it whatever the block the device allocates to place it: a small resource's shared block is
                 // many times the resource, and judged by the block no floor would ever admit one.
-                if (!FitsHostBar(extra: net, pool: pool) || givesWay || ((entry is { Classified: true }) && MemoryClasses.GivesWay(memoryClass: entry.Class) && ((entry.Held + Math.Min(val1: payerBytes, val2: bytes)) > entry.Floor))) {
-                    Refused(pool: pool, owner: payer ?? segment.Name);
-
+                if (!AdmitPastLimit(
+                    bytes: net,
+                    givesWay: (givesWay || ((entry is { Classified: true }) && MemoryClasses.GivesWay(memoryClass: entry.Class) && ((entry.Held + Math.Min(val1: payerBytes, val2: bytes)) > entry.Floor))),
+                    pool: pool,
+                    taker: (payer ?? segment.Name)
+                )) {
                     return new(Bytes: bytes, Net: net, Payer: null, Verdict: GpuMemoryVerdict.Refused);
                 }
                 verdict = GpuMemoryVerdict.OverLimit;
-                state.GrantOverLimit(bytes: net, taker: (payer ?? segment.Name));
-                m_pressure = 1;
             }
             state.Granted += bytes;
             if (segmentState is not null) { segmentState.Granted += bytes; }
@@ -1011,6 +1078,8 @@ public sealed class MemoryAccount {
 
     // One pool's admission state beyond what its owners hold. Written under the account's lock.
     private sealed class PoolState {
+        // A device profile's authored bar (SetDeviceBar), and an operator's cap (SetBudget).
+        public long? Bar;
         public long? BudgetOverride;
         public long DeviceRefusals;
         public long FamilyPromised;
@@ -1303,9 +1372,16 @@ public sealed class MemoryAccount {
             lock (m_account.m_gate) {
                 ThrowIfNotAdmitted();
                 var extra = bytes - Promise;
-                if (!m_account.FitsHostBar(allowance: m_allowance, extra: extra, givesWay: MemoryClasses.GivesWay(memoryClass: EffectiveClass), pool: PhysicalMemory.Host) ||
-                    (EffectiveClass == MemoryClass.Cached && !m_account.Fits(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host))) {
-                    m_account.Refused(PhysicalMemory.Host, Name, trim: EffectiveClass != MemoryClass.Cached);
+                var givesWay = MemoryClasses.GivesWay(memoryClass: EffectiveClass);
+
+                if ((EffectiveClass == MemoryClass.Cached) && !m_account.Fits(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host)) {
+                    m_account.Refused(PhysicalMemory.Host, Name, trim: false);
+                    return false;
+                }
+                // Past the bar a charge that gives way is refused, as authoring storage apart from play is past the
+                // machine's budget; play storage that cannot give way is admitted and counted (AdmitPastLimit).
+                if (!m_account.FitsHostBar(allowance: m_allowance, extra: extra, givesWay: givesWay, pool: PhysicalMemory.Host) &&
+                    !m_account.AdmitPastLimit(bytes: extra, givesWay: (givesWay || m_account.Apart(allowance: m_allowance)), pool: PhysicalMemory.Host, taker: Name)) {
                     return false;
                 }
                 RecordChange(bytes, backing);
@@ -1476,13 +1552,12 @@ public sealed class MemoryAccount {
 
                 var extra = (Math.Max(val1: 0L, val2: ((m_entry.Peak + (peak - m_peak)) - m_entry.Held)) - m_entry.Promise);
 
-                // A reservation within its floor holds what the holder cannot run without, judged on the bar alone; past
-                // the floor it gives way, and the pool's room counts too.
-                if (!m_account.FitsHostBar(extra: extra, pool: m_entry.Pool) || ((peak > floor) && !m_account.Fits(extra: extra, pool: m_entry.Pool))) {
-                    m_account.Refused(pool: m_entry.Pool, owner: Owner);
+                // A reservation within its floor holds what the holder cannot run without and is never refused; past the
+                // floor it gives way, and the bar and the pool's room both count (AdmitPastLimit).
+                if ((!m_account.FitsHostBar(extra: extra, pool: m_entry.Pool) || !m_account.Fits(extra: extra, pool: m_entry.Pool)) &&
+                    !m_account.AdmitPastLimit(bytes: extra, givesWay: (peak > floor), pool: m_entry.Pool, promise: true, taker: Owner)) {
                     return false;
                 }
-                if ((extra > 0L) && !m_account.Fits(extra: extra, pool: m_entry.Pool)) { m_account.m_pressure = 1; }
                 m_account.ChangeFamily(entry: m_entry, held: 0L, peak: (peak - m_peak));
                 m_entry.Floor += (Math.Min(val1: floor, val2: peak) - m_floor);
                 m_floor = Math.Min(val1: floor, val2: peak);

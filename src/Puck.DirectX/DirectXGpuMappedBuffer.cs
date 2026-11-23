@@ -85,6 +85,8 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     public ulong ChunkBytes => (ChunkTiles * TileBytes);
     /// <inheritdoc/>
     public ulong MappedBytes => m_mapped;
+    /// <inheritdoc/>
+    public ulong SpareBytes => m_arena.SpareTileBytes;
 
     /// <summary>Creates a reserved buffer with no tile mapped, where the device has reserved resources at tier 2 or above
     /// (tier 1 leaves an unmapped tile's reads undefined).</summary>

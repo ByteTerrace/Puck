@@ -2,7 +2,6 @@ using System.Globalization;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Hosting.Jobs;
-using Puck.Abstractions.Memory;
 
 namespace Puck.World;
 
@@ -140,7 +139,7 @@ public sealed class WorldDeviceProfileState {
     // Under m_gate, so a boot's selection and a command's are applied one at a time and the recorded selection is the
     // one whose bars the account holds.
     private Selection ApplyLocked(WorldDeviceProfile? profile, string source, string? adapter, string? table) {
-        MemoryAccount.Shared.SetBudget(bytes: profile?.DeviceMemoryBytes, pool: PhysicalMemory.Device);
+        MemoryAccount.Shared.SetDeviceBar(bytes: profile?.DeviceMemoryBytes);
         MemoryAccount.Shared.SetHostBar(bytes: profile?.HostMemoryBytes);
 
         var selection = new Selection(Profile: profile?.Name, Source: source, Adapter: adapter, Table: table, DeviceMemoryBytes: profile?.DeviceMemoryBytes, HostMemoryBytes: profile?.HostMemoryBytes);

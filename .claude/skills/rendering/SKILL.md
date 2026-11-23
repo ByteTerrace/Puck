@@ -408,11 +408,21 @@ It gives chunks back before it backs any, and a chunk the device refuses makes i
 and try again every prepared frame (`SdfWorldTables.CoverRefusedBacking`) as the given-back chunks retire. A mesh named ahead that lies in a
 refused chunk is refused ahead (`SdfWorldTables.RefusesAhead`), so it takes the draws and the mesh it replaces gives
 up its memory; a product waiting on words the device will not back would otherwise hold the bake pending for good.
-The region's limit (`SdfResidencyGrant.ReserveGrowth`, stored as `LimitBytes`) is the one number both the arena
-refuses by and the bake's budget is held under (`SdfResidencyGrant.Budget`, at most `SdfMeshTier.BudgetEighths` of
-it), and a refused mesh presses `Retier` on its own, so pressure raises the detail bias before it leaves a hole. The
-selector's pool share alone can pass a region's limit (it counts every residency's reservation as room), and a
-budget read from it lets the arena refuse whole places while the bias stays at zero.
+A region has two limits, both from `SdfResidencyGrant.ReserveGrowth`: the bytes the arena places in (`LimitBytes`,
+what the pool has room for) and the device bytes the region may hold while it places storage the draws can do without
+(`HeldLimitBytes`), which is the residency's share of the elastic budget (`SdfResidencySelector.ShareOf`). The pool's
+room at boot is the fixed storage of views that open later, so a product that waits beside the mesh it replaces must
+not fill it: the fixed class then passes the pool's limit and nothing gives the room back. The arena's one placing door
+(`TryPlace`) refuses a waiting product that would take the region past the held limit (for a mapped region, the chunks
+its placements cover), and a held limit that falls under what the region holds takes back, at the next plan
+(`SdfMeshRegionArena.SetLimit`), the meshes no list names and then the waiting products, which take their draws at once
+(`RefusesAhead`). A drawn mesh and a kept floor are placed and kept whatever the held limit says, since refusing either
+leaves a hole; the bake's budget (`SdfResidencyGrant.Budget`, `SdfMeshTier.BudgetEighths` of the same share) coarsens
+the drawn meshes, so a region stands over its share until it has. `world.residency` prints `region-held-limit`, `arena-held`, `arena-placed` and
+`shed`. A mapped region's chunks come from 64 MiB heaps kept for tiles, which are freed only when empty, so chunks
+given back leave spare memory only a mapped region can take (`IGpuMappedBuffer.SpareBytes`): the selector counts it as
+the regions' and a region grows into it without a promise. A refused mesh presses `Retier` on its own, so pressure
+raises the detail bias before it leaves a hole.
 Uniform construction, growth and descriptor writes share `IGpuBindings.RequireConstantBufferSize`: aligned,
 nonzero and within `IGpuBindings.MaxConstantBufferBytes`, the current backend's view limit.
 
