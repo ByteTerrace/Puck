@@ -374,8 +374,8 @@ which replaces only each world's authority root
 worker restores it; one hostname issues once (`build/Keep-WorldTls.py`).
 
 **First issuance uses ACME TLS-ALPN-01 through the load balancer's own rule.** A
-release replaces its one worker in place, and a fresh worker's NIC joins the
-load balancer's pool when the scale set creates it, so the worker that needs a
+release boots its one worker on fresh compute, whose NIC joins the load
+balancer's pool when the scale set creates it, so the worker that needs a
 certificate is the one the 443 rule reaches. The VM extension waits for the
 certificate before the release commits, so the commit means the MCP front
 answers. This needs only two things: the rule's probe judges that Caddy listens
