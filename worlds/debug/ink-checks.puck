@@ -1,34 +1,50 @@
-// Focused witnesses for ink: one form for each kind of line, under a template that draws a level line at a constant
-// pixel width from the stamp alone. The sphere and the capsule have the same radius, so a width that
-// follows the curvature across the view shows as the same line on both and one that follows the mean curvature shows the
-// capsule's line at half width. The box's outline is a crease, which no per-pixel scalar finds. The joined pair is a
-// smooth blend, whose seam no comparison of neighbouring pixels finds, and the stacked pair is a hard union of two
-// shapes that bake as one draw.
+// Focused witnesses for ink: one form for each kind of line, in two rows.
+//
+// The near row (z -3) draws level lines from the stamp alone (inkLevels): a terminator the light phase raises as its
+// `line` and an inside outline the compose phase adds to it, drawn by an ink phase that reads nothing but `ink.line`.
+// The sphere and the capsule have the same radius, so a width that follows the curvature across the view shows as the
+// same line on both and one that follows the mean curvature shows the capsule's line at half width.
+//
+// The far row (z -9) draws the edges the view's search finds, under the standard ink (../standard/ink.puck): the
+// sphere's and the capsule's silhouettes, the box's creases, the stacked pair's crease where its two shapes meet (one
+// draw, so no object boundary), the two-material box's material boundary, and two touching copies of one box, whose
+// shared face is an object boundary. The last form is hatched, so its shade side takes strokes. The joined pair is a
+// smooth blend, whose seam no comparison of neighbouring pixels finds and neither row draws.
 schema: "puck.world.definition.v1"
 basis: "../minimal/minimal"
 documentId: "ink-checks"
 import "../standard/shading"
+import "../standard/ink"
 
-function inkPixels(value, slope) = abs(value) / max(slope * surface.footprint, 0.0000001)
-function inkLine(pixels, width) = 1 - smoothstep(max(width - 1, 0), width, pixels)
+function levelPixels(value, slope) = abs(value) / max(slope * surface.pixel, 0.0000001)
+function levelLine(pixels, width) = 1 - smoothstep(max(width - 1, 0), width, pixels)
 
-shade template inkLevels(threshold, width, inkColor) {
+shade template inkLevels(threshold, width, tint) {
   light {
     let sine = sqrt(max(1 - light.cosine * light.cosine, 0))
-    let terminator = inkLine(inkPixels(light.cosine - threshold, abs(surface.curvature) * sine), width)
-    diffuse: light.color * (light.weight * light.reach * max(light.cosine, 0) * light.visibility * (1 - terminator))
+    line: levelLine(levelPixels(light.cosine - threshold, abs(surface.curvature) * sine), width)
   }
   compose {
     let g = saturate(-dot(surface.normal, surface.rayDirection))
     let inside = (1 - sqrt(max(1 - g * g, 0))) / max(abs(surface.curvature), 0.0000001)
-    let contour = inkLine(inside / max(surface.footprint, 0.0000001), width)
+    let contour = levelLine(inside / max(surface.pixel, 0.0000001), width)
     let breakup = smoothstep(0.35, 0.65, lattice(surface.layerPosition * 40, uint(7)))
-    let lit = surface.albedo * (compose.radiance + compose.indirect) * compose.attenuation * compose.adaptation
-    color: mix(lit, inkColor * lit, contour * breakup)
+    line: max(compose.line, contour * breakup)
+  }
+  ink {
+    color: ink.under * tint
+    coverage: ink.line
   }
 }
 
 let inkPalette = [{ color: "#C9A27E", roughness: 0.6, specular: 0.04, shade: inkLevels(0.1, 2, [0.05, 0.05, 0.08]) }]
+// The far row's rows: the standard line with material boundaries drawn, on two paints.
+let edgeInk = standardInk with { materials: 0.8, far: 1 }
+let edgePalette = [
+  inked({ color: "#C9A27E", roughness: 0.6, specular: 0.04 }, edgeInk)
+  inked({ color: "#4F8A8B", roughness: 0.6, specular: 0.04 }, edgeInk)
+]
+let hatchPalette = [hatched({ color: "#D8C7A0", roughness: 0.7 }, edgeInk)]
 
 render {
   shade: plain()
@@ -81,6 +97,79 @@ prototypes {
       }
     }
   }
+  prototype "edge-sphere" {
+    document {
+      schema: "puck.creation.v1"
+      palette: edgePalette
+      shape Sphere "sphere" {
+        position [0, 1, 0]
+        scale [1, 1, 1]
+      }
+    }
+  }
+  prototype "edge-capsule" {
+    document {
+      schema: "puck.creation.v1"
+      palette: edgePalette
+      shape Capsule "capsule" {
+        position [0, 1.5, 0]
+        scale [1, 3, 1]
+      }
+    }
+  }
+  prototype "edge-box" {
+    document {
+      schema: "puck.creation.v1"
+      palette: edgePalette
+      shape Box "box" {
+        position [0, 0.8, 0]
+        scale [1.6, 1.6, 1.6]
+      }
+    }
+  }
+  prototype "edge-stack" {
+    document {
+      schema: "puck.creation.v1"
+      palette: edgePalette
+      shape Box "plinth" {
+        position [0, 0.4, 0]
+        scale [1.4, 0.8, 1.4]
+      }
+      shape Box "block" {
+        position [0, 1.2, 0]
+        scale [1, 0.8, 1]
+      }
+    }
+  }
+  prototype "edge-paints" {
+    document {
+      schema: "puck.creation.v1"
+      palette: edgePalette
+      shape Box "lower" {
+        position [0, 0.4, 0]
+        scale [1.4, 0.8, 1.4]
+      }
+      shape Box "upper" {
+        position [0, 1.2, 0]
+        scale [1.4, 0.8, 1.4]
+        material: 1
+      }
+    }
+  }
+  prototype "edge-hatched" {
+    document {
+      schema: "puck.creation.v1"
+      palette: hatchPalette
+      shape Sphere "ball" {
+        position [0, 1.6, 0]
+        scale [0.9, 0.9, 0.9]
+      }
+      shape Box "plinth" {
+        position [0, 0.35, 0]
+        scale [1.6, 0.7, 1.6]
+      }
+    }
+  }
   prototype "ink-stack" {
     document {
       schema: "puck.creation.v1"
@@ -120,6 +209,47 @@ placements {
   placement "ink-stack" {
     prototype: "ink-stack"
     position [6, 0, -3]
+    solid
+  }
+  placement "edge-sphere" {
+    prototype: "edge-sphere"
+    position [-7.5, 0, -9]
+    solid
+  }
+  placement "edge-capsule" {
+    prototype: "edge-capsule"
+    position [-4.5, 0, -9]
+    solid
+  }
+  placement "edge-box" {
+    prototype: "edge-box"
+    position [-1.5, 0, -9]
+    yawDegrees: 30
+    solid
+  }
+  placement "edge-stack" {
+    prototype: "edge-stack"
+    position [1.5, 0, -9]
+    solid
+  }
+  placement "edge-paints" {
+    prototype: "edge-paints"
+    position [4.5, 0, -9]
+    solid
+  }
+  placement "edge-copy-a" {
+    prototype: "edge-box"
+    position [7.5, 0, -9]
+    solid
+  }
+  placement "edge-copy-b" {
+    prototype: "edge-box"
+    position [9.1, 0, -9]
+    solid
+  }
+  placement "edge-hatched" {
+    prototype: "edge-hatched"
+    position [12, 0, -9]
     solid
   }
 }
