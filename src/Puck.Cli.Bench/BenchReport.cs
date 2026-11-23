@@ -119,6 +119,9 @@ public sealed record BenchHostLoad(int Readings, double CpuMeanPercent, double C
 /// <param name="Repeats">How many repeats each metric's samples come from.</param>
 /// <param name="Settings">The lane's settings, as text.</param>
 /// <param name="HostLoad">The machine's load while it ran, or <see langword="null"/> when no sampler was installed.</param>
+/// <param name="Conditions">The verdict on the conditions the measurement ran under: <c>clean</c>, or <c>DISTURBED</c> and why
+/// (competing load, another World, a held GPU clock) when its timings are not a verdict on the build; <see langword="null"/> for a
+/// lane that does not record them.</param>
 /// <param name="Complete">Whether every repeat finished; an interrupted or failed run keeps what it measured.</param>
 /// <param name="Metrics">Each metric by name.</param>
 /// <param name="Rows">The lane's printed table from its last repeat, row name to text.</param>
@@ -134,6 +137,7 @@ public sealed record BenchReport(
     IReadOnlyDictionary<string, string> Settings,
     BenchHostLoad? HostLoad,
     bool Complete,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Conditions,
     IReadOnlyDictionary<string, BenchMetric> Metrics,
     IReadOnlyList<KeyValuePair<string, string>>? Rows = null,
     IReadOnlyList<StartupSample>? Startup = null,
@@ -151,6 +155,7 @@ public sealed record BenchReport(
     public static BenchReport Start(string verb, BenchBuild build, int repeats, IReadOnlyDictionary<string, string> settings) => new(
         Build: build,
         Complete: false,
+        Conditions: null,
         HostLoad: null,
         Metrics: new Dictionary<string, BenchMetric>(),
         OperatingSystem: RuntimeInformation.OSDescription,
