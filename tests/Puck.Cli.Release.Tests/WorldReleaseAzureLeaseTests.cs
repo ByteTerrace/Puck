@@ -89,7 +89,7 @@ public sealed class WorldReleaseAzureLeaseTests {
                     token
                 );
 
-                await Assert.ThrowsAsync<RequestFailedException>(testCode: () => stale.EnsureHeldAsync());
+                await Assert.ThrowsAsync<WorldReleaseControllerLeaseLostException>(testCode: () => stale.EnsureHeldAsync());
                 Assert.True(condition: stale.Token.IsCancellationRequested);
                 await stale.DisposeAsync();
                 Assert.NotNull(@object: stale.ReleaseFailure);

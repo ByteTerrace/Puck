@@ -228,7 +228,12 @@ public static partial class AzureCommand {
     private static async Task<string> RunAsync(string executable, IEnumerable<string> arguments, string? directory = null, bool capture = false, string? input = null) {
         var controller = WorldReleaseController.Value;
 
-        if (controller is not null) { await controller.EnsureHeldAsync().ConfigureAwait(continueOnCapturedContext: false); }
+        if (controller is not null) {
+            await controller.EnsureHeldAsync(effect: string.Join(
+                separator: ' ',
+                values: arguments.Take(count: 3).Prepend(element: executable)
+            )).ConfigureAwait(continueOnCapturedContext: false);
+        }
         return (await CliProcess.RunCheckedAsync(
             arguments: arguments,
             capture: capture,

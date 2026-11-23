@@ -50,17 +50,34 @@ public sealed partial class WorldScreenBinder {
     /// (<see cref="WorldSessionRoute.Access"/>, settled in <see cref="Publish"/>): a session view, a nested camera or
     /// child of one and an infinity layer are available only while every session they are seen through may observe,
     /// at the latest epoch among them, under a route of every one's span.</remarks>
-    public WorldViewAccess AccessOf(string view) {
-        if (SessionFeedOf(view) is { } feed) { return Access(feed: feed, infinity: null, route: m_queryRoute); }
-        if (m_infinityOutputs.TryGetValue(view, out var infinity)) { return Access(feed: null, infinity: infinity.Entry, route: m_queryRoute); }
+    public WorldViewAccess AccessOf(string view) => (GateOf(view: view, feed: out var feed, infinity: out var infinity) switch {
+        ViewGate.Gated => Access(feed: feed, infinity: infinity, route: m_queryRoute),
+        ViewGate.Retired => WorldViewAccess.Retired,
+        _ => WorldViewAccess.Open,
+    });
+    // What gates a view by name: a session view, an infinity layer, or a nested camera's level, through the feed and the
+    // layer it is seen through; a retired generated observation, which no session shows any more; or nothing.
+    private ViewGate GateOf(string view, out SessionFeed? feed, out InfinityEntry? infinity) {
+        (feed, infinity) = (null, null);
+        if (SessionFeedOf(view) is { } session) {
+            feed = session;
+            return ViewGate.Gated;
+        }
+        if (m_infinityOutputs.TryGetValue(view, out var output)) {
+            infinity = output.Entry;
+            return ViewGate.Gated;
+        }
         if (NestedCameraLevel(view) is { } level && m_nestedOwners.TryGetValue(level, out var owner)) {
-            return Access(feed: owner.Feed, infinity: owner.Infinity, route: m_queryRoute);
+            (feed, infinity) = (owner.Feed, owner.Infinity);
+            return ViewGate.Gated;
         }
         // Historical package entries can outlive the view roster. A retired generated observation is not a new
         // unnamed host view, and the session it showed is gone. Recognize the minted path grammar, not arbitrary
         // prefixes (for example its environment buffer is a different instance and is not an observation image).
-        return (ObservationName(view) ? WorldViewAccess.Retired : WorldViewAccess.Open);
+        return (ObservationName(view) ? ViewGate.Retired : ViewGate.Open);
     }
+
+    private enum ViewGate : byte { Open, Gated, Retired }
     /// <inheritdoc/>
     public void ReadAccess(RenderGraphInstanceSet set, Span<WorldViewAccess> access) {
         EnsureFeeds();
@@ -126,7 +143,12 @@ public sealed partial class WorldScreenBinder {
             m_accessBindingsVersion++;
         }
     }
-    private bool Available(string view) => AccessOf(view: view).Available;
+    // Whether a view by name is available, as AccessOf answers it, without building the route it would be given.
+    private bool Available(string view) => (GateOf(view: view, feed: out var feed, infinity: out var infinity) switch {
+        ViewGate.Gated => Available(feed: feed, infinity: infinity),
+        ViewGate.Retired => false,
+        _ => true,
+    });
     private static bool ObservationName(string name) {
         ReadOnlySpan<char> path;
         if (GeneratedName.TryStripHead(name, WorldViewNames.SessionHead, out var session)) {
@@ -191,12 +213,12 @@ public sealed partial class WorldScreenBinder {
             Route: (available ? route.Settle() : DeliveryLabel.Of(span: DeliverySpan.Ended))
         );
     }
-    private static bool Available(SessionFeed feed) {
+    private static bool Available(SessionFeed? feed, InfinityEntry? infinity = null) {
         var available = true;
         var epoch = 0L;
         var latch = DeliveryLatch.Capture();
 
-        WalkRoute(available: ref available, epoch: ref epoch, feed: feed, infinity: null, latch: in latch, spans: null);
+        WalkRoute(available: ref available, epoch: ref epoch, feed: feed, infinity: infinity, latch: in latch, spans: null);
         return available;
     }
     // Visits every session and layer a view is seen through, from the leaf up.

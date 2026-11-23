@@ -288,7 +288,7 @@ public sealed partial class WorldScreenBinder {
         if (!m_sharedLeads.TryGetValue(key: feed, value: out var lead)) { return null; }
         var tick = lead.Mirror.Tick;
         if (!(SharedProofOf(feed: feed)?.Covers(tick: tick) ?? false) || !(SharedProofOf(feed: lead)?.Covers(tick: tick) ?? false)) { return null; }
-        return new WorldSharedScene(Authority: feed.InstanceName, Mirror: lead.Mirror, Name: WorldViewNames.Shared(lead: lead.RegistrationName));
+        return new WorldSharedScene(Authority: feed.InstanceName, Mirror: lead.Mirror, Name: lead.SharedName);
     }
     // The routed window a session view renders through this frame, once the presenter's latch includes it.
     private WorldRoutedWindow? RoutedWindowOf(SessionFeed feed) => (
@@ -413,6 +413,10 @@ public sealed partial class WorldScreenBinder {
         public WorldSessionMirror Mirror => Hosted.Mirror;
 
         public string RegistrationName { get; } = registrationName;
+        // The name of the scene this feed leads for the feeds that share it (WorldViewNames.Shared), read every frame.
+        public string SharedName => (m_sharedName ??= WorldViewNames.Shared(lead: RegistrationName));
+
+        private string? m_sharedName;
         public WorldScreenProjection Projection { get; } = projection;
         public WorldScreenResolution? Resolution { get; } = resolution;
 

@@ -4,7 +4,6 @@ using System.Numerics;
 using System.Text;
 using Puck.Abstractions.Memory;
 using Puck.Maths;
-using Puck.SignedDistance;
 using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
 using BakeStage = Puck.SdfVm.SdfMeshBakeReport.Stage;
 
@@ -32,9 +31,6 @@ public sealed partial class SdfMeshPathBake {
     private void Offer() {
         if (Interlocked.Exchange(location1: ref m_offered, value: 1) == 0) { Offered?.Invoke(); }
     }
-
-    // The latest dressed frame's dynamic transforms, which carry a dynamic group's demand box into world space.
-    private IReadOnlyList<DynamicTransform> m_demandTransforms = [];
 
     // When the latest bake that baked or loaded a group started (a Stopwatch timestamp; zero before one).
     private long m_bakeStarted;
@@ -146,6 +142,7 @@ public sealed partial class SdfMeshPathBake {
         }
         public void Dispose() {
             m_owner.m_accounts.GateHeld(held: HeldAt(now: Stopwatch.GetTimestamp()), site: m_site, waited: Waited);
+            m_owner.PublishOwing();
             m_scope.Dispose();
             SdfMeshBakeReport.GateLeft();
         }
@@ -171,7 +168,8 @@ public sealed partial class SdfMeshPathBake {
     // group the last frame's share ended at, and every group when `whole`: a restart ranks the groups it plans before
     // its first take. With no demand point the priorities stand as they were and the plan's order decides. A priority
     // only orders work, never changes a mesh, so one up to a sweep old, or one a worker reads mid-measure, orders no mesh
-    // differently. It runs on the frame's thread with the gate open: the frame's thread alone replaces the group list and
+    // differently. A frame's share runs on the measure's lane (DemandMeasure) and a restart's whole measure on the frame's
+    // thread, both with the gate open: only PrepareFrame, which joins the lane first, replaces the group list and
     // the copy index (Restart, Revisit, IndexCopies). Also marks each group in view (Group.InView: SdfMeshDemand.Sees,
     // which takes every box with no demand point) and keeps the count of the groups that owe the frame (OwesFrame), which
     // the bake's owed takes read (OwedGroups), and of those still bringing a first mesh (m_unshown), by the visits.
@@ -182,7 +180,7 @@ public sealed partial class SdfMeshPathBake {
             if (m_doneThrough >= m_groups.Count) {
                 m_holeEpoch++;
                 Volatile.Write(location: ref m_owedGroups, value: 0);
-                m_unshown = 0;
+                Volatile.Write(location: ref m_unshown, value: 0);
                 return;
             }
         }
@@ -197,7 +195,7 @@ public sealed partial class SdfMeshPathBake {
         if (whole) {
             m_holeEpoch++;
             Volatile.Write(location: ref m_owedGroups, value: 0);
-            m_unshown = 0;
+            Volatile.Write(location: ref m_unshown, value: 0);
         }
         for (var visited = 0; ((visited < count) && (spent < share)); visited++) {
             var boxes = Prioritized(group: m_groups[at], measured: measured);
@@ -249,7 +247,7 @@ public sealed partial class SdfMeshPathBake {
         group.HoleEpoch = m_holeEpoch;
         if (now == before) { return; }
         Volatile.Write(location: ref m_owedGroups, value: (m_owedGroups + ((now & 1) - (before & 1))));
-        m_unshown += ((now >> 1) - (before >> 1));
+        Volatile.Write(location: ref m_unshown, value: (m_unshown + ((now >> 1) - (before >> 1))));
     }
     // The leaders done since Follow last ran that groups follow (Group.Done enqueues them), under the gate.
     private readonly List<Group> m_followable = [];
@@ -545,6 +543,7 @@ public sealed partial class SdfMeshPathBake {
     /// work is dropped before it runs, a stage running for one queues no further stage, an answer arriving for one is
     /// dropped, and each group frees its workspace when its last running job ends.</summary>
     public void Retire() {
+        RetireMeasure();
         using (EnterGate(site: BakeGate.Read)) {
             foreach (var group in m_groups.Concat(second: m_retiredGroups)) {
                 group.Retired = true;
@@ -624,8 +623,8 @@ public sealed partial class SdfMeshPathBake {
     // A group's demand box in world space: a dynamic group's carried out of its slot's frame by the slot's transform, as
     // the world-axis box about the turned one.
     private (Vector3 Center, Vector3 Half) WorldBox(Group group) {
-        if (!group.Dynamic || (group.Slot >= m_demandTransforms.Count)) { return (group.DemandCenter, group.DemandHalf); }
-        var box = SdfMeshBox.Carried(center: group.DemandCenter, half: group.DemandHalf, transform: m_demandTransforms[group.Slot]);
+        if (!group.Dynamic || (group.Slot >= m_slotPoses.Length)) { return (group.DemandCenter, group.DemandHalf); }
+        var box = SdfMeshBox.Carried(center: group.DemandCenter, half: group.DemandHalf, transform: m_slotPoses[group.Slot]);
 
         return (box.Center, box.AxisHalf);
     }
@@ -652,7 +651,7 @@ public sealed partial class SdfMeshPathBake {
         var result = (priority ? 0f : float.PositiveInfinity);
 
         foreach (var index in copies) {
-            var (center, half) = TransformDemandBox(group: group, matrix: m_demandCopies[index].Matrix);
+            var (center, half) = TransformDemandBox(group: group, matrix: m_copyPoses[index].Matrix);
             var value = (priority ? Demand.Priority(center: center, half: half) : Demand.DistanceFrom(center: center, half: half, index: 0));
 
             result = (priority ? MathF.Max(x: result, y: value) : MathF.Min(x: result, y: value));
@@ -700,7 +699,7 @@ public sealed partial class SdfMeshPathBake {
 
             var now = Stopwatch.GetTimestamp();
             var dressed = (m_dressedRevision == m_productRevision);
-            var holes = m_unshown;
+            var holes = Volatile.Read(location: ref m_unshown);
 
             for (var at = (m_unresident.Count - 1); (at >= 0); at--) {
                 var group = m_unresident[at];
@@ -841,6 +840,7 @@ public sealed partial class SdfMeshPathBake {
     /// <param name="largest">How many of the largest groups to name.</param>
     /// <returns>The description, one part a line.</returns>
     public IReadOnlyList<string> DescribeDemand(int largest = 12) {
+        JoinMeasure();
         using (EnterGate(site: BakeGate.Read)) {
             var count = Demand.Count;
             var groups = new int[(count + 1)];
@@ -892,6 +892,7 @@ public sealed partial class SdfMeshPathBake {
     /// the group counts as near.</param>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeResidency(float radius) {
+        JoinMeasure();
         using (EnterGate(site: BakeGate.Read)) {
             var start = m_bakeStarted;
             var groups = m_groups.Count;

@@ -529,7 +529,7 @@ laws exercise that boundary.
   (`SdfMeshBakeReport.GateLeft`): a write to a piped standard error can block
   on its reader, and a frame thread blocked there holds every worker.
   `Prioritize` measures a share of the groups' priority and view each prepared
-  frame, outside the gate but on the frame thread, from a cursor
+  frame, outside the gate on the demand measure's lane (below), from a cursor
   (`GroupSweep`, the cursor the demand watch's reset sweeps use too): a rank is up to a
   measure old, a restart ranks every group it plans, and a group planned in a
   listed group's place takes that group's rank (`Replace`). The counts of the
@@ -718,7 +718,21 @@ laws exercise that boundary.
   until the finer is baked and its words stand in the mesh region
   (`FinishReplacements`; the swap bullet below). A frame measures again only
   the groups whose demand may have moved (`SdfMeshPathBake.MeasureDemands`,
-  the demand watch in `SdfMeshPathBake.Demand.cs`): groups newly set into a
+  the demand watch in `SdfMeshPathBake.Demand.cs`), on a lane of the bake's own
+  beside the rest of the frame, never under the gate: `PrepareFrame` decides the
+  tiers from the measure the frame before posted, copies what the measure reads
+  of the frame into the bake's own storage in proportion to what moved
+  (`CopyFrameInputs`: the moved slots' transforms, the copies' root matrices),
+  and posts the frame's measure and priority share (`PostMeasure`, a `JobLane`
+  at the frame's fork priority); the next `PrepareFrame`, a change of the demand
+  points (`SdfMeshDemand.BeforeChange`), the reports that read the watch and
+  `Retire` join it first (`JoinMeasure`), the group list throws on a change
+  while it is frozen (`GroupList.Frozen`), a group's `DemandPixel` throws when
+  touched off the measure meanwhile, and the demand watch's group marks live in
+  a byte of their own (`Group.DemandMarks`) so workers' marks never race them.
+  `sdf.residency.demand.join-waits` counts the joins that found the measure still
+  running. `Pending` and `DrawsPending` take no gate: every release of it
+  publishes what the bake owes (`PublishOwing`). Groups newly set into a
   place, groups whose slot or copy moved (the frame's transform and copy
   journals, through the list's owner index), groups a clock made due, and
   groups a change of the points reaches. `SdfMeshDemand` matches each view to
@@ -1533,8 +1547,8 @@ laws exercise that boundary.
 - **Dressing is outside derivation.** Top-level `SdfMeshDresser` owns retained topology, posed draws, clipping,
   pick maps and draw claims. Its constructor binds one bake; dispose it before retiring that bake or its library.
   `SdfMeshPathBake.PrepareFrame` is the one locked door: restart/reconcile the frame, update the single copy-membership
-  index shared by demand and dressing, revisit moved frame inputs, prioritize, finish replacements and retier, then
-  return a stack-bound `FrameAccess`. Its consumer
+  index shared by demand and dressing, copy the frame's demand inputs, revisit moved frame inputs, finish replacements,
+  decide tiers from the last measure and post the next to the measure's lane, then return a stack-bound `FrameAccess`. Its consumer
   claims the landed meshes and publishes draws/picking before acknowledging that access's captured product revision;
   it reads the groups only while the access holds the gate, and releases it (`FrameAccess.Release`) once its rows claim
   every mesh it draws, so posing, clipping and publishing run with the gate open; a group read after the release throws.

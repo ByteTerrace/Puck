@@ -135,7 +135,7 @@ public sealed partial class SdfMeshPathBake {
     // Whether a view may see one of a shared geometry's copies, its box given in the geometry's own frame.
     private bool CopiesSeen(IReadOnlyList<int> copies, Vector3 center, Vector3 half) {
         foreach (var index in copies) {
-            var (boxCenter, boxHalf) = TransformBox(center: center, half: half, matrix: m_demandCopies[index].Matrix);
+            var (boxCenter, boxHalf) = TransformBox(center: center, half: half, matrix: m_copyPoses[index].Matrix);
 
             if (Demand.Sees(center: boxCenter, half: boxHalf)) { return true; }
         }
@@ -161,7 +161,7 @@ public sealed partial class SdfMeshPathBake {
     }
     // The units a group's lattice is in: its slot's for a dynamic group (SdfMeshGeometryBuilder.UnitsOf), metres for any
     // other.
-    private float UnitsOf(Group group) => ((group.Dynamic && (group.Slot < m_demandTransforms.Count)) ? SdfMeshGeometryBuilder.UnitsOf(transform: m_demandTransforms[group.Slot]) : 1f);
+    private float UnitsOf(Group group) => ((group.Dynamic && (group.Slot < m_slotPoses.Length)) ? SdfMeshGeometryBuilder.UnitsOf(transform: m_slotPoses[group.Slot]) : 1f);
     // The metres one display pixel covers at a shared geometry's box, given in the geometry's own frame, from the demand
     // point that sees one of its copies finest, in the geometry's units; infinity, and no point, with no copy. Also the
     // fewest units a copy is measured in.
@@ -247,8 +247,9 @@ public sealed partial class SdfMeshPathBake {
             group.OwedFrames = 0;
         }
     }
-    // Measures the groups whose demand may have moved (MeasureDemands), and once every SdfMeshTier.MeasureFrames frames
-    // decides the tiers: every count of frames below then advances by the frames since the last decision. A decision
+    // Once every SdfMeshTier.MeasureFrames frames decides the tiers from the demand the frame before measured
+    // (MeasureDemands, joined before this frame was prepared): every count of frames below then advances by the frames
+    // since the last decision. A decision
     // reads the demanded tier of each group the demand watch attends (Attend), from the pixel its demand was last
     // measured at, against the one it draws, counts the debt, and plans again at the demanded tier each
     // landed group that has owed a finer one for SdfMeshTier.HoldFrames frames, the finest demand first, at most
@@ -271,7 +272,6 @@ public sealed partial class SdfMeshPathBake {
     // demanded changes nothing: the finer mesh stays, so a viewer who comes back finds it. Under the gate, on the
     // frame's thread.
     private void Retier(SdfFrame frame) {
-        MeasureDemands(frame: frame);
         if (++m_decideFrames < SdfMeshTier.MeasureFrames) {
             _ = StartFirsts(frame: frame, inFlight: out _);
             return;

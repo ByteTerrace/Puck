@@ -21,9 +21,11 @@ public sealed class WorldReleaseControllerLeaseTests {
             Token
         );
 
-        await Assert.ThrowsAsync<IOException>(testCode: () => stale.EnsureHeldAsync());
+        var lost = await Assert.ThrowsAsync<WorldReleaseControllerLeaseLostException>(testCode: () => stale.EnsureHeldAsync());
+
+        Assert.Contains(expectedSubstring: "no longer this controller's", actualString: lost.Message);
         Assert.True(condition: stale.Token.IsCancellationRequested);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => stale.EnsureHeldAsync());
+        await Assert.ThrowsAsync<WorldReleaseControllerLeaseLostException>(testCode: () => stale.EnsureHeldAsync());
         await stale.DisposeAsync();
         Assert.NotNull(@object: stale.ReleaseFailure);
         await successor.EnsureHeldAsync();
@@ -62,7 +64,8 @@ public sealed class WorldReleaseControllerLeaseTests {
         await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => lease.EnsureHeldAsync());
     }
     /// <summary>A renewal the provider never answers leaves the confirmation from acquisition standing, so the
-    /// controller's effects end exactly <see cref="WorldReleaseControllerLease.Lifetime"/> after it on the clock.</summary>
+    /// controller's effects end exactly <see cref="WorldReleaseControllerLease.Lifetime"/> after it on the clock, and the
+    /// work they cancel leaves naming that deadline rather than as a bare cancellation.</summary>
     [Fact]
     public async Task StalledRenewalEndsEffectsExactlyAtTheLocalDeadline() {
         var clock = new VirtualClock();
@@ -72,6 +75,13 @@ public sealed class WorldReleaseControllerLeaseTests {
             cancellationToken: Token,
             clock: clock
         );
+        var running = lease.RunAsync(action: async token => {
+            await Task.Delay(
+                cancellationToken: token,
+                delay: Timeout.InfiniteTimeSpan
+            );
+            return 0;
+        });
 
         clock.Advance(by: WorldReleaseControllerLease.RenewalPeriod);
         await backend.RenewalEntered.Task.WaitAsync(cancellationToken: Token);
@@ -79,6 +89,43 @@ public sealed class WorldReleaseControllerLeaseTests {
         Assert.False(condition: lease.Token.IsCancellationRequested);
         clock.Advance(by: TimeSpan.FromTicks(value: 1));
         Assert.True(condition: lease.Token.IsCancellationRequested);
+        var lost = await Assert.ThrowsAsync<WorldReleaseControllerLeaseLostException>(testCode: () => running);
+
+        Assert.Contains(expectedSubstring: "no lease renewal was confirmed", actualString: lost.Message);
+    }
+    /// <summary>A renewal attempt that goes unanswered is abandoned after
+    /// <see cref="WorldReleaseControllerLease.RenewalAttemptTimeout"/> and tried again on a fresh request, and the
+    /// confirmed retry keeps the lease past the deadline the acquisition alone allowed.</summary>
+    [Fact]
+    public async Task UnansweredRenewalAttemptIsRetriedWhileTheLeaseIsHeld() {
+        var clock = new VirtualClock();
+        var backend = new StallingBackend { StallFirstRenewalOnly = true };
+        await using var lease = await WorldReleaseControllerLease.AcquireAsync(
+            backend: backend,
+            cancellationToken: Token,
+            clock: clock
+        );
+
+        clock.Advance(by: WorldReleaseControllerLease.RenewalPeriod);
+        await backend.RenewalEntered.Task.WaitAsync(cancellationToken: Token);
+        await clock.WhenArmedAsync(
+            count: 1,
+            ct: Token,
+            dueTime: WorldReleaseControllerLease.RenewalAttemptTimeout
+        );
+        clock.Advance(by: WorldReleaseControllerLease.RenewalAttemptTimeout);
+        await clock.WhenArmedAsync(
+            count: 1,
+            ct: Token,
+            dueTime: WorldReleaseControllerLease.RenewalRetryDelay
+        );
+        clock.Advance(by: WorldReleaseControllerLease.RenewalRetryDelay);
+        await backend.Renewed.Task.WaitAsync(cancellationToken: Token);
+        // The check waits for the loop's confirmation, so the deadline below counts from the retried one.
+        await lease.EnsureHeldAsync();
+        clock.Advance(by: (((WorldReleaseControllerLease.Lifetime - WorldReleaseControllerLease.RenewalPeriod) - WorldReleaseControllerLease.RenewalAttemptTimeout) - WorldReleaseControllerLease.RenewalRetryDelay));
+        Assert.False(condition: lease.Token.IsCancellationRequested);
+        Assert.Null(@object: lease.LossReason);
     }
     /// <summary>An acquisition that took the whole local lifetime on the clock may already have lost the lease, so it
     /// is refused; one tick less is held.</summary>
@@ -137,8 +184,13 @@ public sealed class WorldReleaseControllerLeaseTests {
         public TaskCompletionSource ReleaseEntered { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource RenewalEntered { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
+        public TaskCompletionSource Renewed { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool StallFirstRenewalOnly { get; init; }
         public bool StallRelease { get; init; }
         public bool StallRenewal { get; init; }
+
+        private int m_renewals;
 
         public Task AcquireAsync(CancellationToken cancellationToken) { OnAcquire?.Invoke(); return Task.CompletedTask; }
         public Task ReleaseAsync(CancellationToken cancellationToken) {
@@ -152,12 +204,14 @@ public sealed class WorldReleaseControllerLeaseTests {
         }
         public Task RenewAsync(CancellationToken cancellationToken) {
             RenewalEntered.TrySetResult();
-            return (StallRenewal
-                ? Task.Delay(
+            if (StallRenewal || (StallFirstRenewalOnly && (Interlocked.Increment(location: ref m_renewals) == 1))) {
+                return Task.Delay(
                     cancellationToken: cancellationToken,
                     delay: Timeout.InfiniteTimeSpan
-                )
-                : Task.CompletedTask);
+                );
+            }
+            Renewed.TrySetResult();
+            return Task.CompletedTask;
         }
     }
     private sealed class Ownership { public Guid Current { get; set; } }
@@ -173,7 +227,12 @@ public sealed class WorldReleaseControllerLeaseTests {
             owner.Current = Guid.Empty; return Task.CompletedTask;
         }
         public Task RenewAsync(CancellationToken cancellationToken) {
-            if (owner.Current != m_id) { throw new IOException(message: "lost lease"); }
+            if (owner.Current != m_id) {
+                throw new WorldReleaseControllerLeaseLostException(
+                    innerException: new IOException(message: "lost lease"),
+                    message: "lost lease"
+                );
+            }
             return Task.CompletedTask;
         }
     }

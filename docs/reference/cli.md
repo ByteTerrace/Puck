@@ -554,8 +554,11 @@ and `artifacts/azure/silo-worlds`, and validates the worlds beside the checkout'
 signing key at deployment. Temporary preparation keys are never packaged.
 
 Deploy, rollback, resume, and finalization use a renewable Azure Blob lease to exclude competing
-controllers. Losing ownership cancels the CLI's child processes and closes its
-next-effect checks; the durable operation remains available for a later resume.
+controllers (`WorldReleaseControllerLease`). A renewal attempt that fails or goes unanswered is retried on a
+fresh request while the last confirmed renewal still covers the controller; ownership is lost only when storage
+answers that the lease is gone or no renewal is confirmed within the safe lifetime. Losing ownership cancels
+the CLI's child processes and closes its next-effect checks, and the verb's refusal names why the lease was
+lost and the last external effect it started; the durable operation remains available for a later resume.
 This controller lease complements the world's authority fences and publication
 barrier. Guest mutations also serialize with bootstrap under a VM lock and check
 the durable operation after waiting, refusing stale phases or release identities.
