@@ -160,10 +160,12 @@ public sealed partial class SdfMeshPathBake {
 
             var length = demand.WatchLength;
             var carries = (demand.Layout == (Layout + 1));
-            var needed = (m_owners.Length * length);
+            // The layout moves whenever a view's lanes do, so the records are carried between two buffers the watches keep
+            // rather than into a new array each time. A carry writes every value of a record it keeps, and a record it
+            // does not keep is freed, so nothing reads what the spare buffer held before.
+            var size = (m_owners.Length * length);
 
-            if (m_spare.Length < needed) { m_spare = new float[needed]; }
-
+            if (m_spare.Length < size) { m_spare = GC.AllocateUninitializedArray<float>(length: size); }
             var values = m_spare;
 
             for (var record = 0; (record < Count); record++) {
@@ -172,7 +174,8 @@ public sealed partial class SdfMeshPathBake {
                 if (!carries) { lost.Add(item: owner); }
                 Release(group: owner);
             }
-            (m_spare, m_values) = (m_values, values);
+            m_spare = m_values;
+            m_values = values;
             Length = length;
             Layout = demand.Layout;
         }

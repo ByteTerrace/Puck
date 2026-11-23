@@ -469,6 +469,8 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_meshesOwed.Clear();
         ReleaseUploadNeeds();
         m_meshArena.Dispose();
+        m_shadows?.Dispose();
+        m_shadows = null;
         DisposeRetired(completed: ulong.MaxValue);
 
         for (var slot = 0; (slot < FrameRingSize); slot++) {

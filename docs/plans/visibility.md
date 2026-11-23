@@ -530,7 +530,7 @@ that read across views remains V5 work. The far cascade now uses the existing
 `SdfMeshOcclusion` classification with a current camera-depth receiver mask and
 two-phase light-space entry depth. All phases have one meaning, and the final
 exit/optical lists are independent of entry visibility. The
-[rendering skill](../../.claude/skills/rendering/SKILL.md#far-cascade-caster-selection)
+[rendering skill](../../.claude/skills/rendering/SKILL.md#the-worlds-shadows)
 owns the coverage and retention rules. The identity peel remains transmission work.
 
 **Why:** the gain grows with views (screens, windows, nested worlds,

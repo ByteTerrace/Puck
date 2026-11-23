@@ -79,7 +79,6 @@ uint sdfOcclusionNearTexel(uint2 dims, uint level, uint2 texel) {
     return ((level == 0u) ? sdfOcclusionPixel(texel) : sdfMeshOcclusionDepthRW[sdfOcclusionNearWord(dims, level, texel)]);
 }
 
-#include "../frame/sdf-caster-receivers.hlsli"
 
 // Adds a phase's commands, and their vertices, to the pass's drawn counts: skips uniformly when counting is disabled,
 // otherwise reduces across the compute thread group in groupshared memory and adds once per group.
@@ -447,8 +446,6 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         return;
     }
 
-    if (step == SDF_RECEIVER_STEP) { sdfReceiverMark(id.x); return; }
-    if (step == SDF_RECEIVER_REDUCE_STEP) { sdfReceiverReduce(id.x, pushedIndex.index & SdfMeshDrawMask); return; }
 
     if (step == SDF_OCCLUSION_DEPTH_STEP) {
         ViewportData view = worldView();
@@ -489,7 +486,6 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
     uint vertices = 0u;
     uint exitDraws = 0u;
     uint exitVertices = 0u;
-    uint receiverRejected = 0u;
     uint entryRejected = 0u;
     bool culledEntry = false;
     uint entryIdentity = 0u;
@@ -540,10 +536,6 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         if (step == SDF_OCCLUSION_EARLY_STEP) {
             kept = ((draw % slices) == slice) &&
                 (splitExit || (((a.w >> 1u) & 1u) == (header.w & 1u))) && (unboxed || sdfSelectionKeeps(boxCenter, boxX, boxY, boxZ));
-            if (kept && splitExit && occlude && !unboxed) {
-                kept = sdfReceiverMayShadow(boxCenter, boxX, boxY, boxZ);
-                receiverRejected = !kept && (a.w & 2u) == 0u ? 1u : 0u;
-            }
             if (kept) {
                 level = sdfSelectionLevel(record, state, unboxed, boxCenter, boxX, boxY, boxZ, asfloat(b.w), c.w, d.w);
                 state.y = level;
@@ -590,7 +582,7 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         // slot, so its phase compacts in the same staged order.
         if (splitExit) { sdfOcclusionEmit((SDF_SHADOW_CULLED_ENTRY_PHASE + entryPhase), id.x, entryIdentity, count, culledEntry); }
         if (splitExit && step == SDF_OCCLUSION_EARLY_STEP) {
-            // The final exit/peel and glass lists depend ONLY on receiver/box selection.
+            // The final exit/peel and glass lists depend only on box selection.
             // Entry visibility (was/visible) must never remove a potential second surface.
             bool exitEmit = kept && !glass && exitLayer;
             bool glassEmit = optical && kept && glass && depthLayer;
@@ -617,10 +609,8 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         if (WaveIsFirstLane() && (selected != 0u)) { puckCountDetail(3u, selected, 0u, 0u, 0u, 0u); }
     }
     sdfOcclusionCount(draws, vertices);
-    uint receiverSum = WaveActiveSum(receiverRejected);
     uint entrySum = WaveActiveSum(entryRejected);
     if (WaveIsFirstLane()) {
-        puckCountDetail(0u, receiverSum, 0u, 0u, 0u, 0u);
         puckCountDetail(1u, entrySum, 0u, 0u, 0u, 0u);
     }
     if (splitExit && step == SDF_OCCLUSION_EARLY_STEP) {

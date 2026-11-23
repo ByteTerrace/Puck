@@ -1643,13 +1643,10 @@ laws exercise that boundary.
   `SdfFrameBlock.WriteShadowCamera` writes, with the view cameras' handedness;
   `sdfMeshShadowDepth` in `passes/sdf-surface-stage.hlsli` decodes that
   reversed, linear depth, so the two projections are a sync pair. The shadow
-  tier sizes the cascades (`SdfShadowResolution`, `meshShadowTexels`) and a view
-  holds the second slot's cascade only while its world holds a second stable
-  slot (`SdfWorldPackage.WithShadows`).
-- **A view without shadows holds no cascade.** A view whose quality skips
-  shadows (windows, camera views) runs `SdfWorldPackage.WithoutShadows` of its
-  fragment: the cascades' passes and their 252 MB of targets go, and the
-  surface pass binds the filler.
+  tier of an anchor's view sizes its entries (`SdfShadowResolution`, `meshShadowTexels`), and an anchor holds the
+  second slot's entry only while its world holds a second stable slot (`SdfWorldShadows`).
+- **A view without shadows reads none.** A view whose quality skips shadows (windows, camera views) takes no anchor
+  and its surface pass binds the filler; no view fragment holds a cascade.
 - **Shadow handoffs are pass values.** The outgoing light fades from its slot's
   cascade by the handoff's weight; the incoming light lights unshadowed until
   it holds the slot. No handoff plans or allocates anything.

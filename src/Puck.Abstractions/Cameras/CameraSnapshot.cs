@@ -212,15 +212,12 @@ public readonly record struct CameraSnapshot {
     /// through any affine matrix is tested exactly.</param>
     /// <param name="margin">The fraction the frustum's sides are widened by: zero is the exact frustum.</param>
     /// <param name="far">The forward distance of the far plane, in world units; infinity, the default, has none.</param>
-    /// <param name="sweep">The displacement the box is swept along, in world units: the test is of every point the box
-    /// passes moving by up to this, as a shadow caster's box swept along its light reaches the receivers it can shadow.
-    /// Zero, the default, tests the box where it stands.</param>
-    /// <param name="reach">The distance, in world units, every plane is moved out by: a receiver this near the frustum
+    /// <param name="reach">The distance, in world units, every plane is moved out by: a point this near the frustum
     /// still counts. Zero by default.</param>
-    /// <returns><see langword="false"/> when the whole box, swept, lies at or before the near plane, at or past the far
-    /// plane, or past one widened side, each moved out by <paramref name="reach"/>; otherwise <see langword="true"/>.</returns>
-    public bool MaySee(Vector3 center, Vector3 halfX, Vector3 halfY, Vector3 halfZ, float margin, float far = float.PositiveInfinity, Vector3 sweep = default, float reach = 0f) {
-        var box = new SweptBox(Center: (center - Position), HalfX: halfX, HalfY: halfY, HalfZ: halfZ, Reach: reach, Sweep: sweep);
+    /// <returns><see langword="false"/> when the whole box lies at or before the near plane, at or past the far plane, or
+    /// past one widened side, each moved out by <paramref name="reach"/>; otherwise <see langword="true"/>.</returns>
+    public bool MaySee(Vector3 center, Vector3 halfX, Vector3 halfY, Vector3 halfZ, float margin, float far = float.PositiveInfinity, float reach = 0f) {
+        var box = new GrownBox(Center: (center - Position), HalfX: halfX, HalfY: halfY, HalfZ: halfZ, Reach: reach);
         Span<(Vector3 Normal, float Offset)> planes = stackalloc (Vector3, float)[FrustumPlanes];
 
         Planes(far: far, margin: margin, planes: planes);
@@ -230,7 +227,7 @@ public readonly record struct CameraSnapshot {
 
         return true;
     }
-    /// <summary>Returns how far a box may move before <see cref="MaySee"/>, with no sweep or reach, answers otherwise for
+    /// <summary>Returns how far a box may move before <see cref="MaySee"/>, with no reach, answers otherwise for
     /// it. A box the frustum may hold is refused once it lies wholly past any one plane, so its slack is the least, over
     /// the planes, of how far it stands from lying wholly past that plane. A refused box is held again only once it lies
     /// wholly past none, so its slack is the most, over the planes it lies wholly past, of how far past it lies. A box
@@ -244,7 +241,7 @@ public readonly record struct CameraSnapshot {
     /// <param name="far">The forward distance of the far plane; infinity, the default, has none.</param>
     /// <returns>The distance in world units, never negative; infinity for a frustum with no finite plane.</returns>
     public float FrustumSlack(Vector3 center, Vector3 halfX, Vector3 halfY, Vector3 halfZ, float margin, float far = float.PositiveInfinity) {
-        var box = new SweptBox(Center: (center - Position), HalfX: halfX, HalfY: halfY, HalfZ: halfZ, Reach: 0f, Sweep: default);
+        var box = new GrownBox(Center: (center - Position), HalfX: halfX, HalfY: halfY, HalfZ: halfZ, Reach: 0f);
         Span<(Vector3 Normal, float Offset)> planes = stackalloc (Vector3, float)[FrustumPlanes];
         var inside = float.PositiveInfinity;
         var outside = 0f;
@@ -329,7 +326,7 @@ public readonly record struct CameraSnapshot {
 
     // The frustum's planes: each through the eye or at the near distance, or at the far one, its normal pointing out of
     // the frustum and its sides widened by a fraction of the half extents. A box lies past one when its nearest point
-    // does (SweptBox.Nearest).
+    // does (GrownBox.Nearest).
     private void Planes(float margin, float far, Span<(Vector3 Normal, float Offset)> planes) {
         var vertical = (TanHalfFieldOfView * (1f + margin));
         var horizontal = (AspectRatio * vertical);
@@ -342,13 +339,13 @@ public readonly record struct CameraSnapshot {
         planes[5] = ((((FrustumOffset.Y - vertical) * Forward) - Up), 0f);
     }
 
-    // A box relative to the eye, swept and grown by a reach, measured against one plane at a time.
-    private readonly record struct SweptBox(Vector3 Center, Vector3 HalfX, Vector3 HalfY, Vector3 HalfZ, Vector3 Sweep, float Reach) {
+    // A box relative to the eye, grown by a reach, measured against one plane at a time.
+    private readonly record struct GrownBox(Vector3 Center, Vector3 HalfX, Vector3 HalfY, Vector3 HalfZ, float Reach) {
         // The signed distance, in the plane normal's length, from the plane to the box's point nearest it: at or past
-        // zero the whole box lies past the plane. The center's distance less the box's reach along the normal, less the
-        // sweep's where it moves the box toward the plane, less the reach.
+        // zero the whole box lies past the plane. The center's distance less the box's extent along the normal, less the
+        // reach.
         public float Nearest(Vector3 normal, float offset) {
-            var nearest = (((((Vector3.Dot(vector1: normal, vector2: Center) + offset) - MathF.Abs(x: Vector3.Dot(vector1: normal, vector2: HalfX))) - MathF.Abs(x: Vector3.Dot(vector1: normal, vector2: HalfY))) - MathF.Abs(x: Vector3.Dot(vector1: normal, vector2: HalfZ))) + MathF.Min(x: 0f, y: Vector3.Dot(vector1: normal, vector2: Sweep)));
+            var nearest = ((((Vector3.Dot(vector1: normal, vector2: Center) + offset) - MathF.Abs(x: Vector3.Dot(vector1: normal, vector2: HalfX))) - MathF.Abs(x: Vector3.Dot(vector1: normal, vector2: HalfY))) - MathF.Abs(x: Vector3.Dot(vector1: normal, vector2: HalfZ)));
 
             return (nearest - (Reach * normal.Length()));
         }

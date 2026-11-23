@@ -2508,7 +2508,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         FitSkyViews?.Invoke(m_frameViews, lighting.Sky, width, height);
         // The next pack holds no body a shadow of this frame's views and lights may show.
-        m_animator.ShadowBy(frame: m_dressedFrame, height: height, width: width);
+        m_animator.ShadowBy(frame: m_dressedFrame);
         m_dressedBeforeField = ((m_staticFieldBuild is not null) || m_staticFieldOwed);
 
         return m_dressedFrame;

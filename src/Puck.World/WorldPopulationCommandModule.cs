@@ -400,13 +400,11 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
             provider: CultureInfo.InvariantCulture,
             handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###}; atmosphere {atmosphereKinds} kind(s), each at most one composite evaluation a pixel)"
         );
-        // The cascades' texels for a full-resolution 60-degree 16:9 view, the shape a seat's chase camera takes.
-        var shadows = (WorldRenderFarDistance.ResolveShadowCoverage(defaults: server.Definition.Render).Describe(
-            aspectRatio: (16f / 9f),
+        // The world's eye-centred shadow entries' texels at full resolution, whatever way any view faces.
+        var shadows = WorldRenderFarDistance.ResolveShadowCoverage(defaults: server.Definition.Render).Describe(
             farDistance: farDistance,
-            tanHalfFieldOfView: MathF.Tan(x: (MathF.PI / 6f)),
             texels: Puck.SdfVm.SdfShadowResolutions.Texels(resolution: Puck.SdfVm.SdfShadowResolution.Full)
-        ) + " for a 60-degree 16:9 view");
+        );
         var lattice = ((Population.FieldRegions.Count > 0)
             ? string.Join(separator: Environment.NewLine, values: Population.FieldRegions.Select(selector: region => ($"region {region.Name}: " + region.Lattice.DescribeCost(
                 activeBodyCount: Population.ActiveCount(),

@@ -52,9 +52,10 @@ the scatter. Every diagnostic except the bloom-only view bypasses optical scatte
 and a debug view that is not scene light passes the display pass unencoded
 (`DebugViewModes.ComposesFinal`).
 
-The tables build each view's signature inputs once a frame: its cascade fit and
-its pass block with the hashes every pass group takes of it (`SdfWorldTables.CascadesOf`
-and the memo beside it). The renderer's passes read the fit through
+The tables build each view's signature inputs once a frame: its pass block, with the
+world's shared cascade set as the view reads it, and the hashes every pass group takes
+of it (`SdfWorldTables.CascadesOf` and the memo beside it, which also compares the
+shadows' `ContentRevision`). The renderer's passes read the set through
 `SdfWorldTables.CascadesOf`, never `SdfMeshShadowCascades.Fit`. A pass-block value
 taken from the tables belongs in `SdfPassValues`, which the memo compares by value;
 a value read from anywhere else must move the memo's epoch (`ForgetViewInputs`),
@@ -409,104 +410,54 @@ retired graph whose submissions completed. Buffers a recording replaced retire a
 (`SdfMeshOcclusion.Completed`). A reusable slot fence reads signaled after an abandoned submission and after a loss's
 drain, so polling one is never a proof.
 
-## Far-cascade caster selection
+## The world's shadows
 
-`SdfMeshOcclusion` and `sdf-mesh-occlusion.comp.hlsl` are the one classification
-door for camera and cascade draws. The far cascade reads the current mesh target
-through a graph dependency. `sdf-caster-receivers.hlsli` reprojects every covered
-camera sample with its render grid and jitter into light-space occupancy cells;
-OR-reduced parents conservatively cover a query rectangle. Expand caster boxes
-by `SdfMeshCull.ShadowFilterTexels`, the complete search/filter and normal-offset
-reach, before querying. Keep unboxed draws. Camera invisibility of a caster is
-never evidence that it cannot cast a visible shadow.
+A world's shadows are its residency's, never a view's: `SdfWorldShadows`, owned by the tables, drawn in the
+residency's per-frame upload (`SdfWorldTables.SubmitUpload`, its `shadows` pass) ahead of every view's submission, and
+read by every view through `SdfWorldTables.CascadesOf` and the layers `SdfWorldPassRecorder.BindPorts` binds. No view
+fragment holds a shadow pass or storage (`SdfWorldPackage.NativeFragment`); the [decision](../../../docs/decisions/rendering.md#a-worlds-shadows-are-drawn-once-and-cost-what-moved)
+records the options weighed.
 
-Entry depth uses the camera pass's two-phase mechanism in the light's orthographic
-projection: draw previous survivors at current transforms, build the maximum
-forward-depth pyramid with infinity for holes, then draw new survivors. Phase
-indices have one meaning: early entry, late entry, solid exit, thin exit, optical.
-Exit (and a future identity peel) and glass lists depend only on box/receiver
-selection, never entry visibility. They execute after entry depth is final.
-Never use an earlier exit/peel image to reject a caster.
+- **Anchors.** The near, far and secondary entries belong to anchors, each eye-centred on one view and snapped to cells
+  of an eighth of each entry's reach (`SdfMeshShadowCascades.Fit`, `CellOf`, `HalfExtentOf`). Views whose eyes share a
+  near cell share an anchor; one elsewhere takes its own up to `SdfWorldShadows.MaxAnchors`, then reads the nearest
+  (`SdfWorldShadows.Assign`). The distant entry is one for the world, centred on its first shadowed view. A view's pass
+  set binds its anchor's layers and rebinds when `BindingRevisionOf` moves.
+- **The one door.** `SdfWorldShadows.Decide` decides once for the upload about to be submitted (frozen by `Submitted`
+  until the residency's next frame start, `BeginShadowFrame`), `Record` draws exactly that, and `Submitted` commits the
+  cameras. Readers read `ReaderCamera`: the camera a redraw completing this upload drew from, else the committed one,
+  else none (an entry no submitted upload drew is empty, `Holds` false). Never read an entry's camera from a fresh
+  `Fit`.
+- **Whole redraws.** An entry redraws whole when the light turns past its tolerance (`farShadows.turnDegrees`,
+  `distantShadows.turnDegrees`, else one texel for a caster as tall as the reach), its eye's cell changes, its texels
+  change or `StaticDrawRevision` moves; a recording that draws a layer whole calls `CastersRead`. The far entry spreads a
+  redraw over one period of `farShadows.hertz`, the distant entry over `distantShadows.frames`, into back layers copied
+  forward on the last share.
+- **Moved rectangles.** `SdfWorldTables.NoteMotion` hands every non-shading change's before and after boxes to
+  `SdfWorldShadows.Moved` before the scopes' early return; keep that call first, or a staging whose scopes are all met
+  drops the change. Each entry judges the row against its `Footprint` from where it last drew it (`MoveTexels`) and owes
+  at most `MaxRectangles` merged rectangles; a change no box bounds (`MovedEverywhere`, a seeded history) owes the whole
+  layer. A rectangle draws through a viewport of its own from the camera of that rectangle of the plane (aspect in
+  `SdfFrameBlock.WriteShadowCamera`), keeping the casters in that box (`SdfMeshCull.OfLightBox`).
+- **Layouts.** Every layer rests shader-readable between uploads; the recorder moves it to the attachment layout and
+  back (`Entry.Move`). A new layer is cleared before anything binds it.
+- **Glass.** An entry's glass extinction (`Optical`) is drawn with each whole redraw, against the front depth, from a
+  selection of every draw (`OpticalKind`).
+- **Evidence.** `world.residency`'s `shadows` line prints the uploads, the measured GPU time of the shadow pass
+  (timestamps around it, read when the slot completes), moved changes, anchors, each view's anchor and each entry's
+  state; `world.rates` counts `shadow-<entry>.static|share|live|held` per world upload; the selection marks name each
+  drawing (`drawn.shadow-far.a0 rect0.*`). Timings belong to the lead's quiet window.
 
-A receiver-conditioned cascade retains a coverage identity with each submitted
-layer (`SdfWorldPasses.ReceiverSignatureOf`): the sample grid its receivers were
-classified on (cull level, detail, extent, scale, cut, bindings), excluding the
-light, the camera, the geometry and the jitter. The far rate can hold, or refresh
-over the static layer, while both layers cover that grid; a changed grid refreshes both. The hold's own
-camera tolerances and the receiver cells' neighbouring-cell margin cover the
-drift the identity leaves out; a receiver a moving caster uncovers lags by the
-same refresh its shadow does. Hashing the geometry signature or the jitter here
-ends the hold on every frame anything moves, so a receiver-conditioned cascade
-then pays a whole refresh each frame (`sdf.rates` shows `rendered` and `static` on every
-frame and no `held`). Readers use each layer's committed light
-camera. The graph keeps the sampling barrier, while the package projects its
-cadence dependency onto the consumed receiver inputs, so unrelated mesh writes do
-not invalidate it. `world.cull camera` removes the receiver input and disables cascade
-depth occlusion, retaining the original far rate and camera occlusion. Count held
-only when the pass stands, and rendered/split only on successful submission.
-For a complete-refresh cost comparison, set `world.rates shadow-far off` on
-both sides. Also measure ordinary cadence: replacing a split refresh with two
-culled layers can cost more in a view with little rejection even when a whole
-refresh costs less. Report those separately and read `sdf.rates` beside the
-draw/vertex counters; a split frame's counts cover only its submitted layer.
-Compare counts beside time and shadow diagnostic captures on both backends;
-include a moving camera and reduced/temporal render grids. The receiver scratch
-shares the depth allocation and its existing slot-fence retirement; early
-compute samples camera depth, late compute samples light depth, in separate sets.
+### The distant shadow map
 
-A far cascade at a reduced rate holds a static layer (`SdfFarShadows.HoldsStaticLayer`; the far pass's
-`ShadowFarStaticDepth` and `ShadowFarStaticExit` outputs, `SdfWorldPackage.WithShadows`' `farStatic`). Its invariant is
-that the layer is copied only into a cascade drawn from the camera it was drawn from, holding the static revision it
-drew; `SdfWorldPasses.RecordFar` is the one door (`SdfFarStaticLayer`, its `SdfFarStaticUse`), and `SubmittedFar` commits the
-layer. The recorder stages the static draws through a second `SdfMeshOcclusion` (`SdfMeshMotion.Static`, its own mesh
-set group after the cascade's, `OcclusionGroups`) and the moving draws plus every glass draw through the cascade's own
-(`SdfMeshMotion.Dynamic`) over a `CopyDepth` of the layer; the kernel leaves a draw a motion filter excludes untouched.
-A refresh that ends the fit (`DecideFar`'s covers false) bypasses the layer (`SdfFarStaticUse.Bypasses`): every caster
-straight into the cascade, no static selection and no copy, and the layer stops standing until the next refresh the rate
-alone calls for draws it again; a layer drawn on a refresh that ends the fit would stand for nothing when the next one
-ends it too, as a walking camera does. So under a turning sun the authored `farShadows.turnDegrees` is the layer's
-lifetime. A path that draws the layer must call `SdfWorldTables.CastersRead`, or a caster absent then never redraws it on landing.
-The static selection's late step samples the layer it just drew, an access the graph plan never sees; it binds because
-`ShaderPipelineRenderNode.UsageOf` creates every depth sampled. A depth created without `Sampled` is a `D32_FLOAT`
-texture, and Direct3D 12 removes the device (`DXGI_ERROR_INVALID_CALL`, no breadcrumb) on creating its shader resource
-view, so `DirectXGpuBindings` refuses that write by name.
-`sdf.rates`' `shadow-far.static` counts the layer's redraws.
-
-## The distant shadow map
-
-The cascade set's fourth entry (`SdfMeshShadowCascades.DistantEntry`, primary role) is the far shadows past the
-far cascade, authored per device row (`WorldQualityPreset.DistantShadows`) and at boot (`render.distantShadows`),
-carried on `SdfFrame.DistantShadows`; the [handbook](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-distant-shadow-map)
-owns the behaviour. Its invariant is that a held map draws only what cannot move while it stands: the
-`shadow-distant` pass stages `staticOnly`, so the selection kernel rejects every record carrying
-`SdfMeshRecord.DynamicFlag` (set from `SdfMeshDraw.IsStatic` in `SdfMeshRegion.WriteDraw`, derived so a skinned or
-displaced draw, which moves without its record changing, is never static), and its
-signature (`SdfWorldPasses.DistantSignatureOf`) folds `SdfWorldTables.StaticDrawRevision`, which only
-`StageChangedDraws` and `Unname` advance. A new path that changes a static draw's record outside those two leaves a
-stale map standing. The revision follows casters, not records (`SdfMeshDraw.SameCaster`): a tier swap within one
-bake group (the same `Trace`) and an eviction leave it standing, and a landing advances it only when the caster never
-stood or the distant pass recorded while it was absent (`SdfWorldTables.CastersRead`, called beside `RecordDistant`).
-Under the standard's day (0.25° a second) the authored `turnDegrees` sets the redraw rate: 0.1° redraws 2.5 times a
-second, and `world.gpu-timing` keeps a standing pass's last samples (as it does glass's), so its `shadow-distant`
-figure is a refresh's cost, not a frame's; `world.counters sdf.rates` counts the refreshes. Readers take the camera through `CascadesOf`, which reads the committed one
-(`SubmittedDistant`, which like every package commit runs only once the frame's submission reached the queue:
-`ShaderPipelineRenderNode.CommitPackages`) or none; an entry without a committed camera writes no role (`SdfFrameBlock.WriteMeshShadows`
-through `SdfMeshShadowCascades.Holds`), and the surface pass reads no optical term for it. Because its count makes
-the set four long while the secondary entry may be empty, test entries with `Holds`, never `index < Count`.
-
-A redraw spread over `distantShadows.frames` frames (`SdfDistantShadows.Slices`) draws one share of the casters a
-frame into the back map (`SdfWorldPackage.Parts.ShadowDistantBackDepth` and `BackExit`, allocated only while the map is
-sliced, `SdfWorldPackage.WithShadows`), every share from the camera the redraw started from, and the last share copies
-the back map into the map receivers read (`SdfWorldPassRecorder.CopyDepth`, `IGpuRecorder.CopyImage` on two depth
-images). The selection kernel keeps the draws whose index leaves the share's remainder (`SdfMeshOcclusion.Stage`'s
-`slice` and `slices`), so the shares draw every draw once. The invariant is that receivers read the map only through a
-committed camera: `SdfWorldPasses.RecordDistant` stages a camera for this frame's readers only when the drawing
-completes a map (`SdfDistantDraw.Completes`), and `SubmittedDistant` advances the redraw past a share only on
-submission, so an abandoned share is drawn again. A graph still without the back map draws a chosen share whole
-(`RecordDistant`'s `hasBack`). A sliced map holds only while the static scene stands at the revision it committed
-(which `SubmittedDistant` commits beside the camera), so a static change starts a sliced redraw rather than a whole one through the
-signature; a change during a redraw is redrawn by the next decision. `world.rates` counts each share that completes no
-map as `shadow-distant.share`.
+The cascade set's fourth entry (`SdfMeshShadowCascades.DistantEntry`) is authored per device row
+(`WorldQualityPreset.DistantShadows`) and at boot (`render.distantShadows`), carried on `SdfFrame.DistantShadows`. It
+draws the static scene alone (the selection's `staticOnly`, rejecting `SdfMeshRecord.DynamicFlag`, set from
+`SdfMeshDraw.IsStatic`, which a skinned or displaced draw never is), follows no motion, and redraws only for a turn, a cell
+or a static change; `StaticDrawRevision` follows casters, not records (`SdfMeshDraw.SameCaster`), and only
+`StageChangedDraws` and `Unname` advance it. A new path that changes a static draw's record outside those two leaves a
+stale map standing. Because the set's count is four while the secondary entry may be empty, test entries with `Holds`,
+never `index < Count`.
 
 ## Evidence-preserving diagnostics
 
@@ -644,11 +595,9 @@ add the row you found.
 ## Which dispatch owns the code
 
 A view is a chain of separate dispatches: `mesh` (graphics, in two occlusion
-phases with the occlusion kernel between them, `SdfMeshOcclusion`) →
-`shadow-near`, `shadow-far`, `shadow-second`, `shadow-distant` (graphics, the far cascade reading
-current camera receivers, the distant map held between changes) → `pyramid` (the ambient occlusion's
+phases with the occlusion kernel between them, `SdfMeshOcclusion`) → `pyramid` (the ambient occlusion's
 depth pyramid from the mesh target) → `surface` (each pixel's visibility record from the mesh
-target: normal, screen-space AO, the cascades' soft shadows into K;
+target: normal, screen-space AO, the world's shared cascades' soft shadows into K;
 `passes/sdf-surface-stage.hlsli`) → `views-probes` (the irradiance volume's
 gather once a cell, `passes/sdf-views-probes.hlsli`) → `views` (materials and lighting) →
 `resolve` (reduced or temporal views) → `sky` → `composite`. A view of a
@@ -1606,31 +1555,13 @@ matrix alone and wrote only their pose words through `StagePose`). A draw riding
 its frame slot moves with the slot's row and packs no record, so a moving body
 counts in `sdf.transforms`, never in `records.posed`.
 
-- **The far cascade is the frame's largest variable pass; read whether it
-  holds.** With box-only selection it draws nearly every caster in a 280 m box out to 200 m toward the
-  sun, at each mesh's coarsest level whose error fits a texel, in two layers,
-  so a view facing the debug world's lawn, forest and studio draws many times
-  the mesh pass's vertices there (`world.counters gpu pass sdf.world$shadow-far
-  counter vertices`, which counts only the layers a frame draws).
-  `world.counters sdf.rates` counts `shadow-far.rendered` (both layers),
-  `.split` (one layer of a split refresh), `.held` and `.static` (the static
-  layer drawn again). A cascade at a reduced rate holds a static layer, so each
-  refresh draws both layers over it and costs only the moving casters: a still
-  60 Hz view at 30 Hz shows `.rendered` and `.held` on alternate frames and no
-  `.static`, while `.static` on every frame means the fit ends every frame and
-  each refresh redraws the whole cascade. The rate and the light turn a hold tolerates are
-  the device table's `farShadows { hertz, turnDegrees }` (`SdfFrame.FarShadows`,
-  `SdfFarShadows.TurnRadiansFor`; an unauthored world refreshes every frame and
-  tolerates a one-texel turn), measured from the camera the static layer was
-  drawn from; only a cascade whose graph holds no static layer yet splits a
-  timed refresh, drawing the depth on one frame and the exit layer on the next
-  (`SdfFarLayers`). The pass
-  asks `SdfWorldPasses.RecordFar`, which answers both for a layer its graph has
-  not drawn, and `SubmittedFar` commits each drawn layer's camera; the surface
-  pass reads the exit layer through the pass block's fourth camera. Compare
-  `world.gpu-timing`'s `sdf.world$shadow-far` with `world.debug-view indirect`,
-  which keeps the cascades but drops the views shading's cost and the temporal
-  resolve.
+- **Shadow cost is per world, in the upload; read what each entry drew.** A world's shadows draw in its
+  residency's upload (`SdfWorldShadows`), so `world.gpu-timing` shows no shadow pass; `world.residency`'s `shadows`
+  line prints their measured GPU time, the moved changes, the anchors and each entry's state, and `world.rates`
+  counts each entry's whole redraws, shares, rectangle redraws and holds. A whole redraw draws every caster in a
+  light box at each mesh's coarsest level whose error fits a texel; `.static` on most uploads means the light's turn
+  tolerance or the eye's cell ends the hold every frame, and `owedall` on an entry means a change no box bounds
+  (`MovedEverywhere`) redraws it whole. The selection marks (`world.residency`'s selection line) name each drawing.
 - **A window whose extent swings rebuilds on a backoff.** A window a moving
   camera crosses (the endless fall's floor and ceiling paintings) requests a new
   extent every few frames; a resize build the request outran is discarded, and

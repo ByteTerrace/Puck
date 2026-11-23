@@ -9,12 +9,11 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-// A view's frame runs the raster parts only when they draw: the mesh part a frame with a mesh draw, and a shadow cascade
-// a frame with a draw whose shadows are on and whose first stable slot holds a directional light, the second cascade
-// only for a second such slot. A part that skips records nothing, so its pass line binds no pipeline.
+// A view's frame runs the mesh part only when it draws: a frame with a mesh draw. A part that skips records nothing, so its
+// pass line binds no pipeline. The shadows are the residency's (SdfWorldShadows), drawn by its upload.
 public sealed partial class SdfWorldPassesLawTests {
-    // Whether the mesh part and the near and second cascades bound their pipelines in a view's latest completed frame.
-    private static (bool Mesh, bool Near, bool Second) StagesOf(SdfFrame frame) {
+    // Whether the mesh part bound its pipeline in a view's latest completed frame.
+    private static bool MeshRan(SdfFrame frame) {
         var gpu = new FakeGpuDevice(trackObjects: true) { DistinctBuffers = true };
         var pipelines = SdfTestPipelines.Cache();
         using var view = new SdfTestView(
@@ -71,13 +70,8 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         var binds = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.PipelineBinds);
 
-        // A view that skips shadows runs a fragment with no cascade pass, so a cascade with no pass line did not run.
         bool Ran(string part) {
             var pass = sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${part}");
-
-            if ((pass < 0) && (part is SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowSecond)) {
-                return false;
-            }
 
             Assert.True(condition: (pass >= 0), userMessage: $"no {part} pass line");
 
@@ -92,7 +86,7 @@ public sealed partial class SdfWorldPassesLawTests {
             return true;
         }
 
-        return (Ran(part: SdfWorldPackage.Parts.Mesh), Ran(part: SdfWorldPackage.Parts.ShadowNear), Ran(part: SdfWorldPackage.Parts.ShadowSecond));
+        return Ran(part: SdfWorldPackage.Parts.Mesh);
     }
     // The host-visible bytes each part of a view's latest completed frame wrote, by part, over frames whose camera moves
     // along x each frame, so every pass block carries one run that changes every frame.
@@ -169,25 +163,9 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: bytes["sdf.world$surface"], actual: bytes["sdf.world$views"]);
     }
     [Fact]
-    public void ZeroStableSlotsSkipTheCascadesEvenWithShadowCastingLights() {
-        var frame = DrawnFrame();
-
-        frame.Lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 0);
-        Assert.Equal(expected: (true, false, false), actual: StagesOf(frame: frame));
-    }
-    [Fact]
-    public void TheRasterPartsRunExactlyWhenTheyDraw() {
-        var frame = DrawnFrame();
-
-        Assert.Equal(actual: StagesOf(frame: Frame()), expected: (false, false, false));
-        Assert.Equal(actual: StagesOf(frame: frame), expected: (true, true, false));
-        // A view that skips shadows has no cascade pass to run.
-        Assert.Equal(
-            actual: StagesOf(frame: (frame with { Views = [(frame.Views[0] with { Quality = new SdfViewQuality { DisableSoftShadows = true } })] })),
-            expected: (true, false, false)
-        );
-        // Soft shadows on, but no light casts them.
-        Assert.Equal(actual: StagesOf(frame: (frame with { Lights = new SdfLights() })), expected: (true, false, false));
+    public void TheMeshPartRunsExactlyWhenItDraws() {
+        Assert.False(condition: MeshRan(frame: Frame()));
+        Assert.True(condition: MeshRan(frame: DrawnFrame()));
     }
 
     // The fixture's frame with one triangle drawn.

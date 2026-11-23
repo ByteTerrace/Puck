@@ -84,9 +84,8 @@ public sealed class SdfMeshCullLawTests {
         Assert.True(condition: Keeps(cull: SdfMeshCull.Of(camera: in Camera, far: 40f, height: 900u, width: 900u), draw: in draw));
     }
     [Fact]
-    public void ACascadeKeepsADrawItsLightBoxMayHoldAndThatMayShadowWhatTheViewShows() {
-        // A light looking straight down from 100 m up over a 40 m square, holding depths 1 to 150 along its fall, and a
-        // view from 8 m south of the origin looking north at it.
+    public void AShadowEntryKeepsADrawItsLightBoxMayHold() {
+        // A light looking straight down from 100 m up over a 40 m square, holding depths 1 to 150 along its fall.
         var light = new SdfMeshShadowCamera(
             Far: 150f,
             Forward: -Vector3.UnitY,
@@ -96,19 +95,15 @@ public sealed class SdfMeshCullLawTests {
             Right: Vector3.UnitX,
             Up: -Vector3.UnitZ
         );
-        var view = CameraSnapshot.LookAt(fieldOfViewRadians: (MathF.PI * 0.5f), position: new Vector3(x: 0f, y: 0f, z: 8f), target: Vector3.Zero, viewportHeight: 1f, viewportWidth: 1f);
-        var cascade = SdfMeshCull.Of(camera: in view, cascade: in light, far: 40f, height: 900u, texels: 2048, width: 900u);
+        var cascade = SdfMeshCull.OfLightBox(cascade: in light);
 
         Assert.True(condition: Keeps(cull: in cascade, draw: At(position: Vector3.Zero)));
-        // High above what the view shows: its shadow falls into it.
+        // High above the receivers, inside the box.
         Assert.True(condition: Keeps(cull: in cascade, draw: At(position: new Vector3(x: 0f, y: 60f, z: 0f))));
         // Outside the light's box, across it and along it.
         Assert.False(condition: Keeps(cull: in cascade, draw: At(position: new Vector3(x: 22f, y: 0f, z: 0f))));
         Assert.False(condition: Keeps(cull: in cascade, draw: At(position: new Vector3(x: 0f, y: 101f, z: 0f))));
         Assert.False(condition: Keeps(cull: in cascade, draw: At(position: new Vector3(x: 0f, y: -60f, z: 0f))));
-        // Inside the light's box, but its shadow falls behind the view or beside it.
-        Assert.False(condition: Keeps(cull: in cascade, draw: At(position: new Vector3(x: 0f, y: 5f, z: 12f))));
-        Assert.False(condition: Keeps(cull: in cascade, draw: At(position: new Vector3(x: 11f, y: 5f, z: 0f))));
         Assert.True(condition: Keeps(cull: SdfMeshCull.None, draw: At(position: new Vector3(x: 11f, y: 5f, z: 0f))));
     }
 }

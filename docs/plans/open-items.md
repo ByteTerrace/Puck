@@ -242,7 +242,7 @@ packet; these are the ones owed now, most valuable first.
    a slope and on the stairs (`debug.go stairs`) show them planted.
 4. **The hunt 14 lanes.** `world.gpu-timing` (now per-frame milliseconds, stale
    rows marked) at the pool, the valley and the gallery entrance;
-   `world.rates` for `shadow-far.static`, `.rendered` and `.held` over the
+   `world.rates` for each shadow entry's `.static`, `.live` and `.held` over the
    route; a portal that a wall hides stays hidden while the camera moves; and
    the nested views' look at render scales 0.75 and 0.5. The paired before and
    after on the RTX 2060 rides its hosted leg.
@@ -1244,25 +1244,41 @@ static copies by row identity (`sdf.creations.static.copies-rebuilt` +77 over
 manifest parts it met (`world.boot.manifest.parts-walked` +275, `.replayed`
 +660k). What remains is in proportion to the document, not the change:
 
-- [high] Each new placements section (a response change in a disclosed
-  document; about 110 compiles over the chapter) builds a new
-  `WorldPlacementStamp` compilation context, which validates every surface
-  descriptor again (`world.boot.surface.descriptors` +117k over the chapter),
-  and the frame table and the manifest still visit every row to find it
-  unchanged. Carry a context's descriptors and frames across a section whose
-  rows are reused, and derive the frame table and manifest of a section from
-  the section it replaced by its changed rows, so a disclosure costs the rows
-  that moved. Check: those counters per delivery.
-- [high] The frame thread still allocated 1054 MiB in the lift chapter (647
-  iterations, `frames.csv` `frameThreadAllocatedBytes`), and the longest frames
-  were gen2 collections (pauses of 350 to 700 ms) on a machine short of memory.
-  Attribute the frame thread's allocations with a `gc-verbose` trace read by
-  allocation tick, not a speedscope conversion (which weights by time), and
-  remove the largest sources. The largest left on the route is a graph
-  install's (`ShaderPipelineRenderNode.InstallPending`: its resources, the pass
-  recorders and their group sets, about half of the frame thread's allocation
-  in a 40 s window of the route), which a secondary view's resize pays each
-  time; an install that keeps what the resize did not change is the fix.
+- [high] A response change still rebuilds whole products on background
+  threads, and their garbage stops the frame thread: every gen1 collection
+  suspends it, and the stalls at the garden painting and the lift were frames
+  holding several gen1 pauses beside the frame's own work. Per rebuild, read by
+  allocation tick (`puck host allocations --focus`): the composition's program
+  (`SdfProgram`'s word arrays, about 150 MB a build on the large object heap,
+  `SdfCompositionFrameSource.StartBuild`), and the presentation field
+  (`WorldFramePresenter.RebuildStaticField`, about 280 MB: a whole static
+  program and its field evaluator, `SdfFieldEvaluator.BuildRotationBounds` and
+  `SdfBoundsCache` among it). Build each from the one it replaces by the rows
+  that changed, or keep their storage owned and reused. Check: allocation by
+  site over the lift chapter, and no frame with more than one collection.
+- [high] Each delivery that replaces a placements section still builds a new
+  `WorldPlacementStamp` compilation context; frames now resolve on demand and
+  a surface descriptor is carried from any context whose rows and creations it
+  read stand (`world.boot.surface.descriptors-carried`), but the context's row
+  index and caches are rebuilt per section, and `WorldFaceCatalog.DeriveFrame`
+  (from `WorldNestedScreens.Reconcile`, every nested screen each delivery) asks
+  for a fresh one. Derive a section's index and context from the section it
+  replaced by its changed rows. Check: `world.boot.surface.descriptors` per
+  delivery near zero, and the placement sites gone from the frame thread's
+  allocation.
+- [high] The frame thread still allocates 150 to 600 KB a frame on average in
+  steady chapters (median 30 to 140 KB). The largest remaining sites, by
+  allocation tick: the irradiance volume replaced whole on resize
+  (`SdfMeshIrradiance.TryReplaceVolume`, `MemoryAccount.Owner.AllocateArray`),
+  render-graph reconfiguration on a secondary view's resize
+  (`ShaderPipelineRenderNode.InstallPending`: its resources, the pass recorders
+  `SdfWorldPassRecorder` and their group sets `DirectXGpuBindings.PlaceGroupSet`,
+  about half of the frame thread's allocation in a 40 s window of the route),
+  `SdfMeshOcclusion`'s sighting arrays, the document rebind
+  (`WorldDocumentWalker.Cursor.RewriteItems`' object arrays) and
+  `FixedQ4816.FromDegreesExact`'s `BigInteger` work. Each is a per-change
+  rebuild of something derivable from what changed: an install that keeps what
+  the resize did not change is the graph's fix.
 - [medium] A mesh region whose growth is refused holds its limit to what it
   holds (`SdfWorldTables.HoldsRefusedGrowth`, `sdf.rows.check.region.refusal-holds`)
   until the region's size, a release, the pool's room or a trim moves, or a
@@ -1468,19 +1484,45 @@ The frame's GPU side:
   reading `sdfViewsFilterShadows` and `sdfViewsFilterNormals` puts rows 0 and
   3 on the same banks (read GPU Trace's bank conflicts, then try a row stride
   that clears it).
-- [high] The far shadow cascade draws nearly every caster in its box at the
-  coarsest level whose error fits its texel. At an authored rate below every
-  frame it now holds a static layer and redraws only moving casters over it
-  (`SdfFarShadows.HoldsStaticLayer`, counted as `shadow-far.static`), so these
-  limits bite when the static layer redraws. Two geometry limits remain after
-  receiver and light-space culling: a level chain stops at two contour cells
-  of error, so a finely contoured mesh (the card backs, the console bricks)
-  never coarsens toward a far texel (`SdfMeshCollapse.CellShares`), and draws
-  with members (the falls' slots) have no host box and draw level zero in
-  every pass. Measure each against the cascade's vertices before changing the
-  bake identity; then measure receiver-conditioned depth's total saving
-  against the box-only path's cadence
+- [high] A shadow entry's whole redraw draws nearly every caster in its light box
+  at the coarsest level whose error fits its texel (one of the distant map's four
+  shares 4.3M triangles over 1694 draws, the far entry's whole layer 5.9M over
+  5604, in the selection marks), and runs at every light-turn tolerance, cell crossing and
+  static change (`SdfWorldShadows`), so these limits bite there. Two geometry
+  limits remain: a level chain stops at two contour cells of error, so a finely
+  contoured mesh (the card backs, the console bricks) never coarsens toward a far
+  texel (`SdfMeshCollapse.CellShares`), and draws with members (the falls' slots)
+  have no host box, draw level zero in every pass and owe every entry its whole
+  layer when they move (`SdfWorldShadows.MovedEverywhere`). Measure each against
+  the entries' drawn triangles before changing the bake identity
   ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#pucks-open-cases)).
+- [high] A world's shadows draw every entry whole in one upload when its residency
+  first shows a shadowed view: the layers are new, so nothing spreads the first
+  redraw over frames (`SdfWorldShadows.Entry.Decide`), and the shadow pass's
+  most expensive upload reads 14 to 46 ms (`world.residency`'s `shadows ... most`)
+  as the route enters the session world. Spread the first draw as a later one is,
+  keeping the views' filler until the last share lands.
+- [medium] The near entry redraws whole on about one upload in eight on the
+  debug route (`world.rates shadow-near.static`): its one-texel default turn
+  tolerance is 0.06 degrees at a 16 m reach, a quarter of a second of the
+  standard's day. The far and distant entries take authored tolerances; give the
+  near entry the same authored lever, or judge the turn by the shadow length
+  the entry's casters actually have, before changing the default.
+- [medium] Every staging change reaches every entry that follows motion
+  (`SdfWorldShadows.Moved`): about 19 thousand changes an upload in the session
+  world with 51 views, each judged per entry on the frame thread. Most are
+  grass blades that move less than a texel; a per-row skip for draws whose box
+  cannot move a texel at the coarsest entry would cut the work before the
+  per-entry loop.
+- [low] A shadow entry's glass extinction selection marks every draw it keeps,
+  opaque ones included (`sdf-mesh-occlusion.comp.hlsl`, `marking && emit`), so
+  the selection marks' `shadow-<entry> glass` rows read like a second opaque
+  draw of the layer although only phase 4's glass draws execute. Mark only the
+  glass emission there.
+- [low] A held anchor keeps its layers (about 100 MB at 2048 texels with glass)
+  for `SdfWorldShadows.AnchorKeptUploads` after its last reader leaves. Count
+  the anchors' bytes in the residency's memory account so the selector sees
+  them.
 - [low] A frustum that meets a glass box a wall hides still runs the glass
   trio (`SdfWorldPasses.GlassSeen`); the glass pass's occlusion lies on the
   GPU, past the host test.
@@ -2516,8 +2558,8 @@ then the reconstruction's two changes below.
 - [medium] The off-mode sill burst once showed two paired flashes about 11
   presentations apart, and has not reproduced since the shaft lintels were
   moved off the slab top. No run has qualified a cadence refresh: the far
-  cascade's rate is now authored (`farShadows`) and below every frame it holds
-  a static layer, so a re-run reads `shadow-far.held` and `shadow-far.static`
+  entry's rate is authored (`farShadows`) and the world's shadows are cached
+  (`SdfWorldShadows`), so a re-run reads the shadow entries' counts
   in `world.rates` beside the flashes. Region 0.36 0.78 0.32 0.1;
   `body.pose 16.15 13.57 37.28 191 0 0`;
   `view.override camera look 15.508 16.895 33.842 16.155 14.57 37.279 55`;
@@ -4817,15 +4859,6 @@ their lane order; this packet keeps the single duplicates and leads.
     hygiene. Then consider raising CA2027 to an error in `.editorconfig`: the
     SDK ships it but reports it as a build warning only under a stricter
     `AnalysisMode` than Puck's default.
-  - **Rendering: the far cascade's split refresh.** [medium] A rated far
-    cascade below every-frame rates always holds a static layer
-    (`SdfFarShadows.HoldsStaticLayer`), and `SdfWorldPasses.RecordFar` answers
-    both layers whenever the recorder's `SdfFarStaticLayer.Held` is set, so
-    the split path (`SdfFarLayers.Depth` and `Exit`, `FarExitOwed`, the exit
-    camera the surface pass reads as the cascades' fourth, and the exit branch
-    of `FarSignatureOf`) runs only while a rebuilt graph without the static
-    depths is installed. Make that window draw both layers too and delete the
-    split, with the exit camera row in the pass block and its HLSL reader.
 
 ### Author leaks to the standard
 

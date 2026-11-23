@@ -107,9 +107,27 @@ public sealed class WorldSeatInput {
     /// <summary>Whether the authority has acknowledged this exact source registry.</summary>
     public bool Admitted => m_admitted;
 
-    /// <summary>Sends the immutable compiled source registry through the existing grant-checked command door.</summary>
-    public void Admit(WorldAuthorityEndpoint endpoint, Principal owner, int body, bool freshAttachment) =>
+    /// <summary>Sends the immutable compiled source registry through the existing grant-checked command door. A repeat of
+    /// the admission last sent, to the same authority for the same owner and body, waits until
+    /// <see cref="AdmissionRetryTicks"/> of that authority's engine ticks have passed: the authority answers an identical
+    /// admission by keeping the profile it holds, so a seat whose publication has not arrived resends it at that pace
+    /// rather than encoding its whole registry every step.</summary>
+    public void Admit(WorldAuthorityEndpoint endpoint, Principal owner, int body, bool freshAttachment) {
+        var tick = endpoint.EngineTick;
+
+        if (!freshAttachment && ReferenceEquals(objA: m_admittedAt, objB: endpoint) && (m_admittedOwner == owner) && (m_admittedBody == body) &&
+            (tick >= m_admittedTick) && ((tick - m_admittedTick) < AdmissionRetryTicks)) {
+            return;
+        }
         endpoint.Submissions.SubmitCommand(command: new WorldCommand.AdmitInput(EntityIndex: body, FreshAttachment: freshAttachment, Principal: owner, Sources: m_contracts));
+        (m_admittedAt, m_admittedOwner, m_admittedBody, m_admittedTick) = (endpoint, owner, body, tick);
+    }
+    /// <summary>The engine ticks a seat waits before it resends an identical admission whose publication has not arrived.</summary>
+    public const ulong AdmissionRetryTicks = 30;
+    private WorldAuthorityEndpoint? m_admittedAt;
+    private Principal m_admittedOwner;
+    private int m_admittedBody = int.MinValue;
+    private ulong m_admittedTick;
     /// <summary>Installs a matching publication and rebuilds the controller's kept physical/latch image.</summary>
     public bool Reconcile(in WorldInputPublication publication, SeatController seat, InputRouter? router = null, int slot = 0) {
         var sources = publication.Sources.Span;

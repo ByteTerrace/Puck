@@ -50,8 +50,8 @@ render {
   // and the hit cache and the published and feedback tables are sized by it; its distant shadow map draws 1024 texels a
   // side (a texel about 2.3 m across the 1200 m reach) and holds through a fifth of a degree of the sun's turn, so the
   // standard's day redraws it a little over once a second, each step about one of its texels, and spreads each redraw
-  // over four frames, so no frame pays a whole one; its far cascade refreshes 15 times a second, the medium tier's rate,
-  // so three of every four 60 Hz frames stand where the high tier's stand every other frame. It relights and traces half
+  // over four frames, so no frame pays a whole one; its far entry draws moved casters 15 times a second, the medium tier's rate,
+  // and spreads a whole redraw over four frames. It relights and traces half
   // the probes a frame the high tier does, over the medium volume's two thirds of the probes, so a frame it fills
   // takes less of the one background share for lighting and the lighting's age grows before the frame does. Its bloom scatters from the
   // low pyramid and its sky field shades at half the grid, each a soft term whose full grid the 2060 cannot afford. It
@@ -135,13 +135,12 @@ render {
   // draw changes). 1200 m reaches across a caldera of the debug valley's size from its rim; 2048 texels make a texel
   // about 1.3 m there, and a tenth of a degree moves a shadow cast from a kilometre about a texel, so under the standard's
   // quarter-degree-a-second day the map is drawn a few times a second and each step is a texel. Low draws no shadows.
-  // The far cascade (`farShadows`) is drawn again `hertz` times a second, which a moving caster's shadow lags it by, and
-  // at once when the sun turns `turnDegrees`. Between those turns its static casters stand in a layer of their own, which
-  // each refresh copies and draws the moving casters over, so the tolerance is how long that layer lives under a turning
-  // sun: a tenth of a degree is 0.4 s of the standard's quarter-degree-a-second day, six refreshes at 15 Hz, and moves the
-  // shadow of a 20 m caster about 3.5 cm, under a texel of a 2048-texel cascade reaching 120 m. High refreshes 30 times a
-  // second, so a 60 Hz view draws both of the cascade's layers on every other frame, and holds its layer through a twentieth
-  // of a degree, six of its refreshes; medium refreshes 15 times, so three of every four 60 Hz frames stand.
+  // The far shadow entry (`farShadows`) draws the casters that moved `hertz` times a second, which a moving caster's
+  // shadow lags it by, and spreads a whole redraw over the frames of one such period; it is drawn whole again when the
+  // sun turns `turnDegrees`, so the tolerance is how long the cached layer lives under a turning sun: a tenth of a degree
+  // is 0.4 s of the standard's quarter-degree-a-second day and moves the shadow of a 20 m caster about 3.5 cm, under a
+  // texel of a 2048-texel entry reaching 120 m. High draws moved casters 30 times a second and holds through a twentieth
+  // of a degree; medium 15 times a second through a tenth. The distant map's `frames` spread its redraws the same way.
   medium {
     distantShadows {
       reach: 1200
@@ -178,6 +177,7 @@ render {
       reach: 1200
       texels: 2048
       turnDegrees: 0.1
+      frames: 4
     }
     farShadows {
       hertz: 30

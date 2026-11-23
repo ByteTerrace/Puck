@@ -37,7 +37,27 @@ public sealed class WorldLiveValues(Func<ArenaTime> clock, Lock? gate = null) {
     // composed over the last projection, or delivered again with most of its rows unchanged, walks only what changed and
     // hands back the same copies. Sound because a document value never changes once built (records with init members,
     // immutable holders, lists no composition mutates in place).
-    internal Dictionary<object, object> Bound { get; set; } = new(comparer: ReferenceEqualityComparer.Instance);
+    internal Dictionary<object, object> Bound { get; private set; } = new(comparer: ReferenceEqualityComparer.Instance);
+    // The memo the next bind fills while it reads Bound, empty: the two trade places at each bind, so a delivery
+    // binds into storage the bind before last grew rather than a new table.
+    private Dictionary<object, object> Spare { get; set; } = new(comparer: ReferenceEqualityComparer.Instance);
+
+    // The spare memo, emptied of anything a bind that stopped part way left in it.
+    internal Dictionary<object, object> EmptySpare() {
+        Spare.Clear();
+        return Spare;
+    }
+
+    // Makes the memo a bind filled the one later binds read, and empties the one it replaces for the bind after.
+    internal void Adopt(Dictionary<object, object> kept) {
+        var replaced = Bound;
+
+        Bound = kept;
+        if (!ReferenceEquals(objA: replaced, objB: kept)) {
+            replaced.Clear();
+            Spare = replaced;
+        }
+    }
 }
 /// <summary>Resolves state-backed values embedded anywhere in a world document against its Text state cells.</summary>
 /// <remarks>
@@ -123,10 +143,10 @@ public static class WorldStateDocumentValues {
                 throw new InvalidOperationException(message: binder.Reason);
             }
 
-            live.Bound = binder.Kept;
+            live.Adopt(kept: binder.Kept);
         } else {
             // A definition that names no reference has nothing else worth remembering.
-            live.Bound = new(comparer: ReferenceEqualityComparer.Instance);
+            live.Bound.Clear();
         }
 
         var owned = (ReferenceEquals(objA: bound, objB: definition)
@@ -216,7 +236,7 @@ public static class WorldStateDocumentValues {
     // what it became then and recording, for the next, what each value this one meets becomes. The state section is
     // kept whole: its lattice origins stay the resolved seeds the catalog was compiled beside.
     private sealed class Binder(WorldLiveValues live) : IWorldDocumentRewriter {
-        public Dictionary<object, object> Kept { get; } = new(comparer: ReferenceEqualityComparer.Instance);
+        public Dictionary<object, object> Kept { get; } = live.EmptySpare();
         public string Reason { get; private set; } = string.Empty;
         public bool Stopped { get; private set; }
 

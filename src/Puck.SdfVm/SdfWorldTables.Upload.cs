@@ -4,7 +4,8 @@ namespace Puck.SdfVm;
 
 // The upload: one fenced submission a frame, recorded by the residency's staging before any pass records, ahead of every view's submission. It takes the next ring slot, waits the previous upload's fence, which signals once every submission queued
 // before it has finished, the views that read this slot two uploads earlier among them, flushes the slot's share of every
-// region, and records the fillers' first transitions and the regions' copies, each handing what it wrote to every shader stage that reads it in a later submission. The graph's
+// region, and records the fillers' first transitions, the regions' copies and the world's shadow layers (SdfWorldShadows),
+// each handing what it wrote to every shader stage that reads it in a later submission. The graph's
 // environment producer runs afterward, once its panorama images have been acquired.
 public sealed partial class SdfWorldTables {
     // Device objects retained through pending carries and then the device queue's completed prefix.
@@ -41,6 +42,8 @@ public sealed partial class SdfWorldTables {
             m_frameFences[((int)((m_uploads - 1UL) % FrameRingSize))].Wait();
             m_completedUploads = m_uploads;
         }
+        // Every earlier upload is complete, the slot's last among them: what its shadow selections read back is ready.
+        m_shadows?.Completed(slot: slot);
         // The flush below rewrites the slot's buffers, which a background job that leased the slot may still read.
         m_gpuWork.EndLeases(ringSlot: slot);
 
@@ -77,12 +80,15 @@ public sealed partial class SdfWorldTables {
         }
         m_work.LeavePass();
         RecordSkyEnvironmentDecision();
+        // After the region copies, which hand the mesh region and transforms to the vertex stage the shadows draw with.
+        RecordShadows(commandBuffer: commandBuffer, slot: slot);
         recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
         recorder.EndCommandBuffer(commandBufferHandle: commandBuffer);
         m_gpu.QueueSubmitter.Submit(
             commandBufferHandles: [commandBuffer],
             fence: m_frameFences[slot]
         );
+        m_shadows?.Submitted(slot: slot);
         // Publish submission only after the fence has been armed by the queue. Before this point an initially
         // signaled fence must not satisfy geometry staged for the next upload.
         m_uploads = checked((m_uploads + 1UL));

@@ -27,11 +27,11 @@ public readonly record struct SdfFrameSettings {
     /// <see cref="SdfMeshShadowCascades.Fit"/> reads; the default is <see cref="SdfShadowCoverage.Default"/>.</summary>
     public SdfShadowCoverage ShadowCoverage { get; init; } = SdfShadowCoverage.Default;
     /// <summary>The key light's distant shadow map (<c>render.distantShadows</c> or the device table's row), which
-    /// <see cref="SdfMeshShadowCascades.Fit"/> adds to every view's cascade set while it is on; the default is off.</summary>
+    /// <see cref="SdfMeshShadowCascades.Fit"/> adds to the world's cascade set while it is on; the default is off.</summary>
     public SdfDistantShadows DistantShadows { get; init; }
-    /// <summary>How the key light's far shadow cascade keeps up with what moves (<c>render.farShadows</c> or the device
-    /// table's row) while <see cref="SdfUpdateRates.ShadowFar"/> is on: its refreshes a second and the light turn a held
-    /// cascade tolerates; the default refreshes it every frame (<see cref="SdfFarShadows.EveryFrame"/>).</summary>
+    /// <summary>How the key light's far shadow entry keeps up with what moves (<c>render.farShadows</c> or the device
+    /// table's row) while <see cref="SdfUpdateRates.ShadowFar"/> is on: its refreshes a second and the light turn its held
+    /// static layer tolerates; the default refreshes it every frame (<see cref="SdfFarShadows.EveryFrame"/>).</summary>
     public SdfFarShadows FarShadows { get; init; } = SdfFarShadows.EveryFrame;
     /// <summary>The device table’s maximum shading footprint and classification tile. Absent shades every pixel.</summary>
     public SdfViewsRate? ViewsRate { get; init; }
