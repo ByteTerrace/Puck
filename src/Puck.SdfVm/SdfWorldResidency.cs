@@ -588,9 +588,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private IGpuDeviceContext? m_packDevice;
     private FrameContext m_packContext;
 
-    /// <summary>Gets whether the frame's preparation has begun and its packing has not run
-    /// (<see cref="BeginPack"/>).</summary>
-    internal bool PackBegun => (m_pack == PackStage.Begun);
     /// <summary>Gets whether the frame's packing may run beside other residencies' as a partition of a fork: it has
     /// begun, and the frame neither locks presentation to a tick nor converges its lighting, both of which settle
     /// their work inside the preparation and wait for it there.</summary>

@@ -1754,13 +1754,27 @@ counts in `sdf.transforms`, never in `records.posed`.
   `host.memory` and `host.memory families 0` beside any such reading before reading the kernel
   ([the frame budget](../../../docs/plans/frame-budget.md#where-the-memory-goes)).
 - **A frame captures only what it reads.** `SdfWorldPasses.BeginFrame` serves every held residency's upkeep
-  (`SdfWorldResidency.Upkeep`), captures the host residency, which places the cameras, and prepares residencies that
-  owe their minimum; the runtime then seals its roots and footprints (`RenderGraphFrame.Seal`) and prepares only the
-  instances `RenderGraphScheduler.Readers` marks (`IRenderGraphPackageFactory.PrepareRead`), in rounds until none is
-  new, and asks `IsUnchanged` of those alone. A scheduled render is always among them, since `Readers` follows every
-  edge `Schedule` passes demand along; a new demand edge in the scheduler goes into `Readers` in the same change, or
-  its producer renders from a residency nobody captured this frame. A graph installed mid-frame still stages late
-  (`SdfWorldResidency.Staged`, counted). `world.counters sdf.captures` reads residencies held against captures run.
+  (`SdfWorldResidency.Upkeep`), captures the host residency, which places the cameras, and serves the minimum of the
+  residencies that owe one (`SdfWorldResidency.OwesPreparation`): one residency a frame, the one longest past the
+  slowest view tier's period without a capture, on a frame that rates views; every owed residency on a frame that
+  rates nothing (the views lever off, a locked tick, a converging capture, an unpaced host). A day that turns keeps
+  lighting settling for good, so a minimum served every frame captures every held world every frame. The runtime
+  then seals its roots and footprints (`RenderGraphFrame.Seal`) and captures only the instances
+  `RenderGraphScheduler.Readers` marks (`IRenderGraphPackageFactory.PrepareRead`), in rounds until none is new, and
+  asks `IsUnchanged` of those alone. A scheduled render is always among them, since `Readers` follows every edge
+  `Schedule` passes demand along; a new demand edge in the scheduler goes into `Readers` in the same change, or its
+  producer renders from a residency nobody captured this frame. `Readers` does not know a refresh holds an instance,
+  so a view rated to a reduced tier still captures its residency every frame
+  ([the plan](../../../docs/plans/frame-production.md#the-steps), step 1). A graph installed mid-frame still stages
+  late (`SdfWorldResidency.Staged`, counted). `world.counters sdf.captures` reads residencies held against captures
+  run, the minimums served and held, and the residencies packed and uploaded beside others.
+- **Residencies pack and upload on the pool.** A captured residency's frame is packed in
+  `SdfWorldPasses.ReadsPrepared` and its upload recorded in `SdfWorldPasses.RendersScheduled`, each as one
+  `JobClass.Frame` fork with a residency a partition; the steps before and after each fork stay on the frame thread
+  ([runtime contracts](references/runtime-contracts.md#1-image-lifetime-is-leased-per-image-and-per-reader)). A
+  caller that needs a residency's packed frame before the fork calls `SdfWorldResidency.Prepare`, which packs it
+  there and then. `host.frames`' `pack` part is the frame thread's wall time across the pack fork, its own partition
+  and the join included; the workers' share is not in any part.
 - **A dress walks only what moved.** `SdfMeshDresser.Dress` skips its group walk while the bake's product revision and
   copy layout revision stand; `SdfMeshPathBake.Replace` (the group list's one writer), Restart's clear, the
   `Group.Mesh` setter, `ShowOwn` and `FinishReplacements` move the product revision, so a new change to what

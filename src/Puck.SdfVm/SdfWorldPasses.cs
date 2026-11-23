@@ -504,6 +504,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             }
         }
         SdfCaptureWork.ProcessWork.Add(kind: SdfCaptureWork.Held, amount: m_residencies.Count);
+        // A frame that ended before its readers were all prepared leaves captures of its own behind.
+        m_packsPending.Clear();
         if (m_host is { IsReleased: false } host) {
             CaptureForPack(residency: host, context: in context);
         }

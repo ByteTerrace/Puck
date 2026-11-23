@@ -231,7 +231,7 @@ class with ready work, and within a class the job its comparer ranks first
 
 | Class | Work | Who forks it |
 |---|---|---|
-| `Frame` | The frame's own parallel work: view recording (section 3), the pose pack and the other `BeginFrame` partitions, a lockstep frame's converging irradiance drain (the scene build, refill and drain the frame waits for through `SdfMeshIrradiance.AwaitScene`, `AwaitRefill` and `AwaitYield`). | The frame thread, inside produce. |
+| `Frame` | The frame's own parallel work: view recording (section 3), the residencies' packing and upload recording ([the frame's CPU production](frame-production.md)), the pose pack and the other `BeginFrame` partitions, a lockstep frame's converging irradiance drain (the scene build, refill and drain the frame waits for through `SdfMeshIrradiance.AwaitScene`, `AwaitRefill` and `AwaitYield`). | The frame thread, inside produce. |
 | `Tick` | The parallel tick's partitions (section 2). | The frame thread, inside the step. |
 | `Bake` | The mesh bake's group stages and lattice answers, kernel-tree compiles on reload (`SdfKernelTreeLoad`), shader pipeline builds (`BackgroundBuild`), the composition build (`SdfCompositionFrameSource`), the presentation query field's build (`WorldFramePresenter.RebuildStaticField`). | Residencies and render nodes. |
 | `Lighting` | The irradiance volume's CPU work (its worker, scene build, refill and probe placement), response preparation (`WorldFramePresenter.PrepareResponses`), the reflow preview (`WorldServer.Reflow`). | The irradiance volume, the presenter and the server. |
@@ -789,6 +789,10 @@ a lane's calls under its pass (`GpuWorkLedger.EnterLane`). The walk itself still
 runs on whichever thread its partition gets, the frame thread when a wave holds
 one recording; `pipeline.inspect <instance>` prints its `last-walk-us` beside the
 lanes'.
+
+Before any recording, the residencies the frame captured pack as one such fork
+and the uploads of those it renders record as another, one residency a
+partition ([the frame's CPU production](frame-production.md#what-is-built)).
 
 ### What 36 % means
 

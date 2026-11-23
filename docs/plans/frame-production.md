@@ -12,10 +12,9 @@ world a painting or a screen shows, the worlds in its sky. Each one is a
 residency (`SdfWorldResidency`): a scene that is captured from its world's
 state, packed into GPU tables, uploaded and recorded.
 
-The frame thread used to do all of that for every residency, one after
-another, on every frame, whether or not anything showed the world. The cost of
-a frame therefore grew with the number of worlds a client holds, not with what
-the player sees or what moved. At the scale Puck is for, where every zone,
+A frame thread that does all of that for every residency, one after another,
+on every frame, pays for the number of worlds a client holds, not for what the
+player sees or what moved. At the scale Puck is for, where every zone,
 character and server is a world, that shape cannot hold.
 
 The rule this plan builds toward: **a world is produced by its own job, and
@@ -36,8 +35,9 @@ In order, on the frame thread unless a step says otherwise:
 3. **Pack.** Once the readers are known, every captured residency packs
    (`SdfWorldPasses.ReadsPrepared`): one residency a partition of one fork of
    the job pool.
-4. **Schedule**, then **prepare**: each scheduled residency submits its upload
-   (`SdfWorldTables.SubmitUpload`).
+4. **Schedule**, then **prepare**: the residencies the schedule renders record
+   their uploads (`SdfWorldPasses.RendersScheduled`), again one residency a
+   partition, and submit them in schedule order.
 5. **Record**, in dependency waves (`RenderGraphRuntime.RenderWaves`).
 
 ## What is built
@@ -45,14 +45,15 @@ In order, on the frame thread unless a step says otherwise:
 **A world nothing shows costs a frame at most one capture.** A residency owes
 a minimum while its meshes arrive or its lighting settles
 (`SdfWorldResidency.OwesPreparation`), and with a day that turns, lighting
-never stops settling. That minimum used to be a whole capture, pack and upload
-for every such residency on every frame. Now a frame that rates views serves
-one residency's minimum: the one that has gone longest past the slowest view
-tier's period without a capture (`SdfUpdateRateTiers.Tiers`). A frame that
-rates nothing (the views lever off, a locked tick, a converging capture, a
-host not paced to a display) serves every owed residency as before, so
-lockstep bakes and settled captures are unchanged. A residency a reader names
-is still captured for that reader on that frame.
+never stops settling. A minimum served to every such residency on every frame
+is a whole capture, pack and upload of every held world. So a frame that rates
+views serves one residency's minimum: the one that has gone longest past the
+slowest view tier's period without a capture (`SdfUpdateRateTiers.Tiers`). A
+frame that rates nothing (the views lever off, a locked tick, a converging
+capture, a host not paced to a display) serves every owed residency, so a
+lockstep bake and a settled capture land every world as fast as they can. A
+residency a reader names is captured for that reader on that frame whatever
+the minimum did.
 
 **Residencies pack side by side.** A residency's preparation is three steps
 (`SdfWorldResidency.BeginPack`, `RunPack`, `EndPack`). The first asks the
@@ -61,21 +62,28 @@ last submits. The middle one packs the frame, stages its meshes, shading,
 lighting and exposure, and keeps to the residency's own state, so the frame
 thread forks it across the pool, one residency a partition, and joins.
 
-The invariant: `SdfWorldResidency.RunPack` reads and writes only its
-residency, that residency's tables, bake, lighting and exposures, the frame it
-packs and the device. What enforces it: everything of the preparation that
-reads the host or another residency sits in `BeginPack`, and the upload sits
-in `EndPack`, which refuses to run inside a partition. Where it stops: nothing
-checks a step added to the middle that reads outside the residency; that is
-review's to catch, as a recording domain is
+**Their uploads record side by side.** The upload has the same three steps
+(`SdfWorldResidency.BeginStage`, `RecordStage`, `EndStage`). The first waits
+the previous upload's fence and takes the ring slot; the last submits, in
+schedule order, and pumps the residency's background work. The middle one
+records the regions' copies and the world's shadow layers into the residency's
+own command list.
+
+The invariant: a middle step (`SdfWorldResidency.RunPack`, `RecordStage`)
+reads and writes only its residency, that residency's tables, bake, lighting
+and exposures, the frame it packs and the device. What enforces it: everything
+that reads the host or another residency sits in the first step, and the
+submission sits in the last, which refuses to run inside a partition. Where it
+stops: nothing checks a step added to the middle that reads outside the
+residency; that is review's to catch, as a recording domain is
 ([runtime contracts](../../.claude/skills/rendering/references/runtime-contracts.md#1-image-lifetime-is-leased-per-image-and-per-reader)).
-A frame that locks presentation to a tick or converges its lighting packs in
-turn on the frame thread, since both wait for their own work inside the
-preparation.
+A frame that locks presentation to a tick, converges its lighting or is
+withheld keeps all three steps on the frame thread, since each waits for its
+own work inside them.
 
 `world.counters sdf.captures` reads all of it: `held` against `run`, the
-minimums served and held, and the residencies packed beside others and on a
-worker.
+minimums served and held, and the residencies packed and uploaded beside
+others and on a worker.
 
 ## Options weighed
 
@@ -129,20 +137,16 @@ across a benchmark chapter and divided by the frames.
    frame) are read-only while the captures run. The host captures first, as
    now. Check: a new `sdf.captures` count of captures run on a worker, and
    the capture part of `host.frames` falling to the host's own.
-3. **Uploads record side by side.** `SdfWorldTables.SubmitUpload` splits as
-   the preparation did: the fence wait and the submission on the frame thread,
-   the recording between them on the pool. Check: `render.record`'s worker
-   counts take in the uploads.
-4. **One fork records a frame.** A node publishes the output it will commit as
+3. **One fork records a frame.** A node publishes the output it will commit as
    it is prepared, so every consumer binds before any recording runs, and a
    failed recording abandons its consumers with it. Check: `render.record`'s
    `waves` a frame falls to one.
-5. **The pump follows what completed.** Each residency's background work polls
+4. **The pump follows what completed.** Each residency's background work polls
    every frame (`SdfWorldResidency.Upkeep`); a completion wakes the frame
    thread already (`IGpuSubmissionFence.SignalOnCompletion`), so a residency
    with nothing completed and nothing to refill is not visited. Check: a
    count of residencies pumped a frame against those held.
-6. **Then the pipeline**, if the host world's own chain still bounds a frame.
+5. **Then the pipeline**, if the host world's own chain still bounds a frame.
 
 ## Systems considered
 

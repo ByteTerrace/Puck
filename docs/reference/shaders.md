@@ -869,7 +869,10 @@ footprints after the captures that start composes (`RenderGraphFrame.Seal`),
 and prepares what the frame reads (`IRenderGraphPackageFactory.PrepareRead`):
 each instance a schedule of the frame could render, by the scheduler's demand
 rules before any refresh or budget (`RenderGraphScheduler.Readers`), visited in
-rounds until a round finds no new reader. It then asks the package of every
+rounds until a round finds no new reader. Once the readers are all prepared it
+tells every package so (`IRenderGraphPackageFactory.ReadsPrepared`), which is
+where a package finishes work it left until it knew every reader, side by side
+on the job pool. It then asks the package of every
 instance the frame reads
 whose inputs stand unchanged and whose graph runs only package passes whether anything it
 renders from changed since its latest render
@@ -945,10 +948,16 @@ than the map holds and the atmosphere reads the map (a fog in-scattering the
 sky, or a haze); the composite's atmosphere reads the map instead of evaluating
 the sky. At
 the start of each frame the factory serves every residency's upkeep, starts its
-frame, and prepares the host residency, whose capture places the cameras, and
-each residency that owes its minimum, meshes arriving or lighting settling
-(`IRenderGraphPackageFactory.BeginFrame`); any other residency is prepared only
-for an instance the frame reads (`IRenderGraphPackageFactory.PrepareRead`). It answers `IsUnchanged` from
+frame, and captures the host residency, whose capture places the cameras
+(`IRenderGraphPackageFactory.BeginFrame`). A residency that owes its minimum,
+meshes arriving or lighting settling, is captured there too: one such residency
+a frame, the one longest without a capture, on a frame that rates views, and
+every one of them on a frame that rates nothing, such as a locked tick. Any
+other residency is captured only for an instance the frame reads
+(`IRenderGraphPackageFactory.PrepareRead`). The captured residencies then pack
+side by side on the job pool (`IRenderGraphPackageFactory.ReadsPrepared`), and
+the uploads of the ones the schedule renders record the same way
+(`IRenderGraphPackageFactory.RendersScheduled`). It answers `IsUnchanged` from
 the residency's record of what each view last rendered, and sizes a view's
 counted scratch through `CounterOf` from the view's extent and the residency's
 instance capacity. A pass installs only once its residency has built its
