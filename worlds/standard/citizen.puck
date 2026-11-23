@@ -122,9 +122,9 @@ template citizenLooks(coats, hats, skin = "#E2B48C", trousers = "#4A4038") {
 // every phase `g` × `groupSeconds` of day later than group 0, so a crowd does not leave all at once.
 //
 // The clock is read once per group, never once per citizen: a rule per phase writes each group's current anchor
-// (1 home, 2 work, 3 market) into `citizenGroupAnchor`, and a rule per anchor sends each citizen whose group's anchor
-// just became that anchor to its own point, counting the visit in `citizenVisits`. A citizen's rules compare two
-// cells; the day's arithmetic runs for twelve groups.
+// (1 home, 2 work, 3 market) into `citizenGroupAnchor`, and one rule sends each citizen whose group's anchor differs
+// from the one it last went to (`citizenAt`) to its own point of that anchor, counting the visit in `citizenVisits`. A
+// citizen's rule compares two cells; the day's arithmetic runs for twelve groups.
 template citizenSchedule(people, phases, clock, groups = 12, groupDayFraction = 0.00347) {
   state {
     world [
@@ -142,6 +142,12 @@ template citizenSchedule(people, phases, clock, groups = 12, groupDayFraction = 
       }
       {
         name: "citizenVisits"
+        kind: "Int"
+        capacity: length(people)
+        cells: map(people, p => { key: $"{p.key}", value: 0 })
+      }
+      {
+        name: "citizenAt"
         kind: "Int"
         capacity: length(people)
         cells: map(people, p => { key: $"{p.key}", value: 0 })
@@ -182,25 +188,19 @@ template citizenSchedule(people, phases, clock, groups = 12, groupDayFraction = 
     }
   }
 
-  rule "citizen-to-home" {
-    when citizenGroupAnchor[citizenGroup[$each]] == 1
-    mode: Edge
+  rule "citizen-go" {
+    when citizenGroupAnchor[citizenGroup[$each]] != 0 and citizenAt[$each] != citizenGroupAnchor[citizenGroup[$each]]
+    mode: Level
     forEach: citizenGroup
-    designate(key: $each, kind: Point, register: "errand", pointX: citizenHomeX[$each], pointY: 0, pointZ: citizenHomeZ[$each])
-    citizenVisits[$each] = citizenVisits[$each] + 1
-  }
-  rule "citizen-to-work" {
-    when citizenGroupAnchor[citizenGroup[$each]] == 2
-    mode: Edge
-    forEach: citizenGroup
-    designate(key: $each, kind: Point, register: "errand", pointX: citizenWorkX[$each], pointY: 0, pointZ: citizenWorkZ[$each])
-    citizenVisits[$each] = citizenVisits[$each] + 1
-  }
-  rule "citizen-to-market" {
-    when citizenGroupAnchor[citizenGroup[$each]] == 3
-    mode: Edge
-    forEach: citizenGroup
-    designate(key: $each, kind: Point, register: "errand", pointX: citizenMarketX[$each], pointY: 0, pointZ: citizenMarketZ[$each])
+    designate(
+      key: $each,
+      kind: Point,
+      register: "errand",
+      pointX: citizenGroupAnchor[citizenGroup[$each]] == 1 ? citizenHomeX[$each] : (citizenGroupAnchor[citizenGroup[$each]] == 2 ? citizenWorkX[$each] : citizenMarketX[$each]),
+      pointY: 0,
+      pointZ: citizenGroupAnchor[citizenGroup[$each]] == 1 ? citizenHomeZ[$each] : (citizenGroupAnchor[citizenGroup[$each]] == 2 ? citizenWorkZ[$each] : citizenMarketZ[$each])
+    )
+    citizenAt[$each] = citizenGroupAnchor[citizenGroup[$each]]
     citizenVisits[$each] = citizenVisits[$each] + 1
   }
 }

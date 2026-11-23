@@ -273,13 +273,22 @@ within that shape-derived bound and red beyond it; outward error receives
 only the arithmetic and authored-margin budget. The remaining fix is an
 exact rim contact.
 
+Every contact solve asks its surfaces at the contact skin plus a resting band
+(`FixedContactPushMath.RestingBand`): a push leaves a body exactly at the skin,
+so walkable ground within the band is a resting contact
+(`FixedContactPushMath.Classify`) that grounds the body and clamps its approach
+without moving it, and a body standing on or walking level ground stays
+grounded through its ordinary sweep. A non-walkable surface in the band is not
+a contact, so a body beside a wall is not pressed into it.
+
 A walking body's `motion.groundSnap` is a downward reach, scaled with the
 body (0.3 m by default; zero disables it). The controller projects its walking
-velocity onto the current support, then uses `FixedStepUp.TrySnap` to find
-walkable support below the completed step: one support-distance query
-(`IContactField.TrySupportDistance`), then one landing sweep that descends
-`FixedStepUp.LandingDepth` past it and must ground. The same landing serves
-step-up and snap. The query reads each collider's own push query with its skin
+velocity onto the support it stands on (`FixedStepUp.TryFollowSupport`: one
+sweep that does not move the body, and a snap only when nothing holds it there),
+then uses `FixedStepUp.TrySnap` where the completed step did not ground: one
+support-distance query (`IContactField.TrySupportDistance`), then one landing
+sweep down to it, which stands the body within the resting band and must ground.
+The same landing serves step-up and snap. The query reads each collider's own push query with its skin
 padded by the remaining reach (`FixedSupportDistance`): the separation of two
 convex solids is convex along a straight descent, so a Newton step from below
 lands on a flat face in one step and closes on a rounded edge in a few, never

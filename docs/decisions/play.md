@@ -15,6 +15,20 @@ must run well both locally and from the server, and testing the hosted
 deployment and connecting to it is part of the ordinary work, not a later
 phase.
 
+**One world, many perspectives (the owner's ruling).** Different players see
+and play the same world through different perspectives and game systems that
+all interact: one plays a city as a builder from above, one drives a car
+through it, one moves in its crowd by possessing a citizen. Shifting between
+perspectives is a long-term player unlock. So a world's people and vehicles
+are real engine bodies that a seat can possess (its autonomous producer
+standing down and resuming on release), a seat's perspective (layout, camera
+and verbs) is authored per seat, progression gates which perspectives a seat
+may enter, and many players may inhabit a world's bodies against a remote
+authority. The owner's words: "someone might views the city as if playing
+Civilization or Sim City. Others might be a driver in a car, others might be
+the people moving around in it (imagine possessing a random NPC)." The
+[city plan](../plans/city.md) builds the first instance.
+
 **The debug world is the proving ground.** The reference game was once one
 document, the island with its districts, and before that a quilt of ground
 corner authorities. Those worlds (the quilt, the island and the One World) are

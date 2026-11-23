@@ -32,6 +32,7 @@ import "../standard/domains"
 import "../standard/citizen"
 import "../standard/vehicle"
 import "../standard/market"
+import "../standard/styles"
 
 // The city draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -84,16 +85,23 @@ views {
   nestingDepth: 3
 }
 
-// The palette every city prototype shares, by slot.
+// The city's cel look (../standard/styles.puck): the standard band with a warmer held shade, a dusky mauve a step
+// below the lit cream and ochre, so the town reads painted rather than lit.
+let cityStyle = celStyle with { shadowTint [0.78, 0.62, 0.74], restore: 0.65 }
+function cityCel(base) = celMaterial(base, cityStyle)
+
+// The palette every city prototype shares, by slot: cel paint on everything but the river, and the warm glow of a lit
+// window.
 let cityPalette = [
-  { color: "#EBDDBF", roughness: 0.85 }
-  { color: "#D9A55B", roughness: 0.85 }
-  { color: "#2F7F7A", roughness: 0.6, specular: 0.15 }
-  { color: "#B9A88E", roughness: 0.9 }
-  { color: "#5C5A58", roughness: 0.95 }
-  { color: "#C9BFAE", roughness: 0.9 }
+  cityCel({ color: "#EBDDBF", roughness: 0.85 })
+  cityCel({ color: "#D9A55B", roughness: 0.85 })
+  cityCel({ color: "#2F7F7A", roughness: 0.6, specular: 0.15 })
+  cityCel({ color: "#B9A88E", roughness: 0.9 })
+  cityCel({ color: "#5C5A58", roughness: 0.95 })
+  cityCel({ color: "#C9BFAE", roughness: 0.9 })
   { color: "#3D7C8C", roughness: 0.15, specular: 0.5 }
-  { color: "#8A5A3C", roughness: 0.8 }
+  cityCel({ color: "#8A5A3C", roughness: 0.8 })
+  { color: "#FFD9A0", emissive: 160, roughness: 0.4 }
 ]
 let cream = 0
 let ochre = 1
@@ -103,6 +111,7 @@ let road = 4
 let paving = 5
 let river = 6
 let timber = 7
+let windowGlow = 8
 
 // A gable's ridge box turned 45 degrees about Z: its upper half stands over the walls as a roof whose ridge runs along Z.
 let gableTurn = [0, 0, 0.382683, 0.92388]
@@ -160,46 +169,71 @@ let pavement = { shared: true, network: "pavement" }
 
 
 
-// The vehicles (../standard/vehicle.puck): carts lapping two road loops at 8 m/s, the ring road round the square and
-// the works loop (the quay lane, the cross street, the east lane and the works road). Each loop is a curve on its
-// roads' centreline, straights joined by circular corners of 8 m radius, and each vehicle follows its loop's route
-// from where it is placed. Their bodies sit below the citizens', so the citizens keep the top of the capacity.
+// The vehicles (../standard/vehicle.puck): carts lapping two loops of four corner stops, the ring road round the square
+// and the works loop (the quay lane, the cross street, the east lane and the works road), at 8 m/s. They drive the
+// `roads` network: a shared domain over each road strip, its 1 m cells sized for a vehicle, each a metre longer at both
+// ends so neighbouring strips share cells at the corners, and never joined to the pavement. Their bodies sit below the
+// citizens', so the citizens keep the top of the capacity.
 let vehicleColors = ["#B5523B", "#2F7F7A", "#C98B2E", "#3E6E8E", "#6B8E4E", "#7A4E7E"]
+let roadDomains = map(
+  filter(roadStrips, strip => (strip.id != "avenue") and (strip.id != "cross-street")),
+  strip => surfaceDomain(
+    $"road-{strip.id}",
+    [(strip.x0 - 1), 0.05, (strip.z0 - 1)],
+    1,
+    (strip.x1 - strip.x0 + 2),
+    (strip.z1 - strip.z0 + 2),
+    2.2,
+    3,
+    256,
+    vehicleWalker
+  ) with { shared: true, network: "roads" }
+)
+// The works loop's stretch of the cross street, from the quay lane to the east lane.
+let worksCrossDomain = surfaceDomain("road-works-cross", [29, 0.05, -136], 1, 122, 12, 2.2, 3, 256, vehicleWalker) with {
+  shared: true
+  network: "roads"
+}
 let vehicleLoops = [
-  {
-    road: roadLoop(name: "ring", x0: -35, x1: 35, z0: -85, z1: -15, radius: 8)
-    route: "vehicleRing"
-    corners [[35, -85], [35, -15], [-35, -15], [-35, -85]]
-    perSide: 10
-  }
-  {
-    road: roadLoop(name: "works", x0: 35, x1: 145, z0: -130, z1: -50, radius: 8)
-    route: "vehicleWorks"
-    corners [[145, -130], [145, -50], [35, -50], [35, -130]]
-    perSide: 15
-  }
+  { group: "ring", stops [[35, -85], [35, -15], [-35, -15], [-35, -85]], perSide: 10 }
+  { group: "works", stops [[145, -130], [145, -50], [35, -50], [35, -130]], perSide: 15 }
 ]
-// Each loop's vehicles stand evenly along its four sides, between the corners of its centreline.
+// Each vehicle starts on a side of its loop, driving to the stop that ends the side.
 let vehicleSpots = flatMap(vehicleLoops, loop => flatMap(range(0, 4), side => map(range(0, loop.perSide), k => {
-  route: loop.route
-  x: loop.corners[(side + 3) % 4][0] + (loop.corners[side][0] - loop.corners[(side + 3) % 4][0]) * (k + 0.5) / loop.perSide
-  z: loop.corners[(side + 3) % 4][1] + (loop.corners[side][1] - loop.corners[(side + 3) % 4][1]) * (k + 0.5) / loop.perSide
+  group: loop.group
+  stops: loop.stops
+  first: side
+  x: loop.stops[(side + 3) % 4][0] + (loop.stops[side][0] - loop.stops[(side + 3) % 4][0]) * (k + 0.5) / loop.perSide
+  z: loop.stops[(side + 3) % 4][1] + (loop.stops[side][1] - loop.stops[(side + 3) % 4][1]) * (k + 0.5) / loop.perSide
 })))
 let vehicleCount = length(vehicleSpots)
 
-curves: map(vehicleLoops, loop => loop.road)
-bodyMotionPrograms: map(vehicleLoops, loop => vehicleRoute(name: loop.route, road: loop.road.name))
+// The crossings: the ring road's four, at the middle of each side (the north one where the arrival ground meets the
+// square), and the works road's, by the middle workshop. Each names its region (cx, cz and half extents hx, hz) and the
+// approach box before it on the vehicles' side of travel (x0 .. x1, z0 .. z1): vehicles drive the ring anticlockwise,
+// north up the east side, west along the north side, south down the west side and east along the south side.
+let cityCrossings = [
+  { group: "ring", region: "place-city-crossing-north", cx: 0, cz: -15, hx: 3, hz: 5, x0: 3, x1: 11, z0: -20, z1: -10 }
+  { group: "ring", region: "place-city-crossing-west", cx: -35, cz: -50, hx: 5, hz: 3, x0: -40, x1: -30, z0: -47, z1: -39 }
+  { group: "ring", region: "place-city-crossing-south", cx: 0, cz: -85, hx: 3, hz: 5, x0: -11, x1: -3, z0: -90, z1: -80 }
+  { group: "ring", region: "place-city-crossing-east", cx: 35, cz: -50, hx: 5, hz: 3, x0: 30, x1: 40, z0: -61, z1: -53 }
+  { group: "works", region: "place-city-crossing-works", cx: 90, cz: -50, hx: 3, hz: 5, x0: 93, x1: 101, z0: -55, z1: -45 }
+]
 
 navigation {
-  domains [
-    walkable("city-square", [-46, 0.05, -100], 1, 92, 100, 2.2, 3, 1024) with pavement
-    walkable("city-terraces", [-150, 0.05, -205], 1, 114, 245, 2.2, 3, 1024) with pavement
-    walkable("city-works", [36, 0.05, -100], 1, 114, 140, 2.2, 3, 1024) with pavement
-    walkable("city-quay", [-46, 0.05, -205], 1, 196, 119, 2.2, 3, 1024) with pavement
-  ]
+  domains: concat(
+    [
+      walkable("city-square", [-46, 0.05, -100], 1, 92, 100, 2.2, 3, 1024) with pavement
+      walkable("city-terraces", [-150, 0.05, -205], 1, 114, 245, 2.2, 3, 1024) with pavement
+      walkable("city-works", [36, 0.05, -100], 1, 114, 140, 2.2, 3, 1024) with pavement
+      walkable("city-quay", [-46, 0.05, -205], 1, 196, 119, 2.2, 3, 1024) with pavement
+    ],
+    roadDomains,
+    [worksCrossDomain]
+  )
 }
 
-vehicleDesign(producers: { vehicleRing: vehicleSteering, vehicleWorks: vehicleSteering })
+vehicleDesign(domain: "road-ring-north")
 vehicleLooks(colors: vehicleColors)
 
 // The market (../standard/market.puck): each stall sells to the Moth from a 2 by 2 m spot on the fountain side of its
@@ -213,6 +247,56 @@ marketStalls(
   }),
   clock: cityDay
 )
+vehicleRoutes(
+  vehicles: map(range(0, vehicleCount), v => { key: 7 + vehicleCount - v, stops: vehicleSpots[v].stops, first: vehicleSpots[v].first, group: vehicleSpots[v].group }),
+  crossings: map(cityCrossings, c => {
+    region: c.region
+    group: c.group
+    x0: c.x0
+    x1: c.x1
+    z0: c.z0
+    z1: c.z1
+    cx0: c.cx - c.hx
+    cx1: c.cx + c.hx
+    cz0: c.cz - c.hz
+    cz1: c.cz + c.hz
+  })
+)
+
+
+// The street lamps: a 4.2 m post with a lantern on each road's outer pavement and round the fountain, each a point light
+// of `cityLampLumens` lumens that the city's clock (city-day.puck) turns on from dusk to dawn: 7 along the north and
+// south of the ring and 6 along its east and west, 7 down the avenue, 15 along the cross street, 6 by the works road,
+// 10 on the quay's edge and 8 round the fountain.
+let cityLampLumens = 1800
+let cityLampSpots = concat(
+  map(range(0, 7), k => [(-36 + 12 * k), -8.5]),
+  map(range(0, 7), k => [(-36 + 12 * k), -91.5]),
+  map(range(0, 6), k => [41.5, (-80 + 12 * k)]),
+  map(range(0, 6), k => [-41.5, (-80 + 12 * k)]),
+  map(range(0, 7), k => [6.5, (-100 - 15 * k)]),
+  map(range(0, 15), k => [(-140 + 20 * k), -123.5]),
+  map(range(0, 6), k => [(46 + 20 * k), -43.5]),
+  map(range(0, 10), k => [(-40 + 20 * k), -202.5]),
+  map(range(0, 8), k => [(24 * sine(k * 0.7853981633974483)), (-50 + 24 * cosine(k * 0.7853981633974483))])
+)
+
+// The lamps' power: on (`cityLampLumens`) from half past six in the evening to six in the morning, off by day.
+state {
+  world [
+    { name: "cityLamps", kind: "Fixed", value: "0" }
+  ]
+}
+rule "city-lamps-on" {
+  when cityDay >= (18.5 / 24) or cityDay < (6 / 24)
+  mode: Edge
+  cityLamps = cityLampLumens
+}
+rule "city-lamps-off" {
+  when cityDay >= (6 / 24) and cityDay < (18.5 / 24)
+  mode: Edge
+  cityLamps = 0
+}
 
 // The citizens (../standard/citizen.puck). `citizenCount` of them, numbered down from the top of the body capacity
 // above the Moth's eight (avatars/moth.puck), in blocks of one look each: look `b` is block `b`, its citizens standing
@@ -323,6 +407,17 @@ placements {
       halfExtents [2, 2, 2]
     }
   }
+  // The crossings (../standard/vehicle.puck): a region over each place where the pavement meets a vehicle loop, which
+  // holds an approaching vehicle while any body stands in it.
+  for crossing in cityCrossings {
+    placement $"{crossing.region}" {
+      prototype: "place"
+      position [crossing.cx, 1.5, crossing.cz]
+      region {
+        halfExtents [crossing.hx, 2, crossing.hz]
+      }
+    }
+  }
   placement "place-city-bridge" {
     prototype: "place"
     position [0, 1.5, -225]
@@ -424,7 +519,7 @@ placements {
         count: 1
         kit: "vehicle"
         look: $"vehicle-{v % length(vehicleColors)}"
-        source: producer(name: spot.route)
+        source: producer(name: "vehicle")
         distribution {
           region: disc(radius: 0.01)
           fill {
@@ -447,6 +542,14 @@ placements {
       prototype: $"stall-{stall.awning}"
       position [stall.x, 0, stall.z]
       yawDegrees: stall.yaw
+      solid
+    }
+  }
+
+  for (spot, i) in cityLampSpots {
+    placement $"lamp-{i}" {
+      prototype: "street-lamp"
+      position [spot[0], 0, spot[1]]
       solid
     }
   }
@@ -490,7 +593,8 @@ prototypes {
     }
   }
 
-  // A terrace house of each height and wall colour: a 10 by 8 m block under a teal gable whose ridge runs along Z.
+  // A terrace house of each height and wall colour: a 10 by 8 m block under a teal gable whose ridge runs along Z, with a
+  // pair of lit windows on each upper storey of its door face.
   for height in houseHeights {
     for tone in houseTones {
       prototype $"house-{height}-{tone.name}" {
@@ -507,12 +611,21 @@ prototypes {
             material: teal
             position [0, height, 0]
             rotation: gableTurn
-            scale [3.75, 3.75, 4.3]
+            scale [3.6, 3.6, 4.3]
           }
           shape Box "door" {
             material: timber
             position [0, 1.1, 4]
             scale [0.6, 1.1, 0.06]
+          }
+          for storey in range(1, floor(height / 3.3)) {
+            for side in [-1, 1] {
+              shape Box $"window-{storey}-{side}" {
+                material: windowGlow
+                position [(2.5 * side), (3.3 * storey), 4]
+                scale [0.5, 0.65, 0.05]
+              }
+            }
           }
         }
       }
@@ -583,7 +696,7 @@ prototypes {
         material: teal
         position [0, 12, 0]
         rotation: gableTurn
-        scale [8.8, 8.8, 10.4]
+        scale [8.55, 8.55, 10.4]
       }
       shape Box "tower" {
         material: cream
@@ -670,6 +783,30 @@ prototypes {
     }
   }
 
+  // A street lamp: a timber post with a glowing lantern under a teal cap; its light is the city's, keyed on the clock.
+  prototype "street-lamp" {
+    document {
+      name: "street-lamp"
+      palette: cityPalette
+      schema: "puck.creation.v1"
+      shape Cylinder "post" {
+        material: timber
+        position [0, 2, 0]
+        scale [0.08, 2, 0.08]
+      }
+      shape Box "lantern" {
+        material: windowGlow
+        position [0, 4.2, 0]
+        scale [0.2, 0.25, 0.2]
+      }
+      shape Box "cap" {
+        material: teal
+        position [0, 4.52, 0]
+        scale [0.28, 0.07, 0.28]
+      }
+    }
+  }
+
   // The bridge: a stone deck 12 m wide over the river, flush with both banks, between low parapets.
   prototype "bridge" {
     document {
@@ -701,43 +838,51 @@ spawnPoints [
   { id: "city-market", position [0, 0, -38], yawDegrees: 0 }
 ]
 
-// The sun the city's day cycle (city-day.puck) turns, and an exposure whose floor follows that day as the hall's
-// follows the valley's (hall.puck): EV 7 from dawn to dusk, down to EV 2 at night, keyed a stop and a quarter above the
-// meter by day so the cream walls read white.
+// The sun the city's day cycle (city-day.puck) turns, and an exposure whose floor follows that day: EV 7 from dawn to
+// dusk, keyed a stop and a quarter above the meter so the cream walls read white; at night a floor of EV 3.5 and a stop
+// under the meter, so the town stays dark and the lamps' pools and lit windows carry it rather than a lifted average.
 render {
   farDistance: 600
   lighting {
-    lights [
-      directional(
-        name: "key",
-        direction: [3, 5, -4],
-        color: "#FFF0DC",
-        illuminance: 100000lx,
-        shadow: always,
-        angularRadius: 0.2
-      )
-    ]
+    lights: concat(
+      [
+        directional(
+          name: "key",
+          direction: [3, 5, -4],
+          color: "#FFF0DC",
+          illuminance: 100000lx,
+          shadow: always,
+          angularRadius: 0.2
+        )
+      ],
+      map(range(0, length(cityLampSpots)), i => point(
+        name: $"lamp-{i}",
+        position: [cityLampSpots[i][0], 4.2, cityLampSpots[i][1]],
+        temperature: 2700K,
+        power: "state.cityLamps"
+      ))
+    )
   }
   exposure {
     mode: Auto
     minimum {
       clock: cityDay
       keys [
-        { at: 0, value: 2 }
-        { at: 18900, value: 2 }
+        { at: 0, value: 3.5 }
+        { at: 18900, value: 3.5 }
         { at: 23400, value: 7 }
         { at: 63000, value: 7 }
-        { at: 67500, value: 2 }
+        { at: 67500, value: 3.5 }
       ]
     }
     compensation {
       clock: cityDay
       keys [
-        { at: 0, value: 0 }
-        { at: 18900, value: 0 }
+        { at: 0, value: -1 }
+        { at: 18900, value: -1 }
         { at: 23400, value: 1.25 }
         { at: 63000, value: 1.25 }
-        { at: 67500, value: 0 }
+        { at: 67500, value: -1 }
       ]
     }
     maximum: 16

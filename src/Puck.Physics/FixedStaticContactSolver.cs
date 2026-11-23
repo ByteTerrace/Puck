@@ -246,13 +246,10 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
 
         return written;
     }
-    /// <summary>Returns whether a collider's box lies further than the contact skin from a body's bounds along some
-    /// world axis, so its exact query would find no push; a collider without bounds (<see cref="FixedAabb.Everywhere"/>)
-    /// never misses.</summary>
-    /// <param name="box">The collider's box.</param>
-    /// <param name="body">The body's bounds.</param>
-    /// <returns><see langword="true"/> when the collider cannot push the body.</returns>
-    public bool Misses(in FixedAabb box, in FixedAabb body) => !box.Intersects(other: body.Grow(margin: ContactSkin));
+    /// <summary>Gets how far past a body's bounds the solve asks a surface: the contact skin plus the resting band
+    /// (<see cref="FixedContactPushMath.RestingBand"/>), so ground a body rests on at its skin still holds it. A cull
+    /// ahead of the solve keeps every collider within this reach.</summary>
+    public FixedQ4816 ContactReach => (ContactSkin + FixedContactPushMath.RestingBand);
 
     private bool Sweep(
         ReadOnlySpan<FixedStaticCollider> colliders,
@@ -278,7 +275,10 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         var pushed = false;
         var culls = (boxes.Length == colliders.Length);
         var bounds = (culls ? FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume) : default);
-        var reach = bounds.Grow(margin: ContactSkin);
+        // Every surface is asked at the skin plus the resting band, so ground the body rests on at its skin still holds it
+        // (FixedContactPushMath.Classify).
+        var skin = ContactReach;
+        var reach = bounds.Grow(margin: skin);
 
         var indexed = (culls && candidates.IsActive && candidates.Contains(box: in bounds));
         var next = 0;
@@ -292,17 +292,17 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             if (culls && !boxes[index].Intersects(other: in reach)) {
                 continue;
             }
-            if (culls && frames[index].IsOriented && frames[index].Separates(bodyExtent: bounds.Extent, offset: (bounds.Center - boxes[index].Center), skin: ContactSkin)) {
+            if (culls && frames[index].IsOriented && frames[index].Separates(bodyExtent: bounds.Extent, offset: (bounds.Center - boxes[index].Center), skin: skin)) {
                 continue;
             }
             // The collider that answered: a field collider's exact piece where it narrowed, whose surface the edge witness
             // and the support witness below then read, as the push did.
-            var pushes = colliders[index].TryGetAnsweredPush(
+            var met = colliders[index].TryGetAnsweredPush(
                 answered: out var collider,
                 orientation: in orientation,
                 position: position,
                 push: out var push,
-                skin: ContactSkin,
+                skin: skin,
                 uncertain: out var unsure,
                 volume: in volume
             );
@@ -312,13 +312,25 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     Span: ((source == FixedSurfaceColliderSource.Static) ? ContactUncertaintySpan.Static : ContactUncertaintySpan.Dynamic)));
             }
 
-            FixedStaticContactWork.Process.CountQuery(pushed: pushes);
-            if (pushes) {
-                var blockClimb = (push.IsEdge &&
-                    (FixedVector3.Dot(left: push.Normal, right: up) > FixedQ4816.Zero) &&
-                    (FixedVector3.Dot(left: movement.RejectFrom(unitAxis: up), right: push.Normal) < FixedQ4816.Zero));
+            var depth = FixedQ4816.Zero;
+            var kind = (met
+                ? FixedContactPushMath.Classify(banded: push.Penetration, depth: out depth, groundedThreshold: GroundedThreshold, normal: push.Normal, up: in up)
+                : FixedContactPushMath.ContactKind.None);
+            var blockClimb = ((kind != FixedContactPushMath.ContactKind.None) && push.IsEdge &&
+                (FixedVector3.Dot(left: push.Normal, right: up) > FixedQ4816.Zero) &&
+                (FixedVector3.Dot(left: movement.RejectFrom(unitAxis: up), right: push.Normal) < FixedQ4816.Zero));
 
-                if (blockClimb) {
+            // An edge the body approaches laterally is never resting support: only a push past the skin meets it.
+            if ((kind == FixedContactPushMath.ContactKind.Rest) && blockClimb) {
+                kind = FixedContactPushMath.ContactKind.None;
+            }
+            FixedStaticContactWork.Process.CountQuery(pushed: (kind == FixedContactPushMath.ContactKind.Push));
+            if (kind != FixedContactPushMath.ContactKind.None) {
+                var displaces = (kind == FixedContactPushMath.ContactKind.Push);
+
+                push = push with { Penetration = depth };
+
+                if (displaces && blockClimb) {
                     var bottom = FixedColliderBounds.MinimumProjection(normal: up, orientation: in orientation,
                         position: previousPosition, volume: in volume);
                     var probe = ((position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal)) +
@@ -336,13 +348,14 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                             up: in up, witness: in witness) + ContactSkin) - bottom));
                     }
                 }
+                // Ground the body rests on grounds it and clamps its approach, and moves nothing.
                 ApplyPush(
-                    blockClimb: blockClimb,
+                    blockClimb: (displaces && blockClimb),
                     groundNormal: ref groundNormal,
                     grounded: ref grounded,
                     lastNormal: ref lastNormal,
                     position: ref position,
-                    push: in push,
+                    push: (displaces ? push : (push with { Penetration = FixedQ4816.Zero })),
                     up: in up,
                     velocity: ref velocity
                 );
@@ -355,11 +368,13 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                         WalkableThreshold = GroundedThreshold,
                     };
                 }
-                pushed = true;
-                if (culls) {
-                    bounds = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
-                    reach = bounds.Grow(margin: ContactSkin);
-                    indexed &= candidates.Contains(box: in bounds);
+                if (displaces) {
+                    pushed = true;
+                    if (culls) {
+                        bounds = FixedColliderBounds.WorldBounds(orientation: in orientation, position: position, volume: in volume);
+                        reach = bounds.Grow(margin: skin);
+                        indexed &= candidates.Contains(box: in bounds);
+                    }
                 }
             }
         }
@@ -548,7 +563,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         in FixedVector3 previousPosition, in FixedVector3 position, in FixedQuaternion orientation,
         ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedColliderCandidates candidates) {
         var swept = SweptBounds(orientation: in orientation, position: in position, previousPosition: in previousPosition, volumes: volumes);
-        var reach = swept.Grow(margin: ContactSkin);
+        var reach = swept.Grow(margin: ContactReach);
         var boxes = colliders.Boxes;
 
         if (candidates.IsActive && candidates.Contains(box: in swept)) {

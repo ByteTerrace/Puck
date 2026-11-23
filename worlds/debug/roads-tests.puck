@@ -41,11 +41,8 @@ gravity {
 // toward -X.
 curves [roadLoop(name: "loop", x0: -12, x1: 12, z0: -8, z1: 8, radius: 4)]
 
-targetRegisters [
-  { name: "route", maximumRange: 100, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
-]
-
-// The walker's stops, the corners of a 10 m square, and the domain it routes over.
+// The walker's stops, the corners of a 10 m square, and the domain it routes over. The `route` register is
+// vehicleDesign's.
 navigation {
   domains [surfaceDomain("pad", [16, 0.05, 16], 1, 18, 18, 2.2, 3, 256)]
 }
@@ -61,7 +58,7 @@ bodyMotionPrograms [
   }
 ]
 
-vehicleDesign(producers: { loopRoute: vehicleSteering })
+vehicleDesign(domain: "pad", shaping: vehicleGripShaping, routes: { loopRoute: vehicleRouteSteering })
 vehicleLooks(colors: ["#B5523B", "#2F7F7A"])
 
 kits [

@@ -7,6 +7,38 @@ namespace Puck.Physics;
 /// approach velocity through up on walkable ground and across up on walls. One home so a correction to it reaches
 /// every caller in the same change.</summary>
 public static class FixedContactPushMath {
+    /// <summary>The band past the contact skin within which a surface still holds a body that rests on it, in metres.
+    /// A push leaves a body exactly at the skin, where a query at the skin alone finds no contact, so every solver asks
+    /// at the skin plus this band and reads a surface inside the band as a resting contact (<see cref="Classify"/>):
+    /// walkable ground still grounds the body there, and nothing displaces it. Without it, a body standing still or
+    /// walking level ground reads as airborne every tick and pays a ground snap to find the floor it never left.</summary>
+    public static FixedQ4816 RestingBand { get; } = FixedQ4816.FromRawBits(value: 16L);
+
+    /// <summary>What one contact measured at the skin plus <see cref="RestingBand"/> means for the solve.</summary>
+    public enum ContactKind : byte {
+        /// <summary>No contact the solve acts on: a surface in the band that is not walkable ground, which a body beside
+        /// a wall at its skin is not pressed into.</summary>
+        None,
+        /// <summary>Walkable ground in the band: it grounds the body and clamps its approach, and displaces nothing.</summary>
+        Rest,
+        /// <summary>A surface inside the skin: the solve pushes the body out by the depth past the skin.</summary>
+        Push,
+    }
+
+    /// <summary>Classifies a contact a solver measured at its skin plus <see cref="RestingBand"/>, and returns its depth
+    /// past the skin alone: positive for a push, at most zero for a resting contact.</summary>
+    /// <param name="normal">The measured contact normal.</param>
+    /// <param name="banded">The contact's depth into the skin grown by the band.</param>
+    /// <param name="up">The body's up axis the walkable test measures alignment against.</param>
+    /// <param name="groundedThreshold">The <c>cos(maxSlope)</c> the normal's alignment must clear to be walkable.</param>
+    /// <param name="depth">The depth past the skin alone.</param>
+    /// <returns>What the contact means.</returns>
+    public static ContactKind Classify(in FixedVector3 normal, FixedQ4816 banded, in FixedVector3 up, FixedQ4816 groundedThreshold, out FixedQ4816 depth) {
+        depth = (banded - RestingBand);
+        if (depth > FixedQ4816.Zero) { return ContactKind.Push; }
+        var alignment = FixedVector3.Dot(left: normal, right: up);
+        return (((alignment > FixedQ4816.Zero) && (alignment >= groundedThreshold)) ? ContactKind.Rest : ContactKind.None);
+    }
     /// <summary>The uncommitted outcome of resolving one confirmed contact push: the position/velocity deltas a
     /// caller adds, whether the push reads as walkable, and the measured surface normal.</summary>
     public readonly record struct Trial(FixedVector3 PositionDelta, FixedVector3 VelocityDelta, bool Grounded, FixedVector3 Normal);

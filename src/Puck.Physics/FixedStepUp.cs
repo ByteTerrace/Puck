@@ -48,20 +48,54 @@ public readonly record struct FixedStepUpResult(FixedVector3 Position, FixedVect
 /// still a wall.</para>
 /// <para>The lowering reaches no further than where the original step would have ended along the up axis, so a step
 /// that was rising (a jump) lands on nothing it would not otherwise have reached. It asks the sweep's own support
-/// distance (<see cref="IFixedContactStep.TrySupportDistance"/>) and lands <see cref="LandingDepth"/> past it: the
-/// landing meets the riser's top by that sliver and resolves it as ground, where one deep move would read the riser's
+/// distance (<see cref="IFixedContactStep.TrySupportDistance"/>) and lands on it, the contact skin off the riser's top: the
+/// landing stands within the solve's resting band of the riser's top and resolves it as ground, where one deep move would read the riser's
 /// side as the nearer face.</para>
 /// <para>Bounded: two sweeps reject a wall, and an accepted step costs four sweeps and one support-distance query.</para>
 /// </remarks>
 public static class FixedStepUp {
-    /// <summary>Gets how far, in metres, a landing descends past the support distance, so its sweep meets the support
-    /// it lowers onto by that sliver and measures it: the support distance stands the body exactly the contact skin
-    /// off the surface, where no push grounds it.</summary>
-    public static FixedQ4816 LandingDepth { get; } = FixedQ4816.FromRawBits(value: 16L);
+    /// <summary>Projects a velocity onto the walkable support a body stands on, which is what a walking body aims its
+    /// step by before it moves: the ground it rests on where it stands, found by one sweep that does not move it (a
+    /// resting contact, <see cref="FixedContactPushMath.RestingBand"/>), else the support a ground snap
+    /// (<see cref="TrySnap"/>) finds within the distance. A body that stands on its ground, the ordinary case after any
+    /// grounded step, pays one sweep and no support-distance query.</summary>
+    /// <typeparam name="TStep">The caller's contact sweep.</typeparam>
+    /// <param name="step">The contact sweep.</param>
+    /// <param name="start">Where the body stands.</param>
+    /// <param name="velocity">The velocity to project onto the support.</param>
+    /// <param name="up">The body's unit up axis.</param>
+    /// <param name="distance">The greatest descent a snap searches; zero or less searches nothing.</param>
+    /// <param name="result">The support's resolution and the projected velocity; its position is where the body stands
+    /// or the snap's landing.</param>
+    /// <returns>Whether proven walkable support was found.</returns>
+    public static bool TryFollowSupport<TStep>(ref TStep step, in FixedVector3 start, in FixedVector3 velocity,
+        in FixedVector3 up, FixedQ4816 distance, out FixedStepUpResult result)
+        where TStep : IFixedContactStep, allows ref struct {
+        result = default;
+        if (distance <= FixedQ4816.Zero) { return false; }
+        var stood = start;
+        var moved = velocity;
+        var resting = step.SweepSupport(position: ref stood, previousPosition: in start, responseOrigin: start, velocity: ref moved);
+
+        return ((stood == start) && TryAccept(landed: start, landing: in resting, moved: moved, uncertain: default, result: out result)) ||
+            TrySnap(distance: distance, result: out result, start: in start, step: ref step, up: in up, velocity: in velocity);
+    }
+    // A support sweep proves walkable support when it was not refused, grounded, and left uncertain only the pairs the
+    // pose it started from did; the accepted velocity follows the support.
+    private static bool TryAccept(in FixedVector3 landed, in ContactResolution landing, in FixedVector3 moved, ContactUncertainty uncertain,
+        out FixedStepUpResult result) {
+        if ((landing.Refusal != ContactRefusal.None) || !landing.Uncertainty.IsWithin(earlier: uncertain) || !landing.Grounded) {
+            result = default;
+            return false;
+        }
+        result = new FixedStepUpResult(Position: landed, Velocity: moved.RejectFrom(unitAxis: landing.GroundNormal), Resolution: landing);
+        return true;
+    }
 
     /// <summary>Finds the first walkable support below a position within a caller-supplied snap distance: one
-    /// support-distance query, then one landing sweep that descends <see cref="LandingDepth"/> past it. Shared by a
-    /// step up's lowering; an unsuccessful search changes nothing.</summary>
+    /// support-distance query, then one landing sweep down to it, which stands the body the contact skin off the
+    /// support, where the solve's resting band (<see cref="FixedContactPushMath.RestingBand"/>) grounds it. Shared by
+    /// a step up's lowering; an unsuccessful search changes nothing.</summary>
     /// <typeparam name="TStep">The caller's contact sweep.</typeparam>
     /// <param name="step">The contact sweep.</param>
     /// <param name="start">The position to lower from.</param>
@@ -83,17 +117,12 @@ public static class FixedStepUp {
         if ((distance <= FixedQ4816.Zero) || !step.TrySupportDistance(descent: out var descent, reach: distance, start: in start)) {
             return false;
         }
-        var landed = (start - (up * (descent + LandingDepth)));
+        var landed = (start - (up * descent));
         var moved = velocity;
         var landing = step.SweepSupport(position: ref landed, previousPosition: in start,
             responseOrigin: responseOrigin ?? start, velocity: ref moved);
 
-        if ((landing.Refusal != ContactRefusal.None) || !landing.Uncertainty.IsWithin(earlier: uncertain) || !landing.Grounded) {
-            return false;
-        }
-        result = new FixedStepUpResult(Position: landed,
-            Velocity: moved.RejectFrom(unitAxis: landing.GroundNormal), Resolution: landing);
-        return true;
+        return TryAccept(landed: landed, landing: in landing, moved: moved, uncertain: uncertain, result: out result);
     }
 
     /// <summary>Tries the step-up for one blocked step.</summary>

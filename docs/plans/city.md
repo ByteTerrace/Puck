@@ -31,6 +31,33 @@ local topology comes first and the remote topology is stage 5's acceptance; a
 player bumps and steps around citizens from stage 2, and trades at the market
 from stage 3.
 
+### Perspectives
+
+The owner's ruling: different players see and play the same city from
+different perspectives, through different game systems that all interact. One
+plays it as a city builder from above, another drives a car through it,
+another moves among the crowd by possessing a citizen, and shifting between
+perspectives is a long-term player unlock. So every citizen and vehicle stays
+a real engine body under real systems, never a prop: anything a player might
+take over must already run what a player would run.
+
+| Perspective | Built on | To build |
+|---|---|---|
+| City builder | The city's state rows and rules: anchors, schedules, stock, routes and crossings are cells a rule reads | A top-down camera layout and authored verbs (zoning a lot, placing a stall, routing a loop) that write those rows through the ordinary grant-checked mutations |
+| Driver | Vehicles are bodies with a kit, a `route` register and the road network | Possession of a vehicle's body, a driving camera and bindings; the producer stands down while a seat drives |
+| A citizen | Citizens are bodies on a schedule | Possession of a citizen's body; the schedule's rules skip a possessed citizen and resume it from where it stands once released |
+| Shifting | Rules gated on state | The account's progression rows decide which perspectives a seat may enter |
+
+Possession exists in the engine: a seat's control set names another body
+(`{ body:<n> }`), a Drive grant over that body authorizes it, and the seat's
+camera, listener and HUD move to the possessed body
+([engagement](../../.claude/skills/puck-world/references/engagement.md#possession-swaps-the-perceived-world-not-just-the-driven-body)).
+The perspectives interact through one simulation: a builder's edit changes
+where citizens go and vehicles drive, a possessed citizen still holds a
+crossing, and a player's car yields at it as the others do. Many players
+inhabiting the city's bodies against a remote authority is the MMO-shaped
+stress stage 5 measures.
+
 ## What exists
 
 Each row cites the code it was read from; recheck it before building on it.
@@ -134,6 +161,15 @@ size and topology.
      `world.tick.interest-bytes` over `world.tick.interest-bodies` recorded
      per recipient.
    - The client's frame time in motion through the square.
+6. **Perspectives.** The city played from each perspective above.
+   - A seat possesses a citizen: its camera moves to the citizen
+     (`body.where`'s `anchor=body:<n>`), its schedule pauses, and on release
+     it walks on to its current anchor.
+   - A seat possesses a vehicle and drives a lap of its loop; other vehicles
+     yield to it at the crossings.
+   - From the builder's view, a verb moves a stall or rezones a lot, and the
+     citizens' and vehicles' routes follow on the next anchor change.
+   - A perspective the seat has not unlocked is refused by name.
 
 **The benchmark chapter.** From stage 1, `benchmark-route.puck` gains a
 `citySeam` chapter: the route walks to the city painting, crosses with a

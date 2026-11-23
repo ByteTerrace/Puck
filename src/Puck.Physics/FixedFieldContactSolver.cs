@@ -354,11 +354,13 @@ public sealed class FixedFieldContactSolver(
 
             for (var volumeIndex = 0; (volumeIndex < volumes.Length); volumeIndex++) {
                 ref readonly var volume = ref volumes[volumeIndex];
+                // Asked at the skin plus the resting band, so ground the body rests on at its skin still holds it
+                // (FixedContactPushMath.Classify).
                 var contact = FixedFieldColliderContact.Solve(
                     collider: in m_surface,
                     orientation: in orientation,
                     position: position,
-                    skin: m_skin,
+                    skin: (m_skin + FixedContactPushMath.RestingBand),
                     volume: in volume
                 );
 
@@ -366,7 +368,14 @@ public sealed class FixedFieldContactSolver(
                     uncertain = uncertain.With(pair: new ContactUncertainPair(Collider: 0, Span: ContactUncertaintySpan.Field, Volume: volumeIndex));
                 }
 
-                if ((contact.Outcome == FixedFieldContactOutcome.Contact) && contact.Pushes) {
+                var depth = FixedQ4816.Zero;
+                var kind = (((contact.Outcome == FixedFieldContactOutcome.Contact) && contact.Pushes)
+                    ? FixedContactPushMath.Classify(banded: contact.Penetration, depth: out depth, groundedThreshold: m_groundedThreshold,
+                        normal: contact.Normal, up: iterationUp)
+                    : FixedContactPushMath.ContactKind.None);
+
+                if (kind != FixedContactPushMath.ContactKind.None) {
+                    // Ground the body rests on grounds it and clamps its approach, and moves nothing.
                     FixedContactPushMath.Commit(
                         grounded: ref grounded,
                         groundNormal: ref groundNormal,
@@ -375,16 +384,17 @@ public sealed class FixedFieldContactSolver(
                         trial: FixedContactPushMath.ComputeOrdinary(
                             groundedThreshold: m_groundedThreshold,
                             normal: contact.Normal,
-                            penetration: contact.Penetration,
+                            penetration: ((kind == FixedContactPushMath.ContactKind.Push) ? depth : FixedQ4816.Zero),
                             up: iterationUp,
                             velocity: in velocity
                         ),
                         velocity: ref velocity
                     );
-                    pushed = true;
-                } else if ((contact.Outcome == FixedFieldContactOutcome.Embedded) && contact.Pushes && !extracted) {
+                    pushed |= (kind == FixedContactPushMath.ContactKind.Push);
+                } else if ((contact.Outcome == FixedFieldContactOutcome.Embedded) && contact.Pushes && !extracted &&
+                    (contact.Penetration > FixedContactPushMath.RestingBand)) {
                     extracted = true;
-                    position += (contact.Normal * contact.Penetration);
+                    position += (contact.Normal * (contact.Penetration - FixedContactPushMath.RestingBand));
                     velocity = velocity.LimitAlong(maximum: FixedQ4816.Zero, unitAxis: -contact.Normal);
                     pushed = true;
                 }

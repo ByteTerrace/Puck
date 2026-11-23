@@ -1165,7 +1165,11 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   It is a State and Server design with its own cross-family review, taken
   after T1 to T3 measure what remains serial. At scale it is the limit:
   [a town](#the-debug-world-at-mmo-scale)'s hundreds of inhabitants are kit
-  bodies, so their tick is serial until this transaction exists.
+  bodies, so their tick is serial until this transaction exists. The bodies
+  whose step writes no state (a town's citizens and vehicles) need less: the
+  kit advance split
+  ([K1 to K4](engine-job-system.md#the-steps-phases)) runs them in fixed
+  partitions over one frozen pose image and leaves state-writing kits serial.
 - [medium] The rule phase's remaining volatile and visit costs are the memo's
   ([rule evaluation stays serial](engine-job-system.md#rule-evaluation-stays-serial)).
 - [medium] Snapshot emission's entity rows, which T1 partitioned, are a small
