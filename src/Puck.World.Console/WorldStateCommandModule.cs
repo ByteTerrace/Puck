@@ -511,8 +511,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             values: lines
         );
     }
-    private static CommandResult DescribeStateHandler(WorldStateReadView view, WireArgs args) {
-        return args.Count switch {
+    private static CommandResult DescribeStateHandler(WorldStateReadView view, WireArgs args, int count) {
+        return count switch {
             0 => new CommandResult(Output: DescribeState(view: view)),
             1 => DescribeOneRow(
             name: args[0].ToString(),
@@ -1002,12 +1002,13 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.state",
-            description: $"Reads back the live state section at all three grains (Immediate): with no argument, every row's name/kind/shape (a one-value row shows its value, a keyed row its cell count against its capacity), plus each row's declared range and non-negative floor when it carries them; with a row name, that row's line followed by every cell it holds; with a row name and a cell key, that one cell alone; a row naming an enum spells each value by its member name; a trailing instance:<name> reads that running instance's state under its own grants — or a refusal naming why there is none: {WorldStateForms.Spelling}.",
+            description: $"Reads back the live state section at all three grains (Immediate): with no argument, every row's name/kind/shape (a one-value row shows its value, a keyed row its cell count against its capacity), plus each row's declared range and non-negative floor when it carries them; with a row name, that row's line followed by every cell it holds; with a row name and a cell key, that one cell alone; a row naming an enum spells each value by its member name — or a refusal naming why there is none: {WorldStateForms.Spelling}. A trailing instance:<name> reads that running instance's state instead of the console's own world.",
             forms: WorldStateForms,
             handler: (context, args) => {
                 if (!authority.TryResolveReadView(
-                    args: ref args,
+                    args: in args,
                     context: context,
+                    count: out var count,
                     error: out var error,
                     verb: "world.state",
                     view: out var view
@@ -1017,6 +1018,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
 
                 return DescribeStateHandler(
                     args: args,
+                    count: count,
                     view: view
                 );
             },

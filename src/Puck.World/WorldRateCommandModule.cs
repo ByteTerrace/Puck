@@ -1,6 +1,5 @@
 using System.Globalization;
 using Puck.Commands;
-using Puck.World.Protocol;
 
 namespace Puck.World;
 
@@ -64,7 +63,7 @@ internal sealed class WorldRateCommandModule(WorldInstanceHost instances, WorldR
         return 1;
     }
     private static bool IsInstanceToken(in WireArgs args, int index) =>
-        ((((uint)index) < ((uint)args.Count)) && WorldInstanceToken.Is(token: args[index]));
+        ((((uint)index) < ((uint)args.Count)) && WorldArgs.IsInstanceToken(token: args[index]));
     // Tapes a pause/resume that targets the BOOT instance specifically — the tape's own scope (see
     // WorldReplayTape.NoteRateLever's remarks). A named instance's own lever never reaches the tape.
     private void NoteBootLever(string name, bool paused) {
@@ -144,14 +143,14 @@ internal sealed class WorldRateCommandModule(WorldInstanceHost instances, WorldR
             return false;
         }
 
-        if (!WorldInstanceToken.Is(token: args[tokenIndex])) {
+        if (!WorldArgs.IsInstanceToken(token: args[tokenIndex])) {
             instanceName = string.Empty;
             error = WorldRateForms.Refuse(args: in args, got: args[tokenIndex].ToString());
 
             return false;
         }
 
-        return WorldInstanceToken.TryParseName(
+        return WorldArgs.TryParseInstanceName(
             token: args[tokenIndex],
             verb: verb,
             name: out instanceName,

@@ -154,7 +154,7 @@ public sealed partial class NavigationRuntime {
             var geometry = m_geometry;
 
             if (
-                (previous.Tuning != Tuning) ||
+                !previous.SameBake(row: Tuning) ||
                 (Tuning.Kind == NavigationKind.Medium) ||
                 (geometry is not IRegionalContactField part)
             ) {

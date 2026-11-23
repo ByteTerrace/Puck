@@ -545,7 +545,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             return false;
         }
 
-        if (!WorldInstanceToken.Is(token: args[0])) {
+        if (!WorldArgs.IsInstanceToken(token: args[0])) {
             instance = null;
             error = forms.Refuse(got: args[0].ToString());
 
@@ -566,7 +566,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
     private static string WithInstanceTag(string text, WorldInstance? instance) =>
         ((instance is not null)
             ? CommandEcho.SpliceTag(
-                prefix: WorldInstanceToken.Prefix,
+                prefix: WorldArgs.InstanceTokenPrefix,
                 text: text,
                 value: instance.Name
             )
@@ -635,7 +635,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                     return new CommandResult(Output: DescribeFaces(context));
                 }
 
-                if (WorldInstanceToken.Is(token: args[0])) {
+                if (WorldArgs.IsInstanceToken(token: args[0])) {
                     return CommandResult.Error(output: "[world.faces: no instance-addressed form — screens are the boot instance's own; see world.inhabitants/world.attachments/world.portals/world.destinations for instance:<name>]");
                 }
 
@@ -674,7 +674,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             forms: WorldRegionForms,
             description: WorldRegionForms.Spelling + $" — Reports one placement region's live occupancy (Immediate): count= is the number of bodies the region pass holds latched inside it, the count a rule's region(...) reads and body.place lists from; occupants= lists them (at most {MaxRegionOccupantsListed}, each body:<index>@(x, y, z)); measured= is the number of active bodies whose position the region's volume holds in the frame the pass last sensed it in, read now; stale= names bodies latched but not inside, and missed= bodies inside but not latched, either of which means the latches drifted from the bodies. A trailing instance:<name> token reads a named running instance's population instead of the boot world's.",
             handler: (context, args) => {
-                if ((args.Count is < 1 or > 2) || WorldInstanceToken.Is(token: args[0])) {
+                if ((args.Count is < 1 or > 2) || WorldArgs.IsInstanceToken(token: args[0])) {
                     return WorldRegionForms.Refuse();
                 }
 

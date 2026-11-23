@@ -17,17 +17,16 @@ public interface IWorldConsoleAuthority : ICommandAuthority {
     /// <param name="refusal">The refusal reason, on failure.</param>
     /// <returns><see langword="true"/> when a row was resolved.</returns>
     bool TryResolve(CommandContext context, out WorldInstance instance, out string refusal);
-    /// <summary>Resolves the row a trailing <c>instance:&lt;name&gt;</c> token (<see cref="WorldInstanceToken"/>) names,
-    /// for a host whose console reaches more than one running row. A host whose console reaches one row refuses.</summary>
+    /// <summary>Resolves a running row by name, for a read-back that carries a trailing <c>instance:&lt;name&gt;</c>
+    /// token (<see cref="WorldArgs.InstanceTokenPrefix"/>). A console bound to one row names no other.</summary>
     /// <param name="context">The invocation's context.</param>
-    /// <param name="token">The token, prefix included.</param>
-    /// <param name="verb">The calling verb's name, for the refusal echo.</param>
-    /// <param name="instance">The named row, on success.</param>
-    /// <param name="error">The inline refusal echo, on failure.</param>
+    /// <param name="name">The instance's name.</param>
+    /// <param name="instance">The resolved row, on success.</param>
+    /// <param name="refusal">The refusal reason, on failure.</param>
     /// <returns><see langword="true"/> when a running row answers to the name.</returns>
-    bool TryResolveNamed(CommandContext context, ReadOnlySpan<char> token, string verb, out WorldInstance instance, out CommandResult error) {
+    bool TryResolveNamed(CommandContext context, string name, out WorldInstance instance, out string refusal) {
         instance = null!;
-        error = CommandResult.Error(output: $"[{verb}: this console addresses its own row only; instance: names no other here]");
+        refusal = "this console addresses one world";
 
         return false;
     }
@@ -119,47 +118,33 @@ public static class WorldConsoleAuthorityExtensions {
 
         return resolved;
     }
-    /// <summary>Resolves the row an invocation addresses when its last token may be an <c>instance:&lt;name&gt;</c>
-    /// address: the named row (<see cref="IWorldConsoleAuthority.TryResolveNamed"/>), with the token read off
-    /// <paramref name="args"/>, or the invocation's own row when no such token ends the line.</summary>
+    /// <summary>Resolves the row a read-back addresses and hands back the view its acting principal reads it through: the
+    /// running row a trailing <c>instance:&lt;name&gt;</c> token names, else this invocation's row.</summary>
     /// <param name="authority">The authority to resolve against.</param>
     /// <param name="context">The invocation's context.</param>
-    /// <param name="args">The invocation's wire arguments; on success, the arguments before the address.</param>
+    /// <param name="args">The invocation's wire arguments, a trailing instance token included.</param>
     /// <param name="verb">The calling verb's name, for the refusal echo.</param>
-    /// <param name="instance">The addressed row, on success.</param>
-    /// <param name="error">The inline refusal echo, on failure.</param>
-    /// <returns><see langword="true"/> when a row was resolved.</returns>
-    public static bool TryResolveAddressed(this IWorldConsoleAuthority authority, CommandContext context, ref WireArgs args, string verb, out WorldInstance instance, out CommandResult error) {
-        var count = args.Count;
-
-        if ((count == 0) || !WorldInstanceToken.Is(token: args[(count - 1)])) {
-            return authority.TryResolveInstance(context: context, error: out error, instance: out instance, verb: verb);
-        }
-        if (!authority.TryResolveNamed(context: context, error: out error, instance: out instance, token: args[(count - 1)], verb: verb)) {
-            return false;
-        }
-        args = args.Head(count: (count - 1));
-
-        return true;
-    }
-    /// <summary>Resolves the row an invocation addresses, honouring a trailing <c>instance:&lt;name&gt;</c> address
-    /// (<see cref="TryResolveAddressed"/>), and hands back the view its acting principal reads that row's state through,
-    /// under that row's own grants.</summary>
-    /// <param name="authority">The authority to resolve against.</param>
-    /// <param name="context">The invocation's context.</param>
-    /// <param name="args">The invocation's wire arguments; on success, the arguments before any address.</param>
-    /// <param name="verb">The calling verb's name, for the refusal echo.</param>
+    /// <param name="count">The arguments before any instance token.</param>
     /// <param name="view">The acting principal's view, on success.</param>
     /// <param name="error">The inline refusal echo, on failure.</param>
     /// <returns><see langword="true"/> when a row was resolved.</returns>
-    public static bool TryResolveReadView(this IWorldConsoleAuthority authority, CommandContext context, ref WireArgs args, string verb, out WorldStateReadView view, out CommandResult error) {
-        if (!authority.TryResolveAddressed(args: ref args, context: context, error: out error, instance: out var instance, verb: verb)) {
-            view = null!;
-
+    public static bool TryResolveReadView(this IWorldConsoleAuthority authority, CommandContext context, in WireArgs args, string verb, out int count, out WorldStateReadView view, out CommandResult error) {
+        count = args.Count;
+        if ((count == 0) || !WorldArgs.IsInstanceToken(token: args[(count - 1)])) {
+            return authority.TryResolveReadView(context: context, error: out error, verb: verb, view: out view);
+        }
+        count--;
+        view = null!;
+        if (!WorldArgs.TryParseInstanceName(error: out var parseError, name: out var name, token: args[count], verb: verb)) {
+            error = parseError!.Value;
+            return false;
+        }
+        if (!authority.TryResolveNamed(context: context, instance: out var instance, name: name, refusal: out var refusal)) {
+            error = CommandResult.Error(output: $"[{verb}: {refusal}]");
             return false;
         }
         view = authority.ReadView(context: context, instance: instance);
-
+        error = default;
         return true;
     }
     /// <summary>Resolves this invocation's row and hands back the view its acting principal reads that row's state

@@ -118,7 +118,7 @@ public sealed class CommandEchoTests {
         // A name carrying a delimiter is spliced as ONE token rather than closing the envelope it is being spliced
         // into — and the reserved PREFIX stays outside the quote, because the readers of these tags test for exactly
         // that prefix. Quoting the whole tag produced `"instance:my world"`, still one well-formed token and still
-        // invisible to WorldInstanceToken.Is.
+        // invisible to WorldArgs.IsInstanceToken.
         Assert.Equal(
             actual: CommandEcho.SpliceTag(
                 prefix: "instance:",
@@ -212,7 +212,7 @@ public sealed class CommandEchoTests {
 
         // The whole point of the tag: a script reads it off the echo and hands it straight back as an argument. It
         // must arrive as ONE token whose reserved prefix is still the leading characters — the test every
-        // instance-addressed verb applies (WorldInstanceToken.Is) — with the console's own splitter removing the
+        // instance-addressed verb applies (WorldArgs.IsInstanceToken) — with the console's own splitter removing the
         // value's quotes exactly as it does for a Field.
         var token = Assert.Single(collection: seen);
 

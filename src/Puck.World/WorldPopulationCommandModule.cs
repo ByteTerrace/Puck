@@ -3,6 +3,7 @@ using System.Text;
 using Puck.Commands;
 using Puck.Input;
 using Puck.Maths;
+using Puck.Physics;
 using Puck.Physics.Navigation;
 using Puck.Shaders;
 using Puck.World.Client;
@@ -26,23 +27,41 @@ namespace Puck.World;
 /// <param name="renderProbe">The optional live presentation inventory; absent in a headless host.</param>
 /// <param name="gamepads">The optional hardware manager <c>world.devices</c> reads each gamepad's battery and
 /// accessories from; absent in a headless host or off Windows.</param>
-public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServer server, IServerLink link, WorldRenderProbe? renderProbe = null, GamepadManager? gamepads = null) : ICommandModule {
+/// <param name="instances">The running instances a trailing <c>instance:&lt;name&gt;</c> addresses; absent, the token
+/// names no instance.</param>
+public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServer server, IServerLink link, WorldRenderProbe? renderProbe = null, GamepadManager? gamepads = null, WorldInstanceHost? instances = null) : ICommandModule {
     private WorldPopulation Population => server.Population;
 
     private static readonly CommandForms WorldPopulationForms = CommandForms.Of(verb: "world.population", "[count] [idle|producer:<name>]");
-    private static readonly CommandForms WorldNavigationForms = CommandForms.Of(verb: "world.navigation", "[route <from> <to> [path]]", "map <domain> [<column> <row> <columns> <rows>]");
+    private static readonly CommandForms WorldNavigationForms = CommandForms.Of(verb: "world.navigation", "[route <from> <to> [path] [profile:<name>]] [instance:<name>]", "map <domain> [<column> <row> <columns> <rows>] [instance:<name>]");
 
     // The world.navigation read-back, a domain's drawing, or one checked route between two endpoints. Every form reads
     // baked domains, so an unbaked runtime bakes on the thread pool while the session holds, never on the pump: the
-    // answer comes once every bake has finished, or the answer deadline refuses it and the bakes run on.
+    // answer comes once every bake has finished, or the answer deadline refuses it and the bakes run on. A trailing
+    // instance:<name> reads that running instance's navigation instead of the boot world's.
     private CommandResult Navigation(CommandContext context, WireArgs args) {
+        WorldInstance? instance = null;
+        var count = args.Count;
+
+        if ((count > 0) && WorldArgs.IsInstanceToken(token: args[(count - 1)])) {
+            if (instances is null) {
+                return CommandResult.Error(output: $"[{WorldNavigationForms.Verb}: this host runs no instances]");
+            }
+            if (!WorldInstanceArgs.TryResolveInstance(error: out var tokenError, instance: out instance, instances: instances, token: args[(count - 1)], verb: WorldNavigationForms.Verb)) {
+                return tokenError!.Value;
+            }
+            count--;
+        }
+
+        var target = (instance?.Server ?? server);
+        var population = target.Population;
         Func<CommandResult> answer;
 
-        if (args.Count == 0) {
-            answer = () => new CommandResult(Output: Population.DescribeNavigation());
+        if (count == 0) {
+            answer = () => new CommandResult(Output: population.DescribeNavigation());
         } else if (args[0].ToString() == "map") {
-            if ((args.Count is not (2 or 6)) ||
-                ((args.Count == 6) && !(args.TryInt(index: 2, value: out _) && args.TryInt(index: 3, value: out _) && args.TryInt(index: 4, value: out _) && args.TryInt(index: 5, value: out _)))) {
+            if ((count is not (2 or 6)) ||
+                ((count == 6) && !(args.TryInt(index: 2, value: out _) && args.TryInt(index: 3, value: out _) && args.TryInt(index: 4, value: out _) && args.TryInt(index: 5, value: out _)))) {
                 return WorldNavigationForms.Refuse();
             }
 
@@ -52,67 +71,89 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
             var rows = 256;
             var name = args[1].ToString();
 
-            if (args.Count == 6) {
+            if (count == 6) {
                 _ = args.TryInt(index: 2, value: out x0);
                 _ = args.TryInt(index: 3, value: out z0);
                 _ = args.TryInt(index: 4, value: out columns);
                 _ = args.TryInt(index: 5, value: out rows);
             }
-            answer = () => new CommandResult(Output: Population.DescribeNavigationMap(depth: rows, name: name, width: columns, x0: x0, z0: z0));
-        } else if ((args.Count is < 3 or > 4) || (args[0].ToString() != "route") || ((args.Count == 4) && (args[3].ToString() != "path"))) {
+            answer = () => new CommandResult(Output: population.DescribeNavigationMap(depth: rows, name: name, width: columns, x0: x0, z0: z0));
+        } else if ((count < 3) || (args[0].ToString() != "route") || !TryRouteOptions(args: args, count: count, path: out var path, profile: out var profile)) {
             return WorldNavigationForms.Refuse();
         } else {
             var from = args[1].ToString();
             var to = args[2].ToString();
-            var path = (args.Count == 4);
 
-            answer = () => Route(context: context, from: from, path: path, to: to);
+            answer = () => Route(context: context, from: from, path: path, profile: profile, target: target, to: to);
         }
-        if (Population.NavigationBaked) {
+        if (population.NavigationBaked) {
             return answer();
         }
-        Population.BeginNavigationBakes();
+        population.BeginNavigationBakes();
         if (context.TextSession is not { } session) {
             return answer();
         }
         session.HoldWhile(
-            hold: () => !Population.NavigationBaked,
+            hold: () => !population.NavigationBaked,
             released: deadlinePassed => (deadlinePassed
-                ? CommandResult.Error(output: $"[world.navigation: {Population.NavigationBakedDomainCount}/{Population.NavigationDomainCount} domains baked at the answer deadline; the rest bake on, ask again]")
+                ? CommandResult.Error(output: $"[world.navigation: {population.NavigationBakedDomainCount}/{population.NavigationDomainCount} domains baked at the answer deadline; the rest bake on, ask again]")
                 : answer()),
             publishResult: true);
-        return new CommandResult(Output: $"[world.navigation: baking {Population.NavigationDomainCount - Population.NavigationBakedDomainCount} domain(s) off the tick]");
+        return new CommandResult(Output: $"[world.navigation: baking {population.NavigationDomainCount - population.NavigationBakedDomainCount} domain(s) off the tick]");
     }
-    private CommandResult Route(CommandContext context, string from, string to, bool path) {
-        var definition = server.ReadView(context).Definition;
+    // A route's trailing options, each at most once: `path`, and `profile:<name>`.
+    private static bool TryRouteOptions(WireArgs args, int count, out bool path, out string? profile) {
+        path = false;
+        profile = null;
+        for (var index = 3; (index < count); index++) {
+            var option = args[index].ToString();
 
-        if (!TryEndpoint(token: from, definition: definition, point: out var fromPoint, within: out var fromShape, reason: out var reason) ||
-            !TryEndpoint(token: to, definition: definition, point: out var toPoint, within: out var toShape, reason: out reason)) {
+            if ((option == "path") && !path) {
+                path = true;
+            } else if (option.StartsWith(value: "profile:", comparisonType: StringComparison.Ordinal) && (profile is null) && (option.Length > "profile:".Length)) {
+                profile = option["profile:".Length..];
+            } else {
+                return false;
+            }
+        }
+        return true;
+    }
+    private static CommandResult Route(CommandContext context, WorldServer target, string from, string to, bool path, string? profile) {
+        var population = target.Population;
+        var definition = target.ReadView(context).Definition;
+        var costs = NavigationCostProfile.Neutral;
+
+        if ((profile is not null) && !population.TryNavigationProfile(name: profile, profile: out costs)) {
+            return CommandResult.Error(output: $"[world.navigation route: no navigation profile named '{profile}']");
+        }
+
+        if (!TryEndpoint(token: from, definition: definition, point: out var fromPoint, population: population, within: out var fromShape, reason: out var reason) ||
+            !TryEndpoint(token: to, definition: definition, point: out var toPoint, population: population, within: out var toShape, reason: out reason)) {
             return CommandResult.Error(output: $"[world.navigation route: {reason}]");
         }
-        if (!Population.TryRouteEndpoint(cell: out var fromCell, domain: out var fromDomain, point: fromPoint, within: fromShape)) {
+        if (!population.TryRouteEndpoint(cell: out var fromCell, domain: out var fromDomain, point: fromPoint, within: fromShape)) {
             return CommandResult.Error(output: $"[world.navigation route: no domain holds a walkable cell at '{from}']");
         }
         INavigationRouteGoal goal;
 
         if (toShape is { } place) {
             goal = new WorldNavigationPlaceGoal(Shape: place);
-        } else if (Population.TryRouteEndpoint(cell: out var toCell, domain: out var toDomain, point: toPoint, within: null)) {
-            goal = new NavigationCellGoal(Cell: toCell, Domain: toDomain, Position: Population.NavigationFoot(node: new NavigationRouteNode(Cell: toCell, Domain: toDomain, Position: default)));
+        } else if (population.TryRouteEndpoint(cell: out var toCell, domain: out var toDomain, point: toPoint, within: null)) {
+            goal = new NavigationCellGoal(Cell: toCell, Domain: toDomain, Position: population.NavigationFoot(node: new NavigationRouteNode(Cell: toCell, Domain: toDomain, Position: default)));
         } else {
             return CommandResult.Error(output: $"[world.navigation route: no domain holds a walkable cell at '{to}']");
         }
 
         var route = new List<NavigationRouteNode>();
         var walls = new List<FixedVector3>();
-        var status = Population.FindCheckedRoute(fromCell: fromCell, fromDomain: fromDomain, goal: goal, route: route, samples: out var samples, walls: walls, work: out var work);
+        var status = population.FindCheckedRoute(fromCell: fromCell, fromDomain: fromDomain, goal: goal, profile: costs, route: route, samples: out var samples, walls: walls, work: out var work);
 
-        return new CommandResult(Output: DescribeRoute(from: from, to: to, status: status, route: route, work: work, samples: samples, walls: walls, path: path)) {
+        return new CommandResult(Output: DescribeRoute(from: from, to: to, status: status, route: route, work: work, samples: samples, walls: walls, path: path, target: target)) {
             IsError = ((route.Count == 0) || (walls.Count != 0)),
         };
     }
     // A route endpoint: a place's region (its center and volume), a spawn point, a body's position or a literal point.
-    private bool TryEndpoint(string token, WorldDefinition definition, out FixedVector3 point, out FixedSpatialShape? within, out string reason) {
+    private static bool TryEndpoint(string token, WorldDefinition definition, WorldPopulation population, out FixedVector3 point, out FixedSpatialShape? within, out string reason) {
         point = default;
         within = null;
         reason = string.Empty;
@@ -128,7 +169,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
             return false;
         }
         if (token.StartsWith(value: "body:", comparisonType: StringComparison.Ordinal)) {
-            if (int.TryParse(s: token.AsSpan(start: "body:".Length), style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var index) && (Population.EntryBody(index: index) is { } body)) {
+            if (int.TryParse(s: token.AsSpan(start: "body:".Length), style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var index) && (population.EntryBody(index: index) is { } body)) {
                 point = body.FixedPosition;
                 return true;
             }
@@ -161,17 +202,19 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
         reason = $"'{token}' is no static region placement, spawn:<id>, body:<n> or x,y,z";
         return false;
     }
-    // The route's answer: its nodes, length and domains in order, the innermost place at each node in order, the work,
-    // and the contact check.
-    private string DescribeRoute(string from, string to, NavigationStatus status, List<NavigationRouteNode> route, NavigationRouteWork work, int samples, List<FixedVector3> walls, bool path) {
+    // The route's answer: its nodes, length and domains in order, the innermost place and the area type at each node in
+    // order, the work, and the contact check.
+    private static string DescribeRoute(WorldServer target, string from, string to, NavigationStatus status, List<NavigationRouteNode> route, NavigationRouteWork work, int samples, List<FixedVector3> walls, bool path) {
+        var population = target.Population;
         var text = new StringBuilder();
         var length = 0.0;
         var domains = new List<string>();
         var passes = new List<string>();
+        var areas = new List<string>();
 
         for (var index = 0; (index < route.Count); index++) {
             var node = route[index];
-            var name = Population.NavigationDomainName(index: node.Domain);
+            var name = population.NavigationDomainName(index: node.Domain);
 
             if ((domains.Count == 0) || (domains[^1] != name)) {
                 domains.Add(item: name);
@@ -182,26 +225,32 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
                 length += Math.Sqrt(d: ((((double)step.X) * ((double)step.X)) + (((double)step.Z) * ((double)step.Z))));
             }
 
-            var places = server.Events.PlacesAt(point: Population.NavigationFoot(node: node));
+            var places = target.Events.PlacesAt(point: population.NavigationFoot(node: node));
             var at = ((places.Count == 0) ? "none" : places[0]);
 
             if ((passes.Count == 0) || (passes[^1] != at)) {
                 passes.Add(item: at);
             }
+
+            var area = population.NavigationAreaName(node: node);
+
+            if ((areas.Count == 0) || (areas[^1] != area)) {
+                areas.Add(item: area);
+            }
         }
 
         var verdict = ((walls.Count == 0) ? status.ToString().ToLowerInvariant() : "obstructed");
 
-        _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"[world.navigation route: {from} -> {to} status={verdict} nodes={route.Count} length={length:0.00}m domains={string.Join(separator: ">", values: domains)} passes={string.Join(separator: ">", values: passes)} expanded={work.Expanded} joins={work.Joins} walls={walls.Count}/{samples}");
+        _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"[world.navigation route: {from} -> {to} status={verdict} nodes={route.Count} length={length:0.00}m domains={string.Join(separator: ">", values: domains)} passes={string.Join(separator: ">", values: passes)} areas={string.Join(separator: ">", values: areas)} expanded={work.Expanded} joins={work.Joins} walls={walls.Count}/{samples}");
         if (walls.Count > 0) {
             var first = walls[0];
-            var places = server.Events.PlacesAt(point: first);
+            var places = target.Events.PlacesAt(point: first);
 
             _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $" firstWall=({((double)first.X):0.00},{((double)first.Y):0.00},{((double)first.Z):0.00}) in {((places.Count == 0) ? "none" : places[0])}");
         }
         if (path) {
             foreach (var node in route) {
-                _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"\n  {Population.NavigationDomainName(index: node.Domain)}:{node.Cell} ({((double)node.Position.X):0.00},{((double)node.Position.Y):0.00},{((double)node.Position.Z):0.00})");
+                _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"\n  {population.NavigationDomainName(index: node.Domain)}:{node.Cell} ({((double)node.Position.X):0.00},{((double)node.Position.Y):0.00},{((double)node.Position.Z):0.00})");
             }
         }
 

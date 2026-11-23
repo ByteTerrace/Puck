@@ -51,11 +51,11 @@ internal sealed class WorldReload(WorldInstanceHost instances, WorldDeferredVerb
         // A row's answer as the verb prints it: the boot row's as it stands, another row's tagged with its name.
         public CommandResult Tagged(CommandResult result) => ((Boot || string.IsNullOrEmpty(value: result.Output))
             ? result
-            : (result with { Output = CommandEcho.SpliceTag(prefix: WorldInstanceToken.Prefix, text: result.Output, value: Row.Name) }));
+            : (result with { Output = CommandEcho.SpliceTag(prefix: WorldArgs.InstanceTokenPrefix, text: result.Output, value: Row.Name) }));
     }
 
     /// <summary>The verb's forms: every running row, or the one a trailing <c>instance:</c> token names.</summary>
-    public static CommandForms Forms { get; } = CommandForms.Of(verb: Verb, $"[{WorldInstanceToken.Prefix}<name>]");
+    public static CommandForms Forms { get; } = CommandForms.Of(verb: Verb, $"[{WorldArgs.InstanceTokenPrefix}<name>]");
 
     /// <summary>Starts a reload of the rows a <c>world.reload</c> line addresses: every running row, or the row its
     /// trailing <c>instance:</c> token names.</summary>
@@ -64,7 +64,7 @@ internal sealed class WorldReload(WorldInstanceHost instances, WorldDeferredVerb
     /// <returns>A result settling once every addressed row answered, or the refusal of a malformed line.</returns>
     public CommandResult Run(CommandContext context, in WireArgs args) {
         if (args.Count == 0) { return Run(context: context, only: null); }
-        if ((args.Count != 1) || !WorldInstanceToken.Is(token: args[0])) { return Forms.Refuse(); }
+        if ((args.Count != 1) || !WorldArgs.IsInstanceToken(token: args[0])) { return Forms.Refuse(); }
         if (!WorldInstanceArgs.TryResolveInstance(error: out var error, instance: out var row, instances: instances, token: args[0], verb: Verb)) {
             return error!.Value;
         }

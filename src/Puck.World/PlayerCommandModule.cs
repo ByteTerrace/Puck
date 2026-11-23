@@ -522,7 +522,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScre
 
         if (
             (count == 0) ||
-            !WorldInstanceToken.Is(token: args[(count - 1)])
+            !WorldArgs.IsInstanceToken(token: args[(count - 1)])
         ) {
             target = new InstanceTarget(
                 EffectiveCount: count,
@@ -557,7 +557,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScre
     // uses for anchor=body:<n>, reused here because an instance-targeted read has no perception anchor to report but
     // still owes the caller which instance answered.
     private static string WithInstanceTag(string text, string instanceName) => CommandEcho.SpliceTag(
-        prefix: WorldInstanceToken.Prefix,
+        prefix: WorldArgs.InstanceTokenPrefix,
         text: text,
         value: instanceName
     );
