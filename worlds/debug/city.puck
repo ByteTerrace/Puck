@@ -28,7 +28,6 @@ import "place-kit"
 import "walkers"
 import "city-day"
 import "../standard/bounds"
-import "../standard/domains"
 import "../standard/citizen"
 
 // The city draws no HUD panels; controls.puck supplies its cursor.
@@ -121,7 +120,7 @@ let terraceLots = flatMap(range(0, 7), c => map(range(0, 18), r => {
 
 // The works' workshops, 22 by 16 m, three across and four deep about the works road; the quay's warehouses, 18 by 12 m,
 // six across in two rows; the civic halls west of the avenue.
-let shedLots = flatMap(map(range(0, 3), c => 62 + 30 * c), x => map([20, -2, -26, -72], z => { x: x, z: z }))
+let shedLots = flatMap(map(range(0, 3), c => 62 + 30 * c), x => map([20, -2, -26, -72], z => { x: x, z: z, yaw: (z == -72) ? 180 : 0 }))
 let warehouseLots = flatMap(map(range(0, 6), c => 20 + 24 * c), x => map([-160, -190], z => { x: x, z: z }))
 let hallLots = map([-110, -160, -190], z => { x: -22, z: z })
 
@@ -148,16 +147,16 @@ let roadStrips = [
 ]
 
 // The districts' navigation domains, 1 m cells on whole-metre origins so neighbouring grids share cells where they
-// overlap, each reaching a few metres into its neighbours so a route crosses between them.
+// overlap, each reaching a few metres into its neighbours so a route crosses between them. The four are one `pavement`
+// network of shared domains: a citizen heading to an anchor reads its step from that anchor's goal field, which
+// crosses the districts at their shared cells, rather than searching a route of its own.
+let pavement = { shared: true, network: "pavement" }
 navigation {
   domains [
-    walkable("city-square", [-46, 0.05, -100], 1, 92, 100, 2.2, 3, 1024)
-    walkable("city-terraces", [-150, 0.05, -205], 1, 114, 245, 2.2, 3, 1024)
-    walkable("city-works", [36, 0.05, -100], 1, 114, 140, 2.2, 3, 1024)
-    walkable("city-quay", [-46, 0.05, -205], 1, 196, 119, 2.2, 3, 1024)
-    // The citizens' one domain over the whole bank, 2 m cells sized for the standard walker (../standard/domains.puck),
-    // so a citizen routes between any two districts.
-    surfaceDomain("city-streets", [-150, 0.05, -205], 2, 150, 123, 2.2, 3, 1024)
+    walkable("city-square", [-46, 0.05, -100], 1, 92, 100, 2.2, 3, 1024) with pavement
+    walkable("city-terraces", [-150, 0.05, -205], 1, 114, 245, 2.2, 3, 1024) with pavement
+    walkable("city-works", [36, 0.05, -100], 1, 114, 140, 2.2, 3, 1024) with pavement
+    walkable("city-quay", [-46, 0.05, -205], 1, 196, 119, 2.2, 3, 1024) with pavement
   ]
 }
 
@@ -165,7 +164,7 @@ navigation {
 // The citizens (../standard/citizen.puck). `citizenCount` of them, numbered down from the top of the body capacity
 // above the Moth's eight (avatars/moth.puck), in blocks of one look each: look `b` is block `b`, its citizens standing
 // in a disc on the open ground north of the square until the schedule sends them off.
-let citizenCount = 480
+let citizenCount = 1920
 let citizenCoats = ["#B5523B", "#3E6E8E", "#6B8E4E", "#C98B2E", "#7A4E7E", "#D8CBB0"]
 let citizenHats = ["#2F2A26", "#8A5A3C", "#2F7F7A", "#C9BFAE"]
 let citizenLookCount = length(citizenCoats) * length(citizenHats)
@@ -175,11 +174,11 @@ let citizenTop = 7 + citizenCount
 // Each citizen's anchors: a home at a terrace house's front lane, work at a workshop, warehouse or civic hall door or
 // behind a market stall, and the market inside the stall ring. Assignments step through the lists by coprime strides
 // so neighbours in a block live, work and shop in different places.
-let citizenHomes = map(terraceLots, lot => [lot.x, (lot.z + 6)])
+let citizenHomes = map(terraceLots, lot => [lot.x, (lot.z - 6)])
 let citizenWorks = concat(
-  map(shedLots, lot => [lot.x, (lot.z + 10)]),
-  map(warehouseLots, lot => [lot.x, (lot.z + 7.5)]),
-  map(hallLots, lot => [lot.x, (lot.z + 11.5)]),
+  map(shedLots, lot => [lot.x, ((lot.yaw == 180) ? (lot.z + 10) : (lot.z - 10))]),
+  map(warehouseLots, lot => [lot.x, (lot.z - 7.5)]),
+  map(hallLots, lot => [lot.x, (lot.z - 11.5)]),
   map(stallRing, stall => [(20.5 * sine(stall.yaw * 3.141592653589793 / 180)), (-50 + 20.5 * cosine(stall.yaw * 3.141592653589793 / 180))])
 )
 let citizenMarkets = map(stallRing, stall => [(14 * sine(stall.yaw * 3.141592653589793 / 180)), (-50 + 14 * cosine(stall.yaw * 3.141592653589793 / 180))])
@@ -188,24 +187,24 @@ let citizenPeople = map(range(0, citizenCount), i => {
   home: citizenHomes[i % length(citizenHomes)]
   work: citizenWorks[(7 * i + 3) % length(citizenWorks)]
   market: citizenMarkets[(5 * i) % length(citizenMarkets)]
-  shift: (i % 12) / 288
+  group: i % 12
 })
 
 bodies {
   capacity: 8 + citizenCount
 }
 
-citizenDesign(domain: "city-streets")
+citizenDesign(domain: "city-square")
 citizenLooks(coats: citizenCoats, hats: citizenHats)
 citizenSchedule(
   people: citizenPeople,
   clock: cityDay,
   phases: [
-    { name: "night", from: 19, to: 7, anchor: "home" }
-    { name: "morning", from: 7, to: 12, anchor: "work" }
-    { name: "lunch", from: 12, to: 13, anchor: "market" }
-    { name: "afternoon", from: 13, to: 17, anchor: "work" }
-    { name: "evening", from: 17, to: 19, anchor: "market" }
+    { from: 19, to: 7, anchor: "home" }
+    { from: 7, to: 12, anchor: "work" }
+    { from: 12, to: 13, anchor: "market" }
+    { from: 13, to: 17, anchor: "work" }
+    { from: 17, to: 19, anchor: "market" }
   ]
 )
 
@@ -321,6 +320,7 @@ placements {
     placement $"shed-{lot.x}-{lot.z}" {
       prototype: "shed"
       position [lot.x, 0, lot.z]
+      yawDegrees: lot.yaw
       solid
     }
   }
@@ -492,7 +492,8 @@ prototypes {
     }
   }
 
-  // A civic hall west of the avenue: a 24 by 20 m cream hall with a tower over its north end.
+  // A civic hall west of the avenue: a 24 by 20 m cream hall with a tower over its south end (shapes are in the author
+  // frame, a half turn from the world's, so local +Z is world -Z).
   prototype "civic-hall" {
     document {
       name: "civic-hall"
@@ -552,7 +553,8 @@ prototypes {
     }
   }
 
-  // A market stall of each awning colour: a timber counter under an awning on four posts, open toward +Z.
+  // A market stall of each awning colour: a timber counter under an awning on four posts, the counter on the side its yaw
+  // turns to face the fountain.
   for awning in [{ name: "teal", slot: teal }, { name: "ochre", slot: ochre }] {
     prototype $"stall-{awning.name}" {
       document {

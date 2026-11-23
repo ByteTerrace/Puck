@@ -2,21 +2,21 @@
 // from a small set of parts so a crowd shows many looks. A module library: it hands its importers templates and
 // emits no document. A world expands `citizenDesign` once (the producer, the kit, the target register), then
 // `citizenLooks` (the parts' prototypes and looks) and `citizenSchedule` (the anchor rows and the rules that send each
-// citizen between them), and places the crowd with an `inhabit` row naming the kit and a look (docs/plans/city.md).
+// citizen between them), and places the crowd with an `inhabit` row naming the kit and a look.
 //
 // Everything a citizen does runs on the engine's own systems: its body walks the standard `walk` motion program
 // (motion.puck) under its kit, its producer routes it over the world's navigation domain toward its `errand` register,
-// and the schedule's rules write that register from the world's clock. A crowd batches motion through the kit's
-// `autonomy` row, which needs `overlap` body contact; citizens pass through one another rather than collide.
+// and the schedule's rules write that register from the world's clock. Citizens use `overlap` body contact, so a
+// crowd can batch its motion through an `autonomy` row; they pass through one another rather than collide.
 
 import "kits"
 
 // A citizen's stroll: the standard walker's motion (kits.puck) at a walking pace of 1.4 m/s, never running.
 let citizenMotion = walkerMotion with { speed { value: 1.4 } }
 
-// The producer, the kit and the target register. `domain` names the surface domain the citizens route over;
-// `motionSeconds` and `steeringSeconds` set how often each citizen's motion and steering update.
-template citizenDesign(domain, motionSeconds = 0.1, steeringSeconds = 0.2) {
+// The producer, the kit and the target register. `domain` names the surface domain the citizens route over. The kit runs
+// at the full tick rate: an `autonomy` cadence under a steering producer stops the host today.
+template citizenDesign(domain) {
   targetRegisters [
     { name: "errand", maximumRange: 1000, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
   ]
@@ -38,10 +38,6 @@ template citizenDesign(domain, motionSeconds = 0.1, steeringSeconds = 0.2) {
       bodyMotionProgram: "walk"
       // Its 0.3 m spheres span the ground to 1.7 m, as the standard walker's (walker.puck).
       collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
-      autonomy {
-        motionSeconds: motionSeconds
-        steeringSeconds: steeringSeconds
-      }
       motion: citizenMotion
       producers {
         citizenErrand {
@@ -131,56 +127,30 @@ template citizenLooks(coats, hats, skin = "#E2B48C", trousers = "#4A4038") {
   }))
 }
 
-// The schedule. `people` lists each citizen as `{ key, home, work, market, shift }`: `key` its body number, each anchor
-// an `[x, z]` point on the ground, `shift` a fraction of a day added to every phase's start, so a crowd does not leave
-// all at once. `phases` lists the day's parts as `{ name, from, to, anchor }` in hours of `clock`, a world row holding
-// the day's fraction (skies.puck's `dayCycle`); `anchor` is "home", "work" or "market". A phase whose `from` exceeds
-// its `to` runs over midnight. As each citizen enters a phase, a rule designates that anchor's point as its errand and
-// counts the visit in `citizenVisits`, so a state reading shows every citizen moving between anchors.
-template citizenSchedule(people, phases, clock) {
+// The schedule. `people` lists each citizen as `{ key, home, work, market, group }`: `key` its body number, each anchor
+// an `[x, z]` point on the ground, `group` one of `groups` shift groups, numbered from 0. `phases` lists the day's parts
+// as `{ from, to, anchor }` in hours of `clock`, a world row holding the day's fraction (skies.puck's `dayCycle`);
+// `anchor` is "home", "work" or "market", and a phase whose `from` exceeds its `to` runs over midnight. Group `g` starts
+// every phase `g` × `groupSeconds` of day later than group 0, so a crowd does not leave all at once.
+//
+// The clock is read once per group, never once per citizen: a rule per phase writes each group's current anchor
+// (1 home, 2 work, 3 market) into `citizenGroupAnchor`, and a rule per anchor sends each citizen whose group's anchor
+// just became that anchor to its own point, counting the visit in `citizenVisits`. A citizen's rules compare two
+// cells; the day's arithmetic runs for twelve groups.
+template citizenSchedule(people, phases, clock, groups = 12, groupDayFraction = 0.00347) {
   state {
     world [
+      citizenAnchorRow(name: "citizenHomeX", people: people, values: map(people, p => p.home[0]))
+      citizenAnchorRow(name: "citizenHomeZ", people: people, values: map(people, p => p.home[1]))
+      citizenAnchorRow(name: "citizenWorkX", people: people, values: map(people, p => p.work[0]))
+      citizenAnchorRow(name: "citizenWorkZ", people: people, values: map(people, p => p.work[1]))
+      citizenAnchorRow(name: "citizenMarketX", people: people, values: map(people, p => p.market[0]))
+      citizenAnchorRow(name: "citizenMarketZ", people: people, values: map(people, p => p.market[1]))
       {
-        name: "citizenHomeX"
-        kind: "Fixed"
+        name: "citizenGroup"
+        kind: "Int"
         capacity: length(people)
-        cells: map(people, p => { key: $"{p.key}", value: $"{round(p.home[0] * 1024) / 1024}" })
-      }
-      {
-        name: "citizenHomeZ"
-        kind: "Fixed"
-        capacity: length(people)
-        cells: map(people, p => { key: $"{p.key}", value: $"{round(p.home[1] * 1024) / 1024}" })
-      }
-      {
-        name: "citizenWorkX"
-        kind: "Fixed"
-        capacity: length(people)
-        cells: map(people, p => { key: $"{p.key}", value: $"{round(p.work[0] * 1024) / 1024}" })
-      }
-      {
-        name: "citizenWorkZ"
-        kind: "Fixed"
-        capacity: length(people)
-        cells: map(people, p => { key: $"{p.key}", value: $"{round(p.work[1] * 1024) / 1024}" })
-      }
-      {
-        name: "citizenMarketX"
-        kind: "Fixed"
-        capacity: length(people)
-        cells: map(people, p => { key: $"{p.key}", value: $"{round(p.market[0] * 1024) / 1024}" })
-      }
-      {
-        name: "citizenMarketZ"
-        kind: "Fixed"
-        capacity: length(people)
-        cells: map(people, p => { key: $"{p.key}", value: $"{round(p.market[1] * 1024) / 1024}" })
-      }
-      {
-        name: "citizenShift"
-        kind: "Fixed"
-        capacity: length(people)
-        cells: map(people, p => { key: $"{p.key}", value: $"{round(p.shift * 65536) / 65536}" })
+        cells: map(people, p => { key: $"{p.key}", value: p.group })
       }
       {
         name: "citizenVisits"
@@ -188,61 +158,69 @@ template citizenSchedule(people, phases, clock) {
         capacity: length(people)
         cells: map(people, p => { key: $"{p.key}", value: 0 })
       }
+      {
+        name: "citizenGroupShift"
+        kind: "Fixed"
+        capacity: groups
+        cells: map(range(0, groups), g => { key: $"{g}", value: $"{round(g * groupDayFraction * 65536) / 65536}" })
+      }
+      {
+        name: "citizenGroupAnchor"
+        kind: "Int"
+        capacity: groups
+        cells: map(range(0, groups), g => { key: $"{g}", value: 0 })
+      }
     ]
   }
 
-  for phase in filter(phases, p => (p.anchor == "home") and (p.from < p.to)) {
-    rule $"citizen-{phase.name}" {
-      when clock >= ((phase.from / 24) + citizenShift[$each]) and clock < (phase.to / 24)
-      mode: Edge
-      forEach: citizenShift
-      designate(key: $each, kind: Point, register: "errand", pointX: citizenHomeX[$each], pointY: 0, pointZ: citizenHomeZ[$each])
-      citizenVisits[$each] = citizenVisits[$each] + 1
+  for (phase, i) in phases {
+    for code in [(phase.anchor == "home") ? 1 : ((phase.anchor == "work") ? 2 : 3)] {
+      for daytime in filter([phase], p => p.from < p.to) {
+        rule $"citizen-phase-{i}" {
+          when clock >= ((phase.from / 24) + citizenGroupShift[$each]) and clock < ((phase.to / 24) + citizenGroupShift[$each])
+          mode: Edge
+          forEach: citizenGroupShift
+          citizenGroupAnchor[$each] = code
+        }
+      }
+      for overnight in filter([phase], p => p.from > p.to) {
+        rule $"citizen-phase-{i}" {
+          when clock >= ((phase.from / 24) + citizenGroupShift[$each]) or clock < ((phase.to / 24) + citizenGroupShift[$each])
+          mode: Edge
+          forEach: citizenGroupShift
+          citizenGroupAnchor[$each] = code
+        }
+      }
     }
   }
-  for phase in filter(phases, p => (p.anchor == "home") and (p.from > p.to)) {
-    rule $"citizen-{phase.name}" {
-      when clock >= ((phase.from / 24) + citizenShift[$each]) or clock < (phase.to / 24)
-      mode: Edge
-      forEach: citizenShift
-      designate(key: $each, kind: Point, register: "errand", pointX: citizenHomeX[$each], pointY: 0, pointZ: citizenHomeZ[$each])
-      citizenVisits[$each] = citizenVisits[$each] + 1
-    }
+
+  rule "citizen-to-home" {
+    when citizenGroupAnchor[citizenGroup[$each]] == 1
+    mode: Edge
+    forEach: citizenGroup
+    designate(key: $each, kind: Point, register: "errand", pointX: citizenHomeX[$each], pointY: 0, pointZ: citizenHomeZ[$each])
+    citizenVisits[$each] = citizenVisits[$each] + 1
   }
-  for phase in filter(phases, p => (p.anchor == "work") and (p.from < p.to)) {
-    rule $"citizen-{phase.name}" {
-      when clock >= ((phase.from / 24) + citizenShift[$each]) and clock < (phase.to / 24)
-      mode: Edge
-      forEach: citizenShift
-      designate(key: $each, kind: Point, register: "errand", pointX: citizenWorkX[$each], pointY: 0, pointZ: citizenWorkZ[$each])
-      citizenVisits[$each] = citizenVisits[$each] + 1
-    }
+  rule "citizen-to-work" {
+    when citizenGroupAnchor[citizenGroup[$each]] == 2
+    mode: Edge
+    forEach: citizenGroup
+    designate(key: $each, kind: Point, register: "errand", pointX: citizenWorkX[$each], pointY: 0, pointZ: citizenWorkZ[$each])
+    citizenVisits[$each] = citizenVisits[$each] + 1
   }
-  for phase in filter(phases, p => (p.anchor == "work") and (p.from > p.to)) {
-    rule $"citizen-{phase.name}" {
-      when clock >= ((phase.from / 24) + citizenShift[$each]) or clock < (phase.to / 24)
-      mode: Edge
-      forEach: citizenShift
-      designate(key: $each, kind: Point, register: "errand", pointX: citizenWorkX[$each], pointY: 0, pointZ: citizenWorkZ[$each])
-      citizenVisits[$each] = citizenVisits[$each] + 1
-    }
+  rule "citizen-to-market" {
+    when citizenGroupAnchor[citizenGroup[$each]] == 3
+    mode: Edge
+    forEach: citizenGroup
+    designate(key: $each, kind: Point, register: "errand", pointX: citizenMarketX[$each], pointY: 0, pointZ: citizenMarketZ[$each])
+    citizenVisits[$each] = citizenVisits[$each] + 1
   }
-  for phase in filter(phases, p => (p.anchor == "market") and (p.from < p.to)) {
-    rule $"citizen-{phase.name}" {
-      when clock >= ((phase.from / 24) + citizenShift[$each]) and clock < (phase.to / 24)
-      mode: Edge
-      forEach: citizenShift
-      designate(key: $each, kind: Point, register: "errand", pointX: citizenMarketX[$each], pointY: 0, pointZ: citizenMarketZ[$each])
-      citizenVisits[$each] = citizenVisits[$each] + 1
-    }
-  }
-  for phase in filter(phases, p => (p.anchor == "market") and (p.from > p.to)) {
-    rule $"citizen-{phase.name}" {
-      when clock >= ((phase.from / 24) + citizenShift[$each]) or clock < (phase.to / 24)
-      mode: Edge
-      forEach: citizenShift
-      designate(key: $each, kind: Point, register: "errand", pointX: citizenMarketX[$each], pointY: 0, pointZ: citizenMarketZ[$each])
-      citizenVisits[$each] = citizenVisits[$each] + 1
-    }
-  }
+}
+
+// One anchor coordinate of every citizen as a Fixed row keyed by body number, each value on a 1/1024 m step.
+function citizenAnchorRow(name, people, values) = {
+  name: name
+  kind: "Fixed"
+  capacity: length(people)
+  cells: map(range(0, length(people)), i => { key: $"{people[i].key}", value: $"{round(values[i] * 1024) / 1024}" })
 }
