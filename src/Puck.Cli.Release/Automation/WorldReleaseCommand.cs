@@ -160,13 +160,20 @@ public static class WorldReleaseCommand {
     }
 
     // A durable operation that fails or is cancelled leaves a record behind, so its refusal also says where to look.
-    // CliExit maps the exception to the exit code; this only adds the hint.
-    private static async Task<int> WithRecoveryHintAsync(Func<Task<int>> action) {
+    // CliExit maps the exception to the exit code; this adds the hint, and says why a cancellation stopped the operation:
+    // the caller's, or one the host's cancellation names itself (a lost controller lease). A cancellation neither the
+    // caller nor the host explains is a defect in the release path, so its stack is printed to show where it began.
+    private static async Task<int> WithRecoveryHintAsync(Func<Task<int>> action, CancellationToken cancellationToken) {
         const string Hint = "Run 'puck world release status' to inspect the durable result; use 'puck world release resume' if an operation is unfinished.";
 
         try {
             return await action().ConfigureAwait(continueOnCapturedContext: false);
-        } catch (OperationCanceledException) {
+        } catch (OperationCanceledException error) {
+            if (cancellationToken.IsCancellationRequested) {
+                Console.Error.WriteLine(value: "The release operation stopped because its caller cancelled it (an interrupt or termination request).");
+            } else if ((error.Message == new OperationCanceledException().Message) || (error.Message == new TaskCanceledException().Message)) {
+                Console.Error.WriteLine(value: $"The release operation was cancelled without a reason; the cancellation began at:{Environment.NewLine}{error}");
+            }
             Console.Error.WriteLine(value: Hint);
 
             throw;
@@ -345,7 +352,8 @@ public static class WorldReleaseCommand {
 
                 Console.WriteLine(value: $"Finalized {finalized.Record.ActiveRelease}. The previous release is no longer eligible for ordinary rollback; recovery history and artifacts are retained.");
                 return CliExit.Success;
-            }
+            },
+            cancellationToken: token
         ));
 
         var sourceManifest = new Argument<string>(name: "source-manifest") { Description = "The release.json of the release being left." };
@@ -460,7 +468,8 @@ public static class WorldReleaseCommand {
                     ? CliExit.Success
                     : CliExit.Failed
                 );
-            }
+            },
+            cancellationToken: token
         ));
         var deployPackage = new Argument<string>(name: "package-directory") { Description = "The prepared package: composed worlds, artifacts, and their release.json." };
         var deployOperation = Operation();
@@ -483,7 +492,8 @@ public static class WorldReleaseCommand {
                     ? CliExit.Success
                     : CliExit.Failed
                 );
-            }
+            },
+            cancellationToken: token
         ));
         var rollbackOperation = Operation();
         var rollback = new Command(
@@ -504,7 +514,8 @@ public static class WorldReleaseCommand {
                     ? CliExit.Success
                     : CliExit.Failed
                 );
-            }
+            },
+            cancellationToken: token
         ));
         var checkpointId = new Option<Guid?>("--request") { Description = "Stable recovery-point request ID for retrying an interrupted capture." };
         var checkpoint = new Command(
@@ -549,7 +560,8 @@ public static class WorldReleaseCommand {
                     ? CliExit.Success
                     : CliExit.Failed
                 );
-            }
+            },
+            cancellationToken: token
         ));
         return new Command(
             description: "Prepare, deploy, roll back, inspect, and recover hosted-world deployment groups.",

@@ -22,7 +22,7 @@ public static partial class AzureCommand {
 
         try {
             WorldReleaseController.Value = lease;
-            return await action(lease.Token).ConfigureAwait(continueOnCapturedContext: false);
+            return await lease.RunAsync(action: action).ConfigureAwait(continueOnCapturedContext: false);
         } finally {
             WorldReleaseController.Value = null;
             await lease.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
@@ -58,16 +58,28 @@ public static partial class AzureCommand {
         }
         public async Task ReleaseAsync(CancellationToken cancellationToken) =>
             await m_lease.ReleaseAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-        public async Task RenewAsync(CancellationToken cancellationToken) =>
-            await m_lease.RenewAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+        // Storage answers a renewal of a lease that is not this ID's, or of no lease, with 409 (LeaseIdMismatchWithLeaseOperation,
+        // LeaseNotPresentWithLeaseOperation) or 412 (LeaseLost), and of a deleted blob with 404: each says the lease is gone.
+        public async Task RenewAsync(CancellationToken cancellationToken) {
+            try {
+                await m_lease.RenewAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            } catch (RequestFailedException error) when (error.Status is 404 or 409 or 412) {
+                throw new WorldReleaseControllerLeaseLostException(
+                    innerException: error,
+                    message: $"storage answered {error.Status} {error.ErrorCode}"
+                );
+            }
+        }
     }
 
     private static Task<WorldReleaseControllerLease> AcquireWorldReleaseLeaseAsync(string endpoint, Guid owner, string group, TimeProvider clock, CancellationToken cancellationToken) {
         _ = SafeName.Parse(candidate: group);
         var options = new BlobClientOptions();
 
+        // The controller lease decides every retry and bounds every call on its clock (WorldReleaseControllerLease), so
+        // the SDK neither retries nor times out on its own.
         options.Retry.MaxRetries = 0;
-        options.Retry.NetworkTimeout = TimeSpan.FromSeconds(seconds: 10);
+        options.Retry.NetworkTimeout = Timeout.InfiniteTimeSpan;
         var blob = new BlobClient(
             blobUri: new Uri(uriString: $"{endpoint.TrimEnd(trimChar: '/')}/{owner:D}/{WorldOwnedWorldSync.HostedPrivateNamespace}/release-groups/{group}.controller"),
             credential: new DefaultAzureCredential(),
