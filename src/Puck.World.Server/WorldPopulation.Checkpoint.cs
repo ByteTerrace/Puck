@@ -236,6 +236,7 @@ public sealed partial class WorldPopulation {
             ActiveName: entry.ProducerState.ActiveProducerName,
             ActiveNavigationDomainIndex: entry.ProducerState.ActiveProducerNavigationDomainIndex,
             ActivityPhase: entry.ProducerState.ActivityPhase,
+            ActivityPhaseRemainder: entry.ProducerState.ActivityPhaseRemainder,
             ActivityRate: entry.ProducerState.ActivityRate,
             CurveArcRaw: entry.ProducerState.CurveArcRaw,
             Flock: new WorldPopulationFlockCheckpoint(
@@ -247,6 +248,7 @@ public sealed partial class WorldPopulation {
                 Target: entry.ProducerState.FlockTarget
             ),
             Phase: entry.ProducerState.Phase,
+            PhaseRemainder: entry.ProducerState.PhaseRemainder,
             PreferredAltitude: entry.ProducerState.PreferredAltitude,
             WeaveFrequency: entry.ProducerState.WeaveFrequency
         );
@@ -420,6 +422,7 @@ public sealed partial class WorldPopulation {
                 ActiveProducerName = producer.ActiveName,
                 ActiveProducerNavigationDomainIndex = producer.ActiveNavigationDomainIndex,
                 ActivityPhase = producer.ActivityPhase,
+                ActivityPhaseRemainder = producer.ActivityPhaseRemainder,
                 ActivityRate = producer.ActivityRate,
                 CurveArcRaw = producer.CurveArcRaw,
                 FlockDesired = producer.Flock.Desired,
@@ -429,6 +432,7 @@ public sealed partial class WorldPopulation {
                 FlockSeeded = producer.Flock.Seeded,
                 FlockTarget = producer.Flock.Target,
                 Phase = producer.Phase,
+                PhaseRemainder = producer.PhaseRemainder,
                 PreferredAltitude = producer.PreferredAltitude,
                 WeaveFrequency = producer.WeaveFrequency,
             };
@@ -580,6 +584,11 @@ public sealed partial class WorldPopulation {
                 (captured.Body.Motion.CarriedBy == captured.Index)
             ) {
                 throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} names an invalid carrier index {captured.Body.Motion.CarriedBy}.");
+            }
+            static bool OutsideSecond(long remainder) => ((remainder <= -((long)FixedTickConversion.TicksPerSecond)) || (remainder >= ((long)FixedTickConversion.TicksPerSecond)));
+
+            if (OutsideSecond(remainder: captured.Producer.PhaseRemainder) || OutsideSecond(remainder: captured.Producer.ActivityPhaseRemainder)) {
+                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} carries a producer phase remainder outside one engine second.");
             }
             var bodyKitIndex = CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit);
 

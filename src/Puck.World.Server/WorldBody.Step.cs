@@ -283,15 +283,25 @@ public sealed partial class WorldBody {
         scratch.StepTicks = stepTicks;
         scratch.GoverningShapingRow = -1;
 
-        for (var phase = 0; (phase < producer.Program.Phases.Length); phase++) {
-            foreach (var op in producer.Program.Phases[phase]) {
-                ExecutePhaseOperation(
-                    op: op,
-                    scratch: ref scratch
-                );
+        // A producer's operations write only the scratch, so a run that throws leaves the body and its producer state
+        // exactly as they were: the run is refused, the body holds still for it, and the fault is the body's own.
+        try {
+            for (var phase = 0; (phase < producer.Program.Phases.Length); phase++) {
+                foreach (var op in producer.Program.Phases[phase]) {
+                    ExecutePhaseOperation(
+                        op: op,
+                        scratch: ref scratch
+                    );
+                }
             }
+        } catch (Exception error) when (IsProducerFault(error: error)) {
+            NoteProducerFault(error: error);
+            StageProducerIntent(intent: default);
+
+            return;
         }
 
+        m_producerFault = null;
         state = scratch.ProducerState;
         StageProducerIntent(intent: in scratch.Intent);
     }
@@ -1035,10 +1045,6 @@ public sealed partial class WorldBody {
             Y: FixedQ4816.Zero,
             Z: (to.Z - from.Z)
         );
-    // A per-second value's share of one fixed step: the exact division by the step's rate, which must divide the
-    // engine tick base (RateOfStep refuses one that does not).
-    private static FixedQ4816 PerStep(FixedQ4816 value, ulong stepTicks) =>
-        (value / FixedQ4816.FromInteger(value: checked((long)FixedTickConversion.RateOfStep(stepTicks: stepTicks))));
     // The body's own resolved up may differ from world Y (a tilted planetoid surface, a wall run) — a producer's
     // "preferred altitude" is a distance from the world origin along that axis, not a literal world-Y coordinate.
     // Under the ordinary UnitY up this is exactly the .Y component every world read before the term generalized.
@@ -1113,17 +1119,35 @@ public sealed partial class WorldBody {
             );
         }
     }
+    private static FixedQ4816 AdvancePhase(FixedQ4816 rate, ref long remainder, ulong stepTicks) {
+        var accumulator = FixedRateAccumulator.FromRemainder(
+            remainder: remainder,
+            ticksPerSecond: EngineTicksPerSecond
+        );
+        var advance = accumulator.Integrate(
+            elapsedTicks: stepTicks,
+            ratePerSecond: rate
+        );
+
+        remainder = accumulator.Remainder;
+
+        return advance;
+    }
     private void ProduceRoamIntent(ref BodyMotionScratch scratch) {
         var producer = scratch.Producer!;
         var state = scratch.ProducerState;
 
-        state.Phase += PerStep(
-            stepTicks: scratch.StepTicks,
-            value: state.WeaveFrequency
+        // A refresh covers whatever whole number of engine ticks its autonomy cadence batched; the carried remainders
+        // keep a second of refreshes a second of phase at any cadence.
+        state.Phase += AdvancePhase(
+            rate: state.WeaveFrequency,
+            remainder: ref state.PhaseRemainder,
+            stepTicks: scratch.StepTicks
         );
-        state.ActivityPhase += PerStep(
-            stepTicks: scratch.StepTicks,
-            value: state.ActivityRate
+        state.ActivityPhase += AdvancePhase(
+            rate: state.ActivityRate,
+            remainder: ref state.ActivityPhaseRemainder,
+            stepTicks: scratch.StepTicks
         );
 
         // Measured from the body's own HOME, never the world origin: a population spread over several placements
@@ -1178,9 +1202,9 @@ public sealed partial class WorldBody {
                 // A producer owns a body-relative steering decision even when a seat-facing kit consumes world-frame
                 // axes. Resolve that decision through the same yaw convention SnapYawToPlanarIntent reads; otherwise
                 // the Turn channel is deliberately inert under World and every roamer can only march toward -Z.
-                var targetYaw = (FixedYaw + PerStep(
-                    stepTicks: scratch.StepTicks,
-                    value: (angularIntent * scratch.TurnSpeed)
+                var targetYaw = (FixedYaw + FixedTickConversion.ShareOfStep(
+                    perSecond: (angularIntent * scratch.TurnSpeed),
+                    stepTicks: scratch.StepTicks
                 ));
 
                 var (sinYaw, cosYaw) = FixedQ4816.SinCos(angle: targetYaw);

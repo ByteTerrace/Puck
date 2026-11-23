@@ -185,8 +185,10 @@ public readonly record struct EntryLookSection(
 /// cached neighbour perception a flocking producer steers by.</summary>
 /// <param name="AcquiredTarget">The population index of the acquired target, or -1.</param>
 /// <param name="ActivityPhase">The activity oscillator's phase.</param>
+/// <param name="ActivityPhaseRemainder">The activity phase's integration remainder over the engine tick base.</param>
 /// <param name="ActivityRate">The activity oscillator's rate.</param>
 /// <param name="Phase">The producer's own phase.</param>
+/// <param name="PhaseRemainder">The producer phase's integration remainder over the engine tick base.</param>
 /// <param name="PreferredAltitude">The altitude the producer holds.</param>
 /// <param name="WeaveFrequency">The weave oscillator's frequency.</param>
 /// <param name="CurveArcRaw">A curve-follow target's travelled arc length, a Q32 raw.</param>
@@ -197,8 +199,10 @@ public readonly record struct EntryLookSection(
 public readonly record struct EntryProducerSection(
     int AcquiredTarget,
     FixedQ4816 ActivityPhase,
+    long ActivityPhaseRemainder,
     FixedQ4816 ActivityRate,
     FixedQ4816 Phase,
+    long PhaseRemainder,
     FixedQ4816 PreferredAltitude,
     FixedQ4816 WeaveFrequency,
     long CurveArcRaw,
@@ -214,8 +218,10 @@ public readonly record struct EntryProducerSection(
     public static void Write(WireWriter writer, in EntryProducerSection section) {
         writer.WriteInt32(value: section.AcquiredTarget);
         writer.WriteFixed(value: section.ActivityPhase);
+        writer.WriteInt64(value: section.ActivityPhaseRemainder);
         writer.WriteFixed(value: section.ActivityRate);
         writer.WriteFixed(value: section.Phase);
+        writer.WriteInt64(value: section.PhaseRemainder);
         writer.WriteFixed(value: section.PreferredAltitude);
         writer.WriteFixed(value: section.WeaveFrequency);
         writer.WriteInt64(value: section.CurveArcRaw);
@@ -238,8 +244,10 @@ public readonly record struct EntryProducerSection(
     public static EntryProducerSection Read(ref WireReader reader) => new(
         AcquiredTarget: reader.ReadInt32(),
         ActivityPhase: reader.ReadFixed(),
+        ActivityPhaseRemainder: reader.ReadInt64(),
         ActivityRate: reader.ReadFixed(),
         Phase: reader.ReadFixed(),
+        PhaseRemainder: reader.ReadInt64(),
         PreferredAltitude: reader.ReadFixed(),
         WeaveFrequency: reader.ReadFixed(),
         CurveArcRaw: reader.ReadInt64(),

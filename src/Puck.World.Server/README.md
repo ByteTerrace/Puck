@@ -1000,6 +1000,13 @@ scripted tape segments: `live` (the submitted stream), `idle` (hold still), or
 `producer:<name>` (an authored producer program declared by the selected kit). The per-tick merge rule is
 tape > submitted > producer > zero.
 
+A producer run that throws is the body's fault, never the host's
+(`WorldBody.ProducerFault.cs`): its operations write only the run's scratch, so
+the run is refused whole, the body holds still for it and its producer state is
+unchanged, and the next run tries again. The population narrates each
+transition once on the `body.producer` channel, faulted and recovered, and
+`body.where` reads `producer=faulted(...)` while the fault holds.
+
 ## The entity table (`WorldPopulation.cs`, `WorldBody.cs`)
 
 A world holds its authored `bodies.capacity` of authoritative bodies, bounded only
@@ -1320,7 +1327,14 @@ and older versions have no compatibility reader).
 
 `kit.autonomy` independently batches non-human motion and producer steering in
 engine-tick time. Bodies are deterministically phased across each interval;
-elapsed time is integrated in one batch. Local seats, connected remote humans,
+elapsed time is integrated in one batch. A refresh lands on the first authority
+tick at or past each slot of the body's cadence grid (`CadenceDue` in
+`WorldPopulation.Step.cs`), so a cadence that is no whole number of authority
+ticks keeps its authored rate on average, and a refresh covers whatever whole
+number of engine ticks it batched: the roam oscillators integrate it through
+rate accumulators whose remainders ride the producer checkpoint section, and a
+per-step share (a hold's pull reach) is `FixedTickConversion.ShareOfStep`.
+Local seats, connected remote humans,
 live sources, tapes, and bodies with pending external input stay at full
 authority rate. `motionSeconds` must remain zero on `bodyContact: solid`, since
 a body skipped for a tick cannot honestly participate in that tick's dynamic

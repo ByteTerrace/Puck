@@ -15,7 +15,7 @@ import "kits"
 let citizenMotion = walkerMotion with { speed { value: 1.4 } }
 
 // The producer, the kit and the target register. `domain` names the surface domain the citizens route over. The kit runs
-// at the full tick rate: an `autonomy` cadence under a steering producer stops the host today.
+// at the full tick rate; an importer may batch a large crowd with `citizen` overridden to carry an `autonomy` row.
 template citizenDesign(domain) {
   targetRegisters [
     { name: "errand", maximumRange: 1000, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }

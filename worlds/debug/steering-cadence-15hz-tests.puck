@@ -1,0 +1,27 @@
+// The steering-cadence crowd at 15 Hz: 0.1 s is a tick and a half, so each steady refresh runs two ticks and carries
+// the half tick it overshot into the next, and 0.7 s is ten and a half ticks. `puck test
+// worlds/debug/steering-cadence-15hz-tests.puck --reproduce` replays it bit for bit.
+schema: "puck.world.definition.v1"
+basis: "steering-cadence-tests"
+documentId: "steering-cadence-15hz-tests"
+
+simulation {
+  rateHz: 15
+}
+
+test "at 15 Hz the crowd steering at 0.1, 0.2 and 0.7 s roams apart and stays home" {
+  when {
+    ticks 225
+  }
+  expect {
+    distance(body, 201, body, 300) > 0.5
+    distance(body, 101, body, 200) > 0.5
+    distance(body, 1, body, 100) > 0.5
+    bodyPosition(body, 250, x) > -30
+    bodyPosition(body, 250, x) < -10
+    bodyPosition(body, 150, x) > -10
+    bodyPosition(body, 150, x) < 10
+    bodyPosition(body, 50, x) > 10
+    bodyPosition(body, 50, x) < 30
+  }
+}
