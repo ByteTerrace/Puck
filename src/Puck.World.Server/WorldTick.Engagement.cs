@@ -409,6 +409,37 @@ public sealed partial class WorldTick {
                     nearest = distance;
                 }
             }
+
+            // A body whose kit boards on a press (WorldMountBoard): the seat stands within its radius, holds Drive
+            // over it, and nobody rides it yet.
+            for (var index = 0; (index < Host.Population.Capacity); index++) {
+                if (
+                    (index == slot) ||
+                    (Host.Population.MountFacet(index: index) is not { BoardChannel: { } channelName } facet) ||
+                    !body.Channels.TryGetOrdinal(name: channelName, ordinal: out var ordinal) ||
+                    (Host.Body(index: index) is not { } mount)
+                ) {
+                    continue;
+                }
+
+                var radius = (facet.BoardRadius * mount.Scale);
+                var distance = (mount.FixedPosition - body.FixedPosition).LengthSquared;
+                var subject = GrantSubject.Body(index: index);
+
+                if (
+                    (distance > (radius * radius)) ||
+                    Host.Population.HasRider(mount: index) ||
+                    !Host.GrantTable.Allows(principal: principal, capability: WorldCapability.Drive, subject: subject).IsAllowed ||
+                    !Host.Engagement.CheckEngage(actingPrincipal: principal, target: subject).IsAllowed
+                ) {
+                    continue;
+                }
+                if ((ordinals[slot] < 0) || (distance < nearest)) {
+                    ordinals[slot] = ordinal;
+                    targets[slot] = subject;
+                    nearest = distance;
+                }
+            }
         }
     }
     // The leave half of the context button: a seat captured on a screen or at a tabletop (its set holds that
@@ -421,6 +452,16 @@ public sealed partial class WorldTick {
         if (Host.Body(index: principal.Index) is not { } body) { return false; }
 
         foreach (var application in Host.GrantTable.Applications(principal: principal)) {
+            // A rider leaves the body it rides on the press that boarded it.
+            if (
+                (application.Target.Kind == GrantSubjectKind.Body) &&
+                (Host.Population.MountFacet(index: application.Target.Value) is { BoardChannel: { } boardChannel }) &&
+                body.Channels.TryGetOrdinal(name: boardChannel, ordinal: out ordinal)
+            ) {
+                target = application.Target;
+
+                return true;
+            }
             if (
                 (application.Target.Kind == GrantSubjectKind.Placement) &&
                 WorldTabletopFrame.TryFind(

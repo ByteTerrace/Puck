@@ -1204,6 +1204,14 @@ public static partial class WorldDefinitionValidator {
             if ((kit.Mount is { } mount) && !(VectorFunctions.IsFinite(vector: mount.Seat) && VectorFunctions.IsFinite(vector: mount.Exit))) {
                 errors.Add(item: $"{path}.mount seat and exit must be finite.");
             }
+            if (kit.Mount?.Board is { } board) {
+                if (!compositionChannelNames.Contains(item: board.Channel)) {
+                    errors.Add(item: $"{path}.mount.board.channel '{board.Channel}' names no declared composition channel.");
+                }
+                if (!(float.IsFinite(f: board.Radius) && (board.Radius > 0f))) {
+                    errors.Add(item: $"{path}.mount.board.radius must be finite and positive.");
+                }
+            }
             ValidateTether(
                 channelNames: compositionChannelNames,
                 errors: errors,

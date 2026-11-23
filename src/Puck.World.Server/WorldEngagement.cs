@@ -607,7 +607,11 @@ public sealed partial class WorldEngagement {
             }
 
             var principal = PrincipalOf(index: index);
-            var applications = m_grants.Applications(principal: principal);
+            var applications = WithoutDepartedBodies(
+                applications: m_grants.Applications(principal: principal),
+                index: index,
+                principal: principal
+            );
 
             body.SetEngaged(engaged: !HoldsOwnBody(
                 applications: applications,
@@ -738,6 +742,42 @@ public sealed partial class WorldEngagement {
             }
         }
         m_population.SyncPossession(possessed: m_possessed);
+    }
+    // A set that names a body no longer live here (it crossed to another authority, or was retired) drops that
+    // member: the index may come to hold another body, which the participant never chose to drive. A set left with
+    // nothing is the own-body default again.
+    private IReadOnlyList<ControlApplication> WithoutDepartedBodies(Principal principal, int index, IReadOnlyList<ControlApplication> applications) {
+        var departed = false;
+
+        for (var slot = 0; (slot < applications.Count); slot++) {
+            departed |= Departed(application: applications[slot], index: index);
+        }
+        if (!departed) {
+            return applications;
+        }
+
+        m_composeScratch.Clear();
+        for (var slot = 0; (slot < applications.Count); slot++) {
+            if (!Departed(application: applications[slot], index: index)) {
+                m_composeScratch.Add(item: applications[slot]);
+            }
+        }
+        if ((m_composeScratch.Count == 0) || !m_grants.TryValidateApplications(applications: m_composeScratch, principal: principal, reason: out _)) {
+            _ = m_grants.ClearApplications(principal: principal);
+        } else {
+            m_grants.SetApplications(
+                applications: m_composeScratch,
+                principal: principal
+            );
+        }
+
+        return m_grants.Applications(principal: principal);
+
+        bool Departed(ControlApplication application, int index) => (
+            (application.Target.Kind == GrantSubjectKind.Body) &&
+            (application.Target.Value != index) &&
+            !((((uint)application.Target.Value) < ((uint)m_population.Capacity)) && m_population.IsActive(index: application.Target.Value) && (m_population.EntryBody(index: application.Target.Value) is not null))
+        );
     }
     // A timeline held for one tick, from the spares.
     private MachinePadTimeline RentTimeline(in MachinePadState start) {

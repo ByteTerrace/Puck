@@ -1187,12 +1187,17 @@ public sealed partial class WorldPopulation {
     /// <param name="planarVelocity">The mapped (rotated) planar velocity.</param>
     /// <param name="verticalVelocity">The mapped (rotation-invariant) vertical velocity.</param>
     /// <param name="actionContinuity">Named action registers carried without assuming matching ordinals. Input resets.</param>
+    /// <param name="definition">The live document. The carried registers are the body's own state, so the size, kit
+    /// and look they select are the body's before its segment is swept and before it first advances here
+    /// (<see cref="SyncBodyCells"/>).</param>
     /// <param name="continuum">The optional already-evaluated adjacency segment to resolve before this body may
-    /// participate in another ordinary simulation step. Portal and spawn arrivals omit it.</param>
+    /// participate in another ordinary simulation step. Portal and spawn arrivals omit it, and so does a traveler whose
+    /// pose is another body's. The sweep meets this world's ground and the neighbour's, and none of the neighbour's
+    /// bodies (<see cref="LandingArrival"/>).</param>
     /// <param name="destinationCompletedEngineTick">The destination authority's completed engine-time boundary at
     /// admission. It raises the traveler's consumed-through fence when transport arrives after the source interval.</param>
     /// <returns><see langword="true"/> when the seat was active and its body was overridden.</returns>
-    public bool ApplyMappedArrival(int slot, string motionProgramName, FixedVector3 position, FixedQ4816 yawRadians, FixedVector3 planarVelocity, FixedQ4816 verticalVelocity, ulong destinationCompletedEngineTick, WorldTransferActionContinuity? actionContinuity = null, WorldContinuumTrajectory? continuum = null) {
+    public bool ApplyMappedArrival(int slot, string motionProgramName, FixedVector3 position, FixedQ4816 yawRadians, FixedVector3 planarVelocity, FixedQ4816 verticalVelocity, ulong destinationCompletedEngineTick, WorldDefinition definition, WorldTransferActionContinuity? actionContinuity = null, WorldContinuumTrajectory? continuum = null) {
         var entry = m_entries[slot];
 
         if (
@@ -1239,13 +1244,19 @@ public sealed partial class WorldPopulation {
                 );
             }
         }
+        _ = SyncBodyCells(definition: definition);
         if (continuum is { } trajectory) {
             BeginAdjacencyContacts();
-            body.ApplyContinuumTrajectory(
-                destinationCompletedEngineTick: destinationCompletedEngineTick,
-                entityIndex: slot,
-                trajectory: in trajectory
-            );
+            LandingArrival = true;
+            try {
+                body.ApplyContinuumTrajectory(
+                    destinationCompletedEngineTick: destinationCompletedEngineTick,
+                    entityIndex: slot,
+                    trajectory: in trajectory
+                );
+            } finally {
+                LandingArrival = false;
+            }
         }
 
         return true;

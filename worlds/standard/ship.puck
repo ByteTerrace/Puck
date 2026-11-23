@@ -3,6 +3,9 @@
 // `shipLook` once for the skiff, and `shipCraft` for the body register a ship is known by, then places a ship with an
 // `inhabit` row naming the kit and the look.
 //
+// A seat that may drive the ship (a `grants` row giving it Drive over the ship's body) boards it with the context
+// button from within five metres and steps out with the same button.
+//
 // The ship runs the engine's own systems. It is a body like any other: the seat that drives it holds its control set
 // (the body's own producer, if it has one, stands down for as long as a seat drives it), the kit's `mount` carries that
 // seat's own body in the cockpit so the pilot goes where the ship goes, and the `fly` program moves it under the kit's
@@ -88,6 +91,8 @@ template shipFlight(kit = "ship", cruise = 60, boost = 4, taxi = 4, approach = 2
       mount {
         seat: seat
         exit: exit
+        // The context button boards the ship from beside it and steps out of it again.
+        board { channel: "interact", radius: 5 }
       }
       // A body of this kit marks itself a craft the first tick it stands or flies, so the register that selects the
       // kit wherever it lands needs no rule of the world it starts in.

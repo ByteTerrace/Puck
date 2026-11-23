@@ -88,7 +88,7 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
             if (resolution.Refusal != ContactRefusal.None) { return resolution; }
         }
 
-        var localIsSolid = (m_population.BodyContact(index: entityIndex) == WorldBodyContactMode.Solid);
+        var localIsSolid = (!m_population.LandingArrival && (m_population.BodyContact(index: entityIndex) == WorldBodyContactMode.Solid));
         // The frozen record can predate a handoff committed after it was frozen, within the same tick, so the
         // arrival asks for itself: the entity still shown at the slot it departed from is this body.
         var departedFrom = default(Protocol.WorldEntityAddress);

@@ -1265,12 +1265,11 @@ public sealed partial class WorldReplaySnapshot {
             throw ReplayRefusal.ArrivalRefused.Raise(message: $"transfer {arrival.TransferId} from '{arrival.SourceAuthority}' does not decode against the recorded world — {decodeReason}");
         }
 
-        var reason = string.Empty;
-        var reproduced = server.ExecuteAuthorityOperation(operation: () => server.TransferEscrow.TryReland(
+        var reproduced = server.RelandArrival(
             arrival: decoded!,
-            reason: out reason,
+            reason: out var reason,
             recorded: arrival.Outcome
-        ));
+        );
 
         if (!reproduced) {
             throw ReplayRefusal.ArrivalRefused.Raise(message: $"transfer {arrival.TransferId} from '{arrival.SourceAuthority}' {(arrival.Outcome.RolledBack ? "rolled back" : "landed")} live but the re-drive's own escrow did not reproduce it — {reason}");

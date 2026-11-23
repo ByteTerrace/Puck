@@ -17,6 +17,12 @@ public sealed partial class WorldPopulation {
     internal ImmutableArray<WorldAdjacencyProjection> AdjacencyProjections { get; private set; } = [];
 
     internal bool HasAdjacencyImage(ulong tick) => (m_adjacencyImageTick == tick);
+    /// <summary>Gets whether an arriving traveler's carried segment is being swept. The segment is the rest of a step
+    /// the traveler began under the neighbour, where it already met that world's bodies as its own; the neighbour's
+    /// record of them was frozen before the handoff, so it can still show the traveler's own companions where they
+    /// stood. The sweep therefore meets ground on both sides and no neighbour body; the next tick's record, pinned
+    /// after every arrival of the boundary has landed, meets them.</summary>
+    internal bool LandingArrival { get; private set; }
     // The ownership faces of the definition the contact field composes over, rederived when that definition changes.
     private WorldOwnershipFace[] m_ownershipFaces = [];
     private WorldDefinition? m_ownershipFacesDefinition;

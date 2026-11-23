@@ -431,7 +431,7 @@ public sealed partial class WorldInstanceHost {
             var arrivedSource = transfer.SourceInstance;
             // What a traveller that rode across drives where it landed: the handed-on body and the kit it runs there.
             var drives = (((transfer.Rides is not null) && (targetAuthority.Local is { } ridden))
-                ? ridden.Server.ExecuteAuthorityOperation(operation: () => ((ridden.Server.Engagement.DrivenBody(index: member.TargetSlot) is var driven and >= 0)
+                ? ridden.Server.ExecuteAuthorityOperation(operation: () => ((ridden.Server.Engagement.MountOf(index: member.TargetSlot) is var driven and >= 0)
                     ? $", driving body:{driven} (kit '{ridden.Server.Population.KitName(index: driven)}')"
                     : ", driving nothing: the body it rode was not handed on"))
                 : string.Empty);
