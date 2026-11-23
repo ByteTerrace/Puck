@@ -314,6 +314,10 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         );
     }
     /// <inheritdoc/>
+    /// <remarks>Clears through a typed <c>R32_UINT</c> view of exactly the range, which takes any four-byte offset the
+    /// contract admits, as <c>vkCmdFillBuffer</c> does. A raw view's first element must lie on a 16-byte boundary:
+    /// <c>CreateUnorderedAccessView</c> refuses any other, and a clear that names the refused descriptor removes the
+    /// device with <c>DXGI_ERROR_INVALID_CALL</c>.</remarks>
     public void ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes, ulong offsetBytes = 0) {
         ArgumentOutOfRangeException.ThrowIfZero(commandBufferHandle);
         ArgumentOutOfRangeException.ThrowIfZero(bufferHandle);
@@ -325,7 +329,7 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
             throw new ArgumentOutOfRangeException(
                 nameof(sizeBytes),
                 sizeBytes,
-                "Direct3D 12 buffer clears require a positive size divisible by four and representable by a raw UAV."
+                "Direct3D 12 buffer clears require a positive size divisible by four whose words a buffer view can count."
             );
         }
         if ((offsetBytes & 3) != 0) {
@@ -340,12 +344,12 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
                     Buffer = new D3D12_BUFFER_UAV {
                         CounterOffsetInBytes = 0,
                         FirstElement = (offsetBytes / 4),
-                        Flags = D3D12_BUFFER_UAV_FLAGS.D3D12_BUFFER_UAV_FLAG_RAW,
+                        Flags = D3D12_BUFFER_UAV_FLAGS.D3D12_BUFFER_UAV_FLAG_NONE,
                         NumElements = checked((uint)(sizeBytes / 4)),
                         StructureByteStride = 0,
                     },
                 },
-                Format = DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS,
+                Format = DXGI_FORMAT.DXGI_FORMAT_R32_UINT,
                 ViewDimension = D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_BUFFER,
             },
             resource: bufferHandle
