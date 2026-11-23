@@ -222,7 +222,7 @@ public sealed partial class WorldTick {
         Host.Output.DeliverSnapshot(snapshot: Host.Document.BuildSnapshot(
             stepTicks: stepTicks,
             tick: tick
-        ));
+        ), lender: Host.Document.TickSnapshotLender);
     }
     // The one door into the ordered domain. The authority gate is held across both the enqueue and the drain, which
     // is what makes m_ordered and m_drainingOrdered single-threaded state rather than shared state: a tick-thread
@@ -606,7 +606,7 @@ public sealed partial class WorldTick {
         Host.Document.DeliverPending();
         if (deliver) {
             m_deliveringCues = true;
-            try { Host.Output.DeliverSnapshot(in frame); } finally { m_deliveringCues = false; }
+            try { Host.Output.DeliverSnapshot(in frame, lender: Host.Document.TickSnapshotLender); } finally { m_deliveringCues = false; }
         }
         m_pendingTick.Delivered = true;
         m_cues.Clear();

@@ -277,13 +277,17 @@ public sealed partial class WorldOutputHub {
     /// <summary>Fans a tick's snapshot out to every typed subscriber, synchronously, before returning. A faulting
     /// sink is isolated and detached — see the class remarks.</summary>
     /// <param name="snapshot">The tick snapshot.</param>
-    public void DeliverSnapshot(in WorldSnapshot snapshot) {
+    public void DeliverSnapshot(in WorldSnapshot snapshot) => DeliverSnapshot(snapshot: in snapshot, lender: null);
+    // The tick's fan-out names the owner of the storage its snapshot lends (the document's tick carrier), which a
+    // recorded hand-off takes over instead of copying it; a null lender copies.
+    internal void DeliverSnapshot(in WorldSnapshot snapshot, IWorldSnapshotLender? lender) {
         if (WithholdsTimeline) {
             return;
         }
 
         m_interest.Begin(snapshot.Entries);
         m_deliveryDepth++;
+        var outer = BeginFanOut(lender: lender);
 
         try {
             var writeIndex = 0;
@@ -324,6 +328,7 @@ public sealed partial class WorldOutputHub {
 
             Compact(writeIndex: writeIndex);
         } finally {
+            EndFanOut(outer: outer);
             m_deliveryDepth--;
         }
     }
