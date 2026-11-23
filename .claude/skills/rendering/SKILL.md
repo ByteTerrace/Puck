@@ -958,8 +958,9 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   normal, and again at each other pixel of the cell whose receiver does not lie
   within the screen-measured tolerance of the representative's (`sdfViewsProbeTolerance`:
   two pixels along the surface or the normal bias, half a pixel off its tangent
-  plane, facing alike; `sdfViewsProbesCompatible`), each into its cell's record; views reads the
-  gather the record names for its pixel (`sdfViewsProbesAt`) and never gathers, so
+  plane, facing alike; `sdfViewsProbesCompatible`), and resolves each gather into a slot
+  (`sdfViewsProbesStoreSlot`): everything a shading sample reads of the volume. Views reads the
+  slot its cell's record names for its pixel (`sdfViewsProbesAt`) and holds no gather, so
   the reuse never steps across a visibility edge the record shows and the shading
   kernels carry none of the gather's code. Every view, a nested one included, first
   reuses its preceding render's gather for a receiver that passes the same tolerance
@@ -981,12 +982,22 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   gather a lane: in foliage many pixels gather, and inside the views kernel each warp
   holding one would pay a whole gather at views' occupancy. Records and history lie in
   planes, one word of every cell a plane (`sdfViewsProbeWord`), so a wave's
-  accesses coalesce. The cube reads
-  stay per shading sample, along its shading normal and mirror direction; views
-  keeps no corner weight live across its light walk and reads a traced light's
-  visibility from the record's light agreement (`sdfViewsLightVisibility`), loading
-  the gather (`sdfViewsProbesWhole`) only for a light the corners disagree on or a
-  pixel with a gather of its own. The gather
+  accesses coalesce. A slot holds the gather's blended cubes (the light a surface
+  receives and the radiance a reflection adds, a shared-exponent word a face, and the
+  sky shares), its traced lights' agreement, and the lights its corners disagree on with
+  each one's share; a views pixel reads its cubes along its shading normal and mirror
+  direction (`sdfViewsIndirectSeen`, `sdfViewsReflectionSeen`) and a traced light's
+  visibility from the agreement and that list (`sdfViewsLightVisibility`). No views
+  kernel includes a reader of a probe's corners: one pixel that read sixteen corners
+  made its whole wave pay for them, and the gather's arrays set every kernel's
+  registers, so a new thing views needs of the volume is a word the lookup resolves
+  into the slot, never a corner read in views. A cell's representative's slot lies in
+  the record's planes; a pixel with a gather of its own takes a slot from the pool that
+  follows the planes in the same buffer (`sdfViewsProbePoolSlot`), whose count
+  `SdfWorldPassRecorder` zeroes before the lookup's dispatch, and a group of cells the
+  pool has no room for keeps no extra, its pixels reading their representatives'.
+  A slot lists at most `SdfViewsProbePartialLights` lights its corners disagree on and
+  rounds the rest to seen or unseen. The gather
   supplies indirect light, reflections and traced static-light visibility. Glass
   gathers at its own pane (`passes/sdf-glass-stage.hlsli`), since a pane is lit
   apart from the surface behind it, and keeps the near face's gathers in a history
@@ -1731,6 +1742,15 @@ counts in `sdf.transforms`, never in `records.posed`.
   The host draws arrive with a journal too: `SdfMeshDrawComposer` composes each producer's draws (a scene's statics
   and stamp pool, `WorldSceneMeshDraws`; the composition's emitters) and copies and owes only the rows a producer's
   journal names, which the dresser's host cursor reads.
+- **A response swaps copies, never the program.** A delivery that moved only placement holdings stays out of the
+  readers' rebuild watch (`WorldClient.HoldingRevision`, `WorldSessionMirror.ComposingRevision`; the delivered rows are
+  judged, before live values are bound). A responding static row, or one riding a body, is a rigid copy whose catalog
+  holds a template for every creation it can show (`WorldRigidAssets.ReconcileStatic`), so the sweep moves its copies'
+  template range and pose alone (`WorldRigidAssets.PresentHoldings`, `PlaceStaticCopies`, `PackRiding`). The program
+  composes again only through `HoldingComposeRevision` (a responding row the catalog refuses: glass, a pattern of
+  riding occurrences, a riding creation with volumes) or `StaticTemplateRevision` (a template set the latest emission did not write); a new path that
+  presents a response goes through one of the two. A solid row's response still rebuilds the presentation query field
+  whole (`WorldFramePresenter.RebuildStaticField`).
 - **A pack visits only what woke.** The stamp pool, its rigid bodies (`WorldRigidAssets.Pack`) and the catalog
   avatars (`WorldCatalogAvatars.Pack`) each keep an awake set, so a frame costs the registrations something woke, never
   the pool: a body's presented inputs through the source's journal (`IWorldStampSource.BodyChanges`, which

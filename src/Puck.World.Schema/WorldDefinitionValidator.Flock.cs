@@ -87,7 +87,7 @@ public static partial class WorldDefinitionValidator {
         RequireRange(
             flock.CandidateBudget,
             1,
-            WorldBodiesLimits.CapacityCeiling,
+            WorldBodiesLimits.IndexLimit,
             $"{path}.candidateBudget",
             errors
         );

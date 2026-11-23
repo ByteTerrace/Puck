@@ -7,7 +7,12 @@ namespace Puck.World.Protocol.Tests;
 public sealed class PeerAddressLawTests {
     [Fact]
     public void EveryRepresentablePeerAddressRoundTripsWithoutBecomingASeat() {
-        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
+        // Every address of the first dense population, then each power of two up to the format bound's last index.
+        var indices = Enumerable.Range(start: 0, count: 4096)
+            .Concat(second: Enumerable.Range(start: 12, count: 8).Select(selector: shift => (1 << shift)))
+            .Append(element: (WorldBodiesLimits.IndexLimit - 1));
+
+        foreach (var index in indices) {
             var principal = Principal.Peer(
                 generation: 7,
                 index: index

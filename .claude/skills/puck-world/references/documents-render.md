@@ -418,7 +418,8 @@ forEach/flock-affinity reach instead. See the
 
 ### Crowd scale policies
 
-`WorldBodiesLimits.CapacityCeiling` is 4096. `kits.rows[].autonomy` independently
+A world authors its body capacity; client tables grow with it, and only the
+body-index format bound (`WorldBodiesLimits.IndexLimit`) caps it. `kits.rows[].autonomy` independently
 batches non-human `motionSeconds` and producer `steeringSeconds` (0..1; zero is
 full authority rate), with deterministic per-body phasing and exact elapsed
 engine-tick batches. Live/human/tape/pending-input bodies stay full-rate. Refuse

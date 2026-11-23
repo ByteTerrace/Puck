@@ -108,7 +108,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     private static WorldEventFeedCheckpoint ReadEventFeed(ref WireReader reader) {
         var policy = (reader.ReadBoolean() ? new WorldCollisionEvents(CandidateBudget: reader.ReadInt32(),
             MaxPairsPerBody: reader.ReadInt32(), BeginBudget: reader.ReadInt32()) : null);
-        var pending = reader.ReadArray(field: "event feed discovery work", maximum: WorldBodiesLimits.CapacityCeiling,
+        var pending = reader.ReadArray(field: "event feed discovery work", maximum: WorldBodiesLimits.IndexLimit,
             readItem: static (ref WireReader r) => r.ReadInt32());
         var edges = reader.ReadArray(
             field: "event feed edges",
@@ -127,7 +127,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var overlapping = reader.ReadArray(
             field: "event feed overlapping",
-            maximum: WorldEventFeed.MaximumTrackedPairsForCapacity(capacity: WorldBodiesLimits.CapacityCeiling),
+            maximum: WorldEventFeed.MaximumTrackedPairsForCapacity(capacity: WorldBodiesLimits.IndexLimit),
             readItem: static (ref WireReader r) => {
                 var a = r.ReadInt32();
                 var b = r.ReadInt32();
@@ -144,7 +144,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
                 var occupancy = ReadBoolArray(
                     field: "event feed region occupancy cells",
-                    maximum: WorldBodiesLimits.CapacityCeiling,
+                    maximum: WorldBodiesLimits.IndexLimit,
                     reader: ref r
                 );
 

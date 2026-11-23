@@ -634,7 +634,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             maximum: MaxCollectionCount
         );
         var routedInputs = reader.ReadArray(field: "server routed input", maximum: MaxCollectionCount, readItem: ReadRoutedInput);
-        var federatedInputs = reader.ReadArray(field: "server federated input", maximum: WorldBodiesLimits.CapacityCeiling, readItem: WorldWireLeaves.ReadFederatedInput);
+        var federatedInputs = reader.ReadArray(field: "server federated input", maximum: WorldBodiesLimits.IndexLimit, readItem: WorldWireLeaves.ReadFederatedInput);
         var pending = reader.ReadArray(
             field: "server pending",
             readItem: static (ref WireReader r) => ReadPendingOp(reader: ref r),

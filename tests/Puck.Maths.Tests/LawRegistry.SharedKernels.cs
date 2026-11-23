@@ -73,6 +73,12 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
     );
+    private static readonly Domain ShareOfStep = new(
+        Key: "share-of-step",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
     private static readonly Domain SignedQuotients = new(
         Key: "signed-quotients",
         Block: 512,
@@ -366,6 +372,12 @@ internal static partial class LawRegistry {
             ),
             domain: SecondsOfTicks,
             id: "deep.core-seconds-of-ticks-vs-oracle",
+            width: 1
+        ),
+        SweptCase(
+            claim: SharedKernelClaims.ShareOfStepVsOracle,
+            domain: ShareOfStep,
+            id: "core.share-of-step-vs-oracle",
             width: 1
         ),
         SweptCase(

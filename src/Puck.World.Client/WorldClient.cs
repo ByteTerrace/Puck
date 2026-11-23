@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using Puck.Commands;
 using System.Numerics;
 using Puck.Maths;
@@ -19,11 +20,10 @@ namespace Puck.World.Client;
 /// <remarks>Single-threaded on the launcher's window-pump thread: snapshots arrive synchronously inside the server
 /// step, submissions run immediately before it, and the render-pose refresh runs during frame produce.</remarks>
 public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSource {
-    /// <summary>The entity-view capacity — single-sourced from <see cref="WorldBodiesLimits.CapacityCeiling"/>
-    /// so the validator's admitted population.capacity and this client's fixed
-    /// per-entity arrays can never again drift apart: an over-capacity document refuses at load instead of booting
-    /// into a latent out-of-bounds throw here.</summary>
-    public const int EntityCapacity = WorldBodiesLimits.CapacityCeiling;
+    /// <summary>Gets the number of entity slots the view holds: the highest body a delivery has named, rounded up as the
+    /// view grows with the world, never more than <see cref="WorldBodiesLimits.IndexLimit"/>. A slot past it is
+    /// unseen.</summary>
+    public int EntityCapacity => m_poses.Capacity;
     /// <summary>How many counters <see cref="WriteRevision"/> reports — the component count
     /// <c>WorldSceneEmitter</c> folds into its own when it lays out its revision vector.</summary>
     public const int RevisionComponentCount = 4;
@@ -184,6 +184,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private WorldChannelTable m_channels;
     private int m_definitionRevision;
     private int m_responseRevision;
+    private int m_holdingRevision;
+    // The definition the latest state delivery handed over, before live state values were bound into it.
+    private WorldDefinition? m_lastDelivered;
     private int m_solidResponseRevision;
     private WorldDocumentVersion m_documentVersion;
 
@@ -227,6 +230,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// placement is among the rows the delivery moved, so a consumer of solid geometry alone (the static query field)
     /// holds across a lamp or a display swapping its creation.</summary>
     public int SolidResponseRevision => m_solidResponseRevision;
+    /// <summary>Gets the monotonic holding counter: bumped instead of the response revision (<see cref="WriteRevision"/>)
+    /// when a delivery moved only placement holdings, so the scene reconciles its rows and composes again only for a row
+    /// whose shown response it does not keep at hand.</summary>
+    public int HoldingRevision => m_holdingRevision;
     /// <summary>The version of the latest delivered definition, or <see langword="default"/> before the first delivery.</summary>
     public WorldDocumentVersion DocumentVersion => m_documentVersion;
     /// <summary>The client seat table.</summary>
@@ -282,24 +289,25 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private readonly ulong[] m_lastSubmissionEpoch = new ulong[PlayerRoster.MaxSlots];
     private readonly ulong[] m_lastSubmissionTick = new ulong[PlayerRoster.MaxSlots];
     // The double-buffered per-entity tick poses (the interpolation endpoints), active flags, placements and pose epochs
-    // (m_poses), the tick's palette/archetype image, and the per-entity correction easers. Sized to the table ceiling;
-    // inactive slots are simply unseen.
-    private readonly WorldPoseTable m_poses = new(capacity: EntityCapacity);
-    private readonly Vector3[] m_color = new Vector3[EntityCapacity];
+    // (m_poses), the tick's palette/archetype image, and the per-entity correction easers. Every column grows with the
+    // pose table (FitEntities) to the highest body a delivery names, never a fixed slot count; a reader asking past it
+    // reads an unseen slot.
+    private readonly WorldPoseTable m_poses = new();
+    private Vector3[] m_color = [];
     // The kit row index per entity: the chase camera reads the framed body's collider through it.
-    private readonly byte[] m_kit = new byte[EntityCapacity];
+    private byte[] m_kit = [];
     // The LOOK row index per entity — the frame source reads it to resolve each body's appearance (catalog rig vs.
     // creation stamp), scale, and gait amplitude. PRESENTATION-ONLY.
-    private readonly byte[] m_look = new byte[EntityCapacity];
-    private readonly BodyFacts[] m_facts = new BodyFacts[EntityCapacity];
+    private byte[] m_look = [];
+    private BodyFacts[] m_facts = [];
     // The occupant-owned procedural rig. This is deliberately distinct from the authority-local entity index: a
     // seamless transfer may move the occupant to another slot without changing its implicit shape.
-    private readonly byte[] m_catalogRig = new byte[EntityCapacity];
-    private readonly int[] m_generation = new int[EntityCapacity];
-    private readonly RenderErrorEaser[] m_easers = new RenderErrorEaser[EntityCapacity];
+    private byte[] m_catalogRig = [];
+    private int[] m_generation = [];
+    private RenderErrorEaser[] m_easers = [];
     // The per-frame resolved render poses (alpha-interpolated + eased) — what the frame source and anchors read.
-    private readonly Vector3[] m_renderPosition = new Vector3[EntityCapacity];
-    private readonly Quaternion[] m_renderOrientation = new Quaternion[EntityCapacity];
+    private Vector3[] m_renderPosition = [];
+    private Quaternion[] m_renderOrientation = [];
     private string m_authority = string.Empty;
 
     /// <summary>Initializes a new instance of the <see cref="WorldClient"/> class over the seat table it submits for
@@ -327,11 +335,26 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_levers = null;
         m_stateMirror = new WorldStateMirror(view: m_stateView);
         m_stateMirror.Delivered += PublishDeliveredState;
+    }
 
-        for (var index = 0; (index < EntityCapacity); index++) {
-            m_renderOrientation[index] = Quaternion.Identity;
-            m_easers[index].Reset();
-        }
+    // Grows every per-entity column to the pose table's length, the new slots unseen: identity attitudes and reset
+    // easers. Called after the pose table admits an entry, before the entry's columns are written.
+    private void FitEntities() {
+        var length = m_poses.Capacity;
+        var from = m_color.Length;
+
+        if (length <= from) { return; }
+        Array.Resize(array: ref m_color, newSize: length);
+        Array.Resize(array: ref m_kit, newSize: length);
+        Array.Resize(array: ref m_look, newSize: length);
+        Array.Resize(array: ref m_facts, newSize: length);
+        Array.Resize(array: ref m_catalogRig, newSize: length);
+        Array.Resize(array: ref m_generation, newSize: length);
+        Array.Resize(array: ref m_easers, newSize: length);
+        Array.Resize(array: ref m_renderPosition, newSize: length);
+        Array.Resize(array: ref m_renderOrientation, newSize: length);
+        m_renderOrientation.AsSpan(start: from).Fill(value: Quaternion.Identity);
+        for (var index = from; (index < length); index++) { m_easers[index].Reset(); }
     }
 
     /// <summary>Whether another live, claimed slot resolves to <paramref name="body"/> this tick. Used only after
@@ -985,11 +1008,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public Vector3 BodyColor(int index) {
         return (((index < PlayerRoster.MaxSlots) && m_roster.IsJoined(slot: index))
             ? m_roster.BodyColor(slot: index)
-            : m_color[index]
+            : ArrayCapacity.ElementOr(array: m_color, index: index)
         );
     }
     /// <summary>The entity-owned procedural catalog rig from the latest snapshot.</summary>
-    public byte CatalogRig(int index) => m_catalogRig[index];
+    public byte CatalogRig(int index) => ArrayCapacity.ElementOr(array: m_catalogRig, index: index);
     /// <inheritdoc/>
     public void DeliverAnswer(in QueryAnswer answer) {
         // Queries are synchronous over the loopback (the link returns the answer); nothing arrives on this lane yet.
@@ -1024,6 +1047,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         // its program and re-reads scene/screens on its next capture. Poses still flow only through snapshots.
         var adopted = m_stateView.Adopt(delivered: definition);
 
+        m_lastDelivered = definition;
+
         BeginVersion(version: version);
         m_channels = WorldChannelTable.For(definition: adopted);
         m_targets = WorldTargetRegisterTable.Compile(
@@ -1040,6 +1065,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (!rows.TryApply(Definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the client's creation roster."); }
         _ = m_stateView.Adopt(delivered: changed, valuesFollow: true);
+        m_lastDelivered = changed;
         BeginVersion(version);
         m_definitionRevision++;
     }
@@ -1092,7 +1118,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_bodyChangesWhole |= (m_authority != snapshot.Authority);
 
         foreach (ref readonly var entry in snapshot.Entries.Span) {
-            var wasActive = ((((uint)entry.Index) < EntityCapacity) && m_poses.IsActive(index: entry.Index));
+            var wasActive = m_poses.IsActive(index: entry.Index);
 
             if (!m_poses.TryAdmit(
                 admission: out var admission,
@@ -1101,6 +1127,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             )) {
                 continue;
             }
+
+            FitEntities();
 
             var index = entry.Index;
 
@@ -1230,11 +1258,18 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         var previous = Definition;
+        var previousDelivered = m_lastDelivered;
         var adopted = m_stateView.Adopt(delivered: definition, valuesFollow: (stamp.ArenaValues && (version.Activation == m_documentVersion.Activation)));
 
-        switch (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, solid: out var solid)) {
+        m_lastDelivered = definition;
+        switch (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, holdings: out _, solid: out var solid)) {
             case WorldPlacementChange.Appearance:
-                m_responseRevision++;
+                // A sweep that moved only holdings leaves the composition to the scene, which presents a row whose every
+                // response it keeps at hand by its copies and composes again only for the rest (WorldSceneEmitter). The
+                // delivered rows are judged, since binding live state values rebuilds an adopted row's state references.
+                var holdings = ((WorldPlacementResponse.ComparePlacements(after: definition, before: previousDelivered, holdings: out var held, solid: out _) == WorldPlacementChange.Appearance) && held);
+
+                if (holdings) { m_holdingRevision++; } else { m_responseRevision++; }
                 if (solid) { m_solidResponseRevision++; }
 
                 break;
@@ -1263,12 +1298,12 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public WorldEntityAddress EntityAddress(int index) => new(
         Authority: m_authority,
         Index: index,
-        Generation: m_generation[index]
+        Generation: ArrayCapacity.ElementOr(array: m_generation, index: index)
     );
     /// <summary>The entity's authoritative fact mask from the latest snapshot — the presentation's gate for
     /// fact-keyed animation. An inactive index reports whatever its last snapshot carried.</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public BodyFacts Facts(int index) => m_facts[index];
+    public BodyFacts Facts(int index) => ArrayCapacity.ElementOr(array: m_facts, index: index);
     /// <summary>Whether the entity is drawn this frame (present in the latest snapshot).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public bool IsActive(int index) => m_poses.IsActive(index: index);
@@ -1286,14 +1321,14 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// its eye out of.</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The index into the delivered definition's kit rows.</returns>
-    public int Kit(int index) => m_kit[index];
+    public int Kit(int index) => ArrayCapacity.ElementOr(array: m_kit, index: index);
     /// <summary>The entity's resolved look row index from the latest snapshot — the frame source's appearance selector
     /// (presentation-only).</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public byte LookIndex(int index) => m_look[index];
+    public byte LookIndex(int index) => ArrayCapacity.ElementOr(array: m_look, index: index);
     /// <summary>The entity's per-frame render attitude (interpolated and correction-eased).</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public Quaternion Orientation(int index) => m_renderOrientation[index];
+    public Quaternion Orientation(int index) => ArrayCapacity.ElementOr(array: m_renderOrientation, index: index, fallback: Quaternion.Identity);
     /// <summary>The placement row this entity inhabits, or <see langword="null"/> for a seat/peer — the frame source
     /// renders an inhabitant's creation geometry (a body-rooted stamp) instead of a catalog avatar.</summary>
     /// <param name="index">The 0-based entity index.</param>
@@ -1309,7 +1344,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
     /// <summary>The entity's per-frame render position (interpolated and correction-eased).</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public Vector3 Position(int index) => m_renderPosition[index];
+    public Vector3 Position(int index) => ArrayCapacity.ElementOr(array: m_renderPosition, index: index);
     /// <summary>Publishes the static-scene query field every presentation consumer shares.</summary>
     /// <param name="field">The evaluator built over the composed program's static layers, or <see langword="null"/>
     /// when the program admits no fixed-point query.</param>
@@ -1488,7 +1523,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <inheritdoc/>
     public bool TryResolveAnchor(int anchorId, out SdfAnchor anchor) {
         if (
-            (((uint)anchorId) >= EntityCapacity) ||
+            (((uint)anchorId) >= ((uint)m_renderPosition.Length)) ||
             !m_poses.IsActive(index: anchorId)
         ) {
             anchor = default;

@@ -10,7 +10,7 @@ public sealed partial class WorldRuleHost {
     // The bodies as they stood before this tick's rule effects, or null until a decision reads neighbours. Derived
     // scratch: reconciliation during an effect must not replace this image.
     private WorldPerceptionImage? m_decisionPerception;
-    private FixedSpatialNeighbor[]? m_decisionScratch;
+    private FixedSpatialNeighbor[] m_decisionScratch = [];
     private WorldDecisionWork m_decisionWork;
 
     /// <summary>Gets bounded-neighbor and score work from the last completed ordinary rule pass.</summary>
@@ -208,7 +208,7 @@ public sealed partial class WorldRuleHost {
                 (budget > 0) &&
                 (retained < neighbors.Source.MaxCandidates)
             ) {
-                var scratch = (m_decisionScratch ??= new FixedSpatialNeighbor[WorldBodiesLimits.CapacityCeiling]);
+                var scratch = Puck.Abstractions.Memory.ArrayCapacity.EnsureScratch(ref m_decisionScratch, budget);
                 var builds = image.Builds;
                 var width = ((ulong)image.Capacity).NextPowerOfTwo();
                 var bits = BitOperations.Log2(value: width);

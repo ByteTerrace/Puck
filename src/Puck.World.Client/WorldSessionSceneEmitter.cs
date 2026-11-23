@@ -89,7 +89,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private IReadOnlyList<WorldScreen> m_textRows = [];
 
 
-    private readonly Vector3[]? m_bodyColors;
+    private Vector3[]? m_bodyColors;
 
     private int m_bodyColorRevision;
 
@@ -182,7 +182,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         m_mirror = mirror;
         m_bodyColor = (bodyColor ?? mirror.BodyColor);
-        m_bodyColors = ((bodyColor is null) ? null : new Vector3[WorldBodiesLimits.CapacityCeiling]);
+        m_bodyColors = ((bodyColor is null) ? null : []);
         m_onlyPrototypes = onlyPrototypes;
         m_shadowSettings = shadowSettings;
         m_effectiveCameraName = effectiveCameraName;
@@ -769,8 +769,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_census.Refresh(m_source);
         var stamps = (m_onlyPrototypes is null) ? m_census.Stamps : [];
         m_catalog.ObserveArticulation(stamps);
-        m_pool.Rigid.ReconcileStatic(definition, definition.Placements);
+        m_pool.Rigid.ReconcileStatic(definition, definition.Placements, riding: true);
         m_pool.Reconcile(definition.PlacementFrames, definition.Placements, definition.Creations, definition.Dynamics, stamps, definition.Looks);
+        m_pool.Rigid.PresentHoldings(placements: definition.Placements);
         m_avatars.Prepare();
     }
 
@@ -783,7 +784,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     /// <summary>Writes each rebuild revision independently so opposing moves cannot mask a change.</summary>
     public void WriteRevision(Span<int> destination) {
-        destination[0] = m_mirror.DefinitionRevision;
+        destination[0] = m_mirror.ComposingRevision;
         destination[1] = m_catalog.ArticulatedRevision;
 
         if (BakedColors().TryTakeMove()) {
@@ -793,8 +794,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         destination[2] = m_bakedColorRevision;
 
         destination[3] = m_catalog.Revision;
-        if (m_bodyColors is { } colors) {
-            // The avatars the program draws are the only bodies whose colour it bakes.
+        if (m_bodyColors is not null) {
+            // The avatars the program draws are the only bodies whose colour it bakes; the record grows with the band.
+            Puck.Abstractions.Memory.ArrayCapacity.EnsureLength(array: ref m_bodyColors, required: m_catalog.BodySpan);
+            var colors = m_bodyColors;
             foreach (var index in m_catalog.Bodies) {
                 var color = m_bodyColor(arg: index);
 
@@ -805,6 +808,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             }
         }
         destination[4] = m_bodyColorRevision;
+        destination[5] = m_pool.Rigid.HoldingComposeRevision;
+        destination[6] = m_pool.Rigid.StaticTemplateRevision;
     }
 
     // The bound colors the static build bakes, over the session's own followed state mirror: the one path the local
@@ -830,7 +835,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <summary>Gets the actual catalog, articulation and local-template transform count.</summary>
     public int DynamicSlotCount => (m_catalog.SlotCount + m_pool.DynamicSlotCount);
     /// <inheritdoc/>
-    public int RevisionComponentCount => 5;
+    public int RevisionComponentCount => 7;
     /// <inheritdoc/>
     /// <remarks>The mirrored world's static placements' meshes, fixed by each live <see cref="Emit"/>, then its stamp
     /// pool's (<see cref="WorldCreationInstances.MeshDraws"/>).</remarks>

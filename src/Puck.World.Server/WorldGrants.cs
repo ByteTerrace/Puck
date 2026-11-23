@@ -61,8 +61,9 @@ namespace Puck.World.Server;
 public sealed partial class WorldGrants : IWorldGrantsView {
     private static readonly long DefaultHoldCeiling = Puck.Maths.FixedQ4816.FromDouble(value: WorldGrant.DefaultHoldSeconds).Value;
     // The per-body-index own-body default sets, minted on first read and never mutated afterward — every
-    // uncomposed participant shares its index's instance.
-    private static readonly IReadOnlyList<ControlApplication>?[] OwnBodyApplications = new IReadOnlyList<ControlApplication>?[WorldBodiesLimits.CapacityCeiling];
+    // uncomposed participant shares its index's instance. Keyed, not sized by the body-index bound: every server's
+    // grants share it, and GetOrAdd hands an index one instance whichever thread mints it.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, IReadOnlyList<ControlApplication>> OwnBodyApplications = new();
     private readonly Dictionary<Grantee, GranteeGrants> m_byGrantee = new();
     // Every principal that has COMPOSED an application set away from its own-body default. An absent row IS the
     // default (see DefaultApplications) — the single storage engagement lives in, distinct from the capability sets
@@ -829,11 +830,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         var index = principal.Index;
 
-        if (((uint)index) >= ((uint)OwnBodyApplications.Length)) {
+        if (!WorldBodiesLimits.IsBodyIndex(index: index)) {
             return [];
         }
 
-        return (OwnBodyApplications[index] ??= [ControlApplication.OwnBody(bodyIndex: index)]);
+        return OwnBodyApplications.GetOrAdd(key: index, valueFactory: static body => [ControlApplication.OwnBody(bodyIndex: body)]);
     }
     private static bool Holds(IReadOnlyList<ControlApplication> applications, GrantSubject target) {
         for (var index = 0; (index < applications.Count); index++) {

@@ -1927,24 +1927,23 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             objB: m_lastProgram
         );
 
-        if (programChanged) {
-            m_lastProgram = program;
+        if (programChanged) { m_lastProgram = program; }
 
-            // The field holds the delivered definition's static placements and screens and the neighbours' strips alone,
-            // so a rebuild for a body coming or going, or for a value-only state delivery that moves no shown creation,
-            // leaves it as it was.
-            if (
-                (m_client.DefinitionRevision != m_staticFieldDefinition) ||
-                (m_client.SolidResponseRevision != m_staticFieldResponses) ||
-                (m_adjacencies.NeighbourRevision != m_staticFieldNeighbours) ||
-                (m_builtCodeRevision != m_staticFieldCode)
-            ) {
-                m_staticFieldCode = m_builtCodeRevision;
-                m_staticFieldDefinition = m_client.DefinitionRevision;
-                m_staticFieldResponses = m_client.SolidResponseRevision;
-                m_staticFieldNeighbours = m_adjacencies.NeighbourRevision;
-                RebuildStaticField();
-            }
+        // The field holds the delivered definition's static placements and screens and the neighbours' strips alone, so a
+        // rebuild for a body coming or going, or for a value-only state delivery that moves no shown creation, leaves it
+        // as it was. A solid row's response moves it whether or not the program composed again: the scene presents a
+        // response its copies keep at hand without composing (WorldRigidAssets.PresentHoldings).
+        if (
+            (m_client.DefinitionRevision != m_staticFieldDefinition) ||
+            (m_client.SolidResponseRevision != m_staticFieldResponses) ||
+            (m_adjacencies.NeighbourRevision != m_staticFieldNeighbours) ||
+            (m_builtCodeRevision != m_staticFieldCode)
+        ) {
+            m_staticFieldCode = m_builtCodeRevision;
+            m_staticFieldDefinition = m_client.DefinitionRevision;
+            m_staticFieldResponses = m_client.SolidResponseRevision;
+            m_staticFieldNeighbours = m_adjacencies.NeighbourRevision;
+            RebuildStaticField();
         }
 
         // Emit one view per joined local seat (a 1..MaxSlots count up to the ViewportCapacity floor, so players can join
@@ -2675,7 +2674,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             throw new WorldRenderCapacityRefusedException(
                 innerException: capacity,
                 message: (((((((string)$"the composed render scene exceeds the engine's {capacity.Limit}-{capacity.Capacity} ceiling — {definition.Placements.Count} placement row(s), {definition.Screens.Count} screen(s), ")
-                    + $"population {WorldBodiesLimits.CapacityCeiling} body slots, and ")
+                    + $"population {definition.Population.Capacity} body slots, and ")
                     + $"{WorldAdjacencyBands.ProjectionCapacity(definition: definition)} adjacency band(s) at ")
                     + $"{WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid(s) + {WorldAdjacencyGeometry.MaximumEntitiesPerBand} ")
                     + $"body(ies) each. Author fewer rows, or fewer adjacency edges (a band is reserved for every direct ")

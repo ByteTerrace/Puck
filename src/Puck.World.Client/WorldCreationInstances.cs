@@ -13,16 +13,16 @@ namespace Puck.World.Client;
 /// <summary>Live creation presentation: articulated instances retain animation state and actual motion-owner transforms; rigid bodies share local geometry assets and own only a root pose. Animated, attached and inhabited placements use the same pose and anchor machinery.</summary>
 /// <remarks>Articulated instances allocate their actual root and motion-owner slots. Rigid bodies share local geometry through <see cref="WorldRigidAssets"/>.</remarks>
 public sealed partial class WorldCreationInstances : IWorldBodyPoses {
-    private int[] m_catalogSlots = [];
+    private WorldCatalogBand? m_catalog;
 
     private int m_catalogBase;
 
     /// <summary>Publishes the catalog looks' actual packed slot map for part anchors.</summary>
-    public void SetCatalogSlots(int[] slots, int slotBase) { m_catalogSlots = slots; m_catalogBase = slotBase; }
+    internal void SetCatalogSlots(WorldCatalogBand band, int slotBase) { m_catalog = band; m_catalogBase = slotBase; }
     /// <summary>Reads a procedural look's part through its dense slot map.</summary>
     public bool TryCatalogPartPose(int body, string part, int rig, float scale, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
-        if ((((uint)body) >= ((uint)m_catalogSlots.Length)) || (m_catalogSlots[body] < 0)) { pose = default; return false; }
-        return WorldRigCatalog.TryPartPose(0, part, rig, transforms[(m_catalogBase + m_catalogSlots[body])..], out pose, scale);
+        if ((m_catalog?.SlotOf(body: body) ?? -1) is not (>= 0 and var slot)) { pose = default; return false; }
+        return WorldRigCatalog.TryPartPose(0, part, rig, transforms[(m_catalogBase + slot)..], out pose, scale);
     }
 
     private const float GroupBoundMargin = 0.4f;
@@ -529,6 +529,10 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     // non-inhabited row — an inhabited row roots through the body-stamp census instead.
     private static bool PoolRooted(WorldPlacement row, WorldPrototype creation) =>
         ((row.Inhabit is null) && (WorldPlacementStamper.IsAnimated(creation: creation) || (row.Attach is not null)));
+    // Whether the pool registers a row: one it roots that the rigid catalog does not copy. A responding row riding a body
+    // is a rigid copy there (WorldRigidAssets.ReconcileStatic, which a reconcile runs first), so its responses swap a
+    // template rather than recreating a registration and composing the program again.
+    private bool PoolOwns(WorldPlacement row, WorldPrototype creation) => (PoolRooted(row: row, creation: creation) && !Rigid.ContainsPlacement(placement: row));
     private static Registration RegisterBody(BodyStamp stamp, bool guessLayer = false) {
         var registration = new Registration(rig: stamp.Creation.Rig) {
             BodyIndex = stamp.BodyIndex,
@@ -768,24 +772,9 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         var row = live.Row!;
 
         if (row.Attach is { } attach) {
-            // PRESENTATION float, deliberately: this rides the client's INTERPOLATED body pose so an attached row is as
-            // smooth as the body it sits on. The authoritative answer is the fixed-point one
-            // (WorldPlacementAttachment.TryResolve, what world.attachments echoes); this is its render-side image, the
-            // same relationship every avatar pose already has to the tick pose it interpolates. Same composition order:
-            // rotate the local offset into the body's own frame, then add.
-            var bodyOrientation = client.Orientation(index: attach.BodyIndex);
+            var (position, orientation) = WorldAttachedPose.Root(attach: attach, source: client);
 
-            return (
-                (client.Position(index: attach.BodyIndex) + Vector3.Transform(
-                value: attach.LocalOffset,
-                rotation: bodyOrientation
-            )),
-                Quaternion.Normalize(value: (bodyOrientation * Quaternion.CreateFromAxisAngle(
-                axis: Vector3.UnitY,
-                angle: float.DegreesToRadians(degrees: attach.LocalYawDegrees)
-            ))),
-                row.Scale
-            );
+            return (position, orientation, row.Scale);
         }
 
         return (live.StaticFrame.Position, live.StaticFrame.Rotation, live.StaticFrame.Scale);
@@ -1026,7 +1015,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     private long m_selectedReadersPack = -1L;
 
     // Zero denotes an empty entry. Live entries store the pool slot plus one.
-    private readonly int[] m_bodySlots = new int[WorldBodiesLimits.CapacityCeiling];
+    private int[] m_bodySlots = [];
     private void ReconcileSlots(IReadOnlyDictionary<string, CompiledPlacementFrame> placementFrames, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
         // Diff-by-stable-key, shared by both root kinds a slot can hold (KeyedReconciler.Reconcile): the entry's
         // current row resolves the fate — gone releases the slot, changed content releases+recreates, otherwise the
@@ -1045,7 +1034,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
                 creations: creations,
                 id: presentRow.ShownPrototypeId
             ) is not { } presentCreation) ||
-                !PoolRooted(
+                !PoolOwns(
                 creation: presentCreation,
                 row: presentRow
             )
@@ -1141,7 +1130,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
                 creations: creations,
                 id: placement.ShownPrototypeId
             ) is not { } creation) ||
-                !PoolRooted(
+                !PoolOwns(
                 creation: creation,
                 row: placement
             ) ||
@@ -1171,6 +1160,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
 
             var slot = FreeSlot();
             m_pool[slot] = fresh;
+            ArrayCapacity.EnsureLength(array: ref m_bodySlots, required: (stamp.BodyIndex + 1));
             m_bodySlots[stamp.BodyIndex] = slot + 1;
             ApplyMotion(
                 live: fresh,
@@ -1416,7 +1406,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         // applies before hiding the render stamp below the floor, so no reader treats a stale carrier pose as the row's.
         if (
             (live.Row?.Attach is { } attach) &&
-            ((((uint)attach.BodyIndex) >= ((uint)WorldClient.EntityCapacity)) || !client.IsActive(index: attach.BodyIndex))
+            (!WorldBodiesLimits.IsBodyIndex(index: attach.BodyIndex) || !client.IsActive(index: attach.BodyIndex))
         ) {
             pose = default;
 

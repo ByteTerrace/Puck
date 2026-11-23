@@ -151,6 +151,7 @@ public sealed class WorldRigidAssetLawTests {
         private readonly WorldClient m_client = ClientFixtures.Client(definition: Fixtures.BuildGradientUpDocument(gradientUp: false));
 
         public WorldPoseCarries Carries => m_client.Carries;
+        public int EntityCapacity => m_client.EntityCapacity;
         public WorldDefinition Definition => m_client.Definition;
         public WorldStateMirror StateMirror => m_client.StateMirror;
         public SdfFieldEvaluator? StaticField => null;

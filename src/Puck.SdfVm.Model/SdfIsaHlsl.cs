@@ -386,6 +386,8 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_VIEWS_FILTER_WORDS", value: SdfWorldPackage.ViewsFilterWords);
         declarations.Count(name: "SDF_VIEWS_PROBE_RATE", value: SdfWorldPackage.ViewsProbeRate);
         declarations.Count(name: "SDF_VIEWS_PROBE_WORDS", value: SdfWorldPackage.ViewsProbeWords);
+        declarations.Count(name: "SDF_VIEWS_PROBE_RECORD_WORDS", value: SdfWorldPackage.ViewsProbeRecordWords);
+        declarations.Count(name: "SDF_VIEWS_PROBE_SLOT_WORDS", value: SdfWorldPackage.ViewsProbeSlotWords);
         declarations.Count(name: "SDF_VIEWS_PROBE_HISTORY_WORDS", value: SdfWorldPackage.ViewsProbeHistoryWords);
         declarations.Count(name: "SDF_SHADOW_BITS", value: SdfVisibility.ShadowBits);
         declarations.Bits(name: "SDF_SHADOW_MASK", value: SdfVisibility.ShadowMask);

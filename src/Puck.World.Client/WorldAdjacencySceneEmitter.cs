@@ -49,6 +49,10 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // emitter's own remarks and AGENTS.md's authored-vs-constant rule: every world wants THE SAME adjacency-instance
     // ceiling, because it sizes the reservation this emitter itself declares, never gameplay feel.
     internal const int MaxInstancesPerBand = WorldAdjacencyGeometry.MaximumPlacementsPerBand;
+    // The neighbour body indices a band keeps presentation state for, laid out band by band at this stride. A band draws
+    // at most MaxEntitiesPerBand bodies, so the stride is a presentation bound, not the neighbour's population: a body
+    // at or past it is not drawn across the seam and counts as truncated (SelectBand), which narrates by name.
+    internal const int BodyStride = 4096;
 
     private readonly int m_bandCount;
     private readonly Func<WorldDefinition> m_definition;
@@ -142,7 +146,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         m_source = source;
         m_suppressEntity = suppressEntity;
         m_bandCount = WorldAdjacencyBands.ProjectionCapacity(definition: client.Definition);
-        m_gaits = new WorldAvatarGait[(m_bandCount * WorldBodiesLimits.CapacityCeiling)];
+        m_gaits = new WorldAvatarGait[(m_bandCount * BodyStride)];
         m_motionOwners = new WorldTransformOwners(capacity: m_gaits.Length);
         m_emittedRigs = new int[m_gaits.Length];
         m_emittedScales = new float[m_gaits.Length];
@@ -180,7 +184,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         for (var band = 0; (band < Math.Min(visuals.Count, m_bandCount)); band++) {
             Select(band: band, projection: visuals[band]);
             for (var at = 0; (at < m_selectedCount[band]); at++) {
-                var motion = ((band * WorldBodiesLimits.CapacityCeiling) + m_selected[((band * MaxEntitiesPerBand) + at)]);
+                var motion = ((band * BodyStride) + m_selected[((band * MaxEntitiesPerBand) + at)]);
 
                 m_liveSlots[motion] = m_liveSlotCount;
                 m_liveSet.Add(item: motion);
@@ -199,7 +203,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         var near = m_near[band];
         var frame = projection.Path[0].Neighbour;
         var depth = projection.OverlapDepth;
-        var bound = Math.Min(val1: neighbour.EntityCapacity, val2: WorldBodiesLimits.CapacityCeiling);
+        var bound = Math.Min(val1: neighbour.EntityCapacity, val2: BodyStride);
         var whole = (neighbour.CollectEntityChanges(cursor: m_nearCursors[band], into: m_nearRuns) || (m_nearBands[band] != (frame, depth)));
 
         m_nearBands[band] = (frame, depth);
@@ -347,10 +351,10 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     //     at two places at once.
     private void EmitEntities(SdfProgramBuilder builder, WorldAdjacencyProjection projection, int bandIndex, int slotBase) {
         var neighbour = projection.Neighbour;
-        var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
-        var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
+        var bodyMaterials = new int[BodyStride];
+        var accentMaterials = new int[BodyStride];
         var noseFactor = neighbour.Definition.PlayerDefaults.NoseFactor;
-        var appearanceBase = (bandIndex * WorldBodiesLimits.CapacityCeiling);
+        var appearanceBase = (bandIndex * BodyStride);
         var emitting = m_emitting;
 
         emitting.Clear();
@@ -359,14 +363,14 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             projection: projection
         );
 
-        Array.Clear(array: m_emittedEntities, index: appearanceBase, length: WorldBodiesLimits.CapacityCeiling);
+        Array.Clear(array: m_emittedEntities, index: appearanceBase, length: BodyStride);
         foreach (var index in emitting) { m_emittedEntities[(appearanceBase + index)] = true; }
 
         if (
             truncated &&
             m_truncationNarrated.Add(item: projection.Name)
         ) {
-            WorldClientDiagnostics.Report(channel: "world.adjacency", text: $"'{projection.Name}' neighbour bodies truncated for rendering at {MaxEntitiesPerBand} bodies");
+            WorldClientDiagnostics.Report(channel: "world.adjacency", text: $"'{projection.Name}' neighbour bodies truncated for rendering: a band draws at most {MaxEntitiesPerBand} bodies, each below body {BodyStride}");
         }
 
         foreach (var index in emitting) {
@@ -470,19 +474,25 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         var frame = projection.Path[0].Neighbour;
         var bound = Math.Min(
             val1: neighbour.EntityCapacity,
-            val2: WorldBodiesLimits.CapacityCeiling
+            val2: BodyStride
         );
         var selected = 0;
+        var truncated = false;
 
         foreach (var index in neighbour.ActiveEntities) {
             if (
-                (index >= bound) ||
                 IsSuppressed(
                 index: index,
                 neighbour: neighbour
             ) ||
                 !Near(depth: projection.OverlapDepth, frame: frame, index: index, neighbour: neighbour)
             ) {
+                continue;
+            }
+
+            if (index >= bound) {
+                truncated = true;
+
                 continue;
             }
 
@@ -494,7 +504,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             destination.Add(item: index);
         }
 
-        return false;
+        return truncated;
     }
 
     /// <inheritdoc/>
@@ -641,7 +651,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
             var bound = Math.Min(
                 val1: neighbour.EntityCapacity,
-                val2: WorldBodiesLimits.CapacityCeiling
+                val2: BodyStride
             );
             // The emitted latch, not a fresh liveness read: the program's geometry was compiled for exactly this set, and
             // re-deriving the set here would pack a body whose leaves this program never emitted. A body that left the
@@ -650,13 +660,13 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
             if (!ReferenceEquals(objA: emitted, objB: m_packedLists[bandIndex])) {
                 foreach (var left in (m_packedLists[bandIndex] ?? [])) {
-                    if (Array.BinarySearch(array: emitted, value: left) < 0) { m_gaits[((bandIndex * WorldBodiesLimits.CapacityCeiling) + left)].Seeded = false; }
+                    if (Array.BinarySearch(array: emitted, value: left) < 0) { m_gaits[((bandIndex * BodyStride) + left)].Seeded = false; }
                 }
                 m_packedLists[bandIndex] = emitted;
             }
 
             foreach (var entity in emitted) {
-                var motionIndex = ((bandIndex * WorldBodiesLimits.CapacityCeiling) + entity);
+                var motionIndex = ((bandIndex * BodyStride) + entity);
 
                 if (entity >= bound) {
                     continue;

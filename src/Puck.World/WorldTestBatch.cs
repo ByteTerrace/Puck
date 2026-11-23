@@ -229,7 +229,7 @@ internal sealed class WorldTestBatch {
                     try {
                         Console.WriteLine(value: $"[test.batch: tick replay {name} 0]");
                         divergence = probe.Verify(progress: tick => {
-                            if ((tick % 120) == 0) { Console.WriteLine(value: $"[test.batch: tick replay {name} {tick}]"); }
+                            if ((tick % WorldTestRun.ProgressTicks) == 0) { Console.WriteLine(value: $"[test.batch: tick replay {name} {tick}]"); }
                         });
                     } catch (Exception exception) { throw new InvalidOperationException($"reproduction of '{name}' failed: {exception.Message}", exception); }
                 }

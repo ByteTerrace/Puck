@@ -1,0 +1,219 @@
+// A vehicle: a body that drives a loop of road stops at its own pace, drawn as a small cart. A module library: it hands
+// its importers templates and lets and emits no document. A world declares its roads as navigation domains of one
+// shared network, expands `vehicleDesign` once over them, `vehicleLooks` once, and `vehicleRoutes` with every vehicle's
+// stops, then places the vehicles with `inhabit` rows naming the kit and a look.
+//
+// A vehicle runs the engine's own systems: its producer routes it over the road network toward its `route` register
+// (`navigated`, reading the stop's shared goal field), its body drives the standard `walk` motion program (motion.puck)
+// under a kit whose shaping grips the road across its heading, as a wheeled body does, and the routes' rules move the
+// register to the next stop as the vehicle arrives. Vehicles use `overlap` body contact.
+
+import "kits"
+
+// The road domains' envelope for a vehicle (domains.puck's `surfaceDomain`): a 2 m tall body of 0.9 m radius that
+// climbs no more than a kerb and keeps to gentle grades.
+let vehicleWalker = { height: 2, radius: 0.9, step: 0.3, slope: 30 }
+
+// A vehicle producer's steering: straight at the next step of its route, turning as it goes.
+let vehicleSteering = {
+  channels {}
+  scalars {
+    forward: 1
+    approach: 1
+    approachAltitudeGain: 0
+    standoffRadius: 0.8
+    orbit: 0
+    softRadius: 3
+    inwardGain: 3
+    turnScale: 2
+    weaveAmplitude: 0
+    weaveFrequencyBase: 0
+    weaveFrequencyRange: 0
+    activityRateBase: 1
+    activityRateRange: 0
+    altitudeBase: 0
+    altitudeGain: 0
+    altitudeRange: 0
+    pitchWave: 0
+    pressThreshold: 0
+    rollTurn: 0
+    strafeWave: 0
+    turnWave: 0
+    upWave: 0
+  }
+}
+
+// The `route` target register, the `vehicle` producer that routes over `domain` (any domain of the road network) and
+// the `vehicle` kit that drives at `speed` metres a second.
+template vehicleDesign(domain, speed = 8) {
+  targetRegisters [
+    { name: "route", maximumRange: 1000, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
+  ]
+
+  bodyMotionPrograms [
+    {
+      kind: Producer
+      name: "vehicle"
+      operations [SenseNearestInCone, ProduceSteeringIntent, FaceSensorTarget]
+      target: navigated(domain: domain, register: "route")
+      version: "puck.body.program.v1"
+    }
+  ]
+
+  kits [
+    {
+      name: "vehicle"
+      bodyContact: Overlap
+      bodyMotionProgram: "walk"
+      collider: capsule(endpoint: [0, 0.4, 0], radius: 0.9)
+      motion: walkerMotion with { speed { value: speed } }
+      producers {
+        vehicle: vehicleSteering
+      }
+    }
+  ]
+}
+
+// A cart in each body colour: a prototype and look `vehicle-<i>`, a 1.8 by 3.4 m body on four wheels under a canopy.
+template vehicleLooks(colors, trim = "#2F2A26", canopy = "#EBDDBF") {
+  prototypes {
+    for (color, i) in colors {
+      prototype $"vehicle-{i}" {
+        document {
+          name: $"vehicle-{i}"
+          schema: "puck.creation.v1"
+          palette [
+            { color: color, roughness: 0.55, specular: 0.2 }
+            { color: trim, roughness: 0.8 }
+            { color: canopy, roughness: 0.85 }
+          ]
+          shape Box "body" {
+            material: 0
+            position [0, 0.75, 0]
+            scale [0.9, 0.4, 1.7]
+            rounding: 0.15
+          }
+          shape Box "canopy" {
+            material: 2
+            position [0, 1.55, -0.3]
+            scale [0.85, 0.06, 1.0]
+          }
+          shape Box "post-left" {
+            material: 1
+            position [-0.8, 1.3, -0.3]
+            scale [0.05, 0.25, 0.05]
+          }
+          shape Box "post-right" {
+            material: 1
+            position [0.8, 1.3, -0.3]
+            scale [0.05, 0.25, 0.05]
+          }
+          for wheel in [[-0.9, 1.1], [0.9, 1.1], [-0.9, -1.1], [0.9, -1.1]] {
+            shape Cylinder $"wheel-{wheel[0]}-{wheel[1]}" {
+              material: 1
+              position [wheel[0], 0.35, wheel[1]]
+              rotation [0, 0, 0.707107, 0.707107]
+              scale [0.35, 0.12, 0.35]
+            }
+          }
+        }
+      }
+    }
+  }
+
+  looks: map(range(0, length(colors)), i => {
+    name: $"vehicle-{i}"
+    scale: 1
+    source: creation(prototypeId: $"vehicle-{i}")
+    motion {
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+    }
+  })
+}
+
+// Every vehicle's loop. `vehicles` lists each as `{ key, stops, first }`: `key` its body number, `stops` the four
+// `[x, z]` points of its loop in driving order, `first` the stop it drives to first. From the second tick each vehicle
+// is sent to its first stop; once it arrives, the next stop round the loop becomes its route, so
+// it laps forever. A vehicle has arrived once it stands within 3 m of its stop, read from its own position, so a
+// stop it has just left can never advance it twice in one tick. `vehicleStop` holds the stop each vehicle drives to.
+template vehicleRoutes(vehicles) {
+  state {
+    world: concat(
+      flatMap(range(0, 4), s => [
+        vehicleStopRow(name: $"vehicleStop{s}X", vehicles: vehicles, values: map(vehicles, v => v.stops[s][0]))
+        vehicleStopRow(name: $"vehicleStop{s}Z", vehicles: vehicles, values: map(vehicles, v => v.stops[s][1]))
+      ]),
+      [
+        {
+          name: "vehicleStop"
+          kind: "Int"
+          capacity: length(vehicles)
+          cells: map(vehicles, v => { key: $"{v.key}", value: v.first })
+        }
+      ]
+    )
+  }
+
+  rule "vehicle-start-0" {
+    when $tick >= 2 and vehicleStop[$each] == 0
+    mode: Edge
+    forEach: vehicleStop
+    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop0X[$each], pointY: 0, pointZ: vehicleStop0Z[$each])
+  }
+  rule "vehicle-start-1" {
+    when $tick >= 2 and vehicleStop[$each] == 1
+    mode: Edge
+    forEach: vehicleStop
+    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop1X[$each], pointY: 0, pointZ: vehicleStop1Z[$each])
+  }
+  rule "vehicle-start-2" {
+    when $tick >= 2 and vehicleStop[$each] == 2
+    mode: Edge
+    forEach: vehicleStop
+    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop2X[$each], pointY: 0, pointZ: vehicleStop2Z[$each])
+  }
+  rule "vehicle-start-3" {
+    when $tick >= 2 and vehicleStop[$each] == 3
+    mode: Edge
+    forEach: vehicleStop
+    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop3X[$each], pointY: 0, pointZ: vehicleStop3Z[$each])
+  }
+  rule "vehicle-next-1" {
+    when vehicleStop[$each] == 0 and ((bodyPosition(each, x) - vehicleStop0X[$each]) * (bodyPosition(each, x) - vehicleStop0X[$each]) + (bodyPosition(each, z) - vehicleStop0Z[$each]) * (bodyPosition(each, z) - vehicleStop0Z[$each])) < 9
+    mode: Level
+    forEach: vehicleStop
+    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop1X[$each], pointY: 0, pointZ: vehicleStop1Z[$each])
+    vehicleStop[$each] = 1
+  }
+  rule "vehicle-next-2" {
+    when vehicleStop[$each] == 1 and ((bodyPosition(each, x) - vehicleStop1X[$each]) * (bodyPosition(each, x) - vehicleStop1X[$each]) + (bodyPosition(each, z) - vehicleStop1Z[$each]) * (bodyPosition(each, z) - vehicleStop1Z[$each])) < 9
+    mode: Level
+    forEach: vehicleStop
+    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop2X[$each], pointY: 0, pointZ: vehicleStop2Z[$each])
+    vehicleStop[$each] = 2
+  }
+  rule "vehicle-next-3" {
+    when vehicleStop[$each] == 2 and ((bodyPosition(each, x) - vehicleStop2X[$each]) * (bodyPosition(each, x) - vehicleStop2X[$each]) + (bodyPosition(each, z) - vehicleStop2Z[$each]) * (bodyPosition(each, z) - vehicleStop2Z[$each])) < 9
+    mode: Level
+    forEach: vehicleStop
+    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop3X[$each], pointY: 0, pointZ: vehicleStop3Z[$each])
+    vehicleStop[$each] = 3
+  }
+  rule "vehicle-next-0" {
+    when vehicleStop[$each] == 3 and ((bodyPosition(each, x) - vehicleStop3X[$each]) * (bodyPosition(each, x) - vehicleStop3X[$each]) + (bodyPosition(each, z) - vehicleStop3Z[$each]) * (bodyPosition(each, z) - vehicleStop3Z[$each])) < 9
+    mode: Level
+    forEach: vehicleStop
+    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop0X[$each], pointY: 0, pointZ: vehicleStop0Z[$each])
+    vehicleStop[$each] = 0
+  }
+}
+
+// One stop coordinate of every vehicle as a Fixed row keyed by body number, each value on a 1/1024 m step.
+function vehicleStopRow(name, vehicles, values) = {
+  name: name
+  kind: "Fixed"
+  capacity: length(vehicles)
+  cells: map(range(0, length(vehicles)), i => { key: $"{vehicles[i].key}", value: $"{round(values[i] * 1024) / 1024}" })
+}

@@ -274,7 +274,7 @@ public sealed partial class WorldTransferEscrow {
 
         if (
             (count <= 0) ||
-            (count > WorldBodiesLimits.CapacityCeiling)
+            (count > WorldBodiesLimits.IndexLimit)
         ) { reason = "reservation traveler count is invalid"; return false; }
         owned = request with { Members = [.. request.Members!] };
         reason = string.Empty;

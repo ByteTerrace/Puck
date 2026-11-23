@@ -28,7 +28,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var slots = reader.ReadArray(
             field: "transfer continuation slots",
             readItem: static (ref WireReader r) => r.ReadInt32(),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         var sourceSlot = reader.ReadInt32();
         var border = reader.ReadString(

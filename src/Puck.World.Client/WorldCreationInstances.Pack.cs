@@ -454,13 +454,11 @@ public sealed partial class WorldCreationInstances {
 
         // An attached row whose body is not active contributes nothing this frame — the presentation mirror of
         // WorldPlacementAttachment.TryResolve's inactive-body verdict (which world.attachments echoes by reason).
-        // The registration keeps its slot: occupancy changes tick to tick and a rebuild is not owed for one. The
-        // range test is a belt-and-braces guard, not a live gap: WorldBodiesLimits.CapacityCeiling is
-        // WorldClient.EntityCapacity, so the document validator's bound on population.capacity already keeps
-        // every body index inside this client's view.
+        // The registration keeps its slot: occupancy changes tick to tick and a rebuild is not owed for one. A body
+        // the client's view has not grown to yet reads inactive.
         if (
             (live is { Row.Attach: { } parked }) &&
-            ((((uint)parked.BodyIndex) >= ((uint)WorldClient.EntityCapacity)) || !client.IsActive(index: parked.BodyIndex))
+            (!WorldBodiesLimits.IsBodyIndex(index: parked.BodyIndex) || !client.IsActive(index: parked.BodyIndex))
         ) {
             // A parked row is drawn nowhere, so it rates no body it reads (ReaderHertz reads PackedRoot).
             live.PackedRoot = null;

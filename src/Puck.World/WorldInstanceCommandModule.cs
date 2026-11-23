@@ -122,7 +122,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             text: token[5..],
             value: out bodyIndex
         ) &&
-            (((uint)bodyIndex) < WorldBodiesLimits.CapacityCeiling)
+            (((uint)bodyIndex) < WorldBodiesLimits.IndexLimit)
         ) {
             return true;
         }

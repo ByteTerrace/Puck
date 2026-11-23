@@ -123,6 +123,10 @@ internal sealed class WorldTestRun {
     private readonly Func<InputRouter> m_router;
 
     public event Action? Exported;
+    /// <summary>The completed ticks between two progress reports of a run or its replay: few enough that a world of
+    /// thousands of bodies on a loaded machine reports well inside the test runner's progress budget.</summary>
+    public const int ProgressTicks = 30;
+
     public event Action<ulong>? Progress;
     /// <summary>Raised at every completed tick of an armed run, before the export it may take.</summary>
     public event Action<ulong>? Ticked;
@@ -447,7 +451,7 @@ internal sealed class WorldTestRun {
             return;
         }
         if (AuthorityTicks == 0) { FirstTick?.Invoke(); }
-        if ((tick % 120) == 0) { Progress?.Invoke(tick); }
+        if ((tick % ProgressTicks) == 0) { Progress?.Invoke(tick); }
         Ticked?.Invoke(tick);
         // Replay probes own per-authority tick hashes. A verdict-only run needs only the export and answers;
         // hashing again here duplicates the probe during reproduction and serves no manifest reader.
