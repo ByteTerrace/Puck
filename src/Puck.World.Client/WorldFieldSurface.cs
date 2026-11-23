@@ -1,7 +1,6 @@
 using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
-using Puck.SignedDistance.Queries;
 
 namespace Puck.World.Client;
 
@@ -18,7 +17,7 @@ public static class WorldFieldSurface {
     /// <param name="point">The point the ray meets, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the ray proves a surface within the far distance; a march that ends without
     /// proving one answers <see langword="false"/>.</returns>
-    public static bool TryMeet(SdfFieldEvaluator? field, SourceRay ray, Vector3 from, double farDistance, out FixedPosition point) {
+    public static bool TryMeet(WorldQueryField? field, SourceRay ray, Vector3 from, double farDistance, out FixedPosition point) {
         point = default;
 
         // The ray's origin already lies this far along the line from the camera.
@@ -46,7 +45,7 @@ public static class WorldFieldSurface {
     /// <param name="field">The field.</param>
     /// <param name="point">The point, on or near a surface.</param>
     /// <returns>The unit normal, or zero where the field gives no gradient.</returns>
-    public static Vector3 NormalAt(SdfFieldEvaluator field, FixedPosition point) {
+    public static Vector3 NormalAt(WorldQueryField field, FixedPosition point) {
         ArgumentNullException.ThrowIfNull(argument: field);
 
         return (field.TrySurfaceNormal(normal: out var normal, position: point) ? normal : Vector3.Zero);

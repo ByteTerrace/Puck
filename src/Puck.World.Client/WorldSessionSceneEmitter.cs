@@ -135,7 +135,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private CameraSnapshot? m_dressedCamera;
     // The last dressed program's fixed-point field, built when a pick first asks for it, and the far distance a pick
     // marches it to.
-    private SdfFieldEvaluator? m_dressedField;
+    private WorldQueryField? m_dressedField;
     private SdfProgram? m_dressedFieldProgram;
     private float m_dressedFarDistance;
 
@@ -728,7 +728,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             m_dressedFieldProgram = program;
 
             try {
-                m_dressedField = new SdfFieldEvaluator(program: builder.Build(), reading: SdfFieldReading.Contact, regional: true);
+                m_dressedField = new WorldQueryField(fixedPart: new SdfFieldEvaluator(program: builder.Build(), reading: SdfFieldReading.Contact, regional: true));
             } catch (ArgumentException) {
                 // A static placement the fixed-point evaluator does not interpret (a path, a non-uniform scale).
                 m_dressedField = null;

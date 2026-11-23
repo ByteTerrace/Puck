@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.SignedDistance.Queries;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
 
@@ -22,7 +21,7 @@ public interface IWorldStampSource {
 
     /// <summary>Gets the static solid field an effector plants against, or <see langword="null"/> when this world
     /// carries none.</summary>
-    SdfFieldEvaluator? StaticField { get; }
+    WorldQueryField? StaticField { get; }
     /// <summary>Gets the presenting seat's guess on its own input for the world this source presents, or
     /// <see langword="null"/> unless the client presents exactly one seat and that seat's body is in this world
     /// (<see cref="WorldClient.SeatGuessAt"/>). A stamp pool reads it into its guess layer alone
