@@ -226,14 +226,14 @@ let cityCrossings = [
 // The town's navigation areas (../standard/domains.puck's `townAreaTypes`): every road strip is `road`, and each
 // crossing's region, marked after the roads so it wins where it lies on one, is `crossing`. A citizen pays ten times a
 // road's length to walk it (../standard/citizen.puck's `citizenProfile`), so it keeps to the pavement and crosses the
-// ring and the works road at their crossings; a vehicle never drives onto the pavement (`vehicleProfile`).
+// ring and the works road at their crossings. The vehicles follow their road curves and route over no domain.
 navigation {
   areaTypes: townAreaTypes
   areas: concat(
     map(roadStrips, strip => townArea("road", strip.x0, strip.x1, strip.z0, strip.z1)),
     map(cityCrossings, c => { type: "crossing", placement: c.region })
   )
-  profiles [citizenProfile, vehicleProfile]
+  profiles [citizenProfile]
   domains: concat(
     [
       walkable("city-square", [-46, 0.05, -100], 1, 92, 100, 2.2, 3, 1024) with pavement
