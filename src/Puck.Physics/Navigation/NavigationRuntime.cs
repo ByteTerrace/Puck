@@ -12,8 +12,6 @@ public enum NavigationStatus : byte {
     Unreachable,
     SearchLimit,
     PathLimit,
-    Pending,
-    CapacityLimited,
 }
 /// <summary>A deterministic, bounded A*/shared-search kernel over a set of navigation domains, each proved against the
 /// static contact geometry its bodies collide with and an optional live-medium field. Reads no document; every
@@ -37,10 +35,13 @@ public sealed partial class NavigationRuntime {
     /// <param name="capacity">Representation ceilings the host's own authoring vocabulary declares.</param>
     /// <param name="previous">The prior runtime, when a host is replacing its document. A domain whose tuning, capacity
     /// and geometry part are equal to a prior domain's keeps that domain's workspace, its bake (finished or in flight)
-    /// included; a medium domain also requires the same field provider at the same revision.</param>
+    /// included; a medium domain also requires the same field provider at the same revision. A prior goal field whose
+    /// network is the same kept domains in the same order stays resident.</param>
+    /// <param name="work">The ledger the runtime counts its searches into; <see langword="null"/> counts into
+    /// <see cref="NavigationSearchWork.Process"/>.</param>
     /// <exception cref="InvalidOperationException"><paramref name="domains"/> is non-empty and
     /// <paramref name="geometry"/> is <see langword="null"/>.</exception>
-    public NavigationRuntime(IReadOnlyList<NavigationDomainInput> domains, IContactField? geometry, INavigationMediumField? fields, NavigationCapacity capacity, NavigationRuntime? previous = null) {
+    public NavigationRuntime(IReadOnlyList<NavigationDomainInput> domains, IContactField? geometry, INavigationMediumField? fields, NavigationCapacity capacity, NavigationRuntime? previous = null, NavigationSearchWork? work = null) {
         if (
             (domains.Count != 0) &&
             (geometry is null)
@@ -102,7 +103,23 @@ public sealed partial class NavigationRuntime {
         RetainedDomainCount = retained;
         RebuiltDomainCount = (domains.Count - retained);
         RebakedDomainCount = rebaked;
+        m_capacity = capacity;
+        m_work = (work ?? NavigationSearchWork.Process);
+        m_offsets = new int[(m_domains.Length + 1)];
+        for (var index = 0; (index < m_domains.Length); index++) {
+            m_offsets[(index + 1)] = checked((m_offsets[index] + m_domains[index].CellCount));
+        }
+        m_joined = new bool[(m_domains.Length * m_domains.Length)];
+        foreach (var domain in m_domains) {
+            domain.Work = m_work;
+        }
+        if (previous is not null) {
+            AdoptGoalFields(previous: previous);
+        }
     }
+
+    private readonly NavigationCapacity m_capacity;
+    private readonly NavigationSearchWork m_work;
 
     public int Count => m_domains.Length;
     /// <summary>Gets the number of domain workspaces retained from the prior runtime installation.</summary>
@@ -212,10 +229,18 @@ public sealed partial class NavigationRuntime {
             m_openStamp = new int[CellCount];
             m_closedStamp = new int[CellCount];
             m_open = new NodeHeap(cells: CellCount);
-
-            Sharing = row.Shared;
-            InitializeSharing();
+            m_mediumRevision = MediumValueRevision;
         }
+
+        // The live medium's revision when the domain was compiled; a domain whose medium has moved on is not retained.
+        private readonly ulong m_mediumRevision;
+        private NavigationSearchWork m_work = NavigationSearchWork.Process;
+
+        /// <summary>Gets the live medium's current revision for a medium domain, zero for any other: what a goal field
+        /// over the domain compares to tell whether the water it was derived over has changed.</summary>
+        internal ulong MediumValueRevision => ((m_mediumField >= 0) ? m_fields!.ValueRevision(field: m_mediumField) : 0UL);
+        // The ledger the runtime that reads the domain counts into.
+        internal NavigationSearchWork Work { set => m_work = value; }
 
         /// <summary>Returns the part of a geometry one domain's queries can reach: the
         /// <see cref="IRegionalContactField.Within"/> part of its footprint's region, or the whole geometry.</summary>
@@ -322,7 +347,7 @@ public sealed partial class NavigationRuntime {
                 objA: m_fields,
                 objB: fields
             ) &&
-                (m_sharedFieldRevision == fields.ValueRevision(field: field))
+                (m_mediumRevision == fields.ValueRevision(field: field))
             );
         }
 
@@ -353,7 +378,7 @@ public sealed partial class NavigationRuntime {
                 return (int)m_bake!.Work.Walkable;
             }
         }
-        public long WorkspaceBytes => checked(((((long)CellCount) * ((((6L * sizeof(int)) + sizeof(long)) + sizeof(uint)) + sizeof(byte))) + SharedWorkspaceBytes));
+        public long WorkspaceBytes => checked(((long)CellCount) * ((((6L * sizeof(int)) + sizeof(long)) + sizeof(uint)) + sizeof(byte)));
 
         // Actual off-center locomotion needs a continuous proof: a cached grid edge certifies only the line
         // between its cell centers. Surface locomotion has a different support/clearance contract.
@@ -466,7 +491,23 @@ public sealed partial class NavigationRuntime {
             );
             return true;
         }
+        /// <summary>Searches one route between two cells of this domain on its own: a bounded A* over the baked edges,
+        /// within the domain's expansion and path budgets.</summary>
+        /// <param name="start">The start cell.</param>
+        /// <param name="goal">The goal cell.</param>
+        /// <param name="path">Receives the route's cells from start to goal.</param>
+        /// <param name="pathLength">The route's cell count, zero when no route is returned.</param>
+        /// <param name="expanded">The nodes the search settled.</param>
+        /// <returns><see cref="NavigationStatus.Active"/> with a route, <see cref="NavigationStatus.Arrived"/> when the
+        /// start is the goal, or why no route was returned.</returns>
         public NavigationStatus FindPath(int start, int goal, Span<int> path, out int pathLength, out int expanded) {
+            var status = SearchPath(expanded: out expanded, goal: goal, path: path, pathLength: out pathLength, start: start);
+
+            m_work.Add(amount: 1, kind: NavigationSearchWork.Searches);
+            m_work.Add(amount: expanded, kind: NavigationSearchWork.SearchExpansions);
+            return status;
+        }
+        private NavigationStatus SearchPath(int start, int goal, Span<int> path, out int pathLength, out int expanded) {
             pathLength = 0;
             expanded = 0;
             if (
@@ -668,13 +709,18 @@ public sealed partial class NavigationRuntime {
             );
         }
 
-        private static uint NeighborBit(int dx, int dy, int dz) {
+        private static uint NeighborBit(int dx, int dy, int dz) => (1U << NeighborSlot(dx: dx, dy: dy, dz: dz));
+        // A step's place among the 26 around a cell, layer then depth then column, skipping the cell itself (13): the bit
+        // of a baked edge mask and a goal field's step.
+        private static byte NeighborSlot(int dx, int dy, int dz) {
             var ordinal = ((((dy + 1) * 9) + ((dz + 1) * 3)) + (dx + 1));
 
-            if (ordinal > 13) {
-                ordinal--;
-            }
-            return (1U << ordinal);
+            return (byte)((ordinal > 13) ? (ordinal - 1) : ordinal);
+        }
+        private static (int Dx, int Dy, int Dz) SlotOffset(byte slot) {
+            var ordinal = ((slot >= 13) ? (slot + 1) : slot);
+
+            return (((ordinal % 3) - 1), ((ordinal / 9) - 1), (((ordinal / 3) % 3) - 1));
         }
         // f = g + h, then the smaller h, then the lower index: a total order, so the heap never breaks a tie itself.
         private int Compare(int left, int right, int goal) {

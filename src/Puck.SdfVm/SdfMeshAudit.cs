@@ -912,8 +912,8 @@ public static class SdfMeshAudit {
             }
         }
 
-        var triangles = new SdfMeshTriangleGrid(cellSize: (2f * cell), indices: indices, positions: positions);
-        var excused = ((accounted is null) ? null : new SdfMeshTriangleGrid(cellSize: (2f * cell), indices: accounted.Indices.Span, positions: accounted.Positions.Span));
+        using var triangles = new SdfMeshTriangleGrid(cellSize: (2f * cell), indices: indices, positions: positions);
+        using var excused = ((accounted is null) ? null : new SdfMeshTriangleGrid(cellSize: (2f * cell), indices: accounted.Indices.Span, positions: accounted.Positions.Span));
         var crossings = 0;
         var missing = 0;
 

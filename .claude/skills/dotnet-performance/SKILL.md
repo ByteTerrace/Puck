@@ -192,7 +192,18 @@ outside this contract and takes the references as written.
   EventPipe trace of `Microsoft-Windows-DotNETRuntime:0x1:5` (allocation ticks
   with stacks; `AllocationKind` separates small from large objects) beside
   `host.frames`' per-iteration collections and pauses, and pool or keep a
-  build's workspace rather than letting it die young.
+  build's workspace rather than letting it die young. `puck host allocations
+  --pid` records and attributes one; the small objects decide how often the
+  young generation is collected, so split a site's bytes by `AllocationKind`
+  before ranking it. The steady garbage in play came from work done per item on
+  a repeating path: a poll that spelled a path string per input every 50 ms, a
+  spatial grid that made a `List<int>` per cell for every floor the bake judged,
+  a diagnostic read that formatted thousands of lines to keep twelve, and a store
+  listing that joined a full path per file. A shared pool emptied whenever one
+  consumer finished (the bake trimmed the large array pool at every `Finish`,
+  which a world in play reaches at each program change in each residency)
+  allocates afresh what the next consumer rents; a pool the process account
+  charges is trimmed by the account under pressure, not by a consumer.
 - A benchmark's `frames.allocatedBytesPerIteration` counts every thread, and in
   a moving chapter the mesh bake's workers dominate it. The bake identity
   includes the kernels' bytecode, so Direct3D 12 and Vulkan keep separate mesh

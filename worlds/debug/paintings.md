@@ -1,6 +1,6 @@
 # Painting wing
 
-[paintings.puck](paintings.puck) hangs five paintings in the gallery hall's east
+[paintings.puck](paintings.puck) hangs six paintings in the gallery hall's east
 wing, on level 0: framed canvases that are doors, as in Mario 64. Walk or jump
 into a canvas and you pass through it; until you do, its glass shows where it
 leads. Each canvas ripples like an event horizon (see
@@ -10,6 +10,7 @@ leads. Each canvas ripples like an event horizon (see
 |---|---|---|
 | North wall, x = 57 | `painting-garden`, gilt frame | Opens onto the garden ([garden.puck](garden.puck)), a sunset plot. The garden's `arrival` frame is the way back. |
 | North wall, x = 64 | `painting-night`, gallery frame (white mat in a black frame) | Opens onto the night field ([night.puck](night.puck)), a snowfield under stars. Its `arrival` frame is the way back. |
+| South wall, x = 60 | `painting-city`, ornate frame | Opens onto the city ([city.puck](city.puck)), a town on a river bend. Its teal `arrival` frame is the way back. |
 | West and east walls, z = 34.5 | `painting-link-west` and `painting-link-east`, brass frames | Two paintings facing each other 18 m apart across the room: step into either and step out of the other, facing out of it. |
 | Floor and ceiling, (66, 22.6) | `painting-fall-floor` and `painting-fall-ceiling`, gilt squares | The endless fall: a body that steps onto the floor glass drops out of the ceiling glass still falling, and falls through the floor again, forever. |
 
@@ -25,8 +26,8 @@ ceiling painting (below).
 `debug.go painting-room` stands a body just inside the doorway, looking
 across the room, and `debug.go portals` before the north wall, where the chase
 camera frames the garden and night paintings either side of her. `debug.go
-portal-garden`, `portal-night`, `portal-link` and `portal-fall` stand it before
-each painting, facing it.
+portal-garden`, `portal-night`, `portal-city`, `portal-link` and `portal-fall`
+stand it before each painting, facing it.
 
 The brass diamond on a teal keel beside the linked paintings is the
 [portal row witness](portal-rows.puck): authored triangles and a field carried

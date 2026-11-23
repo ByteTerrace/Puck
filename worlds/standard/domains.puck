@@ -1,0 +1,31 @@
+// Navigation domains for a walking body: a surface domain sized for the body that walks it. A module library: it hands
+// its importers functions and emits no document.
+//
+// A surface domain samples one ground per column, the first surface under its probe's start (origin height plus
+// `probeUp`) and no deeper than `probeDown` under it. `walker` is the envelope the domain proves cells for: its
+// `height` and `radius` in metres, the `step` it climbs and the steepest `slope` in degrees it walks. Every cell is
+// searchable in one route (the expansion budget is the cell count), a route keeps up to `maxPathNodes` cells, and a
+// body arrives within one cell.
+
+// The standard walker's envelope: its 1.7 m capsule of 0.3 m radius (walker.puck), routed over 0.3 m steps and 50 degree
+// slopes, under the standard's 60 so a route never leans on the limit.
+let standardWalker = { height: 1.7, radius: 0.3, step: 0.3, slope: 50 }
+
+function surfaceDomain(name, origin, cellSize, width, depth, probeUp, probeDown, maxPathNodes, walker = standardWalker) = {
+  name: name
+  kind: Surface
+  origin: origin
+  cellSize: cellSize
+  width: width
+  depth: depth
+  layers: 1
+  probeUp: probeUp
+  probeDown: probeDown
+  agentHeight: walker.height
+  agentRadius: walker.radius
+  maxStepHeight: walker.step
+  maxSlopeDegrees: walker.slope
+  arrivalDistance: cellSize
+  maxExpandedNodes: (width * depth)
+  maxPathNodes: maxPathNodes
+}

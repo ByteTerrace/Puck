@@ -743,17 +743,22 @@ Capacity changes rebuild as well. The [granary board](../../worlds/debug/granari
 combines these frames with preserved dealt instances and guarded reflow.
 
 Changing a navigation definition, or an edit whose proof affects that domain,
-clears a body's local route cache; a retained domain keeps its route and shared
-search workspace. Clearing designations, switching producers, or transferring authority still clears a body's local route cache
+clears a body's local route cache; a retained domain keeps its route, and a goal
+field whose network keeps the same domains stays resident. Clearing designations, switching producers, or transferring authority still clears a body's local route cache
 (`BodyNavigationState`); the checkpoint entry's `EntryNavigationSection` carries the
 domain, goal cell, waypoint cursor, status, and expanded-node count, `EntryRouteSection` the path, and
 `WorldAuthorityCheckpointCodec` validates every domain, node, waypoint,
-status, and budget before restore. The authoritative state hash includes
-producer-domain and route state. `world.navigation`, `body.targets`, and
-`world.budget` expose occupancy, state, expansions, the current followers'
-simultaneous-replan ceiling, and fixed workspace bytes; `$nav:` rule facts
-(`hasPath`, `active`, `arrived`, `remaining`, `pending`, `unreachable`) read
-the same live status.
+status, and budget before restore. A follower of a `shared` domain
+(`WorldPopulation.ReadGoalFieldTarget`) carries none of that: each tick it
+locates itself and its goal in the domain's network and reads its next step from
+the goal's field (`NavigationRuntime.GoalField`), so its entry holds only its
+domain and status, and goal fields stay out of checkpoints and hashes. The
+authoritative state hash includes producer-domain and route state.
+`world.navigation`, `body.targets`, and `world.budget` expose occupancy, state,
+expansions, resident goal fields and their last tick's work, the current
+followers' simultaneous-replan ceiling, and fixed workspace bytes; `$nav:` rule
+facts (`hasPath`, `active`, `arrived`, `remaining`, `unreachable`) read the same
+live status.
 
 **Mutations, the journal, and undo.** A `WorldMutation` applies by composing a
 candidate document, revalidating the WHOLE document through

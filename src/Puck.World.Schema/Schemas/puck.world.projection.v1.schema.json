@@ -46858,7 +46858,7 @@
                       "title": "WorldEffectStartTimer"
                     },
                     {
-                      "description": "Designates a subject into a body\u0027s named target register, or clears the register. A kit\u0027s action designates into its own body the participant that last affected it; a world rule names the body with Key and the subject with TargetKey.",
+                      "description": "Designates a subject into a body\u0027s named target register, or clears the register. A kit\u0027s action designates into its own body the participant that last affected it; a world rule names the body with Key and the subject with TargetKey, or a world point with Placement, Position and the pointX/pointY/pointZ expressions: the same point designation body.designate \u003Cregister\u003E at:x,y,z makes, which a body program\u0027s designated or navigated target walks to.",
                       "properties": {
                         "$type": {
                           "const": "designate"
@@ -46868,16 +46868,18 @@
                           "type": "string"
                         },
                         "kind": {
-                          "description": "Whether the register is filled or cleared; only a world rule clears.",
+                          "description": "Whether the register is filled with a body or a point, or cleared; only a world rule clears or designates a point.",
                           "enum": [
                             "Body",
-                            "Clear"
+                            "Clear",
+                            "Point"
                           ],
                           "default": "Body",
                           "title": "WorldBodyDesignationKind",
                           "x-enumDescriptions": {
                             "Body": "Designate another active body.",
-                            "Clear": "Clear the register."
+                            "Clear": "Clear the register.",
+                            "Point": "Designate a world point."
                           }
                         },
                         "key": {
@@ -46976,7 +46978,7 @@
                           ]
                         },
                         "targetKey": {
-                          "description": "The body a world rule designates, required when Kind is Body and refused when it is Clear. A kit\u0027s action names none.",
+                          "description": "The body a world rule designates, required when Kind is Body and refused otherwise. A kit\u0027s action names none.",
                           "default": null,
                           "title": "StateChannelRef",
                           "anyOf": [
@@ -47069,6 +47071,2593 @@
                               }
                             }
                           ]
+                        },
+                        "placement": {
+                          "description": "For Point, the placement whose document position is the point\u0027s base (its frame composed over its parent, as every consumer reads it), read when the effect fires, so a moved placement is followed; the point is the origin when none is named.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "position": {
+                          "description": "For Point, the literal point, or its offset from Placement when one is named. Exclusive with the point expressions.",
+                          "default": null,
+                          "title": "DocumentVector3",
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
+                        },
+                        "pointX": {
+                          "description": "For Point, a fixed-point expression for the point\u0027s x axis, evaluated when the effect fires; PointY and PointZ accompany it, and together they are the point, or its offset from Placement.",
+                          "default": null,
+                          "title": "ExpressionProgram",
+                          "type": "object",
+                          "required": [
+                            "instructions"
+                          ],
+                          "properties": {
+                            "instructions": {
+                              "description": "The postfix instructions, in evaluation order.",
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "title": "ExpressionInstruction",
+                                "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload.",
+                                "required": [
+                                  "op"
+                                ],
+                                "anyOf": [
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Add",
+                                          "Subtract",
+                                          "Multiply",
+                                          "Divide",
+                                          "Minimum",
+                                          "Maximum",
+                                          "Clamp",
+                                          "Remainder",
+                                          "BitAnd",
+                                          "BitOr",
+                                          "BitXor",
+                                          "BitNot",
+                                          "ShiftLeft",
+                                          "ShiftRight",
+                                          "ShiftRightLogical",
+                                          "Equal",
+                                          "NotEqual",
+                                          "Less",
+                                          "LessOrEqual",
+                                          "Greater",
+                                          "GreaterOrEqual",
+                                          "Select",
+                                          "SetBitCount",
+                                          "LeadingZeroCount",
+                                          "TrailingZeroCount",
+                                          "LowestSetBit",
+                                          "ClearLowestSetBit",
+                                          "RotateLeft",
+                                          "RotateRight",
+                                          "ByteSwap",
+                                          "ReverseBits",
+                                          "Negate",
+                                          "Absolute",
+                                          "ParallelBitExtract",
+                                          "ParallelBitDeposit",
+                                          "BitField",
+                                          "BitInsert",
+                                          "Sign",
+                                          "Pair",
+                                          "PairX",
+                                          "PairY",
+                                          "PairSwap",
+                                          "PairMaximum",
+                                          "PairMinimum",
+                                          "PairSum",
+                                          "PairDifference",
+                                          "PairTranslate",
+                                          "PairScale",
+                                          "MortonIndex",
+                                          "MortonX",
+                                          "MortonY",
+                                          "HilbertIndex",
+                                          "HilbertX",
+                                          "HilbertY",
+                                          "HexIndex",
+                                          "HexQ",
+                                          "HexR",
+                                          "HexRadius",
+                                          "HexEuclideanSquared",
+                                          "HexDistance",
+                                          "HexNeighbor",
+                                          "HexRotate",
+                                          "HexMirror",
+                                          "HexSwap",
+                                          "HexAdd",
+                                          "HexSubtract",
+                                          "HexMultiply",
+                                          "HexScale",
+                                          "HexTranslate",
+                                          "Layer",
+                                          "LayerOffset",
+                                          "LayerStart",
+                                          "LayerSize",
+                                          "SquareRoot",
+                                          "Sine",
+                                          "Cosine",
+                                          "SquareIndex",
+                                          "SquareX",
+                                          "SquareY",
+                                          "SquareRadius",
+                                          "SquareLength",
+                                          "SquareEuclideanSquared",
+                                          "SquareDistance",
+                                          "SquareChebyshev",
+                                          "SquareNeighbor",
+                                          "SquareRotate",
+                                          "SquareMirror",
+                                          "SquareSwap",
+                                          "SquareAdd",
+                                          "SquareSubtract",
+                                          "SquareMultiply",
+                                          "SquareScale",
+                                          "SquareTranslate",
+                                          "GreatestCommonDivisor",
+                                          "LeastCommonMultiple",
+                                          "FloorModulo",
+                                          "FloorDivide",
+                                          "FloorDivideModulo",
+                                          "DivideRemainder",
+                                          "Power",
+                                          "ModularPower",
+                                          "ModularInverse",
+                                          "ExtendedGreatestCommonDivisor",
+                                          "CycleForward",
+                                          "CycleDistance",
+                                          "SmallestMissing",
+                                          "IsPrime",
+                                          "PrimeAt",
+                                          "BinomialCoefficient",
+                                          "Factorial",
+                                          "SubsetRank",
+                                          "SubsetAt",
+                                          "SubsetMember",
+                                          "ArrangementRank",
+                                          "ArrangementAt",
+                                          "ArrangementMember",
+                                          "Floor",
+                                          "Ceiling",
+                                          "Round",
+                                          "ReplicationMask",
+                                          "RepeatBits",
+                                          "IsAbsent",
+                                          "Coalesce",
+                                          "Member",
+                                          "And",
+                                          "Or",
+                                          "Not"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "op"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Argument"
+                                        ]
+                                      },
+                                      "index": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "index"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "BoardShift",
+                                          "BoardRay",
+                                          "BoardImage"
+                                        ]
+                                      },
+                                      "topology": {
+                                        "type": "string"
+                                      },
+                                      "index": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "topology",
+                                      "index"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Call"
+                                        ]
+                                      },
+                                      "subprogram": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "subprogram"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Constant"
+                                        ]
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "All",
+                                          "Any",
+                                          "Count",
+                                          "Sum"
+                                        ]
+                                      },
+                                      "family": {
+                                        "type": "string"
+                                      },
+                                      "binder": {
+                                        "type": "string"
+                                      },
+                                      "subprogram": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "family",
+                                      "binder",
+                                      "subprogram"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Operand"
+                                        ]
+                                      },
+                                      "name": {
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                      },
+                                      "key": {
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Dot",
+                                          "Similarity",
+                                          "Identical"
+                                        ]
+                                      },
+                                      "left": {
+                                        "type": "object",
+                                        "title": "ExpressionVectorOperand",
+                                        "required": [
+                                          "$type"
+                                        ],
+                                        "anyOf": [
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "cell"
+                                              },
+                                              "name": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              },
+                                              "key": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "name"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "literal"
+                                              },
+                                              "value": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "value"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "embed"
+                                              },
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "space": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        ]
+                                      },
+                                      "right": {
+                                        "type": "object",
+                                        "title": "ExpressionVectorOperand",
+                                        "required": [
+                                          "$type"
+                                        ],
+                                        "anyOf": [
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "cell"
+                                              },
+                                              "name": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              },
+                                              "key": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "name"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "literal"
+                                              },
+                                              "value": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "value"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "embed"
+                                              },
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "space": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "left",
+                                      "right"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              }
+                            },
+                            "subprograms": {
+                              "description": "Gets the shared subprograms this program\u0027s Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.",
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "instructions"
+                                ],
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "arity": {
+                                    "type": "integer"
+                                  },
+                                  "instructions": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "title": "ExpressionInstruction",
+                                      "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload.",
+                                      "required": [
+                                        "op"
+                                      ],
+                                      "anyOf": [
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Add",
+                                                "Subtract",
+                                                "Multiply",
+                                                "Divide",
+                                                "Minimum",
+                                                "Maximum",
+                                                "Clamp",
+                                                "Remainder",
+                                                "BitAnd",
+                                                "BitOr",
+                                                "BitXor",
+                                                "BitNot",
+                                                "ShiftLeft",
+                                                "ShiftRight",
+                                                "ShiftRightLogical",
+                                                "Equal",
+                                                "NotEqual",
+                                                "Less",
+                                                "LessOrEqual",
+                                                "Greater",
+                                                "GreaterOrEqual",
+                                                "Select",
+                                                "SetBitCount",
+                                                "LeadingZeroCount",
+                                                "TrailingZeroCount",
+                                                "LowestSetBit",
+                                                "ClearLowestSetBit",
+                                                "RotateLeft",
+                                                "RotateRight",
+                                                "ByteSwap",
+                                                "ReverseBits",
+                                                "Negate",
+                                                "Absolute",
+                                                "ParallelBitExtract",
+                                                "ParallelBitDeposit",
+                                                "BitField",
+                                                "BitInsert",
+                                                "Sign",
+                                                "Pair",
+                                                "PairX",
+                                                "PairY",
+                                                "PairSwap",
+                                                "PairMaximum",
+                                                "PairMinimum",
+                                                "PairSum",
+                                                "PairDifference",
+                                                "PairTranslate",
+                                                "PairScale",
+                                                "MortonIndex",
+                                                "MortonX",
+                                                "MortonY",
+                                                "HilbertIndex",
+                                                "HilbertX",
+                                                "HilbertY",
+                                                "HexIndex",
+                                                "HexQ",
+                                                "HexR",
+                                                "HexRadius",
+                                                "HexEuclideanSquared",
+                                                "HexDistance",
+                                                "HexNeighbor",
+                                                "HexRotate",
+                                                "HexMirror",
+                                                "HexSwap",
+                                                "HexAdd",
+                                                "HexSubtract",
+                                                "HexMultiply",
+                                                "HexScale",
+                                                "HexTranslate",
+                                                "Layer",
+                                                "LayerOffset",
+                                                "LayerStart",
+                                                "LayerSize",
+                                                "SquareRoot",
+                                                "Sine",
+                                                "Cosine",
+                                                "SquareIndex",
+                                                "SquareX",
+                                                "SquareY",
+                                                "SquareRadius",
+                                                "SquareLength",
+                                                "SquareEuclideanSquared",
+                                                "SquareDistance",
+                                                "SquareChebyshev",
+                                                "SquareNeighbor",
+                                                "SquareRotate",
+                                                "SquareMirror",
+                                                "SquareSwap",
+                                                "SquareAdd",
+                                                "SquareSubtract",
+                                                "SquareMultiply",
+                                                "SquareScale",
+                                                "SquareTranslate",
+                                                "GreatestCommonDivisor",
+                                                "LeastCommonMultiple",
+                                                "FloorModulo",
+                                                "FloorDivide",
+                                                "FloorDivideModulo",
+                                                "DivideRemainder",
+                                                "Power",
+                                                "ModularPower",
+                                                "ModularInverse",
+                                                "ExtendedGreatestCommonDivisor",
+                                                "CycleForward",
+                                                "CycleDistance",
+                                                "SmallestMissing",
+                                                "IsPrime",
+                                                "PrimeAt",
+                                                "BinomialCoefficient",
+                                                "Factorial",
+                                                "SubsetRank",
+                                                "SubsetAt",
+                                                "SubsetMember",
+                                                "ArrangementRank",
+                                                "ArrangementAt",
+                                                "ArrangementMember",
+                                                "Floor",
+                                                "Ceiling",
+                                                "Round",
+                                                "ReplicationMask",
+                                                "RepeatBits",
+                                                "IsAbsent",
+                                                "Coalesce",
+                                                "Member",
+                                                "And",
+                                                "Or",
+                                                "Not"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "op"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Argument"
+                                              ]
+                                            },
+                                            "index": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "index"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "BoardShift",
+                                                "BoardRay",
+                                                "BoardImage"
+                                              ]
+                                            },
+                                            "topology": {
+                                              "type": "string"
+                                            },
+                                            "index": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "topology",
+                                            "index"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Call"
+                                              ]
+                                            },
+                                            "subprogram": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "subprogram"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Constant"
+                                              ]
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "value"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "All",
+                                                "Any",
+                                                "Count",
+                                                "Sum"
+                                              ]
+                                            },
+                                            "family": {
+                                              "type": "string"
+                                            },
+                                            "binder": {
+                                              "type": "string"
+                                            },
+                                            "subprogram": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "family",
+                                            "binder",
+                                            "subprogram"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Operand"
+                                              ]
+                                            },
+                                            "name": {
+                                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                            },
+                                            "key": {
+                                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Dot",
+                                                "Similarity",
+                                                "Identical"
+                                              ]
+                                            },
+                                            "left": {
+                                              "type": "object",
+                                              "title": "ExpressionVectorOperand",
+                                              "required": [
+                                                "$type"
+                                              ],
+                                              "anyOf": [
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "cell"
+                                                    },
+                                                    "name": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    },
+                                                    "key": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "name"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "literal"
+                                                    },
+                                                    "value": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "value"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "embed"
+                                                    },
+                                                    "text": {
+                                                      "type": "string"
+                                                    },
+                                                    "space": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              ]
+                                            },
+                                            "right": {
+                                              "type": "object",
+                                              "title": "ExpressionVectorOperand",
+                                              "required": [
+                                                "$type"
+                                              ],
+                                              "anyOf": [
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "cell"
+                                                    },
+                                                    "name": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    },
+                                                    "key": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "name"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "literal"
+                                                    },
+                                                    "value": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "value"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "embed"
+                                                    },
+                                                    "text": {
+                                                      "type": "string"
+                                                    },
+                                                    "space": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "left",
+                                            "right"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            }
+                          }
+                        },
+                        "pointY": {
+                          "description": "The y axis of the computed point.",
+                          "default": null,
+                          "title": "ExpressionProgram",
+                          "type": "object",
+                          "required": [
+                            "instructions"
+                          ],
+                          "properties": {
+                            "instructions": {
+                              "description": "The postfix instructions, in evaluation order.",
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "title": "ExpressionInstruction",
+                                "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload.",
+                                "required": [
+                                  "op"
+                                ],
+                                "anyOf": [
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Add",
+                                          "Subtract",
+                                          "Multiply",
+                                          "Divide",
+                                          "Minimum",
+                                          "Maximum",
+                                          "Clamp",
+                                          "Remainder",
+                                          "BitAnd",
+                                          "BitOr",
+                                          "BitXor",
+                                          "BitNot",
+                                          "ShiftLeft",
+                                          "ShiftRight",
+                                          "ShiftRightLogical",
+                                          "Equal",
+                                          "NotEqual",
+                                          "Less",
+                                          "LessOrEqual",
+                                          "Greater",
+                                          "GreaterOrEqual",
+                                          "Select",
+                                          "SetBitCount",
+                                          "LeadingZeroCount",
+                                          "TrailingZeroCount",
+                                          "LowestSetBit",
+                                          "ClearLowestSetBit",
+                                          "RotateLeft",
+                                          "RotateRight",
+                                          "ByteSwap",
+                                          "ReverseBits",
+                                          "Negate",
+                                          "Absolute",
+                                          "ParallelBitExtract",
+                                          "ParallelBitDeposit",
+                                          "BitField",
+                                          "BitInsert",
+                                          "Sign",
+                                          "Pair",
+                                          "PairX",
+                                          "PairY",
+                                          "PairSwap",
+                                          "PairMaximum",
+                                          "PairMinimum",
+                                          "PairSum",
+                                          "PairDifference",
+                                          "PairTranslate",
+                                          "PairScale",
+                                          "MortonIndex",
+                                          "MortonX",
+                                          "MortonY",
+                                          "HilbertIndex",
+                                          "HilbertX",
+                                          "HilbertY",
+                                          "HexIndex",
+                                          "HexQ",
+                                          "HexR",
+                                          "HexRadius",
+                                          "HexEuclideanSquared",
+                                          "HexDistance",
+                                          "HexNeighbor",
+                                          "HexRotate",
+                                          "HexMirror",
+                                          "HexSwap",
+                                          "HexAdd",
+                                          "HexSubtract",
+                                          "HexMultiply",
+                                          "HexScale",
+                                          "HexTranslate",
+                                          "Layer",
+                                          "LayerOffset",
+                                          "LayerStart",
+                                          "LayerSize",
+                                          "SquareRoot",
+                                          "Sine",
+                                          "Cosine",
+                                          "SquareIndex",
+                                          "SquareX",
+                                          "SquareY",
+                                          "SquareRadius",
+                                          "SquareLength",
+                                          "SquareEuclideanSquared",
+                                          "SquareDistance",
+                                          "SquareChebyshev",
+                                          "SquareNeighbor",
+                                          "SquareRotate",
+                                          "SquareMirror",
+                                          "SquareSwap",
+                                          "SquareAdd",
+                                          "SquareSubtract",
+                                          "SquareMultiply",
+                                          "SquareScale",
+                                          "SquareTranslate",
+                                          "GreatestCommonDivisor",
+                                          "LeastCommonMultiple",
+                                          "FloorModulo",
+                                          "FloorDivide",
+                                          "FloorDivideModulo",
+                                          "DivideRemainder",
+                                          "Power",
+                                          "ModularPower",
+                                          "ModularInverse",
+                                          "ExtendedGreatestCommonDivisor",
+                                          "CycleForward",
+                                          "CycleDistance",
+                                          "SmallestMissing",
+                                          "IsPrime",
+                                          "PrimeAt",
+                                          "BinomialCoefficient",
+                                          "Factorial",
+                                          "SubsetRank",
+                                          "SubsetAt",
+                                          "SubsetMember",
+                                          "ArrangementRank",
+                                          "ArrangementAt",
+                                          "ArrangementMember",
+                                          "Floor",
+                                          "Ceiling",
+                                          "Round",
+                                          "ReplicationMask",
+                                          "RepeatBits",
+                                          "IsAbsent",
+                                          "Coalesce",
+                                          "Member",
+                                          "And",
+                                          "Or",
+                                          "Not"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "op"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Argument"
+                                        ]
+                                      },
+                                      "index": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "index"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "BoardShift",
+                                          "BoardRay",
+                                          "BoardImage"
+                                        ]
+                                      },
+                                      "topology": {
+                                        "type": "string"
+                                      },
+                                      "index": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "topology",
+                                      "index"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Call"
+                                        ]
+                                      },
+                                      "subprogram": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "subprogram"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Constant"
+                                        ]
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "All",
+                                          "Any",
+                                          "Count",
+                                          "Sum"
+                                        ]
+                                      },
+                                      "family": {
+                                        "type": "string"
+                                      },
+                                      "binder": {
+                                        "type": "string"
+                                      },
+                                      "subprogram": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "family",
+                                      "binder",
+                                      "subprogram"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Operand"
+                                        ]
+                                      },
+                                      "name": {
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                      },
+                                      "key": {
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Dot",
+                                          "Similarity",
+                                          "Identical"
+                                        ]
+                                      },
+                                      "left": {
+                                        "type": "object",
+                                        "title": "ExpressionVectorOperand",
+                                        "required": [
+                                          "$type"
+                                        ],
+                                        "anyOf": [
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "cell"
+                                              },
+                                              "name": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              },
+                                              "key": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "name"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "literal"
+                                              },
+                                              "value": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "value"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "embed"
+                                              },
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "space": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        ]
+                                      },
+                                      "right": {
+                                        "type": "object",
+                                        "title": "ExpressionVectorOperand",
+                                        "required": [
+                                          "$type"
+                                        ],
+                                        "anyOf": [
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "cell"
+                                              },
+                                              "name": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              },
+                                              "key": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "name"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "literal"
+                                              },
+                                              "value": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "value"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "embed"
+                                              },
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "space": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "left",
+                                      "right"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              }
+                            },
+                            "subprograms": {
+                              "description": "Gets the shared subprograms this program\u0027s Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.",
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "instructions"
+                                ],
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "arity": {
+                                    "type": "integer"
+                                  },
+                                  "instructions": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "title": "ExpressionInstruction",
+                                      "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload.",
+                                      "required": [
+                                        "op"
+                                      ],
+                                      "anyOf": [
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Add",
+                                                "Subtract",
+                                                "Multiply",
+                                                "Divide",
+                                                "Minimum",
+                                                "Maximum",
+                                                "Clamp",
+                                                "Remainder",
+                                                "BitAnd",
+                                                "BitOr",
+                                                "BitXor",
+                                                "BitNot",
+                                                "ShiftLeft",
+                                                "ShiftRight",
+                                                "ShiftRightLogical",
+                                                "Equal",
+                                                "NotEqual",
+                                                "Less",
+                                                "LessOrEqual",
+                                                "Greater",
+                                                "GreaterOrEqual",
+                                                "Select",
+                                                "SetBitCount",
+                                                "LeadingZeroCount",
+                                                "TrailingZeroCount",
+                                                "LowestSetBit",
+                                                "ClearLowestSetBit",
+                                                "RotateLeft",
+                                                "RotateRight",
+                                                "ByteSwap",
+                                                "ReverseBits",
+                                                "Negate",
+                                                "Absolute",
+                                                "ParallelBitExtract",
+                                                "ParallelBitDeposit",
+                                                "BitField",
+                                                "BitInsert",
+                                                "Sign",
+                                                "Pair",
+                                                "PairX",
+                                                "PairY",
+                                                "PairSwap",
+                                                "PairMaximum",
+                                                "PairMinimum",
+                                                "PairSum",
+                                                "PairDifference",
+                                                "PairTranslate",
+                                                "PairScale",
+                                                "MortonIndex",
+                                                "MortonX",
+                                                "MortonY",
+                                                "HilbertIndex",
+                                                "HilbertX",
+                                                "HilbertY",
+                                                "HexIndex",
+                                                "HexQ",
+                                                "HexR",
+                                                "HexRadius",
+                                                "HexEuclideanSquared",
+                                                "HexDistance",
+                                                "HexNeighbor",
+                                                "HexRotate",
+                                                "HexMirror",
+                                                "HexSwap",
+                                                "HexAdd",
+                                                "HexSubtract",
+                                                "HexMultiply",
+                                                "HexScale",
+                                                "HexTranslate",
+                                                "Layer",
+                                                "LayerOffset",
+                                                "LayerStart",
+                                                "LayerSize",
+                                                "SquareRoot",
+                                                "Sine",
+                                                "Cosine",
+                                                "SquareIndex",
+                                                "SquareX",
+                                                "SquareY",
+                                                "SquareRadius",
+                                                "SquareLength",
+                                                "SquareEuclideanSquared",
+                                                "SquareDistance",
+                                                "SquareChebyshev",
+                                                "SquareNeighbor",
+                                                "SquareRotate",
+                                                "SquareMirror",
+                                                "SquareSwap",
+                                                "SquareAdd",
+                                                "SquareSubtract",
+                                                "SquareMultiply",
+                                                "SquareScale",
+                                                "SquareTranslate",
+                                                "GreatestCommonDivisor",
+                                                "LeastCommonMultiple",
+                                                "FloorModulo",
+                                                "FloorDivide",
+                                                "FloorDivideModulo",
+                                                "DivideRemainder",
+                                                "Power",
+                                                "ModularPower",
+                                                "ModularInverse",
+                                                "ExtendedGreatestCommonDivisor",
+                                                "CycleForward",
+                                                "CycleDistance",
+                                                "SmallestMissing",
+                                                "IsPrime",
+                                                "PrimeAt",
+                                                "BinomialCoefficient",
+                                                "Factorial",
+                                                "SubsetRank",
+                                                "SubsetAt",
+                                                "SubsetMember",
+                                                "ArrangementRank",
+                                                "ArrangementAt",
+                                                "ArrangementMember",
+                                                "Floor",
+                                                "Ceiling",
+                                                "Round",
+                                                "ReplicationMask",
+                                                "RepeatBits",
+                                                "IsAbsent",
+                                                "Coalesce",
+                                                "Member",
+                                                "And",
+                                                "Or",
+                                                "Not"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "op"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Argument"
+                                              ]
+                                            },
+                                            "index": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "index"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "BoardShift",
+                                                "BoardRay",
+                                                "BoardImage"
+                                              ]
+                                            },
+                                            "topology": {
+                                              "type": "string"
+                                            },
+                                            "index": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "topology",
+                                            "index"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Call"
+                                              ]
+                                            },
+                                            "subprogram": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "subprogram"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Constant"
+                                              ]
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "value"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "All",
+                                                "Any",
+                                                "Count",
+                                                "Sum"
+                                              ]
+                                            },
+                                            "family": {
+                                              "type": "string"
+                                            },
+                                            "binder": {
+                                              "type": "string"
+                                            },
+                                            "subprogram": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "family",
+                                            "binder",
+                                            "subprogram"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Operand"
+                                              ]
+                                            },
+                                            "name": {
+                                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                            },
+                                            "key": {
+                                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Dot",
+                                                "Similarity",
+                                                "Identical"
+                                              ]
+                                            },
+                                            "left": {
+                                              "type": "object",
+                                              "title": "ExpressionVectorOperand",
+                                              "required": [
+                                                "$type"
+                                              ],
+                                              "anyOf": [
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "cell"
+                                                    },
+                                                    "name": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    },
+                                                    "key": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "name"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "literal"
+                                                    },
+                                                    "value": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "value"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "embed"
+                                                    },
+                                                    "text": {
+                                                      "type": "string"
+                                                    },
+                                                    "space": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              ]
+                                            },
+                                            "right": {
+                                              "type": "object",
+                                              "title": "ExpressionVectorOperand",
+                                              "required": [
+                                                "$type"
+                                              ],
+                                              "anyOf": [
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "cell"
+                                                    },
+                                                    "name": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    },
+                                                    "key": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "name"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "literal"
+                                                    },
+                                                    "value": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "value"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "embed"
+                                                    },
+                                                    "text": {
+                                                      "type": "string"
+                                                    },
+                                                    "space": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "left",
+                                            "right"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            }
+                          }
+                        },
+                        "pointZ": {
+                          "description": "The z axis of the computed point.",
+                          "default": null,
+                          "title": "ExpressionProgram",
+                          "type": "object",
+                          "required": [
+                            "instructions"
+                          ],
+                          "properties": {
+                            "instructions": {
+                              "description": "The postfix instructions, in evaluation order.",
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "title": "ExpressionInstruction",
+                                "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload.",
+                                "required": [
+                                  "op"
+                                ],
+                                "anyOf": [
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Add",
+                                          "Subtract",
+                                          "Multiply",
+                                          "Divide",
+                                          "Minimum",
+                                          "Maximum",
+                                          "Clamp",
+                                          "Remainder",
+                                          "BitAnd",
+                                          "BitOr",
+                                          "BitXor",
+                                          "BitNot",
+                                          "ShiftLeft",
+                                          "ShiftRight",
+                                          "ShiftRightLogical",
+                                          "Equal",
+                                          "NotEqual",
+                                          "Less",
+                                          "LessOrEqual",
+                                          "Greater",
+                                          "GreaterOrEqual",
+                                          "Select",
+                                          "SetBitCount",
+                                          "LeadingZeroCount",
+                                          "TrailingZeroCount",
+                                          "LowestSetBit",
+                                          "ClearLowestSetBit",
+                                          "RotateLeft",
+                                          "RotateRight",
+                                          "ByteSwap",
+                                          "ReverseBits",
+                                          "Negate",
+                                          "Absolute",
+                                          "ParallelBitExtract",
+                                          "ParallelBitDeposit",
+                                          "BitField",
+                                          "BitInsert",
+                                          "Sign",
+                                          "Pair",
+                                          "PairX",
+                                          "PairY",
+                                          "PairSwap",
+                                          "PairMaximum",
+                                          "PairMinimum",
+                                          "PairSum",
+                                          "PairDifference",
+                                          "PairTranslate",
+                                          "PairScale",
+                                          "MortonIndex",
+                                          "MortonX",
+                                          "MortonY",
+                                          "HilbertIndex",
+                                          "HilbertX",
+                                          "HilbertY",
+                                          "HexIndex",
+                                          "HexQ",
+                                          "HexR",
+                                          "HexRadius",
+                                          "HexEuclideanSquared",
+                                          "HexDistance",
+                                          "HexNeighbor",
+                                          "HexRotate",
+                                          "HexMirror",
+                                          "HexSwap",
+                                          "HexAdd",
+                                          "HexSubtract",
+                                          "HexMultiply",
+                                          "HexScale",
+                                          "HexTranslate",
+                                          "Layer",
+                                          "LayerOffset",
+                                          "LayerStart",
+                                          "LayerSize",
+                                          "SquareRoot",
+                                          "Sine",
+                                          "Cosine",
+                                          "SquareIndex",
+                                          "SquareX",
+                                          "SquareY",
+                                          "SquareRadius",
+                                          "SquareLength",
+                                          "SquareEuclideanSquared",
+                                          "SquareDistance",
+                                          "SquareChebyshev",
+                                          "SquareNeighbor",
+                                          "SquareRotate",
+                                          "SquareMirror",
+                                          "SquareSwap",
+                                          "SquareAdd",
+                                          "SquareSubtract",
+                                          "SquareMultiply",
+                                          "SquareScale",
+                                          "SquareTranslate",
+                                          "GreatestCommonDivisor",
+                                          "LeastCommonMultiple",
+                                          "FloorModulo",
+                                          "FloorDivide",
+                                          "FloorDivideModulo",
+                                          "DivideRemainder",
+                                          "Power",
+                                          "ModularPower",
+                                          "ModularInverse",
+                                          "ExtendedGreatestCommonDivisor",
+                                          "CycleForward",
+                                          "CycleDistance",
+                                          "SmallestMissing",
+                                          "IsPrime",
+                                          "PrimeAt",
+                                          "BinomialCoefficient",
+                                          "Factorial",
+                                          "SubsetRank",
+                                          "SubsetAt",
+                                          "SubsetMember",
+                                          "ArrangementRank",
+                                          "ArrangementAt",
+                                          "ArrangementMember",
+                                          "Floor",
+                                          "Ceiling",
+                                          "Round",
+                                          "ReplicationMask",
+                                          "RepeatBits",
+                                          "IsAbsent",
+                                          "Coalesce",
+                                          "Member",
+                                          "And",
+                                          "Or",
+                                          "Not"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "op"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Argument"
+                                        ]
+                                      },
+                                      "index": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "index"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "BoardShift",
+                                          "BoardRay",
+                                          "BoardImage"
+                                        ]
+                                      },
+                                      "topology": {
+                                        "type": "string"
+                                      },
+                                      "index": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "topology",
+                                      "index"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Call"
+                                        ]
+                                      },
+                                      "subprogram": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "subprogram"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Constant"
+                                        ]
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "All",
+                                          "Any",
+                                          "Count",
+                                          "Sum"
+                                        ]
+                                      },
+                                      "family": {
+                                        "type": "string"
+                                      },
+                                      "binder": {
+                                        "type": "string"
+                                      },
+                                      "subprogram": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "family",
+                                      "binder",
+                                      "subprogram"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Operand"
+                                        ]
+                                      },
+                                      "name": {
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                      },
+                                      "key": {
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "properties": {
+                                      "op": {
+                                        "enum": [
+                                          "Dot",
+                                          "Similarity",
+                                          "Identical"
+                                        ]
+                                      },
+                                      "left": {
+                                        "type": "object",
+                                        "title": "ExpressionVectorOperand",
+                                        "required": [
+                                          "$type"
+                                        ],
+                                        "anyOf": [
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "cell"
+                                              },
+                                              "name": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              },
+                                              "key": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "name"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "literal"
+                                              },
+                                              "value": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "value"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "embed"
+                                              },
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "space": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        ]
+                                      },
+                                      "right": {
+                                        "type": "object",
+                                        "title": "ExpressionVectorOperand",
+                                        "required": [
+                                          "$type"
+                                        ],
+                                        "anyOf": [
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "cell"
+                                              },
+                                              "name": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              },
+                                              "key": {
+                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "name"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "literal"
+                                              },
+                                              "value": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "value"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "properties": {
+                                              "$type": {
+                                                "const": "embed"
+                                              },
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "space": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "$type",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "op",
+                                      "left",
+                                      "right"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              }
+                            },
+                            "subprograms": {
+                              "description": "Gets the shared subprograms this program\u0027s Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.",
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "instructions"
+                                ],
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "arity": {
+                                    "type": "integer"
+                                  },
+                                  "instructions": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "title": "ExpressionInstruction",
+                                      "description": "One postfix instruction: \u0027op\u0027 names the operation and the remaining members are that operation\u0027s payload.",
+                                      "required": [
+                                        "op"
+                                      ],
+                                      "anyOf": [
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Add",
+                                                "Subtract",
+                                                "Multiply",
+                                                "Divide",
+                                                "Minimum",
+                                                "Maximum",
+                                                "Clamp",
+                                                "Remainder",
+                                                "BitAnd",
+                                                "BitOr",
+                                                "BitXor",
+                                                "BitNot",
+                                                "ShiftLeft",
+                                                "ShiftRight",
+                                                "ShiftRightLogical",
+                                                "Equal",
+                                                "NotEqual",
+                                                "Less",
+                                                "LessOrEqual",
+                                                "Greater",
+                                                "GreaterOrEqual",
+                                                "Select",
+                                                "SetBitCount",
+                                                "LeadingZeroCount",
+                                                "TrailingZeroCount",
+                                                "LowestSetBit",
+                                                "ClearLowestSetBit",
+                                                "RotateLeft",
+                                                "RotateRight",
+                                                "ByteSwap",
+                                                "ReverseBits",
+                                                "Negate",
+                                                "Absolute",
+                                                "ParallelBitExtract",
+                                                "ParallelBitDeposit",
+                                                "BitField",
+                                                "BitInsert",
+                                                "Sign",
+                                                "Pair",
+                                                "PairX",
+                                                "PairY",
+                                                "PairSwap",
+                                                "PairMaximum",
+                                                "PairMinimum",
+                                                "PairSum",
+                                                "PairDifference",
+                                                "PairTranslate",
+                                                "PairScale",
+                                                "MortonIndex",
+                                                "MortonX",
+                                                "MortonY",
+                                                "HilbertIndex",
+                                                "HilbertX",
+                                                "HilbertY",
+                                                "HexIndex",
+                                                "HexQ",
+                                                "HexR",
+                                                "HexRadius",
+                                                "HexEuclideanSquared",
+                                                "HexDistance",
+                                                "HexNeighbor",
+                                                "HexRotate",
+                                                "HexMirror",
+                                                "HexSwap",
+                                                "HexAdd",
+                                                "HexSubtract",
+                                                "HexMultiply",
+                                                "HexScale",
+                                                "HexTranslate",
+                                                "Layer",
+                                                "LayerOffset",
+                                                "LayerStart",
+                                                "LayerSize",
+                                                "SquareRoot",
+                                                "Sine",
+                                                "Cosine",
+                                                "SquareIndex",
+                                                "SquareX",
+                                                "SquareY",
+                                                "SquareRadius",
+                                                "SquareLength",
+                                                "SquareEuclideanSquared",
+                                                "SquareDistance",
+                                                "SquareChebyshev",
+                                                "SquareNeighbor",
+                                                "SquareRotate",
+                                                "SquareMirror",
+                                                "SquareSwap",
+                                                "SquareAdd",
+                                                "SquareSubtract",
+                                                "SquareMultiply",
+                                                "SquareScale",
+                                                "SquareTranslate",
+                                                "GreatestCommonDivisor",
+                                                "LeastCommonMultiple",
+                                                "FloorModulo",
+                                                "FloorDivide",
+                                                "FloorDivideModulo",
+                                                "DivideRemainder",
+                                                "Power",
+                                                "ModularPower",
+                                                "ModularInverse",
+                                                "ExtendedGreatestCommonDivisor",
+                                                "CycleForward",
+                                                "CycleDistance",
+                                                "SmallestMissing",
+                                                "IsPrime",
+                                                "PrimeAt",
+                                                "BinomialCoefficient",
+                                                "Factorial",
+                                                "SubsetRank",
+                                                "SubsetAt",
+                                                "SubsetMember",
+                                                "ArrangementRank",
+                                                "ArrangementAt",
+                                                "ArrangementMember",
+                                                "Floor",
+                                                "Ceiling",
+                                                "Round",
+                                                "ReplicationMask",
+                                                "RepeatBits",
+                                                "IsAbsent",
+                                                "Coalesce",
+                                                "Member",
+                                                "And",
+                                                "Or",
+                                                "Not"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "op"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Argument"
+                                              ]
+                                            },
+                                            "index": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "index"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "BoardShift",
+                                                "BoardRay",
+                                                "BoardImage"
+                                              ]
+                                            },
+                                            "topology": {
+                                              "type": "string"
+                                            },
+                                            "index": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "topology",
+                                            "index"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Call"
+                                              ]
+                                            },
+                                            "subprogram": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "subprogram"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Constant"
+                                              ]
+                                            },
+                                            "value": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "value"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "All",
+                                                "Any",
+                                                "Count",
+                                                "Sum"
+                                              ]
+                                            },
+                                            "family": {
+                                              "type": "string"
+                                            },
+                                            "binder": {
+                                              "type": "string"
+                                            },
+                                            "subprogram": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "family",
+                                            "binder",
+                                            "subprogram"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Operand"
+                                              ]
+                                            },
+                                            "name": {
+                                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                            },
+                                            "key": {
+                                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "name"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "properties": {
+                                            "op": {
+                                              "enum": [
+                                                "Dot",
+                                                "Similarity",
+                                                "Identical"
+                                              ]
+                                            },
+                                            "left": {
+                                              "type": "object",
+                                              "title": "ExpressionVectorOperand",
+                                              "required": [
+                                                "$type"
+                                              ],
+                                              "anyOf": [
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "cell"
+                                                    },
+                                                    "name": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    },
+                                                    "key": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "name"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "literal"
+                                                    },
+                                                    "value": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "value"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "embed"
+                                                    },
+                                                    "text": {
+                                                      "type": "string"
+                                                    },
+                                                    "space": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              ]
+                                            },
+                                            "right": {
+                                              "type": "object",
+                                              "title": "ExpressionVectorOperand",
+                                              "required": [
+                                                "$type"
+                                              ],
+                                              "anyOf": [
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "cell"
+                                                    },
+                                                    "name": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    },
+                                                    "key": {
+                                                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone/properties/instructions/items/anyOf/6/properties/name"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "name"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "literal"
+                                                    },
+                                                    "value": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "value"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "properties": {
+                                                    "$type": {
+                                                      "const": "embed"
+                                                    },
+                                                    "text": {
+                                                      "type": "string"
+                                                    },
+                                                    "space": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "$type",
+                                                    "text"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "op",
+                                            "left",
+                                            "right"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            }
+                          }
                         }
                       },
                       "required": [

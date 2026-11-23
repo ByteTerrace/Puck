@@ -1177,7 +1177,15 @@ sum in privately resident memory, `privateResidentNeed`) fits free RAM with the 
 floor left over (`ram-covered`). The line also prints the kind's expected whole working set
 (`workingSet`, `unmeasured` before the first observation), which admission reports and never
 judges: the difference is clean mapped-file and image pages the system shares and reclaims,
-so a refusal can be read against both. A `start` line prints each live start's private bytes,
+so a refusal can be read against both. The expected figures are this machine's own: each
+kind of start (a windowed World also by backend and by warm or cold mesh store) keeps its
+last ten observed peaks under the lease root and expects their high percentile, and a World
+that reported ready records its peaks as it stops. Until a kind has a record its private bytes
+are the World's memory budget here (three quarters of installed memory, at most the
+large-machine figure) and its private working set is 0.7 of that, held to the free memory
+the idle machine leaves above the pressure floor, so a kind never measured still runs on a
+small machine, while commit and a start beside running ones are judged by the whole guess.
+A start whose measured need does not fit is refused. A `start` line prints each live start's private bytes,
 private working set, working set and the figure admission judged for it (`judged`). The
 capacity lines judge CPU, commit headroom against its reserve and pressure, and device
 admission separately checks GPU ownership.

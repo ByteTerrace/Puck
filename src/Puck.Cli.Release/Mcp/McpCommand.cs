@@ -97,7 +97,7 @@ public static class McpCommand {
         try {
             var process = launch.StartRedirected(gpu: out var gpu, readiness: out var readiness);
 
-            return new OperatorWorldStart(Build: build.Path, Lease: new Leases(build: build, gpu: gpu), Process: process, Refusal: null) { Observe = readiness.Observe };
+            return new OperatorWorldStart(Build: build.Path, Lease: new Leases(build: build, gpu: gpu), Process: process, Refusal: null) { Observe = readiness.Observe, Settle = () => Puck.Cli.Host.HostStartTracker.Session.Finish(process: process, readiness: readiness) };
         } catch (Exception exception) when ((exception is InvalidOperationException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)) {
             build.Dispose();
 

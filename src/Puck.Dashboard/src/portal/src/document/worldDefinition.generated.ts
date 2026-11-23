@@ -6399,7 +6399,7 @@ export type WorldBodyContactPolicy = {
 /**
  * How a rule-triggered body designation chooses its target.
  */
-export type WorldBodyDesignationKind = "Body" | "Clear";
+export type WorldBodyDesignationKind = "Body" | "Clear" | "Point";
 
 export type WorldCamera = {
   /**
@@ -7663,7 +7663,7 @@ export type WorldEffectConsumeInput = {
 };
 
 /**
- * Designates a subject into a body's named target register, or clears the register. A kit's action designates into its own body the participant that last affected it; a world rule names the body with Key and the subject with TargetKey.
+ * Designates a subject into a body's named target register, or clears the register. A kit's action designates into its own body the participant that last affected it; a world rule names the body with Key and the subject with TargetKey, or a world point with Placement, Position and the pointX/pointY/pointZ expressions: the same point designation body.designate <register> at:x,y,z makes, which a body program's designated or navigated target walks to.
  */
 export type WorldEffectDesignate = {
   $type?: "designate";
@@ -7672,7 +7672,7 @@ export type WorldEffectDesignate = {
    */
   register: string;
   /**
-   * Whether the register is filled or cleared; only a world rule clears.
+   * Whether the register is filled with a body or a point, or cleared; only a world rule clears or designates a point.
    */
   kind?: WorldBodyDesignationKind;
   /**
@@ -7680,9 +7680,29 @@ export type WorldEffectDesignate = {
    */
   key?: StateChannelRefNonNullable;
   /**
-   * The body a world rule designates, required when Kind is Body and refused when it is Clear. A kit's action names none.
+   * The body a world rule designates, required when Kind is Body and refused otherwise. A kit's action names none.
    */
   targetKey?: StateChannelRefNonNullable;
+  /**
+   * For Point, the placement whose document position is the point's base (its frame composed over its parent, as every consumer reads it), read when the effect fires, so a moved placement is followed; the point is the origin when none is named.
+   */
+  placement?: string | null;
+  /**
+   * For Point, the literal point, or its offset from Placement when one is named. Exclusive with the point expressions.
+   */
+  position?: DocumentVector3;
+  /**
+   * For Point, a fixed-point expression for the point's x axis, evaluated when the effect fires; PointY and PointZ accompany it, and together they are the point, or its offset from Placement.
+   */
+  pointX?: ExpressionProgramNonNullable2;
+  /**
+   * The y axis of the computed point.
+   */
+  pointY?: ExpressionProgramNonNullable2;
+  /**
+   * The z axis of the computed point.
+   */
+  pointZ?: ExpressionProgramNonNullable2;
 };
 
 /**
@@ -10056,13 +10076,17 @@ export type WorldNavigationDomain = {
    */
   medium?: string | null;
   /**
-   * Optional shared reverse-search policy. Absent uses independent bounded A* searches. Shared searches are queued and advanced on subsequent simulation ticks, independently of any leader.
+   * Whether bodies navigating this domain follow shared goal fields: one field per goal over the domain's network, derived once and read a step at a time by every body heading there, in place of a route search per body. False keeps independent bounded A* searches, each within this domain.
    */
-  shared?: WorldNavigationSharing | null;
+  shared?: boolean;
   /**
    * Optional static placement frame. Origin and grid axes are local to that frame; probes remain vertical. The frame must be undistributed and unit scale.
    */
   parent?: string | null;
+  /**
+   * The network the domain joins. Domains join where they share a cell only when their networks match, so a route or goal field crosses from one district's pavement to the next but never onto a road of another network. Absent joins the one unnamed network.
+   */
+  network?: string | null;
 };
 
 export type WorldNavigationKind = "Surface" | "Volume" | "Medium";
@@ -10072,17 +10096,6 @@ export type WorldNavigationSection = {
    * Finite rectangular domains, each compiled from the world's deterministic solid field.
    */
   domains?: (WorldNavigationDomain | null)[] | null;
-};
-
-export type WorldNavigationSharing = {
-  /**
-   * Resident destination-cell trees. A full cache with pending work refuses another destination as capacity-limited; it never launches an unbudgeted independent search.
-   */
-  goalCapacity: number;
-  /**
-   * Total reverse-Dijkstra expansions per simulation tick, shared fairly between pending resident goals. Each expansion inspects at most 26 edges. A tree can eventually settle every domain cell; the independent A* MaxExpandedNodes bound does not truncate a shared tree.
-   */
-  expandedNodesPerTick: number;
 };
 
 /**

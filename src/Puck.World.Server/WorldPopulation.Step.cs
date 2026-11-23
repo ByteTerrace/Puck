@@ -209,6 +209,9 @@ public sealed partial class WorldPopulation {
 
         var domain = m_navigation[target.NavigationDomainIndex];
 
+        if (domain.Tuning.Shared) {
+            return ReadGoalFieldTarget(domainIndex: target.NavigationDomainIndex, goal: in goal, self: in self, state: state, targetIndex: targetIndex);
+        }
         if (
             !domain.CoversRouteHeight(position: in self) ||
             !domain.CoversRouteHeight(position: in goal) ||
@@ -249,20 +252,12 @@ public sealed partial class WorldPopulation {
             state.DomainIndex = target.NavigationDomainIndex;
             state.GoalCell = goalCell;
             state.Waypoint = 1;
-            state.Status = ((domain.Sharing is not null)
-                ? domain.RequestShared(
-                    start,
-                    goalCell,
-                    state.WritablePath(),
-                    out state.PathLength
-                )
-                : domain.FindPath(
-                    start,
-                    goalCell,
-                    state.WritablePath(),
-                    out state.PathLength,
-                    out state.ExpandedLast
-                )
+            state.Status = domain.FindPath(
+                start,
+                goalCell,
+                state.WritablePath(),
+                out state.PathLength,
+                out state.ExpandedLast
             );
             if (state.PathLength == 0) {
                 state.Waypoint = 0;
@@ -308,6 +303,67 @@ public sealed partial class WorldPopulation {
             Index: targetIndex,
             Position: goal
         );
+    }
+    // The most goal-field steps one read follows past cells the body already stands within arrival distance of: a
+    // junction between two domains is a step at one place, and arrival distance is about a cell, so a read takes one or
+    // two.
+    private const int GoalFieldLookahead = 8;
+
+    // A shared domain's follower holds no route. Each read locates the body and its goal in the target domain's network
+    // and follows the goal's field from the body's cell, so a body pushed off its line reads the step from where it now
+    // stands, and a tick costs a step read per follower; a field is derived only for a goal no follower read before.
+    private BodySensorTarget ReadGoalFieldTarget(BodyNavigationState state, int domainIndex, in FixedVector3 self, in FixedVector3 goal, int targetIndex) {
+        if (
+            !TryLocateInNetwork(cell: out var cell, domain: out var domain, network: domainIndex, position: in self) ||
+            !TryLocateInNetwork(cell: out var goalCell, domain: out var goalDomain, network: domainIndex, position: in goal)
+        ) {
+            state.Clear(status: NavigationStatus.OutsideDomain);
+            return BodySensorTarget.None;
+        }
+
+        var field = m_navigation.GoalField(goalCell: goalCell, goalDomain: goalDomain);
+        var arrivalSquared = (m_navigation[domainIndex].Tuning.ArrivalDistance * m_navigation[domainIndex].Tuning.ArrivalDistance);
+
+        state.Clear();
+        state.DomainIndex = domainIndex;
+        for (var step = 0; (step < GoalFieldLookahead); step++) {
+            var status = m_navigation.GoalStep(cell: cell, domain: domain, field: field, nextCell: out var nextCell, nextDomain: out var nextDomain);
+
+            if (status == NavigationStatus.Arrived) {
+                break;
+            }
+            if (status != NavigationStatus.Active) {
+                state.Status = status;
+                return BodySensorTarget.None;
+            }
+
+            var waypoint = m_navigation[nextDomain].Foot(node: nextCell);
+            var distanceToWaypoint = (waypoint - self).LengthSquared;
+
+            if ((distanceToWaypoint > arrivalSquared) || (step == (GoalFieldLookahead - 1))) {
+                state.Status = NavigationStatus.Active;
+                return new BodySensorTarget(Index: targetIndex, Position: waypoint, DistanceSquared: distanceToWaypoint);
+            }
+            domain = nextDomain;
+            cell = nextCell;
+        }
+
+        var distanceSquared = (goal - self).LengthSquared;
+
+        state.Status = ((distanceSquared <= arrivalSquared) ? NavigationStatus.Arrived : NavigationStatus.Active);
+        return new BodySensorTarget(DistanceSquared: distanceSquared, Index: targetIndex, Position: goal);
+    }
+    // The walkable cell a position stands on in a domain's network: the domain's own cell first, else the nearest of its
+    // network's.
+    private bool TryLocateInNetwork(int network, in FixedVector3 position, out int domain, out int cell) {
+        var own = m_navigation[network];
+
+        if (own.CoversRouteHeight(position: in position) && own.TryCell(node: out cell, position: in position)) {
+            domain = network;
+            return true;
+        }
+
+        return m_navigation.TryLocate(cell: out cell, domain: out domain, network: network, position: in position);
     }
     // Advances a curve-follow arc position by one compiled step, then wraps (closed) or clamps (open) it back inside
     // [0, totalLengthRaw] — the persisted state never grows past the curve's own length, so it stays bounded across
