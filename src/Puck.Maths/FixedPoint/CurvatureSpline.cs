@@ -52,14 +52,25 @@ public sealed class CurvatureSplineException : ArgumentException {
 /// <param name="TangentYaw">The tangent direction, in radians; the unit tangent is <c>(cos, sin)</c> in the XZ
 /// plane, the same convention <see cref="FixedQ4816.SinCos"/> uses.</param>
 /// <param name="Curvature">The signed planar curvature at this knot, under the <c>cross2(a, b) = a.X·b.Z − a.Z·b.X</c>
-/// convention: positive curvature turns from the tangent toward +Z faster than toward −Z.</param>
+/// convention: positive curvature turns from the tangent toward +Z faster than toward −Z. The segment leaving the
+/// knot always reaches it; the segment arriving reaches it too unless <paramref name="IncomingCurvature"/> says
+/// otherwise.</param>
+/// <param name="IncomingCurvature">The signed curvature the segment arriving at this knot reaches there, when it differs
+/// from <paramref name="Curvature"/>: an arc ending into a straight declares the arc's curvature here and zero as
+/// <paramref name="Curvature"/>, so the curve keeps its tangent across the knot while its curvature jumps.
+/// <see langword="null"/> for a knot whose curvature is continuous.</param>
 public readonly record struct CurvatureSplineKnot(
     FixedQ4816 X,
     FixedQ4816 Z,
     FixedQ4816 Elevation,
     FixedQ4816 TangentYaw,
-    FixedQ4816 Curvature
-);
+    FixedQ4816 Curvature,
+    FixedQ4816? IncomingCurvature = null
+) {
+    /// <summary>Gets the curvature the segment arriving at this knot reaches there: <see cref="IncomingCurvature"/>
+    /// when declared, else <see cref="Curvature"/>.</summary>
+    public FixedQ4816 ArrivingCurvature => (IncomingCurvature ?? Curvature);
+}
 /// <summary>One evaluated sample of a <see cref="CompiledCurvatureSpline"/>.</summary>
 /// <param name="Position">The world position (X, Elevation, Z).</param>
 /// <param name="Tangent">The unit planar tangent (Y is always zero).</param>
@@ -132,7 +143,9 @@ public readonly record struct CurvatureSplineSegment {
 /// The curvature-first spline primitive: authors declare knot positions, tangent directions and signed endpoint
 /// curvatures; <see cref="Compile"/> derives the tangent lengths that reproduce them exactly (Steven Wittens'
 /// curvature-continuous cubic-Bézier construction, "Making Curvature Front and Center"), at Q32 precision, along with
-/// a Simpson arc-length table. <see cref="CompiledCurvatureSpline.Evaluate"/> is the zero-allocation per-tick/per-frame
+/// a Simpson arc-length table. The tangent is continuous at every knot (to within
+/// <see cref="StraightHeadingToleranceRaw"/> where a straight meets its neighbour); the curvature is too, except where a knot
+/// declares a different <see cref="CurvatureSplineKnot.IncomingCurvature"/>. <see cref="CompiledCurvatureSpline.Evaluate"/> is the zero-allocation per-tick/per-frame
 /// form; <see cref="Compile"/> allocates and runs exact <see cref="System.Numerics.BigInteger"/>/<see cref="Rational"/>
 /// arithmetic, never on a per-tick path.
 /// </summary>
@@ -155,6 +168,15 @@ public static class CurvatureSpline {
     public const int CoefficientFractionBitCount = 32;
     /// <summary>The largest ratio a derived tangent length may take over the segment's planar chord length.</summary>
     public const long MaxTangentChordRatio = 4L;
+    /// <summary>The largest angle, as a <see cref="FixedQ4816"/> raw count of radians, by which a knot's authored
+    /// tangent may miss its segment's chord while the segment still compiles as a straight line: one raw, the
+    /// resolution of <see cref="CurvatureSplineKnot.TangentYaw"/> itself. A segment whose two end curvatures are zero
+    /// and whose two tangents each point along the chord within this bound (sine of the angle at most
+    /// <c>2^-16</c>, and pointing forward) compiles to the exact line between its knots, its tangent the chord's
+    /// direction at both ends. A heading of π or ±π/2, which no Q16 yaw holds exactly, therefore compiles straight, as
+    /// does a diagonal whose yaw is the knots' own bearing rounded to the nearest raw; the tangent then turns by at
+    /// most this angle across the knot it shares with its neighbour.</summary>
+    public const long StraightHeadingToleranceRaw = 1L;
 
     /// <summary>The largest magnitude a knot's X, Z, or elevation coordinate may take. Chosen so a Q32 raw
     /// (<c>2^20 · 2^32 = 2^52</c>) stays well inside the signed 64-bit carrier under de Casteljau's convex-hull
@@ -193,7 +215,9 @@ public static class CurvatureSpline {
         }
         if (
             (knot.Curvature.Value > MaxCurvature.Value) ||
-            (knot.Curvature.Value < -MaxCurvature.Value)
+            (knot.Curvature.Value < -MaxCurvature.Value) ||
+            (knot.ArrivingCurvature.Value > MaxCurvature.Value) ||
+            (knot.ArrivingCurvature.Value < -MaxCurvature.Value)
         ) {
             throw new CurvatureSplineException(
                 detail: $"the curvature leaves ±{MaxCurvature}.",
@@ -203,7 +227,9 @@ public static class CurvatureSpline {
         }
     }
 
-    /// <summary>Compiles authored knots into a curvature-continuous spline.</summary>
+    /// <summary>Compiles authored knots into a spline: each segment leaves its start knot at that knot's
+    /// <see cref="CurvatureSplineKnot.Curvature"/> and arrives at its end knot at that knot's
+    /// <see cref="CurvatureSplineKnot.ArrivingCurvature"/>.</summary>
     /// <param name="knots">The authored knots, in curve order.</param>
     /// <param name="closed">Whether the last knot connects back to the first.</param>
     /// <returns>The compiled spline.</returns>
@@ -274,7 +300,7 @@ public static class CurvatureSpline {
         );
     }
 }
-/// <summary>The compiled, curvature-continuous form of an authored curve — zero-allocation, exception-free evaluation
+/// <summary>The compiled form of an authored curve — zero-allocation, exception-free evaluation
 /// over its whole arc-length domain.</summary>
 public sealed partial class CompiledCurvatureSpline {
     private const int NarrowingShift = (CurvatureSpline.CoefficientFractionBitCount - FixedQ4816.FractionBitCount); // Q32 -> Q16
@@ -637,5 +663,86 @@ public sealed partial class CompiledCurvatureSpline {
         return NarrowToQ16(raw: ((index == SegmentCount)
             ? TotalLengthRaw
             : m_segments[index].StationRaw));
+    }
+    /// <summary>Returns the arc station, a Q32 raw, of the point on the curve's plan nearest a position (its elevation
+    /// ignored): the nearest of the curve's arc-table samples, refined by projecting the position onto the chord from
+    /// that sample to each neighbouring sample, the same linear-in-arc reading <see cref="EvaluateRaw"/> makes within a
+    /// panel. Total and allocation-free; a tie keeps the earliest station.</summary>
+    /// <param name="position">The position to join the curve from; only its X and Z are read.</param>
+    /// <returns>The station, in <c>[0, TotalLengthRaw]</c>.</returns>
+    public long NearestStationRaw(FixedVector3 position) {
+        var point = new FixedVector2(
+            X: position.X,
+            Y: position.Z
+        );
+        var bestSegment = 0;
+        var bestSample = 0;
+        var bestDistance = UInt128.MaxValue;
+
+        for (var segmentIndex = 0; (segmentIndex < m_segments.Length); ++segmentIndex) {
+            var segment = m_segments[segmentIndex];
+
+            for (var sample = 0; (sample < segment.ArcTable.Length); ++sample) {
+                var distance = PlanarDistanceSquared(
+                    from: point,
+                    to: SamplePlan(sample: sample, segment: segment)
+                );
+
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestSegment = segmentIndex;
+                    bestSample = sample;
+                }
+            }
+        }
+
+        var best = m_segments[bestSegment];
+        var anchor = SamplePlan(sample: bestSample, segment: best);
+        var anchorStation = (best.StationRaw + best.ArcTable[bestSample]);
+        var station = anchorStation;
+
+        foreach (var neighbour in (ReadOnlySpan<int>)[(bestSample - 1), (bestSample + 1)]) {
+            if (((uint)neighbour) >= ((uint)best.ArcTable.Length)) { continue; }
+
+            var chord = (SamplePlan(sample: neighbour, segment: best) - anchor);
+            var along = FixedVector2.SegmentParameter(
+                point: (point - anchor),
+                segment: chord
+            );
+            var distance = PlanarDistanceSquared(
+                from: point,
+                to: (anchor + (chord * along))
+            );
+
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                station = (anchorStation + FixedQ4816.RoundProduct(
+                    fractionBitCount: FixedQ4816.FractionBitCount,
+                    product: (((Int128)(best.ArcTable[neighbour] - best.ArcTable[bestSample])) * along.Value)
+                ));
+            }
+        }
+
+        return WrapOrClamp(argument: station);
+    }
+    private static UInt128 PlanarDistanceSquared(FixedVector2 from, FixedVector2 to) {
+        var dx = (to.X.Value - from.X.Value);
+        var dz = (to.Y.Value - from.Y.Value);
+
+        return FusedArithmetic.AddProducts(
+            firstLeft: dx,
+            firstRight: dx,
+            secondLeft: dz,
+            secondRight: dz
+        ).Magnitude;
+    }
+    // The plan position at one arc-table sample: the table's panels split t evenly, a power of two of them.
+    private static FixedVector2 SamplePlan(CurvatureSplineSegment segment, int sample) {
+        var tRaw = ((((long)sample) << CurvatureSpline.CoefficientFractionBitCount) >> BitOperations.Log2(value: ((uint)(segment.ArcTable.Length - 1))));
+
+        return new FixedVector2(
+            X: NarrowToQ16(raw: DeCasteljau(p0: segment.P0X, p1: segment.P1X, p2: segment.P2X, p3: segment.P3X, tRaw: tRaw)),
+            Y: NarrowToQ16(raw: DeCasteljau(p0: segment.P0Z, p1: segment.P1Z, p2: segment.P2Z, p3: segment.P3Z, tRaw: tRaw))
+        );
     }
 }

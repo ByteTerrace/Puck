@@ -605,7 +605,7 @@ public sealed partial class WorldPopulation {
         }
 
         // Selecting a producer starts it: a plain producer switch, or a same-name kit retune onto a different
-        // curve row, resets the travelled arc rather than resuming a foreign curve's station — see
+        // curve row, rejoins the curve rather than resuming a foreign curve's station — see
         // BodyProducerState.ActiveProducerName's remarks.
         var curveIndex = -1;
         var navigationDomainIndex = -1;
@@ -627,7 +627,10 @@ public sealed partial class WorldPopulation {
         ) {
             entry.ProducerState.ActiveProducerCurveIndex = curveIndex;
             entry.ProducerState.ActiveProducerName = name;
-            entry.ProducerState.CurveArcRaw = 0L;
+            // A curve follower joins its curve where it stands, so followers placed along one curve keep their spacing.
+            entry.ProducerState.CurveArcRaw = ((((uint)curveIndex) < ((uint)m_curveRows.Count))
+                ? m_curveRows[curveIndex].Compiled.NearestStationRaw(position: body.FixedPosition)
+                : 0L);
             entry.ProducerState.ActiveProducerNavigationDomainIndex = navigationDomainIndex;
             entry.NavigationState.Clear();
             entry.ProducerState.FlockSeeded = false;

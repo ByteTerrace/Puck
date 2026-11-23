@@ -1,12 +1,17 @@
 // A vehicle: a body that drives a loop of road stops at its own pace, drawn as a small cart. A module library: it hands
-// its importers templates and lets and emits no document. A world declares its roads as navigation domains of one
-// shared network, expands `vehicleDesign` once over them, `vehicleLooks` once, and `vehicleRoutes` with every vehicle's
-// stops, then places the vehicles with `inhabit` rows naming the kit and a look.
+// its importers templates, functions and lets and emits no document. A world declares its roads as navigation domains
+// of one shared network, expands `vehicleDesign` once over them, `vehicleLooks` once, and `vehicleRoutes` with every
+// vehicle's stops, then places the vehicles with `inhabit` rows naming the kit and a look.
 //
 // A vehicle runs the engine's own systems: its producer routes it over the road network toward its `route` register
-// (`navigated`, reading the stop's shared goal field), its body drives the standard `walk` motion program (motion.puck)
-// under a kit whose shaping grips the road across its heading, as a wheeled body does, and the routes' rules move the
-// register to the next stop as the vehicle arrives. Vehicles use `overlap` body contact.
+// (`navigated`, reading the stop's shared goal field), its body drives the standard `walk` motion program (motion.puck),
+// and the routes' rules move the register to the next stop as the vehicle arrives. Vehicles use `overlap` body contact.
+//
+// A road can also be a curve. `roadLoop` declares a loop's `curves` row and `vehicleRoute` a program that follows it
+// (the curve-follow target, which joins the curve at the station nearest the vehicle, so vehicles placed along a road
+// keep their spacing); `vehicleDesign`'s `routes` adds such programs to the kit's producers, and a placement selects one
+// by name. `vehicleGripShaping` is a shaping row that grips the road across the vehicle's heading, as a wheeled body
+// does: the vehicle turns toward its target and its velocity follows the way it faces.
 
 import "kits"
 
@@ -14,38 +19,77 @@ import "kits"
 // climbs no more than a kerb and keeps to gentle grades.
 let vehicleWalker = { height: 2, radius: 0.9, step: 0.3, slope: 30 }
 
-// A vehicle producer's steering: straight at the next step of its route, turning as it goes.
+// A vehicle producer's steering: straight at the next step of its route, turning as it goes, coasting once within
+// `standoffRadius` of it. An empty route holds the vehicle still.
 let vehicleSteering = {
   channels {}
   scalars {
-    forward: 1
     approach: 1
     approachAltitudeGain: 0
     standoffRadius: 0.8
     orbit: 0
-    softRadius: 3
     inwardGain: 3
     turnScale: 2
-    weaveAmplitude: 0
-    weaveFrequencyBase: 0
-    weaveFrequencyRange: 0
-    activityRateBase: 1
-    activityRateRange: 0
-    altitudeBase: 0
-    altitudeGain: 0
-    altitudeRange: 0
-    pitchWave: 0
-    pressThreshold: 0
-    rollTurn: 0
-    strafeWave: 0
-    turnWave: 0
-    upWave: 0
   }
 }
 
+// A curve route's steering: as `vehicleSteering`, trailing the point that travels the road by 3 m rather than catching
+// it.
+let vehicleRouteSteering = vehicleSteering with { scalars: vehicleSteering.scalars with { standoffRadius: 3 } }
+
+// Lateral slip dies at 16 metres a second squared, so a vehicle's velocity follows its turn.
+let vehicleGripShaping = [
+  {
+    along {
+      engage: 5
+      release: 6
+    }
+    across {
+      lateral: 16
+    }
+  }
+]
+
+let roadQuarterTurn = 1.5707963267948966
+
+// A road loop's curve: a closed rounded rectangle on the centreline x0..x1 by z0..z1 (z0 < z1), its corners circular
+// arcs of `radius`, each two 45 degree segments, joined by straights. It is driven along z0 toward +X, up x1 toward +Z,
+// along z1 toward -X and down x0 toward -Z. Each corner's end knots author the arc's curvature on the arc side and
+// zero on the straight side, so the curvature jumps where an arc meets a straight and the heading carries through.
+function roadLoop(name, x0, x1, z0, z1, radius) = {
+  name: name
+  closed: true
+  knots: flatMap(range(0, 4), corner => map(range(0, 3), step => roadLoopKnot(
+    centre: [[x1 - radius, z0 + radius], [x1 - radius, z1 - radius], [x0 + radius, z1 - radius], [x0 + radius, z0 + radius]][corner],
+    radius: radius,
+    corner: corner,
+    step: step
+  )))
+}
+
+// One knot of a road loop's corner: `step` 0 where the arc leaves the straight before it, 1 at its middle and 2 where
+// it meets the straight after it, about the corner's centre. The heading is reduced to [-pi, pi].
+function roadLoopKnot(centre, radius, corner, step) = {
+  position [centre[0] + radius * cosine((corner - 1 + step / 2) * roadQuarterTurn), 0, centre[1] + radius * sine((corner - 1 + step / 2) * roadQuarterTurn)]
+  tangentYaw: ((corner + step / 2) * roadQuarterTurn > 3.1416) ? (corner + step / 2) * roadQuarterTurn - 4 * roadQuarterTurn : (corner + step / 2) * roadQuarterTurn
+  curvature: (step == 2) ? 0 : 1 / radius
+  incomingCurvature: (step == 0) ? 0 : 1 / radius
+}
+
+// A route program `name` that travels a point round the `road` curve at nine tenths of the vehicle's `speed`, so the
+// vehicle, at full speed, closes on it. The kit steers it with `vehicleRouteSteering`.
+function vehicleRoute(name, road, speed = 8) = {
+  kind: Producer
+  name: name
+  operations [SenseNearestInCone, ProduceSteeringIntent, FaceSensorTarget]
+  target: curve(curve: road, rate: speed * 0.9)
+  version: "puck.body.program.v1"
+}
+
 // The `route` target register, the `vehicle` producer that routes over `domain` (any domain of the road network) and
-// the `vehicle` kit that drives at `speed` metres a second.
-template vehicleDesign(domain, speed = 8) {
+// the `vehicle` kit that drives at `speed` metres a second under `shaping`. `routes` adds curve route programs to its
+// producers, each name mapped to `vehicleRouteSteering`.
+template vehicleDesign(domain, speed = 8, shaping = walkerMotion.shaping, routes = {}) {
   targetRegisters [
     { name: "route", maximumRange: 1000, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
   ]
@@ -66,10 +110,8 @@ template vehicleDesign(domain, speed = 8) {
       bodyContact: Overlap
       bodyMotionProgram: "walk"
       collider: capsule(endpoint: [0, 0.4, 0], radius: 0.9)
-      motion: walkerMotion with { speed { value: speed } }
-      producers {
-        vehicle: vehicleSteering
-      }
+      motion: walkerMotion with { shaping: shaping, speed { value: speed } }
+      producers: ({ vehicle: vehicleSteering } with routes)
     }
   ]
 }
@@ -226,7 +268,8 @@ template vehicleRoutes(vehicles, crossings = []) {
   }
 
   // Crossings: a vehicle in a crossing's approach box while any body stands in the crossing's region stops (its route
-  // set to where it stands, `vehicleHeld` 1; a cleared route would let its producer steer at the nearest body); once the region is empty it is released (2) and resumes the stop it was driving to.
+  // set to where it stands, `vehicleHeld` 1); once the region is empty it is released (2) and resumes the stop it was
+  // driving to.
   for crossing in crossings {
     rule $"vehicle-crossing-{crossing.region}" {
       when (bodyPosition(each, x) > crossing.x0 and bodyPosition(each, x) < crossing.x1 and
