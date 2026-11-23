@@ -112,15 +112,17 @@ internal sealed class WorldPerceptionImage {
     /// <param name="candidateBudget">The most occupants to examine.</param>
     /// <param name="sampleOrdinal">The phase that rotates which occupants a limited budget examines.</param>
     /// <param name="destination">Receives the neighbours found.</param>
+    /// <param name="requireBuilt">Whether the neighbourhood must already be built: a query from a kit partition only
+    /// reads, so <see cref="BuildDeclared"/> builds every neighbourhood before the partitions run.</param>
     /// <returns>The work the query took and the neighbours it wrote.</returns>
-    public FixedNeighborhoodWork Query(long cellWidthRaw, in FixedVector3 origin, FixedQ4816 radius, int excludedIndex, int candidateBudget, ulong sampleOrdinal, Span<FixedSpatialNeighbor> destination) {
+    /// <exception cref="InvalidOperationException"><paramref name="requireBuilt"/> is <see langword="true"/> and the
+    /// neighbourhood has not been built since the freeze.</exception>
+    public FixedNeighborhoodWork Query(long cellWidthRaw, in FixedVector3 origin, FixedQ4816 radius, int excludedIndex, int candidateBudget, ulong sampleOrdinal, Span<FixedSpatialNeighbor> destination, bool requireBuilt = false) {
         var grid = m_grids[cellWidthRaw];
 
         if (!grid.Built) {
-            grid.Neighborhood.Rebuild(points: m_points.AsSpan(length: Count, start: 0));
-            grid.Built = true;
-            Builds++;
-            WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.PerceptionGrids);
+            if (requireBuilt) { throw new InvalidOperationException(message: "A perception query from a kit partition met a neighbourhood not built before the fork."); }
+            Build(grid: grid);
         }
 
         return grid.Neighborhood.Query(
@@ -131,5 +133,17 @@ internal sealed class WorldPerceptionImage {
             sampleOrdinal,
             destination
         );
+    }
+    /// <summary>Builds every declared neighbourhood not yet built since the freeze, so the queries that follow only read.</summary>
+    public void BuildDeclared() {
+        foreach (var grid in m_grids.Values) {
+            if (!grid.Built) { Build(grid: grid); }
+        }
+    }
+    private void Build(Grid grid) {
+        grid.Neighborhood.Rebuild(points: m_points.AsSpan(length: Count, start: 0));
+        grid.Built = true;
+        Builds++;
+        WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.PerceptionGrids);
     }
 }

@@ -62,11 +62,19 @@ same change.
 
 ## The body step and the seam door
 
-- `WorldPopulation` steps bodies one at a time; `WorldBody.Advance` runs the
-  motion program's phases, then `ResolveProgramContacts` sweeps the step
-  through the field. A rigid kit only prepares its step and joins the
-  population's one `FixedRigidWorld` solve; carried and tethered bodies have
-  their own files beside it.
+- `WorldBody.Advance` runs the motion program's phases, then
+  `ResolveProgramContacts` sweeps the step through the field. A rigid kit only
+  prepares its step and joins the population's one `FixedRigidWorld` solve;
+  carried and tethered bodies have their own files beside it.
+- **The kit advance split.** `WorldPopulation.AdvanceSimulated` advances every
+  body whose step is local (`WorldBody.StepIsLocal`,
+  `WorldPopulation.ProducerIsLocal`) in fixed slot partitions on the job pool,
+  then the rest serially in index order (`WorldPopulation.Partitions.cs` holds
+  the phases and the invariant). A step that reaches shared population state,
+  the input runtime or a register from a partition throws
+  (`ThrowIfPartitioned`, `WriteStateRaw`); a new shared write a body step can
+  reach goes through the body's `WorldBodyStepLog` or makes the body serial.
+  Producers read other bodies only through the frozen perception image.
 - **One door for every moving sweep.** `WorldBody.SweepContact` is the
   dispatch every sweep that moves a body goes through; an
   `IEntityContactField` (today `WorldAdjacencyContactField`) learns which

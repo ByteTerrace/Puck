@@ -182,9 +182,9 @@ public sealed partial class WorldPopulation {
     /// it through every authority transfer.</summary>
     public FixedQ4816 TravelTurn(int index) => m_entries[index].TravelTurn;
     /// <summary>Clears designation outputs after the world authority has applied them.</summary>
-    public void ClearDesignationOutputs() => m_designationOutputs.Clear();
+    public void ClearDesignationOutputs() => m_outputs.Designations.Clear();
     /// <summary>Clears staged generator invocations after the world authority has enqueued them.</summary>
-    public void ClearGeneratorInvocationOutputs() => m_generatorInvocations.Clear();
+    public void ClearGeneratorInvocationOutputs() => m_outputs.Generators.Clear();
     /// <summary>Collects every currently-inhabited body slot bound to <paramref name="placementId"/> into
     /// <paramref name="into"/> (cleared first) — the despawn-ownership guard's read: which live bodies a
     /// <c>removePlacement</c> rule effect targeting this placement would strip their Inhabit binding from. Rule
