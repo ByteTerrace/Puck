@@ -12,8 +12,8 @@
 #include "sdf-toon.hlsli"
 
 // The share of the probes about a surface that see a traced light (sdfMeshLightVisibility). The views pass reads it
-// through its probe record first (sdfViewsLightVisibility, sdf-views-probes.hlsli), which answers the same value without
-// visiting the corners wherever every measured corner agrees on the light.
+// from its pixel's probe slot (sdfViewsLightVisibility, sdf-views-probes.hlsli), which the probe lookup resolved from the
+// corners.
 #if defined(SDF_VIEWS_PASS) && !defined(SDF_VIEWS_PROBES_PASS) && !defined(SDF_VIEWS_FILTER_PASS)
 float sdfViewsLightVisibility(SdfMeshProbes probes, uint lightIndex);
 #define sdfLightProbeVisibility sdfViewsLightVisibility
@@ -74,13 +74,9 @@ bool sdfMeshCameraLight(float3 normal, out float3 light) {
     }
     return true;
 }
-// The volume's indirect light at a surface (sdfMeshIndirect), or where it has measured nothing the camera sample's light,
-// or before the sample has read the open sky under the volume's sky source.
-float3 sdfMeshIndirectSeen(SdfMeshProbes probes, float3 normal) {
-    if (sdfMeshAnswers(probes)) {
-        return sdfMeshIndirect(probes, normal);
-    }
-
+// The indirect light at a surface the volume has measured nothing about: the camera sample's light, or before the sample
+// has read the open sky under the volume's sky source.
+float3 sdfMeshIndirectUnanswered(float3 normal) {
     float3 light;
 
     if (sdfMeshCameraLight(normal, light)) {
@@ -91,13 +87,24 @@ float3 sdfMeshIndirectSeen(SdfMeshProbes probes, float3 normal) {
     }
     return float3(0.0, 0.0, 0.0);
 }
+// The volume's indirect light at a surface (sdfMeshIndirect), or where it has measured nothing the unanswered light.
+float3 sdfMeshIndirectSeen(SdfMeshProbes probes, float3 normal) {
+    if (sdfMeshAnswers(probes)) {
+        return sdfMeshIndirect(probes, normal);
+    }
+    return sdfMeshIndirectUnanswered(normal);
+}
+// The environment a surface the volume has measured nothing about reflects: the environment as far as the camera sample
+// sees the sky open, and its surroundings for the rest.
+float3 sdfMeshReflectionUnanswered(float3 direction, float3 environment) {
+    return ((environment * saturate(passGroup.airLight)) + sdfMeshCameraSurroundings());
+}
 // The environment a surface reflects along a mirror direction under the volume (sdfMeshReflection), or where it has
-// measured nothing the camera sample's: the environment as far as it sees the sky open, and its surroundings for the
-// rest.
+// measured nothing the unanswered environment.
 float3 sdfMeshReflectionSeen(SdfMeshProbes probes, float3 direction, float3 environment) {
     return (sdfMeshAnswers(probes)
         ? sdfMeshReflection(probes, direction, environment)
-        : ((environment * saturate(passGroup.airLight)) + sdfMeshCameraSurroundings()));
+        : sdfMeshReflectionUnanswered(direction, environment));
 }
 
 // A bound screen's area light, outside the generated SDF_LIGHT_* kinds, which name the lights table's.

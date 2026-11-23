@@ -823,6 +823,20 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                         _ => (recording.Width.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), recording.Height.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels)),
                     };
 
+                    if (m_part == SdfWorldPackage.Parts.ViewsProbes) {
+                        // The pool's count of extra slots starts from zero before any group takes one; it follows the
+                        // records' planes (sdfViewsProbePoolWord in sdf-views-probes.hlsli).
+                        var records = recording.Outputs[OutputIndexOf(member: SdfWorldPackage.ViewsProbeRecordsWritten)].Buffer!;
+                        var count = (((records.SizeBytes / sizeof(uint)) / SdfWorldPackage.ViewsProbeWords) * SdfWorldPackage.ViewsProbeRecordWords);
+
+                        recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: records.BufferHandle,
+                            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
+                            destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+                        recorder.ClearStorageBuffer(commandBuffer, records.BufferHandle, sizeof(uint), (count * sizeof(uint)));
+                        recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: records.BufferHandle,
+                            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+                            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+                    }
                     BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
                     recorder.Dispatch(
                         commandBufferHandle: commandBuffer,

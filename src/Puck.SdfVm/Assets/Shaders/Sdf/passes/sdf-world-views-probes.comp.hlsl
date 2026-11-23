@@ -5,8 +5,9 @@
 // The group then runs every gather its cells asked for as one list, a gather a lane: the view first reuses its
 // preceding render's gather where one stands for the receiver (sdf-probe-history.hlsli), and the gathers no entry
 // serves run as a second list, so a cell of foliage with four gathers costs the group four lanes rather than one lane
-// four gathers while its neighbours wait. Each gather is written into its cell's record (sdf-views-probes.hlsli), which
-// views reads in place of gathering, and each representative's into the history for the next render.
+// four gathers while its neighbours wait. Each gather is resolved into a slot (sdf-views-probes.hlsli), the
+// representative's in its cell's record and every other in the pool, which views reads in place of gathering, and each
+// representative's is written into the history for the next render.
 #define SDF_VIEWS_PROBES_PASS
 #include "sdf-pixel-pass.hlsli"
 #include "sdf-views-probes.hlsli"
@@ -27,6 +28,12 @@ groupshared uint sdfProbeMissCount;
 // Each cell's state for its representative's record: the representative's place in bits 0 to 7, the extras mask in bits
 // 8 to 15 and the coarse-shading rate above them.
 groupshared uint sdfProbeCellState[SdfProbeGroupCells];
+// The group's extras: how many its cells hold, each cell's first among them, and the pool slot of the group's first, or
+// SdfProbeNoExtras for a group the pool has no room for, whose cells then keep none.
+groupshared uint sdfProbeExtraCount;
+groupshared uint sdfProbeCellExtras[SdfProbeGroupCells];
+groupshared uint sdfProbeExtraBase;
+static const uint SdfProbeNoExtras = 0xFFFFFFFFu;
 
 // The surface point, the geometric normal (and its packed word) and the metres the pixel spans at its hit, formed exactly
 // as the views stage forms them.
@@ -60,14 +67,18 @@ SdfProbeJob sdfProbeJobOf(uint job, uint2 firstCell, uint viewIndex) {
     decoded.record = sdfViewsProbeRecord(decoded.cell, viewIndex);
     return decoded;
 }
-// Writes a job's gather into its cell's record: the representative's with its blended cube, or an extra slot's.
+// Resolves a job's gather into its slot: the representative's in its cell's record, or an extra's in the pool. A group
+// the pool has no room for stores no extra, and its records name none.
 void sdfProbeStoreJob(SdfProbeJob job, SdfMeshProbes probes) {
-    if (job.extra == 0u) {
-        uint state = sdfProbeCellState[job.cellLane];
+    uint state = sdfProbeCellState[job.cellLane];
+    uint extras = ((state >> 8u) & 0xFFu);
+    uint base = sdfProbeExtraBase;
+    uint first = ((base == SdfProbeNoExtras) ? 0u : (base + sdfProbeCellExtras[job.cellLane]));
 
-        sdfViewsProbesStore(job.record, probes, (state & 0xFFu), true, (state >> 16u), ((state >> 8u) & 0xFFu));
-    } else {
-        sdfViewsProbesStoreExtra(job.record, (job.extra - 1u), probes);
+    if (job.extra == 0u) {
+        sdfViewsProbesStore(job.record, probes, (state & 0xFFu), (state >> 16u), ((base == SdfProbeNoExtras) ? 0u : extras), first);
+    } else if (base != SdfProbeNoExtras) {
+        sdfViewsProbesStoreSlot(sdfViewsProbePoolSlot(sdfViewsProbeExtraEntry(first, extras, (job.extra - 1u))), probes, 0u);
     }
 }
 
@@ -90,6 +101,8 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
     if (groupLane == 0u) {
         sdfProbeJobCount = 0u;
         sdfProbeMissCount = 0u;
+        sdfProbeExtraCount = 0u;
+        sdfProbeExtraBase = SdfProbeNoExtras;
     }
 
     uint rate = sdfRateTile(view, viewIndex, id.xy, origin);
@@ -138,7 +151,7 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
 #endif
 
         if (!present) {
-            sdfViewsProbesStore(sdfViewsProbeRecord(id.xy, viewIndex), sdfMeshProbesNone(), 0u, false, rate, 0u);
+            sdfViewsProbesStoreEmpty(sdfViewsProbeRecord(id.xy, viewIndex), rate);
             if (keeps) {
                 sdfProbeHistoryStore(sdfViewsProbeHistoryRW, sdfProbeHistoryEntry(id.xy, viewIndex), false, float3(0.0, 0.0, 0.0), 0u, 0u, sdfMeshProbesNone());
             }
@@ -147,6 +160,13 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
 
             InterlockedAdd(sdfProbeJobCount, (1u + countbits(extras)), first);
             sdfProbeCellState[groupLane] = (lane | (extras << 8u) | (rate << 16u));
+            sdfProbeCellExtras[groupLane] = 0u;
+            if (extras != 0u) {
+                uint firstExtra;
+
+                InterlockedAdd(sdfProbeExtraCount, countbits(extras), firstExtra);
+                sdfProbeCellExtras[groupLane] = firstExtra;
+            }
             sdfProbeJobs[first] = (groupLane | (lane << 6u));
             [loop] for (uint candidate = 0u, job = (first + 1u); candidate < SdfProbeCellPixels; candidate++) {
                 if ((candidate != lane) && (((extras >> sdfViewsProbeExtraSlot(candidate, lane)) & 1u) != 0u)) {
@@ -154,6 +174,17 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
                     job++;
                 }
             }
+        }
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // The group takes its extras' pool slots together, so its cells' slots are adjacent and one lane counts them.
+    if ((groupLane == 0u) && (sdfProbeExtraCount != 0u)) {
+        uint taken;
+
+        InterlockedAdd(sdfViewsProbeRecordsRW[sdfViewsProbePoolWord()], sdfProbeExtraCount, taken);
+        if ((taken + sdfProbeExtraCount) <= sdfViewsProbePoolCapacity()) {
+            sdfProbeExtraBase = taken;
         }
     }
     GroupMemoryBarrierWithGroupSync();

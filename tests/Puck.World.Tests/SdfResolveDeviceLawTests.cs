@@ -96,6 +96,23 @@ public sealed class SdfResolveDeviceLawTests {
             Assert.Equal(expected: ((Half)0f), actual: history[((pixel * 4) + 3)]);
         }
     }
+    // A gray in [0, 1] as the kernels pack a color in one word (Shared/shared-exponent.hlsli): three nine-bit mantissas
+    // under a five-bit exponent biased by fifteen.
+    private static uint SharedExponentGray(float gray) {
+        if (gray <= 0f) {
+            return 0u;
+        }
+
+        var exponent = (Math.Max(val1: -16, val2: ((int)MathF.Floor(x: MathF.Log2(x: gray)))) + 16);
+        var mantissa = ((uint)MathF.Floor(x: ((gray * MathF.Pow(x: 2f, y: (24 - exponent))) + 0.5f)));
+
+        if (mantissa == 512u) {
+            exponent++;
+            mantissa = 256u;
+        }
+
+        return (mantissa | (mantissa << 9) | (mantissa << 18) | (((uint)exponent) << 27));
+    }
     private static void Check(Half[] color, uint width, uint x, uint y, float value) {
         var offset = ((int)(((y * width) + x) * 4));
 
@@ -184,12 +201,11 @@ public sealed class SdfResolveDeviceLawTests {
                     BinaryPrimitives.WriteUInt32LittleEndian(destination: historyInputBytes.AsSpan(start: Address(word: 0u)), value: 1u);
                     Write(word: 0u, value: ((1u << ((int)SdfWorldPackage.TemporalPeriod)) - 1u));
                     for (var phase = 0u; phase < SdfWorldPackage.TemporalPeriod; phase++) {
-                        var gray = BitConverter.HalfToUInt16Bits(value: ((Half)(phase / 7f)));
                         var first = (SdfWorldPackage.HistoryWindowOffset + (phase * SdfWorldPackage.HistorySampleWords));
 
-                        Write(word: first, value: (((uint)gray) | (((uint)gray) << 16)));
-                        Write(word: (first + 1u), value: (((uint)gray) | (((uint)BitConverter.HalfToUInt16Bits(value: ((Half)1f))) << 16)));
-                        Write(word: (first + 4u), value: BitConverter.HalfToUInt16Bits(value: ((Half)weight)));
+                        // A phase's color as a shared-exponent word, then full coverage as UNORM16 under its weight.
+                        Write(word: first, value: SharedExponentGray(gray: (phase / 7f)));
+                        Write(word: (first + 1u), value: (0xFFFFu | (((uint)BitConverter.HalfToUInt16Bits(value: ((Half)weight))) << 16)));
                     }
                 }
             }
