@@ -161,29 +161,18 @@ public sealed class SdfMeshRegionArena : IDisposable {
             }
         }
     }
-    // Whether a placement at words [word, word + words) alone keeps a chunk covered, so forgetting it gives device
-    // memory back; always for a region that is not mapped.
-    private bool KeepsChunk(long word, long words) {
-        if ((m_chunkWords == 0L) || (words <= 0L)) { return true; }
-
-        var last = (int)Math.Min(val1: (m_chunkCounts.Length - 1), val2: ((word + words) - 1L) / m_chunkWords);
-
-        for (var chunk = (int)(word / m_chunkWords); (chunk <= last); chunk++) {
-            if (m_chunkCounts[chunk] == 1) { return true; }
-        }
-        return false;
-    }
-    // The chunks words [word, word + words) would newly cover: those in the range whose count is zero.
-    private long UncoveredChunks(long word, long words) {
+    // How many chunks words [word, word + words) touch hold exactly a count: zero counts the chunks a placement there
+    // would newly cover, and one the chunks a placement there alone keeps covered. Zero while nothing is counted.
+    private long ChunksCounting(long word, long words, int count) {
         if ((m_chunkWords == 0L) || (words <= 0L)) { return 0L; }
 
         var last = (int)Math.Min(val1: (m_chunkCounts.Length - 1), val2: ((word + words) - 1L) / m_chunkWords);
-        var uncovered = 0L;
+        var chunks = 0L;
 
         for (var chunk = (int)(word / m_chunkWords); (chunk <= last); chunk++) {
-            if (m_chunkCounts[chunk] == 0) { uncovered++; }
+            if (m_chunkCounts[chunk] == count) { chunks++; }
         }
-        return uncovered;
+        return chunks;
     }
     // The reserve's draw records are counted as one run from word zero, moved whenever the reserve grows.
     private void CountReserve() {
@@ -283,7 +272,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         if (HeldLimitWords == long.MaxValue) { return true; }
 
         return ((m_chunkWords > 0L)
-            ? (((m_coveredChunks + UncoveredChunks(word: ((long)start), words: ((long)words))) * m_chunkWords) <= HeldLimitWords)
+            ? (((m_coveredChunks + ChunksCounting(count: 0, word: ((long)start), words: ((long)words))) * m_chunkWords) <= HeldLimitWords)
             : (((long)(start + words)) <= HeldLimitWords));
     }
     // Takes back what the draws can do without while the region holds more than its held limit, down to the limit less a
@@ -304,8 +293,8 @@ public sealed class SdfMeshRegionArena : IDisposable {
             m_shedOrder.Sort(comparison: static (left, right) => right.Words.CompareTo(value: left.Words));
             foreach (var (words, mesh) in m_shedOrder) {
                 if (HeldWords <= target) { break; }
-                // A product lying only in chunks other meshes keep covered gives nothing back.
-                if (!KeepsChunk(word: m_placements[mesh].VertexWord, words: words)) { continue; }
+                // A product of a mapped region lying only in chunks other meshes keep covered gives nothing back.
+                if ((m_chunkWords > 0L) && (ChunksCounting(count: 1, word: m_placements[mesh].VertexWord, words: words) == 0L)) { continue; }
                 _ = Forget(mesh: mesh);
                 _ = m_moved.Remove(item: mesh);
                 m_forgotten.Add(item: mesh);
