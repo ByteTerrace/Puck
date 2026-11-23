@@ -1,7 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Physics.Motion;
-using Puck.SignedDistance.Queries;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -41,7 +40,7 @@ public sealed class WorldSessionStampSource : IWorldStampSource {
     /// <inheritdoc/>
     /// <remarks>A session mirrors no static solid field, so an effector finds no ground to plant on and holds its
     /// authored pose.</remarks>
-    public SdfFieldEvaluator? StaticField => null;
+    public WorldQueryField? StaticField => null;
 
     /// <inheritdoc/>
     public WorldEntityAddress EntityAddress(int index) => m_mirror.Address(index: index);

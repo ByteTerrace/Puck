@@ -166,14 +166,43 @@ public sealed partial class WorldRigidAssets {
     // Each responding row's holding as the latest PresentHoldings presented it.
     private readonly Dictionary<string, int> m_presentedHoldings = new(comparer: StringComparer.Ordinal);
 
+    /// <summary>Presents a delivery that moved holdings alone without reconciling anything else: reconciles the static rows
+    /// against the delivered definition, and while every responding row whose holding moved is a copy here, the copy count
+    /// stands and the templates stand, places the copies again (<see cref="PlaceStaticCopies"/>) and answers
+    /// <see langword="true"/>. Otherwise it presents nothing and answers <see langword="false"/>, and the caller reconciles
+    /// in full and calls <see cref="PresentHoldings"/>.
+    /// <para>The invariant: a delivery that moved holdings alone reaches the program only through
+    /// <see cref="HoldingComposeRevision"/> and <see cref="StaticTemplateRevision"/>, since the readers that deliver it
+    /// keep such a delivery out of their rebuild watch (<c>WorldClient.HoldingRevision</c>,
+    /// <c>WorldSessionMirror.ComposingRevision</c>).</para></summary>
+    /// <param name="definition">The delivered definition.</param>
+    /// <returns>Whether the delivery was presented by the copies alone.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public bool TryPresentHoldingsAlone(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        var placements = definition.Placements;
+        var copies = m_staticCopies.Count;
+
+        ReconcileStatic(definition: definition, placements: placements, riding: m_staticRiding, scope: m_staticScope);
+        if ((m_staticCopies.Count != copies) || !StaticTemplatesStand) { return false; }
+        for (var index = 0; (index < placements.Count); index++) {
+            var placement = placements[index];
+
+            if (placement.Respond is not { Count: > 0 }) { continue; }
+            if (m_presentedHoldings.TryGetValue(key: placement.Id, value: out var held) && (held == placement.Holding)) { continue; }
+            if (!ContainsPlacement(placement: placement)) { return false; }
+        }
+        for (var index = 0; (index < placements.Count); index++) {
+            if (placements[index].Respond is { Count: > 0 }) { m_presentedHoldings[placements[index].Id] = placements[index].Holding; }
+        }
+        PlaceStaticCopies();
+        return true;
+    }
     /// <summary>Presents the responses the latest reconcile met. A responding row that is a rigid static copy keeps a
     /// template for every creation it can show (<see cref="ReconcileStatic"/>), so while the templates stand its copies
-    /// alone move (<see cref="PlaceStaticCopies"/>). A holding that moved on any other row (an attached or animated row,
-    /// one left to the visual emission) moves <see cref="HoldingComposeRevision"/>, and a template set the latest emission
-    /// did not write moves <see cref="StaticTemplateRevision"/>; either composes the program again.
-    /// <para>The invariant: a delivery that moved holdings alone reaches the program only through these two counters,
-    /// since the readers that deliver it keep such a delivery out of their rebuild watch (<c>WorldClient.HoldingRevision</c>,
-    /// <c>WorldSessionMirror.ComposingRevision</c>). Call after every reconcile of the rows.</para></summary>
+    /// alone move (<see cref="PlaceStaticCopies"/>). A holding that moved on any other row moves
+    /// <see cref="HoldingComposeRevision"/>, and a template set the latest emission did not write moves
+    /// <see cref="StaticTemplateRevision"/>; either composes the program again. Call after every reconcile of the rows.</summary>
     /// <param name="placements">The placement rows the latest reconcile read.</param>
     /// <exception cref="ArgumentNullException"><paramref name="placements"/> is <see langword="null"/>.</exception>
     public void PresentHoldings(IReadOnlyList<WorldPlacement> placements) {

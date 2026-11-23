@@ -144,7 +144,7 @@ public sealed class WorldEditorFrameLawTests {
         var routes = new WorldSeatAuthorityRouter();
         var client = ClientFixtures.Client(definition: (Fixtures.BuildDocument() with { DocumentId = "home" }));
 
-        client.PublishStaticField(field: BootFrameField());
+        client.PublishStaticField(field: new WorldQueryField(fixedPart: BootFrameField()));
         _ = routes.Publish(endpoint: north, entity: north.Mirror.Address(index: 0), slot: 0);
 
         var continuum = new WorldContinuum(

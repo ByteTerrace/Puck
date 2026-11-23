@@ -2,7 +2,6 @@ using System.Numerics;
 using Puck.Physics.Motion;
 using Puck.SdfVm;
 using Puck.SignedDistance;
-using Puck.SignedDistance.Queries;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
 using Xunit;
@@ -154,7 +153,7 @@ public sealed class WorldRigidAssetLawTests {
         public int EntityCapacity => m_client.EntityCapacity;
         public WorldDefinition Definition => m_client.Definition;
         public WorldStateMirror StateMirror => m_client.StateMirror;
-        public SdfFieldEvaluator? StaticField => null;
+        public WorldQueryField? StaticField => null;
 
         public WorldEntityAddress EntityAddress(int index) => new("rigid", index, 0);
         public BodyFacts Facts(int index) => default;

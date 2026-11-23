@@ -1,7 +1,6 @@
 using System.Numerics;
 using Puck.Maths;
 using Puck.SdfVm.Views;
-using Puck.SignedDistance.Queries;
 
 namespace Puck.World.Client;
 
@@ -346,7 +345,7 @@ public sealed class WorldSeatViewState {
     /// <param name="feel">The portable automatic pull-in preference.</param>
     /// <param name="viewForward">The rig's look direction before boom smoothing.</param>
     /// <exception cref="ArgumentNullException"><paramref name="control"/> is <see langword="null"/>.</exception>
-    public float Clear(bool enabled, SdfFieldEvaluator? field, ref Vector3 eye, ref Vector3 target, in WorldChaseBody subject, Vector3 up, in SdfCameraDynamics dynamics, float deltaSeconds,
+    public float Clear(bool enabled, WorldQueryField? field, ref Vector3 eye, ref Vector3 target, in WorldChaseBody subject, Vector3 up, in SdfCameraDynamics dynamics, float deltaSeconds,
         SdfCameraClearance? clearance, WorldSeatViewControl control, float scale = 1f,
         SdfCameraFirstPerson? firstPerson = null, WorldSeatCameraFeel? feel = null, Vector3? viewForward = null) {
         ArgumentNullException.ThrowIfNull(argument: control);
