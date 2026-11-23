@@ -295,12 +295,17 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         Span<int> revision = stackalloc int[WorldClient.RevisionComponentCount];
 
         m_client.WriteRevision(destination: revision);
-        if (m_prepared && revision.SequenceEqual(other: m_preparedRevision) && (m_preparedHolding == m_client.HoldingRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && (m_preparedCode == Puck.Abstractions.CodeRevision.Current) && !m_census.TryTakeMove()) { return; }
+        var standing = (m_prepared && revision.SequenceEqual(other: m_preparedRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && (m_preparedCode == Puck.Abstractions.CodeRevision.Current) && !m_census.TryTakeMove());
+        var holdingMoved = (m_preparedHolding != m_client.HoldingRevision);
+
+        if (standing && !holdingMoved) { return; }
         revision.CopyTo(destination: m_preparedRevision);
         m_prepared = true;
         m_preparedHolding = m_client.HoldingRevision;
         m_preparedPresentation = m_continuum.PresentationRevision;
         m_preparedCode = Puck.Abstractions.CodeRevision.Current;
+        // A delivery that moved holdings alone, on rows the rigid catalog copies, moves those copies and nothing else.
+        if (standing && m_animator.Rigid.TryPresentHoldingsAlone(definition: m_client.Definition)) { return; }
         ReconcileStamps();
         m_animator.Rigid.PresentHoldings(placements: m_client.Definition.Placements);
     }

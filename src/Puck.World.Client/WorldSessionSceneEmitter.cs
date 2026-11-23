@@ -746,6 +746,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     }
 
     private int m_preparedDefinition = int.MinValue;
+    private int m_preparedComposing = int.MinValue;
     private int m_preparedSnapshot = int.MinValue;
 
     public void PrepareFrame() {
@@ -761,10 +762,16 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         set => m_source.Guess = value;
     }
     private void PrepareRegistrations() {
-        if ((m_preparedDefinition == m_mirror.DefinitionRevision) && (m_preparedSnapshot == m_mirror.SnapshotRevision) && !m_census.TryTakeMove()) { return; }
+        var standing = ((m_preparedSnapshot == m_mirror.SnapshotRevision) && (m_preparedComposing == m_mirror.ComposingRevision) && !m_census.TryTakeMove());
+
+        if (standing && (m_preparedDefinition == m_mirror.DefinitionRevision)) { return; }
         m_preparedDefinition = m_mirror.DefinitionRevision;
         m_preparedSnapshot = m_mirror.SnapshotRevision;
+        m_preparedComposing = m_mirror.ComposingRevision;
         var definition = Scoped(m_mirror.Definition);
+
+        // A delivery that moved holdings alone, on rows the rigid catalog copies, moves those copies and nothing else.
+        if (standing && m_pool.Rigid.TryPresentHoldingsAlone(definition: definition)) { return; }
 
         m_census.Refresh(m_source);
         var stamps = (m_onlyPrototypes is null) ? m_census.Stamps : [];
