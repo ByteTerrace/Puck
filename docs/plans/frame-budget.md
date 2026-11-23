@@ -125,19 +125,25 @@ top of that crossed what the system gives the process.
 | The root | 250 | 250 | |
 | Room in device blocks no family names | 700 | 2,000 | Blocks the churn of resizes and shadow layers leaves part filled |
 
-Four causes, in the order they are fixed:
+Four causes. This memo owns the per-pixel storage a view holds (the table
+above and the first cause); [the memory plan](streaming-and-memory.md#the-build-order)
+owns residency, the mesh budget and shadow allocation, which the other three
+are evidence for.
 
 1. **A view out of sight kept the storage of the extent it was last seen at.**
    A window fills the display as a body walks through it, and nothing shrank it
-   afterwards, since a view no schedule reaches renders nothing. Built: such a
-   view renders at its least share until its node installs that extent
+   afterwards, since a view no schedule reaches renders nothing. Such a view
+   now renders at its least share until its node installs that extent
    (`WorldViewGraphHost.ReserveShrinks`).
 2. **A world no window shows was resident at full detail.** A session view no
    fit measures demanded meshes at its whole image from wherever its camera
    stands, so the debug world's second residency, seen through a window inside
    a painting, held the same gibibyte as the one the seat stands in, and the
-   one detail bias coarsened both to fit. Built: a session view demands at the
-   display pixels it is presented over (`WorldRenderSettings.NestedDemandHeight`).
+   one detail bias coarsened both to fit. A session view now demands at the
+   display pixels it is presented over
+   (`WorldRenderSettings.NestedDemandHeight`), one function the memory plan's
+   demand by consumer replaces
+   ([nested views](streaming-and-memory.md#nested-views-fitted-windows-authored-quality-and-standing-feeds)).
 3. **The debug world is resident twice.** A session whose stream is not what a
    whole reader is handed (`WorldSceneShare.SharesAuthority`) renders a scene of
    its own, and every such session of one world shares one
@@ -145,18 +151,14 @@ Four causes, in the order they are fixed:
    shadows and irradiance volume, though nearly all its meshes are the first
    residency's: the library shares a mesh on the host (`SdfMeshLibrary`) and
    each residency places its own copy on the device (`SdfMeshRegionArena`).
-   The step is one device mesh pool a process's residencies place in, keyed by
-   mesh identity, with each residency keeping only its draw records.
 4. **Resizes and shadow layers churn the blocks.** A window's extent moves in
    sixteen steps an octave (`RenderGraphExtent.StepsPerOctave`), each a whole
    new graph beside the old one until it retires, and a pressure trim gives
    back shadow layers the next frame takes again (`world.residency`'s `shadows`
    line counts the `trims`, and `host.memory`'s `over-limit-by` names the
-   layers granted past the limit). The step is
-   an allocation at the octave with the render grid moving inside it, as the
-   main view's does, once the storage table's rows shrink what an octave
-   holds, and a trim that gives back only what no view has read for the
-   anchors' own keep time.
+   layers granted past the limit). The window's part is this memo's: an
+   allocation at the octave with the render grid moving inside it, as the main
+   view's does, once the storage table's rows shrink what an octave holds.
 
 ## The design
 
@@ -267,17 +269,12 @@ Each step lands with the check that shows it worked, read at the stage standing
 and over the route, before and after, in one World session each.
 
 The device fits its budget first, since a frame over it reads as a stall in
-whichever pass touches moved memory ([where the memory goes](#where-the-memory-goes)):
+whichever pass touches moved memory ([where the memory goes](#where-the-memory-goes)).
+The memory plan owns that; this memo's share of it is one step:
 
-- **One device mesh pool.** A process's residencies place meshes in one pool by
-  mesh identity. Check: with the garden painting in view from the painting
-  room, the mesh regions hold one copy of the debug world, and
-  `world.residency`'s `detail-bias` of the world the seat stands in reads zero
-  at the stage.
-- **Windows allocate by octave, and a trim keeps what a view read.** Check: over
-  the route the `session` and `routed` families' `allocated` stay within twice
-  their `peak`, the room in device blocks no family names stays under half a
-  gibibyte, and `pool device` reads `over-limit=0` at every chapter's end.
+- **Windows allocate by octave.** The render grid moves inside the allocation,
+  so a window grows without a second graph beside the first. Check: over the
+  route the `session` family's `allocated` stays within twice its `peak`.
 
 The route's report writes a chapter disturbed when the device's memory rose in
 it to what the system budgets the process
