@@ -51,6 +51,7 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.BodyStatePrefix}<bodyRef>:<slot>",
             $"{WorldRuleFacts.IdentityPrefix}<bodyRef>:<fact>",
             $"{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>",
+            $"{WorldRuleFacts.ProducerPrefix}<bodyRef>:held|possessed|down",
             $"{WorldRuleFacts.ParkedPrefix}<bodyRef>",
             $"{WorldRuleFacts.LinkPrefix}<adjacencyName>",
             $"{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>",
@@ -1237,6 +1238,62 @@ public static partial class WorldFactsVocabulary {
                     cost: 1L,
                     describe: name,
                     reach: WorldDisclosureReach.Fields,
+                    payload: operand,
+                    read: facet => facet.Read(operand: operand),
+                    rowOrdinal: -1,
+                    valueKind: CellKind.Int,
+                    world: world
+                );
+            } else if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldRuleFacts.ProducerPrefix
+            )) {
+                RuleCompiler.RefuseKeyOnReservedChannel(
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+
+                var tokens = call!.Texts();
+                var width = WorldFactsCompileContext.BodyRefTokenWidth(
+                    start: 0,
+                    tokens: tokens
+                );
+                var reasons = ((tokens.Length != (width + 1))
+                    ? BodyProducerStandDown.None
+                    : tokens[width] switch {
+                        "held" => BodyProducerStandDown.Held,
+                        "possessed" => BodyProducerStandDown.Possessed,
+                        "down" => (BodyProducerStandDown.Held | BodyProducerStandDown.Possessed),
+                        _ => BodyProducerStandDown.None,
+                    });
+
+                if (reasons == BodyProducerStandDown.None) {
+                    throw new RuleException(
+                        detail: $"'{name}' does not spell '{WorldRuleFacts.ProducerPrefix}<bodyRef>:<held|possessed|down>' ({WorldFactsCompileContext.BodyRefVocabulary})",
+                        refusal: WorldRuleRefusal.SpatialChannelMalformed,
+                        ruleName: ruleName
+                    );
+                }
+
+                var body = world.ResolveBodyRef(
+                    channel: name,
+                    ruleName: ruleName,
+                    start: 0,
+                    tokens: tokens
+                );
+                var operand = new ProducerOperand(
+                    bodyA: body,
+                    reasons: reasons
+                );
+
+                fact = BodyFact(
+                    bodyA: body,
+                    bodyB: default,
+                    cost: 1L,
+                    describe: name,
+                    reach: WorldDisclosureReach.Bodies,
                     payload: operand,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: -1,

@@ -18,12 +18,12 @@ public static class InfinityViewSampling {
     /// <param name="frame">The frame the view renders (<see cref="InfinityViewFit.Fit"/>), which must be visible.</param>
     /// <param name="imageSlot">The consuming view's infinity-image binding slot, or −1 for none.</param>
     /// <returns>The packed record: the viewer's basis, the rectangle, the image slot, the fallback colour, and image alpha
-    /// as coverage for far geometry.</returns>
+    /// as coverage for a view that covers (<see cref="InfinityViewSpec.Covers"/>).</returns>
     public static SdfSkyView Describe(InfinityViewSpec spec, CameraSnapshot viewer, InfinityViewFrame frame, int imageSlot) {
         ArgumentNullException.ThrowIfNull(argument: spec);
 
         return new SdfSkyView {
-            Coverage = ((spec.Kind == InfinityViewKind.Far) ? 1u : 0u),
+            Coverage = (spec.Covers ? 1u : 0u),
             Fallback = spec.Fallback,
             Forward = viewer.Forward,
             ImageSlot = imageSlot,

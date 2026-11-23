@@ -8,7 +8,7 @@ public sealed partial class SdfShadeProgram {
     private sealed class Compiler(SdfShadeDefinition source) {
         private readonly Dictionary<string, Node> m_nodes = new(comparer: StringComparer.Ordinal);
         private readonly Dictionary<string, SdfShadeShape> m_shapeDefinitions = new(comparer: StringComparer.Ordinal);
-        private readonly Dictionary<SdfShadeExpression, Node>[] m_expressionCache = Enumerable.Range(count: 3, start: 0)
+        private readonly Dictionary<SdfShadeExpression, Node>[] m_expressionCache = Enumerable.Range(count: PhaseCount, start: 0)
             .Select(selector: _ => new Dictionary<SdfShadeExpression, Node>(comparer: ReferenceEqualityComparer.Instance)).ToArray();
         private readonly Dictionary<(SdfShadePhase Phase, string Name), Node> m_values = [];
         private readonly List<SdfShadeValue> m_canonicalValues = [];
@@ -31,7 +31,7 @@ public sealed partial class SdfShadeProgram {
             foreach (var parameter in source.Parameters) { ValidateBits(parameter.Type, parameter.Bits); }
             foreach (var value in (source.Values ?? [])) {
                 if (value is null || string.IsNullOrEmpty(value.Name)) { Fail("PUCK127", "A shade value requires a name and expression."); }
-                if (((uint)value.Phase) >= 3) { Fail(code: "PUCK126", message: "Unknown shade phase."); }
+                if (((uint)value.Phase) >= PhaseCount) { Fail(code: "PUCK126", message: "Unknown shade phase."); }
                 var lowered = Lower(value.Value, value.Phase, 0);
 
                 if (!m_values.TryAdd(key: (value.Phase, value.Name), value: lowered)) { Fail(code: "PUCK128", message: "Shade value is defined twice."); }
@@ -49,14 +49,14 @@ public sealed partial class SdfShadeProgram {
             }
             outputs.Sort(comparison: (a, b) => ((a.Phase != b.Phase) ? a.Phase.CompareTo(target: b.Phase) : StringComparer.Ordinal.Compare(x: a.Name, y: b.Name)));
             CanonicalizeParameters(outputs);
-            var phases = new SdfShadeInstruction[3][];
+            var phases = new SdfShadeInstruction[PhaseCount][];
             var bindings = new List<SdfShadeBinding>();
-            var costs = new uint[3];
+            var costs = new uint[PhaseCount];
             var wrap = 0f;
             var tilt = 0f;
             var everySide = false;
 
-            for (var phase = 0; (phase < 3); phase++) {
+            for (var phase = 0; (phase < PhaseCount); phase++) {
                 var instructions = new List<SdfShadeInstruction>();
                 var registers = new Dictionary<string, SdfShadeOperand>(comparer: StringComparer.Ordinal);
 
@@ -116,9 +116,15 @@ public sealed partial class SdfShadeProgram {
                     instructions.Add(item: op); registers.Add(key: node.Key, value: result);
                     m_canonicalValues.Add(item: new(((SdfShadePhase)phase), $"r{result.Index}", Canonical(args: args, node: node)));
                     costs[phase] = checked(((costs[phase] + SdfShadeOps.Get(op: node.Op).Work) + ((node.Shape is { } costShape) ? SdfShadeCost.Shape(shape: costShape) : 0u)));
-                    if (checked(((costs[0] + costs[1]) + costs[2])) > MaxPhaseWork) { Fail(code: "PUCK129", message: $"Shade work exceeds {MaxPhaseWork}."); }
+                    if (checked((((costs[0] + costs[1]) + costs[2]) + costs[3])) > MaxPhaseWork) { Fail(code: "PUCK129", message: $"Shade work exceeds {MaxPhaseWork}."); }
                     return result;
                 }
+            }
+            // The stage runs an ink phase only where one of its line inputs is live (the gate in sdfShadeInkPhase), so one
+            // that reads none could never run.
+            if ((phases[((int)SdfShadePhase.Ink)].Length != 0) && !phases[((int)SdfShadePhase.Ink)].Any(predicate: static op =>
+                ((op.Op == SdfShadeOp.Input) && (SdfShadeOps.Inputs[((int)op.Immediate)].Name is var name) && ((name == "ink.line") || SdfShadeOps.EdgeInputs.Contains(value: name))))) {
+                Fail(code: "PUCK126", message: "An ink phase runs only where a line is: it must read ink.line or an edge.* distance.");
             }
             var canonicalOutputs = bindings.Select(selector: o => new SdfShadeOutput(o.Phase, o.Name, new("value", Name: $"r{o.Value.Index}"))).ToArray();
 
@@ -127,7 +133,7 @@ public sealed partial class SdfShadeProgram {
             // register selection (SdfShadeOps.DispatchWork).
             var straight = phases.Select(selector: static phase => phase.ToArray()).ToArray();
             var straightBindings = bindings.ToArray();
-            var straightCosts = new uint[3];
+            var straightCosts = new uint[PhaseCount];
 
             for (var phase = 0; (phase < phases.Length); phase++) {
                 phases[phase] = Allocate(phases[phase], ((SdfShadePhase)phase), bindings);
@@ -138,14 +144,13 @@ public sealed partial class SdfShadeProgram {
             uint WorkOf(SdfShadeInstruction instruction) => checked(SdfShadeOps.Get(instruction.Op).Work + (instruction.Op == SdfShadeOp.Shape
                 ? SdfShadeCost.Shape(m_shapes.First(s => s.Relative == instruction.Immediate).Shape) : 0u));
             if (costs.Aggregate(0UL, static (sum, cost) => checked(sum + cost)) > MaxPhaseWork) { Fail("PUCK129", $"Shade work exceeds {MaxPhaseWork} after register allocation."); }
-            var pixelWork = checked(costs[0] + MaxLights * ((ulong)DefaultLightWork + costs[1]) + DefaultComposeWork + costs[2] + EngineWork);
-            if (checked(128UL * pixelWork) > MaxWork) { Fail("PUCK129", "Shade work exceeds the dispatch bound for a complete glass group at the maximum light walk."); }
+            if (checked(128UL * PixelWork(costs: costs, lights: MaxLights)) > MaxWork) { Fail("PUCK129", "Shade work exceeds the dispatch bound for a complete glass group at the maximum light walk."); }
             // Header: instruction ranges for each phase, constant and layout ranges, then the identity the constructor
             // writes. Every range is vector relative.
             const int InstructionVectors = 3;
             var words = new List<uint>(collection: Enumerable.Repeat(count: (HeaderVectors * 4), element: 0u));
 
-            for (var phase = 0; (phase < 3); phase++) {
+            for (var phase = 0; (phase < PhaseCount); phase++) {
                 words[(phase * 4)] = ((uint)(words.Count / 4)); words[((phase * 4) + 1)] = ((uint)phases[phase].Length);
                 words[((phase * 4) + 2)] = costs[phase];
                 foreach (var op in phases[phase]) {
@@ -158,14 +163,15 @@ public sealed partial class SdfShadeProgram {
                 }
             }
             var constantsOffset = ((uint)(words.Count / 4));
-            // The surface phase's fourth header word holds the reads; the light and compose phases' hold their assigned
-            // outputs (AssignedOutputs), which the stage reads before the phase runs to leave out the default terms the
-            // phase replaces.
-            words[3] = (uint)m_reads;
-            words[7] = AssignedOutputs(outputs: bindings, phase: SdfShadePhase.Light);
-            words[11] = AssignedOutputs(outputs: bindings, phase: SdfShadePhase.Compose);
+            // The surface phase's fourth header word holds the reads; every other phase's holds its assigned outputs
+            // (AssignedOutputs), which the stage reads before the phase runs to leave out the default terms the phase
+            // replaces.
+            const int Layout = (LayoutVector * 4);
 
-            words[12] = constantsOffset; words[13] = ((uint)(m_constants.Count / 4));
+            words[3] = (uint)m_reads;
+            for (var phase = 1; (phase < PhaseCount); phase++) { words[((phase * 4) + 3)] = AssignedOutputs(outputs: bindings, phase: ((SdfShadePhase)phase)); }
+
+            words[Layout] = constantsOffset; words[(Layout + 1)] = ((uint)(m_constants.Count / 4));
             words.AddRange(collection: m_constants);
             foreach (var (shape, relative) in m_shapes) {
                 var data0 = shape.Data0At(tableVector: checked(((((int)constantsOffset) + relative) + 7)));
@@ -175,7 +181,7 @@ public sealed partial class SdfShadeProgram {
                 RequireRange(((uint)(words.Count / 4)), checked(((constantsOffset + ((uint)relative)) + 7)), ((uint)shape.Table.Count.CeilingDivide(divisor: 4)));
             }
             foreach (var (_, word) in m_relocations) { words[word] = checked((words[word] + constantsOffset)); }
-            words[14] = ((uint)(words.Count / 4)); words[15] = ((uint)m_parameters.Count);
+            words[(Layout + 2)] = ((uint)(words.Count / 4)); words[(Layout + 3)] = ((uint)m_parameters.Count);
             var parameterWords = new List<uint>();
 
             foreach (var parameter in m_parameters) {
@@ -189,12 +195,12 @@ public sealed partial class SdfShadeProgram {
             }
             var sliceLength = ((uint)(words.Count / 4));
 
-            for (var phase = 0; (phase < 3); phase++) {
+            for (var phase = 0; (phase < PhaseCount); phase++) {
                 RequireRange(sliceLength, words[(phase * 4)], checked((words[((phase * 4) + 1)] * InstructionVectors)));
             }
             RequireRange(sliceLength, constantsOffset, ((uint)(m_constants.Count / 4)));
-            RequireRange(sliceLength, words[14], words[15]);
-            for (var phase = 0; (phase < 3); phase++) {
+            RequireRange(sliceLength, words[(Layout + 2)], words[(Layout + 3)]);
+            for (var phase = 0; (phase < PhaseCount); phase++) {
                 for (var i = 0; (i < phases[phase].Length); i++) {
                     var op = phases[phase][i];
 
@@ -451,7 +457,7 @@ public sealed partial class SdfShadeProgram {
 
     private static readonly string[][] OutputNames = [
         ["albedo", "roughness", "metal", "specular", "coat", "sheen", "wrap", "fill", "emissive", "normal", "reveal"],
-        ["diffuse", "rim", "specular", "attenuation"], ["color"],
+        ["diffuse", "rim", "specular", "attenuation", "line"], ["color", "line"], ["color", "coverage"],
     ];
 
     /// <summary>The largest named output set of any phase, used by the shared generator.</summary>

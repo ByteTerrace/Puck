@@ -171,8 +171,10 @@ public sealed partial class WorldPopulation {
 
     // Whether a body's producer reads only what a partition may read: the frozen image, its own entry, a curve, a sight
     // test, a shared domain's resident goal field and a domain's own path search. A flock affinity (an authority
-    // expression over the arena) stays serial.
+    // expression over the arena) stays serial. A producer that stands down runs none of its program, as a body naming
+    // none does.
     private bool ProducerIsLocal(Entry entry, WorldBody body, int index) =>
+        (entry.ProducerState.StandDown != BodyProducerStandDown.None) ||
         (body.Source.ProducerName is not { } name) ||
         (ResolveProducer(entry: entry, name: name, table: m_kits[ResolveKitIndex(index: index)].Producers) is not { } producer) ||
         (producer.Flock is not { } flock) ||
@@ -223,12 +225,17 @@ public sealed partial class WorldPopulation {
             ) {
                 continue;
             }
-            if (step.SteeringDue && (entry.ProducerLookup is { } producer) && (player.Source.ProducerName is not null)) {
+            if (step.SteeringDue && (entry.ProducerState.StandDown == BodyProducerStandDown.None) && (entry.ProducerLookup is { } producer) && (player.Source.ProducerName is not null)) {
                 perceives |= ((producer.Flock is not null) || (producer.Target?.Source is BodyTargetSource.Sensed));
                 if (producer.Flock is { MovementDomainIndex: >= 0 } flock) { m_navigation[flock.MovementDomainIndex].EnsureBaked(); }
-                // A route of its own reads one domain: bake it here, where a bake may be adopted.
+                // A route of its own reads one domain, and its cells' area types under a profile that prices them: bake
+                // and derive them here, where a bake may be adopted.
                 if ((producer.Target is { Source: BodyTargetSource.Navigated } routed) && (((uint)routed.NavigationDomainIndex) < ((uint)m_navigation.Count))) {
-                    m_navigation[routed.NavigationDomainIndex].EnsureBaked();
+                    if (NavigationProfile(index: routed.NavigationProfileIndex).IsNeutral) {
+                        m_navigation[routed.NavigationDomainIndex].EnsureBaked();
+                    } else {
+                        m_navigation[routed.NavigationDomainIndex].EnsureAreas();
+                    }
                 }
                 PrepareGoalField(entry: entry, producer: producer, self: player.FixedPosition);
             }

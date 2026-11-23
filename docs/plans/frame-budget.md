@@ -27,7 +27,8 @@ the debug world does not hold.
 | Surface | `surface`: normals, ambient occlusion, cascade shadows | 1.9 | 1.0 |
 | Indirect light | `views-probes` | 2.0 to 3.6 | 0.4 |
 | Light selection | `views-filter`, `views-bins` | 0.95 | 0.4 |
-| Shading | `views` | 1.9 standing, 2.5 moving | 2.0 |
+| Shading | `views` | 1.9 standing, 2.5 moving | 1.6 |
+| Ink | the edge search in `views-filter`, the ink phase in `views` | about 0.9 (scaled, below) | 0.4 |
 | Glass | `glass-clear`, `glass`, `glass-shade` | 0 to 0.9 | 0.4 |
 | Reconstruction | `resolve` | 1.9 moving, 2.5 standing | 0.7 |
 | Sky and display | `sky`, `composite`, the bloom pyramid, `display` | 1.5 | 0.9 |
@@ -37,6 +38,21 @@ the debug world does not hold.
 
 The main view's rows are `world.gpu-timing` at the stage with the camera
 standing and the route's chapter means moving; the others are the route's.
+
+Ink's share is taken from shading, where the outline it replaced read its
+neighbours. Its row is the difference `SDF_VIEWS_OMIT_INK` makes
+(`passes/sdf-views-split.hlsli`) outside the gallery, the Moth and the
+gallery's walls inked, in a window of 1280 by 900: `views-filter` 0.56 ms
+against 0.36 ms and `views` 0.95 ms against 0.87 ms, so about 0.2 ms of search
+and 0.07 ms of phase over 1.15 million pixels, which is about 0.65 ms and
+0.25 ms at 2560 by 1440 if both follow the pixel count. It is over its share,
+and the search is where: it loads four tile entries a pixel where the filter
+alone loads two, each with a read of its draw's record for the object key,
+seeds two pairs an entry through group atomics, and scans up to sixteen mask
+lines a pixel in a seeded tile. Decoding each entry's normal once did not move
+the reading, so the arithmetic is not the cost; the next cut is the memory
+traffic (the key in the visibility record with the bake's part word, or seeds
+written by the surface pass, which already holds each hit).
 
 Per-pixel storage of the main view at 2560 by 1440 (`host.memory families 0`):
 
@@ -68,7 +84,8 @@ against the same frame:
   foliage, where many pixels gather for themselves, it is the largest pass
   after views.
 - **`views-filter`**: two fifths is the tiles' light masks
-  (`SDF_VIEWS_OMIT_LIGHTS`), the rest the occlusion and shadow filter.
+  (`SDF_VIEWS_OMIT_LIGHTS`), the rest the occlusion and shadow filter, and in
+  a view that inks the edge search beside them (`SDF_VIEWS_OMIT_INK`).
 - **`views`**: a fifth with the shading compiled out
   (`SDF_VIEWS_OMIT_SHADING`: the load, the hit door, the store). Of the rest,
   the light walk (`SDF_VIEWS_OMIT_LIGHTS`) and the reflected environment

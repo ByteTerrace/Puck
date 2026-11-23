@@ -13,8 +13,9 @@ void sdfProbeLightingSetup() {
         passGroup.meshIrradianceSpacings[level] = sdfProbeLighting[4 + 2 * level];
     }
 }
-bool probeClear(float3 positionWorld, float3 direction, float reach, uint lane) {
-    return !sdfProbeOccluded(positionWorld, direction, reach, lane);
+// Whether a ray reaches `reach` unblocked; `toward` a point light at that distance, past the solid that holds it.
+bool probeClear(float3 positionWorld, float3 direction, float reach, uint lane, bool toward) {
+    return !sdfProbeOccluded(positionWorld, direction, reach, lane, toward);
 }
 // One shading mechanism for lattice relight and camera-meter fallback; CPU Shade remains the reference. `unanswered` is
 // the reflectance (times the bounce gain) a hit no probe answers leaves without its bounce, zero where the volume answers
@@ -47,11 +48,11 @@ float3 sdfProbeShade(float3 positionWorld, float3 normal, uint material, bool re
                 float window = saturate(1 - ratio * ratio * ratio * ratio);
                 float near = max(length, SDF_LIGHT_MINIMUM_DISTANCE);
                 attenuation = window * window / (near * near) * spot * spot;
-                reach = length - 0.02;
+                reach = length - SDF_MESH_IRRADIANCE_LIGHT_BIAS;
             }
             float lambert = max(0, (dot(normal, direction) + surface.w) / (1 + surface.w));
             if (lambert <= 0 || attenuation <= 0) { continue; }
-            if (mode.z != 0 && reach > 0 && !probeClear(lifted, direction, reach, lane)) { continue; }
+            if (mode.z != 0 && reach > 0 && !probeClear(lifted, direction, reach, lane, mode.w != 0)) { continue; }
             float3 value = surface.xyz * color.xyz * (color.w * lambert * mode.x * attenuation * gains.x);
             if (mode.w == 0) { varying += value; } else { local += value; }
         }

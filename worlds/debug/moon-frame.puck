@@ -1,0 +1,28 @@
+// Where the moon stands against the debug world, shared by both worlds' documents: the moon's own (moon.puck) and
+// everything in the debug world that shows it or leads to it (sky.puck's view of it, the seam the ship crosses). A
+// library: it emits no document.
+//
+// The two worlds' axes are the same and their origins differ by `moonCentre`: a point at `p` in the moon's world is the
+// point `p + moonCentre` of the debug world. One relation places the moon's image in the valley's sky, the valley's
+// image in the moon's, and both sides of the seam, so what a traveller sees ahead is where the crossing puts it.
+
+// The moon's centre in the debug world's coordinates: about 5 km from the valley floor, 55 degrees up toward the
+// north-east, over the lowest of the caldera's walls.
+let moonCentre = [1840, 4100, 2200]
+// The same point seen from the moon: the debug world's origin in the moon's coordinates.
+let debugOrigin = [(0 - moonCentre[0]), (0 - moonCentre[1]), (0 - moonCentre[2])]
+
+// The moon's radius, the distance from its centre inside which it pulls, and that pull.
+let moonRadius = 600
+let moonReach = 1500
+let moonGravity = 6
+
+// The seam between the two authorities: a level plane this high over the valley floor, below the moon's reach, that
+// wide and deep. Under it a body is the debug world's, over it the moon's.
+let skySeamAltitude = 2400
+let skySeamSpan = 20000
+
+// The direction of the sun from the moon, low over the north pole so the craters there throw long shadows and two
+// thirds of the side the valley sees is lit, and how bright its stars are drawn.
+let moonSunDirection = [-0.75, 0.25, -0.6]
+let moonStarLuminance = 600

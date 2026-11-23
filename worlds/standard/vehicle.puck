@@ -1,7 +1,9 @@
 // A vehicle: a body that drives a loop of road stops at its own pace, drawn as a small cart. A module library: it hands
 // its importers templates, functions and lets and emits no document. A world declares its roads as navigation domains
-// of one shared network, expands `vehicleDesign` once over them, `vehicleLooks` once, and `vehicleRoutes` with every
-// vehicle's stops, then places the vehicles with `inhabit` rows naming the kit and a look.
+// of one shared network, expands `vehicleDesign` once over them, `vehicleLooks` once, `vehicleRoutes` with every
+// vehicle's stops and `vehicleCrossings` with the crossings they yield at, then places the vehicles with `inhabit` rows
+// naming the kit and a look. A seat that possesses a vehicle (`body.engage body:<n>` with Drive over it) drives it in
+// its producer's place; released, the vehicle drives on from where it stands.
 //
 // A vehicle runs the engine's own systems: its producer routes it over the road network toward its `route` register
 // (`navigated`, reading the stop's shared goal field), its body drives the standard `walk` motion program (motion.puck),
@@ -86,10 +88,15 @@ function vehicleRoute(name, road, speed = 8) = {
   version: "puck.body.program.v1"
 }
 
-// The `route` target register, the `vehicle` producer that routes over `domain` (any domain of the road network) and
-// the `vehicle` kit that drives at `speed` metres a second under `shaping`. `routes` adds curve route programs to its
+// A vehicle's navigation profile over a town's area types (domains.puck's `townAreaTypes`): it never drives onto the
+// pavement, and pays a road's and a crossing's length alike.
+let vehicleProfile = { name: "vehicle", exclude ["pavement"] }
+
+// The `route` target register, the `vehicle` producer that routes over `domain` (any domain of the road network) under
+// the navigation `profile` (a world lists `vehicleProfile` to name "vehicle"; none pays one everywhere) and the
+// `vehicle` kit that drives at `speed` metres a second under `shaping`. `routes` adds curve route programs to its
 // producers, each name mapped to `vehicleRouteSteering`.
-template vehicleDesign(domain, speed = 8, shaping = walkerMotion.shaping, routes = {}) {
+template vehicleDesign(domain, speed = 8, shaping = walkerMotion.shaping, routes = {}, profile = null) {
   targetRegisters [
     { name: "route", maximumRange: 1000, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
   ]
@@ -99,7 +106,7 @@ template vehicleDesign(domain, speed = 8, shaping = walkerMotion.shaping, routes
       kind: Producer
       name: "vehicle"
       operations [SenseNearestInCone, ProduceSteeringIntent, FaceSensorTarget]
-      target: navigated(domain: domain, register: "route")
+      target: navigated(domain: domain, register: "route", profile: profile)
       version: "puck.body.program.v1"
     }
   ]
@@ -175,16 +182,14 @@ template vehicleLooks(colors, trim = "#2F2A26", canopy = "#EBDDBF") {
   })
 }
 
-// Every vehicle's loop. `vehicles` lists each as `{ key, stops, first, group }`: `key` its body number, `stops` the four
-// `[x, z]` points of its loop in driving order, `first` the stop it drives to first, `group` the name of the loop it
-// drives (a row `vehicleGroup-<group>` keys its vehicles). `crossings` lists each as
-// `{ region, group, x0, x1, z0, z1, cx0, cx1, cz0, cz1 }`: the id of a placement whose region covers the crossing, the
-// group of vehicles that pass it, the approach box before it on their side of travel and the crossing's own box (world
-// x and z bounds). From the second tick each vehicle
-// is sent to its first stop; once it arrives, the next stop round the loop becomes its route, so
-// it laps forever. A vehicle has arrived once it stands within 3 m of its stop, read from its own position, so a
-// stop it has just left can never advance it twice in one tick. `vehicleStop` holds the stop each vehicle drives to.
-template vehicleRoutes(vehicles, crossings = []) {
+// Every navigated vehicle's loop. `vehicles` lists each as `{ key, stops, first }`: `key` its body number, `stops` the
+// four `[x, z]` points of its loop in driving order, `first` the stop it drives to first. From the second tick each
+// vehicle is sent to its first stop; once it arrives, the next stop round the loop becomes its route, so it laps
+// forever. A vehicle has arrived once it stands within 3 m of its stop, read from its own position, so a stop it has
+// just left can never advance it twice in one tick. `vehicleStop` holds the stop each vehicle drives to. A vehicle a
+// seat possesses keeps the stop it was driving to, however near another it is driven, and drives on to it once
+// released (its producer routes again from where it stands).
+template vehicleRoutes(vehicles) {
   state {
     world: concat(
       flatMap(range(0, 4), s => [
@@ -198,19 +203,7 @@ template vehicleRoutes(vehicles, crossings = []) {
           capacity: length(vehicles)
           cells: map(vehicles, v => { key: $"{v.key}", value: v.first })
         }
-        {
-          name: "vehicleHeld"
-          kind: "Int"
-          capacity: length(vehicles)
-          cells: map(vehicles, v => { key: $"{v.key}", value: 0 })
-        }
-      ],
-      map(distinct(map(vehicles, v => v.group)), g => {
-        name: $"vehicleGroup-{g}"
-        kind: "Int"
-        capacity: length(filter(vehicles, v => v.group == g))
-        cells: map(filter(vehicles, v => v.group == g), v => { key: $"{v.key}", value: 1 })
-      })
+      ]
     )
   }
 
@@ -239,86 +232,83 @@ template vehicleRoutes(vehicles, crossings = []) {
     designate(key: $each, kind: Point, register: "route", pointX: vehicleStop3X[$each], pointY: 0, pointZ: vehicleStop3Z[$each])
   }
   rule "vehicle-next-1" {
-    when vehicleStop[$each] == 0 and ((bodyPosition(each, x) - vehicleStop0X[$each]) * (bodyPosition(each, x) - vehicleStop0X[$each]) + (bodyPosition(each, z) - vehicleStop0Z[$each]) * (bodyPosition(each, z) - vehicleStop0Z[$each])) < 9
+    when vehicleStop[$each] == 0 and producer(each, possessed) == 0 and ((bodyPosition(each, x) - vehicleStop0X[$each]) * (bodyPosition(each, x) - vehicleStop0X[$each]) + (bodyPosition(each, z) - vehicleStop0Z[$each]) * (bodyPosition(each, z) - vehicleStop0Z[$each])) < 9
     mode: Level
     forEach: vehicleStop
     designate(key: $each, kind: Point, register: "route", pointX: vehicleStop1X[$each], pointY: 0, pointZ: vehicleStop1Z[$each])
     vehicleStop[$each] = 1
   }
   rule "vehicle-next-2" {
-    when vehicleStop[$each] == 1 and ((bodyPosition(each, x) - vehicleStop1X[$each]) * (bodyPosition(each, x) - vehicleStop1X[$each]) + (bodyPosition(each, z) - vehicleStop1Z[$each]) * (bodyPosition(each, z) - vehicleStop1Z[$each])) < 9
+    when vehicleStop[$each] == 1 and producer(each, possessed) == 0 and ((bodyPosition(each, x) - vehicleStop1X[$each]) * (bodyPosition(each, x) - vehicleStop1X[$each]) + (bodyPosition(each, z) - vehicleStop1Z[$each]) * (bodyPosition(each, z) - vehicleStop1Z[$each])) < 9
     mode: Level
     forEach: vehicleStop
     designate(key: $each, kind: Point, register: "route", pointX: vehicleStop2X[$each], pointY: 0, pointZ: vehicleStop2Z[$each])
     vehicleStop[$each] = 2
   }
   rule "vehicle-next-3" {
-    when vehicleStop[$each] == 2 and ((bodyPosition(each, x) - vehicleStop2X[$each]) * (bodyPosition(each, x) - vehicleStop2X[$each]) + (bodyPosition(each, z) - vehicleStop2Z[$each]) * (bodyPosition(each, z) - vehicleStop2Z[$each])) < 9
+    when vehicleStop[$each] == 2 and producer(each, possessed) == 0 and ((bodyPosition(each, x) - vehicleStop2X[$each]) * (bodyPosition(each, x) - vehicleStop2X[$each]) + (bodyPosition(each, z) - vehicleStop2Z[$each]) * (bodyPosition(each, z) - vehicleStop2Z[$each])) < 9
     mode: Level
     forEach: vehicleStop
     designate(key: $each, kind: Point, register: "route", pointX: vehicleStop3X[$each], pointY: 0, pointZ: vehicleStop3Z[$each])
     vehicleStop[$each] = 3
   }
   rule "vehicle-next-0" {
-    when vehicleStop[$each] == 3 and ((bodyPosition(each, x) - vehicleStop3X[$each]) * (bodyPosition(each, x) - vehicleStop3X[$each]) + (bodyPosition(each, z) - vehicleStop3Z[$each]) * (bodyPosition(each, z) - vehicleStop3Z[$each])) < 9
+    when vehicleStop[$each] == 3 and producer(each, possessed) == 0 and ((bodyPosition(each, x) - vehicleStop3X[$each]) * (bodyPosition(each, x) - vehicleStop3X[$each]) + (bodyPosition(each, z) - vehicleStop3Z[$each]) * (bodyPosition(each, z) - vehicleStop3Z[$each])) < 9
     mode: Level
     forEach: vehicleStop
     designate(key: $each, kind: Point, register: "route", pointX: vehicleStop0X[$each], pointY: 0, pointZ: vehicleStop0Z[$each])
     vehicleStop[$each] = 0
   }
+}
 
-  // Crossings: a vehicle in a crossing's approach box while any body stands in the crossing's region stops (its route
-  // set to where it stands, `vehicleHeld` 1); once the region is empty it is released (2) and resumes the stop it was
-  // driving to.
-  for crossing in crossings {
+// The crossings vehicles yield at, for a vehicle on any route (a navigated loop of stops or a curve). `vehicles` lists
+// each as `{ key, group }`: `key` its body number, `group` the name of the loop it drives (a row `vehicleGroup-<group>`
+// keys its vehicles). `crossings` lists each as `{ region, group, x0, x1, z0, z1, cx0, cx1, cz0, cz1 }`: the id of a
+// placement whose region covers the crossing, the group of vehicles that pass it, the approach box before it on their
+// side of travel and the crossing's own box (world x and z bounds). A vehicle in a crossing's approach box while any
+// body stands in the crossing's region is held: its producer stands down (`holdProducer`), it coasts to rest, and
+// `vehicleHeld` names the crossing (its number plus one). Once the region is empty, or the vehicle has already rolled
+// into the crossing, it is released (`releaseProducer`) and its producer starts again from where it stands: a curve
+// follower at its curve's nearest station, a navigated vehicle routing again to the stop it was driving to.
+template vehicleCrossings(vehicles, crossings) {
+  state {
+    world: concat(
+      [
+        {
+          name: "vehicleHeld"
+          kind: "Int"
+          capacity: length(vehicles)
+          cells: map(vehicles, v => { key: $"{v.key}", value: 0 })
+        }
+      ],
+      map(distinct(map(vehicles, v => v.group)), g => {
+        name: $"vehicleGroup-{g}"
+        kind: "Int"
+        capacity: length(filter(vehicles, v => v.group == g))
+        cells: map(filter(vehicles, v => v.group == g), v => { key: $"{v.key}", value: 1 })
+      })
+    )
+  }
+
+  for (crossing, i) in crossings {
     rule $"vehicle-crossing-{crossing.region}" {
-      when (bodyPosition(each, x) > crossing.x0 and bodyPosition(each, x) < crossing.x1 and
+      when (vehicleHeld[$each] == 0 and region(crossing.region) >= 1 and
+        bodyPosition(each, x) > crossing.x0 and bodyPosition(each, x) < crossing.x1 and
         bodyPosition(each, z) > crossing.z0 and bodyPosition(each, z) < crossing.z1)
       mode: Level
       forEach: $"vehicleGroup-{crossing.group}"
-      if vehicleHeld[$each] == 0 and region(crossing.region) >= 1 {
-        designate(key: $each, kind: Point, register: "route", pointX: bodyPosition(each, x), pointY: 0, pointZ: bodyPosition(each, z))
-        vehicleHeld[$each] = 1
-      } else if vehicleHeld[$each] == 1 and region(crossing.region) == 0 {
-        vehicleHeld[$each] = 2
-      }
+      holdProducer(key: $each)
+      vehicleHeld[$each] = i + 1
     }
-    rule $"vehicle-crossing-inside-{crossing.region}" {
-      when (vehicleHeld[$each] == 1 and
-        bodyPosition(each, x) > crossing.cx0 and bodyPosition(each, x) < crossing.cx1 and
-        bodyPosition(each, z) > crossing.cz0 and bodyPosition(each, z) < crossing.cz1)
+    rule $"vehicle-crossing-clear-{crossing.region}" {
+      when (vehicleHeld[$each] == i + 1 and (region(crossing.region) == 0 or
+        (bodyPosition(each, x) > crossing.cx0 and bodyPosition(each, x) < crossing.cx1 and
+        bodyPosition(each, z) > crossing.cz0 and bodyPosition(each, z) < crossing.cz1)))
       mode: Level
       forEach: $"vehicleGroup-{crossing.group}"
-      vehicleHeld[$each] = 2
+      releaseProducer(key: $each)
+      vehicleHeld[$each] = 0
     }
-  }
-  rule "vehicle-resume-0" {
-    when vehicleHeld[$each] == 2 and vehicleStop[$each] == 0
-    mode: Level
-    forEach: vehicleStop
-    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop0X[$each], pointY: 0, pointZ: vehicleStop0Z[$each])
-    vehicleHeld[$each] = 0
-  }
-  rule "vehicle-resume-1" {
-    when vehicleHeld[$each] == 2 and vehicleStop[$each] == 1
-    mode: Level
-    forEach: vehicleStop
-    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop1X[$each], pointY: 0, pointZ: vehicleStop1Z[$each])
-    vehicleHeld[$each] = 0
-  }
-  rule "vehicle-resume-2" {
-    when vehicleHeld[$each] == 2 and vehicleStop[$each] == 2
-    mode: Level
-    forEach: vehicleStop
-    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop2X[$each], pointY: 0, pointZ: vehicleStop2Z[$each])
-    vehicleHeld[$each] = 0
-  }
-  rule "vehicle-resume-3" {
-    when vehicleHeld[$each] == 2 and vehicleStop[$each] == 3
-    mode: Level
-    forEach: vehicleStop
-    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop3X[$each], pointY: 0, pointZ: vehicleStop3Z[$each])
-    vehicleHeld[$each] = 0
   }
 }
 

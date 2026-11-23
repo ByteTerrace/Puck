@@ -44,6 +44,7 @@ public sealed class WorldCollisionEventPolicyLawTests(ITestOutputHelper output) 
 
         feed.Collect(
             definition: document,
+            listeners: WorldEventListeners.Everyone,
             population: fixture.Server.Population
         );
         var begins = feed.Edges.Where(predicate: edge => (edge.Family == WorldEventFamily.CollisionBegin)).ToArray();
@@ -74,6 +75,7 @@ public sealed class WorldCollisionEventPolicyLawTests(ITestOutputHelper output) 
 
         feed.Collect(
             definition: disabled,
+            listeners: WorldEventListeners.Everyone,
             population: fixture.Server.Population
         );
         var ends = feed.Edges.Where(predicate: edge => (edge.Family == WorldEventFamily.CollisionEnd)).ToArray();
@@ -123,7 +125,7 @@ public sealed class WorldCollisionEventPolicyLawTests(ITestOutputHelper output) 
         }
         var feed = new WorldEventFeed(capacity: population.Capacity);
 
-        feed.Collect(definition: definition, population: population);
+        feed.Collect(definition: definition, listeners: WorldEventListeners.Everyone, population: population);
         var begins = feed.Edges.Count(predicate: edge => (edge.Family == WorldEventFamily.CollisionBegin));
 
         fixture.Step();

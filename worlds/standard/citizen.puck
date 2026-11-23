@@ -14,9 +14,16 @@ import "kits"
 // A citizen's stroll: the standard walker's motion (kits.puck) at a walking pace of 1.4 m/s, never running.
 let citizenMotion = walkerMotion with { speed { value: 1.4 } }
 
-// The producer, the kit and the target register. `domain` names the surface domain the citizens route over;
-// `motionSeconds` and `steeringSeconds` set how often each citizen's motion and steering update, batching a crowd.
-template citizenDesign(domain, motionSeconds = 0.1, steeringSeconds = 0.2) {
+// A citizen's navigation profile over a town's area types (domains.puck's `townAreaTypes`): a road costs ten times
+// its length to walk and a crossing no more than the pavement, so a citizen keeps to the pavement, walks along a road's
+// edge rather than down it, and crosses at a crossing unless the detour to one is longer than ten road widths.
+let citizenProfile = { name: "citizen", costs { road: 10, crossing: 1, pavement: 1 } }
+
+// The producer, the kit and the target register. `domain` names the surface domain the citizens route over and
+// `profile` the navigation profile they price its areas by (a world lists `citizenProfile` to name "citizen"), or
+// none to pay one everywhere; `motionSeconds` and `steeringSeconds` set how often each citizen's motion and steering
+// update, batching a crowd.
+template citizenDesign(domain, motionSeconds = 0.1, steeringSeconds = 0.2, profile = null) {
   targetRegisters [
     { name: "errand", maximumRange: 1000, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
   ]
@@ -26,7 +33,7 @@ template citizenDesign(domain, motionSeconds = 0.1, steeringSeconds = 0.2) {
       kind: Producer
       name: "citizenErrand"
       operations [SenseNearestInCone, ProduceSteeringIntent, FaceSensorTarget]
-      target: navigated(domain: domain, register: "errand")
+      target: navigated(domain: domain, register: "errand", profile: profile)
       version: "puck.body.program.v1"
     }
   ]
@@ -124,7 +131,9 @@ template citizenLooks(coats, hats, skin = "#E2B48C", trousers = "#4A4038") {
 // The clock is read once per group, never once per citizen: a rule per phase writes each group's current anchor
 // (1 home, 2 work, 3 market) into `citizenGroupAnchor`, and one rule sends each citizen whose group's anchor differs
 // from the one it last went to (`citizenAt`) to its own point of that anchor, counting the visit in `citizenVisits`. A
-// citizen's rule compares two cells; the day's arithmetic runs for twelve groups.
+// citizen's rule compares two cells; the day's arithmetic runs for twelve groups. A citizen a seat possesses
+// (`body.engage body:<n>` with Drive over it) is skipped: the seat walks it, its producer standing down, and once
+// released it routes from where it stands to the anchor its group is at, which may have moved on meanwhile.
 template citizenSchedule(people, phases, clock, groups = 12, groupDayFraction = 0.00347) {
   state {
     world [
@@ -189,7 +198,7 @@ template citizenSchedule(people, phases, clock, groups = 12, groupDayFraction = 
   }
 
   rule "citizen-go" {
-    when citizenGroupAnchor[citizenGroup[$each]] != 0 and citizenAt[$each] != citizenGroupAnchor[citizenGroup[$each]]
+    when citizenGroupAnchor[citizenGroup[$each]] != 0 and citizenAt[$each] != citizenGroupAnchor[citizenGroup[$each]] and producer(each, possessed) == 0
     mode: Level
     forEach: citizenGroup
     designate(

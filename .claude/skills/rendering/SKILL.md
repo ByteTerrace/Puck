@@ -616,7 +616,7 @@ add the row you found.
 | Decide when a frame rebuilds and how it presents | `WorldSceneEmitter` (the composed revision), `WorldFramePresenter` (the `ISdfFrameSource` that delivers it) | `src/Puck.World.Client` |
 | Hand a residency a frame every frame without allocating, or keep one past its source's next capture | `SdfFrame.Writer`, the one door that changes a frame after construction: `Write` a frame of the producer's own from its `SdfFrameContent` (per frame) and `SdfFrameSettings` (per setting), or `CopyFrom` another frame. A source's frame is borrowed until its next capture; `SdfWorldResidency` renders its own copy, written into whichever of its two capture writers the tables do not hold. Never `with` a frame on a per-frame path | `src/Puck.SdfVm` |
 | Add a camera or another view of the world | the view types in `src/Puck.SdfVm/Views`, `WorldViewInstances` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
-| Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork`. A client's per-slot buffers come from the recording (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`), never the buffer factory: that door reserves them (`SdfGpuWorkHold`). A client cuts each job to the allowance its take is handed (`SdfGpuWorkAllowance`: what the charged jobs in flight leave of `SdfGpuWorkBudget.FrameAllowanceSeconds`, the share the frame leaves free, which `WorldBackgroundAllowance` feeds from every node's timestamps) at its kind's `SdfGpuWorkRate`, and while work is queued takes no job priced past it, deciding before it takes anything; never a fixed share. An arrival's bake work (a group drawing nothing yet, or the first detail over its floor) owes the frame and takes the GPU the frame leaves idle between frames, from a quarter of the period up to one period, under its own allowance (`ISdfGpuWorkClient.TryTakeOwed`, `SdfGpuWorkBudget.OwedAllowance`), outside the credit, while ordinary background work keeps the frame allowance; so do the landing of a mesh a staged draw waits for and a seen irradiance volume's first light (`SdfMeshIrradiance.OwesFirstLight`), each a client whose every job is then owed (`ISdfGpuWorkClient.OwesAll`). The residencies' services divide the budget by their display share, never by pump order: each holds a turn (`SdfGpuWorkBudget.Join`, weighed by `SdfGpuWork.Weigh` from `SdfFrame.DisplayShare`) that every budgeted step, owed or not, asks first (`SdfGpuWorkBudget.Takes`, `work-turns` and `turn-holds` on `world.residency`). The budget counts frames background work may have cost (`FramesMissedBehind`, `frames-behind` on `world.residency`) | `src/Puck.SdfVm`, `src/Puck.World.Presentation/WorldBackgroundAllowance.cs`; [the bake's dispatch](#which-dispatch-owns-the-code) |
+| Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork`. A client's per-slot buffers come from the recording (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`), never the buffer factory: that door reserves them (`SdfGpuWorkHold`). A client cuts each job to the allowance its take is handed (`SdfGpuWorkAllowance`: what the charged jobs in flight leave of `SdfGpuWorkBudget.FrameAllowanceSeconds`, the share the frame leaves free, which `WorldBackgroundAllowance` feeds from every node's timestamps) at its kind's `SdfGpuWorkRate`, and while work is queued takes no job priced past it, deciding before it takes anything; never a fixed share. An arrival's bake work (a group drawing nothing yet, or the first detail over its floor) owes the frame and takes the GPU the frame leaves idle between frames, from a quarter of the period up to one period, under its own allowance (`ISdfGpuWorkClient.TryTakeOwed`, `SdfGpuWorkBudget.OwedAllowance`), outside the credit, while ordinary background work keeps the frame allowance; so do the landing of a mesh a staged draw waits for and a seen irradiance volume's first light (`SdfMeshIrradiance.OwesFirstLight`) and the probes a view sees that a lighting jump left stale (`OwesSeenRelight`, ordered first in the worker's list), each a client whose every job is then owed (`ISdfGpuWorkClient.OwesAll`). The residencies' services divide the budget by their display share, never by pump order: each holds a turn (`SdfGpuWorkBudget.Join`, weighed by `SdfGpuWork.Weigh` from `SdfFrame.DisplayShare`) that every budgeted step, owed or not, asks first (`SdfGpuWorkBudget.Takes`, `work-turns` and `turn-holds` on `world.residency`). The budget counts frames background work may have cost (`FramesMissedBehind`, `frames-behind` on `world.residency`) | `src/Puck.SdfVm`, `src/Puck.World.Presentation/WorldBackgroundAllowance.cs`; [the bake's dispatch](#which-dispatch-owns-the-code) |
 | Have the frame thread take work up while it waits between frames, or wake it for a GPU completion | `HostWaits.Serve` (a `WaitService`, served by `HostWaits.Pace`) and `IGpuSubmissionFence.SignalOnCompletion`; never a poll loop or a thread of your own that records. A wait inside the frame's open batch (a residency's staging, `SdfGpuWork.Drive`) hands its submissions off first (`IGpuSubmissionFence.HandOff`), or the completion it sleeps on never comes before the flush | `src/Puck.Abstractions/Waiting`, `src/Puck.Abstractions/Gpu/Device` |
 | Compute irradiance, and check it on the CPU | `SdfMeshIrradiance`, whose CPU reference shares one probe lookup with the relight and the views shader | `src/Puck.SdfVm`; [mesh GI](references/mesh-gi.md) |
 | Meter a view's picture for its exposure (histogram, percentiles, dead band, cut snap) | the composite's histogram (`passes/sdf-composite.comp.hlsl`), read back by `SdfSkyRecorder`, reduced by `SdfExposure.Meter`, followed by `SdfViewExposures` | `src/Puck.SdfVm`, `src/Puck.SignedDistance`; [the decision](../../../docs/decisions/rendering.md#lights-screens-and-the-camera-are-photometric) |
@@ -626,6 +626,7 @@ add the row you found.
 | Share a constant or a layout between C# and HLSL | a generated declaration (`SdfIsaHlsl`, `ShaderDeclarations`) first; a hand pair only where the table lists one | [sync pairs](references/sync-pairs.md) |
 | Add a pipeline variant to a pass | `GpuPassPipelineKey`: a field that changes the pipeline enters the key, or leases share the wrong pipeline | `src/Puck.Shaders/Pipeline` |
 | Let an author program how a surface shades | `SdfShadeProgram` (the op table, admission, cost) | `src/Puck.SignedDistance/Shading`; [authored shading](references/authored-shading.md) |
+| Find where two surfaces, objects, folds or materials meet in a view, or draw a line there | The view's edge search (`sdfViewsGatherFilter`, `sdfViewsEdgesWord`), read by a program as `edge.*` and drawn by its ink phase through `sdfShadeInkPhase`; an object is `SdfMeshDraw.ObjectKey`; the looks are `worlds/standard/ink.puck` | `passes/sdf-views-filter.hlsli`, `src/Puck.SdfVm.Model/SdfShadeHlsl.Invocation.cs`; [the handbook](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#ink) |
 | Read how a device can back a large buffer (sparse binding, reserved resources, memory priority, pageable device-local memory, storage-buffer array indexing) | `GpuDeviceCapabilities.Backing` (`GpuBackingSupport`) and its native figures, read at device creation and printed on `world.counters gpu`'s `capabilities` line | `src/Puck.Abstractions/Gpu/Device`; [streaming plan](../../../docs/plans/streaming-and-memory.md#the-prototype-as-built) |
 | Make a kernel variant depend on something only some devices have (ray queries), or withhold it to run the fallback | `GpuOptionalCapabilities`, read into `GpuDeviceCapabilities.Optional` at device creation (Direct3D 12's options 5 tier, Vulkan's optional extensions in `VulkanLogicalDeviceFactory`); a variant names it in `SdfKernelSet.RequiresOf`, `SdfWorldPipelines.Acquire` leases it only where `SdfWorldPipelines.Runs`, its caller asks `SdfWorldPipelines.Leases`, `VulkanShaderCapabilities.Optional` admits its SPIR-V capability on that device alone, and the World's `--withhold-gpu <capability>` leaves it off | `src/Puck.Abstractions/Gpu/Device`, `src/Puck.SdfVm` |
 | Build, compact or bind an acceleration structure the ray hardware walks | `GpuDeviceServices.AccelerationStructures` (`IGpuAccelerationStructures`: size, create, scratch, `GpuAccelerationStructureInstance` records, the descriptor of a `GpuBindingKind.AccelerationStructure` binding) and the recorder's `BuildAccelerationStructure`, `WriteCompactedSize` and `CompactAccelerationStructure`, which carry their own barriers; a buffer a build reads declares `GpuBufferUsage.AccelerationStructureInput`. Both backends refuse every call on a device without `GpuOptionalCapabilities.RayQuery` | `src/Puck.Abstractions/Gpu/Rays`, `DirectXGpuAccelerationStructures`, `VulkanGpuAccelerationStructures` |
@@ -907,24 +908,41 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
 - **Cel shading is a style per material, not a whole-image filter, and the
   banding is a program.** The standard's `cel` shade program
   (`worlds/standard/shading.puck`) is the one implementation of the band; no
-  kernel bands. A palette row's `toon` (`SdfMaterial.Toon`, material rows 22 and
-  25) is the style row the engine keeps beside it: the styled mark and the ink.
+  kernel bands. A palette row's `toon` (`SdfMaterial.Toon`, material row 22) is
+  the styled mark the engine keeps beside it, and nothing else.
   Every other material inherits the world's default (`render.toon`) through the
-  pass block's `toonOutline` and `toonInk`, both written by `SdfToon.WriteRows`
-  and read by `sdfToonStyle` and `sdfToonAuthored` (`shade/sdf-toon.hlsli`):
-  keep the row layout and the pass block's alike. `world.toon off` writes a
+  pass block's `toonMode` (`SdfToon.Mode`), read by `sdfToonStyled` and
+  `sdfToonAuthored` (`shade/sdf-toon.hlsli`). `world.toon off` writes a
   negative default mode, and `sdfShadeBinding` then marks a styled material's
-  binding unstyled: `sdfShadeHas` reads its light and compose phases as omitted
-  while its surface phase (a terrain under cel) still runs.
+  binding unstyled: `sdfShadeHas` reads its light, compose and ink phases as
+  omitted while its surface phase (a terrain under cel) still runs.
   A program that omits the surface phase keeps the material's layers
   (`sdfShadeHas(binding, 0u)` in both stages; `SdfShadeProgram.Authors` on the
   CPU, which `SdfAppearance.ResolveShadeReads` reads). The program's result is
   scene light for the display pass's one `render.tone`; never expose or
-  compress inside a material. `sdf-toon-outline.hlsli` reads depth/normal
-  edges in views, before temporal resolve, at the pixel's own style's width.
+  compress inside a material.
   Keep screen pictures, portal pictures, sky and self-emission out of both the
   banding and ink. The tuning belongs to the lighting cadence signature, never
   the bake closure.
+- **Ink is a program's fourth phase over edges the view searches once.** The
+  one edge search is in `passes/sdf-views-filter.hlsli` (`sdfViewsGatherFilter`
+  seeds, `sdfViewsEdgesWord` measures): the filter pass of a binned view writes
+  each pixel's edges as the filter record's third word, and an unsplit views
+  kernel searches in its own group. Seeds lie between neighbouring pixels that
+  jump (occlusion by a tangent-plane test, crease, object key, material) and
+  live as bit masks a tile row and column in group memory; a pixel's distance
+  is a bit scan down its column and along each row it reaches, never across
+  an occlusion or an object boundary. Every bound in the search is the reach
+  (`SdfShadeOps.EdgeReach`, `SDF_EDGE_REACH`) and none is the tile's: a bound
+  that reads the tile's edge draws a seam every eight pixels. The comparison
+  reads the record's depth, normal and material and the draw record's object
+  key (`SdfMeshRecord.ObjectKeyShift`, set by `SdfMeshDresser`), never a draw
+  index, so a chunk seam has nothing to differ by. `sdfShadeInkPhase`
+  (`SdfShadeHlsl`) is the one door the phase runs through, with the gate and
+  the composition inside it. A view searches only while `inkEdges` is set
+  (`SdfShadeReads.Edges` over the frame's programs), and the views rate widens
+  its tile border to the reach in such a view (`sdf-views-rate.hlsli`). `line`
+  is a keyword in HLSL: the channel's kernel variables are `linework`.
 - **The frame shades luminance in nits, and each view's composite applies its
   exposure** (`SdfPhotometry`, `SdfViewExposures`, the pass block's `exposure`).
   A light record carries illuminance or intensity over π; emission, sky layers

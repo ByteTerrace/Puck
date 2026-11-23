@@ -302,6 +302,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_GEOMETRY_WORD", value: SdfMeshProbeTrace.GeometryWord);
         declarations.Count(name: "SDF_PROBE_IDENTITY_WORD", value: SdfMeshProbeTrace.IdentityWord);
         declarations.Count(name: "SDF_PROBE_INSTANCE_INDEX_WORD", value: SdfMeshProbeTrace.InstanceIndexWord);
+        declarations.Count(name: "SDF_PROBE_SOLID_WORD", value: SdfMeshProbeTrace.SolidWord);
         declarations.Count(name: "SDF_PROBE_INSTANCE_WORDS", value: SdfMeshProbeTrace.InstanceWords);
         declarations.Count(name: "SDF_PROBE_INSTANCE_BASE_WORD", value: SdfMeshProbeTrace.InstanceBaseWord);
         declarations.Count(name: "SDF_PROBE_STACK_DEPTH", value: SdfMeshProbeTrace.StackDepth);
@@ -384,6 +385,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_SHADE_TILE_HEADER_WORDS", value: SdfWorldPackage.ShadeTileHeaderWords);
         declarations.Count(name: "SDF_SHADE_TILE_LIGHT_WORDS", value: SdfWorldPackage.ShadeTileLightWords);
         declarations.Count(name: "SDF_VIEWS_FILTER_WORDS", value: SdfWorldPackage.ViewsFilterWords);
+        declarations.Count(name: "SDF_EDGE_REACH", value: SdfShadeOps.EdgeReach);
         declarations.Count(name: "SDF_VIEWS_PROBE_RATE", value: SdfWorldPackage.ViewsProbeRate);
         declarations.Count(name: "SDF_VIEWS_PROBE_WORDS", value: SdfWorldPackage.ViewsProbeWords);
         declarations.Count(name: "SDF_VIEWS_PROBE_RECORD_WORDS", value: SdfWorldPackage.ViewsProbeRecordWords);
@@ -426,6 +428,8 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_MESH_MATERIALS_FLAG", value: SdfMeshRecord.MaterialsFlag);
         declarations.Bits(name: "SDF_MESH_SKIN_FLAG", value: SdfMeshRecord.SkinFlag);
         declarations.Bits(name: "SDF_MESH_WORLD_MATERIAL_FLAG", value: SdfMeshRecord.WorldMaterialFlag);
+        declarations.Bits(name: "SDF_MESH_CLIP_FLAG", value: SdfMeshRecord.ClipFlag);
+        declarations.Count(name: "SDF_MESH_OBJECT_KEY_SHIFT", value: SdfMeshRecord.ObjectKeyShift);
         declarations.Count(name: "SDF_MESH_DISPLACEMENT_WORD", value: SdfMeshRecord.DisplacementWord);
         declarations.Count(name: "SDF_MESH_BAND_WORD", value: SdfMeshRecord.BandWord);
         declarations.Section(title: "The frame's sampled table (SdfFrameSampled): a handle with no entry, a height field entry's header, and the reference height its baked reference stands at.");

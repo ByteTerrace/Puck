@@ -26,11 +26,17 @@ public sealed partial class SdfShadeProgram {
     public const ulong MaxWork = (1UL << 32);
     /// <summary>The first header vector holding the program's identity: <see cref="IdentityVectors"/> vectors of its
     /// SHA-256, which a specialized kernel compares to select the program's straight-line arm.</summary>
-    public const int IdentityVector = 4;
+    public const int IdentityVector = (LayoutVector + 1);
     /// <summary>The header vectors the identity occupies, eight words.</summary>
     public const int IdentityVectors = 2;
-    /// <summary>The header's vectors: the three phase ranges, the constant and parameter ranges, then the identity.</summary>
+    /// <summary>The header's vectors: a range for each phase, the constant and parameter ranges, then the identity.</summary>
     public const int HeaderVectors = (IdentityVector + IdentityVectors);
+    /// <summary>The phases of a program (<see cref="SdfShadePhase"/>), each a header vector: the vector its instructions
+    /// start at, their count, their work, and a word the stage reads before the phase runs (the surface phase's the
+    /// program's reads, every other phase's its assigned outputs).</summary>
+    public const int PhaseCount = 4;
+    /// <summary>The header vector holding the constant range and the parameter layout's range.</summary>
+    public const int LayoutVector = PhaseCount;
 
     // Register selectors use a mask. Work admission prices the actual phases at the maximum light walk.
     private const int RegisterBoundProof = 1 / ((MaxRegisters > 0 && (MaxRegisters & (MaxRegisters - 1)) == 0) ? 1 : 0);
@@ -109,8 +115,11 @@ public sealed partial class SdfShadeProgram {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(lights, MaxLights);
         var costs = (straight ? Straight.Costs : Costs);
         // The stage computes the default terms for the outputs a phase leaves unassigned too.
-        return checked(costs[0] + lights * ((ulong)DefaultLightWork + costs[1]) + DefaultComposeWork + costs[2] + EngineWork);
+        return PixelWork(costs: costs, lights: lights);
     }
+    // The ink phase is priced as if every pixel ran it; the gate on its line inputs only lowers what executes.
+    private static ulong PixelWork(IReadOnlyList<uint> costs, uint lights) =>
+        checked(costs[0] + lights * ((ulong)DefaultLightWork + costs[1]) + DefaultComposeWork + costs[2] + costs[3] + EngineWork);
     /// <summary>Checks a relative vector range without addition overflow. The allocation's outer boundary is separate.</summary>
     public static bool ContainsRange(uint sliceLength, uint offset, uint length) => ((offset <= sliceLength) && (length <= (sliceLength - offset)));
     /// <summary>Reads a word only within this program's slice; a refused read yields zero.</summary>

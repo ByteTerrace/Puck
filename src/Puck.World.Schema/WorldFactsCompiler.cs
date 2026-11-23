@@ -451,6 +451,21 @@ public static partial class WorldFactsCompiler {
             source: CompiledValueSource.FromExpression(expression: program, kind: CellKind.Int)
         );
     }
+    internal static IRuleEffect ResolveProducerHold(StateChannelRef key, bool hold, string ruleName, WorldFactsCompileContext context) {
+        var verb = (hold ? "holdProducer" : "releaseProducer");
+        var address = context.ResolveBodyAddress(
+            reference: key,
+            ruleName: ruleName,
+            verb: verb
+        );
+
+        return new WorldProducerHoldEffect(
+            describe: $"{verb} body:{key}",
+            hold: hold,
+            key: address.Key,
+            keyFrom: address.KeyFrom
+        );
+    }
     internal static IRuleEffect ResolveBodyState(WorldEffect.SetBodyState effect, string ruleName, WorldFactsCompileContext context) {
         const string Verb = "setBodyState";
 

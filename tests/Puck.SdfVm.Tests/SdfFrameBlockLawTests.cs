@@ -12,10 +12,11 @@ namespace Puck.SdfVm.Tests;
 /// out member for member, so it binds the block its node writes.</summary>
 public sealed class SdfFrameBlockLawTests {
     [Theory]
-    [InlineData("clock", true, false)]
-    [InlineData("lanes.world2", false, true)]
-    [InlineData("material.roughness", false, false)]
-    public void DefaultProgramReadsDriveClockAndLanesAndCarryIdentity(string input, bool clock, bool lanes) {
+    [InlineData("clock", true, false, false)]
+    [InlineData("lanes.world2", false, true, false)]
+    [InlineData("edge.crease", false, false, true)]
+    [InlineData("material.roughness", false, false, false)]
+    public void DefaultProgramReadsDriveClockLanesAndTheEdgeSearchAndCarryIdentity(string input, bool clock, bool lanes, bool edges) {
         var shade = SdfShadeProgram.Compile(new("default", [], [new(SdfShadePhase.Surface, "roughness", new("input", Name: input))]));
         var frame = Frame() with { ShadePrograms = true, ShadeDefault = shade, Clock = new(600, 0), WorldLanes = new(1, 2, 3, 4) };
         var block = new byte[SdfFrameBlock.SizeBytes];
@@ -23,6 +24,7 @@ public sealed class SdfFrameBlockLawTests {
         int Offset(string member) => (int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member);
         Assert.Equal(clock, BitConverter.ToSingle(block, Offset(SdfWorldPackage.FlowClock)) != 0);
         Assert.Equal(lanes ? 3f : 0f, BitConverter.ToSingle(block, Offset(SdfWorldPackage.WorldLanes) + 8));
+        Assert.Equal(edges ? 1u : 0u, BitConverter.ToUInt32(block, Offset(SdfWorldPackage.InkEdges)));
         Assert.Equal(123u, BitConverter.ToUInt32(block, Offset(SdfWorldPackage.ShadeDefault)));
         Assert.Equal(shade.IdentityBytes.ToArray(), block.AsSpan(Offset(SdfWorldPackage.ShadeIdentity), 32).ToArray());
     }
@@ -61,8 +63,8 @@ public sealed class SdfFrameBlockLawTests {
     // base, since each instance renders its one view at row zero, and the mesh path's values, which the pass recorder
     // writes per pass after it.
     private static readonly string[] ZeroValues = [ShaderFrameInterface.Extent, SdfWorldPackage.ViewBase, SdfWorldPackage.PreviousView,
-        // This fixture reads neither clock nor lanes; the targeted read-flag law covers their nonzero cases.
-        SdfWorldPackage.FlowClock, SdfWorldPackage.WorldLanes,
+        // This fixture reads neither clock, lanes nor edges; the targeted read-flag law covers their nonzero cases.
+        SdfWorldPackage.FlowClock, SdfWorldPackage.WorldLanes, SdfWorldPackage.InkEdges,
         SdfWorldPackage.ShadePrograms, SdfWorldPackage.ShadeDefault, SdfWorldPackage.ShadeIdentity, SdfWorldPackage.ShadeDemand,
         // The bins pass alone reads the widths, and its recorder writes them from the frame's plan just before it dispatches
         // (SdfFrameBlock.WriteShadeBins).
@@ -127,6 +129,7 @@ public sealed class SdfFrameBlockLawTests {
                     },
                     Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
                 ) {
+                    DemandHeight = 400f,
                     Grid = Grid,
                     Quality = Restricted,
                     ScreenFidelity = 0.75f,
@@ -140,9 +143,7 @@ public sealed class SdfFrameBlockLawTests {
             FarDistance = 30f,
             IndirectTier = SdfIndirectTier.High,
             Lights = Lights(),
-            Toon = new SdfToon {
-                Enabled = true, OutlineWidth = 1.5f, OutlineDistance = 12f, OutlineNormal = .65f, OutlineTint = new(.08f, .1f, .16f),
-            },
+            Toon = new SdfToon { Enabled = true },
         };
     }
     // Lights whose count, shadow light and curvature gains are none of them zero, and a full table of directionals, which

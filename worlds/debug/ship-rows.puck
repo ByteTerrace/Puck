@@ -1,0 +1,13 @@
+// The standard's ship as rows of a world: its `fly` program, its `ship` kit and the skiff's prototype and look
+// (../standard/ship.puck), at the debug world's tuning. The debug world imports it for the ship on its launch field
+// (launch.puck) and the moon for the ship that arrives (craft-form.puck), so the two fly one ship.
+
+import "../standard/ship"
+
+shipFlight()
+shipLook()
+
+// The skiff, which the importing world places and selects by name.
+exports {
+  reads [ship]
+}

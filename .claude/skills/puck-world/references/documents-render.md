@@ -434,7 +434,9 @@ per-tick dynamic contact. Large flocks use overlap contact.
 `collision.events` bounds body-pair proximity events separately:
 `candidateBudget` per body, `maxPairsPerBody` retained degree, and `beginBudget`
 per tick. Existing pairs win continuity priority. `maxPairsPerBody: 0` disables
-pair events while ordinary world contact remains live. Preserve these policies,
+pair events while ordinary world contact remains live. Only pairs with a body an
+event-budgeted observe grant names (or every body, under a wildcard one) are
+sensed, so an unobserved crowd costs nothing (`WorldEventListeners`). Preserve these policies,
 cadence phase, cached steering, and overlap latches through checkpoint/hash.
 
 `collision.bodyContacts` separately bounds physical depenetration between

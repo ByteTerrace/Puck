@@ -20,6 +20,8 @@
 // SDF_VIEWS_OMIT_MATERIALS     the material layers: paints, inset, weathering and flow.
 // SDF_VIEWS_OMIT_REFLECTION    the environment the specular lobe reflects.
 // SDF_VIEWS_OMIT_FILTER        the 4x4 occlusion and shadow filter: views shades with the surface pass's raw estimates.
+// SDF_VIEWS_OMIT_INK           the edge search and the ink phase: no view widens its tile, seeds or measures an edge,
+//                              and no program's ink phase runs, so no line is drawn.
 // SDF_VIEWS_OMIT_SHADING       everything after the record's load: a hit shows its normal, so what remains is the load,
 //                              the hit door, the debug view and the store.
 #ifndef PASSES_SDF_VIEWS_SPLIT_HLSLI

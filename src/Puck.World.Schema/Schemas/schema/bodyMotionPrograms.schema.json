@@ -164,6 +164,13 @@
                 ],
                 "default": "Hold",
                 "title": "BodyTargetFallback"
+              },
+              "profile": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
               }
             },
             "required": [

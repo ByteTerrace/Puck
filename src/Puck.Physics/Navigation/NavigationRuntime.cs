@@ -75,9 +75,13 @@ public sealed partial class NavigationRuntime {
     /// network is the same kept domains in the same order stays resident.</param>
     /// <param name="work">The ledger the runtime counts its searches into; <see langword="null"/> counts into
     /// <see cref="NavigationSearchWork.Process"/>.</param>
+    /// <param name="areas">The area types the cells carry, which cost profiles price; <see langword="null"/> is
+    /// <see cref="NavigationAreaSet.None"/>. Each domain's <see cref="NavigationDomainInput.Area"/> must name a type of
+    /// it or be -1.</param>
     /// <exception cref="InvalidOperationException"><paramref name="domains"/> is non-empty and
     /// <paramref name="geometry"/> is <see langword="null"/>.</exception>
-    public NavigationRuntime(IReadOnlyList<NavigationDomainInput> domains, IContactField? geometry, INavigationMediumField? fields, NavigationCapacity capacity, NavigationRuntime? previous = null, NavigationSearchWork? work = null) {
+    /// <exception cref="ArgumentOutOfRangeException">A domain's area type lies outside <paramref name="areas"/>.</exception>
+    public NavigationRuntime(IReadOnlyList<NavigationDomainInput> domains, IContactField? geometry, INavigationMediumField? fields, NavigationCapacity capacity, NavigationRuntime? previous = null, NavigationSearchWork? work = null, NavigationAreaSet? areas = null) {
         if (
             (domains.Count != 0) &&
             (geometry is null)
@@ -85,6 +89,14 @@ public sealed partial class NavigationRuntime {
             throw new InvalidOperationException(message: "navigation domains require the static contact geometry.");
         }
 
+        areas ??= NavigationAreaSet.None;
+        // An equal set marks every cell alike: keep the prior object, so the domains' derived area maps stay valid.
+        m_areas = (((previous is not null) && previous.m_areas.Equals(other: areas)) ? previous.m_areas : areas);
+        foreach (var row in domains) {
+            if ((row.Area < -1) || (row.Area >= m_areas.TypeCount)) {
+                throw new ArgumentOutOfRangeException(paramName: nameof(domains), actualValue: row.Area, message: $"navigation domain '{row.Name}' names an area type outside the area set.");
+            }
+        }
         m_domains = new Domain[domains.Count];
         m_retained = new bool[domains.Count];
         var retained = 0;
@@ -149,6 +161,7 @@ public sealed partial class NavigationRuntime {
         foreach (var domain in m_domains) {
             domain.Work = m_work;
             domain.Gate = m_gate;
+            domain.Areas = m_areas;
         }
         if (previous is not null) {
             AdoptGoalFields(previous: previous);
@@ -157,8 +170,11 @@ public sealed partial class NavigationRuntime {
 
     private readonly NavigationCapacity m_capacity;
     private readonly NavigationSearchWork m_work;
+    private readonly NavigationAreaSet m_areas;
 
     public int Count => m_domains.Length;
+    /// <summary>Gets the area types the runtime's cells carry.</summary>
+    public NavigationAreaSet Areas => m_areas;
     /// <summary>Gets the number of domain workspaces retained from the prior runtime installation.</summary>
     public int RetainedDomainCount { get; }
     /// <summary>Gets the number of domain workspaces compiled for this runtime installation.</summary>
@@ -371,6 +387,10 @@ public sealed partial class NavigationRuntime {
             m_capacity = capacity;
             return true;
         }
+        // Whether a tuning proves the same cells and edges as this domain's: equal in everything but the area type its
+        // unmarked cells take, which only prices a route. A domain whose area type changed is rebuilt (its goal fields
+        // priced the old type), and its partial rebake from this one proves nothing again.
+        internal bool SameBake(in NavigationDomainInput row) => ((row with { Area = Tuning.Area }) == Tuning);
 
         private bool SameMediumRevision(INavigationMediumField? fields) {
             if (
@@ -545,16 +565,20 @@ public sealed partial class NavigationRuntime {
         /// <param name="path">Receives the route's cells from start to goal.</param>
         /// <param name="pathLength">The route's cell count, zero when no route is returned.</param>
         /// <param name="expanded">The nodes the search settled.</param>
+        /// <param name="profile">What the route pays for each area type and which it never enters; <see langword="null"/>
+        /// is <see cref="NavigationCostProfile.Neutral"/>.</param>
         /// <returns><see cref="NavigationStatus.Active"/> with a route, <see cref="NavigationStatus.Arrived"/> when the
         /// start is the goal, or why no route was returned.</returns>
-        public NavigationStatus FindPath(int start, int goal, Span<int> path, out int pathLength, out int expanded) {
-            var status = SearchPath(expanded: out expanded, goal: goal, path: path, pathLength: out pathLength, start: start);
+        public NavigationStatus FindPath(int start, int goal, Span<int> path, out int pathLength, out int expanded, NavigationCostProfile? profile = null) {
+            var status = SearchPath(expanded: out expanded, goal: goal, path: path, pathLength: out pathLength, profile: (profile ?? NavigationCostProfile.Neutral), start: start);
 
             m_work.Add(amount: 1, kind: NavigationSearchWork.Searches);
             m_work.Add(amount: expanded, kind: NavigationSearchWork.SearchExpansions);
             return status;
         }
-        private NavigationStatus SearchPath(int start, int goal, Span<int> path, out int pathLength, out int expanded) {
+        // The profile travels with the search rather than in a field, so searches on several threads at once each price
+        // their steps by their own.
+        private NavigationStatus SearchPath(int start, int goal, Span<int> path, NavigationCostProfile profile, out int pathLength, out int expanded) {
             pathLength = 0;
             expanded = 0;
             if (
@@ -575,7 +599,7 @@ public sealed partial class NavigationRuntime {
                 var order = new SearchOrder(workspace: workspace);
 
                 workspace.Begin();
-                Open(cost: 0, goal: goal, node: start, order: order, parent: -1, workspace: workspace);
+                Open(cost: 0L, goal: goal, node: start, order: order, parent: -1, profile: profile, workspace: workspace);
                 while (workspace.Open.Count != 0) {
                     var current = workspace.Open.Pop(order: order);
 
@@ -606,13 +630,18 @@ public sealed partial class NavigationRuntime {
                         ) {
                             continue;
                         }
-                        var nextCost = checked((workspace.Cost[current] + step.Cost));
+                        var stepCost = (profile.IsNeutral ? step.Cost : profile.Scale(area: AreaCodes()[next], cost: step.Cost));
+
+                        if (stepCost < 0L) {
+                            continue;
+                        }
+                        var nextCost = checked((workspace.Cost[current] + stepCost));
 
                         if (
                             (workspace.OpenStamp[next] != workspace.Stamp) ||
                             (nextCost < workspace.Cost[next])
                         ) {
-                            Open(cost: nextCost, goal: goal, node: next, order: order, parent: current, workspace: workspace);
+                            Open(cost: nextCost, goal: goal, node: next, order: order, parent: current, profile: profile, workspace: workspace);
                         }
                     }
                 }
@@ -757,7 +786,9 @@ public sealed partial class NavigationRuntime {
 
             return (((ordinal % 3) - 1), ((ordinal / 9) - 1), (((ordinal / 3) % 3) - 1));
         }
-        private int Heuristic(int node, int goal) {
+        // The cells left in Chebyshev measure at the straight step's cost, scaled by the search profile's least
+        // multiplier so it stays a lower bound.
+        private long Heuristic(int node, int goal, NavigationCostProfile profile) {
             Coordinates(
                 node: node,
                 x: out var nx,
@@ -770,13 +801,13 @@ public sealed partial class NavigationRuntime {
                 y: out var gy,
                 z: out var gz
             );
-            return checked((Math.Max(
+            return profile.ScaleHeuristic(distance: checked(((long)Math.Max(
                 val1: Math.Abs(value: (nx - gx)),
                 val2: Math.Max(
                     val1: Math.Abs(value: (ny - gy)),
                     val2: Math.Abs(value: (nz - gz))
                 )
-            ) * StraightCost));
+            )) * StraightCost));
         }
 
         public bool IsWalkable(int node) {
@@ -810,10 +841,10 @@ public sealed partial class NavigationRuntime {
         }
         // The heuristic is stored as the node opens, so the search orders by f = g + h, then the smaller h, then the lower
         // index (SearchOrder): a total order, so the heap never breaks a tie itself.
-        private void Open(int node, int cost, int parent, int goal, SearchOrder order, SearchWorkspace workspace) {
+        private void Open(int node, long cost, int parent, int goal, NavigationCostProfile profile, SearchOrder order, SearchWorkspace workspace) {
             workspace.Cost[node] = cost;
             workspace.Parent[node] = parent;
-            workspace.Heuristic[node] = Heuristic(goal: goal, node: node);
+            workspace.Heuristic[node] = Heuristic(goal: goal, node: node, profile: profile);
             if (workspace.OpenStamp[node] != workspace.Stamp) {
                 workspace.OpenStamp[node] = workspace.Stamp;
                 workspace.Open.Push(node: node, order: order);

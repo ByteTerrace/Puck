@@ -2,10 +2,12 @@
 // starts at ten in the morning, with the noon sun 46 degrees up toward +x and -z. A 24-minute day turns the sun a
 // quarter of a degree a second, slow enough to watch the shadows creep and fast enough that a session sees a sunset.
 // At night a deep-blue moon of 6 lux, brighter than a real full moon so the valley reads, lights it opposite the sun,
-// under a night sky of 1 nit and its stars; the hall's exposure floor drops with the day to meet it (hall.puck).
+// under a night sky of 1 nit and its stars; the hall's exposure floor drops with the day to meet it (hall.puck). The
+// moon that hangs in that sky is the moon's own world (moon.puck), which a painting and the launch field's ship reach.
 // debug.md's "Time of day" gives the levers: write `day` to move the time, and its advance to hold the sun.
 
 import "../standard/skies"
+import "moon-frame"
 // The hall keys its exposure floor on the day.
 exports {
   reads [day]
@@ -20,5 +22,24 @@ dayCycle(
   moonPeak: 6,
   moonColor: "#7088E8",
   nightLuminance: 1,
-  starLuminance: 3
+  starLuminance: 3,
+  // The moon: the moon's own world, seen from where the viewer stands in the frame the two worlds share, so it hangs
+  // where the sky seam will put a ship and grows as the ship climbs toward it. Only its ground is drawn, so the
+  // valley's air, stars and sun show round it and the clouds drift across it.
+  bodies: [
+    {
+      $type: "view"
+      name: "moon"
+      destination: "moon"
+      anchor: debugOrigin
+      follow: true
+      coverage: true
+      bound { center [0, 0, 0], radius: (moonRadius + 30) }
+      farDistance: 7000
+      scale: 1
+      refresh: 1
+      shadows: false
+      fallback: "#00000000"
+    }
+  ]
 )

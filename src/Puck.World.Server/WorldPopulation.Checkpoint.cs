@@ -237,6 +237,7 @@ public sealed partial class WorldPopulation {
             ActivityPhaseRemainder: entry.ProducerState.ActivityPhaseRemainder,
             ActivityRate: entry.ProducerState.ActivityRate,
             CurveArcRaw: entry.ProducerState.CurveArcRaw,
+            CurveArcRemainder: entry.ProducerState.CurveArcRemainder,
             Flock: new WorldPopulationFlockCheckpoint(
                 Desired: entry.ProducerState.FlockDesired,
                 Generation: entry.ProducerState.FlockGeneration,
@@ -248,7 +249,8 @@ public sealed partial class WorldPopulation {
             Phase: entry.ProducerState.Phase,
             PhaseRemainder: entry.ProducerState.PhaseRemainder,
             PreferredAltitude: entry.ProducerState.PreferredAltitude,
-            WeaveFrequency: entry.ProducerState.WeaveFrequency
+            WeaveFrequency: entry.ProducerState.WeaveFrequency,
+            StandDown: entry.ProducerState.StandDown
         );
         image.Steering = new(
             Intent: entry.AutonomyState.SteeringIntent,
@@ -423,6 +425,7 @@ public sealed partial class WorldPopulation {
                 ActivityPhaseRemainder = producer.ActivityPhaseRemainder,
                 ActivityRate = producer.ActivityRate,
                 CurveArcRaw = producer.CurveArcRaw,
+                CurveArcRemainder = producer.CurveArcRemainder,
                 FlockDesired = producer.Flock.Desired,
                 FlockGeneration = producer.Flock.Generation,
                 FlockRemainingTicks = producer.Flock.RemainingTicks,
@@ -432,6 +435,7 @@ public sealed partial class WorldPopulation {
                 Phase = producer.Phase,
                 PhaseRemainder = producer.PhaseRemainder,
                 PreferredAltitude = producer.PreferredAltitude,
+                StandDown = producer.StandDown,
                 WeaveFrequency = producer.WeaveFrequency,
             };
             entry.AutonomyState = new BodyAutonomyState {

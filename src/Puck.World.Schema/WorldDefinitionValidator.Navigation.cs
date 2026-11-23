@@ -3,7 +3,9 @@ using Puck.Maths;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    private static HashSet<string> ValidateNavigation(WorldDefinition definition, List<string> errors) {
+    // Returns the domain names a navigated target or flock may name and the cost profile names a navigated target may
+    // select.
+    private static (HashSet<string> Domains, HashSet<string> Profiles) ValidateNavigation(WorldDefinition definition, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var domains = definition.Navigation.Rows;
         var totalCells = 0L;
@@ -288,6 +290,80 @@ public static partial class WorldDefinitionValidator {
         if (totalCells > WorldNavigationCapacity.MaxCellsPerWorld) {
             errors.Add(item: $"navigation.domains declares {totalCells} total cells; the world maximum is {WorldNavigationCapacity.MaxCellsPerWorld}.");
         }
-        return names;
+        return (names, ValidateNavigationAreas(definition: definition, errors: errors));
+    }
+    // The area types, the areas that mark them, each domain's own type and the cost profiles that price them; returns the
+    // profile names a navigated target may select.
+    private static HashSet<string> ValidateNavigationAreas(WorldDefinition definition, List<string> errors) {
+        var section = definition.Navigation;
+        var types = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        if (section.AreaTypeRows.Count > Puck.Physics.Navigation.NavigationAreaSet.MaxTypes) {
+            errors.Add(item: $"navigation.areaTypes declares {section.AreaTypeRows.Count} types; the maximum is {Puck.Physics.Navigation.NavigationAreaSet.MaxTypes}.");
+        }
+        for (var index = 0; (index < section.AreaTypeRows.Count); index++) {
+            var type = section.AreaTypeRows[index];
+
+            if (!SafeName.TryParse(candidate: type, name: out _, reason: out var reason)) {
+                errors.Add(item: $"navigation.areaTypes[{index}] {reason}");
+            } else if (!types.Add(item: type)) {
+                errors.Add(item: $"navigation.areaTypes[{index}] '{type}' is duplicated.");
+            }
+        }
+        for (var index = 0; (index < section.Rows.Count); index++) {
+            if ((section.Rows[index].Area is { } area) && !types.Contains(item: area)) {
+                errors.Add(item: $"navigation.domains[{index}].area '{area}' names no navigation.areaTypes entry.");
+            }
+        }
+
+        var placements = ((section.AreaRows.Count == 0) ? null : WorldPlacementIndex.ById(placements: definition.Placements));
+
+        for (var index = 0; (index < section.AreaRows.Count); index++) {
+            var area = section.AreaRows[index];
+            var path = $"navigation.areas[{index}]";
+
+            if (!types.Contains(item: area.Type)) {
+                errors.Add(item: $"{path}.type '{area.Type}' names no navigation.areaTypes entry.");
+            }
+            if ((area.Placement is null) == (area.Region is null)) {
+                errors.Add(item: $"{path} must author exactly one of placement and region.");
+            }
+            if (area.Region is { } region) {
+                ValidateRegion(region: region, path: $"{path}.region", errors: errors);
+            }
+            if ((area.Placement is { } id) && (placements!.GetValueOrDefault(key: id) is not { Region: not null, Attach: null, Deal: null })) {
+                errors.Add(item: $"{path}.placement '{id}' must name a placement with a region that is neither attached nor dealt.");
+            }
+        }
+
+        var profiles = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < section.ProfileRows.Count); index++) {
+            var profile = section.ProfileRows[index];
+            var path = $"navigation.profiles[{index}]";
+
+            if (!SafeName.TryParse(candidate: profile.Name, name: out _, reason: out var reason)) {
+                errors.Add(item: $"{path}.name {reason}");
+            } else if (!profiles.Add(item: profile.Name)) {
+                errors.Add(item: $"{path}.name '{profile.Name}' is duplicated.");
+            }
+            foreach (var (type, cost) in profile.Costs ?? new Dictionary<string, float>()) {
+                if (!types.Contains(item: type)) {
+                    errors.Add(item: $"{path}.costs.{type} names no navigation.areaTypes entry.");
+                }
+                if (!float.IsFinite(f: cost) || (cost <= 0f) || (cost > WorldNavigationCapacity.MaxAreaCost) || (FixedQ4816.FromDouble(value: cost) <= FixedQ4816.Zero)) {
+                    errors.Add(item: $"{path}.costs.{type} {cost} must be positive, at least one fixed-point step, and at most {WorldNavigationCapacity.MaxAreaCost}.");
+                }
+                if (profile.Exclude?.Contains(value: type) ?? false) {
+                    errors.Add(item: $"{path}.costs.{type} prices a type the profile excludes.");
+                }
+            }
+            foreach (var type in profile.Exclude ?? []) {
+                if (!types.Contains(item: type)) {
+                    errors.Add(item: $"{path}.exclude '{type}' names no navigation.areaTypes entry.");
+                }
+            }
+        }
+        return profiles;
     }
 }

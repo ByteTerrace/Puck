@@ -4,15 +4,15 @@
 #define PASSES_SDF_VIEWS_RATE_HLSLI
 #include "../frame/sdf-history-surface.hlsli"
 #include "../frame/sdf-reprojection.hlsli"
-#include "../shade/sdf-toon.hlsli"
-#include "../shade/sdf-toon-outline.hlsli"
 
 groupshared uint sdfRateEligible[SDF_VISIBILITY_GROUP_EDGE][SDF_VISIBILITY_GROUP_EDGE];
 
 uint sdfRateCell(ViewportData view, uint viewIndex, uint2 origin, uint2 tile, uint tileSize) {
     uint2 dims = worldViewDims(view);
-    // Require a one-pixel border around the tile, including on an uninked surface.
-    if (any(tile == 0u) || any(tile + tileSize >= dims)) return 0u;
+    // Require a border around the tile that is one surface with it: one pixel, or the edge search's reach in a view that
+    // searches (sdf-views-filter.hlsli), since a line drawn from an edge that near varies across the tile's pixels.
+    uint border = ((passGroup.inkEdges != 0u) ? SDF_EDGE_REACH : 1u);
+    if (any(tile < border) || any(tile + tileSize + border > dims)) return 0u;
     // Refresh every tile at full rate once per window so new detail can enter an otherwise smooth history.
     uint2 index = tile / tileSize;
     if ((passGroup.historyFrames + index.x + 3u * index.y) % SDF_TEMPORAL_PERIOD == 0u) return 0u;
@@ -30,12 +30,11 @@ uint sdfRateCell(ViewportData view, uint viewIndex, uint2 origin, uint2 tile, ui
     SdfMaterialData material = sdfMaterialLoad(ref.material);
     // A narrow specular lobe can introduce a glint as the camera turns, before the history can see it.
     if (material.roughness < 0.2 && (material.specular > 0.0 || material.metal > 0.0 || material.coat > 0.0)) return 0u;
-    SdfToonStyle style = sdfToonStyle(material);
     uint rate = 3u;
     uint2 extent = passGroup.viewsRate.zw;
     uint2 end = origin + SDF_VIEWS_PROBE_RATE;
-    uint2 low = origin - uint2(origin == tile);
-    uint2 high = end + uint2(end == tile + tileSize);
+    uint2 low = origin - (border * uint2(origin == tile));
+    uint2 high = end + (border * uint2(end == tile + tileSize));
     [loop] for (uint y = low.y; y < high.y; y++) {
         [loop] for (uint x = low.x; x < high.x; x++) {
             uint2 pixel = uint2(x, y);
@@ -59,7 +58,6 @@ uint sdfRateCell(ViewportData view, uint viewIndex, uint2 origin, uint2 tile, ui
             if (rate == 0u ||
                 !sdfHistoryReceiverMatches(vis.identity, historySurface[sdfHistoryWord(at, 0u, extent)], length(relative),
                     f16tof32(historySurface[sdfHistoryWord(at, 1u, extent)] & 0xffffu))) return 0u;
-            if (sdfToonEnabled(style) && sdfToonOutline(style, p, s, surfacePoint) > 0.0) return 0u;
         }
     }
     return rate;

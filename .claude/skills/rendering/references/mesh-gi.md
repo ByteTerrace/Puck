@@ -33,7 +33,16 @@ fixture buffers are device-local, with explicit upload/copy/readback ordering.
 Boolean visibility uses `sdfProbeOccluded` through the same `sdfProbeWalk` node
 and triangle tests as `sdfProbeIntersect`, returning at the first accepted
 triangle. `probeClear` uses that entry for shadows, light bits and the meter.
-The CPU twin is `Unblocked` through `Walk` and `ILeaves` any-hit leaves.
+The CPU twin is `Unblocked` through `Walk` and `ILeaves` any-hit leaves. A ray
+toward a point light (`probeClear`'s `toward`, the CPU's `ReachesLight`) is
+blocked only by an open instance or a face of an enclosed solid that it leaves
+through (`SdfMeshProbeTrace.SolidWord`, `sdfProbeBlocksLight`, `TriangleLeaves`'
+`leaving`), so the solid holding a light never hides it; the ray-query build
+tests that rule on each candidate rather than with a hardware facing cull, whose
+winding convention differs between the backends. A point light's bit is that
+ray from the probe's centre at any distance: it never reads the light's power or
+range, and every traced light is traced, a dark one included, so a light a rule
+switches on or brightens shows at once.
 `Hierarchy.BuildNode` bounds both hierarchies to `StackDepth - 2` edges from
 the root, switching to median splits when only a balanced subtree fits and
 refusing a named hierarchy that cannot fit. Walks check before pushing and

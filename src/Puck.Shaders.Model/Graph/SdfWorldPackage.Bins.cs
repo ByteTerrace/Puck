@@ -4,8 +4,8 @@ namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
     /// <summary>The views filter's record as the binned views pass reads it: <see cref="ViewsFilterWords"/> words a
-    /// render-extent pixel, the pixel's filtered occlusion and four shadow visibilities (<c>sdf-views-filter.hlsli</c>
-    /// owns the packing), addressed like the visibility record.</summary>
+    /// render-extent pixel, the pixel's filtered occlusion and four shadow visibilities, then its edges
+    /// (<c>sdf-views-filter.hlsli</c> owns the packing), addressed like the visibility record.</summary>
     public const string ViewsFilterRecords = "sdfViewsFilterRecords";
     /// <summary>The views filter's record as the filter pass writes it.</summary>
     public const string ViewsFilterRecordsWritten = "sdfViewsFilterRecordsRW";
@@ -39,7 +39,7 @@ public static partial class SdfWorldPackage {
     public const uint ShadeTileLightWords = 5;
     /// <summary>The words of one pixel's views filter record. <c>SdfIsaHlsl</c> generates it as
     /// <c>SDF_VIEWS_FILTER_WORDS</c>.</summary>
-    public const uint ViewsFilterWords = 2;
+    public const uint ViewsFilterWords = 3;
 
     /// <summary>Returns a fragment whose views pass shades in bins, for a view whose frame runs authored programs: the
     /// views filter's tile gather moves into <see cref="Parts.ViewsFilter"/>, which writes each pixel's filtered

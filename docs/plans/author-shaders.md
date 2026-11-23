@@ -176,19 +176,19 @@ are deleted rather than kept beside the programs.
   `sdfGlassContact` feeding the stamp and its shadow density with the glass
   data); the paints' shape descriptors (a `shape` op's operand); the lanes; the
   flow clock as a stamp input; and the search for edges between neighbouring
-  pixels, which no per-pixel program can make. Today that is the cel outline
-  with its style row. [The ink plan](ink.md#design) replaces it with edge
-  signals in the stamp and an authored ink phase.
+  pixels, which no per-pixel program can make: the view's edge search, which
+  hands a program the `edge.*` distances its ink phase draws from
+  ([the ink plan](ink.md#what-is-built)).
 - *The style switch, as built.* The banding is the `cel` program; a palette
-  row's `toon` and the world's `render.toon` are the style row beside it (the
-  styled mark and the ink), and `render.shade` is the world default's program.
-  `toonSelect` cases are each a style row and a program (`celLook`,
+  row's `toon` and the world's `render.toon` are the style mark beside it, and
+  `render.shade` is the world default's program.
+  `toonSelect` cases are each a style mark and a program (`celLook`,
   `plainLook`), declared by the document so `world prepare` and the publication
   door compile them, and a swap is an appearance upload. `world.toon off`
   suppresses every style. Cel is the debug world's treatment, chosen by its
   materials
   ([the decision](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
-  The ink plan's [sixth step](ink.md#build-order) removes the style row, so a
+  The ink plan's [second step](ink.md#build-order) removes the style mark, so a
   case becomes a program alone: `toonSelect` is renamed `shadeSelect`, a state
   cell and a list of programs, and `world.toon` becomes `world.shade phases`,
   which names the authored phases that run

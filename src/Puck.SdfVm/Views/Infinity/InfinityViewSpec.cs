@@ -35,16 +35,24 @@ public readonly record struct InfinityViewMask(Vector3 Axis, float HalfAngle) {
     /// <summary>Gets the unit axis.</summary>
     public Vector3 Direction => Vector3.Normalize(value: Axis);
 }
+/// <summary>The sphere that bounds what a view shows, in its source's coordinates: a moon, a planet, an island. A view
+/// that states one renders only the cone the sphere subtends from its camera, wherever that camera stands.</summary>
+/// <param name="Center">The sphere's centre in the source.</param>
+/// <param name="Radius">The sphere's radius, positive.</param>
+public readonly record struct InfinityViewBound(Vector3 Center, float Radius);
 /// <summary>
-/// One infinity view, the neutral record the host renders: a second <c>sdf.world</c> instance seen at infinity from a
-/// fixed anchor in its source, turned with the viewer's camera and never translated. The sky layer and body shape that
-/// author one (<c>view</c> and <c>far</c>) lower to this record, and every rule below it (the rect rendered, the
-/// frames that render it, the nesting, the cap) reads nothing else.
+/// One infinity view, the neutral record the host renders: a second <c>sdf.world</c> instance seen from an anchor in its
+/// source and turned with the viewer's camera. By default the camera stays at the anchor whatever the viewer does, so
+/// the source is a backdrop at infinity; a view that <see cref="Follows"/> moves its camera with the viewer's, so the
+/// source is a place at a distance that grows as the viewer nears it. The sky layer and body shape that author one
+/// (<c>view</c> and <c>far</c>) lower to this record, and every rule below it (the rect rendered, the frames that
+/// render it, the nesting, the cap) reads nothing else.
 /// </summary>
 /// <param name="Name">The layer's or body's name, free of the generated-name joiner; the instance is
 /// <c>sky$&lt;name&gt;</c>.</param>
 /// <param name="Kind">What it renders.</param>
-/// <param name="Anchor">The point in the source the camera sits at, whatever the viewer does.</param>
+/// <param name="Anchor">The point in the source the camera sits at, whatever the viewer does; for a view that
+/// <see cref="Follows"/>, the point of the source the viewer's world origin stands at.</param>
 /// <param name="Orientation">The rotation that carries a direction of the viewer's world into the source's. Identity
 /// shows the source's axes as the viewer's.</param>
 /// <param name="Mask">The region it covers, or <see langword="null"/> for the whole sky: the viewer's whole frustum.</param>
@@ -71,6 +79,19 @@ public sealed record InfinityViewSpec(
 ) {
     /// <summary>The factor a view below <see cref="QualityTier.High"/> scales its render by.</summary>
     public const float ReducedScale = 0.5f;
+
+    /// <summary>Gets a value indicating whether the camera moves with the viewer's: it sits at <see cref="Anchor"/>
+    /// plus the viewer's position carried by <see cref="Orientation"/>, so the two worlds share one frame.</summary>
+    public bool Follows { get; init; }
+    /// <summary>Gets the sphere that bounds what the view shows, or <see langword="null"/> for none. With one and no
+    /// <see cref="Mask"/>, the view renders the cone the sphere subtends from its camera.</summary>
+    public InfinityViewBound? Bound { get; init; }
+    /// <summary>Gets a value indicating whether a view of a world draws only that world's geometry, its image alpha
+    /// the geometry's coverage, so the viewer's own sky shows around it.</summary>
+    public bool GeometryCoverage { get; init; }
+    /// <summary>Gets a value indicating whether the view's image alpha is its coverage: far geometry always, a world
+    /// when it asks for <see cref="GeometryCoverage"/>.</summary>
+    public bool Covers => ((Kind == InfinityViewKind.Far) || GeometryCoverage);
 
     /// <summary>Returns the scale the view renders at on a tier.</summary>
     /// <param name="tier">The tier.</param>
@@ -118,6 +139,11 @@ public sealed record InfinityViewSpec(
         }
         if (!(VectorFunctions.IsFinite(rotation: Orientation) && (MathF.Abs(x: (Orientation.Length() - 1f)) < 1e-3f))) {
             reason = $"infinity view '{Name}' has an orientation that is not a unit rotation.";
+
+            return false;
+        }
+        if ((Bound is { } bound) && !(VectorFunctions.IsFinite(vector: bound.Center) && float.IsFinite(f: bound.Radius) && (bound.Radius > 0f))) {
+            reason = $"infinity view '{Name}' has a bound that is not a finite centre and a positive radius.";
 
             return false;
         }

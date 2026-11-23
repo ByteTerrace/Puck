@@ -1,5 +1,6 @@
 // The views filter pass of a binned view (SdfWorldPackage.Parts.ViewsFilter): each 8x8 group gathers the views filter's
-// tile, writes every hit's filtered occlusion and shadows into the filter record its view's mode filters, and writes the
+// tile, writes every hit's filtered occlusion and shadows and its edges into the filter record, as its view's mode
+// filters and searches, and writes the
 // tile's bin and light masks into the shade bins and counts the bin there (sdf-views-filter.hlsli, sdf-views-lights.hlsli).
 // A tile no pixel of which has a program is the plain kernel's; every other tile is the shading selection's. It
 // dispatches over the extent as views does, jobs of whole groups in raster order, and binds the shading selection's
@@ -18,6 +19,7 @@ void sdfViewsFilterStage(SdfPixel p) {
     // The levers and the view's mode are uniform across the group, so every lane reaches every barrier or none does.
     bool ambientFilter = sdfViewsFiltersAmbient(p.viewMode);
     bool shadowFilter = sdfViewsFiltersShadows(p.viewMode);
+    bool edgeSearch = sdfViewsSearchesEdges(p.viewMode);
     bool first = all((p.pixel % SDF_VISIBILITY_GROUP_EDGE) == 0u);
 
     if (first) {
@@ -25,8 +27,8 @@ void sdfViewsFilterStage(SdfPixel p) {
         sdfViewsTileHigh = 0u;
     }
     // The gather's barrier, or this one, orders the initialization before any lane's bin.
-    if (ambientFilter || shadowFilter) {
-        sdfViewsGatherFilter(p, shadowFilter);
+    if (ambientFilter || shadowFilter || edgeSearch) {
+        sdfViewsGatherFilter(p, shadowFilter, edgeSearch);
     } else {
         GroupMemoryBarrierWithGroupSync();
     }
@@ -52,6 +54,10 @@ void sdfViewsFilterStage(SdfPixel p) {
 
                 sdfViewsFilterRecordsRW[record] = words.x;
                 sdfViewsFilterRecordsRW[record + 1u] = words.y;
+                sdfWorkTexels = 1u;
+            }
+            if (edgeSearch) {
+                sdfViewsFilterRecordsRW[sdfViewsFilterRecord(p.pixel, p.viewIndex) + 2u] = sdfViewsEdgesWord(p);
                 sdfWorkTexels = 1u;
             }
             if (sdfShadeBound(sdfShadeBinding(s.material))) {
