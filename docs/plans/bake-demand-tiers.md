@@ -16,8 +16,16 @@ has cell `BaseCell * 2^t`. A group's tier floors every spacing the one detail
 rule (`WorldShapeDetail.Of`) asks of it. The **demanded tier** of a group is
 the coarsest rung whose cell stays under half a display pixel at the nearest
 demand point (`SdfMeshDemand.PixelAt`), clamped to the rungs that change the
-group's mesh (`SdfMeshTier.Finest`, `SdfMeshTier.Coarsest`). With no demand
-point a group demands its coarsest tier.
+group's mesh (`SdfMeshTier.Finest`, `SdfMeshTier.Coarsest`). Down to its
+**floor tier** (`SdfMeshTier.Floor`, the first rung at or past its unrefined
+lattice's cell) a tier floors what the refinement aims for; past the floor it
+coarsens the lattice itself (`SdfMeshTier.LatticeSamples`), to a coarsest rung
+whose cell fits a few times along the group. A lattice past the floor splits a
+sheet's cells no finer than a share of its tier's cell, and one that meshes
+nothing owes the rung below it, so a part thinner than a coarse cell is drawn
+from the coarsest rung that still finds it. With no demand point a group
+demands its coarsest tier; a plan made before any view was observed asks the
+floor.
 
 Each view demands at its own image: a filmed screen of few lines demands
 coarser tiers than the window beside it. A window fitted to its glass demands

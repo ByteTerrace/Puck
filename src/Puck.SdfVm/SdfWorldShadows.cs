@@ -194,7 +194,47 @@ internal sealed class SdfWorldShadows : IDisposable {
     /// another whenever the view reads another anchor, so the view's pass set writes them again before it binds them.</summary>
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>
     /// <returns>The revision.</returns>
-    public long BindingRevisionOf(int view) => ((m_bindingRevision << 8) | (long)(AnchorOf(view: view) + 1));
+    public long BindingRevisionOf(int view) {
+        // Every pass that binds a layer asks this first, so the time of the latest question is the latest reader's.
+        m_usedAt = m_tables.Grant.Selector.Time.GetTimestamp();
+        return ((m_bindingRevision << 8) | (long)(AnchorOf(view: view) + 1));
+    }
+
+    /// <summary>The seconds a world's shadows keep their layers once no upload decides them and no pass asks what it
+    /// binds: a world no view shows for that long holds none, and draws them again over the first frames it is shown
+    /// in, as a world first shown does.</summary>
+    public const double UnseenSeconds = 8d;
+
+    // When an upload last decided the shadows or a pass last asked what it binds, on the selector's clock; zero before
+    // either. Whether the layers were given back since (Upkeep), and how often.
+    private long m_usedAt;
+    private bool m_unseen;
+    private long m_unseenReleases;
+
+    /// <summary>Serves the shadows of a world whether or not a frame prepares it: once neither an upload nor a pass has
+    /// used them for <see cref="UnseenSeconds"/>, gives back every layer, the spare pairs included. The binding revision
+    /// moves, so a pass that binds them later writes its set again, and the entries redraw as ones no upload has drawn.
+    /// Called on the frame thread, from the residency's upkeep.</summary>
+    internal void Upkeep() {
+        if (m_disposed || m_unseen || (m_usedAt == 0) || (m_bytes == 0)) { return; }
+        if (m_tables.Grant.Selector.Time.GetElapsedTime(startingTimestamp: m_usedAt).TotalSeconds < UnseenSeconds) { return; }
+        m_unseen = true;
+        m_unseenReleases++;
+        foreach (var anchor in m_anchors) {
+            anchor.View = -1;
+            anchor.Release();
+        }
+        m_distant.ReleaseLayers();
+        // Every lent pair came back as its redraw ended, so the spares hold them all.
+        foreach (var spare in m_spares) { RetirePair(pair: spare); }
+        m_spares.Clear();
+        m_sparePairs = 0;
+        Array.Fill(array: m_viewAnchors, value: -1);
+        Array.Clear(array: m_viewReaders);
+        m_decided = false;
+        m_bindingRevision++;
+        m_contentRevision++;
+    }
     /// <summary>Returns the image view a view's pass samples at one of the layers' bindings, or <paramref name="filler"/>
     /// for a layer that is not allocated.</summary>
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>
@@ -282,6 +322,8 @@ internal sealed class SdfWorldShadows : IDisposable {
 
         m_decided = true;
         m_decidedFrame = frame;
+        m_usedAt = m_tables.Grant.Selector.Time.GetTimestamp();
+        m_unseen = false;
         if (Interlocked.Exchange(location1: ref m_trimRequested, value: 0) != 0) { Trim(); }
 
         var views = frame.Views.Count;
@@ -628,7 +670,7 @@ internal sealed class SdfWorldShadows : IDisposable {
     /// each serves, and each entry's camera, texels, holds, redraw, owed rectangles and measured triangles.</summary>
     /// <returns>The description.</returns>
     public string Describe() => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
-        handler: $"uploads={m_uploads} gpu={((m_gpuSamples > 0) ? (m_gpuSum / m_gpuSamples) : 0d):0.000}ms/{m_gpuSamples}timed/most{m_gpuMost:0.000}ms recent={RecentMean():0.000}ms/most{RecentMost():0.000}ms moved={m_movedChanges}changes/{m_movedJudged}judged/{m_movedUnbounded}unbounded finest={m_finestTexel * 1000f:0.#}mm bytes={m_bytes} spares={m_spares.Count}/{m_sparePairs} trims={m_trims} anchors={m_anchors.Count(predicate: static anchor => (anchor.View >= 0))}/{m_anchors.Count} views={string.Join(separator: ',', values: m_viewAnchors)} {m_distant.Describe()} {string.Join(separator: ' ', values: m_anchors.SelectMany(selector: static anchor => anchor.Entries).Select(selector: static entry => entry.Describe()))}");
+        handler: $"uploads={m_uploads} gpu={((m_gpuSamples > 0) ? (m_gpuSum / m_gpuSamples) : 0d):0.000}ms/{m_gpuSamples}timed/most{m_gpuMost:0.000}ms recent={RecentMean():0.000}ms/most{RecentMost():0.000}ms moved={m_movedChanges}changes/{m_movedJudged}judged/{m_movedUnbounded}unbounded finest={m_finestTexel * 1000f:0.#}mm bytes={m_bytes} spares={m_spares.Count}/{m_sparePairs} trims={m_trims} unseen-releases={m_unseenReleases} anchors={m_anchors.Count(predicate: static anchor => (anchor.View >= 0))}/{m_anchors.Count} views={string.Join(separator: ',', values: m_viewAnchors)} {m_distant.Describe()} {string.Join(separator: ' ', values: m_anchors.SelectMany(selector: static anchor => anchor.Entries).Select(selector: static entry => entry.Describe()))}");
 
     // The mean and the most of the recent measured uploads.
     private double RecentMean() {
