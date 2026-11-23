@@ -341,15 +341,22 @@ public sealed partial class SdfWorldTables {
         }
         if (HoldsRefusedGrowth()) {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.RefusalHolds);
-            m_meshArena.SetLimit(limitBytes: ((ulong)m_meshGrant.HoldStanding(limitBytes: m_meshRegion.ByteCount)));
+            SetArenaLimit(limitBytes: m_meshGrant.HoldStanding(limitBytes: m_meshRegion.ByteCount));
             return;
         }
 
         var held = ((long)m_meshRegion.DestinationBytes);
         var holes = (m_meshRegion.Mapped ? Math.Max(val1: 0L, val2: (RoundUp(value: m_meshRegion.ByteCount, unit: m_meshRegion.MappedChunkBytes) - held)) : 0L);
-        m_meshArena.SetLimit(limitBytes: ((ulong)m_meshGrant.ReserveGrowth(capacityBytes: held, mostBytes: ((long)MostMeshRegionBytes), unbackedBytes: holes)));
+        SetArenaLimit(limitBytes: m_meshGrant.ReserveGrowth(capacityBytes: held, mostBytes: ((long)MostMeshRegionBytes), spareBytes: m_meshRegion.MappedSpareBytes, unbackedBytes: holes));
 
         static long RoundUp(long value, long unit) => (value.CeilingDivide(divisor: unit) * unit);
+    }
+    // Hands the arena the grant's two limits: the address range it may place meshes in, and the bytes the region may
+    // hold, which is the residency's share of the elastic budget and can be less than the region holds now.
+    private void SetArenaLimit(long limitBytes) {
+        var held = m_meshGrant.HeldLimitBytes;
+
+        m_meshArena.SetLimit(heldBytes: ((held == long.MaxValue) ? null : ((ulong)held)), limitBytes: ((ulong)limitBytes));
     }
     // A growth the account or the device refused (EnsureMeshRegionCapacity): the bytes the region held then, the pool's
     // room and the grant's releases at the refusal, and the plans prepared since. Asking again for room just refused
@@ -897,12 +904,17 @@ public sealed partial class SdfWorldTables {
     /// leaves the set. No draw record changes, so the staged frame stands. On the frame's thread, after the frame's
     /// draws are staged and before its upload.</summary>
     /// <param name="meshes">The meshes, a chunk of a chunked mesh being a mesh of its own.</param>
+    /// <param name="products">How many of <paramref name="meshes"/>, from the first, replace a drawn mesh and wait
+    /// beside it: the ones the region gives back first when its share of the pool falls
+    /// (<see cref="SdfMeshRegionArena.SetLimit"/>). The rest keep their words.</param>
     /// <exception cref="ArgumentNullException"><paramref name="meshes"/> is <see langword="null"/>.</exception>
-    public void NameMeshesAhead(IReadOnlyList<SdfMesh> meshes) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="products"/> is negative or more than the
+    /// meshes.</exception>
+    public void NameMeshesAhead(IReadOnlyList<SdfMesh> meshes, int products = 0) {
         ArgumentNullException.ThrowIfNull(argument: meshes);
         if (m_disposed) { return; }
         PrepareMeshRegionLimit();
-        m_meshArena.PlanAhead(meshes: meshes);
+        m_meshArena.PlanAhead(meshes: meshes, products: products);
         if ((m_meshArena.Placed.Count > 0) || (m_meshArena.Forgotten.Count > 0)) {
             m_meshPlacementVersion++;
             m_meshOrderStale = true;
@@ -952,7 +964,7 @@ public sealed partial class SdfWorldTables {
         var seconds = (((double)ticks) / System.Diagnostics.Stopwatch.Frequency);
         var written = (Volatile.Read(location: ref m_meshWordsWritten) * sizeof(uint));
 
-        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s owed-clock={((since == 0) ? "settled" : "running")} frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)} relocations={m_meshArena.Relocations} relocation=\"{m_meshArena.RelocationReason}\" moved={m_meshMoved} compactions={m_meshArena.Compactions} compacted={m_meshArena.CompactionMoves}/{(m_meshArena.CompactionWords * sizeof(uint))}B gpu-moved={m_meshGpuMoves}/{(m_meshGpuMovedWords * sizeof(uint))}B region-limit={MeshRegionLimitBytes}B region-named={MeshRegionNamedBytes}B refused={m_meshArena.Refused.Count} ahead={m_meshArena.Ahead.Count} ahead-refused={m_meshArena.AheadRefused.Count} refusals={Volatile.Read(location: ref m_meshRefusals)} forgotten={Volatile.Read(location: ref m_meshForgotten)} {DescribeLandingJobs()}");
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s owed-clock={((since == 0) ? "settled" : "running")} frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)} relocations={m_meshArena.Relocations} relocation=\"{m_meshArena.RelocationReason}\" moved={m_meshMoved} compactions={m_meshArena.Compactions} compacted={m_meshArena.CompactionMoves}/{(m_meshArena.CompactionWords * sizeof(uint))}B gpu-moved={m_meshGpuMoves}/{(m_meshGpuMovedWords * sizeof(uint))}B region-limit={MeshRegionLimitBytes}B region-held-limit={((m_meshArena.HeldLimitWords == long.MaxValue) ? "none" : $"{(m_meshArena.HeldLimitWords * sizeof(uint))}B")} arena-held={(m_meshArena.HeldWords * sizeof(uint))}B arena-placed={(m_meshArena.PlacedWords * sizeof(uint))}B shed={m_meshArena.Shed} staging-refused={m_meshRegion.StagingRefusals} region-named={MeshRegionNamedBytes}B refused={m_meshArena.Refused.Count} ahead={m_meshArena.Ahead.Count} ahead-refused={m_meshArena.AheadRefused.Count} refusals={Volatile.Read(location: ref m_meshRefusals)} forgotten={Volatile.Read(location: ref m_meshForgotten)} {DescribeLandingJobs()}");
     }
 
     // The words of the mesh the frame's flush last wrote (WriteSourcedMeshWords), on the frame thread.

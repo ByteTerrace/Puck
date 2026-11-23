@@ -17,6 +17,11 @@ public interface IGpuMappedBuffer : IGpuPagedBuffer {
     ulong ChunkBytes { get; }
     /// <summary>Gets the device bytes the mapped chunks hold.</summary>
     ulong MappedBytes { get; }
+    /// <summary>Gets the device bytes the device holds for the chunks of its mapped buffers that no chunk is mapped to:
+    /// memory already allocated, which only a <see cref="Map"/> of some mapped buffer on the device takes. Chunks given
+    /// back from many of the device's blocks leave it behind them, since a block is freed only once it is empty. The
+    /// same figure for every mapped buffer of one device.</summary>
+    ulong SpareBytes { get; }
 
     /// <summary>Backs every chunk the range touches that holds no backing yet, all or none: the backing is admitted and
     /// placed for every such chunk before any mapping is queued, so a refusal leaves the buffer as it was.</summary>

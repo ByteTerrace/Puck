@@ -56,7 +56,7 @@ public static partial class SdfWorldPackage {
     /// <exception cref="ArgumentNullException"><paramref name="fragment"/> is <see langword="null"/>.</exception>
     public static RenderGraphPackageFragment WithDisplay(RenderGraphPackageFragment fragment, BloomQuality quality) {
         ArgumentNullException.ThrowIfNull(fragment);
-        var resources = fragment.Resources.Select(selector: static resource => ((resource.Name == Color) ? resource with { Name = SceneLight, Retained = false } : resource)).ToList();
+        var resources = fragment.Resources.Select(selector: static resource => ((resource.Name == Color) ? resource with { Name = SceneLight, Retained = true } : resource)).ToList();
         var passes = fragment.Passes.Select(selector: static pass => pass with {
             Inputs = [.. pass.Inputs.Select(selector: static input => ((input.Name == Color) ? input with { Name = SceneLight } : input))],
             Outputs = [.. pass.Outputs.Select(selector: static output => ((output.Name == Color) ? output with { Name = SceneLight } : output))],
@@ -81,7 +81,7 @@ public static partial class SdfWorldPackage {
                 var name = ((level == 0) ? Bloom : $"bloom-up-{level}");
 
                 divisor = Math.Pow(x: 2d, y: (level + ((quality == BloomQuality.High) ? 1 : 2)));
-                resources.Add(item: Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: name, retained: (level != 0)) with {
+                resources.Add(item: Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: name, retained: true) with {
                     Dimensions = ShaderPipelineDimensions.Relative(height: (1d / divisor), width: (1d / divisor)),
                 });
                 passes.Add(item: Pass(inputs: [source, $"bloom-down-{level}"], name: $"bloom-up-{level}", outputs: [name]) with { Members = OpticsMembers });

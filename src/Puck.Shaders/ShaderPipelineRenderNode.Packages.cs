@@ -213,7 +213,9 @@ public sealed partial class ShaderPipelineRenderNode {
     // left it. The input must be this frame's: a previous frame's instance rests in the layout its own role left it in,
     // which this frame's plan does not state, so presenting it would start from a layout it is not in. And no later pass
     // may write the input's storage, as a version forwarding it does, or the published input, and every later read of
-    // the output, would hold that pass's contents. The instance-chain check uses the same rule before any graph installs.
+    // the output, would hold that pass's contents. A published output never stands for a retained or transient input
+    // either: that storage is one image every frame slot shares, which the next frame's writer overwrites while a
+    // consumer may still read the publication. The instance-chain check uses the same rule before any graph installs.
     internal static string? AliasRefusalOf(ShaderPipelinePlan plan, ShaderPipelinePlannedPass planned) {
         var pass = planned.Package!;
 
@@ -250,9 +252,11 @@ public sealed partial class ShaderPipelineRenderNode {
                         ))
                     )))
                         ? "is read by another pass or as history"
-                        : ((LaterWriterOf(plan: plan, planned: planned, storage: plan.FindResource(name: pass.Inputs[index].Name)!.Storage) is { } writer)
-                            ? $"would stand for '{pass.Inputs[index].Name}', which pass '{writer}' overwrites later in the frame"
-                            : null)))));
+                        : ((Publishes(plan: plan, storage: output) && (plan.Storages[plan.FindResource(name: pass.Inputs[index].Name)!.Storage].Declaration is { Retained: true } or { Transient: true }))
+                            ? $"is published and would stand for '{pass.Inputs[index].Name}', one image every frame slot shares, which the next frame overwrites while a consumer may still read the publication"
+                            : ((LaterWriterOf(plan: plan, planned: planned, storage: plan.FindResource(name: pass.Inputs[index].Name)!.Storage) is { } writer)
+                                ? $"would stand for '{pass.Inputs[index].Name}', which pass '{writer}' overwrites later in the frame"
+                                : null))))));
 
             if (why is not null) {
                 return $"Package pass '{planned.Name}' drew nothing, but its output '{pass.Outputs[index].Name}' {why}, so it cannot stand for its input.";

@@ -201,12 +201,17 @@ public sealed class WorldRootGraph {
 
             // The stages ping-pong between two images: a stage forwards the one two passes back, which only the pass
             // before this one read, so the chain holds two stages whatever its length. The frame is its own image.
+            // A stage is read only inside the frame that writes it, so each of the two is one retained image every
+            // frame slot shares; the frame is published and keeps an image a slot.
+            var from = (((index >= 2) && (index < (passCount - 1)))
+                ? StageVersion(index: (index - 1))
+                : null);
+
             resources.Add(item: Image(
-                from: (((index >= 2) && (index < (passCount - 1)))
-                    ? StageVersion(index: (index - 1))
-                    : null),
+                from: from,
                 initialization: ShaderPipelineInitialization.Undefined,
-                name: output
+                name: output,
+                retained: ((from is null) && (index < (passCount - 1)))
             ));
 
             if (index < viewCount) {
@@ -458,12 +463,13 @@ public sealed class WorldRootGraph {
     }
     // Every version the root declares is a working image; a pane or view it places binds whatever image its instance
     // publishes, which the place pass samples.
-    private static ShaderPipelineResource Image(string name, ShaderPipelineInitialization initialization, string? from = null) => new(
+    private static ShaderPipelineResource Image(string name, ShaderPipelineInitialization initialization, string? from = null, bool retained = false) => new(
         Dimensions: ShaderPipelineDimensions.Relative(),
         Format: RenderGraphPackageCatalog.WorkingFormat.ToString(),
         From: from,
         Initialization: initialization,
-        Name: name
+        Name: name,
+        Retained: retained
     );
     // Whether the root places each view with a pass of its own: with more than one view. Otherwise the world's one view is
     // the root's base as it is. The first view's pass is placed over nothing the display shows, so outside its rect it

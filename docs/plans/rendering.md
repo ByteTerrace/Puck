@@ -961,6 +961,46 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
   bindings are never eligible. Check: planned against actual peak allocation
   across resize, graph replacement, held views, capture and background work on
   both backends, kept only for a measured byte dividend.
+- Bring the fixed class down so the mesh regions keep a useful share under a
+  device's memory bar. `host.memory families 0` gives the census, which every
+  benchmark chapter records. On the RTX 4070 at 2560 by 1440 the fixed storage
+  of the debug world's route is most of the bar, so the regions' share of the
+  elastic budget is small and the detail bias rises. The parts, largest first,
+  each with the change that would shrink it:
+  - **The main view's histories.** The stationary window
+    (`SdfWorldPackage.HistoryWindowWords` words a pixel) is the largest single
+    buffer. Pack a phase's sample into two words (a shared-exponent colour and
+    one word for coverage, transport and weight), or keep the window only for
+    pixels the resolve classes stationary.
+  - **A world's shadows** (`SdfWorldShadows`). Every residency reserves the
+    layers of its anchors, their glass extinction, the spare pairs and the
+    rectangle selections at the device table's texel count, a small routed room
+    as much as the valley. Size a residency's layers by what its views show
+    (their display share and the world's extent), share the spare pairs and
+    the rectangle selections across the device's residencies, and allocate an
+    entry when a view first reads it.
+  - **The irradiance volume** (the hit cache, the published and feedback
+    tables, the trace scene and its acceleration structures). Size the
+    tables by the probes a tier's windows hold, and keep one of the published
+    and feedback tables where the trace can write in place.
+  - **Per-pixel scratch sized for the worst case**: the glass sums
+    (`SdfWorldPackage.GlassSumWords` a pixel for views that mostly show no
+    glass) and the probe records. Allocate the glass sums by the tiles glass
+    covers, and alias the records with the glass sums: the views pass has read
+    the records before the glass clear writes the sums. Aliasing retained
+    storage needs the cadence to rerun a writer whose storage another pass
+    has since overwritten, which nothing does today.
+  - **A graph replacement holds two graphs** when its counts moved
+    (`ShaderPipelineRenderNode.CarriedStoragesOf` carries only what matches),
+    which is the pool's peak at boot and at a resize.
+  - **Tile heaps hold spare memory** after a mapped mesh region shrinks: a
+    heap is freed only when empty. The selector counts the spare as the
+    regions' (`IGpuMappedBuffer.SpareBytes`); placing a chunk in the fullest
+    heap that holds it, and moving the last chunks out of a nearly empty heap,
+    would return it to the device.
+  Check: the fixed class's bytes on `host.memory` at each benchmark chapter,
+  with the detail bias on `world.residency`'s selector line at zero through
+  the route.
 
 The back of a portal's glass still needs a presentation choice: no image,
 fallback colour or a front-image mirror. The

@@ -79,6 +79,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         "world.counters world.disclosure --json",
         "world.counters physics.bodies --json",
         "host.memory",
+        "host.memory families 0",
     ];
 
     private static readonly CommandForms WorldBenchmarkForms = CommandForms.Of(verb: "world.benchmark", "run <route>|<source.puck> [<chapter name prefix>|-] [at <tick>] [budget <ms>] [timeout <seconds>] [loops <n>] [output <directory>]", "stop", "overlay on|off|auto");
@@ -970,6 +971,11 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             var (baked, declared) = senses!.Navigation(endpoint: preparing.Endpoint).Domains;
 
             return new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.benchmark: preparing navigation for '{preparing.Reference}': {baked}/{declared} domains baked, {Stopwatch.GetElapsedTime(startingTimestamp: preparing.Started).TotalSeconds:0} s of {Stopwatch.GetElapsedTime(startingTimestamp: preparing.Started, endingTimestamp: preparing.Limit).TotalSeconds:0} s]"));
+        }
+        // A finished run whose report waits for its last readings is still playing to whoever polls for the report: the
+        // summary of the run before it, or of none, is not this run's.
+        if (m_finishOwed is not null) {
+            return new CommandResult(Output: $"[world.benchmark: playing '{m_route}': finished; its report is written once its last chapter reads answer]");
         }
         if (!m_running) {
             return new CommandResult(Output: m_summary);
