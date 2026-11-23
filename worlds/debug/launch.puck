@@ -1,0 +1,132 @@
+// The launch field: a stone pad on the valley floor under the moon, with a ship standing on it. Board the ship and it
+// flies as she walks: the movement keys fly it where the camera looks, Space climbs and C sinks, and Shift is the
+// boost. Climb through the sky seam `skySeamAltitude` metres up and the moon's world takes the ship and its pilot;
+// fly on, and inside the moon's reach the ship rolls to stand against the moon's pull and settles onto whatever ground
+// it is brought down to. The same flight, the other way, comes home. moon.md beside this file gives the console lines.
+//
+// The ship is the standard's (../standard/ship.puck): its `fly` program, its `ship` kit and its skiff. It is a body of
+// this world, so it takes a population slot: this document is imported ahead of every other inhabited placement and
+// the world's capacity grows by `launchBodies`, which gives the ship the highest slot and leaves every other body its
+// index.
+
+import "../standard/ship"
+import "../standard/free-camera"
+import "../standard/styles"
+import "ship-rows"
+import "moon-frame"
+import "shapes"
+
+let launchBodies = 1
+// The ship's body: the population's highest slot (debug.puck's capacity, less one).
+let launchShipBody = (galleryPopulation + 2 + boardRoomBodies + cardBodies + freeCameraBodies + 1)
+
+// The pad stands on the floor toward the moon's bearing, and the ship on it faces that way.
+let launchPad = [118, 148]
+let launchPadTop = 0.35
+let launchPadRadius = 8
+let launchHeading = 220
+
+
+// Seat 1 may drive the ship.
+grants [
+  { budget: 64, capability: Drive, grantee: "seat1", subject: $"body:{launchShipBody}" }
+]
+
+// The ship's body, keyed by its body number, so the rule below marks it as a craft: the register the kit and look
+// selectors read wherever it flies (noclip.puck here, craft-form.puck on the moon).
+state {
+  world [
+    {
+      name: "launchShips"
+      kind: "Int"
+      capacity: 1
+      cells [{ key: $"{launchShipBody}", value: 1 }]
+    }
+  ]
+}
+
+rule "launch-ship-craft" {
+  when bodyState(each, craft) != 1
+  mode: Level
+  forEach: launchShips
+  setBodyState(key: $each, state: "craft", expression: 1)
+}
+
+// The seam under the moon: a level plane over the whole valley. A body that climbs through it is the moon's from
+// there, at the same point of the two worlds' shared frame, with its heading and its velocity.
+adjacencies [
+  {
+    name: "sky"
+    destination: "moon"
+    counterpart: "sky"
+    boundary {
+      center [0, skySeamAltitude, 0]
+      outwardYawDegrees: 0
+      outwardPitchDegrees: 90
+      width: skySeamSpan
+      height: skySeamSpan
+    }
+  }
+]
+
+spawnPoints [
+  // Beside the pad, facing the ship with the moon over it.
+  { id: "launch", position [(launchPad[0] - 7), 0.05, (launchPad[1] - 9)], yawDegrees: launchHeading }
+]
+
+prototypes {
+  // The pad: a low stone drum with a painted ring.
+  prototype "launch-pad" {
+    document {
+      name: "launch-pad"
+      schema: "puck.creation.v1"
+      palette [
+        celMaterial({ color: "#B9AE9C", roughness: 0.85, specular: 0.04 }, celStyle)
+        celMaterial({ color: "#C5533A", roughness: 0.7, specular: 0.06 }, celStyle)
+      ]
+      shape Cylinder "drum" {
+        material: 0
+        position [0, (launchPadTop / 2), 0]
+        scale [launchPadRadius, (launchPadTop / 2), launchPadRadius]
+      }
+      shape Cylinder "ring" {
+        material: 1
+        position [0, (launchPadTop - 0.01), 0]
+        scale [(launchPadRadius - 1.2), 0.012, (launchPadRadius - 1.2)]
+      }
+      shape Cylinder "ring-inner" {
+        material: 0
+        position [0, (launchPadTop - 0.005), 0]
+        scale [(launchPadRadius - 1.8), 0.012, (launchPadRadius - 1.8)]
+      }
+    }
+  }
+}
+
+placements {
+  placement "launch-pad" {
+    prototype: "launch-pad"
+    position [launchPad[0], 0, launchPad[1]]
+    solid
+  }
+
+  placement "launch-ship" {
+    prototype: "ship"
+    position [launchPad[0], (launchPadTop + 0.05), launchPad[1]]
+    yawDegrees: launchHeading
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "ship"
+      look: "ship"
+      source: "Live"
+    }
+  }
+}

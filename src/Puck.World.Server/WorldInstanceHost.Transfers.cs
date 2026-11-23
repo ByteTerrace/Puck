@@ -63,6 +63,26 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
+        // A rider follows the body it rides. While that body still stands here its own crossing decides: undecided, the
+        // rider's waits for the next drain; refused, the body stays and so does its rider.
+        if (
+            (transfer.Sent is null) &&
+            (transfer.Rides is { } ridden) &&
+            source.Server.ExecuteAuthorityOperation(operation: () => (source.Server.Population.IsActive(index: ridden.Slot) && (source.Server.Population.Generation(index: ridden.Slot) == ridden.Generation)))
+        ) {
+            if (HeldCrossingSeats(instance: source).ContainsKey(key: ridden.Slot)) {
+                source.DrainedTransfers.Undrain(transferId: transfer.TransferId);
+                m_pendingTransfers.Enqueue(item: transfer);
+            } else if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} dropped ({TravellerName(index: transfer.SourceSlot, localSeatCount: source.Server.Population.LocalSeatCount)} rides body:{ridden.Slot}, which stayed in '{sourceInstanceName}')]"
+                );
+            }
+
+            return;
+        }
+
         // A resolver-driven transfer's membership/authorization was proven once, at scan time, against the
         // cohort the scan read then. Re-deriving the scope key from that same frozen cohort's still-active
         // members, right here, before this transfer touches anything, catches a seat replaced, a membership
@@ -940,7 +960,8 @@ public sealed partial class WorldInstanceHost {
                 VerticalVelocity: arrivalVerticalVelocity,
                 ActionContinuity: actionContinuity,
                 Continuum: continuum,
-                TravelTurn: arrivalTurn
+                TravelTurn: arrivalTurn,
+                Drives: transfer.Rides?.Incarnation
             ));
         }
 
@@ -1123,7 +1144,7 @@ public sealed partial class WorldInstanceHost {
 
         return cohort;
     }
-    private void EnqueueAdjacencyTransfer(WorldInstance instance, in WorldAdjacencyFaceHit hit) {
+    private void EnqueueAdjacencyTransfer(WorldInstance instance, in WorldAdjacencyFaceHit hit, RiddenMount? rides = null) {
         var definition = instance.Server.Definition;
         var label = $"{instance.Name}/{hit.Adjacency.Name}";
 
@@ -1150,6 +1171,14 @@ public sealed partial class WorldInstanceHost {
             server: instance.Server,
             slots: slots
         );
+        var riders = new List<int>();
+
+        if (rides is null) {
+            instance.Server.Population.CollectRiders(
+                into: riders,
+                mount: hit.Seat
+            );
+        }
         var referencedDocument = ResolveReferenceDocument(
             source: instance,
             neighbourKey: reference.NeighbourKey
@@ -1260,8 +1289,25 @@ public sealed partial class WorldInstanceHost {
             continuum: continuum,
             fullPolicy: WorldTransferFullPolicy.Retry,
             borderCapacity: hit.Adjacency.Capacity,
-            border: $"adjacency/{hit.Adjacency.Name.Value}"
+            border: $"adjacency/{hit.Adjacency.Name.Value}",
+            rides: rides
         );
+
+        if ((riders.Count > 0) && (OccupantIncarnation(instance: instance, slot: hit.Seat) is { } mountIncarnation)) {
+            var mount = new RiddenMount(
+                Generation: instance.Server.Population.Generation(index: hit.Seat),
+                Incarnation: mountIncarnation,
+                Slot: hit.Seat
+            );
+
+            foreach (var rider in riders) {
+                EnqueueAdjacencyTransfer(
+                    hit: hit with { Seat = rider },
+                    instance: instance,
+                    rides: mount
+                );
+            }
+        }
 
         var traveller = TravellerName(index: hit.Seat, localSeatCount: instance.Server.Population.LocalSeatCount);
 
@@ -2162,9 +2208,11 @@ public sealed partial class WorldInstanceHost {
     /// <param name="partyAllOrNothing">Whether the cohort binds as one transaction.</param>
     /// <param name="borderCapacity">The optional capacity authored on the crossed border.</param>
     /// <param name="border">The stable border identity used for destination admission accounting.</param>
+    /// <param name="rides">The body the traveler rode when its crossing was queued, whose own crossing this one follows;
+    /// <see langword="null"/> for a traveler that rides nothing.</param>
     /// <returns>The transfer id this call's queued crossing will carry, freshly minted from the source's own counter, so
     /// a caller that wants to echo it has the value without re-deriving the enqueue order itself.</returns>
-    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceCrossingPoint = default, WorldFaceFrame? sourceFrame = null, WorldContinuumTrajectory? continuum = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null) => EnqueuePending(
+    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceCrossingPoint = default, WorldFaceFrame? sourceFrame = null, WorldContinuumTrajectory? continuum = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null, RiddenMount? rides = null) => EnqueuePending(
         actingPrincipal: actingPrincipal,
         adjacencyCounterpart: adjacencyCounterpart,
         arrival: arrival,
@@ -2181,6 +2229,7 @@ public sealed partial class WorldInstanceHost {
         partyAllOrNothing: partyAllOrNothing,
         posed: null,
         resolvedDestinationRow: resolvedDestinationRow,
+        rides: rides,
         scope: scope,
         sourceCrossingPoint: sourceCrossingPoint,
         sourceFrame: sourceFrame,
@@ -2258,7 +2307,7 @@ public sealed partial class WorldInstanceHost {
         return true;
     }
 
-    private ulong EnqueuePending(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow, IReadOnlyList<int>? frozenCohortSlots, string? frozenScopeKey, ulong? frozenGenerationId, int? testForceJoinRefusalOrdinal, WorldPortalArrival arrival, string? counterpart, string? adjacencyCounterpart, FixedVector3 sourceCrossingPoint, WorldFaceFrame? sourceFrame, WorldContinuumTrajectory? continuum, double holdSeconds, WorldTransferFullPolicy fullPolicy, bool partyAllOrNothing, int? borderCapacity, string? border, PosedTraveller? posed, bool companionReturn = false) {
+    private ulong EnqueuePending(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow, IReadOnlyList<int>? frozenCohortSlots, string? frozenScopeKey, ulong? frozenGenerationId, int? testForceJoinRefusalOrdinal, WorldPortalArrival arrival, string? counterpart, string? adjacencyCounterpart, FixedVector3 sourceCrossingPoint, WorldFaceFrame? sourceFrame, WorldContinuumTrajectory? continuum, double holdSeconds, WorldTransferFullPolicy fullPolicy, bool partyAllOrNothing, int? borderCapacity, string? border, PosedTraveller? posed, bool companionReturn = false, RiddenMount? rides = null) {
         var source = m_instances.GetValueOrDefault(key: sourceInstance);
         var transferId = ((source is not null)
             ? MintTransferId(source: source)
@@ -2301,7 +2350,8 @@ public sealed partial class WorldInstanceHost {
             BorderCapacity: borderCapacity,
             Border: (border ?? "transfer"),
             Posed: posed,
-            CompanionReturn: companionReturn
+            CompanionReturn: companionReturn,
+            Rides: rides
         ));
 
         return transferId;
@@ -2513,6 +2563,8 @@ public sealed partial class WorldInstanceHost {
     /// again unchanged; <see langword="null"/> for an attempt that builds its own.</param>
     /// <param name="Allocation">The allocation record an earlier attempt sent and the source's log had not answered,
     /// with the members and destination that attempt held; <see langword="null"/> for an attempt that sent none.</param>
+    /// <param name="Rides">The body the traveler rode when its crossing was queued; <see langword="null"/> for a traveler
+    /// that rides nothing.</param>
     private readonly record struct PendingTransfer(
         string SourceInstance,
         TransferScope Scope,
@@ -2545,8 +2597,16 @@ public sealed partial class WorldInstanceHost {
         bool CompanionReturn = false,
         HopQuestion[]? Hops = null,
         SentReservation? Sent = null,
-        ParkedAllocation? Allocation = null
+        ParkedAllocation? Allocation = null,
+        RiddenMount? Rides = null
     );
+    /// <summary>The body a crossing rider rode when its crossing was queued. The rider's transfer waits while that
+    /// body's own crossing is undecided, is dropped when the body stays, and carries the incarnation so the destination
+    /// hands the rider the same body to drive.</summary>
+    /// <param name="Slot">The body's 0-based index in the source.</param>
+    /// <param name="Generation">The generation the body held at that index.</param>
+    /// <param name="Incarnation">The incarnation the body keeps wherever it lands.</param>
+    public readonly record struct RiddenMount(int Slot, int Generation, WorldEntityAddress Incarnation);
     // An allocation record in flight to the source's log, and what the attempt that sent it held: the transfer waits,
     // holding these members and this destination, and resumes at the drain after the record settles. The record's
     // durable effect (the source's allocated id range) is applied when it settles; the resumed attempt only reads the

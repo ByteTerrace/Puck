@@ -1,4 +1,4 @@
-// The painting wing: six paintings in the gallery hall's east end on level 0, each a framed canvas that is a door.
+// The painting wing: seven paintings in the gallery hall's east end on level 0, each a framed canvas that is a door.
 // Walk or jump into the canvas and you pass through it, as into a Mario 64 painting; its glass shows where it leads
 // while you stand outside. The debug world imports this file whole, and paintings.md beside it says how to get in,
 // what each painting does and how to get out.
@@ -8,6 +8,7 @@
 //   north wall, x = 57             the garden: a sunset plot (garden.puck)
 //   north wall, x = 64             the night field: a snowfield under stars (night.puck)
 //   south wall, x = 60             the city: a town on a river bend (city.puck)
+//   south wall, x = 66             the moon: the pale moon that hangs over the valley (moon.puck)
 //   west and east walls, z = 34.5  two paintings facing each other: step into either and step out of the other
 //   floor and ceiling, (66, 22.6)  the endless fall: a painting in the floor under its twin in the ceiling, in this
 //                                  world itself, so a body that steps onto the floor glass drops out of the ceiling
@@ -45,6 +46,7 @@ let canvasProud = 0.03
 let fallbackGarden = "#FF9A4D"
 let fallbackNight = "#070B16"
 let fallbackCity = "#E8C48A"
+let fallbackMoon = "#CFC8BC"
 
 // Shape rotations, as authored quaternions [x, y, z, w]: a quarter turn about +X lays a canvas (its +Z face) flat. The
 // floor turns it to face up and the ceiling to face down; the ceiling placement's half turn about up then lines its right
@@ -89,6 +91,10 @@ let wallPaintings = [
   {
     name: "city", x: 60, z: wingZ0, yaw: 180, frame: ornate, destination: "city", counterpart: "arrival/glass", fallback: fallbackCity
     title: "THE CITY", note: "A town on a river bend, its market, terraces, works and quay. Step in; the frame behind you leads back."
+  }
+  {
+    name: "moon", x: 66, z: wingZ0, yaw: 180, frame: modern, destination: "moon", counterpart: "arrival/glass", fallback: fallbackMoon
+    title: "THE MOON", note: "The pale moon over the valley, the same one a ship from the launch field lands on. Step in; the frame behind you leads back."
   }
   {
     name: "link-west", x: wingX0, z: 34.5, yaw: 270, frame: brass, destination: "self", counterpart: "painting-link-east/glass", fallback: fallbackSelf
@@ -588,6 +594,7 @@ spawnPoints [
   { id: "portal-garden", position [57, wingFloor, 36.3], yawDegrees: 180 }
   { id: "portal-night", position [64, wingFloor, 36.3], yawDegrees: 180 }
   { id: "portal-city", position [60, wingFloor, 15.7], yawDegrees: 0 }
+  { id: "portal-moon", position [66, wingFloor, 15.7], yawDegrees: 0 }
   { id: "portal-link", position [54.5, wingFloor, 34.5], yawDegrees: 90 }
   { id: "portal-fall", position [fallX, wingFloor, (fallZ - 4)], yawDegrees: 180 }
   // Eleven metres south of the garden painting, facing it: the seam walk's second crossing (walkthrough-tests.puck).

@@ -223,6 +223,12 @@ public sealed partial class WorldInstanceHost {
                 continue;
             }
 
+            // A rider crosses with the body it rides (EnqueueAdjacencyTransfer queues it behind that body), never on
+            // its own while that body stands here.
+            if ((population.EntryBody(index: seat)?.MountedOn is { } ridden) && population.IsActive(index: ridden)) {
+                continue;
+            }
+
             var earliest = hits.Min(selector: static hit => hit.Parameter);
             var eligible = hits.Where(predicate: hit => (hit.Parameter == earliest))
                 .OrderBy(

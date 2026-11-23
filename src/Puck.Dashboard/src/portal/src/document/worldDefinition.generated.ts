@@ -9482,6 +9482,7 @@ export type WorldKit = {
     [k: string]: WorldPadElement;
   } | null;
   autonomy?: WorldAutonomyCadence | null;
+  mount?: WorldMount | null;
 };
 
 export type WorldKitsSection = {
@@ -9983,6 +9984,17 @@ export type WorldMotionDefaults = {
    * The largest server-correction position error, in world units, that presentation may ease instead of snapping.
    */
   maxSmoothError?: number;
+};
+
+export type WorldMount = {
+  /**
+   * Where the rider's origin is held, in the driven body's own axes at full scale.
+   */
+  seat: DocumentVector3;
+  /**
+   * Where the rider's origin is set down when it stops driving, in the same axes.
+   */
+  exit: DocumentVector3;
 };
 
 export type WorldMusicRow = {
@@ -12750,7 +12762,7 @@ export type WorldRenderSkyLayerSunDisc = {
 };
 
 /**
- * Another world, seen at infinity: a second sdf.world instance (sky$<name>) rendering the destination's session from a fixed anchor in it, turned with the viewer's camera and never translated by it. It renders only while the viewer's previous frame showed it, and only the rectangle its mask covers (a cone, or the whole frustum without a mask). The camera alone sees it, since the environment map binds no screen. At most SdfSky.MaxInfinityViews view and far layers a world, nested worlds included; a view that cannot render draws its Fallback colour.
+ * Another world in the sky: a second sdf.world instance (sky$<name>) rendering the destination's session from an anchor in it, turned with the viewer's camera. Without Follow the camera stays at the anchor, so the destination is a backdrop at infinity; with it the camera moves as the viewer does, so the destination is a place at a distance that grows as the viewer nears it, and the two worlds share one frame. It renders only while the viewer's previous frame showed it, and only the rectangle its mask covers (a cone, the cone its Bound subtends, or the whole frustum with neither). The camera alone sees it, since the environment map binds no screen. At most SdfSky.MaxInfinityViews view and far layers a world, nested worlds included; a view that cannot render draws its Fallback colour.
  */
 export type WorldRenderSkyLayerView = {
   $type?: "view";
@@ -12763,7 +12775,7 @@ export type WorldRenderSkyLayerView = {
    */
   destination?: string | null;
   /**
-   * The point in the destination the camera sits at, whatever the viewer does. Absent is its origin.
+   * The point in the destination the camera sits at, whatever the viewer does; with Follow, the point of the destination this world's origin stands at. Absent is its origin.
    */
   anchor?: DocumentVector3;
   /**
@@ -12794,6 +12806,18 @@ export type WorldRenderSkyLayerView = {
    * BindableColor's grammar: the colour drawn where the view cannot render, before its first image and past the nesting depth or the cap. Absent is black.
    */
   fallback?: BindableColor;
+  /**
+   * Whether the camera moves with the viewer's. Absent is not.
+   */
+  follow?: boolean | null;
+  /**
+   * The sphere that bounds what the view shows, in the destination's coordinates. Absent is none.
+   */
+  bound?: WorldRenderSkyLayerWorldSkyViewBound | null;
+  /**
+   * Whether the view draws only the destination's geometry, so this world's sky shows around it. Absent is not: the destination's own sky fills the view.
+   */
+  coverage?: boolean | null;
   layerName?: string | null;
   /**
    * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
@@ -12827,6 +12851,20 @@ export type WorldRenderSkyLayerView = {
    * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
    */
   tier?: WorldSkyTier | null;
+};
+
+/**
+ * The sphere that bounds what a View shows.
+ */
+export type WorldRenderSkyLayerWorldSkyViewBound = {
+  /**
+   * The sphere's centre, in the destination's coordinates.
+   */
+  center: DocumentVector3;
+  /**
+   * The sphere's radius, in world units, positive.
+   */
+  radius: number;
 };
 
 /**

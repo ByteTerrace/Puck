@@ -1,0 +1,227 @@
+// A ship: a body a seat boards and flies, drawn as a small skiff. A module library: it hands its importers templates
+// and lets and emits no document. A world expands `shipFlight` once for the `fly` motion program and the `ship` kit,
+// `shipLook` once for the skiff, and `shipCraft` for the body register a ship is known by, then places a ship with an
+// `inhabit` row naming the kit and the look.
+//
+// The ship runs the engine's own systems. It is a body like any other: the seat that drives it holds its control set
+// (the body's own producer, if it has one, stands down for as long as a seat drives it), the kit's `mount` carries that
+// seat's own body in the cockpit so the pilot goes where the ship goes, and the `fly` program moves it under the kit's
+// holds. Flying it is walking's controls: the movement channels fly it where the camera looks, climbing and diving
+// with the look, the rise channel climbs and sinks, and the run channel is the boost. Three holds assist the pilot:
+//
+//   landed      on the ground it stands, taxis slowly and lifts off on the rise channel
+//   touchdown   within `flare` metres of ground it flies slowly and settles at `settle` metres a second unless the
+//               pilot holds it up, so letting go near the ground lands it
+//   cruise      anywhere else it hovers where it is left, level with the world's up
+//
+// Its up is the world's pull: under a planet's or a moon's gravity the ship rolls to stand against it at `roll`
+// radians a second (half the turn the kit authors), and in open space it keeps the up it had.
+//
+// A ship crosses a seam between two worlds as any body does, and its pilot crosses behind it. Both worlds declare the
+// `craft` register (`shipCraft`) and select the `ship` kit and look by it, so the body that arrives is the ship that
+// left, and the engine hands its pilot the same body to drive.
+
+import "kits"
+
+// The body register a ship is known by in every world it flies through: 1 on a ship, 0 on everything else. A world's
+// kit and look selectors read it (through whatever register its selector reads), and it crosses with the body.
+template shipCraft() {
+  state {
+    body [
+      {
+        name: "craft"
+        kind: "Counter"
+        initial: 0
+        envelope { $type: "set", values [0, 1] }
+      }
+    ]
+  }
+}
+
+// The `fly` motion program and the `ship` kit. `cruise` is the flying speed in metres a second and `boost` what the
+// run channel multiplies it by; `taxi` is the speed on the ground, `approach` the speed inside the flare. `seat` is
+// where the pilot's own body is held and `exit` where it is set down, in the ship's own axes (+X right, +Y up, -Z
+// ahead).
+template shipFlight(kit = "ship", cruise = 60, boost = 4, taxi = 4, approach = 22, flare = 14, settle = 3, turn = 1.4, roll = 0.35, seat = [
+  0
+  0.7
+  0.2
+], exit = [3, 0.4, 0]) {
+  bodyMotionPrograms [
+    {
+      kind: Motion
+      name: "fly"
+      operations [
+        ResolveYawAttitudeAndPlanarFrame
+        ResolveHold
+        ComputePlanarTargetVelocity
+        ShapeVelocity
+        SnapYawToPlanarIntent
+        RunActionTriggers
+        ApplyHold
+        IntegratePlanarAndVerticalVelocity
+        CommitPose
+      ]
+      // A ship backs and sidesteps at a fraction of its pace ahead.
+      planarTarget {
+        backward: 0.35
+        strafe: 0.5
+      }
+      version: "puck.body.program.v1"
+    }
+  ]
+
+  kits [
+    {
+      name: kit
+      bodyContact: Solid
+      bodyMotionProgram: "fly"
+      // A capsule over the hull's middle, standing on the skids' line: 3 m tall and 2.8 m across.
+      collider: capsule(endpoint: [0, 0.2, 0], radius: 1.4)
+      mass: 0
+      mount {
+        seat: seat
+        exit: exit
+      }
+      motion {
+        facingSnap: false
+        holds [
+          {
+            name: "landed"
+            bond: Surface
+            hold: Gravity
+            cone [0, 50]
+            reach: 0.5
+            forward: Heading
+            speed: taxi
+            gravity: standardGravity
+            envelope { sinkSpeed: 6 }
+            thrust: 1
+          }
+          {
+            name: "touchdown"
+            bond: Surface
+            hold: Gravity
+            cone [0, 60]
+            reach: flare
+            forward: Heading
+            speed: approach
+            gravity { fall: 4, rise: 4 }
+            envelope { sinkSpeed: settle }
+            thrust: 1
+          }
+          {
+            name: "cruise"
+            bond: Free
+            hold: Lift
+            forward: Heading
+            lift: 1
+            speed: cruise
+            gravity: standardGravity
+            thrust: 1
+          }
+        ]
+        moveFrame: World
+        // It gathers speed in two seconds and coasts for five once the stick lets go.
+        shaping [{ along { engage: (cruise / 2), release: (cruise / 5) }, turnScale: 1 }]
+        speed { value: cruise, held { channel: "run", multiplier: boost } }
+        stepHeight: 0
+        turn { falloff: 1, maxPitch: 1.3, pitchRate: 0, rate: turn }
+        upTurn { field: roll, contact: 6.283185307179586 }
+      }
+    }
+  ]
+}
+
+// The skiff: a rounded hull on two skids under a glass canopy, a tail fin, two short wings and a lit engine bell. The
+// prototype and the look are both named `name`. It is drawn about the kit's origin, on the skids' line, nose toward -Z.
+template shipLook(name = "ship", hull = "#E8DCC4", trim = "#C5533A", metal = "#4A4650", glass = "#9FD8E8", glow = "#FFB45A") {
+  prototypes {
+    prototype $"{name}" {
+      document {
+        name: name
+        schema: "puck.creation.v1"
+        palette [
+          { color: hull, roughness: 0.55, specular: 0.2 }
+          { color: trim, roughness: 0.6, specular: 0.15 }
+          { color: metal, roughness: 0.5, specular: 0.3 }
+          { color: glass, roughness: 0.15, specular: 0.7 }
+          { color: glow, emissive: 6000, roughness: 0.4 }
+        ]
+        shape Superellipsoid "hull" {
+          exponent: 2.6
+          material: 0
+          position [0, 1.45, 0.2]
+          scale [1.35, 1.0, 2.6]
+        }
+        shape Superellipsoid "belly" {
+          exponent: 2.2
+          material: 1
+          position [0, 0.95, 0.3]
+          scale [1.2, 0.6, 2.3]
+        }
+        shape Sphere "canopy" {
+          material: 3
+          position [0, 2.0, -0.9]
+          scale [0.85, 0.75, 1.15]
+        }
+        shape Box "wing-left" {
+          material: 1
+          position [-1.9, 1.2, 0.9]
+          scale [0.9, 0.08, 0.7]
+          rounding: 0.06
+        }
+        shape Box "wing-right" {
+          material: 1
+          position [1.9, 1.2, 0.9]
+          scale [0.9, 0.08, 0.7]
+          rounding: 0.06
+        }
+        shape Box "fin" {
+          material: 1
+          position [0, 2.5, 2.1]
+          scale [0.07, 0.7, 0.6]
+          rounding: 0.05
+        }
+        shape Cylinder "bell" {
+          material: 2
+          position [0, 1.4, 2.85]
+          rotation [0.707107, 0, 0, 0.707107]
+          scale [0.6, 0.25, 0.6]
+        }
+        shape Sphere "flame" {
+          material: 4
+          position [0, 1.4, 3.0]
+          scale [0.42, 0.42, 0.25]
+        }
+        for side in [-1, 1] {
+          shape Box $"skid-{side}" {
+            material: 2
+            position [(side * 0.85), 0.08, 0.2]
+            scale [0.1, 0.08, 1.8]
+            rounding: 0.05
+          }
+          shape Box $"strut-fore-{side}" {
+            material: 2
+            position [(side * 0.85), 0.35, -0.8]
+            scale [0.06, 0.3, 0.06]
+          }
+          shape Box $"strut-aft-{side}" {
+            material: 2
+            position [(side * 0.85), 0.35, 1.2]
+            scale [0.06, 0.3, 0.06]
+          }
+        }
+      }
+    }
+  }
+
+  looks [
+    {
+      name: name
+      scale: 1
+      source: creation(prototypeId: name)
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    }
+  ]
+}

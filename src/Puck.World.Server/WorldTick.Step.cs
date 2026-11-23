@@ -377,6 +377,7 @@ public sealed partial class WorldTick {
         // Release every carry relationship this tick's drain invalidated (a partner gone inactive, a kit retune away
         // from the facet either side needs) BEFORE the advance passes, so an orphaned target re-enters rigid
         // integration and contact in the same tick its carrier disappeared rather than skipping one.
+        Host.Engagement.ResolveMounts();
         Host.Population.PrepareCarriedBodies();
         // Sample what the bodies read of the field regions BEFORE either half of the tick advances them, so a medium
         // hold's phase-4 law (inside AdvanceSimulated/AdvanceSeats' own body.Advance calls) reads this tick's
@@ -400,6 +401,7 @@ public sealed partial class WorldTick {
         using (HostFrameWork.Measure(HostFrameWorkPart.TickContact)) { Host.Population.ResolveDynamicContacts(); }
         // The solve may move a rigid carrier. Reconcile its held pose after the contact step as well.
         Host.Population.UpdateCarriedBodies();
+        Host.Population.FollowMounts();
         Host.Population.CompleteStep(tick: tick);
         // Kit effects have settled their authoritative cells. Install their input barrier before world rules
         // can observe a released action and accidentally use it to enter the old mode again.

@@ -1,0 +1,215 @@
+// The moon's ground: a sphere of regolith pocked with craters, as eight octant sectors of one description, so each
+// bakes as its own group at an eighth of the whole's cell. A library: it emits no document; moon.puck places one
+// creation and one solid placement per sector and the pad at the pole.
+//
+// Every sector is the same sphere, the same relief and every crater that reaches it, cut to its octant, so two sectors
+// agree wherever they meet. A crater is a lens of raised ground with a bowl carved from its middle: the lens outside
+// the bowl is the rim. Contact reads the same field the bake draws, so a body stands on the rims and in the bowls. A
+// sector collides `moonLap` metres past its octant's faces, where its neighbour holds the same ground: a body whose
+// feet stand exactly on the plane between two sectors would otherwise rest on the cut faces of both and slip between.
+
+import "../standard/terrain"
+import "../standard/styles"
+import "moon-frame"
+
+let moonDegree = 3.141592653589793 / 180
+
+// The unit direction out from the centre at a latitude and longitude, in degrees: latitude 90 is the north pole (+Y),
+// longitude 0 on the equator is +Z and 90 is +X.
+function moonDirection(latitude, longitude) = [
+  (cosine(latitude * moonDegree) * sine(longitude * moonDegree)),
+  sine(latitude * moonDegree),
+  (cosine(latitude * moonDegree) * cosine(longitude * moonDegree))
+]
+// The quaternion [x, y, z, w] that turns +Y onto the unit direction `n`: the tilt that stands a shape on the ground
+// there. No crater sits at the south pole, where it has no answer.
+function moonTilt(n) = [
+  (n[2] / squareRoot(((n[2] * n[2]) + (n[0] * n[0]) + ((1 + n[1]) * (1 + n[1]))))),
+  0,
+  ((0 - n[0]) / squareRoot(((n[2] * n[2]) + (n[0] * n[0]) + ((1 + n[1]) * (1 + n[1]))))),
+  ((1 + n[1]) / squareRoot(((n[2] * n[2]) + (n[0] * n[0]) + ((1 + n[1]) * (1 + n[1])))))
+]
+
+// The craters: where each lies, the radius of its bowl at the ground, and its depth and its rim's height as shares
+// of that radius. The pole keeps clear of all but the small ones round the pad; the largest lie on the side the valley
+// sees.
+let moonCraters = [
+  { name: "tycho", latitude: -48, longitude: 222, radius: 150, depth: 0.2, rim: 0.09 }
+  { name: "basin", latitude: -20, longitude: 250, radius: 190, depth: 0.14, rim: 0.06 }
+  { name: "twin-a", latitude: -62, longitude: 160, radius: 95, depth: 0.22, rim: 0.1 }
+  { name: "twin-b", latitude: -70, longitude: 205, radius: 70, depth: 0.24, rim: 0.11 }
+  { name: "south", latitude: -84, longitude: 40, radius: 110, depth: 0.2, rim: 0.09 }
+  { name: "limb", latitude: -8, longitude: 185, radius: 120, depth: 0.18, rim: 0.08 }
+  { name: "east", latitude: 12, longitude: 95, radius: 135, depth: 0.19, rim: 0.085 }
+  { name: "east-small", latitude: 34, longitude: 122, radius: 55, depth: 0.25, rim: 0.12 }
+  { name: "far", latitude: 30, longitude: 20, radius: 160, depth: 0.17, rim: 0.075 }
+  { name: "far-small", latitude: 5, longitude: 40, radius: 60, depth: 0.25, rim: 0.12 }
+  { name: "west", latitude: 22, longitude: 300, radius: 105, depth: 0.2, rim: 0.09 }
+  { name: "west-low", latitude: -30, longitude: 320, radius: 85, depth: 0.22, rim: 0.1 }
+  { name: "south-east", latitude: -40, longitude: 90, radius: 100, depth: 0.2, rim: 0.09 }
+  { name: "equator", latitude: -2, longitude: 0, radius: 75, depth: 0.23, rim: 0.105 }
+  { name: "north-west", latitude: 55, longitude: 265, radius: 90, depth: 0.21, rim: 0.095 }
+  { name: "north-east", latitude: 60, longitude: 70, radius: 65, depth: 0.24, rim: 0.11 }
+  { name: "pole-view", latitude: 76, longitude: 180, radius: 70, depth: 0.22, rim: 0.1 }
+  { name: "pole-near", latitude: 84, longitude: 320, radius: 32, depth: 0.26, rim: 0.12 }
+  { name: "pole-pock", latitude: 86.5, longitude: 95, radius: 14, depth: 0.28, rim: 0.13 }
+  { name: "pock-a", latitude: 44, longitude: 200, radius: 40, depth: 0.26, rim: 0.12 }
+  { name: "pock-b", latitude: -15, longitude: 130, radius: 45, depth: 0.26, rim: 0.12 }
+  { name: "pock-c", latitude: -55, longitude: 290, radius: 50, depth: 0.25, rim: 0.115 }
+  { name: "pock-d", latitude: 15, longitude: 235, radius: 38, depth: 0.27, rim: 0.125 }
+  { name: "pock-e", latitude: -35, longitude: 30, radius: 48, depth: 0.25, rim: 0.115 }
+]
+
+// How far past its bowl a crater's rim lens reaches, as a share of the bowl's radius.
+let moonRimReach = 1.4
+
+// The eight octants: the sign of each axis a sector keeps.
+let moonSectors = [
+  { name: "north-a", sign [1, 1, 1] }
+  { name: "north-b", sign [-1, 1, 1] }
+  { name: "north-c", sign [-1, 1, -1] }
+  { name: "north-d", sign [1, 1, -1] }
+  { name: "south-a", sign [1, -1, 1] }
+  { name: "south-b", sign [-1, -1, 1] }
+  { name: "south-c", sign [-1, -1, -1] }
+  { name: "south-d", sign [1, -1, -1] }
+]
+
+// Whether a crater's lens reaches what a sector collides: on every axis its centre lies no further on the other side
+// than the lens and the lap reach.
+function moonCraterReaches(crater, sign) = (
+  ((sign[0] * moonDirection(crater.latitude, crater.longitude)[0] * moonRadius) > (0 - ((crater.radius * moonRimReach) + moonLap))) and
+  ((sign[1] * moonDirection(crater.latitude, crater.longitude)[1] * moonRadius) > (0 - ((crater.radius * moonRimReach) + moonLap))) and
+  ((sign[2] * moonDirection(crater.latitude, crater.longitude)[2] * moonRadius) > (0 - ((crater.radius * moonRimReach) + moonLap)))
+)
+
+// The pad at the north pole: a round slab `padTop` proud of the sphere, where the arrival frame stands and the relief
+// stays out.
+let padTop = 0.6
+let padRadius = 9
+
+// How much rock a sector keeps under its ground: the bake draws a shell this thick, which the deepest bowl stays inside.
+let moonShell = 80
+// The half-extent of a sector's octant box, past the highest rim, and how far past the octant's inner faces a sector
+// still collides.
+let moonOctant = ((moonRadius + 40) / 2)
+let moonLap = 6
+
+// The regolith: pale warm grey in the sun over lavender shade, darker in the bowls and on steep walls, paler on the
+// rims' crests, and broken by a slow mottling so no bowl is one flat value.
+let moonRegolith = 0
+let moonStone = 1
+let moonStyle = celStyle with {
+  threshold: 0.12
+  softness: 0.22
+  shadowTint [0.5, 0.46, 0.7]
+  specularSize: 0.015
+  restore: 0.45
+  form: 0.5
+  ink {
+    outlineWidth: 0
+    outlineDistance: 12
+    outlineNormal: 0.65
+    outlineTint [1, 1, 1]
+  }
+}
+let moonBands = [
+  terrainBand("#8E8794", amount: 0.7, altitude: [0 - terrainOpen, -6], altitudeWidth: 10)
+  terrainBand("#77707F", amount: 0.6, slope: [24, terrainOpen], slopeWidth: 10)
+  terrainBand("#F2EBDD", amount: 0.55, altitude: [3.5, terrainOpen], altitudeWidth: 4)
+]
+let moonBreakup = { scale: 0.012, jitter [8, 5, 0], variation: 0.16, seed: 4273 }
+let moonPalette = [
+  celMaterial(
+    terrainMaterial({ color: "#CFC8BC", roughness: 0.96, specular: 0.02 }, moonBands, moonBreakup, radial: 1, radius: moonRadius),
+    moonStyle
+  )
+  celMaterial({ color: "#E9E4D8", roughness: 0.7, specular: 0.08 }, moonStyle)
+]
+
+// One sector's creation: the sphere, the craters that reach the octant, the relief, then the cuts that leave the
+// octant's shell. The shell and the lapped octant are what a body stands on; the exact octant is a detail shape, so
+// the bake draws each sector to the plane it shares with its neighbour and no further.
+template moonSector(sector) {
+  name: $"moon-{sector.name}"
+  schema: "puck.creation.v1"
+  palette: moonPalette
+  noise {
+    frequency: 0.018
+    amplitude: 2.5
+    octaves: 5
+    gain: 0.5
+    lacunarity: 2
+    seed: 7711
+    masks [
+      {
+        fade: 10
+        shapes [
+          {
+            type: "Box"
+            name: "pad"
+            position [0, moonRadius, 0]
+            scale [(padRadius + 2), 8, (padRadius + 2)]
+          }
+        ]
+      }
+    ]
+  }
+  shape Sphere "ground" {
+    material: moonRegolith
+    position [0, 0, 0]
+    scale [moonRadius, moonRadius, moonRadius]
+  }
+  for crater in filter(moonCraters, c => moonCraterReaches(c, sector.sign)) {
+    shape Superellipsoid $"{crater.name}-rim" {
+      exponent: 2
+      material: moonRegolith
+      position: map(moonDirection(crater.latitude, crater.longitude), axis => axis * moonRadius)
+      rotation: moonTilt(moonDirection(crater.latitude, crater.longitude))
+      scale [(crater.radius * moonRimReach), (crater.radius * crater.rim), (crater.radius * moonRimReach)]
+    }
+    shape Superellipsoid $"{crater.name}-bowl" {
+      blend: Subtraction
+      exponent: 2
+      material: moonRegolith
+      position: map(moonDirection(crater.latitude, crater.longitude), axis => axis * moonRadius)
+      rotation: moonTilt(moonDirection(crater.latitude, crater.longitude))
+      scale [crater.radius, (crater.radius * crater.depth), crater.radius]
+    }
+  }
+  shape Sphere "hollow" {
+    blend: Subtraction
+    material: moonRegolith
+    position [0, 0, 0]
+    scale [(moonRadius - moonShell), (moonRadius - moonShell), (moonRadius - moonShell)]
+  }
+  shape Box "lapped" {
+    blend: Intersection
+    material: moonRegolith
+    position [
+      (sector.sign[0] * (moonOctant - (moonLap / 2)))
+      (sector.sign[1] * (moonOctant - (moonLap / 2)))
+      (sector.sign[2] * (moonOctant - (moonLap / 2)))
+    ]
+    scale [(moonOctant + (moonLap / 2)), (moonOctant + (moonLap / 2)), (moonOctant + (moonLap / 2))]
+  }
+  shape Box "octant" {
+    blend: Intersection
+    detail: true
+    material: moonRegolith
+    position [(sector.sign[0] * moonOctant), (sector.sign[1] * moonOctant), (sector.sign[2] * moonOctant)]
+    scale [moonOctant, moonOctant, moonOctant]
+  }
+}
+
+// The pad: a low stone drum on the pole.
+template moonPad() {
+  name: "moon-pad"
+  schema: "puck.creation.v1"
+  palette: moonPalette
+  shape Cylinder "drum" {
+    material: moonStone
+    position [0, (padTop - 1.5), 0]
+    scale [padRadius, 1.5, padRadius]
+  }
+}
