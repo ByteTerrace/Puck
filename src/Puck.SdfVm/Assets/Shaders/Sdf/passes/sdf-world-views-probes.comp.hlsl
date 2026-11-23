@@ -5,9 +5,11 @@
 // The group then runs every gather its cells asked for as one list, a gather a lane: the view first reuses its
 // preceding render's gather where one stands for the receiver (sdf-probe-history.hlsli), and the gathers no entry
 // serves run as a second list, so a cell of foliage with four gathers costs the group four lanes rather than one lane
-// four gathers while its neighbours wait. Each gather is resolved into a slot (sdf-views-probes.hlsli), the
-// representative's in its cell's record and every other in the pool, which views reads in place of gathering, and each
-// representative's is written into the history for the next render.
+// four gathers while its neighbours wait. Either way a job's gather lands in group memory, and one last list resolves
+// every job's into a slot (sdf-views-probes.hlsli), a job a lane: the representative's in its cell's record and every
+// other in the pool, which views reads in place of gathering. The kernel therefore holds the resolve once, and a lane
+// that reused a gather resolves beside one that gathered. Each representative's gather is written into the history for
+// the next render.
 #define SDF_VIEWS_PROBES_PASS
 #include "sdf-pixel-pass.hlsli"
 #include "sdf-views-probes.hlsli"
@@ -22,9 +24,13 @@ static const uint SdfProbeGroupCells = (SDF_VISIBILITY_GROUP_EDGE * SDF_VISIBILI
 // representative).
 groupshared uint sdfProbeJobs[SdfProbeGroupCells * SdfProbeCellPixels];
 groupshared uint sdfProbeJobCount;
-// The gathers no preceding entry served, as sdfProbeJobs names them.
+// The gathers no preceding entry served, each its place in sdfProbeJobs.
 groupshared uint sdfProbeMisses[SdfProbeGroupCells * SdfProbeCellPixels];
 groupshared uint sdfProbeMissCount;
+// Each job's gather, as a history entry holds one (sdf-probe-history.hlsli): its two cages, its sixteen UNORM16 weights
+// in eight words, then its share and measured flags (sdfViewsProbesFlags).
+static const uint SdfProbeGatherWords = 11u;
+groupshared uint sdfProbeGathers[(SdfProbeGroupCells * SdfProbeCellPixels) * SdfProbeGatherWords];
 // Each cell's state for its representative's record: the representative's place in bits 0 to 7, the extras mask in bits
 // 8 to 15 and the coarse-shading rate above them.
 groupshared uint sdfProbeCellState[SdfProbeGroupCells];
@@ -66,6 +72,48 @@ SdfProbeJob sdfProbeJobOf(uint job, uint2 firstCell, uint viewIndex) {
     decoded.pixel = ((decoded.cell * SDF_VIEWS_PROBE_RATE) + uint2((place % SDF_VIEWS_PROBE_RATE), (place / SDF_VIEWS_PROBE_RATE)));
     decoded.record = sdfViewsProbeRecord(decoded.cell, viewIndex);
     return decoded;
+}
+// Leaves job `at`'s gather in group memory, its weights quantized as a history entry holds them.
+void sdfProbeGatherKeep(uint at, SdfMeshProbes probes) {
+    uint first = (at * SdfProbeGatherWords);
+
+    sdfProbeGathers[first] = probes.cage;
+    sdfProbeGathers[first + 1u] = probes.remainderCage;
+    [unroll] for (uint pair = 0u; (pair < 8u); pair++) {
+        uint low = (uint)round(saturate(probes.weight[2u * pair]) * 65535.0);
+        uint high = (uint)round(saturate(probes.weight[(2u * pair) + 1u]) * 65535.0);
+
+        sdfProbeGathers[(first + 2u) + pair] = (low | (high << 16u));
+    }
+    sdfProbeGathers[first + 10u] = sdfViewsProbesFlags(probes);
+}
+// Leaves in job `at`'s place the gather preceding entry `previous` of `history` holds, word for word.
+void sdfProbeGatherCarry(uint at, StructuredBuffer<uint> history, uint previous) {
+    uint first = (at * SdfProbeGatherWords);
+
+    [unroll] for (uint word = 0u; (word < 10u); word++) {
+        sdfProbeGathers[first + word] = sdfProbeHistoryRead(history, previous, (SdfProbeHistoryGatherWord + word));
+    }
+    sdfProbeGathers[first + 10u] = (sdfProbeHistoryRead(history, previous, SdfProbeHistoryFlagsWord) & ((1u << SdfProbeHistoryHoldShift) - 1u));
+}
+// Job `at`'s gather from group memory.
+SdfMeshProbes sdfProbeGatherOf(uint at) {
+    SdfMeshProbes probes = sdfMeshProbesNone();
+    uint first = (at * SdfProbeGatherWords);
+    uint flags = sdfProbeGathers[first + 10u];
+
+    probes.cage = sdfProbeGathers[first];
+    probes.remainderCage = sdfProbeGathers[first + 1u];
+    [unroll] for (uint pair = 0u; (pair < 8u); pair++) {
+        uint word = sdfProbeGathers[(first + 2u) + pair];
+
+        probes.weight[2u * pair] = (float(word & 0xFFFFu) / 65535.0);
+        probes.weight[(2u * pair) + 1u] = (float(word >> 16u) / 65535.0);
+    }
+    probes.share = (float(flags & 0xFFFFu) / 65535.0);
+    probes.measured = ((flags & SdfViewsProbeMeasured) != 0u);
+    probes.remainderMeasured = ((flags & SdfViewsProbeRemainderMeasured) != 0u);
+    return probes;
 }
 // Resolves a job's gather into its slot: the representative's in its cell's record, or an extra's in the pool. A group
 // the pool has no room for stores no extra, and its records name none.
@@ -205,7 +253,7 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
 
         sdfProbeReceiver(view, decoded.pixel, viewIndex, surfacePoint, normal, packedNormal, tolerance);
         if (reads && sdfProbeHistoryFind(sdfViewsProbeHistory, viewIndex, surfacePoint, normal, tolerance, previous)) {
-            sdfProbeStoreJob(decoded, sdfProbeHistoryLoad(sdfViewsProbeHistory, previous));
+            sdfProbeGatherCarry(at, sdfViewsProbeHistory, previous);
             if (decoded.extra == 0u) {
                 sdfProbeHistoryCarry(sdfViewsProbeHistory, sdfViewsProbeHistoryRW, sdfProbeHistoryEntry(decoded.cell, viewIndex), previous);
             }
@@ -213,7 +261,7 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
             uint slot;
 
             InterlockedAdd(sdfProbeMissCount, 1u, slot);
-            sdfProbeMisses[slot] = job;
+            sdfProbeMisses[slot] = at;
         }
     }
     GroupMemoryBarrierWithGroupSync();
@@ -222,7 +270,8 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
     uint misses = sdfProbeMissCount;
 
     [loop] for (uint missed = groupLane; missed < misses; missed += SdfProbeGroupCells) {
-        SdfProbeJob decoded = sdfProbeJobOf(sdfProbeMisses[missed], firstCell, viewIndex);
+        uint missedJob = sdfProbeMisses[missed];
+        SdfProbeJob decoded = sdfProbeJobOf(sdfProbeJobs[missedJob], firstCell, viewIndex);
         float3 surfacePoint;
         float3 normal;
         uint packedNormal;
@@ -234,7 +283,7 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
 
         SdfMeshProbes probes = sdfMeshProbesAtComplete(surfacePoint, normal, complete, windowBound);
 
-        sdfProbeStoreJob(decoded, probes);
+        sdfProbeGatherKeep(missedJob, probes);
         if (keeps && (decoded.extra == 0u)) {
             // A gather no probe answers names no cage to keep; an incomplete one would stand past the probe that lands.
             uint hold = sdfProbeHistoryHoldOf((surfacePoint + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS)), windowBound);
@@ -242,6 +291,12 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
             sdfProbeHistoryStore(sdfViewsProbeHistoryRW, sdfProbeHistoryEntry(decoded.cell, viewIndex), (complete && (probes.share > 0.0)), surfacePoint, packedNormal, hold, probes);
         }
         sdfWorkTexels += 1u;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // Every job's gather into its slot, a job a lane.
+    [loop] for (uint resolved = groupLane; resolved < jobs; resolved += SdfProbeGroupCells) {
+        sdfProbeStoreJob(sdfProbeJobOf(sdfProbeJobs[resolved], firstCell, viewIndex), sdfProbeGatherOf(resolved));
     }
 
     // The pass counts each gather it ran, never one it reused.
