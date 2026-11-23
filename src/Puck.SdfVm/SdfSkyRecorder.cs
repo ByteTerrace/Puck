@@ -44,7 +44,6 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
     private readonly RenderGraphPackageWorkCounters m_work;
     private readonly SdfKernel m_kernel;
     private readonly bool m_resolved;
-    private readonly bool m_temporal;
 
     private int m_recordedView;
 
@@ -89,7 +88,6 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
         var fragment = owner.FragmentOf(instance: context.Instance)!;
 
         m_resolved = fragment.Passes.Any(predicate: static pass => (pass.Name == SdfWorldPackage.Resolve));
-        m_temporal = fragment.Resources.Any(predicate: static resource => resource.History);
         m_fragmentPass = fragment.Passes.Single(predicate: pass => string.Equals(a: pass.Name, b: context.Part, comparisonType: StringComparison.Ordinal));
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
         m_portLit = new nint[context.InFlightFrames];

@@ -1,7 +1,10 @@
 // The probe lookup's history (SdfWorldPackage.ViewsProbeHistory): the gather each cell's representative read, kept for the
-// next frame's lookup, which reuses it for a receiver compatible with the one it was taken at instead of gathering again.
-// A temporal view's alone: its fragment holds the history's two allocations and its pass block marks it temporal, and
-// every other view binds the dummy at both members and never reads or writes them.
+// view's next render, whose lookup reuses it for a receiver compatible with the one it was taken at instead of gathering
+// again. Every view's fragment holds the history's two allocations, a nested view's at the extent it is shown at: reuse
+// needs no jittered history, only the preceding render's camera and grid, which every view's pass block carries
+// (previousView), and an epoch that breaks (another binding, a parked view shown again) clears that camera. A pass bound
+// to storage that does not hold every cell of its view (the dummy) neither reads nor writes it
+// (sdfViewsProbeHistoryCovers).
 //
 // What makes a kept gather the gather its receiver would read now. A gather is a function of its receiver, the published
 // windows and the published probes' geometry (cells, offsets, validity, surface maps) and nothing else once it is
@@ -64,13 +67,30 @@ void sdfViewsProbeHistoryWrite(uint entry, uint word, uint value) {
     sdfViewsProbeHistoryRW[(word * (count / SDF_VIEWS_PROBE_HISTORY_WORDS)) + entry] = value;
 }
 
-// Whether the view keeps a history at all, and whether this frame may read the preceding one's: the preceding view's
-// camera is known and its render grid is this one's, so a preceding cell is addressed as this frame's.
-bool sdfViewsProbeHistoryKeeps() {
-    return (passGroup.temporal != 0u);
+// Whether a history buffer's planes hold an entry for every cell of view `viewIndex`: the fragment's history does, and
+// the dummy a pass with no history port binds does not, so a view is kept or read only through storage that holds it.
+bool sdfViewsProbeHistoryCovers(uint count, uint viewIndex) {
+    uint2 cells = sdfViewsProbeCells();
+
+    return ((count / SDF_VIEWS_PROBE_HISTORY_WORDS) > sdfViewsProbeHistoryEntry((cells - 1u), viewIndex));
 }
-bool sdfViewsProbeHistoryReads(uint2 dims) {
-    return (sdfViewsProbeHistoryKeeps() && (passGroup.previousView[0].w != 0.0) && all(uint2(passGroup.previousView[4].xy) == dims));
+// Whether the view keeps a history, and whether this render may read the preceding one's: the history it reads holds the
+// view, the preceding render's camera is known and its render grid is this one's, so a preceding cell is addressed as
+// this render's.
+bool sdfViewsProbeHistoryKeeps(uint viewIndex) {
+    uint count;
+    uint stride;
+
+    sdfViewsProbeHistoryRW.GetDimensions(count, stride);
+    return sdfViewsProbeHistoryCovers(count, viewIndex);
+}
+bool sdfViewsProbeHistoryReads(uint2 dims, uint viewIndex) {
+    uint count;
+    uint stride;
+
+    sdfViewsProbeHistory.GetDimensions(count, stride);
+    return (sdfViewsProbeHistoryKeeps(viewIndex) && sdfViewsProbeHistoryCovers(count, viewIndex)
+        && (passGroup.previousView[0].w != 0.0) && all(uint2(passGroup.previousView[4].xy) == dims));
 }
 
 // Whether the published windows hold a pushed receiver as a kept gather at level `chosen` needs them to: that level is

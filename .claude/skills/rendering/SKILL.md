@@ -936,11 +936,14 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   plane, facing alike; `sdfViewsProbesCompatible`), each into its cell's record; views reads the
   gather the record names for its pixel (`sdfViewsProbesAt`) and never gathers, so
   the reuse never steps across a visibility edge the record shows and the shading
-  kernels carry none of the gather's code. A temporal view first reuses the
-  preceding frame's gather for a receiver that passes the same tolerance against
-  the receiver it was taken at (`passes/sdf-views-probe-history.hlsli`, the
-  fragment's `viewsProbeHistory` history buffer, bound per recording by
-  `SdfWorldPassRecorder.BindHistory`); only a complete gather is kept, and an
+  kernels carry none of the gather's code. Every view, a nested one included, first
+  reuses its preceding render's gather for a receiver that passes the same tolerance
+  against the receiver it was taken at (`passes/sdf-views-probe-history.hlsli`, the
+  native fragment's `viewsProbeHistory` history buffer at the view's own extent,
+  bound per recording by `SdfWorldPassRecorder.BindHistory`): reuse needs only the
+  preceding render's camera and grid (`previousView`), never jitter, so a history
+  resource does not make a fragment temporal (`SdfWorldPackage.IsTemporal` is the
+  one test, by the resolve's history color). Only a complete gather is kept, and an
   entry stands under the volume's geometry serial and, past a window's move, only
   where `sdfViewsProbeHistoryHolds` still holds its receiver
   (`SdfMeshIrradianceParameters.Geometry` and `Windows`, stepped in

@@ -1694,8 +1694,15 @@ bias where that is wider, half a pixel off the representative's tangent plane,
 and normals within about eleven degrees (`sdfViewsProbeTolerance`,
 `sdfViewsProbesCompatible`). A tolerance in metres alone would have every pixel
 of grazing or distant ground gather for itself, although a cell there shows
-light that varies over metres. A temporal view also keeps each representative's
-gather for the next frame (`sdf-views-probe-history.hlsli`): a receiver
+light that varies over metres. Every view also keeps each representative's
+gather for its next render (`sdf-views-probe-history.hlsli`), a nested view
+(a portal, a window, a painting) at the extent it is shown at, so a secondary
+view's lookup costs what moved in it rather than its whole image each frame. A
+kept gather validates itself against the receiver it was taken at, so reuse
+needs only the preceding render's camera and grid, never jittered history, and
+a view that does not reconstruct over time keeps one as a temporal view does
+(`SdfWorldPackage.IsTemporal` names a temporal fragment by its history color,
+not by any history resource). A receiver
 projected into the preceding view reuses a kept gather it passes the same
 tolerance against, measured from the receiver the gather was taken at, so reuse
 never drifts. A kept gather stands while the published geometry's serial is

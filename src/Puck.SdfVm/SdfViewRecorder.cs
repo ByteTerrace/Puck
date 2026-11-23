@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
@@ -8,6 +9,9 @@ namespace Puck.SdfVm;
 // its instance and the view's residency, its recording domain.
 internal abstract class SdfViewRecorder(SdfWorldPasses owner, string instance, SdfWorldView view) {
     private protected SdfWorldView m_view = view;
+    // Whether the instance's installed fragment reconstructs over time (SdfWorldPackage.IsTemporal), which every pass of
+    // one installed graph agrees on.
+    private protected readonly bool m_temporal = SdfWorldPackage.IsTemporal(fragment: owner.FragmentOf(instance: instance)!);
 
     public object? RecordingDomain => m_view.Residency;
 
