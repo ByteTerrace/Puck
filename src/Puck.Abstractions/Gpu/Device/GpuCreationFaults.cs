@@ -517,6 +517,7 @@ file sealed class FaultingBufferFactory(IGpuBufferFactory inner, GpuCreationFaul
             usage: usage
         );
     }
+    public ulong MappedChunkBytes => inner.MappedChunkBytes;
     public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         Enter(kind: GpuCreationKind.Buffer);
 

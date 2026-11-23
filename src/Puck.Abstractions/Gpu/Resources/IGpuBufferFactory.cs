@@ -36,6 +36,10 @@ public interface IGpuBufferFactory {
     /// <exception cref="ArgumentException"><paramref name="reservedBytes"/> is zero.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="usage"/> is empty or undefined.</exception>
     IGpuMappedBuffer? TryCreateMapped(ulong reservedBytes, GpuBufferUsage usage, in GpuObjectName name) => null;
+    /// <summary>Gets the bytes one mapping of a buffer <see cref="TryCreateMapped"/> creates covers
+    /// (<see cref="IGpuMappedBuffer.ChunkBytes"/>), so a holder can reserve what the buffer's first mapping backs before
+    /// creating it; zero where the factory creates no mapped buffer.</summary>
+    ulong MappedChunkBytes => 0UL;
     /// <summary>Creates a host-visible buffer.</summary>
     /// <param name="sizeBytes">The size, in bytes, of the buffer; not zero.</param>
     /// <param name="usage">The usages; <see cref="GpuBufferUsages.Validate"/> states the rules.</param>

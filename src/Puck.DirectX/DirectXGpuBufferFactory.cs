@@ -66,6 +66,8 @@ public sealed unsafe class DirectXGpuBufferFactory(DirectXDeviceContext deviceCo
     public IGpuMappedBuffer? TryCreateMapped(ulong reservedBytes, GpuBufferUsage usage, in GpuObjectName name) =>
         DirectXGpuMappedBuffer.TryCreate(context: deviceContext, name: in name, sizeBytes: reservedBytes, usage: usage);
     /// <inheritdoc/>
+    public ulong MappedChunkBytes => DirectXGpuMappedBuffer.ChunkBytesOn(context: deviceContext);
+    /// <inheritdoc/>
     public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) =>
         CreateMapped(
             heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
