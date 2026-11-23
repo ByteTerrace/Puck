@@ -185,9 +185,6 @@ public static partial class CreationCanonicalizer {
         }
         Color(entry.Fill, "fill");
         Color(entry.Bleed, "bleed");
-        foreach (var refusal in (entry.Toon?.Refusals(path: $"palette[{index}].toon") ?? [])) {
-            errors.Add(item: new(Message: $"{refusal}.", Path: $"palette[{index}].toon"));
-        }
         foreach (var refusal in (entry.ToonSelect?.Refusals(path: $"palette[{index}].toonSelect") ?? [])) {
             errors.Add(item: new(Message: $"{refusal}.", Path: $"palette[{index}].toonSelect"));
         }

@@ -49,6 +49,10 @@ public static partial class SdfShadeHlsl {
         text.Append("#define SDF_SHADE_ARMS ").Append((programs?.Length ?? 0)).Append("u\n");
         text.Append("#define SDF_SHADE_READ_PAINT ").Append((uint)SdfShadeReads.PaintCoverage).Append("u\n");
         text.Append("#define SDF_SHADE_READ_PROBE_SHARE ").Append((uint)SdfShadeReads.ProbeShare).Append("u\n");
+        text.Append("#define SDF_SHADE_READ_EDGES ").Append((uint)SdfShadeReads.Edges).Append("u\n");
+        text.Append("#define SDF_SHADE_PHASES ").Append(SdfShadeProgram.PhaseCount).Append("u\n");
+        text.Append(System.Globalization.CultureInfo.InvariantCulture, $"#define SDF_SHADE_EDGE_FAR {SdfShadeOps.EdgeFar:0.0}\n");
+
         foreach (var op in SdfShadeOps.Table) { text.Append(value: "#define SDF_SHADE_").Append(value: op.Op.ToString().ToUpperInvariant()).Append(value: ' ').Append(value: ((uint)op.Op)).Append(value: "u\n"); }
         text.Append(value: "struct SdfShadeStamp { ");
         for (var i = 0; (i < SdfShadeOps.Inputs.Count); i++) { text.Append(value: "uint4 i").Append(value: i).Append(value: "; "); }
@@ -119,7 +123,7 @@ public static partial class SdfShadeHlsl {
 void sdfShadeInterpret(uint2 slice, uint2 parameters, uint phase, SdfShadeStamp stamp, out SdfShadeOutputs outputs) {
     SdfShadeRegisters regs = (SdfShadeRegisters)0;
     outputs = (SdfShadeOutputs)0;
-    if (phase >= 3u) return;
+    if (phase >= SDF_SHADE_PHASES) return;
     uint4 header = sdfShadeRead(slice, phase);
     uint count = min(header.y, SDF_SHADE_MAX_OPS);
     if (header.x > slice.y || count > (slice.y - header.x) / 3u) return;
@@ -184,7 +188,7 @@ void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, S
             var program = programs[arm - 1];
             var plan = plans[arm - 1];
 
-            for (var phase = 0; (phase < 3); phase++) {
+            for (var phase = 0; (phase < SdfShadeProgram.PhaseCount); phase++) {
                 if (program.Phases[phase].Count == 0) { continue; }
                 if (phase == ((int)SdfShadePhase.Light)) {
                     text.Append(System.Globalization.CultureInfo.InvariantCulture, $"void sdfShadeArm{arm}Carry(uint2 slice, uint2 parameters, SdfShadeStamp stamp, inout SdfShadeCarry carry) {{\n")
@@ -217,7 +221,7 @@ void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, S
         for (var arm = 1; (arm <= programs.Length); arm++) {
             var mask = 0u;
 
-            for (var phase = 0; (phase < 3); phase++) { if (programs[arm - 1].Phases[phase].Count != 0) { mask |= (1u << phase); } }
+            for (var phase = 0; (phase < SdfShadeProgram.PhaseCount); phase++) { if (programs[arm - 1].Phases[phase].Count != 0) { mask |= (1u << phase); } }
             text.Append(System.Globalization.CultureInfo.InvariantCulture, $"case {arm}u: return {mask}u;\n");
         }
         text.Append(value: "default: return 0u;\n}\n}\nuint sdfShadeReadsOf(SdfShadeBinding binding) {\nswitch (binding.arm) {\n");
@@ -232,7 +236,7 @@ void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, S
         text.Append(value: "void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, SdfShadeCarry carry, out SdfShadeOutputs outputs) {\noutputs = (SdfShadeOutputs)0;\nswitch (binding.arm) {\n");
         for (var arm = 1; (arm <= programs.Length); arm++) {
             text.Append(System.Globalization.CultureInfo.InvariantCulture, $"case {arm}u:\n");
-            for (var phase = 0; (phase < 3); phase++) {
+            for (var phase = 0; (phase < SdfShadeProgram.PhaseCount); phase++) {
                 if (programs[arm - 1].Phases[phase].Count == 0) { continue; }
                 var carry = ((phase == ((int)SdfShadePhase.Light)) ? ", carry" : "");
                 text.Append(System.Globalization.CultureInfo.InvariantCulture, $"if (phase == {phase}u) outputs = sdfShadeArm{arm}Phase{phase}(binding.range.xy, binding.range.zw, stamp{carry});\n");

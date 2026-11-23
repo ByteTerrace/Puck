@@ -84,7 +84,7 @@ public static class SdfShadeOps {
     public static IReadOnlyList<SdfShadeInput> Inputs { get; } = Array.AsReadOnly(array: new[] {
         I("surface.position", SdfShadeType.Float3), I("surface.layerPosition", SdfShadeType.Float3),
         I("surface.geometricNormal", SdfShadeType.Float3), I("surface.normal", SdfShadeType.Float3),
-        I("surface.curvature"), I("surface.footprint", reads: SdfShadeReads.Footprint),
+        I("surface.curvature"), I("surface.footprint", reads: SdfShadeReads.Footprint), I("surface.pixel", reads: SdfShadeReads.Footprint),
         I("surface.rayDirection", SdfShadeType.Float3), I("surface.contact", reads: SdfShadeReads.Contact),
         I("surface.thickness"), I("paint.coverage", reads: SdfShadeReads.PaintCoverage), I("clock", reads: SdfShadeReads.Clock),
         I("material.albedo", SdfShadeType.Float3), I("material.roughness"), I("material.metal"),
@@ -113,8 +113,24 @@ public static class SdfShadeOps {
         I("compose.specular", SdfShadeType.Float3, SdfShadePhase.Compose), I("compose.attenuation", phase: SdfShadePhase.Compose),
         I("compose.indirect", SdfShadeType.Float3, SdfShadePhase.Compose), I("compose.reflection", SdfShadeType.Float3, SdfShadePhase.Compose),
         I("compose.environment", SdfShadeType.Float3, SdfShadePhase.Compose), I("compose.adaptation", phase: SdfShadePhase.Compose),
-        I("compose.exposure", phase: SdfShadePhase.Compose),
+        I("compose.exposure", phase: SdfShadePhase.Compose), I("compose.line", phase: SdfShadePhase.Compose),
+        I("edge.depth", reads: SdfShadeReads.Edges), I("edge.crease", reads: SdfShadeReads.Edges),
+        I("edge.object", reads: SdfShadeReads.Edges), I("edge.material", reads: SdfShadeReads.Edges),
+        I("edge.creaseCosine", reads: SdfShadeReads.Edges),
+        I("ink.under", SdfShadeType.Float3, SdfShadePhase.Ink), I("ink.line", phase: SdfShadePhase.Ink),
+        I("ink.exposure", phase: SdfShadePhase.Ink),
     });
+    /// <summary>The stamp's edge distances, in the order the view's edge search packs them: the display pixels from the
+    /// pixel to the nearest edge of each class on its own surface, <see cref="EdgeFar"/> where none lies within the
+    /// search's reach.</summary>
+    public static IReadOnlyList<string> EdgeInputs { get; } = Array.AsReadOnly(array: new[] { "edge.depth", "edge.crease", "edge.object", "edge.material" });
+    /// <summary>The distance an <c>edge.*</c> member reads where no edge of its class lies within the search's reach, in
+    /// display pixels: finite, so a width profile over it is ordinary arithmetic, and wider than any line the reach
+    /// draws.</summary>
+    public const float EdgeFar = 1024f;
+    /// <summary>The edge search's reach in render pixels: how far from a pixel the view looks for an edge. A line drawn
+    /// from an <c>edge.*</c> distance is at most this wide on each side of its edge.</summary>
+    public const int EdgeReach = 4;
 
     /// <summary>Gets an operation by its opcode; rejects undefined opcodes.</summary>
     public static SdfShadeOpInfo Get(SdfShadeOp op) => Table.Single(predicate: x => (x.Op == op));

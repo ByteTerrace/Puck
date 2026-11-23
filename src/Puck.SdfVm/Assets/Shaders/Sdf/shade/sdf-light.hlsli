@@ -209,6 +209,9 @@ struct SdfLightResponse {
     float3 specular;
     float3 rim;
     float attenuation;
+    // The line an authored light phase raises, in [0, 1]: the walk keeps the largest, which the compose and ink phases
+    // read (compose.line, ink.line). The default response raises none.
+    float linework;
 };
 
 #ifdef SDF_SCREEN_SOURCES
@@ -424,6 +427,7 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
     response.specular = float3(0.0, 0.0, 0.0);
     response.rim = float3(0.0, 0.0, 0.0);
     response.attenuation = 1.0;
+    response.linework = 0.0;
 
     float3 normal = surface.normal;
 

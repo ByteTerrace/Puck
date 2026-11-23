@@ -59,8 +59,9 @@ public static partial class SdfFrameBlock {
     private static readonly int LightCount = Offset(member: SdfWorldPackage.LightCount);
     private static readonly int LightMask = Offset(member: SdfWorldPackage.LightMask);
     private static readonly int Exposure = Offset(member: SdfWorldPackage.Exposure);
-    private static readonly int ToonOutline = Offset(member: SdfWorldPackage.ToonOutline);
-    private static readonly int ToonInk = Offset(member: SdfWorldPackage.ToonInk);
+    private static readonly int ToonMode = Offset(member: SdfWorldPackage.ToonMode);
+    private static readonly int DisplayPixels = Offset(member: SdfWorldPackage.DisplayPixels);
+    private static readonly int InkEdges = Offset(member: SdfWorldPackage.InkEdges);
     private static readonly int ExposeShare = Offset(member: SdfWorldPackage.ExposeShare);
     private static readonly int AirLight = Offset(member: SdfWorldPackage.AirLight);
     private static readonly int MeterLuminance = Offset(member: SdfWorldPackage.MeterLuminance);
@@ -251,13 +252,17 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (LightMask + (word * sizeof(uint))), value: ((uint)(mask >> (32 * word))));
         }
         WriteSingle(block: block, offset: Exposure, value: (tables.Exposures?.MultiplierOf(view: view) ?? 1f));
-        Span<Vector4> toonRows = stackalloc Vector4[2];
-
-        frame.Toon.WriteRows(inkW: ((float)snapshot.RenderGrid), mode: frame.Toon.Mode, rows: toonRows);
         WriteFlag(block, Offset(SdfWorldPackage.ShadePrograms), frame.ShadePrograms);
         WriteShadeDefault(block, tables.ShadeDefaultFirst, frame.ShadeDefault);
-        WriteVector4(block: block, offset: ToonOutline, value: toonRows[0]);
-        WriteVector4(block: block, offset: ToonInk, value: toonRows[1]);
+        WriteSingle(block: block, offset: ToonMode, value: frame.Toon.Mode);
+        // One unit for a line's width, the display pixel: a view shown at its own output spans one over its render
+        // grid, and a view rendered into an image apart from the output (a window fitted to its glass, a camera filmed
+        // for a screen) the height its picture is shown at over its render rows.
+        WriteSingle(block: block, offset: DisplayPixels, value: (((snapshot.DemandHeight > 0f) && (height > 0u))
+            ? (snapshot.DemandHeight / height)
+            : ((float)(1d / snapshot.RenderGrid))));
+        WriteSingle(block: block, offset: (DisplayPixels + sizeof(float)), value: snapshot.DemandHeight);
+        WriteFlag(block: block, offset: InkEdges, value: ((frame.Program.Appearance.ResolveShadeReads(frame.ShadePrograms, frame.ShadeDefault) & SdfShadeReads.Edges) != 0));
         WriteSingle(block: block, offset: ExposeShare, value: (snapshot.Unexposed ? SdfPhotometry.WindowAdaptation : 1f));
         WriteSingle(block: block, offset: AirLight, value: (tables.Exposures?.AirLightOf(view: view) ?? 1f));
         WriteSingle(block: block, offset: MeterLuminance, value: (tables.Exposures?.MeteredOf(view: view) ?? 0f));

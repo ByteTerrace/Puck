@@ -208,10 +208,7 @@ public static class SdfEncodingProbe {
                     ],
                     EmissiveLane: ((int)v[80]),
                     Glass: new SdfGlass(Depth: v[81], Ior: v[82], Scatter: new Vector3(x: v[119], y: v[120], z: v[121]), Scattering: v[122], ContactReach: v[123], ContactCoverage: v[124], ShadowDensity: v[125]),
-                    Toon: new SdfToon {
-                        Enabled = true, OutlineWidth = v[88], OutlineDistance = v[89], OutlineNormal = v[90],
-                        OutlineTint = new Vector3(x: v[91], y: v[92], z: v[93]),
-                    },
+                    Toon: new SdfToon { Enabled = true },
                     Flow: new SdfFlow(
                         Velocity: new Vector3(x: v[103], y: v[104], z: v[105]),
                         Scale: v[106],

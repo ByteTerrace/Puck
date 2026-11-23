@@ -6,9 +6,10 @@ namespace Puck.SignedDistance;
 /// <summary>The scalar kind and width of a shade register; there are no implicit integer conversions.</summary>
 [System.Text.Json.Serialization.JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<SdfShadeType>))]
 public enum SdfShadeType { Float = 1, Float2 = 2, Float3 = 3, Float4 = 4, UInt = 5, UInt3 = 7 }
-/// <summary>The three entry points of a material's presentation program.</summary>
+/// <summary>The entry points of a material's presentation program, in the order a pixel runs them: the surface, each
+/// light of its walk, the composition of the lit colour, then the ink drawn over it.</summary>
 [System.Text.Json.Serialization.JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<SdfShadePhase>))]
-public enum SdfShadePhase { Surface, Light, Compose }
+public enum SdfShadePhase { Surface, Light, Compose, Ink }
 /// <summary>Inputs whose reads affect frame uploads and cadence, derived only from live canonical ops.</summary>
 [Flags]
 public enum SdfShadeReads : uint {
@@ -21,6 +22,9 @@ public enum SdfShadeReads : uint {
     /// program that does not read it leaves a directional's probe share to its visibility, which reads the probes only
     /// where no cascade holds the point.</summary>
     ProbeShare = 4096,
+    /// <summary>A phase reads an <c>edge.*</c> distance, which the view's edge search fills (<c>sdf-views-edges.hlsli</c>);
+    /// a frame none of whose programs reads one searches nothing.</summary>
+    Edges = 8192,
 }
 /// <summary>An expression supplied to shade admission, never executable words. The compiler validates every field.</summary>
 /// <param name="Op">An op-table spelling, or constant, parameter, or input.</param>
