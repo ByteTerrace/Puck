@@ -239,7 +239,7 @@ public sealed partial class WorldRigidAssets {
             }
             picks.Instances(first, builder.InstanceCount, scratch.Target);
         }
-        EmitStaticAssets(builder: builder, colors: colors, picks: picks, isolation: isolation);
+        EmitStaticAssets(builder: builder, colors: colors, picks: picks, isolation: isolation, text: text);
     }
 
     // Keep the closure-bearing rebuild out of the retained-template path.

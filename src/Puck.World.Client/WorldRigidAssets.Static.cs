@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.SdfVm;
 using Puck.SignedDistance;
+using Puck.Text;
 using Puck.World.Authoring;
 
 namespace Puck.World.Client;
@@ -203,7 +204,7 @@ public sealed partial class WorldRigidAssets {
         return (!IsRigid(creation) ? "not-rigid" :
             ((WorldStateDocumentValues.HasReference(creation.Document) || WorldStateDocumentValues.HasReference(placement)) ? "state-reference" :
             ((placement.Mirror is not null) ? "reflection" :
-            ((document.TextRuns is { Count: > 0 }) ? "text" :
+            (((document.TextRuns is { Count: > 0 }) && (placement.Respond is not { Count: > 0 })) ? "text" :
             ((creation.Mesh is not null) ? "authored-mesh" :
             (document.HasGlass ? "glass" :
             ((document.Shapes is not { Count: > 0 }) ? "no-shapes" :
@@ -222,7 +223,7 @@ public sealed partial class WorldRigidAssets {
     private void PackTemplates(Span<DynamicTransform> transforms, int slotBase) {
         for (var index = 0; (index < m_slotCount); index++) { transforms[slotBase + index] = new DynamicTransform(Vector3.Zero, Quaternion.Identity); }
     }
-    private void EmitStaticAssets(SdfProgramBuilder builder, WorldBakedColors colors, WorldPickMapBuilder picks, WorldShapeIsolation? isolation) {
+    private void EmitStaticAssets(SdfProgramBuilder builder, WorldBakedColors colors, WorldPickMapBuilder picks, WorldShapeIsolation? isolation, PackedFontAtlasCatalog? text) {
         foreach (var asset in m_staticAssets) {
             var creation = asset.Creation;
             var document = creation.EngineDocument;
@@ -237,7 +238,7 @@ public sealed partial class WorldRigidAssets {
             if (scratch.Palette.Length != length) { scratch.Palette = new int[length]; }
             WorldPlacementStamper.FillPalette(builder, colors, document, null, scratch.Palette, hidden: hidden);
             picks.Materials(creation.Id, scratch.Palette);
-            if ((scratch.Emission is { } held) && (scratch.BakeScale == asset.BakeScale) && ReferenceEquals(scratch.Hidden, hidden) && builder.CanAppendEmission(held)) {
+            if ((scratch.Emission is { } held) && (scratch.BakeScale == asset.BakeScale) && ReferenceEquals(scratch.Hidden, hidden) && ReferenceEquals(scratch.Text, text) && builder.CanAppendEmission(held)) {
                 builder.AppendEmission(held);
             } else {
                 var mark = builder.MarkEmission();
@@ -246,12 +247,13 @@ public sealed partial class WorldRigidAssets {
                 // share that result under a relative matrix, without turning a default into explicit authored detail.
                 WorldPlacementStamper.EmitPlacement(builder, document, m_staticDefinition!, scratch.Palette,
                     new WorldPlacement(string.Empty, creation.Id, Vector3.Zero, 0f, asset.BakeScale),
-                    textCatalog: null, worldSeed: m_staticSeed, volumes: null, mesh: null, meshMaterial: 0,
+                    textCatalog: text, worldSeed: m_staticSeed, volumes: null, mesh: null, meshMaterial: 0,
                     meshDraws: null, meshScope: null, firstMesh: 0, hidden: hidden,
                     frameOverride: new CompiledPlacementFrame(Vector3.Zero, 0f));
                 scratch.Emission = builder.RetainEmission(mark);
                 scratch.BakeScale = asset.BakeScale;
                 scratch.Hidden = hidden;
+                scratch.Text = text;
             }
             asset.Range = new SdfMeshTemplateRange(first, (builder.InstanceCount - first));
             picks.Instances(first, builder.InstanceCount, scratch.Target);
