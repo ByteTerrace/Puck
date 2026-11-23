@@ -2,8 +2,8 @@ using Puck.Abstractions.Collections;
 
 namespace Puck.Physics.Navigation;
 
-/// <summary>The indexed binary min-heap both route searches — a domain's per-body A* and its shared destination
-/// trees — schedule open nodes through: node indices in <see cref="BinaryHeap"/> order, and each node's heap slot in a
+/// <summary>The indexed binary min-heap every route search schedules open nodes through — a
+/// domain's per-body A*, the cross-domain route and the goal-field derivation: node indices in <see cref="BinaryHeap"/> order, and each node's heap slot in a
 /// position table so a cheaper rediscovery sifts in place rather than re-inserting.</summary>
 /// <remarks>The order is a struct <see cref="IComparer{T}"/> over node indices that breaks every tie itself (by node
 /// index), never the heap, so a search stays deterministic. The position table is never cleared:

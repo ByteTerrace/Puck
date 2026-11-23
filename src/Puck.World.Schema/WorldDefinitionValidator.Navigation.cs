@@ -7,8 +7,6 @@ public static partial class WorldDefinitionValidator {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var domains = definition.Navigation.Rows;
         var totalCells = 0L;
-        var sharedCells = 0L;
-        var sharedWork = 0L;
 
         if (domains.Count > WorldNavigationCapacity.MaxDomains) {
             errors.Add(item: $"navigation.domains declares {domains.Count} rows; the maximum is {WorldNavigationCapacity.MaxDomains}.");
@@ -47,22 +45,8 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.parent '{parentId}' must name a static, unit-scale placement with one frame.");
                 }
             }
-            if (domain.Shared is { } sharing) {
-                RequireRange(
-                    sharing.GoalCapacity,
-                    1,
-                    WorldNavigationCapacity.MaxSharedGoals,
-                    $"{path}.shared.goalCapacity",
-                    errors
-                );
-                RequireRange(
-                    sharing.ExpandedNodesPerTick,
-                    1,
-                    WorldNavigationCapacity.MaxSharedExpandedPerTick,
-                    $"{path}.shared.expandedNodesPerTick",
-                    errors
-                );
-                sharedWork += sharing.ExpandedNodesPerTick;
+            if ((domain.Network is { } network) && !SafeName.TryParse(candidate: network, name: out _, reason: out var networkReason)) {
+                errors.Add(item: $"{path}.network {networkReason}");
             }
 
             if (!SafeName.TryParse(
@@ -260,9 +244,6 @@ public static partial class WorldDefinitionValidator {
             var cells = ((((long)domain.Width) * domain.Depth) * domain.Layers);
 
             totalCells += cells;
-            if (domain.Shared is { GoalCapacity: > 0 and <= WorldNavigationCapacity.MaxSharedGoals } shared) {
-                sharedCells += (cells * shared.GoalCapacity);
-            }
             if (cells > WorldNavigationCapacity.MaxCellsPerDomain) {
                 errors.Add(item: $"{path} declares {cells} cells; the per-domain maximum is {WorldNavigationCapacity.MaxCellsPerDomain}.");
             }
@@ -306,12 +287,6 @@ public static partial class WorldDefinitionValidator {
 
         if (totalCells > WorldNavigationCapacity.MaxCellsPerWorld) {
             errors.Add(item: $"navigation.domains declares {totalCells} total cells; the world maximum is {WorldNavigationCapacity.MaxCellsPerWorld}.");
-        }
-        if (sharedCells > WorldNavigationCapacity.MaxSharedCellsPerWorld) {
-            errors.Add(item: $"navigation shared trees require {sharedCells} cells; the world maximum is {WorldNavigationCapacity.MaxSharedCellsPerWorld}.");
-        }
-        if (sharedWork > WorldNavigationCapacity.MaxSharedExpandedPerTick) {
-            errors.Add(item: $"navigation shared trees declare {sharedWork} expansions per tick; the world maximum is {WorldNavigationCapacity.MaxSharedExpandedPerTick}.");
         }
         return names;
     }

@@ -180,7 +180,16 @@ Puck.World extends the rule compiler the way any host does (see
   `setVerticalVelocity`, `scaleVerticalVelocity`, `planarImpulse`, `timedMove` and
   `designate` — are one operation in a kit's action and in a rule: a kit's
   action acts on its own body, and a rule names the body with `key`
-  (`WorldBodyEffects` is the one check both scopes lower through). Its predicate arms `held`, `now`,
+  (`WorldBodyEffects` is the one check both scopes lower through). A rule's
+  `designate` fills the register with a body (`kind: Body`, `targetKey`), clears
+  it (`kind: Clear`), or fills it with a world point (`kind: Point`): the same
+  point designation `body.designate <register> at:x,y,z` makes, through
+  `WorldDocument.ApplyDesignationCore`, which a producer program's `designated`
+  or `navigated` target walks to. The point is a literal `position`, a
+  `placement`'s document position read when the rule fires (plus `position` or
+  the expressions as an offset), or the fixed-point expressions `pointX`,
+  `pointY` and `pointZ` evaluated when it fires (`bodyPosition(…)` and state
+  rows make a point from live state). Its predicate arms `held`, `now`,
   `recently`, and `timerElapsed` belong to body programs; a rule that uses one
   is refused with `RuleRefusal.PredicateKindInadmissible`. `pose` and
   `poseCell` teleport: the client snaps the body and its contact state is

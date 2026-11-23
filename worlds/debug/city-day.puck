@@ -1,0 +1,24 @@
+// The city's time of day: the standard's day cycle (skies.puck) on its own `cityDay` clock, a 24-minute day that starts
+// at four in the afternoon, so a first visit sees the light go gold and the town's night come on. The city runs its
+// own clock, never the valley's, so the painting in the gallery shows the city's hour. The `key` sun's other fields
+// stand beside it in a render block of their own, since one source's second `render` block replaces the first's
+// members.
+
+import "../standard/skies"
+
+exports {
+  reads [cityDay]
+}
+
+dayCycle(
+  clock: "cityDay",
+  daySeconds: 1440,
+  start: 16,
+  noonElevation: 52,
+  heading: 20,
+  cloudiness: 0.25,
+  moonPeak: 6,
+  moonColor: "#7088E8",
+  nightLuminance: 1,
+  starLuminance: 3
+)

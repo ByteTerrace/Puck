@@ -595,6 +595,16 @@ ordered steps, concurrency, admission, recording and output, and
 A package or project-reference change that drifts a locked restore needs
 [`puck locks`](../reference/cli.md#puck-locksrestore-lock-files).
 
+A World start (`puck_world_start`, a verb that boots one) passes host admission first: it needs the commit headroom to
+cover its expected peak and free memory to cover its expected resident memory above the pressure floor. The expectation is
+this machine's own recorded peak for that kind of start (World shape, backend, warm or cold mesh store), kept under the
+lease root and learned from each World that stops after reporting ready; before the first record it is the World's memory
+budget on this machine (three quarters of installed memory, at most the large-machine figure), with its resident share held
+to what the idle machine can give, so a 16 GB release-target machine runs its first windowed World, which then teaches
+the figure. `puck host load` prints the figure and whether it is measured (`workingSet=unmeasured`); the
+[CLI reference](../reference/cli.md#puck-host-loadadmission-lines-for-the-machine) and the
+[tooling skill](../../.claude/skills/tooling/SKILL.md) own the rules.
+
 When a red proof would help, optionally run `puck laws prove <law> --fix <commit>`,
 or pass `--file-list` naming the files of an uncommitted fix. It withholds the fix in a
 worktree of its own, requires the law to fail there and pass once the fix is
@@ -1039,7 +1049,9 @@ unverified when no device run exists.
 - Under a Remote Desktop session an NVIDIA GPU can hold its idle clocks (P8 or P5,
   a few hundred MHz) through a whole windowed run, so `host.frames` and
   `world.gpu-timing` read there are no frame-time verdict. Check the clocks with
-  `nvidia-smi --query-gpu=pstate,clocks.gr --format=csv -l 5` beside the run, and
+  `nvidia-smi --query-gpu=pstate,clocks.gr --format=csv -l 5` beside the run
+  (`puck benchmark` records them itself and marks a run whose clock was held
+  down DISTURBED, [the conditions](../plans/benchmark.md#comparing-runs)), and
   take a timing on a console session. A capture's replay runs the GPU at its
   working clocks there, so RenderDoc's per-event GPU durations
   (`GPUCounter.EventGPUDuration`) compare one kernel across two builds or two

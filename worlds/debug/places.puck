@@ -3,8 +3,8 @@
 // the feature beside her rather than behind her; `debug.go <place>` poses a body there and hands the view back to that
 // camera, so one line reaches any feature from anywhere. The debug world imports this file whole, and
 // debug.md beside it lists the places. The painting wing's own places (painting-room, portals, portal-garden,
-// portal-night, portal-link, portal-fall) are authored beside the paintings (paintings.puck), and the valley's (overlook,
-// glacier, valley-<sector>) beside the valley (valley.puck).
+// portal-night, portal-city, portal-link, portal-fall) are authored beside the paintings (paintings.puck), and
+// the valley's (overlook, glacier, valley-<sector>) beside the valley (valley.puck).
 //
 // `debug.go` is an authored command: a `commands` row composing existing verbs, which the console answers beside the
 // engine's own (help, help --names, a binding row or wheel sector naming it). It runs each line under the caller's
@@ -48,12 +48,13 @@ let regionPlaces = concat(
     storeyPlace("east-wing", 0, 20, 51, 12.3, 39.7)
     storeyPlace("painting-room", 0, 51, 69.7, 12.3, 39.7)
     // Before each painting of the wing: the looping pair facing each other at z 34.5 (west and east walls), the garden
-    // and the night field on the north wall, and the endless fall in the floor at (66, 22.6), its column up to the
-    // ceiling twin.
+    // and the night field on the north wall, the city on the south wall, and the endless fall in the floor at
+    // (66, 22.6), its column up to the ceiling twin.
     storeyPlace("loop-portal-west", 0, 51.3, 53.3, 33.3, 35.7)
     storeyPlace("loop-portal-east", 0, 67.4, 69.4, 33.3, 35.7)
     storeyPlace("garden-painting", 0, 55.8, 58.2, 37.4, 39.4)
     storeyPlace("night-painting", 0, 62.8, 65.2, 37.4, 39.4)
+    storeyPlace("city-painting", 0, 58.8, 61.2, 12.6, 14.6)
     { id: "endless-fall", at [fallX, 1.6, fallZ], half [1.5, 2.6, 1.5] }
     // The lobby's west wall: the desktop computer before it, and the big painting into Wonderland (wonderland.puck).
     storeyPlace("desktop", 0, 10.3, 13.3, 22.4, 25)
@@ -121,7 +122,7 @@ spawnPoints [
 commands [
   {
     name: "debug.go"
-    help: "Poses a body at one of the debug world's places (stage, devices, boardroom, chess, go, reversi, alchemy, granaries, cards, auction, shedding, deduction, skirmish, desktop, painting-room, portals, portal-garden, portal-night, portal-link, portal-fall, gallery, wonderland, the camera tests lift, stairs, camera-course, camera-tunnel, camera-colonnade and camera-bays, the valley's overlook, glacier and valley-<sector> floor spots, the pool, forest and forest-inside, or any spawn point) and returns the view to the play layout's chase camera."
+    help: "Poses a body at one of the debug world's places (stage, devices, boardroom, chess, go, reversi, alchemy, granaries, cards, auction, shedding, deduction, skirmish, desktop, painting-room, portals, portal-garden, portal-night, portal-city, portal-link, portal-fall, gallery, wonderland, the camera tests lift, stairs, camera-course, camera-tunnel, camera-colonnade and camera-bays, the valley's overlook, glacier and valley-<sector> floor spots, the pool, forest and forest-inside, or any spawn point) and returns the view to the play layout's chase camera."
     parameters [
       { name: "place", kind: Spawn, default: "stage" }
       { name: "body", kind: Body, default: "0" }

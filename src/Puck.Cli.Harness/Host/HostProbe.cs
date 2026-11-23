@@ -100,8 +100,11 @@ public sealed partial class HostProbe(string checkoutRoot) {
     [LibraryImport(libraryName: "kernel32.dll", EntryPoint = "GetDiskFreeSpaceExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
     private static partial bool GetDiskFreeSpaceEx(string directory, out ulong available, out ulong total, out ulong free);
-    // Busy and total CPU time since boot, in the platform's ticks.
-    private static (ulong Idle, ulong Total)? CpuTimes() {
+    /// <summary>Gets the ticks <see cref="CpuTimes"/> counts in one second: 100-nanosecond units on Windows, jiffies on Linux.</summary>
+    public static double CpuTicksPerSecond => (OperatingSystem.IsWindows() ? 10_000_000.0 : 100.0);
+    /// <summary>Reads the machine's idle and total CPU time, summed over every logical processor, since boot.</summary>
+    /// <returns>The idle and total time in <see cref="CpuTicksPerSecond"/> ticks, or <see langword="null"/> when the platform cannot say.</returns>
+    public static (ulong Idle, ulong Total)? CpuTimes() {
         if (OperatingSystem.IsWindows()) {
             // Kernel time includes idle time.
             return (GetSystemTimes(idle: out var idle, kernel: out var kernel, user: out var user)
@@ -126,12 +129,42 @@ public sealed partial class HostProbe(string checkoutRoot) {
             return (0, double.NaN);
         }
     }
-    // The CPU time a process has used in total, in seconds; NaN when the platform will not say.
-    private static double CpuSeconds(Process process) {
+    /// <summary>Reads the peaks a running process has reached: its private bytes and whole working set now or at the
+    /// operating system's own recorded peak, whichever is higher (Windows records both, so a peak between readings still
+    /// counts), and its private working set now, which no system records a peak of.</summary>
+    /// <param name="process">The running process, whose cached counters are refreshed first.</param>
+    /// <returns>The peaks; one with a counter the platform will not report is not <see cref="HostPeaks.Valid"/>.</returns>
+    public static HostPeaks PeaksOf(Process process) {
+        process.Refresh();
+
+        var (privateGb, workingSetGb) = Footprint(process: process);
+        var resident = ((Puck.Hosting.HostMemory.PrivateResidentBytes(processId: process.Id) is { } bytes) ? (bytes / 1073741824.0) : double.NaN);
+
+        try {
+            if (OperatingSystem.IsWindows()) { privateGb = Math.Max(val1: privateGb, val2: (process.PeakPagedMemorySize64 / 1073741824.0)); }
+            if (double.IsFinite(d: workingSetGb)) { workingSetGb = Math.Max(val1: workingSetGb, val2: (process.PeakWorkingSet64 / 1073741824.0)); }
+        } catch (Exception exception) when ((exception is Win32Exception or InvalidOperationException or NotSupportedException)) { }
+
+        return new HostPeaks(PrivateGb: privateGb, ResidentGb: HostRunningStart.ResidentOf(privateGb: privateGb, privateResidentGb: resident, workingSetGb: workingSetGb), WorkingSetGb: workingSetGb);
+    }
+    /// <summary>Reads the CPU time a process has used in total.</summary>
+    /// <param name="process">The process.</param>
+    /// <returns>The seconds, or NaN when the platform will not say (the process exited, or belongs to another user).</returns>
+    public static double CpuSeconds(Process process) {
         try {
             return process.TotalProcessorTime.TotalSeconds;
         } catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or NotSupportedException) {
             return double.NaN;
+        }
+    }
+    /// <summary>Reads when a process started.</summary>
+    /// <param name="process">The process.</param>
+    /// <returns>The local start time, or <see cref="DateTime.MinValue"/> when the platform will not say.</returns>
+    public static DateTime StartOf(Process process) {
+        try {
+            return process.StartTime;
+        } catch (Exception exception) when ((exception is Win32Exception or InvalidOperationException or NotSupportedException)) {
+            return DateTime.MinValue;
         }
     }
     private static double FreeRamGb() =>
@@ -192,13 +225,7 @@ public sealed partial class HostProbe(string checkoutRoot) {
 
         foreach (var process in Process.GetProcesses()) {
             using (process) {
-                DateTime started;
-
-                try {
-                    started = process.StartTime;
-                } catch (Exception exception) when ((exception is Win32Exception or InvalidOperationException or NotSupportedException)) {
-                    started = DateTime.MinValue;
-                }
+                var started = StartOf(process: process);
 
                 tree[process.Id] = (ProcessInspection.ParentId(processId: process.Id), started);
 

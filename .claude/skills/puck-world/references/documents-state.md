@@ -792,30 +792,25 @@ is the rule operand. Routes are local runtime state: clear them on producer,
 designation, transfer, or domain-rebuild discontinuities; checkpoint and hash
 them wherever uninterrupted simulation continuity is promised.
 
-Optional domain `shared: { goalCapacity, expandedNodesPerTick }` replaces per-body
-A* searches with queued reverse-Dijkstra destination trees. Domain + goal cell
-is the sharing key; never bind cache ownership to a leader or body generation.
-Each body still owns its copied path and cursor, and uses its exact designated
-point at the end. Domain profiles partition clearance/topology/medium compatibility;
-shared volume/medium users must fit the domain's root-centered clearance sphere.
-Searches take deterministic round-robin turns under the domain's aggregate
-per-tick expansion budget, each visiting at most 26 predecessor edges. Pending
-requests pin resident trees; otherwise eviction is LRU using unique, contiguous
-recency ranks (never saturated counters). Full pinned capacity
-reports `$nav:<bodyRef>:capacity`, queued work reports `pending`, and neither
-means `unreachable` or permits an unbudgeted fallback. `maxPathNodes` still bounds
-extraction; a shared tree may settle the whole domain rather than stopping at the
-independent A* `maxExpandedNodes`. Hard totals bound cells × goals and per-tick work.
-Checkpoint/hash discovered costs, successors, settled flags, pending starts,
-ages, and scheduler cursor; derive heap layout and cached hashes. Node hashes
-use canonical 64-cell blocks with dirty-block invalidation, while pending hashes
-sort the bounded request list; never scan a settled domain every replay tick.
-Referenced-medium writes reset
-the affected trees (not writes to unrelated fields), and obsolete trees are
-canonical empty state at checkpoint/hash time. Restore field values before
-restoring navigation's derived invalidation stamps. This is not incremental
-repair, hierarchical routing, crowd collision avoidance, or group membership;
-see the server README's Navigation section for the current limits.
+A domain's optional `network` name sets which domains join: two domains join
+where they share a cell only when their networks match (unnamed domains share one
+network), so a district's pavement joins the next district's pavement and never
+a road of another network. `shared: true` makes the domain's followers read goal
+fields over its network instead of searching a route each. A goal field is one
+reverse search from the goal cell over every domain of the network, kept as one
+step per cell, so every body heading to that goal reads its next step from the
+cell it stands on: it crosses districts at their shared cells, holds no route,
+and never replans when a crowd pushes it off its line. The goal cell is the
+sharing key, never a leader or body. A follower uses its exact designated point
+at the end, and its `$nav` facets read `hasPath` while its field gives it a step
+and `remaining` as its one next waypoint. Fields are a cache, not state: nothing
+checkpoints or hashes them, a world keeps them within a fixed byte budget
+(`WorldNavigationCapacity.MaxGoalFieldBytes`) by dropping the least recently
+read, and a dropped field is derived again with the same steps. A field over a
+medium domain is derived again once that medium changes. Shared volume and
+medium users must fit the domain's root-centered clearance sphere. Local
+avoidance at crowd density is not provided; see the server README's Navigation
+section for the current limits.
 
 ## Records, pools, and retained turns
 

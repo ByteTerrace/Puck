@@ -259,27 +259,40 @@ public sealed class MemoryAdmissionLawTests {
         Assert.Equal(expected: 3L, actual: account.ReadAdmission(pool: PhysicalMemory.Host).ForcedJobs);
     }
     [Fact]
-    public void AuthoringDrawsOnTheMachinesRoomApartFromThePlayBarUnlessThePlayBarHoldsIt() {
-        var free = ((long?)(32L * Gibibyte));
-        var account = new MemoryAccount(availablePhysicalBytes: () => free, installedPhysicalBytes: (64L * Gibibyte));
+    public void AuthoringDrawsOnTheMachinesMeasuredRoomApartFromThePlayBarUnlessThePlayBarHoldsIt() {
+        var now = 1L;
+        var low = false;
+        var account = new MemoryAccount(availablePhysicalBytes: static () => (32L * Gibibyte), clock: () => now, installedPhysicalBytes: (64L * Gibibyte), lowMemorySignaled: () => low);
         using var play = account.CreateOwner(memoryClass: MemoryClass.Workspace, name: "play");
         using var bake = account.CreateOwner(allowance: MemoryAllowance.Authoring, memoryClass: MemoryClass.Workspace, name: "bake");
 
         account.SetHostBar(bytes: (8L * Gibibyte));
+        Assert.Equal(expected: (8L * Gibibyte), actual: account.AuthoringMargin);
         Assert.True(condition: play.TryReserve(peak: (4L * Gibibyte)));
         Assert.True(condition: bake.TryReserve(peak: (16L * Gibibyte)));
         Assert.False(condition: play.TryReserve(peak: (9L * Gibibyte)));
 
         var host = account.ReadAdmission(pool: PhysicalMemory.Host);
 
-        Assert.Equal(expected: ((4L * Gibibyte), (16L * Gibibyte), false), actual: (host.Promised, host.AuthoringPromised, host.AuthoringOnPlayBar));
-        // Authoring draws only on the machine's room past play's bar: 25 GiB with play's 4 fits the machine's limit, but
-        // not once play is entitled to its whole bar.
-        Assert.False(condition: bake.TryReserve(peak: (25L * Gibibyte)));
+        // Authoring's room is the free memory less the margin and what the pool has promised (play's 4 GiB, the bake's
+        // 16): the 4 GiB of play's bar that play does not hold are not kept from it.
+        Assert.Equal(expected: ((4L * Gibibyte), (16L * Gibibyte), false, (4L * Gibibyte)), actual: (host.Promised, host.AuthoringPromised, host.AuthoringOnPlayBar, host.AuthoringRoom));
+        Assert.True(condition: bake.TryReserve(peak: (19L * Gibibyte)));
+        Assert.False(condition: bake.TryReserve(peak: (21L * Gibibyte)));
+        // While the system signals low memory, authoring has no room, and the caches are asked to give back.
+        low = true;
+        now += MemoryAccount.AvailableInterval;
+        Assert.False(condition: bake.TryReserve(peak: (19L * Gibibyte) + Mebibyte));
+        Assert.Equal(expected: (0L, true), actual: (account.ReadAdmission(pool: PhysicalMemory.Host).AuthoringRoom, account.ReadAdmission(pool: PhysicalMemory.Host).MachineLowMemory));
+        Assert.True(condition: account.ServicePressure());
+        low = false;
+        now += MemoryAccount.AvailableInterval;
+        Assert.True(condition: bake.TryReserve(peak: (19L * Gibibyte) + Mebibyte));
         // A player's build holds authoring to the play bar: a bake there is refused and degrades.
+        bake.ReleaseReservation();
         account.SetAuthoringOnPlayBar(onPlayBar: true);
-        Assert.False(condition: bake.TryReserve(peak: (17L * Gibibyte)));
-        Assert.Equal(expected: ((20L * Gibibyte), 0L), actual: (account.ReadAdmission(pool: PhysicalMemory.Host).Promised, account.ReadAdmission(pool: PhysicalMemory.Host).AuthoringPromised));
+        Assert.False(condition: bake.TryReserve(peak: (5L * Gibibyte)));
+        Assert.Equal(expected: ((4L * Gibibyte), 0L), actual: (account.ReadAdmission(pool: PhysicalMemory.Host).Promised, account.ReadAdmission(pool: PhysicalMemory.Host).AuthoringPromised));
         account.SetHostBar(bytes: null);
     }
     [Fact]

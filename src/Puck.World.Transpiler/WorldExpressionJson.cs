@@ -19,6 +19,9 @@ public static class WorldExpressionJson {
         LowerProgramMember(diagnostics: diagnostics, member: "cohesionAffinity", obj: obj);
         LowerProgramMember(diagnostics: diagnostics, member: "alignmentAffinity", obj: obj);
         LowerProgramMember(diagnostics: diagnostics, member: "score", obj: obj);
+        LowerProgramMember(diagnostics: diagnostics, member: "pointX", obj: obj);
+        LowerProgramMember(diagnostics: diagnostics, member: "pointY", obj: obj);
+        LowerProgramMember(diagnostics: diagnostics, member: "pointZ", obj: obj);
         if ((obj["$type"] is JsonValue discriminator) && (discriminator.GetValue<string>() == "compareValue")) {
             LowerProgramMember(diagnostics: diagnostics, member: "left", obj: obj);
             LowerProgramMember(diagnostics: diagnostics, member: "right", obj: obj);

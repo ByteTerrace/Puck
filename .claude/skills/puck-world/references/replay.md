@@ -192,11 +192,8 @@ covers cursors, text, unsupported continuations and relocation after unrelated r
   directory and document path (a companion row's cabinets read content beside
   its own document), and the companion tapes of a set.
   The current key includes authoritative state-system hashes, local flock
-  perception state, full slot generations, and shared navigation trees/pending work.
-  Shared tree nodes fold through canonical 64-cell block digests and a cached
-  root; pending starts fold in sorted order. Cache layout and warmth are derived,
-  never persisted or part of the state identity.
-  Tree eviction ages are unique, contiguous recency ranks, not saturated counters.
+  perception state and full slot generations. Navigation goal fields are a cache
+  of the baked domains, never persisted or part of the state identity.
   Decision policies additionally hash their sorted binding keys, generations,
   selected options/body incarnations, cadence/commitment timers, interrupt latches, and local PCG
   states/counters. The authority checkpoint codec carries these rows as well.

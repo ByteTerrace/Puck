@@ -48,7 +48,7 @@ internal static class SdfMeshTraceJudge {
         var toIndices = to.Indices.Span;
         var fromPositions = from.Positions.Span;
         var fromIndices = from.Indices.Span;
-        var grid = new SdfMeshTriangleGrid(cellSize: Tolerance, indices: toIndices, positions: toPositions);
+        using var grid = new SdfMeshTriangleGrid(cellSize: Tolerance, indices: toIndices, positions: toPositions);
 
         for (var triangle = 0; (triangle < (fromIndices.Length / 3)); triangle++) {
             var (a, b, c) = SdfMeshTriangle.Corners(indices: fromIndices, positions: fromPositions, triangle: triangle);

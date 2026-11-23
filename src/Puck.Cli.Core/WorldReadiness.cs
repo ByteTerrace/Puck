@@ -35,6 +35,15 @@ public sealed class WorldReadiness {
 
     /// <summary>Gets whether this World has reported ready.</summary>
     public bool Ready => (Volatile.Read(location: ref m_marked) != 0);
+    /// <summary>Gets the profile the World is judged by now: the one its launch expected, made cold once the World reported
+    /// baking meshes; <see langword="null"/> when the launch recorded none.</summary>
+    public HostStartProfile? Profile {
+        get {
+            lock (m_gate) {
+                return m_profile;
+            }
+        }
+    }
 
     /// <summary>Creates the readiness of a just-started World, and records its profile.</summary>
     /// <param name="process">The World's process.</param>

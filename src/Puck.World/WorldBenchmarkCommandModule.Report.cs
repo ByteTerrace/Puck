@@ -7,6 +7,7 @@ using Puck.Abstractions.Memory;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Hosting.Jobs;
+using Puck.Hosting.Telemetry;
 using Puck.Launcher;
 
 namespace Puck.World;
@@ -35,6 +36,52 @@ public sealed partial class WorldBenchmarkCommandModule {
             ["hostMemoryLimitBytes"] = host.Limit,
         };
     }
+    // The adapter's state over the whole run, from its first chapter's start to its last chapter's end (or now), with the
+    // provider and the ceilings every chapter's reading is judged against. A host with no provider reports why.
+    private JsonNode? AdapterReport() {
+        if (m_adapter is not { } adapter) { return null; }
+
+        var begun = m_chapters.Where(predicate: static chapter => (chapter.BeginStamp != 0L)).ToArray();
+        var from = ((begun.Length == 0) ? 0L : begun[0].BeginStamp);
+        var to = (((begun.Length == 0) || begun.Any(predicate: static chapter => (chapter.EndStamp == 0L))) ? 0L : begun[^1].EndStamp);
+
+        return AdapterNode(summary: adapter.Summarize(from: from, to: to), whole: true);
+    }
+
+    private static JsonNode? AdapterNode(AdapterTelemetrySummary? summary, bool whole) {
+        if (summary is null) { return null; }
+
+        static JsonNode? Spread(AdapterSpread? spread) => ((spread is { } value) ? new JsonObject { ["min"] = value.Min, ["median"] = value.Median, ["max"] = value.Max } : null);
+
+        var node = new JsonObject();
+
+        if (whole) {
+            node["provider"] = summary.Info.Provider;
+            node["adapter"] = summary.Info.Adapter;
+            node["maxGraphicsClockMhz"] = summary.Info.MaxGraphicsClockMhz;
+            node["maxMemoryClockMhz"] = summary.Info.MaxMemoryClockMhz;
+            node["powerLimitWatts"] = summary.Info.PowerLimitWatts;
+            node["unavailable"] = summary.Info.Unavailable;
+        }
+
+        node["samples"] = summary.Samples;
+        node["loadedSamples"] = summary.LoadedSamples;
+        node["loadedAtUtilizationPercent"] = AdapterTelemetrySummary.LoadedUtilizationPercent;
+        node["graphicsClockMhz"] = Spread(spread: summary.GraphicsClockMhz);
+        node["loadedGraphicsClockMhz"] = Spread(spread: summary.LoadedGraphicsClockMhz);
+        node["memoryClockMhz"] = Spread(spread: summary.MemoryClockMhz);
+        node["powerWatts"] = Spread(spread: summary.PowerWatts);
+        node["utilizationPercent"] = Spread(spread: summary.UtilizationPercent);
+        node["temperatureCelsius"] = Spread(spread: summary.TemperatureCelsius);
+        node["performanceStates"] = new JsonObject([.. summary.PerformanceStates.Select(selector: static entry => KeyValuePair.Create<string, JsonNode?>(key: $"P{entry.Key.ToString(provider: CultureInfo.InvariantCulture)}", value: entry.Value))]);
+        node["clockEvents"] = new JsonObject([.. summary.ClockEventSamples.Select(selector: static entry => KeyValuePair.Create<string, JsonNode?>(key: entry.Key.ToString(), value: entry.Value))]);
+        node["judged"] = (summary.NotJudged is null);
+        node["notJudged"] = summary.NotJudged;
+        node["heldReason"] = summary.HeldReason;
+
+        return node;
+    }
+
     // The topology the route played in, from the seat's own route as the run ends: the authority the seat's client is
     // routed to, whether this process advances that authority's clock (in-process) or another does (remote), and the
     // witness that the seat's body is there, which is the body that authority last delivered at the route's address. A
@@ -82,11 +129,14 @@ public sealed partial class WorldBenchmarkCommandModule {
             ["overlay"] = new JsonObject { ["enabledAtEntry"] = m_overlayAtEntry, ["changedDuringRun"] = m_overlayChanged },
             ["gpu"] = (gpuTiming?.Capture() ?? new JsonObject { ["state"] = "absent" }),
             ["profile"] = ProfileReport(),
+            ["adapter"] = AdapterReport(),
             ["topology"] = TopologyReport(),
             ["preparation"] = m_prepared,
         };
 
         m_prepared = null;
+        m_adapter?.Dispose();
+        m_adapter = null;
 
         gpuTiming?.RequireRecording(false);
 
@@ -226,6 +276,7 @@ public sealed partial class WorldBenchmarkCommandModule {
             }
         }
         node["gpu"] = DescribeGpu(chapter: chapter);
+        node["adapter"] = AdapterNode(summary: chapter.Adapter, whole: false);
         node["reads"] = DescribeReads(chapter: chapter);
 
         return node;

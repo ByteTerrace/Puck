@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 using Puck.Maths;
 using Puck.Physics.Motion;
 
@@ -27,6 +28,10 @@ public enum WorldBodyEffectScope : byte {
 /// <param name="TargetKey">The body a rule designates, or <see langword="null"/>.</param>
 /// <param name="UseMoveDirection">Whether a planar impulse prefers the normalized current movement command.</param>
 /// <param name="Curve">The timed move's progress curve.</param>
+/// <param name="Placement">The placement a point designation is based at, or <see langword="null"/> for the
+/// origin.</param>
+/// <param name="Offset">The literal point of a point designation, or its offset from <paramref name="Placement"/>;
+/// zero when the point is computed.</param>
 public readonly record struct WorldBodyEffectForm(
     string Verb,
     BodyMotionOp Operation,
@@ -39,7 +44,9 @@ public readonly record struct WorldBodyEffectForm(
     StateChannelRef? Key,
     StateChannelRef? TargetKey,
     bool UseMoveDirection = false,
-    BodyMotionCurve Curve = BodyMotionCurve.Linear
+    BodyMotionCurve Curve = BodyMotionCurve.Linear,
+    string? Placement = null,
+    FixedVector3 Offset = default
 );
 /// <summary>The one check and lowering of the body-motion effects — <see cref="WorldEffect.SetVerticalVelocity"/>,
 /// <see cref="WorldEffect.ScaleVerticalVelocity"/>, <see cref="WorldEffect.PlanarImpulse"/> and
@@ -104,6 +111,8 @@ public static class WorldBodyEffects {
         var curve = BodyMotionCurve.Linear;
         string? register = null;
         var designation = WorldBodyDesignationKind.Body;
+        string? placement = null;
+        var offset = default(FixedVector3);
         StateChannelRef? targetKey = null;
         BodyMotionOp operation;
 
@@ -176,6 +185,7 @@ public static class WorldBodyEffects {
 
                 if (!TryDesignation(
                     designate: designate,
+                    offset: out offset,
                     reason: out reason,
                     registerDeclared: registerDeclared,
                     scope: scope,
@@ -183,6 +193,8 @@ public static class WorldBodyEffects {
                 )) {
                     return false;
                 }
+
+                placement = designate.Placement;
 
                 break;
         }
@@ -194,7 +206,9 @@ public static class WorldBodyEffects {
             UseMoveDirection: (effect is WorldEffect.PlanarImpulse { UseMoveDirection: true }),
             DurationTicks: durationTicks,
             Key: key,
+            Offset: offset,
             Operation: operation,
+            Placement: placement,
             Register: register,
             Target: target,
             TargetKey: targetKey,
@@ -255,8 +269,22 @@ public static class WorldBodyEffects {
 
         return true;
     }
-    private static bool TryDesignation(WorldEffect.Designate designate, string verb, WorldBodyEffectScope scope, Predicate<string>? registerDeclared, out string reason) {
+    private static bool TryDesignation(WorldEffect.Designate designate, string verb, WorldBodyEffectScope scope, Predicate<string>? registerDeclared, out FixedVector3 offset, out string reason) {
+        offset = default;
         reason = string.Empty;
+
+        var hasPoint = (
+            (designate.Placement is not null) ||
+            (designate.Position is not null) ||
+            (designate.PointX is not null) ||
+            (designate.PointY is not null) ||
+            (designate.PointZ is not null)
+        );
+        var computed = (
+            (designate.PointX is not null) ||
+            (designate.PointY is not null) ||
+            (designate.PointZ is not null)
+        );
 
         if (string.IsNullOrEmpty(value: designate.Register)) {
             reason = $"'{verb}' names no register";
@@ -268,24 +296,75 @@ public static class WorldBodyEffects {
         } else if (!Enum.IsDefined(value: designate.Kind)) {
             reason = $"'{verb}' kind '{designate.Kind}' is not defined";
         } else if (scope == WorldBodyEffectScope.Kit) {
-            if (designate.Kind == WorldBodyDesignationKind.Clear) {
-                reason = $"'{verb}' kind=clear is a world rule's — a kit's action designates into its own register the participant that last affected it";
+            if (designate.Kind != WorldBodyDesignationKind.Body) {
+                reason = $"'{verb}' kind={designate.Kind.ToString().ToLowerInvariant()} is a world rule's — a kit's action designates into its own register the participant that last affected it";
             } else if (designate.TargetKey is not null) {
                 reason = $"'{verb}' names targetKey '{designate.TargetKey}' — a kit's action designates the participant that last affected its body; 'targetKey' names the body a world rule designates";
+            } else if (hasPoint) {
+                reason = $"'{verb}' names a point — a kit's action designates the participant that last affected its body; only a world rule designates a point";
             }
+        } else if (designate.Kind == WorldBodyDesignationKind.Body) {
+            if (designate.TargetKey is null) {
+                reason = $"'{verb}' kind=body requires targetKey";
+            } else if (hasPoint) {
+                reason = $"'{verb}' kind=body does not admit a point; kind=point designates one";
+            }
+        } else if (designate.Kind == WorldBodyDesignationKind.Clear) {
+            if (designate.TargetKey is not null) {
+                reason = $"'{verb}' kind=clear does not admit targetKey";
+            } else if (hasPoint) {
+                reason = $"'{verb}' kind=clear does not admit a point";
+            }
+        } else if (designate.TargetKey is not null) {
+            reason = $"'{verb}' kind=point does not admit targetKey";
+        } else if (!hasPoint) {
+            reason = $"'{verb}' kind=point requires a point: placement, position, or pointX, pointY and pointZ";
         } else if (
-            (designate.Kind == WorldBodyDesignationKind.Body) &&
-            (designate.TargetKey is null)
+            computed &&
+            ((designate.PointX is null) || (designate.PointY is null) || (designate.PointZ is null))
         ) {
-            reason = $"'{verb}' kind=body requires targetKey";
+            reason = $"'{verb}' computes its point with pointX, pointY and pointZ together; one or two of them name no point";
+        } else if (computed && (designate.Position is not null)) {
+            reason = $"'{verb}' names both position and pointX, pointY and pointZ — authors exactly one";
         } else if (
-            (designate.Kind == WorldBodyDesignationKind.Clear) &&
-            (designate.TargetKey is not null)
+            (designate.Placement is { } placement) &&
+            string.IsNullOrWhiteSpace(value: placement)
         ) {
-            reason = $"'{verb}' kind=clear does not admit targetKey";
+            reason = $"'{verb}' names an empty placement";
+        } else if (designate.Position is { } position) {
+            var literal = ((Vector3)position);
+
+            if (!TryFixedAxis(value: literal.X, field: "position x", verb: verb, result: out var x, reason: out reason) ||
+                !TryFixedAxis(value: literal.Y, field: "position y", verb: verb, result: out var y, reason: out reason) ||
+                !TryFixedAxis(value: literal.Z, field: "position z", verb: verb, result: out var z, reason: out reason)) {
+                return false;
+            }
+
+            offset = new FixedVector3(
+                X: x,
+                Y: y,
+                Z: z
+            );
         }
 
         return (reason.Length == 0);
+    }
+    // An authored literal is a float: one that is not finite is refused by name, and the rest take TryFixed's exact range.
+    private static bool TryFixedAxis(float value, string field, string verb, out FixedQ4816 result, out string reason) {
+        result = FixedQ4816.Zero;
+        if (!float.IsFinite(f: value)) {
+            reason = $"'{verb}' {field} '{value.ToString(provider: CultureInfo.InvariantCulture)}' is not finite";
+
+            return false;
+        }
+
+        return TryFixed(
+            value: decimal.CreateSaturating(value: value),
+            field: field,
+            verb: verb,
+            result: out result,
+            reason: out reason
+        );
     }
     private static bool TryFixed(decimal value, string field, string verb, out FixedQ4816 result, out string reason) {
         if (NumericLiteral.TryToFixed(

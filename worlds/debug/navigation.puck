@@ -22,28 +22,7 @@
 // the valley's 2 m cells cross its open floor.
 
 import "shapes"
-
-// A surface domain for the Moth's walking envelope (avatars/moth.puck): her capsule's 2.06 m height and 0.35 m radius,
-// her 0.3 m step, and a 50 degree slope, under the standard's 60 so a route never leans on the limit. Every cell is
-// searchable in one route (the expansion budget is the cell count) and a route keeps up to its path budget.
-function walkable(name, origin, cellSize, width, depth, probeUp, probeDown, maxPathNodes) = {
-  name: name
-  kind: Surface
-  origin: origin
-  cellSize: cellSize
-  width: width
-  depth: depth
-  layers: 1
-  probeUp: probeUp
-  probeDown: probeDown
-  agentHeight: 2.06
-  agentRadius: 0.35
-  maxStepHeight: 0.3
-  maxSlopeDegrees: 50
-  arrivalDistance: cellSize
-  maxExpandedNodes: (width * depth)
-  maxPathNodes: maxPathNodes
-}
+import "walkers"
 
 navigation {
   domains: concat(

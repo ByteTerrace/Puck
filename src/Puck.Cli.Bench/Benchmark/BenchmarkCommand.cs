@@ -6,8 +6,10 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Puck.Abstractions;
+using Puck.Cli.Host;
 using Puck.Cli.Sweep;
 using Puck.Commands;
+using Puck.Hosting.Telemetry;
 using Puck.World;
 
 namespace Puck.Cli.Bench;
@@ -70,7 +72,7 @@ public static partial class BenchmarkCommand {
         var options = new RunOptions();
 
         options.Command.SetAction((parse, token) => Task.FromResult(Run(options, parse, sampleHost, token)));
-        options.Command.Detail("""
+        options.Command.Detail($"""
             Boots a fresh World paused before its first tick, waits for the renderer with authority held, arms the route at the
             named tick and resumes, so every line of a fresh run lands on the same absolute tick from the boot image. The World
             plays the route itself in real time and records every host iteration; nothing in the run pauses, settles or waits. A
@@ -82,10 +84,16 @@ public static partial class BenchmarkCommand {
             split, each GPU pass's mean and maximum, and the change of the streaming and counter readings across the chapter;
             beside the run's boot span (the host's first iterations through the first chapter), its conditions and the machine's
             load. run.json and frames.csv per backend hold the World's own report and every iteration.
+            Each run also records the machine it ran on: the adapter's clocks, power, utilization, performance state and clock
+            events sampled through every chapter (`adapter`), and the CPU every process outside the run's own tree used, the
+            programs that used most, and any other World or lease holder seen (`machine`). A run whose other processes used more
+            than {HostCompetitionRecorder.DisturbedShare:P0} of the machine's CPU or {HostCompetitionRecorder.DisturbedCores:0} core, that shared the machine with another World, or whose adapter's clock sat
+            under {AdapterTelemetrySummary.HeldClockFraction:P0} of its ceiling while loaded and not power or thermal limited, is DISTURBED: it is named in the summary
+            line, stored as `conditions` in report.json and `machine.verdict` of the run, and its timings are not a verdict on the build.
 
             --against compares each backend's run with the same backend's run in an earlier report, and `puck benchmark compare`
             compares two reports. A comparison is refused, by name, for another route, unlike conditions, a run that began in
-            lockstep, or a metric one report lacks; a chapter that is off course, disturbed, unfinished or missing is
+            lockstep, a disturbed run, or a metric one report lacks; a chapter that is off course, disturbed, unfinished or missing is
             unavailable and nothing of it is compared; a chapter whose program changed is described and not compared. Exit 0:
             compared. Exit 1: the run did not finish, or no chapter could be compared. Exit 2: a refusal, a usage error or an
             infrastructure failure.
@@ -112,7 +120,7 @@ public static partial class BenchmarkCommand {
         compare.Detail("""
             Compares two puck.bench.v1 reports of the benchmark verb: each backend the candidate ran with the same backend of the
             baseline, loop by loop and chapter by chapter, the numbers set side by side with their difference and no threshold.
-            Refusals are named: another-route, unlike-conditions, began-in-lockstep and missing-metric. Exit 0: compared. Exit 1:
+            Refusals are named: another-route, unlike-conditions, began-in-lockstep, disturbed-run and missing-metric. Exit 0: compared. Exit 1:
             no chapter could be compared. Exit 2: refused or unreadable.
             """);
         options.Command.Add(compare);
@@ -181,9 +189,13 @@ public static partial class BenchmarkCommand {
 
             try {
                 using var budget = new SuiteBudget(TimeSpan.FromSeconds(seconds: Allowance(timeout: parse.GetValue(options.Timeout))), token);
-                var played = Play(options: options, parse: parse, build: build, directory: Path.Combine(path1: directory, path2: name), backend: backend, shape: shape, world: world, route: route, prefix: prefix, budget: budget, print: print.Write);
+                var played = Play(options: options, parse: parse, build: build, directory: Path.Combine(path1: directory, path2: name), backend: backend, shape: shape, world: world, route: route, prefix: prefix, budget: budget, print: print.Write, competition: out var competition);
+                var folded = Fold(world: played, conditions: conditions, backend: name, routeName: (prefix.Length == 0 ? routeName : $"{routeName}#{prefix}"), competition: competition);
 
-                runs.Add(item: Fold(world: played, conditions: conditions, backend: name, routeName: (prefix.Length == 0 ? routeName : $"{routeName}#{prefix}")));
+                runs.Add(item: folded);
+                if (BenchmarkConditions.ReasonsOf(run: folded) is { Count: > 0 } reasons) {
+                    print.Write($"{Verb}: {name}: DISTURBED: {string.Join(separator: "; ", values: reasons)}\n");
+                }
             } catch (Exception exception) when (exception is InvalidOperationException or InvalidDataException or IOException or TimeoutException) {
                 failures.Add(item: $"{name}: {exception.Message}");
                 Console.Error.WriteLine(value: $"{Verb}: {name}: {exception.Message}; evidence {PuckPaths.Normalize(path: directory)}");
@@ -215,8 +227,10 @@ public static partial class BenchmarkCommand {
             }
         }
 
+        var verdict = BenchmarkConditions.Describe(runs: runs.OfType<JsonObject>());
         var report = BenchReport.Start(Verb, BenchBuild.Of(build.Path), 1, Settings(options: options, parse: parse, route: routeName, world: world, backends: backends)) with {
             Complete = complete,
+            Conditions = (verdict ?? BenchmarkConditions.Clean),
             HostLoad = host.Finish(),
             Metrics = Metrics(runs: runs),
             Benchmark = benchmark,
@@ -226,7 +240,7 @@ public static partial class BenchmarkCommand {
         if (parse.GetValue(options.Json)) {
             Console.WriteLine(report.ToJson());
         } else {
-            print.WriteLine($"{Verb}: {report.Metrics.Count} metric(s) over {runs.Count} run(s); report {PuckPaths.Normalize(path: Path.Combine(path1: directory, path2: "report.json"))}");
+            print.WriteLine($"{Verb}: {report.Metrics.Count} metric(s) over {runs.Count} run(s); conditions {(verdict ?? BenchmarkConditions.Clean)}; report {PuckPaths.Normalize(path: Path.Combine(path1: directory, path2: "report.json"))}");
         }
 
         return exit;
@@ -263,7 +277,7 @@ public static partial class BenchmarkCommand {
     private static string RouteName(string root, string path) => (PuckPaths.IsWithin(path: path, root: root) ? PuckPaths.Relative(path: path, relativeTo: root) : Path.GetFileName(path: path));
 
     // Plays the route on one fresh paused World and returns the World's own report of it.
-    private static JsonObject Play(RunOptions options, ParseResult parse, WorldBuild build, string directory, WorldBackendPreference? backend, WorldShape shape, string world, string route, string prefix, SuiteBudget budget, Action<string> print) {
+    private static JsonObject Play(RunOptions options, ParseResult parse, WorldBuild build, string directory, WorldBackendPreference? backend, WorldShape shape, string world, string route, string prefix, SuiteBudget budget, Action<string> print, out HostCompetitionReport competition) {
         _ = Directory.CreateDirectory(path: directory);
 
         var timeout = parse.GetValue(options.Timeout);
@@ -329,6 +343,9 @@ public static partial class BenchmarkCommand {
                 throw new InvalidOperationException($"the World never started the route: {armed.Output}");
             }
         }
+        // What else the machine does from the first tick to the last is read from the operating system, beside the run.
+        using var competitors = new HostCompetitionRecorder();
+
         if (!live.Run("world.rate resume", 30).Ok) {
             throw new InvalidOperationException("the World would not resume");
         }
@@ -356,6 +373,7 @@ public static partial class BenchmarkCommand {
                 _ = budget.Token.WaitHandle.WaitOne(PollInterval);
             }
         }
+        competition = competitors.Finish();
         print($"{summary}\n");
 
         var path = Path.Combine(runDirectory, "run.json");
@@ -392,9 +410,10 @@ public static partial class BenchmarkCommand {
 
     // One run as a report holds it: the World's own report with its readings' raw answers replaced by their change across
     // each chapter, and the verb's conditions beside it.
-    private static JsonObject Fold(JsonObject world, JsonObject conditions, string backend, string routeName) {
+    private static JsonObject Fold(JsonObject world, JsonObject conditions, string backend, string routeName, HostCompetitionReport competition) {
         var run = (JsonObject)JsonNode.Parse(world.ToJsonString())!;
 
+        run["machine"] = BenchmarkConditions.Machine(run: run, competition: competition);
         // The budget an iteration is judged against is the World's, which says it whether or not the verb named one.
         conditions["budgetMilliseconds"] = world["budgetMilliseconds"]?.DeepClone();
         run["backend"] = backend;

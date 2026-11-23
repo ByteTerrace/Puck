@@ -169,7 +169,7 @@ public sealed partial class WorldPopulation {
             geometry: NavigationGeometry(contact: m_baseContactField),
             fields: ((m_fieldRegions.Length == 0) ? null : new NavigationMediumFieldAdapter(regions: m_fieldRegions)),
             capacity: new NavigationCapacity(
-                MaxConcurrentRequesters: WorldBodiesLimits.CapacityCeiling,
+                GoalFieldBytes: WorldNavigationCapacity.MaxGoalFieldBytes,
                 MaxMediumSegmentSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions
             ),
             previous: previousNavigation

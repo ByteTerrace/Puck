@@ -276,13 +276,9 @@ public sealed partial class WorldPopulation {
                 MaxExpandedNodes: compiled.MaxExpandedNodes,
                 MaxPathNodes: compiled.MaxPathNodes,
                 Medium: compiled.Medium,
-                Shared: ((row.Shared is { } shared)
-                ? new NavigationSharing(
-                        GoalCapacity: shared.GoalCapacity,
-                        ExpandedNodesPerTick: shared.ExpandedNodesPerTick
-                    )
-                : null),
-                YawRadians: FixedQ4816.FromDegrees(degrees: frame.YawDegrees)
+                Shared: row.Shared,
+                YawRadians: FixedQ4816.FromDegrees(degrees: frame.YawDegrees),
+                Network: row.Network
             );
         }
         return domains;

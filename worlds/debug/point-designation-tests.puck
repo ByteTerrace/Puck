@@ -1,0 +1,260 @@
+// A rule sends a body to a world point. Three citizens stand on a floor with a target register, "errand", that their
+// producer program walks to: a rule designates the point of an anchor (the office placement), a literal position
+// beside it, and a point computed from state (a world row and a live body's position), and each citizen arrives.
+// The register is the one `body.designate <register> at:x,y,z` fills; the rule only reaches it through `designate`'s
+// `kind: Point`.
+schema: "puck.world.definition.v1"
+documentId: "point-designation-tests"
+
+import "../standard/walker"
+import "../standard/kits"
+
+bodies {
+  capacity: 4
+  localSeats: 1
+  networkPlayers: 0
+  reconnectGraceSeconds: 0
+  seatSpawns [start]
+  sleepAfterSeconds: 0s
+}
+
+spawnPoints [
+  { id: "start", position [0, 0, 20], yawDegrees: 0 }
+]
+
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  isActive: true
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, -18, 0]
+}
+
+targetRegisters [
+  { name: "errand", maximumRange: 60, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
+]
+
+// The citizens walk straight at what their register designates and stop within a metre of it.
+bodyMotionPrograms [
+  {
+    kind: Producer
+    name: "errand"
+    operations [SenseNearestInCone, ProduceSteeringIntent, FaceSensorTarget]
+    target: designated(register: "errand")
+    version: "puck.body.program.v1"
+  }
+]
+
+kits [
+  {
+    name: "citizen"
+    bodyContact: Solid
+    bodyMotionProgram: "walk"
+    collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
+    motion: walkerMotion
+    producers {
+      errand {
+        channels {}
+        scalars {
+          forward: 1
+          approach: 1
+          approachAltitudeGain: 0
+          standoffRadius: 1
+          orbit: 0
+          softRadius: 2.5
+          inwardGain: 3
+          turnScale: 3
+          weaveAmplitude: 0
+          weaveFrequencyBase: 0
+          weaveFrequencyRange: 0
+          activityRateBase: 1
+          activityRateRange: 0
+          altitudeBase: 0
+          altitudeGain: 0
+          altitudeRange: 0
+          pitchWave: 0
+          pressThreshold: 0
+          rollTurn: 0
+          strafeWave: 0
+          turnWave: 0
+          upWave: 0
+        }
+      }
+    }
+  }
+]
+
+// Where the computed citizen is sent, held in state: its x is a world row, its z the office's own z read from the
+// anchor citizen's destination.
+state {
+  world {
+    slot marketX = -14.5
+    slot marketZ = 6.25
+  }
+}
+
+// Each rule fires once, on the first tick past its gate.
+rule "citizen-a-to-the-office" {
+  when $tick >= 5
+  mode: Edge
+  designate(key: 1, kind: Point, register: "errand", placement: office)
+}
+
+rule "citizen-b-to-a-position" {
+  when $tick >= 5
+  mode: Edge
+  designate(key: 2, kind: Point, register: "errand", position: [-6, 0, -14])
+}
+
+rule "citizen-c-to-a-computed-point" {
+  when $tick >= 5
+  mode: Edge
+  designate(
+    key: 3,
+    kind: Point,
+    register: "errand",
+    pointX: marketX,
+    pointY: 0,
+    pointZ: marketZ
+  )
+}
+
+looks [
+  {
+    name: "citizen"
+    scale: 1
+    source: creation(prototypeId: citizen)
+    motion {
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+    }
+  }
+]
+
+prototypes {
+  prototype "citizen" {
+    document {
+      name: "citizen"
+      schema: "puck.creation.v1"
+      palette [{ color: "#5B7DB1", roughness: 0.6 }]
+      shape Capsule "body" {
+        material: 0
+        position [0, 0.3, 0]
+        scale [0.3, 2.2, 0.3]
+      }
+    }
+  }
+  prototype "floor" {
+    document {
+      name: "floor"
+      schema: "puck.creation.v1"
+      palette [{ color: "#ADA69F", roughness: 0.85 }]
+      shape Box {
+        material: 0
+        position [0, -0.2, 0]
+        scale [40, 0.2, 40]
+      }
+    }
+  }
+  prototype "office" {
+    document {
+      name: "office"
+      schema: "puck.creation.v1"
+      palette [{ color: "#B5651D", roughness: 0.7 }]
+      shape Box {
+        material: 0
+        position [0, 0.05, 0]
+        scale [0.5, 0.05, 0.5]
+      }
+    }
+  }
+}
+
+placements {
+  placement "floor" {
+    prototype: "floor"
+    position [0, 0, 0]
+    solid
+  }
+  // The anchor the first citizen is sent to.
+  placement "office" {
+    prototype: "office"
+    position [14, 0, -8]
+  }
+  placement "citizen-a" {
+    prototype: "citizen"
+    position [-10, 0, -8]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "citizen"
+      look: "citizen"
+      source: producer(name: "errand")
+    }
+  }
+  placement "citizen-b" {
+    prototype: "citizen"
+    position [6, 0, 2]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "citizen"
+      look: "citizen"
+      source: producer(name: "errand")
+    }
+  }
+  placement "citizen-c" {
+    prototype: "citizen"
+    position [10, 0, 14]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "citizen"
+      look: "citizen"
+      source: producer(name: "errand")
+    }
+  }
+}
+
+test "a rule sends each citizen to a point and it arrives" {
+  when {
+    ticks 900
+  }
+  expect {
+    bodyPosition(body, 1, x) > 12.5
+    bodyPosition(body, 1, x) < 15.5
+    bodyPosition(body, 1, z) > -9.5
+    bodyPosition(body, 1, z) < -6.5
+    bodyPosition(body, 2, x) > -7.5
+    bodyPosition(body, 2, x) < -4.5
+    bodyPosition(body, 2, z) > -15.5
+    bodyPosition(body, 2, z) < -12.5
+    bodyPosition(body, 3, x) > -16
+    bodyPosition(body, 3, x) < -13
+    bodyPosition(body, 3, z) > 4.75
+    bodyPosition(body, 3, z) < 7.75
+  }
+}

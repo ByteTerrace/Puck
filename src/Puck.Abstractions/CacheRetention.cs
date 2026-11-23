@@ -349,7 +349,11 @@ public static class CacheRetention {
     private static Listing EnforceSetsCore(string directory, CacheBound bound, CacheBound trimTo, Func<string, bool> isEntry, string? inUse) {
         var root = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: directory));
         var used = ((inUse is null) ? null : Path.GetFullPath(path: inUse));
-        var sets = new List<(CacheEntry Set, List<CacheEntry> Entries, bool IsDirectory)>();
+        // The set the written entry falls in, which alone keeps its entries' paths from the listing: a store of sets holds
+        // tens of thousands of entries, listed at least once a minute while it is written, and every other set is
+        // judged by its total and last use, its entries spelled again only if it is evicted (EntriesOf).
+        var usedSet = ((used is null) ? null : SetOf(path: used, root: root));
+        var sets = new List<SetListing>();
         using var held = TryOpen(directory: root);
 
         if (held is null) { return new Listing(KeptSets: new HashSet<string>(comparer: PuckPaths.Comparer), KeptUnits: 0, Result: default); }
@@ -362,20 +366,24 @@ public static class CacheRetention {
                         using var child = held.Child(name: entry.Name);
 
                         if (child is null) { continue; }
-                        var entries = new List<CacheEntry>();
+                        var entries = (string.Equals(a: path, b: usedSet, comparisonType: PuckPaths.Comparison) ? new List<CacheEntry>() : null);
+                        var bytes = 0L;
+                        var count = 0;
+                        var lastUsed = DateTime.MinValue;
 
                         foreach (var item in ListFiles(directory: child, recursive: true)) {
                             if (isEntry(arg: item.Entry.Name)) {
-                                entries.Add(item: new CacheEntry(Bytes: item.Entry.Length, LastUsedUtc: item.Entry.LastWriteTimeUtc, Path: PathOf(relativePath: $"{entry.Name}/{item.Path}", root: root)));
+                                bytes += item.Entry.Length;
+                                count++;
+                                if (item.Entry.LastWriteTimeUtc > lastUsed) { lastUsed = item.Entry.LastWriteTimeUtc; }
+                                entries?.Add(item: new CacheEntry(Bytes: item.Entry.Length, LastUsedUtc: item.Entry.LastWriteTimeUtc, Path: PathOf(relativePath: $"{entry.Name}/{item.Path}", root: root)));
                             }
                         }
-                        var lastUsed = ((entries.Count == 0) ? entry.LastWriteTimeUtc : entries.Max(selector: static member => member.LastUsedUtc));
-
-                        sets.Add(item: (new CacheEntry(Bytes: entries.Sum(selector: static member => member.Bytes), LastUsedUtc: lastUsed, Path: path), entries, true));
+                        sets.Add(item: new SetListing(Count: count, Entries: entries, IsDirectory: true, ListedBytes: bytes, Set: new CacheEntry(Bytes: bytes, LastUsedUtc: ((count == 0) ? entry.LastWriteTimeUtc : lastUsed), Path: path)));
                     } else if ((entry.Kind == ConfinedEntryKind.File) && !Abandon(directory: held, entry: entry) && isEntry(arg: entry.Name)) {
                         var file = new CacheEntry(Bytes: entry.Length, LastUsedUtc: entry.LastWriteTimeUtc, Path: path);
 
-                        sets.Add(item: (file, [file], false));
+                        sets.Add(item: new SetListing(Count: 1, Entries: [file], IsDirectory: false, ListedBytes: file.Bytes, Set: file));
                     }
                 } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                     // One unavailable child must not prevent counting the remaining sets.
@@ -391,17 +399,17 @@ public static class CacheRetention {
         var totalBytes = sets.Sum(selector: static set => set.Set.Bytes);
 
         if ((sets.Count > bound.MaxEntries) || (totalBytes > bound.MaxBytes)) {
-            var inUseSet = ((used is null) ? -1 : sets.FindIndex(match: set => set.Entries.Any(predicate: entry => IsInUse(entry: entry, inUse: used))));
+            var inUseSet = ((used is null) ? -1 : sets.FindIndex(match: set => (set.Entries?.Any(predicate: entry => IsInUse(entry: entry, inUse: used)) ?? false)));
             // Sets a running process holds (HoldSet) are kept whole whatever their stamps.
             var pinned = new HashSet<string>(collection: sets.Where(predicate: static set => (set.IsDirectory && IsPinned(set: set.Set.Path))).Select(selector: static set => set.Set.Path), comparer: PuckPaths.Comparer);
             var inUsePath = ((inUseSet >= 0) ? sets[inUseSet].Set.Path : null);
 
             // The set in use trims itself first when it alone holds more than the bound, unless a process pins it.
             if ((inUseSet >= 0) && !pinned.Contains(item: sets[inUseSet].Set.Path) && (sets[inUseSet].Set.Bytes > trimTo.MaxBytes)) {
-                var (set, entries, isDirectory) = sets[inUseSet];
-                var kept = set.Bytes;
+                var listed = sets[inUseSet];
+                var kept = listed.Set.Bytes;
 
-                foreach (var eviction in SelectEvictions(bound: new CacheBound(MaxBytes: trimTo.MaxBytes, MaxEntries: int.MaxValue), entries: entries, inUse: used)) {
+                foreach (var eviction in SelectEvictions(bound: new CacheBound(MaxBytes: trimTo.MaxBytes, MaxEntries: int.MaxValue), entries: listed.Entries!, inUse: used)) {
                     if (TryDelete(directory: held, relativePath: Path.GetRelativePath(path: eviction.Path, relativeTo: root))) {
                         removed++;
                         removedBytes += eviction.Bytes;
@@ -409,14 +417,14 @@ public static class CacheRetention {
                     }
                 }
 
-                sets[inUseSet] = ((set with { Bytes = kept }), entries, isDirectory);
+                sets[inUseSet] = (listed with { Set = (listed.Set with { Bytes = kept }) });
             }
 
             foreach (var eviction in SelectEvictionsCore(bound: trimTo, entries: sets.Select(selector: static set => set.Set), kept: set => (pinned.Contains(item: set.Path) || IsInUse(entry: set, inUse: inUsePath)), usedSinceUtc: null)) {
                 var whole = true;
                 var evicted = sets.First(predicate: set => string.Equals(a: set.Set.Path, b: eviction.Path, comparisonType: PuckPaths.Comparison));
 
-                foreach (var entry in evicted.Entries) {
+                foreach (var entry in (evicted.Entries ?? EntriesOf(held: held, isEntry: isEntry, name: Path.GetFileName(path: eviction.Path), root: root))) {
                     if (TryDelete(directory: held, relativePath: Path.GetRelativePath(path: entry.Path, relativeTo: root))) {
                         removed++;
                         removedBytes += entry.Bytes;
@@ -440,16 +448,37 @@ public static class CacheRetention {
             }
         }
 
-        var total = sets.Sum(selector: static set => set.Entries.Count);
+        var total = sets.Sum(selector: static set => set.Count);
         var keptSets = new HashSet<string>(collection: sets.Select(selector: static set => set.Set.Path).Where(predicate: path => !gone.Contains(item: path)), comparer: PuckPaths.Comparer);
         var result = new CacheRetentionResult(
             Kept: (total - removed),
-            KeptBytes: (sets.Sum(selector: static set => set.Entries.Sum(selector: static entry => entry.Bytes)) - removedBytes),
+            KeptBytes: (sets.Sum(selector: static set => set.ListedBytes) - removedBytes),
             Removed: removed,
             RemovedBytes: removedBytes
         );
 
         return new Listing(KeptSets: keptSets, KeptUnits: keptSets.Count, Result: result);
+    }
+    // One listed set: its total and last use, the entries and bytes the listing found in it, whether it is a directory,
+    // and its entries' paths when the listing kept them (the written entry's set, or a file directly in the root).
+    private readonly record struct SetListing(CacheEntry Set, List<CacheEntry>? Entries, bool IsDirectory, int Count, long ListedBytes);
+    // A set directory's entries, listed again for an eviction: the listing that judged it kept only its total.
+    private static List<CacheEntry> EntriesOf(ConfinedDirectory held, string root, string name, Func<string, bool> isEntry) {
+        var entries = new List<CacheEntry>();
+
+        try {
+            using var child = held.Child(name: name);
+
+            if (child is null) { return entries; }
+            foreach (var item in ListFiles(directory: child, recursive: true)) {
+                if (isEntry(arg: item.Entry.Name)) {
+                    entries.Add(item: new CacheEntry(Bytes: item.Entry.Length, LastUsedUtc: item.Entry.LastWriteTimeUtc, Path: PathOf(relativePath: $"{name}/{item.Path}", root: root)));
+                }
+            }
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            // A set that can no longer be listed is removed by its directory alone (DeleteChild).
+        }
+        return entries;
     }
     // The set a written path belongs to: the top-level subdirectory of root holding it, or the file itself directly in root.
     private static string SetOf(string root, string path) {

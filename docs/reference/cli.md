@@ -1177,7 +1177,15 @@ sum in privately resident memory, `privateResidentNeed`) fits free RAM with the 
 floor left over (`ram-covered`). The line also prints the kind's expected whole working set
 (`workingSet`, `unmeasured` before the first observation), which admission reports and never
 judges: the difference is clean mapped-file and image pages the system shares and reclaims,
-so a refusal can be read against both. A `start` line prints each live start's private bytes,
+so a refusal can be read against both. The expected figures are this machine's own: each
+kind of start (a windowed World also by backend and by warm or cold mesh store) keeps its
+last ten observed peaks under the lease root and expects their high percentile, and a World
+that reported ready records its peaks as it stops. Until a kind has a record its private bytes
+are the World's memory budget here (three quarters of installed memory, at most the
+large-machine figure) and its private working set is 0.7 of that, held to the free memory
+the idle machine leaves above the pressure floor, so a kind never measured still runs on a
+small machine, while commit and a start beside running ones are judged by the whole guess.
+A start whose measured need does not fit is refused. A `start` line prints each live start's private bytes,
 private working set, working set and the figure admission judged for it (`judged`). The
 capacity lines judge CPU, commit headroom against its reserve and pressure, and device
 admission separately checks GPU ownership.
@@ -3135,7 +3143,15 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   sampled position, its phase split and its collections), each GPU pass's mean and maximum (`gpu`: the rolling window mean
   `world.gpu-timing` prints, sampled every 30 ticks), and the change across the chapter of each `world.residency` degradation
   count, the `render.record`, `gpu.queue` and `sdf` counters and `host.memory`'s working set, private bytes and ledger peaks, beside the raw answers of every chapter reading, the device memory families among them (`host.memory families 0`: every owner's device bytes at both ends of a chapter)
-  (`readings`; a reading the host cannot answer is listed under `unmeasured`). The `boot` span is the statistics of the
+  (`readings`; a reading the host cannot answer is listed under `unmeasured`). Each run also carries the machine it ran on:
+  `adapter` (the graphics adapter's clocks, power, utilization, temperature, performance state and clock events, read every
+  500 ms through NVML where the machine has it and unknown, with the reason, where it does not, summarized for the run and for
+  each chapter) and `machine` (the CPU every process outside the verb's own tree used, the programs that used most, any other
+  World or gpu or heavy lease holder seen, and the verdict). A run is **disturbed**, in `machine.verdict`, in the report's
+  top-level `conditions` and in the summary line, when other processes used more CPU than `HostCompetitionRecorder`'s share or
+  core bar, another World was live, or the adapter's graphics clock sat under `AdapterTelemetrySummary.HeldClockFraction` of
+  its ceiling while loaded and not power or thermal limited (a clock lock held by a profiler or a tool). A disturbed run's
+  timings are not a verdict on the build ([the conditions](../plans/benchmark.md#comparing-runs)). The `boot` span is the statistics of the
   host's first iterations, from its first through the start of the first chapter, kept for the host's life in its boot
   recording (`HostFrameTimeline.Boot`, its first 16384 iterations); `truncated` says the host ran longer than that before the
   route began. `<output>/<run id>/<backend>/run.json` is the World's own report (`puck.benchmark.run.v1`) and `frames.csv`
@@ -3145,7 +3161,7 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
 - **Comparing.** `--against <report>` and `compare` compare the candidate with the baseline backend by backend, loop by loop
   and chapter by chapter. A comparison is **refused**, by name, for `another-route` (the route or its chapters differ),
   `unlike-conditions` (any condition differs, each named with both values), `began-in-lockstep` (either run began with
-  presentation locked to ticks) and `missing-metric` (a frame statistic, the hitch count or a GPU pass that one report holds
+  presentation locked to ticks), `disturbed-run` (either run's machine was disturbed, each reason named) and `missing-metric` (a frame statistic, the hitch count or a GPU pass that one report holds
   and the other lacks, named). A chapter is **comparable**, a **changed workload** (its program hash differs: both are
   described and no difference is attributed to execution), or **unavailable** (off course, disturbed, unfinished, unreached or
   its arrival unmeasured, in either run: nothing is compared and the reason is named). The numbers of a comparable chapter are

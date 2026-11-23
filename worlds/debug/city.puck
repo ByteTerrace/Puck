@@ -1,0 +1,603 @@
+// The city: a destination of the debug world's painting wing, a town on a river bend that stress-tests how Puck scales
+// with content (docs/plans/city.md). The debug world's city painting (`painting-city`, hung on the south wall of the
+// wing, paintings.puck) opens onto the arrival frame here: a body walking into the painting comes out of the arrival
+// frame walking -Z, onto the avenue that leads into the square. Turn round and the arrival frame is the way back. Boot
+// the debug world, never this one: it is reached through the debug world's painting.
+//
+// The town in blockout, its four districts around one square, each a navigation domain of its own (x and z in metres,
+// -Z away from the arrival frame):
+//
+//   the square and market   x -30 .. 30, z -20 .. -80, inside a ring road; the arrival frame at z -6 north of it
+//   the terraces            x -150 .. -46, z 40 .. -200: rows of houses with 4 m lanes between them
+//   the works               x 46 .. 150, z 40 .. -100: workshops either side of the works road (z -45 .. -55)
+//   the quay                x -46 .. 150, z -100 .. -205: warehouses along the river, the avenue south to the bridge
+//
+// The river runs east to west from z -205 to -245, and a bridge carries the avenue over it to the far bank. A cross
+// street (z -125 .. -135) runs the town's width.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "city"
+
+// The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's suit toggle and size.
+import "moth-controls"
+import "suit"
+import "size"
+import "painting-kit"
+import "place-kit"
+import "walkers"
+import "city-day"
+import "../standard/bounds"
+
+// The city draws no HUD panels; controls.puck supplies its cursor.
+hud {
+  panels []
+}
+
+metadata {
+  title: "City"
+  description: "A destination of the debug world painting wing: a town on a river bend, with a market square, terraces, works and a quay, and a frame back to the debug world."
+}
+
+// A traveller from the debug world arrives here, and the debug world's window onto the city observes it whole.
+admission [
+  {
+    disclosure: Replica
+    domain: "*"
+    grants [
+      {
+        budget: 8
+        capability: Drive
+        exclusive: true
+      }
+      {
+        budget: 64
+        capability: Observe
+        subject: "all"
+      }
+    ]
+    mode: FederatedAuthority
+  }
+]
+
+references [
+  {
+    document: "debug"
+    name: "debug"
+  }
+]
+
+destinations [
+  {
+    durability: persisted
+    name: "debug"
+    reference: "debug"
+    scope: global
+  }
+]
+
+views {
+  nestingDepth: 3
+}
+
+// The palette every city prototype shares, by slot.
+let cityPalette = [
+  { color: "#EBDDBF", roughness: 0.85 }
+  { color: "#D9A55B", roughness: 0.85 }
+  { color: "#2F7F7A", roughness: 0.6, specular: 0.15 }
+  { color: "#B9A88E", roughness: 0.9 }
+  { color: "#5C5A58", roughness: 0.95 }
+  { color: "#C9BFAE", roughness: 0.9 }
+  { color: "#3D7C8C", roughness: 0.15, specular: 0.5 }
+  { color: "#8A5A3C", roughness: 0.8 }
+]
+let cream = 0
+let ochre = 1
+let teal = 2
+let stone = 3
+let road = 4
+let paving = 5
+let river = 6
+let timber = 7
+
+// A gable's ridge box turned 45 degrees about Z: its upper half stands over the walls as a roof whose ridge runs along Z.
+let gableTurn = [0, 0, 0.382683, 0.92388]
+
+// The terraces' houses: lots 10 m wide and 8 m deep on a 14 by 12 m pitch, in rows that leave the cross street clear.
+// Each lot's height and wall colour cycle through the variants, so neighbours differ.
+let houseHeights = [7, 10, 13]
+let houseTones = [{ name: "cream", slot: cream }, { name: "ochre", slot: ochre }]
+let terraceColumns = map(range(0, 7), c => -141 + 14 * c)
+let terraceRows = flatMap(range(0, 20), k => ((k == 13) or (k == 14)) ? [] : [30 - 12 * k])
+let terraceLots = flatMap(range(0, 7), c => map(range(0, 18), r => {
+  id: $"house-{c}-{r}"
+  x: terraceColumns[c]
+  z: terraceRows[r]
+  height: houseHeights[(2 * c + r) % 3]
+  tone: houseTones[(c + r) % 2].name
+}))
+
+// The works' workshops, 22 by 16 m, three across and four deep about the works road; the quay's warehouses, 18 by 12 m,
+// six across in two rows; the civic halls west of the avenue.
+let shedLots = flatMap(map(range(0, 3), c => 62 + 30 * c), x => map([20, -2, -26, -72], z => { x: x, z: z }))
+let warehouseLots = flatMap(map(range(0, 6), c => 20 + 24 * c), x => map([-160, -190], z => { x: x, z: z }))
+let hallLots = map([-110, -160, -190], z => { x: -22, z: z })
+
+// The market's stalls: twelve round the fountain, 18 m out, every other one under a teal awning.
+let stallCount = 12
+let stallRing = map(range(0, stallCount), i => {
+  id: $"stall-{i}"
+  x: 18 * sine(i * 6.283185307179586 / stallCount)
+  z: -50 + 18 * cosine(i * 6.283185307179586 / stallCount)
+  yaw: i * 360 / stallCount
+  awning: (i % 2 == 0) ? "teal" : "ochre"
+})
+
+// The roads: the ring round the square, the avenue south to the bridge, the cross street and the works road, each a
+// strip 2 cm proud of the ground (x0, x1, z0, z1).
+let roadStrips = [
+  { id: "ring-north", x0: -40, x1: 40, z0: -20, z1: -10 }
+  { id: "ring-south", x0: -40, x1: 40, z0: -90, z1: -80 }
+  { id: "ring-west", x0: -40, x1: -30, z0: -80, z1: -20 }
+  { id: "ring-east", x0: 30, x1: 40, z0: -80, z1: -20 }
+  { id: "avenue", x0: -5, x1: 5, z0: -205, z1: -90 }
+  { id: "cross-street", x0: -150, x1: 150, z0: -135, z1: -125 }
+  { id: "works-road", x0: 40, x1: 150, z0: -55, z1: -45 }
+]
+
+// The districts' navigation domains, 1 m cells on whole-metre origins so neighbouring grids share cells where they
+// overlap, each reaching a few metres into its neighbours so a route crosses between them.
+navigation {
+  domains [
+    walkable("city-square", [-46, 0.05, -100], 1, 92, 100, 2.2, 3, 1024)
+    walkable("city-terraces", [-150, 0.05, -205], 1, 114, 245, 2.2, 3, 1024)
+    walkable("city-works", [36, 0.05, -100], 1, 114, 140, 2.2, 3, 1024)
+    walkable("city-quay", [-46, 0.05, -205], 1, 196, 119, 2.2, 3, 1024)
+  ]
+}
+
+placements {
+  policy {
+    authoringHeadroomInstances: 0
+    authoringHeadroomScreens: 0
+    candidateCap: 1
+    candidateRadius: 1
+    maxPlacementScale: 1
+    minPlacementScale: 1
+    previewDeadlineFrames: 1
+  }
+
+  // The city's places (place-kit.puck): the whole town, each district, the market inside the square, the ground before
+  // the arrival frame a crossing walks out onto, and the bridge.
+  placement "place-city" {
+    prototype: "place"
+    position [0, 1.5, -80]
+    region {
+      halfExtents [150, 20, 125]
+    }
+  }
+  placement "place-city-market" {
+    prototype: "place"
+    position [0, 1.5, -50]
+    region {
+      halfExtents [22, 3, 22]
+    }
+  }
+  placement "place-city-square" {
+    prototype: "place"
+    position [0, 1.5, -50]
+    region {
+      halfExtents [40, 3, 40]
+    }
+  }
+  placement "place-city-terraces" {
+    prototype: "place"
+    position [-98, 1.5, -80]
+    region {
+      halfExtents [52, 8, 120]
+    }
+  }
+  placement "place-city-works" {
+    prototype: "place"
+    position [98, 1.5, -30]
+    region {
+      halfExtents [52, 8, 70]
+    }
+  }
+  placement "place-city-quay" {
+    prototype: "place"
+    position [52, 1.5, -152]
+    region {
+      halfExtents [98, 8, 53]
+    }
+  }
+  placement "place-city-arrival" {
+    prototype: "place"
+    position [0, 1.5, -8]
+    region {
+      halfExtents [2, 2, 2]
+    }
+  }
+  placement "place-city-bridge" {
+    prototype: "place"
+    position [0, 1.5, -225]
+    region {
+      halfExtents [6, 3, 22]
+    }
+  }
+
+  // The city painting's counterpart, facing -Z like it, so a crossing turns the traveller about. Its glass is the way
+  // back: walking +Z into it arrives out of the painting walking +Z, into the wing.
+  placement "arrival" {
+    prototype: "frame"
+    position [0, 0, -6]
+    yawDegrees: 0
+    faceSources [
+      {
+        face: "glass"
+        filter: linear
+        portal {
+          arrival: "mapped"
+          counterpart: "painting-city/glass"
+          destination: "debug"
+          travel: "body"
+        }
+        source {
+          $type: "session"
+          destination: "debug"
+          fallback: "#10141B"
+          projection: window
+        }
+      }
+    ]
+  }
+
+  placement "roads" {
+    prototype: "roads"
+    position [0, 0, 0]
+  }
+
+  for lot in terraceLots {
+    placement $"{lot.id}" {
+      prototype: $"house-{lot.height}-{lot.tone}"
+      position [lot.x, 0, lot.z]
+      solid
+    }
+  }
+  for lot in shedLots {
+    placement $"shed-{lot.x}-{lot.z}" {
+      prototype: "shed"
+      position [lot.x, 0, lot.z]
+      solid
+    }
+  }
+  for lot in warehouseLots {
+    placement $"warehouse-{lot.x}-{lot.z}" {
+      prototype: "warehouse"
+      position [lot.x, 0, lot.z]
+      solid
+    }
+  }
+  for lot in hallLots {
+    placement $"hall-{lot.z}" {
+      prototype: "civic-hall"
+      position [lot.x, 0, lot.z]
+      solid
+    }
+  }
+
+  placement "fountain" {
+    prototype: "fountain"
+    position [0, 0, -50]
+    solid
+  }
+  for stall in stallRing {
+    placement $"{stall.id}" {
+      prototype: $"stall-{stall.awning}"
+      position [stall.x, 0, stall.z]
+      yawDegrees: stall.yaw
+      solid
+    }
+  }
+
+  placement "bridge" {
+    prototype: "bridge"
+    position [0, 0, -225]
+    solid
+  }
+}
+
+prototypes {
+  // The ground: the town's bank down to the river, the river's water 0.8 m below it, and the far bank, each given its
+  // world bounds, which boundsBox turns into the creation's author frame.
+  prototype "floor" {
+    document {
+      name: "floor"
+      palette: cityPalette
+      schema: "puck.creation.v1"
+      boundsBox(label: "north-bank", x0: -150, x1: 150, y0: -2, y1: 0, z0: -205, z1: 40, slot: paving)
+      boundsBox(label: "river", x0: -150, x1: 150, y0: -2, y1: -0.8, z0: -245, z1: -205, slot: river)
+      boundsBox(label: "south-bank", x0: -150, x1: 150, y0: -2, y1: 0, z0: -280, z1: -245, slot: stone)
+    }
+  }
+
+  prototype "frame" {
+    document {
+      arrivalFrame(color: "#2F7F7A", roughness: 0.5, specular: 0.25, post: 0.12)
+    }
+  }
+
+  // The roads, every strip one shape 2 cm proud of the ground.
+  prototype "roads" {
+    document {
+      name: "roads"
+      palette: cityPalette
+      schema: "puck.creation.v1"
+      for strip in roadStrips {
+        boundsBox(label: $"road-{strip.id}", x0: strip.x0, x1: strip.x1, y0: 0, y1: 0.02, z0: strip.z0, z1: strip.z1, slot: road)
+      }
+    }
+  }
+
+  // A terrace house of each height and wall colour: a 10 by 8 m block under a teal gable whose ridge runs along Z.
+  for height in houseHeights {
+    for tone in houseTones {
+      prototype $"house-{height}-{tone.name}" {
+        document {
+          name: $"house-{height}-{tone.name}"
+          palette: cityPalette
+          schema: "puck.creation.v1"
+          shape Box "walls" {
+            material: tone.slot
+            position [0, (height / 2), 0]
+            scale [5, (height / 2), 4]
+          }
+          shape Box "roof" {
+            material: teal
+            position [0, height, 0]
+            rotation: gableTurn
+            scale [3.75, 3.75, 4.3]
+          }
+          shape Box "door" {
+            material: timber
+            position [0, 1.1, 4]
+            scale [0.6, 1.1, 0.06]
+          }
+        }
+      }
+    }
+  }
+
+  // A workshop: a 22 by 16 m ochre shed under a flat teal roof.
+  prototype "shed" {
+    document {
+      name: "shed"
+      palette: cityPalette
+      schema: "puck.creation.v1"
+      shape Box "walls" {
+        material: ochre
+        position [0, 4, 0]
+        scale [11, 4, 8]
+      }
+      shape Box "roof" {
+        material: teal
+        position [0, 8.2, 0]
+        scale [11.4, 0.2, 8.4]
+      }
+      shape Box "door" {
+        material: timber
+        position [0, 2, 8]
+        scale [2.5, 2, 0.06]
+      }
+    }
+  }
+
+  // A warehouse on the quay: an 18 by 12 m stone store under a teal roof.
+  prototype "warehouse" {
+    document {
+      name: "warehouse"
+      palette: cityPalette
+      schema: "puck.creation.v1"
+      shape Box "walls" {
+        material: stone
+        position [0, 5, 0]
+        scale [9, 5, 6]
+      }
+      shape Box "roof" {
+        material: teal
+        position [0, 10.2, 0]
+        scale [9.4, 0.2, 6.4]
+      }
+      shape Box "door" {
+        material: timber
+        position [0, 2, 6]
+        scale [2, 2, 0.06]
+      }
+    }
+  }
+
+  // A civic hall west of the avenue: a 24 by 20 m cream hall with a tower over its north end.
+  prototype "civic-hall" {
+    document {
+      name: "civic-hall"
+      palette: cityPalette
+      schema: "puck.creation.v1"
+      shape Box "walls" {
+        material: cream
+        position [0, 6, 0]
+        scale [12, 6, 10]
+      }
+      shape Box "roof" {
+        material: teal
+        position [0, 12, 0]
+        rotation: gableTurn
+        scale [8.8, 8.8, 10.4]
+      }
+      shape Box "tower" {
+        material: cream
+        position [0, 11, 7]
+        scale [3, 11, 3]
+      }
+      shape Box "tower-cap" {
+        material: teal
+        position [0, 22.4, 7]
+        scale [3.4, 0.4, 3.4]
+      }
+    }
+  }
+
+  // The square's fountain: a stone basin 6 m across round a column.
+  prototype "fountain" {
+    document {
+      name: "fountain"
+      palette: cityPalette
+      schema: "puck.creation.v1"
+      shape Cylinder "basin" {
+        material: stone
+        position [0, 0.35, 0]
+        scale [3, 0.35, 3]
+      }
+      shape Cylinder "pool" {
+        blend: Subtraction
+        material: stone
+        position [0, 0.55, 0]
+        scale [2.7, 0.35, 2.7]
+      }
+      shape Cylinder "water" {
+        material: river
+        position [0, 0.4, 0]
+        scale [2.7, 0.05, 2.7]
+      }
+      shape Cylinder "column" {
+        material: stone
+        position [0, 1.5, 0]
+        scale [0.4, 1.5, 0.4]
+      }
+    }
+  }
+
+  // A market stall of each awning colour: a timber counter under an awning on four posts, open toward +Z.
+  for awning in [{ name: "teal", slot: teal }, { name: "ochre", slot: ochre }] {
+    prototype $"stall-{awning.name}" {
+      document {
+        name: $"stall-{awning.name}"
+        palette: cityPalette
+        schema: "puck.creation.v1"
+        shape Box "counter" {
+          material: timber
+          position [0, 0.5, 0.6]
+          scale [1.5, 0.5, 0.4]
+        }
+        shape Box "post-nw" {
+          material: timber
+          position [-1.4, 1.2, -0.9]
+          scale [0.06, 1.2, 0.06]
+        }
+        shape Box "post-ne" {
+          material: timber
+          position [1.4, 1.2, -0.9]
+          scale [0.06, 1.2, 0.06]
+        }
+        shape Box "post-sw" {
+          material: timber
+          position [-1.4, 1.2, 0.9]
+          scale [0.06, 1.2, 0.06]
+        }
+        shape Box "post-se" {
+          material: timber
+          position [1.4, 1.2, 0.9]
+          scale [0.06, 1.2, 0.06]
+        }
+        shape Box "awning" {
+          material: awning.slot
+          position [0, 2.45, 0]
+          scale [1.6, 0.05, 1.1]
+        }
+      }
+    }
+  }
+
+  // The bridge: a stone deck 12 m wide over the river, flush with both banks, between low parapets.
+  prototype "bridge" {
+    document {
+      name: "bridge"
+      palette: cityPalette
+      schema: "puck.creation.v1"
+      shape Box "deck" {
+        material: stone
+        position [0, -0.3, 0]
+        scale [6, 0.3, 24]
+      }
+      shape Box "parapet-west" {
+        material: stone
+        position [-5.8, 0.5, 0]
+        scale [0.2, 0.5, 20]
+      }
+      shape Box "parapet-east" {
+        material: stone
+        position [5.8, 0.5, 0]
+        scale [0.2, 0.5, 20]
+      }
+    }
+  }
+}
+
+// The town's spawn points: the arrival and the market, for `body.pose` and the benchmark.
+spawnPoints [
+  { id: "city-arrival", position [0, 0, -9], yawDegrees: 0 }
+  { id: "city-market", position [0, 0, -38], yawDegrees: 0 }
+]
+
+// The sun the city's day cycle (city-day.puck) turns, and an exposure whose floor follows that day as the hall's
+// follows the valley's (hall.puck): EV 7 from dawn to dusk, down to EV 2 at night, keyed a stop and a quarter above the
+// meter by day so the cream walls read white.
+render {
+  farDistance: 600
+  lighting {
+    lights [
+      directional(
+        name: "key",
+        direction: [3, 5, -4],
+        color: "#FFF0DC",
+        illuminance: 100000lx,
+        shadow: always,
+        angularRadius: 0.2
+      )
+    ]
+  }
+  exposure {
+    mode: Auto
+    minimum {
+      clock: cityDay
+      keys [
+        { at: 0, value: 2 }
+        { at: 18900, value: 2 }
+        { at: 23400, value: 7 }
+        { at: 63000, value: 7 }
+        { at: 67500, value: 2 }
+      ]
+    }
+    compensation {
+      clock: cityDay
+      keys [
+        { at: 0, value: 0 }
+        { at: 18900, value: 0 }
+        { at: 23400, value: 1.25 }
+        { at: 63000, value: 1.25 }
+        { at: 67500, value: 0 }
+      ]
+    }
+    maximum: 16
+    adaptation: 0.75
+    local: 0.5
+    band: 0.75
+    low: 0.1
+    high: 0.9
+    center: 0.25
+  }
+  atmosphere {
+    fog {
+      density: 0.0015
+    }
+  }
+}

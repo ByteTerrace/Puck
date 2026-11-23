@@ -594,8 +594,9 @@ Two runs are compared chapter by chapter, and a comparison is one of three
 things:
 
 - **Comparable.** The same chapter identity, both arrived, neither disturbed,
-  like conditions, and the same waypoint coverage (below). Statistics,
-  counts and moments are compared.
+  like conditions, runs whose machines were quiet (the machine's conditions,
+  below), and the same waypoint coverage. Statistics, counts and moments are
+  compared.
 - **A changed workload.** The chapter's identity, its waypoint coverage or its
   content differs. The report sets both runs side by side as a description
   and attributes no difference to execution.
@@ -638,6 +639,53 @@ adapter, and it runs its own `table` or its tier's preset
 two runs on different tables, devices, memory caps, topologies or overlay
 states are refused today only when a condition of the first set happens to
 differ (stage 3 closes this).
+
+**The machine's conditions and the verdict.** A timing says nothing about a build
+if the machine was doing something else while it ran, and two incidents showed
+that nothing in a report said so: other lanes building, testing and running Worlds
+during a quiet benchmark, and the GPU held at its base clock by a stale profiler
+lock, so that every pass read a third slow with no sign why. Each run therefore
+records the machine it ran on, from the operating system and the driver and never
+from a lease's claim, and writes a verdict on it.
+
+| Recorded | By | Where in the report |
+|---|---|---|
+| The adapter's graphics and memory clock, power draw, utilization, temperature, performance state and active clock events, read every 500 ms on a timer thread (`AdapterTelemetryRecorder`) and summarized over each chapter's span and over the run | The World, through `IAdapterTelemetry` (`Puck.Hosting`), whose one provider reads NVML (`nvml.dll`, `libnvidia-ml.so.1`); a machine without the library or the adapter reads unknown, with the reason, and never fails | `adapter` of each chapter and of the run (`run.json`) |
+| The CPU every process outside the verb's own process tree used from the first tick to the last, the machine's total less the tree's own, so a process that started and exited between readings still counts; the programs that used most; every other World seen running; every gpu or heavy lease holder seen | The verb (`HostCompetitionRecorder`), reading the process list and the machine's CPU counters every three seconds | `machine.competition` of each run |
+| The verdict: `machine.verdict` and the reasons in `machine.disturbed` for a run, `conditions` for the report, DISTURBED in the summary line | The verb, joining the two | `report.json` |
+
+A run is **disturbed** when any of these holds:
+
+- *Competing load.* Other processes used more than `HostCompetitionRecorder.DisturbedShare`
+  of the machine's CPU capacity over the run, or kept more than
+  `HostCompetitionRecorder.DisturbedCores` cores busy, whichever is the smaller.
+  A build, a test run or a second World keeps a core or more busy for most of its
+  life, which trips the core bar on a machine of many threads and the share bar
+  on a small one; a quiet desktop's background (the system, the compositor, a
+  driver, a security scanner) stays well under a core. Both bars are first
+  estimates to retune against the readings quiet runs show.
+- *Another World was live.* The process list showed a `Puck.World` that is not
+  in the run's own tree, headless or windowed, whether or not it held a lease.
+- *GPU clock held.* Across a span with at least
+  `AdapterTelemetrySummary.MinLoadedSamples` readings at
+  `AdapterTelemetrySummary.LoadedUtilizationPercent` utilization or more (below
+  that the driver may lawfully idle the clocks), the median graphics clock sat
+  under `AdapterTelemetrySummary.HeldClockFraction` of the adapter's highest
+  graphics clock, and a power or thermal clock event was not active in half those
+  readings. A free adapter under load boosts to within a few percent of its
+  ceiling, while a clock locked at the base clock sits near two thirds of it, so
+  the bar separates the two with room for ordinary variation. A power- or
+  thermal-limited clock is the machine's own limit and is recorded (`clockEvents`)
+  but not called held. A chapter carries the same judgement over its own span in
+  its `disturbed` list, so it is unavailable to a comparison by the rule above.
+
+A disturbed run keeps all its numbers, and its timings are not a verdict on the
+build: `puck benchmark compare` and `--against` refuse it with the code
+`disturbed-run`, naming the side and the reasons, and a lane reports no timing from
+it. Its arrival, state hashes and counted work are unaffected. An attached run
+typed into a player build (`world.benchmark run`) records the adapter and judges
+the GPU clock, and records no competition, since the verb that reads it is a
+developer tool.
 
 **How the frame-rate bar is read.** Every benchmark check that claims the frame
 bar uses one reading:

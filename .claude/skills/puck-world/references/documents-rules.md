@@ -25,7 +25,12 @@ the rule effect set (never a new door), `upsertHudPanel`/
 `scaleVerticalVelocity`, `planarImpulse`, `timedMove`, `designate` — work in a
 kit's action and a rule: a kit's action acts on its own body, a rule names the
 body with `key` and refuses a `target`, and both lower through
-`WorldBodyEffects`. `startTimer` writes a kit's own timer slot and is refused BY
+`WorldBodyEffects`. A rule's `designate` also takes `kind: Point`, which writes a
+world point (the `body.designate … at:x,y,z` designation, applied through
+`WorldDocument.ApplyDesignationCore`) from `position`, a `placement`'s document
+position read at firing (with `position` or the expressions as an offset), or
+`pointX`/`pointY`/`pointZ` fixed expressions (`WorldPointTarget`); a kit refuses
+it. `startTimer` writes a kit's own timer slot and is refused BY
 NAME by `WorldFactsCompiler`. `pose` is the
 rule-side `body.pose`: `{"$type":"pose","key":"<body>","spawnPoint":"<id>"}` or
 `position` + `yawDegrees`/`pitchDegrees`/`rollDegrees` (exactly one of the two; `poseCell`
