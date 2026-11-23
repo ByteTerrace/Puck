@@ -35,7 +35,9 @@ public sealed record WorldRouteChapter(
     [property: JsonPropertyName("timeoutSeconds")] float TimeoutSeconds = 120f
 );
 /// <summary>One step of a <see cref="WorldRouteChapter"/>. A place is a region placement's id (<c>place-lobby</c>), the
-/// volume <c>body.place</c> answers from; a heading is a yaw in degrees (0 faces -Z, 90 faces -X).</summary>
+/// volume <c>body.place</c> answers from, in the route's own document unless the step names the world it is played in
+/// (<c>world</c>, that world's <c>documentId</c>), as a route that crosses into another world does for that world's
+/// places; a heading is a yaw in degrees (0 faces -Z, 90 faces -X).</summary>
 [JsonDerivedType(typeof(WorldRouteStep.PoseBody), typeDiscriminator: "pose")]
 [JsonDerivedType(typeof(WorldRouteStep.Line), typeDiscriminator: "line")]
 [JsonDerivedType(typeof(WorldRouteStep.Go), typeDiscriminator: "go")]
@@ -88,6 +90,9 @@ public abstract record WorldRouteStep {
     /// world with no domains), its corridor only <paramref name="Corridor"/>.</param>
     /// <param name="Within">The distance, in metres, at which a point is reached.</param>
     /// <param name="Corridor">Places the body may also stand in on the way.</param>
+    /// <param name="World">The <c>documentId</c> of the world the step is played in, whose places
+    /// <paramref name="Place"/> and <paramref name="Corridor"/> name, or <see langword="null"/> for the route's own
+    /// document. The step fails when the seat stands in another world.</param>
     public sealed record Go(
         [property: DocumentText("a route place or corridor")]
         [property: JsonPropertyName("place"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Place = null,
@@ -97,7 +102,9 @@ public abstract record WorldRouteStep {
         [property: JsonPropertyName("direct")] bool Direct = false,
         [property: JsonPropertyName("within")] float Within = 0.5f,
         [property: DocumentText("a route place or corridor")]
-        [property: JsonPropertyName("corridor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Corridor = null
+        [property: JsonPropertyName("corridor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Corridor = null,
+        [property: DocumentText("a route world")]
+        [property: JsonPropertyName("world"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? World = null
     ) : WorldRouteStep;
     /// <summary>Crosses a threshold no navigation domain joins (a portal) or walks where no domain reaches (a world it
     /// crossed into): turns the camera onto a heading, then holds the stick straight ahead, as a player walking through
@@ -136,11 +143,15 @@ public abstract record WorldRouteStep {
     /// <param name="Until">The place that ends the wait, or <see langword="null"/>.</param>
     /// <param name="Seconds">The time stood after the press with no <paramref name="Until"/>, or the time past which
     /// the wait for it fails.</param>
+    /// <param name="World">The <c>documentId</c> of the world whose place <paramref name="Until"/> names, or
+    /// <see langword="null"/> for the route's own document.</param>
     public sealed record PressAction(
         [property: DocumentText("a seat program action")]
         [property: JsonPropertyName("action")] string Action,
         [property: DocumentText("a route place or corridor")]
         [property: JsonPropertyName("until"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Until = null,
-        [property: JsonPropertyName("seconds")] float Seconds = 1f
+        [property: JsonPropertyName("seconds")] float Seconds = 1f,
+        [property: DocumentText("a route world")]
+        [property: JsonPropertyName("world"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? World = null
     ) : WorldRouteStep;
 }

@@ -386,7 +386,8 @@ public sealed partial class WorldTick {
             definition: Host.Document.Definition,
             tick: tick,
             stepTicks: context.StepTicks,
-            stepStartEngineTick: stepStartEngineTick
+            stepStartEngineTick: stepStartEngineTick,
+            jobs: Host.Jobs
         );
         Host.Population.AdvanceSeats(
             tick: tick,

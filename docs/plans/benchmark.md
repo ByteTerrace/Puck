@@ -286,7 +286,13 @@ from them. In this order:
    (`NavigationRuntime.Straighten`, over `Domain.IsStraightClear` with the route's
    margin). A body that strays a metre from its line, or makes no progress for two
    seconds, plans again from where it stands, so a shed tick, a scale change or a
-   nudge is steered from rather than carried off course.
+   nudge is steered from rather than carried off course. A chapter that plans
+   starts the navigation of each world the seat enters baking off the pump, and a
+   `go` whose world is still baking stands until it is ready, within the
+   chapter's time, so no bake runs on the frame. A step that names the world it
+   is played in (`world`, that world's `documentId`) names that world's places,
+   which the route's own document need not author, and fails if the seat stands
+   elsewhere; the debug route's city chapter walks the city's places that way.
 5. **A chapter fails where a player would see it fail** (built). A stick held
    while the body goes nowhere (`WorldSeatDriver.StallTicks`), standing in none
    of the places the step's path crosses (its corridor: the innermost place at

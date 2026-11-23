@@ -604,6 +604,20 @@ public sealed partial class WorldTransferEscrow {
             Registers: [.. member.ActionContinuity.Registers]
         ),
     };
+    // The lowest free body in [first, limit) whose kit runs the source, or -1.
+    private int LowestFreeSupporting(bool[] consumed, int first, int limit, IntentSource source) {
+        for (var slot = first; ((slot < limit) && (slot < consumed.Length)); slot++) {
+            if (!consumed[slot] && m_server.Population.SupportsSource(index: slot, refusal: out _, source: source)) {
+                return slot;
+            }
+        }
+
+        return -1;
+    }
+    // A reservation member as a refusal names it: its ordinal in the request, the body it is in the source authority,
+    // and the source that drives it, never the destination body a refusal considered for it.
+    private static string DescribeTraveler(int index, in WorldTransferReservationMember member, WorldTransferReservationRequest request) =>
+        $"traveler {(index + 1)} (body:{member.PreferredSlot} of '{request.SourceAuthority}', {member.Source})";
     private static int PreferredOrLowestFree(bool[] consumed, int preferred, int first, int limit) {
         if (
             (preferred >= first) &&
@@ -1809,7 +1823,7 @@ public sealed partial class WorldTransferEscrow {
             );
 
             if (slot < 0) {
-                return WorldTransferReservationReply.Refused(reason: $"destination has no free body index for traveler {(index + 1)}; no queue was created");
+                return WorldTransferReservationReply.Refused(reason: $"destination has no free body index for {DescribeTraveler(index: index, member: in member, request: request)}; no queue was created");
             }
 
             // One question at reserve, asked of whichever authority will actually drive the body at commit: may it.
@@ -1826,6 +1840,25 @@ public sealed partial class WorldTransferEscrow {
                     return WorldTransferReservationReply.Refused(reason: $"{member.Principal.Describe()} cannot enter body:{slot} — {standing.DescribeDenial()}");
                 }
             } else {
+                // A traveler lands on a free body whose kit runs its source: the preferred or lowest free one when it
+                // does, otherwise the lowest free one that does.
+                if (!m_server.Population.SupportsSource(
+                    index: slot,
+                    source: member.Source,
+                    refusal: out var sourceRefusal
+                )) {
+                    var supporting = LowestFreeSupporting(
+                        consumed: consumed,
+                        first: firstSlot,
+                        limit: seatLimit,
+                        source: member.Source
+                    );
+
+                    if (supporting < 0) {
+                        return WorldTransferReservationReply.Refused(reason: $"{DescribeTraveler(index: index, member: in member, request: request)} cannot enter: no free body here runs its source ({sourceRefusal}, the first free body:{slot})");
+                    }
+                    slot = supporting;
+                }
                 if (
                     member.LandsHuman &&
                     !ArrivalDrives(
@@ -1833,14 +1866,7 @@ public sealed partial class WorldTransferEscrow {
                     slot: slot
                 )
                 ) {
-                    return WorldTransferReservationReply.Refused(reason: $"traveler {(index + 1)} cannot enter body:{slot} — '{request.SourceAuthority}' is admitted but its authored admission grants confer no Drive over the body an arrival is assigned");
-                }
-                if (!m_server.Population.SupportsSource(
-                    index: slot,
-                    source: member.Source,
-                    refusal: out var sourceRefusal
-                )) {
-                    return WorldTransferReservationReply.Refused(reason: $"traveler {(index + 1)} cannot enter body:{slot} — {sourceRefusal}");
+                    return WorldTransferReservationReply.Refused(reason: $"{DescribeTraveler(index: index, member: in member, request: request)} cannot enter body:{slot} — '{request.SourceAuthority}' is admitted but its authored admission grants confer no Drive over the body an arrival is assigned");
                 }
             }
 

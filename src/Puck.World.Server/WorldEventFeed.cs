@@ -855,6 +855,40 @@ public sealed class WorldEventFeed {
         frame.HasCenter &&
         frame.Shape.Contains(point: point)
     ));
+    /// <summary>Reads one region's occupancy two ways: the latches the region pass keeps, which <see cref="OccupantCount"/>
+    /// and a rule's <c>region(...)</c> count, and the active bodies whose position the region's volume holds in the frame
+    /// the latest collection sensed it in. Read between ticks, the two agree unless a body moved without the pass seeing
+    /// it.</summary>
+    /// <param name="placementId">The region-carrying placement's stable id.</param>
+    /// <param name="population">The population the feed collects, whose bodies are tested.</param>
+    /// <param name="latched">Receives the latched bodies' indices in ascending order, cleared first.</param>
+    /// <param name="inside">Receives the indices of the active bodies the volume holds in ascending order, cleared first.</param>
+    /// <returns><see langword="true"/> when the latest collection sensed the placement as a region; otherwise the lists
+    /// stay empty.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="population"/>, <paramref name="latched"/> or
+    /// <paramref name="inside"/> is <see langword="null"/>.</exception>
+    public bool AuditRegion(string placementId, WorldPopulation population, List<int> latched, List<int> inside) {
+        ArgumentNullException.ThrowIfNull(argument: population);
+        ArgumentNullException.ThrowIfNull(argument: latched);
+        ArgumentNullException.ThrowIfNull(argument: inside);
+        latched.Clear();
+        inside.Clear();
+        if (!m_regionFrames.TryGetValue(key: placementId, value: out var frame)) {
+            return false;
+        }
+        if (m_regionOccupancy.TryGetValue(key: placementId, value: out var occupancy)) {
+            for (var body = 0; (body < occupancy.Bodies.Length); body++) {
+                if (occupancy.Bodies[body]) { latched.Add(item: body); }
+            }
+        }
+        for (var body = 0; (frame.HasCenter && (body < population.Capacity)); body++) {
+            if (population.IsActive(index: body) && (population.EntryBody(index: body) is { } entry) && frame.Shape.Contains(point: entry.FixedPosition)) {
+                inside.Add(item: body);
+            }
+        }
+
+        return true;
+    }
     /// <summary>Reports whether one body is inside a placement's region as of this tick's collection.</summary>
     /// <param name="placementId">The placement carrying the region facet.</param>
     /// <param name="body">The body's 0-based entity index.</param>

@@ -576,7 +576,8 @@ public sealed partial class WorldBody {
         )
         : 0UL
     );
-    private void WriteStateRaw(int slot, long raw) => m_stateLane?.Write(
+    // A body a kit partition steps never writes a register (StepIsLocal): the lanes are the arena's, which one thread writes.
+    private void WriteStateRaw(int slot, long raw) => ((m_stepLog is null) ? m_stateLane : throw new InvalidOperationException(message: "A body stepped in a kit partition wrote an action-state register."))?.Write(
         ordinal: m_stateOrdinal,
         raw: raw,
         slot: slot
