@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky-environment' (sha256/26f237d6c08476a69d9a9c6002da222ffba9363202231d6efb27d9c2737837e6). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky-environment' (sha256/1cb7be2bf9aeb3a5dfcf6832babd6f0b28eb538d82517499928d5e99a225c280). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 #define PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 
@@ -83,8 +83,8 @@ struct SdfSkyEnvironmentPass {
     [[vk::offset(12)]] uint workCounterRow;
     [[vk::offset(16)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsa2331BE1A : register(b0, space3);
-#define passGroup passGroupIsa2331BE1A
+[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsa6295F7F6 : register(b0, space3);
+#define passGroup passGroupIsa6295F7F6
 [[vk::binding(1, 3)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9 : register(t1, space3);
 #define sdfSky sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9
 [[vk::binding(2, 3)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t2, space3);

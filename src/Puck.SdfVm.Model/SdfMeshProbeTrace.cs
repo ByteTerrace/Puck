@@ -33,6 +33,10 @@ public static class SdfMeshProbeTrace {
     public const int IdentityWord = 29;
     /// <summary>The scene instance ordinal, for hit identity diagnostics.</summary>
     public const int InstanceIndexWord = 30;
+    /// <summary>Whether the instance's mesh encloses a solid with its outward faces wound as the bake winds them
+    /// (<c>SdfMeshDraw.EnclosesSolid</c>): a ray toward a point light is blocked only where it leaves such a solid, so the
+    /// solid that holds a light (its fixture) never hides it; any other instance blocks wherever a ray meets it.</summary>
+    public const int SolidWord = 31;
     /// <summary>The words an uploaded scene starts with, written last as one: the top root's address, then
     /// <see cref="InstanceBaseWord"/>.</summary>
     public const int RootWords = 2;

@@ -185,7 +185,8 @@ public sealed partial class SdfMeshIrradianceScene {
     private enum PrefixPart : byte { None, Node, Entry, Instance }
 
     // One instance record: its inverse transform, its winding-aware normal matrix, its mesh's placement and material base,
-    // whether its transform is identity, and its ordinal. The words it leaves unwritten stay as the caller cleared them.
+    // whether its transform is identity, its ordinal and whether it encloses a solid. The words it leaves unwritten stay as
+    // the caller cleared them.
     private static void WriteInstance(in Instance instance, int index, SdfMeshRegionMesh placement, Span<uint> record) {
         var inverse = instance.WorldToObject;
         MemoryMarshal.Cast<Matrix4x4, uint>(new ReadOnlySpan<Matrix4x4>(in inverse)).CopyTo(record);
@@ -200,6 +201,7 @@ public sealed partial class SdfMeshIrradianceScene {
         record[SdfMeshProbeTrace.GeometryWord + 3] = unchecked((uint)instance.Material);
         record[SdfMeshProbeTrace.IdentityWord] = instance.Identity ? 1u : 0u;
         record[SdfMeshProbeTrace.InstanceIndexWord] = (uint)index;
+        record[SdfMeshProbeTrace.SolidWord] = instance.Solid ? 1u : 0u;
     }
 
     // Allocations still read by the published root are freed only after the replacement root's fence.

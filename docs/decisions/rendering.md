@@ -831,8 +831,18 @@ pixel of it, and the door gives it no response, so the mask changes no pixel:
 a paused still of the painting room with the cull on and off differs by at most
 one level in a tenth of a percent of pixels, inside the difference between two
 captures of one mode. The guarantee rests on the probes' bits as every other
-reader does: a fixture switched on shows once the volume has traced it, as
-before, since its share was zero until then. A static fixture has no authored
+reader does, so the bits answer geometry alone. A probe's bit for a traced
+light says whether a ray from the probe reaches the light's position, at any
+distance and whatever the light's power, range or colour, and the volume traces
+every traced light, a dark one included (`SdfMeshIrradiance.Relight`,
+`sdf-probe-relight-stage.hlsli`): a lamp a schedule switches on, a dimmer
+brightens or a rule recolours shows in the next frame, and only its bounce waits
+for the relight. The ray is blocked only where it leaves a solid between the
+probe and the light, or meets an open sheet
+(`SdfMeshIrradianceScene.ReachesLight`, `sdfProbeBlocksLight`): the solid that
+holds a light, its lantern or housing, is entered and never left short of the
+light, so a light set inside its fixture lights the street as its author meant;
+a two-sided test would let the lantern hide it from every probe. A static fixture has no authored
 way to opt out of the volume's occlusion
 ([open item](../plans/rendering.md#gpu-submission-and-routed-worlds)).
 

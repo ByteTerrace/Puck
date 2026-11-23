@@ -155,9 +155,7 @@ size and topology.
      stand down and resume, the mechanism possession also needs.
 4. **Look and night.** The city to the visual bar.
    - About 500 lights over the night (the lights table's count read from
-     `world.counters` or the render report). The street lamps light once a
-     state-switched light's visibility no longer depends on its power when
-     the volume traced it.
+     `world.counters` or the render report).
    - Ink outlines and selective hatching authored through the ink phase.
    - Captures from at least four sides at noon, dusk and night, judged by a
      look critic against the bar and the gallery side by side.
