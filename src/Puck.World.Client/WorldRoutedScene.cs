@@ -242,8 +242,16 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
                 ConvergesLighting = host.ConvergesLighting,
             });
         }
+        // The document version a diagnostic or the edit-loop clock compares the scene's frames by, as the boot
+        // presentation's frames carry theirs (WorldFramePresenter), boxed once for each version rather than every frame.
+        var version = Mirror.Document.Version;
+
+        if ((m_diagnosticSource is null) || (m_diagnosticVersion != version)) {
+            m_diagnosticVersion = version;
+            m_diagnosticSource = version;
+        }
         // The scene's one frame, written again for each capture from the emitter's, which the emitter writes again too.
-        _ = m_frameWriter.Write(content: in content, settings: Interest(settings: frame.Settings));
+        _ = m_frameWriter.Write(content: in content, settings: (Interest(settings: frame.Settings) with { DiagnosticSource = m_diagnosticSource }));
 
         return m_emitter.TakeLevers(frame: m_frameWriter, height: height, host: host, views: m_frameViews, width: width);
     }
@@ -267,6 +275,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     }
 
     private readonly SdfFrame.Writer m_frameWriter = new();
+    private object? m_diagnosticSource;
+    private Puck.World.Protocol.WorldDocumentVersion m_diagnosticVersion;
     /// <summary>Finds the camera the first seat presented in the world renders with this frame, as the presenter latched
     /// it: the eye every window a screen of this world shows fits to, as the boot world's windows fit to its viewer.</summary>
     /// <param name="camera">The camera, in the scene world's own coordinates, when this returns <see langword="true"/>.</param>

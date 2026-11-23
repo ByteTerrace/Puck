@@ -166,6 +166,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
     /// <summary>Reports an authority after admission and before its first step.</summary>
     public event Action<WorldInstance>? Admitted;
+    /// <summary>Gets the console's handle on a row by name, for a host whose console addresses the rows it spawns
+    /// (<see cref="TryStart"/>): each such row submits its console lines through a link registered under that handle
+    /// (<see cref="WorldInstance.ConsoleLink"/>), so their verdicts answer the lines. <see langword="null"/> for a host
+    /// whose spawned rows keep no console table.</summary>
+    public Func<string, WorldDeferredVerbRow>? ConsoleRows { get; init; }
 
     // Instances an emptying reap spared because a queued transfer was still bound for them; reaped once nothing queued
     // names them (DrainPendingTransfers).
@@ -966,6 +971,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     }
     /// <summary>Resolves the continuous projection channel for a local or remote authority already named by the
     /// session router. Definition and per-tick records cross the same observer contract.</summary>
+    /// <remarks>A row's adjacency preparation resolves its neighbours here while the rows prepared before it in the same
+    /// wave hold their prepared ticks, so a local neighbour's document is read through
+    /// <see cref="WorldServer.Configuration"/>, the member that stays readable across a held tick, never through
+    /// <see cref="WorldServer.Definition"/>, which refuses one.</remarks>
     public bool TryGetProjection(string name, out WorldDefinition? definition, out Func<IClientSink, IDisposable>? attach, out WorldRenderEnvelope? envelope, out IWorldAdjacencySource? adjacencies) {
         if (m_remoteAuthorities.TryGetValue(
             key: name,
@@ -982,7 +991,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             key: name,
             value: out var instance
         )) {
-            definition = instance.Server.Definition;
+            definition = instance.Server.Configuration;
             attach = instance.Server.AttachSink;
             envelope = instance.Server.Envelope;
             adjacencies = instance.Server.Adjacencies;
@@ -1284,12 +1293,14 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             // transport per instance uniformly, never a special case reserved for boot. Federation is the SAME
             // process-wide authenticator/subject a desktop's boot row signs under — a desktop is one authenticated
             // namespace, never one key per spawned row (see WorldFederationIdentity's own remarks).
+            var transport = new LoopbackTransport(server: server, boundary: m_linkBoundary);
+
             started = new WorldInstance(
                 name: name,
                 origin: () => resolvedPath,
                 server: server,
                 ownedMachines: machines,
-                link: new LoopbackTransport(server: server, boundary: m_linkBoundary),
+                link: transport,
                 federation: Boot!.Federation,
                 documentOrigin: new WorldFileOrigin(
                     catalog: m_machineCatalog,
@@ -1298,7 +1309,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 ),
                 ownedAdjacencies: adjacencies,
                 ownedAddons: addons
-            );
+            ) {
+                ConsoleLink = ((ConsoleRows is { } rows) ? transport.ForConsole(row: rows(arg: name)) : null),
+            };
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException or InvalidOperationException or System.Security.SecurityException)) {
             addons?.Dispose();
             adjacencies?.Dispose();
@@ -1444,6 +1457,31 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     }
 
     private IReadOnlyList<string>? m_names;
+
+    /// <summary>Gets the source path every admitted row answers for (<see cref="WorldInstance.SourcePath"/>), the boot
+    /// row's first: one list instance while the rows and the boot row's origin stand, so a reader polling it each step
+    /// compares a reference.</summary>
+    public IReadOnlyList<string> SourcePaths {
+        get {
+            var names = Names;
+            var boot = Boot?.SourcePath;
+
+            if (ReferenceEquals(objA: names, objB: m_sourcePathsNames) && string.Equals(a: boot, b: m_sourcePathsBoot, comparisonType: StringComparison.Ordinal)) { return m_sourcePaths; }
+            var paths = new List<string>(capacity: names.Count);
+
+            if (boot is not null) { paths.Add(item: boot); }
+            foreach (var name in names) {
+                if (!string.Equals(a: name, b: BootInstanceName, comparisonType: StringComparison.Ordinal)) { paths.Add(item: m_instances[name].SourcePath); }
+            }
+            m_sourcePathsNames = names;
+            m_sourcePathsBoot = boot;
+            return m_sourcePaths = paths.AsReadOnly();
+        }
+    }
+
+    private IReadOnlyList<string> m_sourcePaths = [];
+    private IReadOnlyList<string>? m_sourcePathsNames;
+    private string? m_sourcePathsBoot;
 
     /// <summary>Initializes an empty registry — no row is admitted by construction. <see cref="AdmitBoot"/> admits a
     /// desktop's one boot row; <see cref="Admit"/> is the general door every other row (a desktop's own spawn/resolve

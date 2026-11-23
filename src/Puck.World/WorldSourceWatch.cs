@@ -8,33 +8,41 @@ using Puck.World.Transpiler;
 
 namespace Puck.World;
 
-/// <summary>Watches the current source's compiler inputs and requests the ordinary reload command after a quiet period.</summary>
+/// <summary>Watches the compiler inputs of every running world's source and requests the ordinary reload command after a
+/// quiet period.</summary>
 /// <remarks>Host presentation state only. The host supplies the authenticated text ingress; this watch never mutates a world.
+/// The sources are those of every world running in the process (the boot world and each instance started beside it), so
+/// a saved edit to any of them, or to anything their compiles read, requests one reload, which reloads every running
+/// world from its own source (<see cref="WorldReload"/>).
 /// A poll asks <see cref="CompileInputs.Current"/> for each input, which stats it (existence, length and last write) and
 /// re-reads only an input whose stamp moved or was too recent to vouch for its last answer
 /// (<see cref="CompileInputs.RacyStampWindow"/>), so a poll's cost over an unchanged tree is one stat per input and no
 /// content read. The stats run on a pool thread (<see cref="DependencyWatch{TKey, TStamp}"/>), so the host pump that
 /// calls <see cref="Poll"/> only adopts their answers.</remarks>
 public sealed class WorldSourceWatch {
-    private readonly Func<string> m_sourcePath;
+    private readonly Func<IReadOnlyList<string>> m_sourcePaths;
     private readonly string m_catalogFingerprint;
     private readonly IMachineValidationCatalog? m_catalog;
     private readonly DependencyWatch<CompileInput, CompileInput?> m_watch;
+    // Each watched source's normalized path and the facts its compile last read, keyed by question.
+    private readonly Dictionary<string, Dictionary<CompileInput, CompileInput?>> m_sources = new(comparer: PuckPaths.Comparer);
 
     private Action? m_reload;
-    private string? m_source;
-    private string? m_path;
+    // The list of sources the watch last followed, by identity, and its first (the boot world's) source.
+    private IReadOnlyList<string>? m_followed;
+    private string? m_primary;
     private bool m_pending;
     private long m_stampReads;
     private long m_contentReads;
 
-    /// <summary>Creates a watch over the source a function names.</summary>
-    /// <param name="sourcePath">Returns the path of the source the running world was loaded from.</param>
+    /// <summary>Creates a watch over the sources a function names.</summary>
+    /// <param name="sourcePaths">Returns the paths of the sources the running worlds were loaded from, the boot world's
+    /// first. A host answers the same list instance while the set is unchanged, so a poll compares nothing.</param>
     /// <param name="catalogFingerprint">The machine catalog's fingerprint the composer checks documents against.</param>
     /// <param name="catalog">The machine validation catalog, or <see langword="null"/> for none.</param>
-    public WorldSourceWatch(Func<string> sourcePath, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
-        ArgumentNullException.ThrowIfNull(sourcePath);
-        m_sourcePath = sourcePath;
+    public WorldSourceWatch(Func<IReadOnlyList<string>> sourcePaths, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
+        ArgumentNullException.ThrowIfNull(sourcePaths);
+        m_sourcePaths = sourcePaths;
         m_catalogFingerprint = catalogFingerprint;
         m_catalog = catalog;
         m_watch = new DependencyWatch<CompileInput, CompileInput?>(read: Read, comparer: InputComparer.Instance);
@@ -83,8 +91,8 @@ public sealed class WorldSourceWatch {
         _ = Interlocked.Increment(location: ref m_contentReads);
         WorldBootWork.Count(WorldBootWork.WatchContentReads);
     }
-    private void Refresh(CompileInputLog reads) {
-        if (m_path is not { } path) { return; }
+    // Records what one source's compile read as that source's facts, the source file itself always among them.
+    private void Record(string path, CompileInputLog reads) {
         var facts = new Dictionary<CompileInput, CompileInput?>(comparer: InputComparer.Instance);
 
         foreach (var input in reads.Inputs) {
@@ -95,52 +103,80 @@ public sealed class WorldSourceWatch {
         var root = new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Content, Path: path);
 
         if (!facts.ContainsKey(root)) { facts.Add(root, ReadCurrent(input: root)); }
-        m_watch.Refresh(facts.Keys, firstRead: key => facts[key]);
+        m_sources[path] = facts;
     }
-    private void TrackSource(string source) {
-        m_watch.Clear();
-        m_source = source;
-        m_path = PuckPaths.Normalize(path: source);
+    // Watches the union of every source's facts, keeping each fact's first recorded answer.
+    private void Refresh() {
+        var union = new Dictionary<CompileInput, CompileInput?>(comparer: InputComparer.Instance);
+
+        foreach (var facts in m_sources.Values) {
+            foreach (var (question, answer) in facts) { union.TryAdd(key: question, value: answer); }
+        }
+        m_watch.Refresh(union.Keys, firstRead: key => union[key]);
+    }
+    // Compiles and composes a source to learn what it reads.
+    private void Track(string path) {
         var reads = new CompileInputLog();
 
         using (CompileInputs.Record(log: reads)) {
             try {
-                var document = (m_path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")
-                    ? (WorldCompileSession.Shared.TryCompile(compiled: out var compiled, failure: out _, path: m_path) ? compiled!.Document : null)
-                    : CompileInputs.ReadAllBytes(path: m_path));
+                var document = (path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")
+                    ? (WorldCompileSession.Shared.TryCompile(compiled: out var compiled, failure: out _, path: path) ? compiled!.Document : null)
+                    : CompileInputs.ReadAllBytes(path: path));
 
                 if (document is not null) {
-                    _ = WorldCompileSession.Shared.TryComposeBytes(catalog: m_catalog, catalogFingerprint: m_catalogFingerprint, document: document, json: out _, path: m_path, reason: out _);
+                    _ = WorldCompileSession.Shared.TryComposeBytes(catalog: m_catalog, catalogFingerprint: m_catalogFingerprint, document: document, json: out _, path: path, reason: out _);
                 }
             } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
                 // Keep the failed read's absent fact. A later file recovery takes the ordinary reload path.
             }
         }
-        Refresh(reads: reads);
+        Record(path: path, reads: reads);
+    }
+    // Follows the current source list: tracks each source newly running, drops each no longer running, and answers
+    // whether the boot world's source moved (a world.load), whose new origin may have been saved since it was read.
+    private bool Follow(IReadOnlyList<string> sources, CompileInputLog? bootReads) {
+        m_followed = sources;
+        var wanted = new HashSet<string>(comparer: PuckPaths.Comparer);
+        var changed = false;
+
+        for (var index = 0; (index < sources.Count); index++) {
+            var path = PuckPaths.Normalize(path: sources[index]);
+
+            if (!wanted.Add(item: path) || m_sources.ContainsKey(key: path)) { continue; }
+            if ((index == 0) && (bootReads is not null)) { Record(path: path, reads: bootReads); } else { Track(path: path); }
+            changed = true;
+        }
+        foreach (var path in m_sources.Keys.Where(predicate: path => !wanted.Contains(item: path)).ToArray()) {
+            _ = m_sources.Remove(key: path);
+            changed = true;
+        }
+        if (changed) { Refresh(); }
+
+        var primary = ((sources.Count == 0) ? null : PuckPaths.Normalize(path: sources[0]));
+        var moved = ((m_primary is not null) && !PuckPaths.Comparer.Equals(x: primary, y: m_primary));
+
+        m_primary = primary;
+        return moved;
     }
 
     /// <summary>Starts watching and records the current compiler dependency set.</summary>
     /// <param name="submitReload">Queues world.reload through the host-issued ingress of the enabling principal.</param>
-    /// <param name="bootReads">The dependency answers used by the boot load, or null to read the current source.</param>
+    /// <param name="bootReads">The dependency answers the boot load read for the boot world's source, or null to read
+    /// the current source.</param>
     public void Start(Action submitReload, CompileInputLog? bootReads = null) {
         ArgumentNullException.ThrowIfNull(submitReload);
         Stop();
-        var source = m_sourcePath();
-        if (bootReads is null) {
-            TrackSource(source);
-        } else {
-            m_source = source;
-            m_path = PuckPaths.Normalize(path: source);
-            Refresh(bootReads);
-        }
+        _ = Follow(bootReads: bootReads, sources: m_sourcePaths());
         m_reload = submitReload;
     }
     /// <summary>Stops watching and discards changes that have not yet submitted a reload.</summary>
     public void Stop() {
         m_reload = null;
-        m_source = null;
-        m_path = null;
+        m_followed = null;
+        m_primary = null;
         m_pending = false;
+        m_sources.Clear();
         m_watch.Clear();
     }
     /// <summary>Opens the log an ordinary reload records its dependencies into, including a failed compile's missing
@@ -151,14 +187,16 @@ public sealed class WorldSourceWatch {
     public Reads? RecordReads(string path) {
         var normalized = PuckPaths.Normalize(path: path);
 
-        return ((Enabled && PuckPaths.Comparer.Equals(x: normalized, y: m_path)) ? new Reads(Path: normalized, Log: new CompileInputLog()) : null);
+        return ((Enabled && m_sources.ContainsKey(key: normalized)) ? new Reads(Path: normalized, Log: new CompileInputLog()) : null);
     }
     /// <summary>Watches the dependencies a reload recorded, when the watch still follows the source it read. Call on
     /// the host pump.</summary>
     /// <param name="reads">The reads <see cref="RecordReads"/> opened.</param>
     public void AdoptReads(Reads reads) {
         ArgumentNullException.ThrowIfNull(reads);
-        if (Enabled && PuckPaths.Comparer.Equals(x: reads.Path, y: m_path)) { Refresh(reads: reads.Log); }
+        if (!Enabled || !m_sources.ContainsKey(key: reads.Path)) { return; }
+        Record(path: reads.Path, reads: reads.Log);
+        Refresh();
     }
 
     /// <summary>The dependencies one reload of a watched source recorded.</summary>
@@ -172,17 +210,10 @@ public sealed class WorldSourceWatch {
         if (m_reload is not { } reload) { return; }
         WorldBootWork.Count(WorldBootWork.WatchPumps);
         var timestamp = (now ?? Stopwatch.GetTimestamp());
-        var source = m_sourcePath();
+        var sources = m_sourcePaths();
 
-        if (!string.Equals(source, m_source, StringComparison.Ordinal)) {
-            if (PuckPaths.Comparer.Equals(PuckPaths.Normalize(source), m_path)) {
-                m_source = source;
-            } else {
-                TrackSource(source);
-                // A save may have landed since world.load read the accepted candidate.
-                m_watch.Retry(now: timestamp);
-            }
-        }
+        // A save may have landed since world.load read the accepted candidate.
+        if (!ReferenceEquals(objA: sources, objB: m_followed) && Follow(bootReads: null, sources: sources)) { m_watch.Retry(now: timestamp); }
         if (m_pending || !m_watch.Poll(debounceTicks: ((Stopwatch.Frequency * Client.WorldViewGraphHost.WatchDebounceMilliseconds) / 1000),
             now: timestamp,
             pollTicks: ((Stopwatch.Frequency * Client.WorldViewGraphHost.WatchPollMilliseconds) / 1000))) { return; }

@@ -31,10 +31,11 @@ namespace Puck.World;
 /// first needs seating.</para>
 /// <para><c>join</c>/<c>leave</c>/<c>fly</c>/<c>stop</c>/<c>where</c>/<c>pose</c> also accept a trailing
 /// <c>instance:&lt;name&gt;</c> token (see <see cref="TryStripInstanceToken"/>), addressing a named running
-/// <see cref="WorldInstance"/> (<see cref="WorldInstanceHost"/>) instead of the boot world. In the instance form, a
-/// slot is always the 1-based local seat 1..<see cref="WorldBodiesLimits.LocalSeatCount"/> (never a population
-/// entry, and never defaulted — a bare <c>instance:&lt;name&gt;</c> with no slot is refused), and <c>join</c>'s
-/// "next free slot"/either-order profile-then-slot convenience does not apply there.</para>
+/// <see cref="WorldInstance"/> (<see cref="WorldInstanceHost"/>) instead of the boot world. The body verbs' instance
+/// form takes the same 0-based body index as the boot form (a seat or any simulated entry of that instance, body 0 when
+/// omitted); <c>join</c>/<c>leave</c> take the 1-based local seat 1..<see cref="WorldBodiesLimits.LocalSeatCount"/>,
+/// never defaulted, and <c>join</c>'s "next free slot"/either-order profile-then-slot convenience does not apply
+/// there.</para>
 /// </remarks>
 internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScreenBinder screens, IServerLink link, WorldServer server, WorldPerceptionAnchor anchor, WorldClient client, Func<InputRouter> router, WorldInstanceHost instances, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape tape, WorldCreationInstances stamps, WorldSeatViewInput? viewInput = null) : ICommandModule {
     /// <summary>The keyboard-claim command (Keyboard F1..F4, press edge). The target slot rides the binding's Axis1D
@@ -141,7 +142,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScre
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.where",
-            description: "Echoes a body's FULL 6DOF pose and its authoritative fact mask — [body.where: body:<n> pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|holdingunwalkable home=(x.xx, y.yy, z.zz) scale=s.ss vel=(x.xx, y.yy, z.zz) com=(x.xx, y.yy, z.zz)] — so a piped run can assert it moved or changed regime: vel= is the authoritative velocity in m/s (planar x, vertical, planar z); facts= is the lower-case, |-joined set of the body facts the simulation's own action gates read (grounded, airborne, rising, falling, inmedium, atmediumband, holdingunwalkable, unsupported, resting), or none. scale= is the body's live scale multiplier (1.00 unless bodies.scale names a state.body register carrying this body's size) — the collider, resolved move speed, turn rate, and hold probes all read the same value. com= trails only for a rigid-kit body — its live centre of mass, which orbits away from pos= (always the root) for a rolling or tumbling body. " + BodyWhereForms.Spelling + " (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries). A grounded entity prints pitch=0 roll=0; its y= reads the local ground height under it, not necessarily 0.00 (the garden's deck top sits at y=-0.50). A LOCAL seat's echo also carries anchor=body:<n> — the 0-based body index that seat's presentation (camera eye, audio listener, seat.<n>.position.* HUD bindings) derives from: the seat's bound body, or the routed body while possessing (a Control route targeting a body with capture on). A trailing instance:<name> token reads OUT OF a NAMED running instance's OWN tick snapshot instead — body.where <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount, the instance form's own 1-based seat convention); no anchor rides that form (a spawned instance's seat has no client perceiving from it).",
+            description: "Echoes a body's FULL 6DOF pose and its authoritative fact mask — [body.where: body:<n> pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|holdingunwalkable home=(x.xx, y.yy, z.zz) scale=s.ss vel=(x.xx, y.yy, z.zz) com=(x.xx, y.yy, z.zz)] — so a piped run can assert it moved or changed regime: vel= is the authoritative velocity in m/s (planar x, vertical, planar z); facts= is the lower-case, |-joined set of the body facts the simulation's own action gates read (grounded, airborne, rising, falling, inmedium, atmediumband, holdingunwalkable, unsupported, resting), or none. scale= is the body's live scale multiplier (1.00 unless bodies.scale names a state.body register carrying this body's size) — the collider, resolved move speed, turn rate, and hold probes all read the same value. com= trails only for a rigid-kit body — its live centre of mass, which orbits away from pos= (always the root) for a rolling or tumbling body. " + BodyWhereForms.Spelling + " (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries). A grounded entity prints pitch=0 roll=0; its y= reads the local ground height under it, not necessarily 0.00 (the garden's deck top sits at y=-0.50). A LOCAL seat's echo also carries anchor=body:<n> — the 0-based body index that seat's presentation (camera eye, audio listener, seat.<n>.position.* HUD bindings) derives from: the seat's bound body, or the routed body while possessing (a Control route targeting a body with capture on). A trailing instance:<name> token reads OUT OF a NAMED running instance's OWN tick snapshot instead — body.where [body] instance:<name>, the same 0-based body index, any body of that instance; no anchor rides that form (a spawned instance's seat has no client perceiving from it).",
             forms: BodyWhereForms,
             handler: WhereHandler
         );
@@ -149,7 +150,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScre
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.place",
-            description: "Echoes the places a body stands in — [body.place: body:<n> at=<innermost>|none places=<id>,<id>…|none] — every placement whose region facet (a sphere or an oriented box) holds the body's foot point as of the authority's latest tick, innermost (smallest volume) first, read from the same occupancy latches region events and $region: rules use: " + BodyPlaceForms.Spelling + " (optional body index 0..4095, default 0). A local seat's body answers from the instance the seat stands in, so a body that crossed a portal names that world's places. A trailing instance:<name> reads a named instance's seat (slot 1..WorldBodiesLimits.LocalSeatCount).",
+            description: "Echoes the places a body stands in — [body.place: body:<n> at=<innermost>|none places=<id>,<id>…|none] — every placement whose region facet (a sphere or an oriented box) holds the body's foot point as of the authority's latest tick, innermost (smallest volume) first, read from the same occupancy latches region events and $region: rules use: " + BodyPlaceForms.Spelling + " (optional body index 0..4095, default 0). A local seat's body answers from the instance the seat stands in, so a body that crossed a portal names that world's places. A trailing instance:<name> reads a named instance's body by the same 0-based index.",
             forms: BodyPlaceForms,
             handler: PlaceHandler
         );
@@ -206,7 +207,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScre
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.stop",
-            description: "Stops a body's avatar dead: clears its whole tape, releases every held movement key, cancels every in-flight timed press (body.press hold — materialized or still pending), AND clears any BindingEntryMode.Toggle latch the seat carries (a toggled-on channel does not survive a stop) — the panic verb: " + BodyStopForms.Spelling + " (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries; stopping a population entry drops its tape so its producer resumes). Echoes the true released/cleared/toggle counts, or, if the Drive gate refused the command (e.g. CC/death), a refusal naming the denial — never an affirmative quoting a stale count. A trailing instance:<name> token addresses a NAMED running instance's own seat instead — body.stop <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount) — echoing a bare \"tape cleared\", since no client mirrors that seat's held-key/toggle state.",
+            description: "Stops a body's avatar dead: clears its whole tape, releases every held movement key, cancels every in-flight timed press (body.press hold — materialized or still pending), AND clears any BindingEntryMode.Toggle latch the seat carries (a toggled-on channel does not survive a stop) — the panic verb: " + BodyStopForms.Spelling + " (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries; stopping a population entry drops its tape so its producer resumes). Echoes the true released/cleared/toggle counts, or, if the Drive gate refused the command (e.g. CC/death), a refusal naming the denial — never an affirmative quoting a stale count. A trailing instance:<name> token addresses a NAMED running instance's body by the same 0-based index instead — body.stop [body] instance:<name> — echoing a bare \"tape cleared\", since no client mirrors that instance's held-key/toggle state.",
             forms: BodyStopForms,
             handler: StopHandler,
             ackOnly: true
@@ -224,7 +225,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScre
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.fly",
-            description: "Enqueues a six-role timed segment on a body's tape: " + BodyFlyForms.Spelling + " — each channel a float clamped to [-1,1], held for <seconds>. The body's authored motion program decides which roles it reads: ApplyHold consumes up through a hold row's own thrust alongside its gravity arc, while IntegrateLocalAttitude + ComputeLocalTargetVelocity provide body-frame 6DOF. This is the ONE scripted-tape verb: a planar segment is this verb with up/pitch/roll zeroed — body.fly <forward> <strafe> 0 <turn> 0 0 <seconds>. The optional trailing body index is 0..4095 (default 0) — 0..3 local seats, 4..4095 simulated entries.",
+            description: "Enqueues a six-role timed segment on a body's tape: " + BodyFlyForms.Spelling + " — each channel a float clamped to [-1,1], held for <seconds>. The body's authored motion program decides which roles it reads: ApplyHold consumes up through a hold row's own thrust alongside its gravity arc, while IntegrateLocalAttitude + ComputeLocalTargetVelocity provide body-frame 6DOF. This is the ONE scripted-tape verb: a planar segment is this verb with up/pitch/roll zeroed — body.fly <forward> <strafe> 0 <turn> 0 0 <seconds>. The optional trailing body index is 0..4095 (default 0) — 0..3 local seats, 4..4095 simulated entries. A trailing instance:<name> token addresses that running instance's body by the same index.",
             forms: BodyFlyForms,
             handler: FlyHandler,
             ackOnly: true
@@ -233,7 +234,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScre
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.pose",
-            description: "Teleports a body to a full 6DOF pose: " + BodyPoseForms.Spelling + " (yaw about world up, pitch about the body right, roll about the body forward; 0/0/0 = level facing -Z). ANY of the six positional values may be - to HOLD that axis at its current value instead of setting it — body.pose - - - 90 - - 0 turns body:0 to face 90° with its position and pitch/roll untouched; body.pose 3 - 5 - - - 0 moves body:0 on the ground plane only. The held axes are read from the SAME live pose this call resolves and folded into ONE atomic SnapPose submission — never a read-then-write pair, so nothing can move the body between the read and the write. A hard teleport (sim snap + previous-pose reset + render-error clear). A grounded entity re-pins Y and levels on its next step. A seat camera whose look is world-referenced (views.seatControl.yawReference World, as the moth basis authors) turns by the heading the body turned by, as a crossing turns it, so a chase camera keeps its place around the posed body: one behind the body stays behind it. The optional trailing body index is 0..4095 (default 0) — 0..3 local seats, 4..4095 simulated entries. The SPAWN form — body.pose spawn:<id> [body] — poses the body at a declared spawnPoints row (its position and yawDegrees, pitch and roll zero), the console mirror of a rule's pose effect naming a spawnPoint; an undeclared id refuses by name. A seat standing in another instance (a painting's destination) poses at that instance's own spawn point, and at an id only the home world declares it is carried home and set down standing there. A trailing instance:<name> token addresses a NAMED running instance's own seat instead — body.pose <x> <y> <z> <yawDeg> <pitchDeg> <rollDeg> <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount) — the SAME hold-current axes apply, read from that instance's own live pose.",
+            description: "Teleports a body to a full 6DOF pose: " + BodyPoseForms.Spelling + " (yaw about world up, pitch about the body right, roll about the body forward; 0/0/0 = level facing -Z). ANY of the six positional values may be - to HOLD that axis at its current value instead of setting it — body.pose - - - 90 - - 0 turns body:0 to face 90° with its position and pitch/roll untouched; body.pose 3 - 5 - - - 0 moves body:0 on the ground plane only. The held axes are read from the SAME live pose this call resolves and folded into ONE atomic SnapPose submission — never a read-then-write pair, so nothing can move the body between the read and the write. A hard teleport (sim snap + previous-pose reset + render-error clear). A grounded entity re-pins Y and levels on its next step. A seat camera whose look is world-referenced (views.seatControl.yawReference World, as the moth basis authors) turns by the heading the body turned by, as a crossing turns it, so a chase camera keeps its place around the posed body: one behind the body stays behind it. The optional trailing body index is 0..4095 (default 0) — 0..3 local seats, 4..4095 simulated entries. The SPAWN form — body.pose spawn:<id> [body] — poses the body at a declared spawnPoints row (its position and yawDegrees, pitch and roll zero), the console mirror of a rule's pose effect naming a spawnPoint; an undeclared id refuses by name. A seat standing in another instance (a painting's destination) poses at that instance's own spawn point, and at an id only the home world declares it is carried home and set down standing there. A trailing instance:<name> token addresses a NAMED running instance's body instead — body.pose <x> <y> <z> <yawDeg> <pitchDeg> <rollDeg> [body] instance:<name>, the same 0-based index — the SAME hold-current axes apply, read from that instance's own live pose.",
             forms: BodyPoseForms,
             handler: PoseHandler,
             ackOnly: true
@@ -363,25 +364,28 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScre
 
         return null;
     }
-    // Resolves a NAMED instance's own local-seat body at the 1-based slot token sitting at args[slotTokenIndex] —
-    // bounded to WorldBodiesLimits.LocalSeatCount, exactly like every retired world.instance.seat.* verb's own slot bound
-    // (WorldInstanceCommandModule.TrySlot); a spawned instance's population entries beyond the local-seat range were
-    // never addressable through seat.* either, so this preserves that scope rather than widening it.
-    private static (WorldBody? Player, int Slot, string? Error) ResolveInstanceSlot(WorldInstance instance, in WireArgs args, int slotTokenIndex, string verb) {
-        if (
-            !args.TryInt(
-            index: slotTokenIndex,
-            value: out var slot
-        ) ||
-            (slot < 1) ||
-            (slot > WorldBodiesLimits.LocalSeatCount)
-        ) {
-            return (Player: null, Slot: 0, Error: $"[{verb}: instance-targeted slot must be an integer 1..{WorldBodiesLimits.LocalSeatCount}]");
+    // Parses the body index an instance-targeted body verb names at args[tokenIndex] (body 0 when the token is absent):
+    // the same 0-based index the boot forms take, a seat (0..3) or any simulated entry of that instance's own
+    // population, so every body of an instance the caller may observe is addressable exactly as the boot world's are.
+    private static bool TryParseInstanceBody(WorldInstance instance, in WireArgs args, int tokenIndex, int count, string verb, out int index, out string? error) {
+        var last = (instance.Server.Population.Capacity - 1);
+
+        if (!WorldArgs.TryParseIndex(args: in args, at: tokenIndex, count: count, fallback: 0, max: last, min: 0, value: out index)) {
+            error = $"[{verb}: body index in '{instance.Name}' must be an integer 0..{last}]";
+            return false;
+        }
+        error = null;
+        return true;
+    }
+    // Resolves an instance's active body at the index TryParseInstanceBody reads.
+    private static (WorldBody? Player, int Index, string? Error) ResolveInstanceBody(WorldInstance instance, in WireArgs args, int tokenIndex, int count, string verb) {
+        if (!TryParseInstanceBody(args: in args, count: count, error: out var error, index: out var index, instance: instance, tokenIndex: tokenIndex, verb: verb)) {
+            return (Player: null, Index: 0, Error: error);
         }
 
-        return ((instance.Server.Body(index: WorldPopulation.EntityFromDisplay(number: slot)) is { } body)
-            ? (Player: body, Slot: slot, Error: null)
-            : (Player: null, Slot: slot, Error: $"[{verb}: '{instance.Name}' seat {slot} is not active — see world.instance.seats]")
+        return ((instance.Server.Body(index: index) is { } body)
+            ? (Player: body, Index: index, Error: null)
+            : (Player: null, Index: index, Error: $"[{verb}: '{instance.Name}' body {index} is not active]")
         );
     }
     // The shared front matter of the two mode-or-echo verbs (body.motion / body.control): validate the ≤2-token

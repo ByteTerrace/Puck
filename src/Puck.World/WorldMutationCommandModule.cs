@@ -335,8 +335,9 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             routing: CommandRouting.Immediate,
             audience: CommandAudience.Host,
             name: "world.reload",
-            description: "Re-reads the CURRENT document origin from disk and rebuilds from it — the artist external-edit loop: edit the JSON or .puck source externally, world.reload, no restart: world.reload. The source compiles, validates and diffs against the installed document off the simulation thread, and the authority installs the result at a tick boundary; the issuing session's later lines wait for the verdict. The journal always clears on success (reload IS a fresh read of what is on disk right now, so there is nothing to discard-guard the way world.load does). A missing/invalid file, or a re-read that no longer validates or compiles, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the bytes read off disk (for .puck, of the document it lowers to, so an edit that lowers identically keeps the pin) — a re-drive re-reads the same path and refuses BY NAME if the document has moved since the recording was made. The accept echo names the re-read origin.",
-            handler: (context, _) => {
+            description: $"Re-reads each running world's CURRENT document origin from disk and rebuilds from it — the artist external-edit loop: edit the JSON or .puck source externally, world.reload, no restart: {WorldReload.Forms.Spelling}. Every world running in this process reloads, the boot world and each instance a portal, painting or console started beside it, each from its own source, so an edit shows in whichever world it belongs to wherever the seats stand; a trailing instance:<name> reloads that one instance. A world whose source still composes to the revision its authority holds answers that it is unchanged. Each source compiles, validates and diffs against the installed document off the simulation thread, and the authority installs the result at a tick boundary; the issuing session's later lines wait for the verdict. The journal always clears on success (reload IS a fresh read of what is on disk right now, so there is nothing to discard-guard the way world.load does). A missing/invalid file, or a re-read that no longer validates or compiles, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the bytes read off disk (for .puck, of the document it lowers to, so an edit that lowers identically keeps the pin) — a re-drive re-reads the same path and refuses BY NAME if the document has moved since the recording was made. The accept echo names the re-read origin.",
+            forms: WorldReload.Forms,
+            handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
                     definition: server.ReadView(context: context).Definition,
                     verb: "world.reload"
@@ -344,7 +345,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return CommandResult.Error(output: reloadArmed);
                 }
 
-                return reload.Run(context: context);
+                return reload.Run(args: in args, context: context);
             }
         );
         yield return JournalStep(
