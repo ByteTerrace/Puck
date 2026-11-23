@@ -624,6 +624,10 @@ public sealed partial class WorldInstanceHost {
                     reason: reserveReason,
                     transfer: in transfer
                 );
+                HoldRefusedPortalCrossing(
+                    members: members,
+                    transfer: in transfer
+                );
             }
 
             return;

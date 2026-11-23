@@ -191,6 +191,8 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     private bool m_overlayAtEntry;
     private bool m_overlayChanged;
     private bool m_registeredReadings;
+    // Counts the runs entered, so a wall-time watch left by a run that ended ends no later one.
+    private int m_runSerial;
     // A route run: the seat driver, the simulation rate it reads seconds in, and the chapter it is playing.
     private Puck.World.Client.WorldSeatDriver? m_driver;
     private int m_rateHz;
@@ -257,7 +259,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
                 chapter.Name.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal) && chapter.Steps.Any(predicate: static step => step is WorldRouteStep.Go { Direct: false }))) {
                 return Prepare(at: at, budget: budget, context: context, endpoint: endpoint, loops: loops, output: output, prefix: prefix, reference: reference, session: session, timeout: timeout);
             }
-            return RunRoute(at: at, budget: budget, loops: loops, output: output, prefix: prefix, route: route, timeout: timeout);
+            return RunRoute(at: at, budget: budget, loops: loops, output: output, prefix: prefix, route: route, session: context.TextSession, timeout: timeout);
         }
 
         var path = (File.Exists(path: reference) ? Path.GetFullPath(path: reference) : Path.GetFullPath(path: reference, basePath: WorldDocumentPaths.DirectoryOf(documentPath: source.SourcePath)));
@@ -334,7 +336,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
         var lastTick = (firstTick + ((ulong)(m_programs.Sum(selector: static program => (program.Duration + GapTicks)) * loops)) - GapTicks);
 
-        return Enter(budget: budget, firstTick: firstTick, label: (string.IsNullOrEmpty(value: prefix) ? reference : $"{reference}#{prefix}"), lastTick: lastTick, loops: loops, output: output, timeout: timeout);
+        return Enter(budget: budget, firstTick: firstTick, label: (string.IsNullOrEmpty(value: prefix) ? reference : $"{reference}#{prefix}"), lastTick: lastTick, loops: loops, output: output, session: context.TextSession, timeout: timeout);
     }
 
     // Asks the seat's navigation to bake and answers at once. The pump starts the run once the bake is done, or reports that
@@ -392,7 +394,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
     // Plays a route of the running document: each chapter's steps are played by the route's seat program through the
     // seat's own ingress, one chapter after another from the tick hook, since a chapter ends when its steps do.
-    private CommandResult RunRoute(WorldRoute route, string prefix, ulong? at, double budget, int timeout, int loops, string? output) {
+    private CommandResult RunRoute(WorldRoute route, string prefix, ulong? at, double budget, int timeout, int loops, string? output, TextCommandSession? session) {
         if ((seatRouter is null) || (senses is null) || (server is null)) {
             return CommandResult.Error(output: "[world.benchmark: this host composes no seat routes or seat views, so it plays no route]");
         }
@@ -439,7 +441,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         // A route's length is known only as it plays; its chapters' time limits bound it.
         var bound = (ulong)(chapters.Sum(selector: chapter => Math.Ceiling(a: (chapter.TimeoutSeconds * m_rateHz)) + GapTicks) * loops);
 
-        return Enter(budget: budget, firstTick: firstTick, label: (string.IsNullOrEmpty(value: prefix) ? route.Name : $"{route.Name}#{prefix}"), lastTick: (firstTick + bound), loops: loops, output: output, timeout: timeout);
+        return Enter(budget: budget, firstTick: firstTick, label: (string.IsNullOrEmpty(value: prefix) ? route.Name : $"{route.Name}#{prefix}"), lastTick: (firstTick + bound), loops: loops, output: output, session: session, timeout: timeout);
     }
 
     // Arms a route chapter's start at a tick: its begin mark and opening reads on the tick before, which is also the tick
@@ -600,7 +602,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
     // Establishes a run's span and starts recording it: what a test-block run and a route run share once their first
     // chapter is armed.
-    private CommandResult Enter(string label, ulong firstTick, ulong lastTick, double budget, int timeout, int loops, string? output) {
+    private CommandResult Enter(string label, ulong firstTick, ulong lastTick, double budget, int timeout, int loops, string? output, TextCommandSession? session) {
         m_route = label;
         m_routeIdentity = IdentityOf(identities: m_programs.Select(selector: static program => program.Identity));
         m_budget = budget;
@@ -616,16 +618,25 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         script.Answered += OnAnswered;
         if (timeline is { } frames) {
             m_recording = new HostFrameRecording(capacity: ((int)Math.Min(val1: ((long)HostFrameRecording.MaxCapacity), val2: ((((long)(lastTick - firstTick)) * 24L) + 8192L)))) {
-                Flags = () => {
-                    if ((m_deadline != 0L) && (frames.Time.GetTimestamp() > m_deadline)) {
-                        _ = End(reason: $"the run passed its {timeout} s wall-time limit");
-                    }
-
-                    return ((pacing?.TickLocked == true) ? LockstepFlag : 0);
-                },
+                Flags = () => ((pacing?.TickLocked == true) ? LockstepFlag : 0),
                 Ticks = () => script.PublishedTick,
             };
             m_deadline = (frames.Time.GetTimestamp() + (timeout * frames.Time.TimestampFrequency));
+            // The wall-time limit ends the run in a console drain, where its end may read the authority and arm the
+            // seat's releases; a frame sample's callback runs while a tick may be in flight on the step thread. A drain
+            // runs on a paused or held host too, so a run that never ticks still ends at its limit.
+            if (session is not null) {
+                var run = ++m_runSerial;
+
+                session.CompleteOnPump(
+                    done: () => ((run != m_runSerial) || !m_running || (frames.Time.GetTimestamp() > m_deadline)),
+                    complete: () => {
+                        if ((run == m_runSerial) && m_running) {
+                            Console.Error.WriteLine(value: End(reason: $"the run passed its {timeout} s wall-time limit").Output);
+                        }
+                    }
+                );
+            }
         }
         m_adapter?.Dispose();
         m_adapter = new AdapterTelemetryRecorder(telemetry: AdapterTelemetry.Open(adapter: deviceProfile?.Current.Adapter), interval: AdapterSampleInterval);

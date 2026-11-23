@@ -37,7 +37,7 @@
               "description": "The steps.",
               "type": "array",
               "items": {
-                "description": "One step of a WorldRouteChapter. A place is a region placement\u0027s id (place-lobby), the volume body.place answers from; a heading is a yaw in degrees (0 faces -Z, 90 faces -X).",
+                "description": "One step of a WorldRouteChapter. A place is a region placement\u0027s id (place-lobby), the volume body.place answers from, in the route\u0027s own document unless the step names the world it is played in (world, that world\u0027s documentId), as a route that crosses into another world does for that world\u0027s places; a heading is a yaw in degrees (0 faces -Z, 90 faces -X).",
                 "type": [
                   "object",
                   "null"
@@ -138,6 +138,14 @@
                           ]
                         },
                         "default": null
+                      },
+                      "world": {
+                        "description": "The documentId of the world the step is played in, whose places Place and Corridor name, or null for the route\u0027s own document. The step fails when the seat stands in another world.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
                       }
                     },
                     "additionalProperties": false,
@@ -235,6 +243,14 @@
                         "description": "The time stood after the press with no Until, or the time past which the wait for it fails.",
                         "type": "number",
                         "default": 1
+                      },
+                      "world": {
+                        "description": "The documentId of the world whose place Until names, or null for the route\u0027s own document.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
                       }
                     },
                     "required": [

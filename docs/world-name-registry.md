@@ -6809,6 +6809,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `schedule.instances[].document` | `WorldScheduleInstance.Document` | a path or document locator |
 | `curves[].name` | `WorldCurveRow.Name` | a curve name |
 | `navigation.domains[].name` | `WorldNavigationDomain.Name` | a navigation domain name |
+| `navigation.domains[].network` | `WorldNavigationDomain.Network` | a navigation network name |
 | `patterns[].symbols[].name` | `PatternSymbol.Name` | a symbol name is local to its pattern |
 | `patterns[].pattern[symbol].name` | `PatternNode.Symbol.Name` | a symbol name is local to its pattern |
 | `patterns[].pattern[except].name` | `PatternNode.Except.Name` | a symbol name is local to its pattern |
