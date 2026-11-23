@@ -54,7 +54,14 @@ public static partial class AzureCommand {
                 worker: worker
             ).ConfigureAwait(continueOnCapturedContext: false);
         }
-        private async Task EnsureWorkerAsync(AzureWorldReleaseDeployment deployment, CancellationToken cancellationToken) {
+        // Runs the deployment's retained bootstrap under the operation's current phase. A worker already running the exact
+        // image is only checked; any other worker is replaced with fresh compute, never reconfigured in place. Azure
+        // re-runs a VM extension only when its configuration changes, so applying the model a worker already carries (a
+        // source its drain stopped, a VM an automatic repair booted while the guest guard refused it) runs nothing and
+        // reports that worker's last result. A fresh worker runs the bootstrap when the scale set creates it, so the guard
+        // judges it against the durable record as it is then.
+        private async Task EnsureWorkerAsync(AzureWorldReleaseDeployment deployment, WorldReleaseGroupRecord operation,
+            WorldReleaseOperationPhase[] phases, CancellationToken cancellationToken) {
             cancellationToken.ThrowIfCancellationRequested();
             var workers = await StableWorkersAsync(
                 clock: clock,
@@ -78,6 +85,19 @@ public static partial class AzureCommand {
                     return;
                 }
                 if (process["running"]?.GetValue<bool>() == true) { throw new InvalidOperationException(message: "another image is still running after the drain boundary"); }
+                // No host runs, and the drain or recovery already made the state durable in blob storage, so the worker
+                // holds nothing to keep.
+                await RequireAsync(
+                    cancellationToken: cancellationToken,
+                    expected: operation,
+                    phases: phases
+                ).ConfigureAwait(continueOnCapturedContext: false);
+                Console.WriteLine(value: $"Replacing {worker}, which runs no host, with fresh compute for release {deployment.Manifest.Identity}.");
+                await DeleteWorldComputeAsync(
+                    clock: clock,
+                    group: resourceGroup,
+                    scaleSet: scaleSet
+                ).ConfigureAwait(continueOnCapturedContext: false);
             }
             cancellationToken.ThrowIfCancellationRequested();
             var path = Path.Combine(
@@ -528,7 +548,9 @@ public static partial class AzureCommand {
             }
             await EnsureWorkerAsync(
                 cancellationToken: cancellationToken,
-                deployment: target
+                deployment: target,
+                operation: operation,
+                phases: [WorldReleaseOperationPhase.Activate, WorldReleaseOperationPhase.Verify, WorldReleaseOperationPhase.Commit]
             ).ConfigureAwait(continueOnCapturedContext: false);
             return new(
                 true,
@@ -543,6 +565,8 @@ public static partial class AzureCommand {
             ).ConfigureAwait(continueOnCapturedContext: false);
             await EnsureWorkerAsync(
                 (source ?? throw new InvalidOperationException(message: "bootstrap has no source worker")),
+                operation,
+                [WorldReleaseOperationPhase.RecoverActivate],
                 cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false);
             return new(
