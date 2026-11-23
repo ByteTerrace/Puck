@@ -21,7 +21,7 @@ public sealed class SessionLeverLawTests {
     private const string KnobName = "law-knob";
 
     [Fact]
-    public void ToonOffSuppressesEveryStyleWhileTheDefaultAndItsTuningFollowTheDocument() {
+    public void ToonOffSuppressesEveryStyleWhileTheDefaultFollowsTheDocument() {
         var render = Fixtures.BuildDocument().Render with { Toon = null };
         var settings = new WorldRenderSettings(defaults: render);
 
@@ -29,7 +29,7 @@ public sealed class SessionLeverLawTests {
         Assert.Null(@object: settings.ToonOverride);
         Assert.False(condition: settings.ResolveToon(render: render).Suppressed);
 
-        render = render with { Toon = new ToonStyleDocument(Enabled: true, OutlineWidth: 2f, OutlineDistance: 12f, OutlineNormal: .6f, OutlineTint: new(x: .1f, y: .1f, z: .1f)) };
+        render = render with { Toon = new ToonStyleDocument(Enabled: true) };
         Assert.True(condition: settings.ResolveToon(render: render).Enabled);
         Assert.Equal(expected: 1f, actual: settings.ResolveToon(render: render).Mode);
 
@@ -41,15 +41,13 @@ public sealed class SessionLeverLawTests {
         );
 
         sink.Apply(lever: Lever(a: 0, name: WorldSessionLevers.Toon));
-        render = render with { Toon = render.Toon with { OutlineWidth = 3f } };
         var resolved = settings.ResolveToon(render: render);
 
-        // Off keeps the document's default and tuning and suppresses every style, the authored-on default included.
+        // Off keeps the document's default and suppresses every style, the authored-on default included.
         Assert.True(condition: resolved.Enabled);
         Assert.True(condition: resolved.Suppressed);
         Assert.Equal(expected: -2f, actual: resolved.Mode);
         Assert.False(condition: settings.ToonOverride);
-        Assert.Equal(expected: 3f, actual: resolved.OutlineWidth);
 
         // A nested world shows its own styles until the same live override reaches it.
         Assert.False(condition: ToonStyleDocument.ResolveDefault(toon: render.Toon).Suppressed);

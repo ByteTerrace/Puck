@@ -136,7 +136,7 @@ function sunDirection(h, heading, noonElevation) = [
 ]
 
 // The time of day as one clock: the sun's direction, colour and illuminance on the light named `key`, and the sky about
-// it (`clearDay`'s gradient, disc and clouds, and stars that come out at night), all keyed on a state clock whose row of
+// it (`clearDay`'s gradient, disc and clouds, and stars that come out at night behind them), all keyed on a state clock whose row of
 // the same name holds the day's phase, advancing one day every `daySeconds`. Expand it in a document fragment of its own
 // that the world imports, beside the document authoring the `key` directional's other fields, since one source's second
 // `render` block replaces the first's members. The sun rises due east of `heading` at six, culminates at
@@ -148,9 +148,11 @@ function sunDirection(h, heading, noonElevation) = [
 // stands opposite the sun, at `moonPeak` lux times the cosine of its hour angle, in `moonColor`. The night sky's gradient shows at `nightLuminance` nits and its stars
 // at `starLuminance`. Writing the row moves the time (`world.state.cell.set <clock> $value 0.5` is noon), and its
 // advance holds the sun (`world.row.set state <clock> advance {"perSecondNumerator":0,"perSecondDenominator":1}`) and
-// runs it again (the numerator back to one over `daySeconds`). The exposure is the world's to key on the same clock
+// runs it again (the numerator back to one over `daySeconds`). `bodies` are layers of the world's own that hang in the
+// sky behind the clouds and before the stars and the sun's disc: a moon, a planet, another world seen from here. The
+// exposure is the world's to key on the same clock
 // (`render.exposure`'s `minimum`, `maximum`, `compensation` and `ev100` take `{ clock, keys }`).
-template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 60, heading = 0, peak = 100000, noonColor = "#FFF0DC", horizonColor = "#FFB278", cloudiness = 0.25, cloudTier = low, sunLight = 0, moonPeak = 0.25, moonColor = "#C8D4FF", moonAngularRadius = 0.11, nightLuminance = 2, starLuminance = 2) {
+template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 60, heading = 0, peak = 100000, noonColor = "#FFF0DC", horizonColor = "#FFB278", cloudiness = 0.25, cloudTier = low, sunLight = 0, moonPeak = 0.25, moonColor = "#C8D4FF", moonAngularRadius = 0.11, nightLuminance = 2, starLuminance = 2, bodies = []) {
   timeline {
     clocks [{ name: clock, state: clock, spanSeconds: 24h }]
   }
@@ -194,17 +196,20 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
       })
     }
     sky {
-      layers [
-        gradient(name: "air", stops: [
-          { elevation: -1, color: dayStops[0] }
-          { elevation: 0, color: dayStops[1] }
-          { elevation: 0.4, color: dayStops[2] }
-          { elevation: 1, color: dayStops[3] }
-        ])
-        sunDisc(name: "sun", light: sunLight, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
-        clouds(name: "cumulus", coverage: cloudiness, scale: 2, softness: 0.3, drift: [0.02, 0.005], tier: cloudTier)
-        stars(name: "stars", luminance: starLuminance, density: 48, brightness: 1.2, seed: 7, opacity: 0)
-      ]
+      layers: concat(
+        [
+          gradient(name: "air", stops: [
+            { elevation: -1, color: dayStops[0] }
+            { elevation: 0, color: dayStops[1] }
+            { elevation: 0.4, color: dayStops[2] }
+            { elevation: 1, color: dayStops[3] }
+          ])
+          stars(name: "stars", luminance: starLuminance, density: 48, brightness: 1.2, seed: 7, opacity: 0)
+          sunDisc(name: "sun", light: sunLight, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
+        ],
+        bodies,
+        [clouds(name: "cumulus", coverage: cloudiness, scale: 2, softness: 0.3, drift: [0.02, 0.005], tier: cloudTier)]
+      )
       clock: clock
       keys: map(daySkyHours, k => {
         at: k["hour"] * 3600

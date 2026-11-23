@@ -91,7 +91,9 @@ public sealed partial class WorldBody {
         ? (collider.Volumes[0].Radius * m_scale)
         : FixedQ4816.Zero
     );
-    private FixedVector3 HoldProbeOrigin => (m_position + (FixedVector3.UnitY * HoldProbeHeight));
+    // The middle of the collider, which stands along the body's own up: on a round world that is the radius through
+    // the body, and world +Y would put the probe inside the ground everywhere but the top.
+    private FixedVector3 HoldProbeOrigin => (m_position + (m_up * HoldProbeHeight));
     // The axis every hold cone is measured against — the direction the world's own gravity opposes, never the body's
     // own up. A row's cone says what a face is (floor, wall, ceiling), which is a fact about the world; measuring it
     // against a body already leaned onto a ceiling would read that ceiling's own floor as a ceiling.

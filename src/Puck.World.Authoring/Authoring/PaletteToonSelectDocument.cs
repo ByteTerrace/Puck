@@ -32,12 +32,6 @@ public sealed record PaletteToonSelectDocument(
         }
         if ((Cases is null) || (Cases.Count == 0)) {
             yield return $"{path}.cases must name at least one look";
-            yield break;
-        }
-        for (var index = 0; (index < Cases.Count); index++) {
-            foreach (var refusal in (Cases[index].Toon?.Refusals(path: $"{path}.cases[{index}].toon") ?? [])) {
-                yield return refusal;
-            }
         }
     }
 }

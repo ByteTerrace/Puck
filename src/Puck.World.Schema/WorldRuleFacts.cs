@@ -176,6 +176,13 @@ public static class WorldRuleFacts {
     /// screen whose <c>route.input</c> is <c>Simulation</c>, and anything else is refused by name
     /// (<c>WorldRuleRefusal.PointerMalformed</c>, <c>WorldRuleRefusal.ScreenUnknown</c>).</summary>
     public const string PointerPrefix = "$pointer:";
+    /// <summary>The prefix; <c>$producer:&lt;bodyRef&gt;:held|possessed|down</c> (<c>producer(each, possessed)</c> in
+    /// <c>.puck</c>) reads <c>1</c> while the named body's producer stands down for that reason and <c>0</c> otherwise:
+    /// <c>held</c> while a rule holds it (<see cref="WorldEffect.HoldProducer"/>), <c>possessed</c> while a participant
+    /// drives it, <c>down</c> for either. A hold reads from the firing that delivers it onward; possession is settled
+    /// at the end of each tick, after the rules, so rules read it from the tick after a route reaches the body. A
+    /// reference resolving to no live body reads <c>0</c>.</summary>
+    public const string ProducerPrefix = "$producer:";
     /// <summary>Compares the world's own live active-population count.</summary>
     public const string Population = "$population";
     /// <summary>The prefix; <c>$region:&lt;placementId&gt;</c> compares that placement's live region occupant count —

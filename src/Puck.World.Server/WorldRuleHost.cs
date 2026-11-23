@@ -519,6 +519,15 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         );
     }
     /// <inheritdoc/>
+    public Fact Read(ProducerOperand operand) {
+        ArgumentNullException.ThrowIfNull(argument: operand);
+
+        return Fact.Finite(
+            kind: CellKind.Int,
+            value: (((Host.Population.ProducerStandDown(index: ResolveBodyRef(bodyRef: operand.BodyA)) & operand.Reasons) != BodyProducerStandDown.None) ? 1L : 0L)
+        );
+    }
+    /// <inheritdoc/>
     public Fact Read(BoardCellOfOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);
 

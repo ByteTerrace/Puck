@@ -8,9 +8,60 @@ namespace Puck.World;
 internal sealed partial class PlayerCommandModule {
     private static readonly CommandForms BodyDisengageForms = CommandForms.Of(verb: "body.disengage", DisengageForm);
     private static readonly CommandForms BodyEngageForms = CommandForms.Of(verb: "body.engage", EngageForm);
+    // A seat that stands in another instance composes or dissolves its control set there, through the same live route
+    // body.fly and body.where follow: the boot roster no longer holds its body, and the set it changes is the one the
+    // authority it stands in keeps. Returns null for a body this process's boot instance still holds.
+    private CommandResult? RouteControl(CommandContext context, in WireArgs args, int index, GrantSubject? target, bool capture, string verb) {
+        if (!IsSeat(index: index) || !m_roster.IsJoined(slot: index)) {
+            return null;
+        }
+
+        var location = seatRouter.Route(slot: index);
+
+        if (WorldDefinitionLoader.IsBootInstance(name: location.Endpoint.Identity)) {
+            return null;
+        }
+
+        var targetPrincipal = Principal.Seat(slot: location.EntityIndex);
+
+        location.Endpoint.Submissions.SubmitCommand(command: ((target is { } subject)
+            ? new WorldCommand.ComposeControl(
+                EntityIndex: location.EntityIndex,
+                Exclusive: capture,
+                Principal: context.Principal,
+                Target: subject,
+                TargetPrincipal: targetPrincipal
+            )
+            : new WorldCommand.DissolveControl(
+                EntityIndex: location.EntityIndex,
+                Principal: context.Principal,
+                TargetPrincipal: targetPrincipal
+            )));
+        m_roster.Seat(slot: index)?.ReleaseAllHeld();
+
+        return ((target is { } routed)
+            ? Echoed(
+                args: in args,
+                handler: $"[{verb}: body:{index} via '{location.Endpoint.Identity}' body={location.EntityIndex} routed to {routed.Describe()}{(capture ? " (capture)" : " (mirrored)")}; that authority decides]"
+            )
+            : Echoed(
+                args: in args,
+                handler: $"[{verb}: body:{index} via '{location.Endpoint.Identity}' body={location.EntityIndex} asked to disengage; that authority decides]"
+            ));
+    }
     private CommandResult DisengageHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
             return BodyDisengageForms.Refuse();
+        }
+        if (RouteControl(
+            args: in args,
+            capture: false,
+            context: context,
+            index: (((args.Count == 1) && args.TryInt(index: 0, value: out var routedIndex)) ? routedIndex : 0),
+            target: null,
+            verb: "body.disengage"
+        ) is { } routedDissolve) {
+            return routedDissolve;
         }
 
         var (player, index, error) = ResolveTarget(
@@ -100,6 +151,17 @@ internal sealed partial class PlayerCommandModule {
             target: out var target
         )) {
             return CommandResult.Error(output: $"[body.engage: target '{args[0].ToString()}' must be a screen index, body:<n> or placement:<id>]");
+        }
+
+        if ((target.Kind == GrantSubjectKind.Body) && (RouteControl(
+            args: in args,
+            capture: capture,
+            context: context,
+            index: (((tokenCount >= 2) && args.TryInt(index: 1, value: out var routedIndex)) ? routedIndex : 0),
+            target: target,
+            verb: "body.engage"
+        ) is { } routedCompose)) {
+            return routedCompose;
         }
 
         // The driving body is the optional 0-based body index at token 1, default body 0 (seat 1's body), read and

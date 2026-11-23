@@ -28,8 +28,10 @@ public readonly record struct InfinityViewFrame(bool Visible, CameraSnapshot Cam
 /// α, <c>s = sin α</c> and <c>d = a_f² − s²</c> (positive exactly when the cone is wholly in front), the ellipse's centre
 /// is <c>(a_f·aᵣ, a_f·aᵤ) / d</c> and its bounding half-extents are <c>s·√(d + aᵣ²) / d</c> and
 /// <c>s·√(d + aᵤ²) / d</c>.</para>
-/// <para>The camera sits at the view's anchor whatever the viewer does: nothing here reads the viewer's position, so the
-/// view turns with the viewer and is never translated by it. The instance's basis is the viewer's carried by the view's
+/// <para>The camera sits at the view's anchor whatever the viewer does, so the view turns with the viewer and is never
+/// translated by it, unless the view follows (<see cref="InfinityViewSpec.Follows"/>): then the camera sits at the
+/// anchor plus the viewer's position carried by the view's orientation, and a view with a bound and no mask renders
+/// the cone its bound subtends from there. The instance's basis is the viewer's carried by the view's
 /// orientation.</para>
 /// </summary>
 public static class InfinityViewFit {
@@ -54,7 +56,12 @@ public static class InfinityViewFit {
         double minY = (viewer.FrustumOffset.Y - halfHeight), maxY = (viewer.FrustumOffset.Y + halfHeight);
         var whole = true;
 
-        if (spec.Mask is { } mask) {
+        var rotation = spec.Orientation;
+        var position = (spec.Follows
+            ? (spec.Anchor + Vector3.Transform(value: viewer.Position, rotation: rotation))
+            : spec.Anchor);
+
+        if ((spec.Mask ?? BoundMask(spec: spec, position: position)) is { } mask) {
             var axis = mask.Direction;
             double forward = Vector3.Dot(vector1: axis, vector2: viewer.Forward);
             double right = Vector3.Dot(vector1: axis, vector2: viewer.Right);
@@ -86,9 +93,8 @@ public static class InfinityViewFit {
 
         var shownHeight = (maxY - minY);
         var shownWidth = (maxX - minX);
-        var rotation = spec.Orientation;
         var camera = new CameraSnapshot(
-            Position: spec.Anchor,
+            Position: position,
             Right: Vector3.Normalize(value: Vector3.Transform(value: viewer.Right, rotation: rotation)),
             Up: Vector3.Normalize(value: Vector3.Transform(value: viewer.Up, rotation: rotation)),
             Forward: Vector3.Normalize(value: Vector3.Transform(value: viewer.Forward, rotation: rotation)),
@@ -114,6 +120,25 @@ public static class InfinityViewFit {
                 z: ((float)maxX)
             ),
             WholeFrustum: whole
+        );
+    }
+    // The cone a view's bound subtends from its camera, in the viewer's world frame, or null when the view states no
+    // bound or the camera stands inside it or so near that the cone has no bound on the camera plane.
+    private static InfinityViewMask? BoundMask(InfinityViewSpec spec, Vector3 position) {
+        if (spec.Bound is not { } bound) {
+            return null;
+        }
+
+        var toward = (bound.Center - position);
+        var distance = toward.Length();
+
+        if (!(distance > (bound.Radius * 1.0005f))) {
+            return null;
+        }
+
+        return new InfinityViewMask(
+            Axis: Vector3.Transform(value: toward, rotation: Quaternion.Conjugate(value: spec.Orientation)),
+            HalfAngle: MathF.Asin(x: (bound.Radius / distance))
         );
     }
     // The pixels a share of the viewer's extent takes at a scale of its density: at least one, never above the viewer's

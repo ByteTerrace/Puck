@@ -1871,6 +1871,32 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             table: m_eventBudgets,
             value: out budget
         );
+    /// <summary>Lists the bodies whose events an event-budgeted observe grant could deliver: the concrete body subjects
+    /// every such grant names, whoever holds it. A body event's gate resolves to its own body subject or to the wildcard
+    /// (<see cref="TryResolveDecidingGrant"/>), so no body outside this list, under no wildcard, can be told of one.</summary>
+    /// <param name="bodies">The list replaced with the named bodies inside <paramref name="capacity"/>, ascending and
+    /// distinct; left empty under a wildcard.</param>
+    /// <param name="capacity">The population's body capacity; a grant naming a body at or past it lists nothing.</param>
+    /// <returns><see langword="true"/> when an event-budgeted observe grant holds the wildcard, so every body is listed
+    /// implicitly.</returns>
+    internal bool ObservedEventBodies(List<int> bodies, int capacity) {
+        bodies.Clear();
+        foreach (var key in m_eventBudgets.Keys) {
+            if (key.Capability != WorldCapability.Observe) { continue; }
+            if (key.Subject.Kind == GrantSubjectKind.All) { bodies.Clear(); return true; }
+            if ((key.Subject.Kind == GrantSubjectKind.Body) && (((uint)key.Subject.Value) < ((uint)capacity))) { bodies.Add(item: key.Subject.Value); }
+        }
+        if (bodies.Count > 1) {
+            bodies.Sort();
+            var distinct = 1;
+
+            for (var index = 1; (index < bodies.Count); index++) {
+                if (bodies[index] != bodies[(distinct - 1)]) { bodies[distinct++] = bodies[index]; }
+            }
+            bodies.RemoveRange(index: distinct, count: (bodies.Count - distinct));
+        }
+        return false;
+    }
     /// <inheritdoc/>
     public bool TryGetKindMask(Grantee grantee, WorldCapability capability, GrantSubject subject, out MutationKindMask mask) =>
         TryGetGrantValue(

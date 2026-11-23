@@ -2386,7 +2386,10 @@ each moving body's travel, the bounds queries they spend, and how many ended in
 contact or exhausted their budget; and `physics.contact`, the analytic solver's
 resolves, the exact collider queries its bounds culls keep, the convex (GJK and
 EPA) queries among them with the support evaluations they spend, and the pushes
-they return. A
+they return; and `world.events` (`WorldEventWork`), what collecting each tick's
+world events costs: the bodies a collision listener observes, the broadphase
+bodies, candidates and exact pair tests collision sensing spends, the overlaps it
+holds, the region tests and the edges emitted. A
 rendering shape adds the shader compiler's `shaders.compiler` (requests, cache
 hits and each native tool's runs) and the process's SDF kernel loads,
 `shaders.sdf-kernels` (loads and the bytecode bytes they read); each backend adds its

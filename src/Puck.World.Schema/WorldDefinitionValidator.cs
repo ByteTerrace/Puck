@@ -1216,7 +1216,6 @@ public static partial class WorldDefinitionValidator {
             navigationDomainNames: navigationDomainNames,
             navigationProfileNames: navigationProfileNames,
             curveNames: curveNames,
-            simulationRateHz: definition.SimulationRateHz,
             errors: errors
         );
 

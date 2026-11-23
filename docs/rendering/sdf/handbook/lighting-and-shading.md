@@ -598,25 +598,26 @@ its face, never behind it.
 
 ### Cel shading
 
-Cel shading is a style per material, not one look per world, and it has two
-halves. The banding is a shade program, the standard package's `cel`
+Cel shading is a style per material, not one look per world, and it is a
+shade program. The banding is the standard package's `cel`
 (`worlds/standard/shading.puck`): its light phase bands each light and its
-compose phase gathers the result, so no engine code bands anything. Beside the
-program, a material carries a style row, `toon`, which marks it styled and
-holds its ink: the outline that reads neighbouring depth and normals, which a
-per-pixel program cannot express. `celMaterial(base, style)` in
-`worlds/standard/styles.puck` writes both onto a palette row, so one row bands
-and inks while its neighbours keep theirs, and one scene mixes cel-styled
+compose phase gathers the result, so no engine code bands anything. The ink is
+the program's ink phase, the standard's `ink` laid over the band
+([ink](#ink)). Beside the program a material carries a style mark, `toon`,
+which says only that it is styled. `celMaterial(base, style)` in
+`worlds/standard/styles.puck` writes all three onto a palette row, so one row
+bands and inks while its neighbours keep theirs, and one scene mixes cel-styled
 creations with continuous ones (the gallery's `shape-cel` and `shape-cel-hard`
-exhibits on level 3). The styles (`celStyle`, `celHardStyle`) are data there:
-the program's values (`threshold`, `softness`, `shadowTint`, `specularSize`,
-`combined`, `restore`, `bleed`, `form`) and an `ink` row. `celMaterial` composes
-the program after the row's own (`shade [base.shade, cel(...)]`), so a terrain or
+exhibits on level 3). `celHatched` adds the ink's strokes in the shade, and
+`celPaint` is the band with no line. The styles (`celStyle`, `celHardStyle`)
+are data there: the program's values (`threshold`, `softness`, `shadowTint`,
+`specularSize`, `combined`, `restore`, `bleed`, `form`) and an `ink` record
+(`standardInk`, `worlds/standard/ink.puck`). `celMaterial` composes
+the programs after the row's own (`shade [base.shade, cel(...)]`, then the ink), so a terrain or
 weathered row keeps its surface under the band. A world that wants every material styled names
-the program as its `render.shade` and the ink as its `render.toon`; a row with
+the program as its `render.shade` and turns its `render.toon` on; a row with
 `toon: continuousStyle` (`enabled: false`) stays unstyled under it. The engine
-holds no look of its own: a style row that is on authors every outline value,
-and validation names each one it leaves out.
+holds no look of its own.
 
 ```text
 import "../standard/styles"
@@ -650,7 +651,7 @@ camera case or a binding layout is chosen: `toonSelect { state:
 "state.<row>[.<key>]", cases [ ... ] }` shades the row with the case the cell's
 whole value names (an enum member's ordinal, an integer, or a boolean as zero or
 one), and with its own `toon` and `shade` while the cell names none. Each case
-is a style row and a program, `{ toon, shade }`; `celLook(style)` writes the
+is a style mark and a program, `{ toon, shade }`; `celLook(style)` writes the
 cel pair and `plainLook` the continuous one. Every case's program is declared
 by the document, so it is compiled and specialized before a swap; a command
 that writes the cell changes only the material's rows and program reference,
@@ -662,35 +663,79 @@ styled material continuously and uninked, a material's own style and the
 world's default alike: its program's light and compose phases read as omitted
 (`sdfShadeBinding` marks the binding unstyled), so the engine's continuous
 response lights it while a surface phase it composes (a terrain or weathered
-surface) still runs, and its outline is skipped, so one view compares
-continuous against cel. On shows every style as authored. With no argument it echoes the choice.
+surface) still runs, and its ink phase reads as omitted too, so one view
+compares continuous against cel. On shows every style as authored. With no argument it echoes the choice.
 It uses the same render-section grant and session-lever delivery as
 `world.ao`, reaches the host, routed worlds and nested views, and contributes
 no simulation state. Cel shading needs the programs to run, which is the
 default (`world.shade programs`); `world.shade layers` shades every material
 by its layers alone.
 
-Outlines compare the depth and normals of eight neighbouring visibility
-records, on the foreground side of silhouettes and at sharp creases. The
-tangent-plane depth comparison leaves sloping planes clear. `outlineWidth`
-is the close radius in output pixels, scaled to the current render grid;
-`outlineDistance` is the distance in metres at which it halves. Fractional
-radii interpolate two rings, avoiding integer-width jumps. `outlineNormal`
-is the crease cosine threshold; `outlineTint` multiplies the surface's light.
-The ink is part of the lit surface before temporal reprojection and
-atmosphere, so existing motion, disocclusion and history clipping apply.
-Bound displays and portal pictures bypass both halves, and sky stays in its
-existing pass. A portal's destination shades its own surfaces once; the
-consuming view does not posterise the picture.
+A material's own style mark is row 22 of its material record, the mode the
+pass block's `toonMode` carries for the world's default (`SdfToon.Mode`), zero
+to inherit the default, so a palette edit restyles one material and changes
+no mesh.
 
-There is no additional dispatch, image or history allocation: the work is
-in `sdf.world$views` and reported with that pass's counters. An outlined
-opaque hit reads at most eight neighbouring depths and normals at a radius
-of one render pixel or less, sixteen above it. Width zero skips these reads.
-A material's own style row is rows 22 and 25 of its material record, laid out
-as the pass block's `toonOutline` and `toonInk` (`SdfToon.WriteRows` writes
-both), all zero to inherit the world's default, so a palette edit restyles one
-material and changes no mesh. The pass-block parameters participate in the
+### Ink
+
+A line is drawn by a program's fourth phase, `ink { }`, which runs once a
+pixel after `compose`. It reads the colour under it (`ink.under`), writes a
+`color` and a `coverage`, and the engine shows the colour under it moved
+toward `color` by `coverage`. The engine holds no line of its own: which
+edges are drawn, how wide, what colour and how broken are the program's
+arithmetic, and the standard package's are in `worlds/standard/ink.puck`
+(`inked`, `hatched`, `standardInk`), which `celMaterial` lays over its band.
+
+What a phase can read of an edge is the stamp's `edge.*` members, which the
+view's edge search fills (`passes/sdf-views-filter.hlsli`):
+
+| Member | What it holds |
+|---|---|
+| `edge.depth` | The display pixels to the nearest occlusion the pixel's surface owns: one form in front of another, or against the sky. The nearer surface owns it |
+| `edge.crease` | The display pixels to the nearest fold of the surface, two hits at one depth whose normals turn more than thirty degrees |
+| `edge.creaseCosine` | The cosine between the two faces at that fold, so a program draws the folds it wants and tapers the rest |
+| `edge.object` | The display pixels to the nearest boundary between two objects at one depth: two placed copies, or two bake groups |
+| `edge.material` | The display pixels to the nearest boundary between two materials on one surface |
+
+Each distance reads far (`SdfShadeOps.EdgeFar`) where no edge of its class
+lies within the search's reach (`SdfShadeOps.EdgeReach` render pixels). A
+pixel measures only to edges on its own surface: the search never crosses an
+occlusion or an object boundary, so each side of a boundary draws its own
+half of a line from its own program, and a material that wants no line draws
+none. A draw clipped by a portal's glass seeds no edge along the cut, and an
+object is what the dresser keys alike (`SdfMeshDraw.ObjectKey`), so the
+chunks of one mesh have no boundary between them.
+
+Widths have one unit, the display pixel a viewer sees. `surface.pixel` is the
+world size of one at the surface, so a width in metres is that width over
+`surface.pixel`, and a line keeps its width at any render scale and through a
+portal's fitted window (the pass block's `displayPixels`).
+
+A line that is no jump between pixels comes through the `line` channel: a
+light phase may write `line` (the walk keeps the largest over its lights),
+the compose phase reads that as `compose.line` and may write its own, and the
+ink phase reads the result as `ink.line`. The standard's hatching raises it
+where the key light leaves the surface in shade. `ink.exposure` is the view's
+exposure, for an ink authored as a display colour.
+
+The ink phase runs only where a line can be: where an `edge.*` distance is
+within the reach or `ink.line` is above zero (`sdfShadeInkPhase`). Elsewhere
+the pixel keeps its composed colour and no ink instruction executes, so the
+costly part of a look runs only on its lines. An ink phase that reads neither
+is refused at admission, since it could never run. A view searches for edges
+only while a program of its frame reads one (`SdfShadeReads.Edges`, the pass
+block's `inkEdges`); a frame with no such program pays nothing.
+
+Ink is part of the lit surface before temporal reprojection and atmosphere,
+so existing motion, disocclusion and history clipping apply, and a line
+recedes into haze with its surface. Bound displays and portal pictures run no
+program, so the view that shows them never inks them, and sky stays in its
+existing pass. Glass interfaces search no edge and raise no line yet.
+
+The search adds no dispatch: it runs in the group that filters the view's
+shadows, in `sdf.world$views-filter` for a binned view, whose record carries
+each pixel's edges to the shading bins as a third word, and in the views
+kernel's own group otherwise. The pass-block values participate in the
 lighting cadence signature, so live edits request fresh shading and temporal
 samples without rebuilding geometry.
 

@@ -1,0 +1,273 @@
+// The moon: a federated world of its own, the pale one of the valley's two. A cratered sphere `moonRadius` metres in
+// radius about this world's origin, small enough to walk round and to fly round, whose pull points at its centre
+// inside `moonReach` and is nothing beyond it. The debug world shows this world in its sky and reaches it two ways:
+// the moon painting of its painting wing (paintings.puck) opens onto the arrival frame at the north pole here, and a
+// ship climbing out of the valley is handed across the `sky` seam under the moon.
+// Boot the debug world, never this one. moon.md beside this file says how to get here and what to look at.
+//
+// The two worlds share one frame up to a shift: a point at `p` here stands at `p + moonCentre` in the debug world
+// (moon-frame.puck), so the valley lies below the moon's south side and the pole's sky looks away from it. The valley
+// is not drawn in this sky: a view of the debug world from here would draw that whole world a second time.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "moon"
+
+// The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's size; her suit toggle comes
+// with craft-form.puck below.
+import "moth-controls"
+import "size"
+import "painting-kit"
+import "place-kit"
+import "moon-frame"
+import "moon-surface"
+// A ship that crosses the sky seam is a ship here: the craft register and the selectors that read it.
+import "craft-form"
+
+// The moon draws no HUD panels; controls.puck supplies its cursor.
+hud {
+  panels []
+}
+
+metadata {
+  title: "Moon"
+  description: "The pale moon of the debug world's valley: a cratered sphere to walk and fly round, reached through the painting wing's moon painting or by ship through the sky seam."
+}
+
+// A traveller from the debug world arrives here, and the debug world's sky and painting observe it whole.
+admission [
+  {
+    disclosure: Replica
+    domain: "*"
+    grants [
+      {
+        budget: 8
+        capability: Drive
+        exclusive: true
+      }
+      {
+        budget: 64
+        capability: Observe
+        subject: "all"
+      }
+    ]
+    mode: FederatedAuthority
+  }
+]
+
+references [
+  {
+    document: "debug"
+    name: "debug"
+  }
+]
+
+destinations [
+  {
+    durability: persisted
+    name: "debug"
+    reference: "debug"
+    scope: global
+  }
+]
+
+views {
+  nestingDepth: 3
+}
+
+// The seam under the moon, the debug world's `sky` seen from above: a body that sinks through it is the debug
+// world's again.
+adjacencies [
+  {
+    name: "sky"
+    destination: "debug"
+    counterpart: "sky"
+    boundary {
+      center [debugOrigin[0], (debugOrigin[1] + skySeamAltitude), debugOrigin[2]]
+      outwardYawDegrees: 180
+      outwardPitchDegrees: -90
+      width: skySeamSpan
+      height: skySeamSpan
+    }
+  }
+]
+
+// The moon holds more than a traveller's own body: a ship and its pilot arrive as two.
+bodies {
+  capacity: 16
+}
+
+// The pull: toward the centre at `moonGravity` everywhere inside `moonReach`. Outside it only the valley's pull is
+// left, toward the seam and far too faint to turn a body: under a metre a second squared a field moves no body's up,
+// so a body out in the open keeps the up it came with until the moon takes it, and keeps the moon's on the way out.
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  isActive: true
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, -0.05, 0]
+  areas [
+    {
+      placementId: `moon-core`
+      priority: 0
+      mode: Replace
+      bounds: sphere(radius: moonReach)
+      acceleration: radial(magnitude: moonGravity)
+    }
+  ]
+}
+
+// Every surface of the moon is ground a hold can take, so a ship's touchdown hold settles it anywhere it is brought
+// down (the basis leaves that to the placements it marks).
+collision {
+  contactSkin: 0.02
+  defaultHold: true
+  gradientProbe: 0
+  gridCellSize: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements []
+}
+
+spawnPoints [
+  { id: "stage", position [0, (moonRadius + padTop), 5], yawDegrees: 180 }
+  { id: "moon-arrival", position [0, (moonRadius + padTop), 5], yawDegrees: 180 }
+]
+
+placements {
+  policy {
+    authoringHeadroomInstances: 0
+    authoringHeadroomScreens: 0
+    candidateCap: 1
+    candidateRadius: 1
+    maxPlacementScale: 1
+    minPlacementScale: 1
+    previewDeadlineFrames: 1
+  }
+
+  // What the pull rides: the moon's centre.
+  placement "moon-core" {
+    prototype: "place"
+    position [0, 0, 0]
+  }
+
+  placement "place-moon-pole" {
+    prototype: "place"
+    position [0, (moonRadius + 3), 0]
+    region {
+      halfExtents [14, 6, 14]
+    }
+  }
+
+  for sector in moonSectors {
+    placement $"moon-{sector.name}" {
+      prototype: $"moon-{sector.name}"
+      position [0, 0, 0]
+      yawDegrees: 180
+      solid
+    }
+  }
+
+  // The pad at the north pole, level with the frame's foot.
+  placement "moon-pad" {
+    prototype: "moon-pad"
+    position [0, moonRadius, 0]
+    solid
+  }
+
+  // The moon painting's counterpart, facing -Z like it, so a crossing turns the traveller about. Its glass is the way
+  // back: walking +Z into it arrives out of the painting walking -Z, into the wing.
+  placement "arrival" {
+    prototype: "frame"
+    position [0, (moonRadius + padTop), 0]
+    yawDegrees: 0
+    faceSources [
+      {
+        face: "glass"
+        filter: linear
+        portal {
+          arrival: "mapped"
+          counterpart: "painting-moon/glass"
+          destination: "debug"
+          travel: "body"
+        }
+        source {
+          $type: "session"
+          destination: "debug"
+          fallback: "#D8D2C6"
+          projection: window
+        }
+      }
+    ]
+  }
+}
+
+prototypes {
+  // The basis's floor, which this world has no use for: a speck at the centre, under 600 m of rock.
+  prototype "floor" {
+    document {
+      name: "floor"
+      palette [{ color: "#000000" }]
+      schema: "puck.creation.v1"
+      shape Box "ground" {
+        material: 0
+        position [0, 0, 0]
+        scale [1, 1, 1]
+      }
+    }
+  }
+
+  for sector in moonSectors {
+    prototype $"moon-{sector.name}" {
+      document {
+        moonSector(sector: sector)
+      }
+    }
+  }
+
+  prototype "moon-pad" {
+    document {
+      moonPad()
+    }
+  }
+
+  // The way back: the shared arrival frame (painting-kit.puck) in pale stone.
+  prototype "frame" {
+    document {
+      arrivalFrame(color: "#E9E4D8", roughness: 0.6, specular: 0.1, post: 0.12)
+    }
+  }
+}
+
+// Vacuum: a hard sun over a black sky of stars, and no air between the eye and the far crater walls.
+render {
+  farDistance: 6500
+  lighting {
+    lights [
+      directional(
+        name: "key",
+        direction: moonSunDirection,
+        color: "#FFF4E2",
+        illuminance: 100000lx,
+        shadow: always,
+        angularRadius: 0.0046
+      )
+    ]
+  }
+  sky {
+    layers [
+      gradient(name: "void", luminance: 1nit, stops: [
+        { elevation: -1, color: "#02030A" }
+        { elevation: 1, color: "#02030A" }
+      ])
+      stars(name: "stars", luminance: moonStarLuminance, density: 90, brightness: 1.3, seed: 7)
+      sunDisc(name: "sun", light: 0, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
+    ]
+  }
+  atmosphere {
+    fog {
+      density: 0
+    }
+  }
+}

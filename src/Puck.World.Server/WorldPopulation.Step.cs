@@ -25,6 +25,7 @@ public sealed partial class WorldPopulation {
         if (resetPhase) {
             entry.ProducerState.AcquiredTarget = -1;
             entry.ProducerState.CurveArcRaw = 0L;
+            entry.ProducerState.CurveArcRemainder = 0L;
             entry.NavigationState.Clear();
             entry.ProducerState.Phase = phase;
             entry.ProducerState.PhaseRemainder = 0L;
@@ -92,7 +93,7 @@ public sealed partial class WorldPopulation {
     // Every producer reads another body through the tick's frozen image (m_perception), never its live pose: a body's
     // view of the others is the same whichever bodies stepped before it, so it does not depend on the order bodies
     // step in or on how many threads step them. A body the freeze did not find reads as absent.
-    private BodyProducerSensors ReadProducerSensors(int selfIndex, Entry entry, int currentTarget, in FixedVector3 self, CompiledBodyProducer producer, ProducerWork work) {
+    private BodyProducerSensors ReadProducerSensors(int selfIndex, Entry entry, int currentTarget, in FixedVector3 self, CompiledBodyProducer producer, ProducerWork work, ulong stepTicks) {
         var image = m_perception!;
         var candidate = BodySensorTarget.None;
         var targetSource = producer.Target;
@@ -133,7 +134,9 @@ public sealed partial class WorldPopulation {
 
                 entry.ProducerState.CurveArcRaw = AdvanceCurveArc(
                     arcRaw: entry.ProducerState.CurveArcRaw,
-                    stepRaw: fixedSource.ArcStepRaw,
+                    rate: fixedSource.ArcRate,
+                    remainder: ref entry.ProducerState.CurveArcRemainder,
+                    stepTicks: stepTicks,
                     totalLengthRaw: compiled.TotalLengthRaw,
                     closed: compiled.Closed
                 );
@@ -398,13 +401,19 @@ public sealed partial class WorldPopulation {
 
         return m_navigation.TryLocate(cell: out cell, domain: out domain, network: network, position: in position);
     }
-    // Advances a curve-follow arc position by one compiled step, then wraps (closed) or clamps (open) it back inside
-    // [0, totalLengthRaw] — the persisted state never grows past the curve's own length, so it stays bounded across
-    // an arbitrarily long run and CompiledCurvatureSpline.EvaluateRaw's own wrap/clamp is redundant with, never a
-    // substitute for, this one (EvaluateRaw wraps its ARGUMENT; this wraps the STORED accumulator). Both arcRaw and
-    // stepRaw arrive already bounded well under long's range (CurvatureSpline's own MaxCoordinate/
-    // MaxTangentChordRatio caps bound totalLengthRaw far below 2^62), so the addition itself cannot overflow.
-    private static long AdvanceCurveArc(long arcRaw, long stepRaw, long totalLengthRaw, bool closed) {
+    // Advances a curve-follow arc position by its rate over the engine ticks a producer step covers (the remainder
+    // carried in `remainder`, so a batched steering cadence travels what the same span of single ticks would), then
+    // wraps (closed) or clamps (open) it back inside [0, totalLengthRaw] — the persisted state never grows past the
+    // curve's own length, so it stays bounded across an arbitrarily long run and CompiledCurvatureSpline.EvaluateRaw's
+    // own wrap/clamp is redundant with, never a substitute for, this one (EvaluateRaw wraps its ARGUMENT; this wraps the
+    // STORED accumulator). The rate is Q16 and the arc Q32, so the integrated step widens by 16 bits; a step covers at
+    // most a cadence of a second at a validated rate, and CurvatureSpline's own MaxCoordinate/MaxTangentChordRatio caps
+    // bound totalLengthRaw far below 2^62, so the addition cannot overflow.
+    private static long AdvanceCurveArc(long arcRaw, FixedQ4816 rate, ref long remainder, ulong stepTicks, long totalLengthRaw, bool closed) {
+        var accumulator = FixedRateAccumulator.FromRemainder(remainder: remainder, ticksPerSecond: ((long)FixedTickConversion.TicksPerSecond));
+        var stepRaw = (accumulator.Integrate(elapsedTicks: stepTicks, ratePerSecond: rate).Value << FixedQ4816.FractionBitCount);
+
+        remainder = accumulator.Remainder;
         var next = unchecked((arcRaw + stepRaw));
 
         if (!closed) {
@@ -607,7 +616,49 @@ public sealed partial class WorldPopulation {
         }
         return entry.ProducerLookup;
     }
-    // Run the named producer before motion. Live and Idle name no producer.
+    /// <summary>Returns why body <paramref name="index"/>'s producer stands down, the read a rule's
+    /// <c>$producer:</c> channel answers.</summary>
+    /// <param name="index">The 0-based body index.</param>
+    /// <returns>The reasons, or <see cref="BodyProducerStandDown.None"/> for a running producer or an index that holds
+    /// no active body.</returns>
+    public BodyProducerStandDown ProducerStandDown(int index) => (((((uint)index) < ((uint)Capacity)) && m_entries[index].Active)
+        ? m_entries[index].ProducerState.StandDown
+        : BodyProducerStandDown.None);
+    /// <summary>Sets or clears one reason body <paramref name="index"/>'s producer stands down. The producer stops on
+    /// the body's next producer step while any reason holds, and starts again from where the body stands once none
+    /// does (see <see cref="BodyProducerStandDown"/>).</summary>
+    /// <param name="index">The 0-based body index.</param>
+    /// <param name="reason">The reason to set or clear.</param>
+    /// <param name="standDown">Whether the reason holds.</param>
+    /// <returns><see langword="false"/> when the index holds no active body.</returns>
+    /// <exception cref="InvalidOperationException">A kit partition is running: the reasons change only in a serial
+    /// phase (a rule's firing, the engagement fold), so a partition's steer never sees them move.</exception>
+    public bool SetProducerStandDown(int index, BodyProducerStandDown reason, bool standDown) {
+        ThrowIfPartitioned();
+        if ((((uint)index) >= ((uint)Capacity)) || !m_entries[index].Active) { return false; }
+        ref var state = ref m_entries[index].ProducerState.StandDown;
+
+        state = (standDown ? (state | reason) : (state & ~reason));
+        return true;
+    }
+    /// <summary>Makes <paramref name="possessed"/> the bodies that stand down for
+    /// <see cref="BodyProducerStandDown.Possessed"/>: each gains the reason, and every body that held it and is not
+    /// listed loses it. Called once a tick by <see cref="WorldEngagement.FoldTick"/>, which derives the list from the
+    /// grant table.</summary>
+    /// <param name="possessed">The possessed body indices; duplicates are allowed.</param>
+    internal void SyncPossession(List<int> possessed) {
+        ThrowIfPartitioned();
+        // Recomputed whole from the grant table each tick, so a restored or scope-replayed flag can never outlive the
+        // application that set it.
+        for (var index = 0; (index < Capacity); index++) {
+            m_entries[index].ProducerState.StandDown &= ~BodyProducerStandDown.Possessed;
+        }
+        foreach (var index in possessed) {
+            _ = SetProducerStandDown(index: index, reason: BodyProducerStandDown.Possessed, standDown: true);
+        }
+    }
+    // Run the named producer before motion. Live and Idle name no producer, and a producer that stands down runs as
+    // none does. It writes only this body's own entry, so a partition may stage it.
     private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks, ProducerWork work) {
         using var measure = Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickProducers);
 
@@ -615,17 +666,20 @@ public sealed partial class WorldPopulation {
         var kitIndex = ResolveKitIndex(index: index);
 
         if (
+            (entry.ProducerState.StandDown != BodyProducerStandDown.None) ||
             (body.Source.ProducerName is not { } name) ||
             (ResolveProducer(entry: entry, name: name, table: m_kits[kitIndex].Producers) is not { } producer)
         ) {
-            // Leaving the producer lane is itself a producer transition. Do not let a prior route (or curve
-            // station) remain observable through rule facts while the body is idle, live-driven, or names a
-            // producer that the current kit does not carry.
+            // Leaving the producer lane is itself a producer transition, so returning to it starts the producer again
+            // from where the body stands (below). Do not let a prior route (or curve station) remain observable
+            // through rule facts while the body is idle, live-driven, stood down, or names a producer that the
+            // current kit does not carry.
             if (entry.ProducerState.ActiveProducerName is not null) {
                 entry.ProducerState.ActiveProducerName = null;
                 entry.ProducerState.ActiveProducerCurveIndex = -1;
                 entry.ProducerState.ActiveProducerNavigationDomainIndex = -1;
                 entry.ProducerState.CurveArcRaw = 0L;
+                entry.ProducerState.CurveArcRemainder = 0L;
                 entry.NavigationState.Clear(status: NavigationStatus.NoTarget);
                 entry.ProducerState.FlockSeeded = false;
             }
@@ -660,6 +714,7 @@ public sealed partial class WorldPopulation {
             entry.ProducerState.CurveArcRaw = ((((uint)curveIndex) < ((uint)m_curveRows.Count))
                 ? m_curveRows[curveIndex].Compiled.NearestStationRaw(position: body.FixedPosition)
                 : 0L);
+            entry.ProducerState.CurveArcRemainder = 0L;
             entry.ProducerState.ActiveProducerNavigationDomainIndex = navigationDomainIndex;
             entry.NavigationState.Clear();
             entry.ProducerState.FlockSeeded = false;
@@ -683,7 +738,8 @@ public sealed partial class WorldPopulation {
             currentTarget: entry.ProducerState.AcquiredTarget,
             self: body.FixedPosition,
             producer: producer,
-            work: work
+            work: work,
+            stepTicks: stepTicks
         );
 
         if (producer.Flock is not null) {
@@ -1022,17 +1078,21 @@ public sealed partial class WorldPopulation {
         EnsureFieldInputs(body: player, index: index);
 
         var kit = m_kits[KitIndex(index: index)];
+        // A possessed body is driven by a participant, so it moves at the full rate; a producer that stands down has
+        // no steering to batch.
+        var standDown = entry.ProducerState.StandDown;
         var locallyAutonomous = (
             !entry.IsRemoteHuman &&
             !player.Source.IsLive &&
             !player.HasMotionTape &&
-            !player.RequiresFullRateAutonomy
+            !player.RequiresFullRateAutonomy &&
+            ((standDown & BodyProducerStandDown.Possessed) == 0)
         );
         var motionPeriod = (locallyAutonomous
             ? kit.AutonomousMotionTicks
             : 0UL
         );
-        var steeringPeriod = ((!entry.IsRemoteHuman && player.Source.IsProducer)
+        var steeringPeriod = ((!entry.IsRemoteHuman && Producing(entry: entry, player: player))
             ? kit.AutonomousSteeringTicks
             : 0UL
         );
@@ -1090,11 +1150,13 @@ public sealed partial class WorldPopulation {
         return true;
     }
     // Keeps a batched body's staged steering for the motion steps between its steering refreshes.
+    // Whether the body's producer runs: its source names one and nothing stands it down.
+    private static bool Producing(Entry entry, WorldBody player) => (player.Source.IsProducer && (entry.ProducerState.StandDown == BodyProducerStandDown.None));
     private static void SeedSteering(Entry entry, WorldBody player, ulong steeringPeriod, ulong motionPeriod, ProducerWork work) {
         ref var autonomy = ref entry.AutonomyState;
 
         if (
-            player.Source.IsProducer &&
+            Producing(entry: entry, player: player) &&
             ((steeringPeriod != 0UL) || (motionPeriod != 0UL))
         ) {
             autonomy.SteeringIntent = player.StagedProducerIntent;

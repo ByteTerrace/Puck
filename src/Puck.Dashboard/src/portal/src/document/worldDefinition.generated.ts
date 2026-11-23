@@ -347,7 +347,7 @@ export type WorldDefinition = {
 /**
  * An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns — every one addresses a state row and nothing else; a document project appends its own derived arms (a participant's kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.
  */
-export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectSetBodyState | null;
+export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectTimedMove | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectSetBodyState | WorldEffectHoldProducer | WorldEffectReleaseProducer | null;
 
 /**
  * Adds to a named state cell — the same shape as SetState, here the source is the addend rather than the replacement.
@@ -3784,9 +3784,9 @@ export type SdfShadeParameter = {
 };
 
 /**
- * The three entry points of a material's presentation program.
+ * The entry points of a material's presentation program, in the order a pixel runs them: the surface, each light of its walk, the composition of the lit colour, then the ink drawn over it.
  */
-export type SdfShadePhase = "Surface" | "Light" | "Compose";
+export type SdfShadePhase = "Surface" | "Light" | "Compose" | "Ink";
 
 /**
  * A structural shape descriptor. Compilation uses the existing solid/paint emission and admission.
@@ -5652,29 +5652,13 @@ export type TextRunDocument = {
 export type TilingFamily = "Triangular" | "Kagome" | "TruncatedSquare" | "Rhombitrihexagonal" | "TruncatedHexagonal" | "ElongatedTriangular" | "TruncatedTrihexagonal" | "Penrose";
 
 /**
- * A cel style on the wire (SdfToon): the world's default style (render.toon) and a palette row's own (Toon) are this one shape, so a style authored once (the standard's styles.puck) serves both. A style marks its material styled and carries its ink; the banding is the material's shade program (the standard's celMaterial writes both), and the live world.toon off shades every styled material continuously and uninked. The engine holds no look of its own: a style that is on authors every value, and one that says enabled: false needs none. Presentation only; no field enters simulation state or the bake.
+ * A style mark on the wire (SdfToon): the world's default (render.toon) and a palette row's own (Toon) are this one shape. A style marks its material styled and carries no look: the banding and the ink are the material's shade program (the standard's celMaterial writes both), and the live world.toon off shades every styled material continuously and uninked. Presentation only; no field enters simulation state or the bake.
  */
 export type ToonStyleDocument = {
   /**
    * Whether the style is on; absent is on. False on a palette row keeps that material unstyled whatever the world's default is; false on render.toon leaves the world's default off.
    */
   enabled?: boolean | null;
-  /**
-   * The close outline radius in output pixels, in [0, 4]; zero disables outlines.
-   */
-  outlineWidth?: number | null;
-  /**
-   * The distance in metres at which the outline radius halves, in [0.1, 1000].
-   */
-  outlineDistance?: number | null;
-  /**
-   * The crease normal cosine, in [0, 0.95].
-   */
-  outlineNormal?: number | null;
-  /**
-   * The outline multiplier, three linear RGB values in [0, 1].
-   */
-  outlineTint?: DocumentVector3;
 };
 
 /**
@@ -7738,6 +7722,17 @@ export type WorldEffectEmitCue = {
 };
 
 /**
+ * Holds a world-addressed body's producer: it stands down, its body coasting to rest under its motion program, until a rule releases it with ReleaseProducer. A hold is one reason a producer stands down and possession another; the producer starts again, from where the body stands, once neither holds. A rule reads both through producer(each, held|possessed|down).
+ */
+export type WorldEffectHoldProducer = {
+  $type?: "holdProducer";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
+};
+
+/**
  * Paints one lattice field cell, or the cube of Radius around it.
  */
 export type WorldEffectPaintField = {
@@ -7831,6 +7826,17 @@ export type WorldEffectPoseCell = {
    * The pitch a teleport stands the body at, about its right axis: a creation authored standing on its edge (a playing card, whose face looks along its forward axis) is laid flat at 90 or -90. A glide keeps the body's attitude and ignores it.
    */
   pitchDegrees?: number;
+};
+
+/**
+ * Releases a world-addressed body's producer from a HoldProducer hold; releasing a body that is not held does nothing.
+ */
+export type WorldEffectReleaseProducer = {
+  $type?: "releaseProducer";
+  /**
+   * The body — an index, a $cell: indirection, or a bound key.
+   */
+  key: StateChannelRefNonNullable;
 };
 
 /**
@@ -9491,6 +9497,7 @@ export type WorldKit = {
     [k: string]: WorldPadElement;
   } | null;
   autonomy?: WorldAutonomyCadence | null;
+  mount?: WorldMount | null;
 };
 
 export type WorldKitsSection = {
@@ -9992,6 +9999,17 @@ export type WorldMotionDefaults = {
    * The largest server-correction position error, in world units, that presentation may ease instead of snapping.
    */
   maxSmoothError?: number;
+};
+
+export type WorldMount = {
+  /**
+   * Where the rider's origin is held, in the driven body's own axes at full scale.
+   */
+  seat: DocumentVector3;
+  /**
+   * Where the rider's origin is set down when it stops driving, in the same axes.
+   */
+  exit: DocumentVector3;
 };
 
 export type WorldMusicRow = {
@@ -12807,7 +12825,7 @@ export type WorldRenderSkyLayerSunDisc = {
 };
 
 /**
- * Another world, seen at infinity: a second sdf.world instance (sky$<name>) rendering the destination's session from a fixed anchor in it, turned with the viewer's camera and never translated by it. It renders only while the viewer's previous frame showed it, and only the rectangle its mask covers (a cone, or the whole frustum without a mask). The camera alone sees it, since the environment map binds no screen. At most SdfSky.MaxInfinityViews view and far layers a world, nested worlds included; a view that cannot render draws its Fallback colour.
+ * Another world in the sky: a second sdf.world instance (sky$<name>) rendering the destination's session from an anchor in it, turned with the viewer's camera. Without Follow the camera stays at the anchor, so the destination is a backdrop at infinity; with it the camera moves as the viewer does, so the destination is a place at a distance that grows as the viewer nears it, and the two worlds share one frame. It renders only while the viewer's previous frame showed it, and only the rectangle its mask covers (a cone, the cone its Bound subtends, or the whole frustum with neither). The camera alone sees it, since the environment map binds no screen. At most SdfSky.MaxInfinityViews view and far layers a world, nested worlds included; a view that cannot render draws its Fallback colour.
  */
 export type WorldRenderSkyLayerView = {
   $type?: "view";
@@ -12820,7 +12838,7 @@ export type WorldRenderSkyLayerView = {
    */
   destination?: string | null;
   /**
-   * The point in the destination the camera sits at, whatever the viewer does. Absent is its origin.
+   * The point in the destination the camera sits at, whatever the viewer does; with Follow, the point of the destination this world's origin stands at. Absent is its origin.
    */
   anchor?: DocumentVector3;
   /**
@@ -12851,6 +12869,18 @@ export type WorldRenderSkyLayerView = {
    * BindableColor's grammar: the colour drawn where the view cannot render, before its first image and past the nesting depth or the cap. Absent is black.
    */
   fallback?: BindableColor;
+  /**
+   * Whether the camera moves with the viewer's. Absent is not.
+   */
+  follow?: boolean | null;
+  /**
+   * The sphere that bounds what the view shows, in the destination's coordinates. Absent is none.
+   */
+  bound?: WorldRenderSkyLayerWorldSkyViewBound | null;
+  /**
+   * Whether the view draws only the destination's geometry, so this world's sky shows around it. Absent is not: the destination's own sky fills the view.
+   */
+  coverage?: boolean | null;
   layerName?: string | null;
   /**
    * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
@@ -12884,6 +12914,20 @@ export type WorldRenderSkyLayerView = {
    * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
    */
   tier?: WorldSkyTier | null;
+};
+
+/**
+ * The sphere that bounds what a View shows.
+ */
+export type WorldRenderSkyLayerWorldSkyViewBound = {
+  /**
+   * The sphere's centre, in the destination's coordinates.
+   */
+  center: DocumentVector3;
+  /**
+   * The sphere's radius, in world units, positive.
+   */
+  radius: number;
 };
 
 /**

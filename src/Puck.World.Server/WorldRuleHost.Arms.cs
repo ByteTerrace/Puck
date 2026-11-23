@@ -229,6 +229,19 @@ public sealed partial class WorldRuleHost {
                 if (ok && !firing.Preflight) { m_factsStale = true; m_inputsStale = true; }
                 return ok;
             }
+            case WorldProducerHoldEffect hold: {
+                var bodyIndex = BodyIndexOf(source: firing.Values[WorldProducerHoldEffect.BodySource]);
+
+                if (Host.Body(index: bodyIndex) is null) {
+                    return Refuse(code: WorldRuleEffectRefusal.BodyInactive, reason: $"body:{bodyIndex} is inactive", refusal: out refusal);
+                }
+                refusal = EffectRefusal.None;
+                if (!firing.Preflight) {
+                    _ = Host.Population.SetProducerStandDown(index: bodyIndex, reason: BodyProducerStandDown.Held, standDown: hold.Hold);
+                    m_factsStale = true;
+                }
+                return true;
+            }
             case WorldIdentityFactEffect fact:
                 return FireIdentityFact(
                     effect: fact,

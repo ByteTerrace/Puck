@@ -309,6 +309,40 @@ public sealed class NearestOperand : WorldOperandFact {
     public string Row { get; }
     public StateHandle StateHandle { get; }
 }
+/// <summary>Why a body's producer stands down. A body whose producer stands down for any reason runs none of its
+/// producer program: it stages the inert intent, as a body naming no producer does, and its producer runtime (the
+/// route, the curve station, the flock seed) is cleared. When every reason has gone the producer starts again from
+/// where the body stands, as selecting any producer does: a curve follower joins its curve at the station nearest the
+/// body, a navigated one routes again to its register's goal, a flock seeds again.</summary>
+[Flags]
+public enum BodyProducerStandDown : byte {
+    /// <summary>The producer runs.</summary>
+    None = 0,
+
+    /// <summary>A world rule holds the body (<see cref="WorldEffect.HoldProducer"/>) until a rule releases it
+    /// (<see cref="WorldEffect.ReleaseProducer"/>).</summary>
+    Held = 1,
+
+    /// <summary>A participant other than the body's own drives it: that participant's control set names the body
+    /// and it holds Drive over it. The authority derives this from the grant table every tick.</summary>
+    Possessed = 2,
+}
+/// <summary>Whether a body's producer stands down for any of <see cref="Reasons"/>
+/// (<see cref="WorldRuleFacts.ProducerPrefix"/>): <c>1</c> when it does, <c>0</c> otherwise.</summary>
+public sealed class ProducerOperand : WorldOperandFact {
+    /// <summary>Initializes a new instance of the <see cref="ProducerOperand"/> class.</summary>
+    /// <param name="bodyA">The body read.</param>
+    /// <param name="reasons">The reasons the read tests, any of which reads <c>1</c>.</param>
+    public ProducerOperand(CompiledBodyRef bodyA, BodyProducerStandDown reasons) : base(CellKind.Int) {
+        BodyA = bodyA;
+        Reasons = reasons;
+    }
+
+    /// <summary>Gets the body read.</summary>
+    public CompiledBodyRef BodyA { get; }
+    /// <summary>Gets the reasons the read tests.</summary>
+    public BodyProducerStandDown Reasons { get; }
+}
 /// <summary>One facet of a body's navigation state (<see cref="WorldRuleFacts.NavigationPrefix"/>).</summary>
 public sealed class NavigationOperand : WorldOperandFact {
     public NavigationOperand(CompiledBodyRef bodyA, string facet) : base(CellKind.Int) {
