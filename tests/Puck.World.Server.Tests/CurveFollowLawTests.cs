@@ -87,32 +87,16 @@ public sealed class CurveFollowLawTests {
         Y: FixedQ4816.Zero,
         Z: FixedQ4816.Zero
     );
-    // ProduceSteeringIntent's roam shape never governs this producer (SenseNearestInCone always finds the curve
-    // point), but the op reads the full parameter set regardless of which shape a given tick takes.
+    // The approach and facing scalars only: a curve always has a target, so the roam shape is unreachable and its
+    // scalars are refused.
     private static BodyProgramParameters FollowerProducerParameters(float orbit) => new(
         Scalars: new Dictionary<string, float> {
             ["standoffRadius"] = 0.1f,
             ["approach"] = 1f,
             ["orbit"] = orbit,
-            ["altitudeGain"] = 0f,
             ["approachAltitudeGain"] = 0f,
             ["inwardGain"] = 3f,
             ["turnScale"] = 3f,
-            ["forward"] = 0f,
-            ["softRadius"] = 1f,
-            ["weaveAmplitude"] = 0f,
-            ["weaveFrequencyBase"] = 0f,
-            ["weaveFrequencyRange"] = 0f,
-            ["activityRateBase"] = 0f,
-            ["activityRateRange"] = 0f,
-            ["strafeWave"] = 0f,
-            ["turnWave"] = 0f,
-            ["upWave"] = 0f,
-            ["pitchWave"] = 0f,
-            ["rollTurn"] = 0f,
-            ["pressThreshold"] = 0f,
-            ["altitudeBase"] = 0f,
-            ["altitudeRange"] = 0f,
         },
         Channels: new Dictionary<string, string>()
     );

@@ -3,7 +3,8 @@
 // Each vehicle drives the `walk` program under a shaping row that grips across its heading, and follows the loop from
 // where it is placed. A walker on a navigated route laps four stops under four Level rules, "at stop s and arrived,
 // designate stop s + 1": moving its goal clears its arrival for the rest of the tick, so it advances one stop per
-// arrival. `puck test worlds/debug/roads-tests.puck --reproduce`.
+// arrival. A holder on the same route program has its route cleared mid-walk and stands still, since its target
+// source states no roam fallback. `puck test worlds/debug/roads-tests.puck --reproduce`.
 schema: "puck.world.definition.v1"
 documentId: "roads-tests"
 
@@ -12,10 +13,10 @@ import "../standard/kits"
 import "../standard/domains"
 import "../standard/vehicle"
 
-// Capacity four: the seat at 0, then the inhabitants from the top down in placement order, so the walker is body 3,
-// the vehicle on the south straight body 2 and the one on the north straight body 1.
+// Capacity five: the seat at 0, then the inhabitants from the top down in placement order, so the walker is body 4,
+// the vehicle on the south straight body 3, the one on the north straight body 2 and the holder body 1.
 bodies {
-  capacity: 4
+  capacity: 5
   localSeats: 1
   networkPlayers: 0
   reconnectGraceSeconds: 0
@@ -85,30 +86,41 @@ state {
 rule "rounds-start" {
   when $tick >= 2
   mode: Edge
-  designate(key: 3, kind: Point, register: "route", position: [20, 0, 20])
+  designate(key: 4, kind: Point, register: "route", position: [20, 0, 20])
 }
 rule "rounds-next-1" {
-  when stop == 0 and nav(body, 3, arrived) == 1
+  when stop == 0 and nav(body, 4, arrived) == 1
   mode: Level
-  designate(key: 3, kind: Point, register: "route", position: [30, 0, 20])
+  designate(key: 4, kind: Point, register: "route", position: [30, 0, 20])
   stop = 1
 }
 rule "rounds-next-2" {
-  when stop == 1 and nav(body, 3, arrived) == 1
+  when stop == 1 and nav(body, 4, arrived) == 1
   mode: Level
-  designate(key: 3, kind: Point, register: "route", position: [30, 0, 30])
+  designate(key: 4, kind: Point, register: "route", position: [30, 0, 30])
   stop = 2
 }
 rule "rounds-next-3" {
-  when stop == 2 and nav(body, 3, arrived) == 1
+  when stop == 2 and nav(body, 4, arrived) == 1
   mode: Level
-  designate(key: 3, kind: Point, register: "route", position: [20, 0, 30])
+  designate(key: 4, kind: Point, register: "route", position: [20, 0, 30])
   stop = 3
 }
+// The holder sets off along z 33 and has its route cleared a second later: it stops where it is.
+rule "holder-sets-off" {
+  when $tick >= 2
+  mode: Edge
+  designate(key: 1, kind: Point, register: "route", position: [32, 0, 33])
+}
+rule "holder-cleared" {
+  when $tick >= 62
+  mode: Edge
+  designate(key: 1, kind: Clear, register: "route")
+}
 rule "rounds-next-0" {
-  when stop == 3 and nav(body, 3, arrived) == 1
+  when stop == 3 and nav(body, 4, arrived) == 1
   mode: Level
-  designate(key: 3, kind: Point, register: "route", position: [20, 0, 20])
+  designate(key: 4, kind: Point, register: "route", position: [20, 0, 20])
   stop = 0
 }
 
@@ -214,19 +226,39 @@ placements {
       source: producer(name: "loopRoute")
     }
   }
+  placement "holder" {
+    prototype: "walker"
+    position [18, 0, 33]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "walker"
+      look: "walker"
+      source: producer(name: "rounds")
+    }
+  }
 }
 
+
+// The world runs at 30 Hz. A vehicle reaches about 5.5 m/s in a second and a half, the walker walks 4 m/s.
 test "each vehicle drives its straight from where it stands" {
   when {
-    ticks 120
+    ticks 45
   }
   expect {
-    bodyPosition(body, 2, x) > 2
-    bodyPosition(body, 2, z) > -9.5
-    bodyPosition(body, 2, z) < -6.5
-    bodyPosition(body, 1, x) < -2
-    bodyPosition(body, 1, z) > 6.5
-    bodyPosition(body, 1, z) < 9.5
+    bodyPosition(body, 3, x) > 0
+    bodyPosition(body, 3, z) > -9.5
+    bodyPosition(body, 3, z) < -7
+    bodyPosition(body, 2, x) < 0
+    bodyPosition(body, 2, z) > 7
+    bodyPosition(body, 2, z) < 9.5
   }
 }
 
@@ -235,32 +267,63 @@ test "the vehicles keep to the loop as they lap it" {
     ticks 900
   }
   expect {
+    absolute(bodyPosition(body, 3, x)) < 14
+    absolute(bodyPosition(body, 3, z)) < 10
+    (absolute(bodyPosition(body, 3, x)) > 9) or (absolute(bodyPosition(body, 3, z)) > 5)
     absolute(bodyPosition(body, 2, x)) < 14
     absolute(bodyPosition(body, 2, z)) < 10
     (absolute(bodyPosition(body, 2, x)) > 9) or (absolute(bodyPosition(body, 2, z)) > 5)
-    absolute(bodyPosition(body, 1, x)) < 14
-    absolute(bodyPosition(body, 1, z)) < 10
-    (absolute(bodyPosition(body, 1, x)) > 9) or (absolute(bodyPosition(body, 1, z)) > 5)
   }
 }
 
+// Already standing at stop 0 when it is designated, the walker arrives at once; the cascade of Level rules would then
+// carry it round all four stops back to stop 0 in that tick, but its first redesignation clears the arrival.
 test "the walker advances one stop per arrival" {
   when {
-    ticks 120
+    ticks 60
   }
   expect {
     stop == 1
-    bodyPosition(body, 3, x) > 22
-    bodyPosition(body, 3, z) > 18
-    bodyPosition(body, 3, z) < 22
+    bodyPosition(body, 4, x) > 24
+    bodyPosition(body, 4, x) < 29.5
+    bodyPosition(body, 4, z) > 19
+    bodyPosition(body, 4, z) < 21
   }
 }
 
-test "the walker laps its four stops" {
+test "the walker's second arrival advances it once more" {
   when {
-    ticks 840
+    ticks 121
   }
   expect {
-    stop >= 2
+    stop == 2
+    bodyPosition(body, 4, x) > 28.5
+    bodyPosition(body, 4, z) > 22
+    bodyPosition(body, 4, z) < 29
+  }
+}
+
+// The holder walks +X from x 18 for two seconds, then holds wherever its cleared route left it, near x 25.8.
+test "a cleared route holds the body still" {
+  when {
+    ticks 150
+  }
+  expect {
+    bodyPosition(body, 1, x) > 24.5
+    bodyPosition(body, 1, x) < 27
+    bodyPosition(body, 1, z) > 32.5
+    bodyPosition(body, 1, z) < 33.5
+  }
+}
+
+test "a cleared route still holds the body much later" {
+  when {
+    ticks 600
+  }
+  expect {
+    bodyPosition(body, 1, x) > 24.5
+    bodyPosition(body, 1, x) < 27
+    bodyPosition(body, 1, z) > 32.5
+    bodyPosition(body, 1, z) < 33.5
   }
 }

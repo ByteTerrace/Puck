@@ -279,6 +279,7 @@ public static partial class WorldModelShape {
             [],
             [
                 M("register", typeof(global::System.String), typeof(global::Puck.Physics.Motion.BodyTargetSource.Designated), "Register", Read | Write | Required, static value => ((global::Puck.Physics.Motion.BodyTargetSource.Designated)value).Register, text: "a target register name"),
+                M("fallback", typeof(global::Puck.Physics.Motion.BodyTargetFallback), typeof(global::Puck.Physics.Motion.BodyTargetSource.Designated), "Fallback", Read | Write, static value => ((global::Puck.Physics.Motion.BodyTargetSource.Designated)value).Fallback),
             ],
             []),
         T(typeof(global::Puck.Physics.Motion.BodyTargetSource.Navigated), true, JsonTypeInfoKind.Object, null,
@@ -286,6 +287,7 @@ public static partial class WorldModelShape {
             [
                 M("domain", typeof(global::System.String), typeof(global::Puck.Physics.Motion.BodyTargetSource.Navigated), "Domain", Read | Write | Required, static value => ((global::Puck.Physics.Motion.BodyTargetSource.Navigated)value).Domain, text: "a navigation domain"),
                 M("register", typeof(global::System.String), typeof(global::Puck.Physics.Motion.BodyTargetSource.Navigated), "Register", Read | Write | Required, static value => ((global::Puck.Physics.Motion.BodyTargetSource.Navigated)value).Register, text: "a target register name"),
+                M("fallback", typeof(global::Puck.Physics.Motion.BodyTargetFallback), typeof(global::Puck.Physics.Motion.BodyTargetSource.Navigated), "Fallback", Read | Write, static value => ((global::Puck.Physics.Motion.BodyTargetSource.Navigated)value).Fallback),
             ],
             []),
         T(typeof(global::Puck.Physics.Motion.BodyTargetSource.Sensed), true, JsonTypeInfoKind.Object, null,

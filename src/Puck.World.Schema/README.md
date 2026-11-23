@@ -3087,7 +3087,10 @@ program that does not select both operations (`ParameterUnknown`).
 program whose target source is `{ "$type": "navigated", "domain": "…",
 "register": "…" }`. The register remains the authority-checked destination;
 navigation only replaces the direct bearing with deterministic intermediate
-waypoints. `surface` domains sample ground from the world's SDF, enforce step
+waypoints. While the register is empty or cleared (`designate(kind: Clear)`),
+or no route reaches it, the body holds still; a target source that states
+`"fallback": "Roam"` (also on `designated`) roams by its kit's roam scalars
+instead, and only such a producer may author them. `surface` domains sample ground from the world's SDF, enforce step
 and slope limits, and bake both vertical capsule clearance and swept clearance
 between adjacent cells from `maxStepHeight` above the foot up to the head. `volume` domains are collision-free 3D grids for
 airborne or otherwise unconstrained actors. `medium` domains are 3D grids that

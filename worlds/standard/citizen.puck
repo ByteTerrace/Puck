@@ -47,28 +47,12 @@ template citizenDesign(domain, motionSeconds = 0.1, steeringSeconds = 0.2) {
         citizenErrand {
           channels {}
           scalars {
-            forward: 1
             approach: 1
             approachAltitudeGain: 0
             standoffRadius: 0.8
             orbit: 0
-            softRadius: 2
             inwardGain: 3
             turnScale: 3
-            weaveAmplitude: 0
-            weaveFrequencyBase: 0
-            weaveFrequencyRange: 0
-            activityRateBase: 1
-            activityRateRange: 0
-            altitudeBase: 0
-            altitudeGain: 0
-            altitudeRange: 0
-            pitchWave: 0
-            pressThreshold: 0
-            rollTurn: 0
-            strafeWave: 0
-            turnWave: 0
-            upWave: 0
           }
         }
       }

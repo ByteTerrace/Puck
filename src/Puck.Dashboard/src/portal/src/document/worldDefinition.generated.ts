@@ -1116,6 +1116,8 @@ export type BodyProgramParameters = {
   flock?: WorldFlockProfile | null;
 };
 
+export type BodyTargetFallback = "Hold" | "Roam";
+
 export type BodyTargetScope = "Seats" | "Bodies";
 
 export type BodyTargetSource = BodyTargetSourceSensed | BodyTargetSourceDesignated | BodyTargetSourceCurveFollow | BodyTargetSourceNavigated | null;
@@ -1129,12 +1131,14 @@ export type BodyTargetSourceCurveFollow = {
 export type BodyTargetSourceDesignated = {
   $type?: "designated";
   register: string;
+  fallback?: BodyTargetFallback;
 };
 
 export type BodyTargetSourceNavigated = {
   $type?: "navigated";
   domain: string;
   register: string;
+  fallback?: BodyTargetFallback;
 };
 
 export type BodyTargetSourceSensed = {
