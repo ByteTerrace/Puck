@@ -6,6 +6,31 @@ public static partial class WorldDefinitionLoader {
     /// <summary>Whether this process admitted the document from a file. A wire definition has no file provenance.</summary>
     public static bool IsFileAdmission(WorldDefinition definition) => definition.ReadFromFile;
 
+    /// <summary>Parses composed bytes that came from no file and gives the definition the directory its relative paths
+    /// resolve beside. Bytes carry no trace of where their document's assets live, so every byte-level door of this
+    /// loader, and every reader of a release's published definitions, parses here and names that directory: a caller
+    /// cannot read such a document without deciding where its voices, tunes and patches are. Only parses; validation and
+    /// draws remain the caller's.</summary>
+    /// <param name="utf8">The composed document's UTF-8 JSON.</param>
+    /// <param name="sourceName">The origin echoed in refusals.</param>
+    /// <param name="documentDirectory">The directory the document's relative paths resolve beside
+    /// (<see cref="WorldDefinition.DocumentDirectory"/>): for a hosted or released document, the host's layout of its
+    /// documents (a silo's <c>documentDirectory</c>); <see langword="null"/> only for a document that authors no relative
+    /// path, which then refuses one by name.</param>
+    /// <param name="definition">The parsed definition carrying <paramref name="documentDirectory"/>, or
+    /// <see langword="null"/> on refusal.</param>
+    /// <param name="reason">The named parse or schema failure, or empty on success.</param>
+    /// <returns>Whether the bytes parsed.</returns>
+    public static bool TryParseBeside(ReadOnlyMemory<byte> utf8, string sourceName, string? documentDirectory,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out string reason) {
+        if (!WorldDefinitionFileSource.TryParseDocument(definition: out var parsed, reason: out reason, sourceName: sourceName, utf8: utf8)) {
+            definition = null;
+            return false;
+        }
+        definition = (parsed! with { DocumentDirectory = documentDirectory });
+        return true;
+    }
+
     /// <summary>Loads composed bytes and retains the final, draw-resolved document's validation and programs.</summary>
     /// <param name="utf8">The composed JSON bytes.</param>
     /// <param name="sourceName">The origin echoed in refusals.</param>
@@ -30,9 +55,9 @@ public static partial class WorldDefinitionLoader {
         admission = null;
         if (!TryDecode(json: out var json, reason: out reason, sourceName: sourceName, utf8: utf8)) { return false; }
         if (compiled is null) {
-            if (!WorldDefinitionFileSource.TryParseDocument(definition: out var parsed, utf8: json,
+            if (!TryParseBeside(definition: out var parsed, documentDirectory: documentDirectory, utf8: json,
                 reason: out reason, sourceName: sourceName)) { return false; }
-            return TryPrepareAndAdmit(keys: keys, catalog: catalog, definition: (parsed! with { DocumentDirectory = documentDirectory }), instanceIdentity: instanceIdentity, neighbours: neighbours,
+            return TryPrepareAndAdmit(keys: keys, catalog: catalog, definition: parsed, instanceIdentity: instanceIdentity, neighbours: neighbours,
                 overrides: overrides, reason: out reason, resolved: out admission, sourceName: sourceName);
         }
         // A compiled world keyed by these bytes answers the drawn definition, so the authored one is parsed only when
@@ -43,8 +68,8 @@ public static partial class WorldDefinitionLoader {
             documentDirectory: documentDirectory,
             drawn: out var drawn,
             instanceIdentity: instanceIdentity,
-            parse: () => (WorldDefinitionFileSource.TryParseDocument(definition: out var authored, utf8: json, reason: out var parseReason, sourceName: sourceName)
-                ? ((authored! with { DocumentDirectory = documentDirectory }), string.Empty)
+            parse: () => (TryParseBeside(definition: out var authored, documentDirectory: documentDirectory, utf8: json, reason: out var parseReason, sourceName: sourceName)
+                ? (authored, string.Empty)
                 : (null, parseReason)),
             reason: out reason,
             sourceName: sourceName
@@ -77,10 +102,9 @@ public static partial class WorldDefinitionLoader {
         [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out string reason,
         IMachineValidationCatalog? catalog = null, string? documentDirectory = null) {
         definition = null;
-        if (!WorldDefinitionFileSource.TryParseDocument(definition: out var parsed, json: json, reason: out reason, sourceName: sourceName)) {
+        if (!TryParseBeside(definition: out var parsed, documentDirectory: documentDirectory, reason: out reason, sourceName: sourceName, utf8: System.Text.Encoding.UTF8.GetBytes(s: json))) {
             return false;
         }
-        parsed = (parsed! with { DocumentDirectory = documentDirectory });
         if (!TryProvePublishable(catalog: catalog, definition: parsed, reason: out reason, sourceName: sourceName)) {
             return false;
         }
@@ -169,8 +193,8 @@ public static partial class WorldDefinitionLoader {
         try {
             return (
                 TryDecode(json: out var json, reason: out reason, sourceName: sourceName, utf8: utf8) &&
-                WorldDefinitionFileSource.TryParseDocument(definition: out var parsed, reason: out reason, sourceName: sourceName, utf8: json) &&
-                TryPrepareBootValues(keys: keys, definition: (parsed! with { DocumentDirectory = documentDirectory }), instanceIdentity: instanceIdentity, reason: out reason, resolved: out definition, sourceName: sourceName)
+                TryParseBeside(definition: out var parsed, documentDirectory: documentDirectory, reason: out reason, sourceName: sourceName, utf8: json) &&
+                TryPrepareBootValues(keys: keys, definition: parsed, instanceIdentity: instanceIdentity, reason: out reason, resolved: out definition, sourceName: sourceName)
             );
         } catch (Exception exception) {
             definition = null;

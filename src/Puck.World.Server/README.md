@@ -193,7 +193,12 @@ metadata changes can pass; unsupported definition sections and conflicting live
 values refuse. Qualification is repeated for rollback against the latest state.
 Published package definitions are parsed as composed documents, so a boot draw
 may still be unfilled. The checkpoint's live definition and undo base use the
-strict saved-state reader. `LoadPublishedDefinitionBytesAsync` reads exact
+strict saved-state reader. Both packages are parsed through
+`WorldDefinitionLoader.TryParseBeside` with the store's document directory, the
+directory its checkpoints decode beside, and the transition resolves both packages
+and both checkpoint documents beside that one directory, so a world whose assets
+are relative paths (the debug world's voices and tunes) qualifies as its silo
+runs it. `LoadPublishedDefinitionBytesAsync` reads exact
 root-selected source bytes for bootstrap retry checks without initializing draws;
 `LoadDefinitionAsync` remains the runtime-loading path.
 

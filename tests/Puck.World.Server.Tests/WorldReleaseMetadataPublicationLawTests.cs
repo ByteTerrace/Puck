@@ -15,6 +15,27 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
         value: "/authority/root"
     );
 
+    // A world whose assets are relative paths publishes its metadata change beside the store's document directory, the
+    // directory the silo that runs it resolves them beside: both packages and the checkpoint's documents resolve there.
+    [Fact]
+    public async Task RelativeAssetPathsPublishBesideTheStoresDocumentDirectory() {
+        using var scenario = await Scenario.CreateAsync(relativeAssets: true);
+        var outcome = await scenario.ApplyAsync();
+
+        Assert.True(
+            condition: outcome.Ok,
+            userMessage: outcome.Detail
+        );
+        var recovery = (await scenario.Store.LoadRecoveryAsync(
+            scenario.Identity,
+            Token
+        ))!.Value;
+
+        Assert.Equal(
+            "B",
+            recovery.Definition!.Metadata!.Title
+        );
+    }
     [Fact]
     public async Task ConflictingCurrentMetadataRefusesBeforeUploadingCandidateObjects() {
         using var scenario = await Scenario.CreateAsync(conflict: true);
@@ -512,6 +533,9 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
         public WorldAuthorityBlobStore Store { get; }
         public DirectoryObjectStorageTarget Target { get; }
 
+        // The directory the scenario's documents resolve their relative paths beside, as a silo lays out its documents.
+        public string DocumentDirectory => m_directory.RootPath;
+
         private Scenario() {
             Target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
                 path1: m_directory.RootPath,
@@ -521,7 +545,8 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
             Store = new(
                 store: Blobs,
                 target: Target,
-                timeProvider: new VirtualClock()
+                timeProvider: new VirtualClock(),
+                documentDirectory: DocumentDirectory
             );
             Archive = new(
                 Blobs,
@@ -591,7 +616,8 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
             Archive,
             Token
         );
-        public static async Task<Scenario> CreateAsync(bool conflict = false, bool owned = false, bool tail = false, bool deferredDraw = false, string? reset = null) {
+        public static async Task<Scenario> CreateAsync(bool conflict = false, bool owned = false, bool tail = false, bool deferredDraw = false, string? reset = null,
+            bool relativeAssets = false) {
             var scenario = new Scenario();
             var a = Fixtures.BuildDocument() with {
                 Metadata = new(
@@ -599,6 +625,25 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
                 Description: "authored"
             ),
             };
+
+            if (relativeAssets) {
+                // A world whose patch is a relative path, published undrawn as a release publishes it.
+                CompiledWorldFixtures.WritePatchBeside(directory: scenario.m_directory);
+                Assert.True(
+                    condition: WorldDefinitionLoader.TryReadPublishable(
+                        definition: out var parsed,
+                        documentDirectory: scenario.DocumentDirectory,
+                        json: CompiledWorldFixtures.World.Replace(
+                            newValue: CompiledWorldFixtures.PatchBeside,
+                            oldValue: "PATCH"
+                        ),
+                        reason: out var besideReason,
+                        sourceName: "relative assets"
+                    ),
+                    userMessage: besideReason
+                );
+                a = parsed with { Metadata = a.Metadata };
+            }
 
             if (deferredDraw) {
                 var tree = JsonNode.Parse(WorldDefinitionSerialization.Serialize(definition: a))!;
@@ -642,6 +687,7 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
                 userMessage: bootReason
             );
             using var fixture = Fixtures.FreshServer(live with {
+                DocumentDirectory = a.DocumentDirectory,
                 Metadata = new(
                 Title: (conflict
                 ? "operator"

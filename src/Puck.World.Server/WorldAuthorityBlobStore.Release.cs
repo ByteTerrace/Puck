@@ -1,4 +1,3 @@
-using System.Text;
 using Puck.Abstractions.Machines;
 using Puck.Assets;
 using Puck.Storage;
@@ -166,24 +165,27 @@ public sealed partial class WorldAuthorityBlobStore {
         if (checkpoint!.Server.LastCompletedTick != protectedRoot.Root.CheckpointTick) {
             return WorldAuthorityStoreOutcome.Failed(detail: "protected checkpoint tick does not match its authority root");
         }
-        // Package definitions are published undrawn and only parsed here: the transition compares their metadata and
-        // rewrites the checkpoint's live documents, the only ones that hold drawn cells.
+        // Package definitions are published undrawn and only parsed here, beside the directory the checkpoint decoded
+        // beside: the transition proves both, compares their metadata and rewrites the checkpoint's live documents (the
+        // only ones that hold drawn cells), all against that one directory.
         if (
-            !WorldDefinitionFileSource.TryParseDocument(
+            !WorldDefinitionLoader.TryParseBeside(
             definition: out var sourceDefinition,
-            json: Encoding.UTF8.GetString(bytes: sourceBytes.Span),
+            documentDirectory: m_documentDirectory,
             reason: out reason,
-            sourceName: source.DefinitionFiles[key]
+            sourceName: source.DefinitionFiles[key],
+            utf8: sourceBytes
         ) ||
-            !WorldDefinitionFileSource.TryParseDocument(
+            !WorldDefinitionLoader.TryParseBeside(
             definition: out var targetDefinition,
-            json: Encoding.UTF8.GetString(bytes: targetBytes.Span),
+            documentDirectory: m_documentDirectory,
             reason: out reason,
-            sourceName: target.DefinitionFiles[key]
+            sourceName: target.DefinitionFiles[key],
+            utf8: targetBytes
         ) ||
             !WorldReleaseMetadataTransition.TryApply(
-            after: targetDefinition!,
-            before: sourceDefinition!,
+            after: targetDefinition,
+            before: sourceDefinition,
             current: checkpoint,
             machines: machines,
             reason: out reason,

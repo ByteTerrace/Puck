@@ -7,8 +7,8 @@ namespace Puck.World.Server;
 /// <summary>Prepares an authored metadata delta against a complete checkpoint without replaying gameplay or
 /// taking the ordinary reload path. This preservation rule does not itself authorize a deployment.</summary>
 public static class WorldReleaseMetadataTransition {
-    private static byte[] ApplyDefinition(byte[] bytes, Member source, Member target, string scope, IMachineValidationCatalog? machines) {
-        var definition = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
+    private static byte[] ApplyDefinition(byte[] bytes, Member source, Member target, string scope, string? documentDirectory, IMachineValidationCatalog? machines) {
+        var definition = WorldDefinitionSerialization.Deserialize(documentDirectory: documentDirectory, utf8Json: bytes);
         var document = JsonNode.Parse(WorldDefinitionSerialization.Serialize(definition: definition))!.AsObject();
         var metadata = Merge(
             source,
@@ -18,7 +18,7 @@ public static class WorldReleaseMetadataTransition {
         );
 
         if (metadata.Exists) { document["metadata"] = metadata.Value; } else { document.Remove(propertyName: "metadata"); }
-        var result = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: document.ToJsonString()));
+        var result = WorldDefinitionSerialization.Deserialize(documentDirectory: documentDirectory, utf8Json: System.Text.Encoding.UTF8.GetBytes(s: document.ToJsonString()));
 
         if (!Validate(
             definition: result,
@@ -129,7 +129,10 @@ public static class WorldReleaseMetadataTransition {
     /// <summary>Applies only the published metadata changes to both the live definition and its undo base.
     /// Arrays are indivisible values; object members merge independently. A changed live value refuses the
     /// transition, including when it already equals the requested target. Custom object key order may change
-    /// after deletion and reintroduction; metadata values and all other checkpoint state are retained.</summary>
+    /// after deletion and reintroduction; metadata values and all other checkpoint state are retained. Both packages and
+    /// the checkpoint's documents resolve their relative paths beside the one directory the packages carry
+    /// (<see cref="WorldDefinition.DocumentDirectory"/>, as <see cref="WorldDefinitionLoader.TryParseBeside"/> gives it),
+    /// the hosting silo's layout of its documents; packages that carry different directories are refused.</summary>
     /// <param name="before">The source release's published definition.</param>
     /// <param name="after">The target release's published definition.</param>
     /// <param name="current">The complete current gameplay checkpoint.</param>
@@ -143,6 +146,12 @@ public static class WorldReleaseMetadataTransition {
         ArgumentNullException.ThrowIfNull(after);
         ArgumentNullException.ThrowIfNull(current);
         transitioned = null;
+        var documentDirectory = before.DocumentDirectory;
+
+        if (!string.Equals(a: documentDirectory, b: after.DocumentDirectory, comparisonType: StringComparison.Ordinal)) {
+            reason = "release definitions resolve their relative paths beside different directories";
+            return false;
+        }
         // Both package definitions are published undrawn; each is proved through a drawn copy, as a release read proves
         // it, since a document whose references read a drawn cell cannot be judged undrawn.
         if (
@@ -176,6 +185,7 @@ public static class WorldReleaseMetadataTransition {
                 source,
                 target,
                 "live",
+                documentDirectory,
                 machines
             );
             var undoBase = ApplyDefinition(
@@ -183,6 +193,7 @@ public static class WorldReleaseMetadataTransition {
                 source,
                 target,
                 "undo base",
+                documentDirectory,
                 machines
             );
 
