@@ -182,6 +182,8 @@
 #define SDF_SHADOW_CULLED_ENTRY_PHASE     5u
 #define SDF_SIGHT_COUNT_BASE              7u
 #define SDF_MESH_MARK_BASE                64u
+#define SDF_MESH_VERTEX_COUNT_BASE        57u
+#define SDF_MESH_SHADOW_FILTER_TEXELS     14.0
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
 #define SDF_MESH_IRRADIANCE_PROBE_WORDS                 247u

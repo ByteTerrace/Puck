@@ -30,11 +30,18 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // Every pass reserves early/late entry; cascades also reserve exit, extinction and compact culled entry.
     private readonly uint m_argumentPhases;
     private readonly bool m_optical;
+    // Whether every stage reads back the vertices its phases drew (Measured), and the tag the stage being recorded
+    // carries to its measurement.
+    private readonly bool m_measures;
+    private long m_tag;
     // The counts' draw phases and portal sight verdicts; the selection marks follow from MeshMarkBase, which the
     // unsigned constant keeps past the verdicts at compile time.
     private const int SightWords = (SdfKernelInterfaces.MeshSightCountBase + SdfPortalSight.Capacity);
     private const uint MarkRoom = (uint)(SdfKernelInterfaces.MeshMarkBase - SightWords);
     private const ulong CountsBytes = (SightWords * sizeof(uint));
+    // The bytes of the counts a measured stage reads back: through the vertex words under the marks, which the sight
+    // verdicts must end before (the constant's conversion fails to compile otherwise).
+    private const ulong MeasuredBytes = ((SightWords + ((uint)(SdfKernelInterfaces.MeshVertexCountBase - SightWords)) + SdfKernelInterfaces.MeshShadowPhases) * sizeof(uint));
     // The draws one mark word holds: two bits each.
     private const uint DrawsPerMarkWord = 16u;
     // The most shares one staged draw list splits into (Stage): eight bits of the controls' fourth word.
@@ -83,14 +90,17 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         internal bool Marks;
         internal ulong Bytes;
         internal uint Draws;
+        internal bool Measured;
+        internal long Tag;
         internal long RowEpoch;
         internal SdfWorldTables? Tables;
     }
 
     // Creates a view's occlusion state; every buffer is created on the first frame that needs it.
-    public SdfMeshOcclusion(IGpuBufferFactory buffers, int slots, string owner, string part, bool cascade, bool optical = false, SdfPortalSight? sight = null) {
+    public SdfMeshOcclusion(IGpuBufferFactory buffers, int slots, string owner, string part, bool cascade, bool optical = false, SdfPortalSight? sight = null, bool measures = false) {
         m_argumentPhases = cascade ? SdfKernelInterfaces.MeshShadowPhases : 2u;
         m_optical = optical;
+        m_measures = measures;
         m_retired = Enumerable.Range(count: slots, start: 0).Select(selector: static _ => new List<IGpuBuffer>()).ToArray();
         m_owner = owner;
         m_part = part;
@@ -113,6 +123,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     public string Part => m_part;
     // The candidates staged for the frame.
     public uint CandidateCount => m_count;
+    // Receives, once the node proves a measured stage's slot complete, the tag the stage was staged with and the vertices
+    // every phase of it rasterized together.
+    public Action<long, ulong>? Measured { get; set; }
 
     internal void Submitted(int slot) => m_readbacks.Submitted(slot: slot);
     // The node proved the slot's previous submission complete: one queue completed every earlier submission too, so the
@@ -140,6 +153,12 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         ((IGpuReadbackBuffer)slot.Buffer.Buffer!).Read(System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: read));
         if (slot.Sight) { m_sight!.Complete(slot.Epoch, slot.Sightings, read.Slice(start: SdfKernelInterfaces.MeshSightCountBase, length: SdfPortalSight.Capacity)); }
         if (slot.Marks) { slot.Tables?.ObserveSelectionMarks(draws: slot.Draws, epoch: slot.RowEpoch, marks: read[SdfKernelInterfaces.MeshMarkBase..], source: this); }
+        if (slot.Measured && (Measured is { } measured)) {
+            var vertices = 0UL;
+
+            foreach (var phase in read.Slice(start: SdfKernelInterfaces.MeshVertexCountBase, length: SdfKernelInterfaces.MeshShadowPhases)) { vertices += phase; }
+            measured(arg1: slot.Tag, arg2: vertices);
+        }
     }
     // The bytes of the counts a frame marking a list of draws reads back: through the last draw's mark word.
     private static ulong MarkedBytes(uint draws) => ((((ulong)SightWords) + MarkRoom + draws.CeilingDivide(divisor: DrawsPerMarkWord)) * sizeof(uint));
@@ -153,7 +172,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // distant map redraw spread over several frames) keeps only the draws whose index leaves that share's remainder, so the
     // shares of one draw list draw each of its draws exactly once. The kernel reads the count and the share from eight bits
     // each of the controls' fourth word (MaxSlices).
-    public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false, bool skipsDepth = false, bool skipsExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default, SdfMeshMotion motion = SdfMeshMotion.Any, int slice = 0, int slices = 1) {
+    public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false, bool skipsDepth = false, bool skipsExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default, SdfMeshMotion motion = SdfMeshMotion.Any, int slice = 0, int slices = 1, long tag = 0L) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: slices, other: 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: slices, other: MaxSlices);
         ArgumentOutOfRangeException.ThrowIfNegative(value: slice);
@@ -162,6 +181,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         // completion, after this slot's history copy and every preceding submission.
         m_slot = slot;
         m_count = count;
+        m_tag = tag;
         m_width = Math.Max(val1: width, val2: 1u);
         m_height = Math.Max(val1: height, val2: 1u);
         m_levels = LevelsOf(height: m_height, width: m_width);
@@ -271,10 +291,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // Copies the counts after the frame's last selection step into the slot's readback, when the step computed portal
     // sight verdicts or the frame marks its selection; the node delivers the copy once it proves the slot complete.
     private void RecordReadback(IGpuRecorder recorder, nint commandBuffer, bool sight) {
-        if (!sight && !m_marking) { return; }
+        if (!sight && !m_marking && !m_measures) { return; }
 
         var slot = m_readbackSlots[m_slot];
-        var bytes = (m_marking ? MarkedBytes(draws: m_count) : CountsBytes);
+        var bytes = (m_marking ? MarkedBytes(draws: m_count) : (m_measures ? MeasuredBytes : CountsBytes));
 
         slot.Buffer.Fit(Math.Max(bytes, CountsBytes));
         GpuReadbackCopy.Record(commandBuffer: commandBuffer, destination: (IGpuReadbackBuffer)slot.Buffer.Buffer!, recorder: recorder, sizeBytes: bytes,
@@ -282,6 +302,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         Ready(buffer: m_counts.Buffer!, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferRead, sourceStage: GpuStage.Transfer);
         slot.Sight = sight;
         slot.Marks = m_marking;
+        slot.Measured = m_measures;
+        slot.Tag = m_tag;
         slot.Bytes = bytes;
         slot.Draws = m_count;
         slot.RowEpoch = m_rowEpoch;

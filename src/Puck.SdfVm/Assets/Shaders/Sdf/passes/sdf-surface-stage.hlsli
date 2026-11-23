@@ -28,7 +28,7 @@ static const uint SdfMeshAoPyramidShift = 3u;
 // pattern turns and spaces.
 static const uint SdfMeshShadowSearchTaps = 12u;
 static const uint SdfMeshShadowFilterTaps = 16u;
-static const float SdfMeshShadowMaxTexels = 14.0;
+static const float SdfMeshShadowMaxTexels = SDF_MESH_SHADOW_FILTER_TEXELS;
 // The band, in texels, at the edge of a role's outermost cascade over which its coverage falls from one to zero and the
 // probes' answer takes over (sdfMeshShadow): one widest filter footprint, so the hand-over is never narrower than the
 // softest edge the cascade draws.

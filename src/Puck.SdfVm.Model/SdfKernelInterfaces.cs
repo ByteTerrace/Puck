@@ -96,6 +96,14 @@ public sealed class SdfKernelInterfaces {
     public const int MeshShadowPhases = MeshShadowCulledEntryPhase + 2;
     /// <summary>First portal sight verdict after draw counts.</summary>
     public const int MeshSightCountBase = MeshShadowPhases;
+    /// <summary>The first of the raster selection's vertex words, one a command phase just under the selection marks: the
+    /// compaction adds each command it keeps for the phase's draw list to its phase's word, so the counts carry the
+    /// vertices each phase rasterizes and a pass reads back the work it drew (a shadow entry's drawings).</summary>
+    public const int MeshVertexCountBase = (MeshMarkBase - MeshShadowPhases);
+    /// <summary>The widest radius, in shadow texels, the surface pass's percentage-closer filter takes: the penumbra the
+    /// softest shadow edge a cascade draws spreads over, which the world's shadows weigh a held layer's lag against
+    /// (<c>SdfWorldShadows</c>).</summary>
+    public const float MeshShadowFilterTexels = 14f;
     /// <summary>The first selection mark word in the raster selection's counts, past every portal sight verdict: on a
     /// marked frame each draw a phase emits a command for ORs its level plus one into two bits, sixteen draws a
     /// word, the lowest draw in the lowest bits.</summary>

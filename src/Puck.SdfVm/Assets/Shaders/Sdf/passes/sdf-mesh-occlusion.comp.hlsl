@@ -164,6 +164,13 @@ void sdfOcclusionCompactPhase(uint candidate, uint local, uint phase, bool scatt
             sdfMeshOcclusionDrawsRW[(word + part)] = sdfMeshOcclusionDrawsRW[(slot + part)];
         }
     }
+    // The vertices the phase's kept commands rasterize, summed a wave at a time into its vertex word, which a pass reads
+    // back as the work it drew (SdfKernelInterfaces.MeshVertexCountBase).
+    uint vertices = WaveActiveSum(emitted ? sdfMeshOcclusionDrawsRW[(slot + 1u)] : 0u);
+
+    if (WaveIsFirstLane() && (vertices != 0u)) {
+        InterlockedAdd(sdfMeshOcclusionCountsRW[(SDF_MESH_VERTEX_COUNT_BASE + phase)], vertices);
+    }
     if ((local == (SDF_MESH_SELECTION_GROUP_SIZE - 1u)) && (group == ((count - 1u) / SDF_MESH_SELECTION_GROUP_SIZE))) {
         sdfMeshOcclusionCountsRW[phase] = (place + sdfCompactFlags[local]);
     }

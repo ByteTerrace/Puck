@@ -163,12 +163,12 @@ public sealed partial class SdfWorldTables {
     }
 
     /// <summary>Gets the bytes of the buffers the tables' regions hold, by the memory they live in
-    /// (<see cref="GpuRegion.OwnedBytes"/>): every per-frame table, the previous transform tables and the mesh region.
-    /// Read at the time asked, since a region
+    /// (<see cref="GpuRegion.OwnedBytes"/>): every per-frame table, the previous transform tables and the mesh region,
+    /// and the world's shadow layers (<see cref="SdfWorldShadows.Bytes"/>). Read at the time asked, since a region
     /// grows by replacing its buffers. View-local readbacks remain charged to their recorders.</summary>
     public GpuMemoryBytes TableBytes {
         get {
-            var bytes = (new GpuMemoryBytes(DeviceLocal: (((m_previousDynamicTransforms.Buffer!.SizeBytes + m_previousMeshTransforms.Buffer!.SizeBytes) + m_shadowHandoffBuffer.SizeBytes) + ScreenEmission.SizeBytes), HostVisible: 0));
+            var bytes = (new GpuMemoryBytes(DeviceLocal: ((((m_previousDynamicTransforms.Buffer!.SizeBytes + m_previousMeshTransforms.Buffer!.SizeBytes) + m_shadowHandoffBuffer.SizeBytes) + ScreenEmission.SizeBytes) + (ulong)(m_shadows?.Bytes ?? 0L)), HostVisible: 0));
 
             bytes += m_meshHistoryCopies.OwnedBytes;
             bytes += MeshIrradianceBufferBytes;
