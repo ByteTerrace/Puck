@@ -913,23 +913,25 @@ public sealed partial class SdfMeshPathBake {
     // The least pixel that still demands a group's coarsest held tier under the bias, or the tier half a rung finer while
     // the bias holds any (SdfMeshTier.CoarsestEdge): the larger of the two, so a point that could move either counts.
     private static float CoarsestEdgeOf(int bias, Group group) {
-        var edge = SdfMeshTier.CoarsestEdge(coarsest: group.CoarsestTier, finest: group.FinestTier, halfRungs: bias);
+        var edge = SdfMeshTier.DemandedCoarsestEdge(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: bias);
 
-        return ((bias > 0) ? MathF.Max(x: edge, y: SdfMeshTier.CoarsestEdge(coarsest: group.CoarsestTier, finest: group.FinestTier, halfRungs: (bias - 1))) : edge);
+        return ((bias > 0) ? MathF.Max(x: edge, y: SdfMeshTier.DemandedCoarsestEdge(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: (bias - 1))) : edge);
     }
-    // The tier a group demands at a pixel under the bias, held to its rungs.
-    private int DemandedTierOf(Group group, float pixel) => SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: TierOf(pixel: pixel));
+    // The tier a group demands at a pixel under the bias, held to its rungs: the bias reaches its floor and no further
+    // (SdfMeshTier.Demanded), the one rule every plan and decision asks.
+    private int DemandedTierOf(SdfMeshBakeGroup group, float pixel) =>
+        SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: Volatile.Read(location: ref m_bias), pixel: pixel);
     // The tier half a rung finer than the bias asks, held to the group's rungs: what the bias would demand one step back.
     private static int FinerTierOf(int bias, Group group, float pixel) =>
-        SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: SdfMeshTier.Of(pixel: SdfMeshTier.Biased(halfRungs: (bias - 1), pixel: pixel)));
+        SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: (bias - 1), pixel: pixel);
     // How far a group's pixel may move, in its own units, before the tier it demands under the bias changes, or the tier
     // half a rung finer does while the bias holds any (Retier's finer figure); infinity where no move can change either.
     private static float DemandSlack(int bias, Group group, float pixel) {
         if (!float.IsFinite(f: pixel)) { return float.PositiveInfinity; }
 
-        var slack = SdfMeshTier.Slack(coarsest: group.CoarsestTier, finest: group.FinestTier, halfRungs: bias, pixel: pixel);
+        var slack = SdfMeshTier.DemandedSlack(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: bias, pixel: pixel);
 
-        return ((bias > 0) ? MathF.Min(x: slack, y: SdfMeshTier.Slack(coarsest: group.CoarsestTier, finest: group.FinestTier, halfRungs: (bias - 1), pixel: pixel)) : slack);
+        return ((bias > 0) ? MathF.Min(x: slack, y: SdfMeshTier.DemandedSlack(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: (bias - 1), pixel: pixel)) : slack);
     }
     // Lists a group for the tier decisions to read, once.
     private void Attend(Group group) => _ = m_attention.Add(group: group);
