@@ -922,7 +922,7 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
      unchanged across a wall under an authored light phase.
   The kernels' registers were read on Vulkan (`[pipeline-statistics]`): the
   specialized binned views kernel compiles to 168 with the light walk and 128
-  with it compiled out, the plain binned kernel to 128 and the filter to 40.
+  with it compiled out, the plain binned kernel to 128 and the filter, which decides each tile's lights, to 54.
   Direct3D 12's are unread: PIX's analysis of a debug-world capture of 2.9 GB
   took the host past 25 GB of memory before it wrote a counter. Check for the
   whole item: the route's per-chapter `world` node GPU means, read in the lead's

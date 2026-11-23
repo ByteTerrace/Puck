@@ -394,12 +394,13 @@ A wave intrinsic sums lanes in registers; one lane then does the atomic.
   (`puckAddGroupWork` in [`ShaderWorkCounters.AppendHlsl`](../../../../src/Puck.Shaders.Model/Interface/ShaderWorkCounters.cs));
   every thread of the group reaches the call, so a kernel never returns before it. A pass the node records
   with `GpuKernelCounters.DisabledRow` (no reading demands the counts) branches out of every counting function
-  before any wave, groupshared or atomic work. The views light tiles reduce each lane's depth, box corners and kept
-  lights across the wave (`WaveActiveMin`, `WaveActiveMax`, `WaveActiveBitOr`) and one lane a wave joins them into the
-  group's words (`sdfViewsTileLights`).
-- **A wave reduction is not free either.** Each one is work on every lane. The light tiles' reductions measured a few
-  percent of the filter pass under the atomics they replaced, and five more barriers in that kernel measured nothing: a
-  tile stage's cost is the lanes' own work, wherever the stage runs.
+  before any wave, groupshared or atomic work.
+- **A wave reduction is not free either, and it holds state live.** Each one is work on every lane. Reducing the views
+  light tiles' depths, box corners and kept lights across the wave (`sdfViewsTileLights`) measured a few percent of the
+  filter pass under the per-lane atomics and raised the unsplit plain views kernel from 128 to 168 registers on Vulkan,
+  and five more barriers in that kernel measured nothing: a tile stage's cost is the lanes' own work, wherever the stage
+  runs, so the tiles keep their atomics. The filter kernel holds 54 registers with the tile stage in either form, 40
+  without it.
 - Wave size is the device's (32 on NVIDIA, 32 or 64 on AMD), so never size data
   by it. A float reduction's order differs by wave size; counts are integers,
   and the sky reduction sums in a fixed order so its coefficients repeat on one
@@ -576,7 +577,7 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
   so a specialized set adds registers only over the binned plain kernel, and it is the light walk that adds them: with
   the walk compiled out (`SDF_VIEWS_OMIT_LIGHTS`) the specialized binned kernel compiles to 128; the interpreter's views, binned views
   and glass run at 255 (8 warps), the probe lookup at 128 and the views filter
-  at 40, and the specialized and plain glass keep 96 and 16 bytes of local
+  at 54 (40 before it decided each tile's lights), and the specialized and plain glass keep 96 and 16 bytes of local
   memory. The interpreter costs tens of times the specialized kernels where a
   large program covers the view ([author shaders](../../../../docs/plans/author-shaders.md#the-decision-matrix)).
   The interpreter's light phase, inlined in the light walk with its sixteen
