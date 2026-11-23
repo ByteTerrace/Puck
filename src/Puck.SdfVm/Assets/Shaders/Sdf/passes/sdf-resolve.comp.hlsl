@@ -40,6 +40,7 @@
 #include "../frame/sdf-work.hlsli"
 #include "../shade/sdf-transport.hlsli"
 #include "Shared/reconstruction.hlsli"
+#include "Shared/shared-exponent.hlsli"
 
 // The history surface holds SDF_HISTORY_SURFACE_WORDS an output pixel (SdfWorldPackage.HistorySurfaceWords), in planes:
 // word w of every output pixel lies in plane w, extent.x * extent.y words long (sdfHistoryWord), so a wave's lanes read
@@ -52,8 +53,8 @@
 // (SdfWorldPackage.TemporalPeriod), or at SDF_HISTORY_FEATURE_WEIGHT_CAP while the pixel carries a feature.
 // The stationary window (historyWindowRW, SDF_HISTORY_WINDOW_WORDS a pixel in the same planar layout) is one buffer the
 // resolve updates in place, not history in two copies: word zero is the phase mask, and from SDF_HISTORY_WINDOW_OFFSET
-// each phase holds five words: color/coverage as four halves, transport as four halves, then its Gaussian weight as a
-// half. A completed window replaces each phase with that phase's new samples. Its fixed-order sum is invariant when the
+// each phase holds four words: its color as a shared-exponent word (Shared/shared-exponent.hlsli), its coverage as UNORM16
+// under its Gaussian weight as a half, then its transport as four halves. A completed window replaces each phase with that phase's new samples. Its fixed-order sum is invariant when the
 // jitter repeats; an exponential mean capped at one period instead keeps favoring the latest phase, and clipping to its
 // neighborhood destroys unsighted features. Every window access names the invocation's own pixel (sdfHistoryWindowWord
 // takes no other), and a pixel keeps its window only while its history comes from that same pixel, so no invocation
@@ -591,18 +592,17 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
 
     [unroll] for (uint sample = 0u; sample < SDF_TEMPORAL_PERIOD; sample++) {
         uint offset = (SDF_HISTORY_WINDOW_OFFSET + (sample * SDF_HISTORY_SAMPLE_WORDS));
-        uint packed[5] = { 0u, 0u, 0u, 0u, 0u };
+        uint packed[SDF_HISTORY_SAMPLE_WORDS] = { 0u, 0u, 0u, 0u };
         bool present = ((mask & (1u << sample)) != 0u);
 
         if (present && (sample == phase)) {
-            float4 color = clamp((sum / weightSum), -65504.0, 65504.0);
+            float4 color = (sum / weightSum);
             color.a = clamp(color.a, coverageMin, coverageMax);
             uint2 transport = sdfPackTransport(transportSum / weightSum);
-            packed[0] = (f32tof16(color.r) | (f32tof16(color.g) << 16u));
-            packed[1] = (f32tof16(color.b) | (f32tof16(color.a) << 16u));
+            packed[0] = puckPackSharedExponent(color.rgb);
+            packed[1] = ((uint)round(saturate(color.a) * 65535.0) | (f32tof16(weightSum) << 16u));
             packed[2] = transport.x;
             packed[3] = transport.y;
-            packed[4] = f32tof16(weightSum);
             [unroll] for (uint component = 0u; component < SDF_HISTORY_SAMPLE_WORDS; component++) {
                 historyWindowRW[sdfHistoryWindowWord(id, (offset + component), extent)] = packed[component];
             }
@@ -613,9 +613,8 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
         }
         // Decode the new phase too: using its unrounded sum while the other phases use halves would itself pulse.
         if (present) {
-            float4 color = float4(f16tof32(packed[0] & 0xFFFFu), f16tof32(packed[0] >> 16u),
-                f16tof32(packed[1] & 0xFFFFu), f16tof32(packed[1] >> 16u));
-            float weight = f16tof32(packed[4]);
+            float4 color = float4(puckUnpackSharedExponent(packed[0]), (float(packed[1] & 0xFFFFu) / 65535.0));
+            float weight = f16tof32(packed[1] >> 16u);
             windowMin = min(windowMin, color);
             windowMax = max(windowMax, color);
             windowColor += (weight * color);

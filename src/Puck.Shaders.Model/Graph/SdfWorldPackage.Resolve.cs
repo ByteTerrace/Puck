@@ -47,8 +47,9 @@ public static partial class SdfWorldPackage {
     public const uint TemporalPeriod = 8;
     /// <summary>The first word of a pixel's stationary samples in the window, following its phase mask.</summary>
     public const uint HistoryWindowOffset = 1;
-    /// <summary>The words per stationary phase: RGBA and transport as four halves each, then its Gaussian weight as a half.</summary>
-    public const uint HistorySampleWords = 5;
+    /// <summary>The words per stationary phase: its color as one shared-exponent word, its coverage as UNORM16 under its
+    /// Gaussian weight as a half, then its transport as four halves.</summary>
+    public const uint HistorySampleWords = 4;
     /// <summary>The words one output pixel holds in the stationary window: its phase mask and a sample per jitter phase.
     /// SdfIsaHlsl generates it into the kernels as <c>SDF_HISTORY_WINDOW_WORDS</c>.</summary>
     public const uint HistoryWindowWords = (HistoryWindowOffset + (TemporalPeriod * HistorySampleWords));
