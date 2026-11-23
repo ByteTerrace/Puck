@@ -105,20 +105,42 @@ public static class WorldEffect {
     ) : ActionEffect;
     /// <summary>Designates a subject into a body's named target register, or clears the register. A kit's action
     /// designates into its own body the participant that last affected it; a world rule names the body with
-    /// <paramref name="Key"/> and the subject with <paramref name="TargetKey"/>.</summary>
+    /// <paramref name="Key"/> and the subject with <paramref name="TargetKey"/>, or a world point with
+    /// <paramref name="Placement"/>, <paramref name="Position"/> and the <c>pointX</c>/<c>pointY</c>/<c>pointZ</c>
+    /// expressions: the same point designation <c>body.designate &lt;register&gt; at:x,y,z</c> makes, which a body
+    /// program's <c>designated</c> or <c>navigated</c> target walks to.</summary>
     /// <param name="Register">The authored target-register name.</param>
-    /// <param name="Kind">Whether the register is filled or cleared; only a world rule clears.</param>
+    /// <param name="Kind">Whether the register is filled with a body or a point, or cleared; only a world rule clears
+    /// or designates a point.</param>
     /// <param name="Key">The body a world rule names — see <see cref="SetVerticalVelocity.Key"/>.</param>
     /// <param name="TargetKey">The body a world rule designates, required when <paramref name="Kind"/> is
-    /// <see cref="WorldBodyDesignationKind.Body"/> and refused when it is <see cref="WorldBodyDesignationKind.Clear"/>.
-    /// A kit's action names none.</param>
+    /// <see cref="WorldBodyDesignationKind.Body"/> and refused otherwise. A kit's action names none.</param>
+    /// <param name="Placement">For <see cref="WorldBodyDesignationKind.Point"/>, the placement whose document position
+    /// is the point's base (its frame composed over its parent, as every consumer reads it), read when the effect
+    /// fires, so a moved placement is followed; the point is the origin when none is named.</param>
+    /// <param name="Position">For <see cref="WorldBodyDesignationKind.Point"/>, the literal point, or its offset from
+    /// <paramref name="Placement"/> when one is named. Exclusive with the point expressions.</param>
+    /// <param name="PointX">For <see cref="WorldBodyDesignationKind.Point"/>, a fixed-point expression for the point's x
+    /// axis, evaluated when the effect fires; <paramref name="PointY"/> and <paramref name="PointZ"/> accompany it, and
+    /// together they are the point, or its offset from <paramref name="Placement"/>.</param>
+    /// <param name="PointY">The y axis of the computed point.</param>
+    /// <param name="PointZ">The z axis of the computed point.</param>
     public sealed record Designate(
         [property: DocumentText("a target register name")] string Register,
         WorldBodyDesignationKind Kind = WorldBodyDesignationKind.Body,
         [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
         [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? TargetKey = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? TargetKey = null,
+        [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Placement = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Position = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? PointX = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? PointY = null,
+        [property: DocumentName(WorldNameKind.State, WorldNameRole.Expression)]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ExpressionProgram? PointZ = null
     ) : ActionEffect;
     /// <summary>Emits a deterministic presentation-neutral cue (<see cref="WorldGameplayCue"/>).</summary>
     /// <param name="Name">The cue name; see <see cref="WorldGameplayCue.IsValidName"/>.</param>
@@ -248,6 +270,8 @@ public enum WorldBodyDesignationKind : byte {
     Body,
     /// <summary>Clear the register.</summary>
     Clear,
+    /// <summary>Designate a world point.</summary>
+    Point,
 }
 /// <summary>One deterministic presentation-neutral cue emitted by an authored rule.</summary>
 /// <param name="Name">The cue's stable authored identifier.</param>
