@@ -430,6 +430,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             width: width
         ));
 
+        // The display pixels the glass spans from the viewer's eye, for a window fitted to it; a view no fit measures
+        // takes its presented height (WorldRenderSettings.NestedDemandHeight).
+        var fittedHeight = ((fitted is null)
+            ? 0f
+            : WorldWindowFrustumFit.ShownHeight(fitted: in camera, viewerPixelsPerMetre: (ViewerPixelsPerMetre?.Invoke() ?? 0f)));
+
         m_dressedCamera = camera;
         m_dressedFarDistance = WorldRenderFarDistance.Resolve(defaults: m_mirror.Definition.Render);
         m_views.Clear();
@@ -437,9 +443,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Camera: camera,
             Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
         ) {
-            DemandHeight = ((fitted is null)
-                ? 0f
-                : WorldWindowFrustumFit.ShownHeight(fitted: in camera, viewerPixelsPerMetre: (ViewerPixelsPerMetre?.Invoke() ?? 0f))),
+            DemandHeight = (Session?.NestedDemandHeight(fitted: fittedHeight, imageHeight: height, view: ViewName) ?? fittedHeight),
             DemandWithinView = (fitted is not null),
             ImageWindow = (fitted?.Window ?? default),
             Quality = (Session?.NestedViewQuality(view: ViewName) ?? default),

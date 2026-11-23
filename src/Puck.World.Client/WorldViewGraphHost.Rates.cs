@@ -178,6 +178,14 @@ public sealed partial class WorldViewGraphHost {
     public double? DisplayShareOf(string instance) => ((m_presentedShares.Count == 0)
         ? null
         : m_presentedShares.GetValueOrDefault(key: instance).Height);
+    /// <summary>Returns the latest measured height, in display pixels, an instance reaches through footprints: its share
+    /// of the display's height (<see cref="DisplayShareOf"/>) times that height.</summary>
+    /// <param name="instance">The instance's name.</param>
+    /// <returns>The height in display pixels, zero for an instance no footprint showed, or <see langword="null"/> before
+    /// the first measurement.</returns>
+    public double? DisplayPixelsOf(string instance) => ((DisplayShareOf(instance: instance) is { } share)
+        ? (share * m_displayHeight)
+        : null);
     /// <summary>Returns the latest measured share of the display's pixels an instance reaches through footprints: its
     /// share of the display's width times its share of the height, measured as <see cref="DisplayShareOf"/> measures the
     /// height.</summary>
