@@ -76,9 +76,10 @@ public sealed record WasmGuestBuild(string Crate, IReadOnlyList<string>? Feature
     /// <param name="path">Absolute requested path.</param>
     /// <returns>Whether <see cref="TryFind"/> could recognize the path.</returns>
     public static bool MayName(string path) {
-        var normalized = Puck.Abstractions.PuckPaths.Slashed(path: path);
+        // Asked of every compile input on every source-watch poll, so a path that cannot be a module spells nothing.
+        if (!path.EndsWith(".wasm", StringComparison.Ordinal)) { return false; }
 
-        return (normalized.Contains("/wasm/", StringComparison.Ordinal) && normalized.EndsWith(".wasm", StringComparison.Ordinal));
+        return Puck.Abstractions.PuckPaths.Slashed(path: path).Contains("/wasm/", StringComparison.Ordinal);
     }
     /// <summary>Recognizes a declared source-backed module without compiling it.</summary>
     /// <param name="path">Requested absolute module path.</param>

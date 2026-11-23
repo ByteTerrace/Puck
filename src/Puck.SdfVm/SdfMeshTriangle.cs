@@ -1,5 +1,7 @@
 using System.Numerics;
 
+using Puck.Abstractions.Memory;
+
 namespace Puck.SdfVm;
 
 // Shared nearest-point primitive for the offline bake audit, the retained live scene and the trace judge.
@@ -48,29 +50,95 @@ internal static class SdfMeshTriangle {
 }
 // A mesh's triangles bucketed by the cells of a uniform grid their boxes overlap, which answers the distance from a point
 // to the nearest triangle within a reach. It keeps triangle numbers only: each query is handed the positions and indices
-// it was built from.
-internal sealed class SdfMeshTriangleGrid {
+// it was built from. The buckets are one flat run of triangle numbers with each occupied cell's start, found through one
+// open-addressed map from the cell's index in the mesh's cell box, all rented storage the grid returns when disposed: the
+// trace judge builds two for every floor it checks, and a list per cell made most of a bake's small-object garbage.
+// Within a cell its triangles stand in ascending order, so a query visits what a list per cell gave it.
+internal sealed class SdfMeshTriangleGrid : IDisposable {
     private readonly float m_cellSize;
-    private readonly Dictionary<(int, int, int), List<int>> m_cells = [];
+    private readonly (int X, int Y, int Z) m_low;
+    private readonly (int X, int Y, int Z) m_high;
+    private readonly long m_spanX;
+    private readonly long m_spanY;
+    private readonly OwnedLongMap<int> m_cells;
+    // Each occupied cell's first triangle in m_triangles, by the slot m_cells maps the cell to, then the run's end.
+    private int[] m_starts;
+    private int[] m_triangles;
 
     public SdfMeshTriangleGrid(ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, float cellSize) {
         m_cellSize = cellSize;
-        for (var triangle = 0; (triangle < (indices.Length / 3)); triangle++) {
-            var (a, b, c) = SdfMeshTriangle.Corners(indices: indices, positions: positions, triangle: triangle);
-            var low = Cell(point: Vector3.Min(value1: a, value2: Vector3.Min(value1: b, value2: c)));
-            var high = Cell(point: Vector3.Max(value1: a, value2: Vector3.Max(value1: b, value2: c)));
 
-            for (var z = low.Z; (z <= high.Z); z++) {
-                for (var y = low.Y; (y <= high.Y); y++) {
-                    for (var x = low.X; (x <= high.X); x++) {
-                        if (!m_cells.TryGetValue(key: (x, y, z), value: out var held)) {
-                            held = [];
-                            m_cells.Add(key: (x, y, z), value: held);
+        var triangleCount = (indices.Length / 3);
+        var low = Vector3.Zero;
+        var high = Vector3.Zero;
+
+        for (var triangle = 0; (triangle < triangleCount); triangle++) {
+            var (a, b, c) = SdfMeshTriangle.Corners(indices: indices, positions: positions, triangle: triangle);
+            var cornerLow = Vector3.Min(value1: a, value2: Vector3.Min(value1: b, value2: c));
+            var cornerHigh = Vector3.Max(value1: a, value2: Vector3.Max(value1: b, value2: c));
+
+            low = ((triangle == 0) ? cornerLow : Vector3.Min(value1: low, value2: cornerLow));
+            high = ((triangle == 0) ? cornerHigh : Vector3.Max(value1: high, value2: cornerHigh));
+        }
+        m_low = Cell(point: low);
+        m_high = Cell(point: high);
+        m_spanX = (((long)m_high.X - m_low.X) + 1L);
+        m_spanY = (((long)m_high.Y - m_low.Y) + 1L);
+        m_cells = new OwnedLongMap<int>(allocator: null, capacity: triangleCount);
+
+        // The first pass numbers each occupied cell in the order a triangle first reaches it and counts its triangles;
+        // the counts become the runs' starts, and the second pass lays each triangle into its cells' runs.
+        var counts = RentedArrays.Rent<int>(minimumLength: Math.Max(val1: 16, val2: triangleCount));
+        var occupied = 0;
+        var total = 0;
+
+        try {
+            for (var triangle = 0; (triangle < triangleCount); triangle++) {
+                var (cellLow, cellHigh) = CellsOf(indices: indices, positions: positions, triangle: triangle);
+
+                for (var z = cellLow.Z; (z <= cellHigh.Z); z++) {
+                    for (var y = cellLow.Y; (y <= cellHigh.Y); y++) {
+                        for (var x = cellLow.X; (x <= cellHigh.X); x++) {
+                            var key = Key(x: x, y: y, z: z);
+
+                            if (!m_cells.TryGetValue(key: key, value: out var slot)) {
+                                slot = occupied++;
+                                m_cells.Add(key: key, value: slot);
+                                if (slot >= counts.Length) { counts = RentedArrays.Grow(array: counts, keep: slot, minimumLength: (2 * counts.Length)); }
+                                counts[slot] = 0;
+                            }
+                            counts[slot]++;
+                            total = checked(total + 1);
                         }
-                        held.Add(item: triangle);
                     }
                 }
             }
+
+            m_starts = RentedArrays.Rent<int>(minimumLength: (occupied + 1));
+            m_triangles = RentedArrays.Rent<int>(minimumLength: total);
+
+            var at = 0;
+
+            for (var slot = 0; (slot < occupied); slot++) {
+                m_starts[slot] = at;
+                at += counts[slot];
+                counts[slot] = m_starts[slot];
+            }
+            m_starts[occupied] = at;
+            for (var triangle = 0; (triangle < triangleCount); triangle++) {
+                var (cellLow, cellHigh) = CellsOf(indices: indices, positions: positions, triangle: triangle);
+
+                for (var z = cellLow.Z; (z <= cellHigh.Z); z++) {
+                    for (var y = cellLow.Y; (y <= cellHigh.Y); y++) {
+                        for (var x = cellLow.X; (x <= cellHigh.X); x++) {
+                            _ = m_cells.TryGetValue(key: Key(x: x, y: y, z: z), value: out var slot);
+                            m_triangles[counts[slot]++] = triangle;
+                        }
+                    }
+                }
+            }
+        } finally {
+            RentedArrays.Return(array: counts);
         }
     }
 
@@ -80,12 +148,13 @@ internal sealed class SdfMeshTriangleGrid {
         var high = Cell(point: (point + new Vector3(value: reach)));
         var nearest = reach;
 
-        for (var z = low.Z; (z <= high.Z); z++) {
-            for (var y = low.Y; (y <= high.Y); y++) {
-                for (var x = low.X; (x <= high.X); x++) {
-                    if (!m_cells.TryGetValue(key: (x, y, z), value: out var held)) { continue; }
-                    foreach (var triangle in held) {
-                        var (a, b, c) = SdfMeshTriangle.Corners(indices: indices, positions: positions, triangle: triangle);
+        // No triangle reaches a cell outside the mesh's own cell box.
+        for (var z = Math.Max(val1: low.Z, val2: m_low.Z); (z <= Math.Min(val1: high.Z, val2: m_high.Z)); z++) {
+            for (var y = Math.Max(val1: low.Y, val2: m_low.Y); (y <= Math.Min(val1: high.Y, val2: m_high.Y)); y++) {
+                for (var x = Math.Max(val1: low.X, val2: m_low.X); (x <= Math.Min(val1: high.X, val2: m_high.X)); x++) {
+                    if (!m_cells.TryGetValue(key: Key(x: x, y: y, z: z), value: out var slot)) { continue; }
+                    for (var at = m_starts[slot]; (at < m_starts[(slot + 1)]); at++) {
+                        var (a, b, c) = SdfMeshTriangle.Corners(indices: indices, positions: positions, triangle: m_triangles[at]);
 
                         nearest = MathF.Min(x: nearest, y: Vector3.Distance(value1: point, value2: SdfMeshTriangle.Closest(a: a, b: b, c: c, p: point)));
                     }
@@ -96,5 +165,21 @@ internal sealed class SdfMeshTriangleGrid {
         return nearest;
     }
 
+    // Returns the grid's storage to the pools it was rented from.
+    public void Dispose() {
+        m_cells.Dispose();
+        RentedArrays.Return(array: m_starts);
+        RentedArrays.Return(array: m_triangles);
+        m_starts = [];
+        m_triangles = [];
+    }
+
+    private ((int X, int Y, int Z) Low, (int X, int Y, int Z) High) CellsOf(ReadOnlySpan<uint> indices, ReadOnlySpan<Vector3> positions, int triangle) {
+        var (a, b, c) = SdfMeshTriangle.Corners(indices: indices, positions: positions, triangle: triangle);
+
+        return (Cell(point: Vector3.Min(value1: a, value2: Vector3.Min(value1: b, value2: c))), Cell(point: Vector3.Max(value1: a, value2: Vector3.Max(value1: b, value2: c))));
+    }
+    // A cell's index in the mesh's cell box, which every triangle's cells lie inside.
+    private long Key(int x, int y, int z) => ((x - (long)m_low.X) + (m_spanX * ((y - (long)m_low.Y) + (m_spanY * (z - (long)m_low.Z)))));
     private (int X, int Y, int Z) Cell(Vector3 point) => SdfMeshLattice.CellOf(cell: new Vector3(value: m_cellSize), point: point);
 }
