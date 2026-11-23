@@ -99,9 +99,9 @@ let cityStyle = celStyle with {
     far: 0.6
     fold: 0.7
     tint [0.13, 0.1, 0.16]
-    hatch: 0.5
-    hatchPitch: 0.55
-    hatchWidth: 0.2
+    hatch: 0.32
+    hatchPitch: 0.4
+    hatchWidth: 0.12
     hatchSoftness: 0.3
   }
 }
@@ -286,7 +286,7 @@ vehicleRoutes(
 // of `cityLampLumens` lumens that the city's clock (city-day.puck) turns on from dusk to dawn: 6 along each side of the
 // ring, 7 down the avenue, 15 along the cross street, 6 by the works road, 10 on the quay's edge and 8 round the
 // fountain. No lamp stands within 6 m of x 0, where the avenue runs and a traveller walks out of the arrival frame.
-let cityLampLumens = 4500
+let cityLampLumens = 1200
 let cityLampSpots = concat(
   map(range(0, 6), k => [(-30 + 12 * k), -8.5]),
   map(range(0, 6), k => [(-30 + 12 * k), -91.5]),
