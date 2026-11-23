@@ -1392,6 +1392,10 @@ public sealed partial class WorldTransferEscrow {
             ) {
                 grant!.Install();
                 population.EntryBody(index: index)?.SetIntentSource(source: IntentSource.Live);
+                population.SeatRider(
+                    mount: index,
+                    rider: slot
+                );
             }
 
             return;
@@ -1616,10 +1620,14 @@ public sealed partial class WorldTransferEscrow {
                 yawRadians: member.YawRadians
             );
         } else if (member.Arrival == WorldTransferArrival.Mapped) {
+            // Every arrival across a seam pins the upcoming tick's neighbour record again, so the record that tick
+            // reads leaves out each body that has landed here, whichever landed first.
             if (member.Continuum is not null) { m_server.PrepareAdjacencyForArrival(); }
             m_server.Population.ApplyMappedArrival(
                 actionContinuity: member.ActionContinuity,
-                continuum: member.Continuum,
+                // A traveler that rode a body across takes that body's seat once it lands (ResumeDrive): its own
+                // segment describes nothing it will keep.
+                continuum: ((member.Drives is null) ? member.Continuum : null),
                 destinationCompletedEngineTick: m_server.CompletedEngineTicks,
                 motionProgramName: member.BodyMotionProgramName,
                 planarVelocity: member.PlanarVelocity,
@@ -1628,9 +1636,6 @@ public sealed partial class WorldTransferEscrow {
                 verticalVelocity: member.VerticalVelocity,
                 yawRadians: member.YawRadians
             );
-            // The carried registers are the body's own state, so the size, kit and look they select are the body's
-            // before it first advances here.
-            m_server.Population.SyncBodyCells(definition: m_server.Definition);
         }
 
         m_borderAdmissions[slot] = border;

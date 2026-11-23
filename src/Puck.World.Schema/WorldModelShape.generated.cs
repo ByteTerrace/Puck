@@ -4709,6 +4709,14 @@ public static partial class WorldModelShape {
             [
                 M("seat", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.WorldMount), "Seat", Read | Write | Required, static value => ((global::Puck.World.WorldMount)value).Seat, kind: WorldNameKind.State, role: WorldNameRole.Binding, facet: WorldExportFacet.Binding),
                 M("exit", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.WorldMount), "Exit", Read | Write | Required, static value => ((global::Puck.World.WorldMount)value).Exit, kind: WorldNameKind.State, role: WorldNameRole.Binding, facet: WorldExportFacet.Binding),
+                M("board", typeof(global::Puck.World.WorldMountBoard), typeof(global::Puck.World.WorldMount), "Board", Read | Write, static value => ((global::Puck.World.WorldMount)value).Board),
+            ],
+            []),
+        T(typeof(global::Puck.World.WorldMountBoard), true, JsonTypeInfoKind.Object, null,
+            [],
+            [
+                M("channel", typeof(global::System.String), typeof(global::Puck.World.WorldMountBoard), "Channel", Read | Write | Required, static value => ((global::Puck.World.WorldMountBoard)value).Channel, text: "logical input channels"),
+                M("radius", typeof(global::System.Single), typeof(global::Puck.World.WorldMountBoard), "Radius", Read | Write | Required, static value => ((global::Puck.World.WorldMountBoard)value).Radius),
             ],
             []),
         T(typeof(global::Puck.World.WorldMusicRow), true, JsonTypeInfoKind.Object, null,

@@ -10010,6 +10010,21 @@ export type WorldMount = {
    * Where the rider's origin is set down when it stops driving, in the same axes.
    */
   exit: DocumentVector3;
+  /**
+   * The press that boards the body and leaves it, or null for a body boarded only by a composed control set.
+   */
+  board?: WorldMountBoard | null;
+};
+
+export type WorldMountBoard = {
+  /**
+   * The declared channel whose press boards and leaves.
+   */
+  channel: string;
+  /**
+   * The distance, in world units at full scale, from the body's origin within which the press boards. Positive.
+   */
+  radius: number;
 };
 
 export type WorldMusicRow = {

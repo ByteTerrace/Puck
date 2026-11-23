@@ -1080,6 +1080,30 @@
               "exit": {
                 "$ref": "./common.schema.json#/$defs/DocumentVector3",
                 "description": "Where the rider\u0027s origin is set down when it stops driving, in the same axes."
+              },
+              "board": {
+                "description": "The press that boards the body and leaves it, or null for a body boarded only by a composed control set.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "channel": {
+                    "description": "The declared channel whose press boards and leaves.",
+                    "type": "string"
+                  },
+                  "radius": {
+                    "description": "The distance, in world units at full scale, from the body\u0027s origin within which the press boards. Positive.",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "channel",
+                  "radius"
+                ],
+                "additionalProperties": false,
+                "default": null,
+                "title": "WorldMountBoard"
               }
             },
             "required": [

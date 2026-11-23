@@ -131,8 +131,8 @@ collision {
 }
 
 spawnPoints [
-  { id: "stage", position [0, (moonRadius + padTop), 5], yawDegrees: 180 }
-  { id: "moon-arrival", position [0, (moonRadius + padTop), 5], yawDegrees: 180 }
+  { id: "stage", position [0, (moonRadius + padTop), -5], yawDegrees: 0 }
+  { id: "moon-arrival", position [0, (moonRadius + padTop), -5], yawDegrees: 0 }
 ]
 
 placements {

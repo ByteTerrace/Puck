@@ -17,6 +17,33 @@ public sealed partial class WorldPopulation {
     /// <param name="rider">The riding body's 0-based index.</param>
     /// <param name="mount">The ridden body's 0-based index, or -1 for none.</param>
     public void SetMount(int rider, int mount) => m_entries[rider].Body?.SetMount(index: mount);
+    /// <summary>Seats a body on the body it rides at once: it rides <paramref name="mount"/> from now, at the seat of
+    /// that body's kit. A mount whose kit carries no rider leaves the body where it is, riding nothing.</summary>
+    /// <param name="rider">The riding body's 0-based index.</param>
+    /// <param name="mount">The ridden body's 0-based index.</param>
+    public void SeatRider(int rider, int mount) {
+        if ((m_entries[rider] is not { Active: true, Body: { } body }) || (MountFacet(index: mount) is not { } facet)) {
+            return;
+        }
+
+        body.SetMount(index: mount);
+        body.FollowMount(
+            facet: in facet,
+            mount: m_entries[mount].Body!
+        );
+    }
+    /// <summary>Reads whether any active body rides <paramref name="mount"/> this tick.</summary>
+    /// <param name="mount">The ridden body's 0-based index.</param>
+    /// <returns><see langword="true"/> when a body rides it.</returns>
+    public bool HasRider(int mount) {
+        for (var index = 0; (index < Capacity); index++) {
+            if (m_entries[index] is { Active: true, Body: { MountedOn: { } ridden } } && (ridden == mount)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Collects the active bodies riding <paramref name="mount"/>, in index order.</summary>
     /// <param name="mount">The ridden body's 0-based index.</param>
     /// <param name="into">The list the riders' indices are added to.</param>

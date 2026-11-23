@@ -9,9 +9,20 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>Resolves adjacency observations on the host and publishes their frozen projections.</summary>
+/// <remarks>
+/// The two halves run at different times. <see cref="ResolveNeighbours"/> and <see cref="MirrorsPrimed"/> ask the
+/// host which authority each neighbour is and attach a mirror to it: they read another authority's live definition
+/// and observation door, so the host calls them only at a boundary where no authority it steps holds a prepared or
+/// executing tick. <see cref="Prepare"/> and the presentation publish run while a tick is being prepared, when another
+/// authority of the same wave may already hold a prepared tick; they read only the mirrors a boundary attached, which
+/// hold what each neighbour last delivered. The one place that enforces the split is <c>ResolveHandle</c>: outside a
+/// boundary read it answers from the held handles and never reaches the host.
+/// </remarks>
 public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
     private readonly WorldInstanceHost m_instances;
     private readonly string m_sourceInstanceName;
+    // Whether the host's boundary is resolving: only then may a handle be looked up through the host and attached.
+    private bool m_resolving;
 
     private readonly Dictionary<string, Handle> m_handles = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<(string Name, string Destination, string Counterpart), LinkAuthority> m_linkAuthorities = [];
@@ -153,6 +164,9 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
     }
 
     private Handle? ResolveHandle(WorldInstance source, string key, string destination, string counterpart, WorldFaceFrame sourceFrame) {
+        if (!m_resolving) {
+            return m_handles.GetValueOrDefault(key: key);
+        }
         if (!m_instances.TryResolveObservedProjection(source, destination, out var instanceName, out var generation,
             out var definition, out var attach, out _) || definition is null || attach is null) {
             return null;
@@ -171,16 +185,42 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         return handle;
     }
 
-    /// <summary>Checks whether every reachable direct neighbour has delivered its first snapshot to a held row.</summary>
+    /// <summary>Checks whether every reachable direct neighbour has delivered its first snapshot to a held row. It
+    /// resolves each neighbour first, so it is a boundary read as <see cref="ResolveNeighbours"/> is: the host calls it
+    /// for a row it holds back from stepping, while no authority it steps holds a tick.</summary>
     public bool MirrorsPrimed() {
         if (!m_instances.TryGet(instance: out var source, name: m_sourceInstanceName) || source is null) { return true; }
-        foreach (var row in source.Server.Configuration.Adjacencies ?? []) {
-            if (ResolveHandle(source, row.Name.Value, row.Destination, row.Counterpart, row.Boundary.CompileFrame()) is { } handle &&
-                handle.Read(source.Server.Configuration, ImmutableHashSet<Protocol.WorldEntityAddress>.Empty, pin: true) is { SnapshotRevision: < 1 }) {
-                return false;
+
+        m_resolving = true;
+        try {
+            foreach (var row in source.Server.Configuration.Adjacencies ?? []) {
+                if (ResolveHandle(source, row.Name.Value, row.Destination, row.Counterpart, row.Boundary.CompileFrame()) is { } handle &&
+                    handle.Read(source.Server.Configuration, ImmutableHashSet<Protocol.WorldEntityAddress>.Empty, pin: true) is { SnapshotRevision: < 1 }) {
+                    return false;
+                }
             }
+        } finally {
+            m_resolving = false;
         }
         return true;
+    }
+
+    /// <summary>Resolves which authority each adjacency's neighbour is, direct edges and the corners two of them share,
+    /// and attaches a mirror to each one not yet held. The host calls it at a boundary where no authority it steps
+    /// holds a prepared or executing tick: it reads the neighbours' live definitions and observation doors.</summary>
+    public void ResolveNeighbours() {
+        if (!m_instances.TryGet(instance: out var source, name: m_sourceInstanceName) || (source?.Server.Configuration is not { Adjacencies.Count: > 0 } definition)) {
+            return;
+        }
+
+        m_resolving = true;
+        try {
+            // Discovery reads each held image as it stands, which keeps the resolver's generation order across live
+            // edits; a corner first reachable through an image this pass attached is found at the next boundary.
+            _ = BuildProjections(source, definition, ImmutableHashSet<Protocol.WorldEntityAddress>.Empty, pin: false);
+        } finally {
+            m_resolving = false;
+        }
     }
 
     /// <summary>Closes the adjacency input at a host boundary and publishes the same record for presentation.</summary>
@@ -202,9 +242,8 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 }
             }
 
-            // Discover against the previous image first to keep the resolver's generation order across live edits.
-            // Sample the newly eligible images in the second pass, including corners first reachable in that pass.
-            _ = BuildProjections(source, definition, ImmutableHashSet<Protocol.WorldEntityAddress>.Empty, pin: false);
+            // Samples the images of the neighbours a boundary resolved (ResolveNeighbours); nothing here reaches another
+            // authority.
             projections = BuildProjections(source, definition,
                 departed?.ToImmutable() ?? ImmutableHashSet<Protocol.WorldEntityAddress>.Empty, pin: true);
         }

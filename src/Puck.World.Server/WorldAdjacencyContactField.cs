@@ -88,7 +88,7 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
             if (resolution.Refusal != ContactRefusal.None) { return resolution; }
         }
 
-        var localIsSolid = (m_population.BodyContact(index: entityIndex) == WorldBodyContactMode.Solid);
+        var localIsSolid = (!m_population.LandingArrival && (m_population.BodyContact(index: entityIndex) == WorldBodyContactMode.Solid));
         // The frozen record can predate a handoff committed after it was frozen, within the same tick, so the
         // arrival asks for itself: the entity still shown at the slot it departed from is this body.
         var departedFrom = default(Protocol.WorldEntityAddress);
@@ -387,5 +387,32 @@ public sealed class WorldAdjacencyContactField : IEntityContactField {
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) => m_inner.TryUp(
         position: in position,
         up: out up
+    );
+    // The members below answer about this world's own surfaces alone, as the inner field does: a neighbour's solids hold
+    // a body up through the sweeps above and are no surface a hold, a tether or a witness names here. Each is forwarded
+    // because the interface's default declines, and a world with a seam would otherwise offer no ground to hold.
+    /// <inheritdoc/>
+    public int CollectContacts(in FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 margin,
+        Span<FixedSurfaceContact> destination) =>
+        m_inner.CollectContacts(destination: destination, margin: margin, orientation: in orientation, position: in position, volume: in volume);
+    /// <inheritdoc/>
+    public ContactSupportWitness? SupportWitness(ReadOnlySpan<FixedSurfaceContact> contacts, in FixedVector3 position, in FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume, in FixedVector3 up) =>
+        m_inner.SupportWitness(contacts: contacts, orientation: in orientation, position: in position, up: in up, volume: in volume);
+    /// <inheritdoc/>
+    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) => m_inner.TryHoldableSurfaceAlongDirection(
+        candidate: out candidate,
+        direction: in direction,
+        grantedByOverride: out grantedByOverride,
+        maxDistance: maxDistance,
+        origin: in origin
+    );
+    /// <inheritdoc/>
+    public bool TryNearestSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 assistHalfAngle, out FixedSurfaceAttachCandidate candidate) => m_inner.TryNearestSurfaceAlongDirection(
+        assistHalfAngle: assistHalfAngle,
+        candidate: out candidate,
+        direction: in direction,
+        maxDistance: maxDistance,
+        origin: in origin
     );
 }
