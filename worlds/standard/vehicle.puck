@@ -111,7 +111,7 @@ template vehicleDesign(domain, speed = 8, shaping = walkerMotion.shaping, routes
       bodyMotionProgram: "walk"
       collider: capsule(endpoint: [0, 0.4, 0], radius: 0.9)
       motion: walkerMotion with { shaping: shaping, speed { value: speed } }
-      producers: { vehicle: vehicleSteering } with routes
+      producers: ({ vehicle: vehicleSteering } with routes)
     }
   ]
 }
