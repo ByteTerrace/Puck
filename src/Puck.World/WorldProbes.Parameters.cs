@@ -121,8 +121,9 @@ internal sealed partial class WorldProbes {
     // handed to its running kernel, which adopts them on its next cycle) — skipping a stale reading (older than the
     // binding's own maxAgeSeconds — the write simply stops, never forcing the target back to some other value), a
     // target that is not currently live (a seat-relative target with no instance at this seat), and an unchanged
-    // write. A boot shape that never composed presentation (no pass composed under the row's name) leaves
-    // every binding's Writes at zero — a harmless, honestly-reported no-op, never a fault.
+    // write. A boot shape that never composed presentation (no pass composed under the row's name), and a world shown
+    // through a screen (no boot pass is its own), leave every post binding's Writes at zero — a harmless,
+    // honestly-reported no-op, never a fault.
     private void ServiceParameters() {
         var nowTimestamp = Stopwatch.GetTimestamp();
 
@@ -169,6 +170,7 @@ internal sealed partial class WorldProbes {
                     parameter.LastTarget = targetInstance;
                 } else if (
                     (value == parameter.LastValue) ||
+                    (m_passes is null) ||
                     !m_passes.TrySetConfig(
                     field: template.PostField!,
                     pass: template.PostPass!,

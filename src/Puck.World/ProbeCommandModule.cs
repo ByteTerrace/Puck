@@ -6,9 +6,10 @@ namespace Puck.World;
 
 /// <summary>
 /// The camera-probes console surface — <c>probe.status</c>, <c>probe.record</c>, and <c>probe.set</c> — for the
-/// <c>probes</c> document section's live host (<see cref="WorldProbes"/>). All three verbs are Immediate.
+/// <c>probes</c> document section's live hosts (<see cref="WorldProbeHosts"/>). All three verbs are Immediate.
 /// <c>probe.status</c> is a query (always echoes, even under <c>wire.ack quiet</c>) reporting every declared
-/// probe's run state and every binding's conditioned value and write count; <c>probe.record</c> arms a live
+/// probe's run state and every binding's conditioned value and write count, the boot world's and then each world's
+/// shown through a screen; <c>probe.record</c> and <c>probe.set</c> address the boot world's host. <c>probe.record</c> arms a live
 /// recording of one probe's fresh readings to a <c>puck.probe.track.v1</c> document — the recorded track a
 /// track-input probe plugs into in place of a live device, so a binding's downstream behavior is testable without
 /// hardware; <c>probe.set</c> patches one probe kind config field live (<see cref="WorldProbes.TrySetField"/>). A
@@ -16,8 +17,8 @@ namespace Puck.World;
 /// <c>probe.record</c>'s own completion narrates separately, on stderr, once its window elapses (see
 /// <see cref="WorldProbes.TryBeginRecording"/>).
 /// </summary>
-internal sealed class ProbeCommandModule(Func<WorldProbes> probes) : ICommandModule {
-    private readonly Func<WorldProbes> m_probes = probes;
+internal sealed class ProbeCommandModule(Func<WorldProbeHosts> probes) : ICommandModule {
+    private readonly Func<WorldProbeHosts> m_probes = probes;
     private static readonly CommandForms ProbeRecordForms = CommandForms.Of(verb: "probe.record", "<probe>[$<seat>] <path> <seconds>");
     private static readonly CommandForms ProbeSetForms = CommandForms.Of(verb: "probe.set", "<probe>[$<seat>] <field> <value>");
 
@@ -36,7 +37,7 @@ internal sealed class ProbeCommandModule(Func<WorldProbes> probes) : ICommandMod
         var probeRef = args[0].ToString();
         var path = args[1].ToString();
 
-        if (!m_probes().TryBeginRecording(
+        if (!m_probes().Boot.TryBeginRecording(
             path: path,
             probeRef: probeRef,
             reason: out var reason,
@@ -62,7 +63,7 @@ internal sealed class ProbeCommandModule(Func<WorldProbes> probes) : ICommandMod
         var probeRef = args[0].ToString();
         var field = args[1].ToString();
 
-        if (!m_probes().TrySetField(
+        if (!m_probes().Boot.TrySetField(
             field: field,
             probeRef: probeRef,
             reason: out var reason,
@@ -98,7 +99,7 @@ internal sealed class ProbeCommandModule(Func<WorldProbes> probes) : ICommandMod
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "probe.status",
-            description: "Echoes every live probe instance and its bindings, live: probe.status — a probe whose row is seat-relative (at least one camera socket carries no seat of its own) is instanced once per occupied local seat and listed as <id>$<seat>; a single-instance row is listed by its bare <id>. For each instance, its kind, either every socket's bound source (socket=camera:<sensor>@<resolvedToken>|view:<camera>|probe:<id>|unbound, space-separated — a camera socket names the seat it targets and the roster token (camera<N>) actually resolved, or 'seat<N>-unassigned' when no camera is seated there) or track=<path> for a track-input probe, run state (running | idle, plus a fault when one is recorded) and, while running, tier, rate, cycles/drops, for a kind that writes a texture output=<socket> (world.screens reads its ring back on the screen showing it: the source extent and order:fence or order:cpu-wait (reason)), then the latest capture age, channel values, and confidence; for each axis binding, its conditioned value, confidence, captured value, and expiry; for each parameter binding, its extension target, value, and write count; for each control binding, its device control, value, and write count. A query (always echoes, even under wire.ack quiet). A world with no probes rows answers 'no probes rows declared'.",
+            description: "Echoes every live probe instance and its bindings, live: probe.status — a probe whose row is seat-relative (at least one camera socket carries no seat of its own) is instanced once per occupied local seat and listed as <id>$<seat>; a single-instance row is listed by its bare <id>. For each instance, its kind, either every socket's bound source (socket=camera:<sensor>@<resolvedToken>|view:<camera>|probe:<id>|unbound, space-separated — a camera socket names the seat it targets and the roster token (camera<N>) actually resolved, or 'seat<N>-unassigned' when no camera is seated there) or track=<path> for a track-input probe, run state (running | idle, plus a fault when one is recorded) and, while running, tier, rate, cycles/drops, for a kind that writes a texture output=<socket> (world.screens reads its ring back on the screen showing it: the source extent and order:fence or order:cpu-wait (reason)), then the latest capture age, channel values, and confidence; for each axis binding, its conditioned value, confidence, captured value, and expiry; for each parameter binding, its extension target, value, and write count; for each control binding, its device control, value, and write count. Then each world shown through a screen whose own host runs its probes, prefixed world <instance>: (refused when its host could not be built; the screens showing its probes name why). A query (always echoes, even under wire.ack quiet). A world with no probes rows answers 'no probes rows declared'.",
             handler: StatusHandler
         );
         yield return CommandDefinition.WithWireArgs(

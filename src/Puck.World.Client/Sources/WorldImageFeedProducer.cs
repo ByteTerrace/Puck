@@ -90,13 +90,13 @@ public sealed class WorldImageFeedProducer : IRenderGraphSourceProducer, IGpuWor
     /// feed refuses. While the gate fills the feed's content class the source hands out its capture fill, never the
     /// feed's image, so it is rendered once the fill has converted, whatever the feed answers, and the live feed owes no
     /// publication. Otherwise it publishes the feed (<see cref="IWorldImportFeed.Publish"/>) and answers as the feed
-    /// does, unless an external feed answers that it has no image: the source then hands out its fill and answers as the
-    /// fill does. The extent is the one the feed declared, so the arguments are not read.</remarks>
+    /// does, unless an external feed answers that it has no image, or a feed stands its fill in
+    /// (<see cref="IWorldImportFeed.ShowsFill"/>): the source then hands out its fill and answers as the fill does. The extent is the one the feed declared, so the arguments are not read.</remarks>
     public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
         if ((Feed is { } feed) && !m_gate.Fills(content: feed.Descriptor.Content)) {
             var published = feed.Publish(context: in context);
 
-            if (published.IsRendered || !feed.Descriptor.FillsCaptures) {
+            if (published.IsRendered || !m_gate.FillsFeed(feed: feed)) {
                 return published;
             }
         }

@@ -43,11 +43,19 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     private readonly ProbeRowInfo[] m_rows;
     private readonly IInputClock m_clock;
     private readonly IInputFocus m_focus;
-    private readonly WorldPostPasses m_passes;
+    // The boot views' composed passes a post-target parameter binding writes, or null for a world shown through a
+    // screen, whose views compose no passes of their own here.
+    private readonly WorldPostPasses? m_passes;
     private readonly IReadOnlyList<WorldViewPostPass> m_post;
     private readonly InputRouter m_router;
     private readonly PlayerRoster m_roster;
     private readonly WorldScreenBinder m_screens;
+    // The world instance whose probes this host runs, and whether it is a world shown through a screen rather than the
+    // boot world: such a host binds no local seat, camera device, input lane or boot pass, so it runs every probe as one
+    // instance at seat 1, faults a camera socket by name, and services only its kernels, tracks and probe-target
+    // parameter bindings.
+    private readonly string m_world;
+    private readonly bool m_presented;
 
     private bool m_disposed;
     private RecordingState? m_recording;
@@ -57,11 +65,15 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     /// probe/channel reference, a post pass's config field, and a control name. Live per-instance state (rings,
     /// kernel runs, binding state) is built afterward, by the first <see cref="CaptureFrame"/>'s instance
     /// reconciliation.</summary>
+    /// <param name="world">The name of the world instance whose probes the host runs: the boot world's, or a world shown
+    /// through a screen, whose host binds no local seat, camera device, input lane or boot pass.</param>
+    /// <param name="definition">The world's definition, whose <c>probes</c> section the host runs.</param>
+    /// <param name="documentDirectory">The directory a track binding's path resolves against, or
+    /// <see langword="null"/> for a document with none, which resolves no relative track.</param>
     /// <param name="clock">The shared input capture clock an axis binding's captured signal is stamped with.</param>
-    /// <param name="definitionSource">The booted document and its source path, for the <c>probes</c> section and
-    /// resolving a track binding's path against the document's own directory.</param>
     /// <param name="focus">The terminal input focus an axis binding's capture is gated through.</param>
-    /// <param name="passes">The composed <c>views.post</c> passes a parameter binding writes into.</param>
+    /// <param name="passes">The composed <c>views.post</c> passes a parameter binding writes into, or
+    /// <see langword="null"/> for a world shown through a screen, whose post-target bindings write nothing.</param>
     /// <param name="roster">The seat roster a seat-relative row's instances follow — occupancy drives creation and
     /// retirement.</param>
     /// <param name="router">The command router an axis binding's conditioned sample is captured into.</param>
@@ -73,25 +85,30 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
     /// channel-count-mismatched track document, an unresolved channel name, an unresolved or range-incompatible
     /// post pass or probe config field, an unresolved control name, or a screen showing a probe whose kind writes no
     /// texture.</exception>
-    public WorldProbes(IInputClock clock, WorldDefinitionSource definitionSource, IInputFocus focus, WorldPostPasses passes, PlayerRoster roster, InputRouter router, WorldScreenBinder screens) {
+    public WorldProbes(string world, WorldDefinition definition, string? documentDirectory, IInputClock clock, IInputFocus focus, WorldPostPasses? passes, PlayerRoster roster, InputRouter router, WorldScreenBinder screens) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: world);
+        ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: clock);
-        ArgumentNullException.ThrowIfNull(argument: definitionSource);
         ArgumentNullException.ThrowIfNull(argument: focus);
-        ArgumentNullException.ThrowIfNull(argument: passes);
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: router);
         ArgumentNullException.ThrowIfNull(argument: screens);
 
+        m_world = world;
+        m_presented = !string.Equals(
+            a: world,
+            b: WorldDefinitionLoader.BootInstanceName,
+            comparisonType: StringComparison.Ordinal
+        );
         m_clock = clock;
         m_focus = focus;
         m_passes = passes;
-        m_post = (definitionSource.Definition.Views.Post ?? []);
+        m_post = (definition.Views.Post ?? []);
         m_roster = roster;
         m_router = router;
         m_screens = screens;
 
-        var probes = definitionSource.Definition.Probes;
-        var documentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: definitionSource.SourcePath);
+        var probes = definition.Probes;
 
         m_rowIndexById = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         m_rows = new ProbeRowInfo[probes.Count];
@@ -110,18 +127,30 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
             m_rows[index] = BuildRow(
                 documentDirectory: documentDirectory,
                 index: index,
+                presented: m_presented,
                 probesById: probesById,
                 row: row
             );
             m_rowIndexById[row.Id] = index;
         }
 
-        foreach (var screen in definitionSource.Definition.Screens) {
+        foreach (var screen in definition.Screens) {
             if (
                 (screen.Source is WorldScreenSource.Probe probeSource) &&
                 (m_rows[m_rowIndexById[probeSource.Id]].Manifest.Output is null)
             ) {
                 throw new InvalidOperationException(message: $"screens[{screen.Index}] shows probe '{probeSource.Id}', whose kind writes no texture output.");
+            }
+        }
+
+        // Every row that writes a texture is declared from here on, so a screen showing it reads a probe its world
+        // declares even before its instance exists (a seat-relative row with no seat joined).
+        foreach (var rowInfo in m_rows) {
+            if (rowInfo.Manifest.Output is not null) {
+                m_screens.DeclareProbeOutput(
+                    external: WorldCaptureFills.IsExternalProbe(probe: rowInfo.Row, rowOf: RowOf),
+                    id: WorldScreenBinder.ProbeKey(id: rowInfo.Row.Id, world: m_world)
+                );
             }
         }
 
@@ -153,11 +182,21 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
 
         ReconcileInstances();
         ServiceProbes();
-        ServiceAxes(frameKey: frameKey);
+
+        if (!m_presented) {
+            ServiceAxes(frameKey: frameKey);
+        }
+
         ServiceParameters();
-        ServiceControls(frameKey: frameKey);
+
+        if (!m_presented) {
+            ServiceControls(frameKey: frameKey);
+        }
+
         ServiceRecording();
     }
+    /// <summary>Gets the name of the world instance whose probes the host runs.</summary>
+    public string World => m_world;
     /// <inheritdoc/>
     public void Dispose() {
         if (m_disposed) {
@@ -824,6 +863,9 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         public required string OutputRingKey { get; init; }
         public object? OutputSet { get; set; }
         public List<ParameterState> ParameterBindings { get; } = [];
+        // What ReportRun last handed the binder for this instance's ring.
+        public string? ReportedRefusal { get; set; }
+        public string? ReportedWaiting { get; set; }
         public required object?[] ResolvedGenerations { get; init; }
         public required PublishBuffer<ProbeReading> Ring { get; init; }
         public required ProbeRowInfo RowInfo { get; init; }
