@@ -721,9 +721,12 @@ Free Cam do not alter the logical movement basis.
   ticks, and read only while the delivery declares them), its cameras as views
   of it filmed under the level, its text through
   its own fonts, and producers whose content is a function of their settings
-  (`testPattern`, `qr`, `color`) through the shared instance. A probe shows
-  nothing (only the boot world runs a probe host), nor does a local-device
-  producer. A world another authority runs shows neither its machines nor its
+  (`testPattern`, `qr`, `color`) through the shared instance. A probe runs
+  on that world's own probe host (`WorldProbeHosts`), reading that world's
+  cameras through views the level films for it; a probe whose host or run
+  cannot start (a camera socket, which never opens the local device, or a
+  track a remote world's missing document directory cannot resolve) shows its
+  capture fill and names why. A local-device producer shows nothing. A world another authority runs shows neither its machines nor its
   text (its definition carries no document directory) nor its session screens
   (no message carries a remote screen session); its cameras and producers
   show.

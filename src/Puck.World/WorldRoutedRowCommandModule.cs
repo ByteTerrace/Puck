@@ -47,11 +47,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
 
         var route = m_seatRouter.Route(slot: slot);
 
-        if (string.Equals(
-            a: route.Endpoint.Identity,
-            b: WorldInstanceHost.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )) {
+        if (WorldDefinitionLoader.IsBootInstance(name: route.Endpoint.Identity)) {
             m_link.SubmitWorldMutation(mutation: mutation);
 
             return CommandResult.None;

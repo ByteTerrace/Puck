@@ -43,6 +43,15 @@ public static partial class WorldDefinitionLoader {
     /// cannot see that composition-root type.</summary>
     public const string BootInstanceName = "boot";
 
+    /// <summary>Returns whether a world instance name is the boot world's (<see cref="BootInstanceName"/>), ordinally.</summary>
+    /// <param name="name">The world instance name, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when <paramref name="name"/> is the boot world's name.</returns>
+    public static bool IsBootInstance(string? name) => string.Equals(
+        a: name,
+        b: BootInstanceName,
+        comparisonType: StringComparison.Ordinal
+    );
+
     // Every byte-level load door decodes here, so the boot ledger counts each such load once; a file load counts in
     // WorldDefinitionFileSource.TryLoadParsed instead.
     // The document is read from its bytes as the text they decode to (Puck.Confinement.FileContent.Utf8), never decoded

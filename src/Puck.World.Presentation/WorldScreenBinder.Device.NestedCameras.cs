@@ -50,6 +50,8 @@ public sealed partial class WorldScreenBinder {
             if ((entry.Screens is { } screens) && (InfinityParent(entry: entry) is { } parent)) { SetNestedCameraViews(level: screens, parent: parent, refresh: refresh); }
         }
     }
+    // A camera a screen shows is demanded by that screen; one a probe of the world exports is shown outside the world, as a
+    // boot camera's probe export is.
     private void SetNestedCameraViews(WorldNestedScreens<SessionFeed> level, string? parent, RenderGraphRefresh refresh) {
         foreach (var camera in level.Cameras) {
             var (width, height) = WorldViewInstances.Fit(
@@ -58,9 +60,11 @@ public sealed partial class WorldScreenBinder {
                 height: ((int)camera.Camera.RenderHeight),
                 width: ((int)camera.Camera.RenderWidth)
             );
+            var demand = ((level.CameraReads.Contains(value: camera.Name) ? WorldViewDemand.Screen : WorldViewDemand.None) |
+                (m_nestedViewExports.ContainsKey(key: camera.Name) ? WorldViewDemand.Root : WorldViewDemand.None));
 
             m_views.Set(view: new WorldView(
-                Demand: WorldViewDemand.Screen,
+                Demand: demand,
                 FilmsWorld: false,
                 Height: height,
                 Name: camera.Name,
@@ -248,6 +252,10 @@ public sealed partial class WorldScreenBinder {
                 Quality = NestedQuality(views: views, name: camera.Name),
             });
             views[^1] = ResolveResolution(views[^1], camera.Name, camera.Camera.RenderWidth, camera.Camera.RenderHeight);
+
+            if (Runtime?.NodeOf(instance: camera.Name) is { } node) {
+                node.Export = m_nestedViewExports.GetValueOrDefault(key: camera.Name);
+            }
         }
     }
     // The level a view of a routed scene's frame past its seats and windows films: a camera view's.

@@ -450,11 +450,7 @@ internal sealed partial class PlayerCommandModule {
 
             if (
                 m_roster.IsJoined(slot: rosterSlot) &&
-                !string.Equals(
-                a: location.Endpoint.Identity,
-                b: WorldInstanceHost.BootInstanceName,
-                comparisonType: StringComparison.Ordinal
-            )
+                !WorldDefinitionLoader.IsBootInstance(name: location.Endpoint.Identity)
             ) {
                 routedLocation = location;
                 targetChannels = m_seatBindings.Channels(slot: rosterSlot);

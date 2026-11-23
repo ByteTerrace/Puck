@@ -79,11 +79,7 @@ public static class WorldArgs {
             return false;
         }
 
-        if (string.Equals(
-            a: candidate,
-            b: WorldDefinitionLoader.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )) {
+        if (WorldDefinitionLoader.IsBootInstance(name: candidate)) {
             name = string.Empty;
             error = CommandResult.Error(output: $"[{verb}: '{WorldDefinitionLoader.BootInstanceName}' is the world this process booted with — omit instance: to address it]");
 
