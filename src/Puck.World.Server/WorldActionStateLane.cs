@@ -31,7 +31,7 @@ public sealed class WorldActionStateLane {
     /// <param name="slot">The register-file slot.</param>
     /// <returns>The row's catalog ordinal, or <c>-1</c> when the slot is out of range or the bound catalog declares no
     /// such row.</returns>
-    public int RowOrdinal(int slot) => ((((uint)slot) < ((uint)m_rows.Length)) ? m_rows[slot] : -1);
+    public int RowOrdinal(int slot) => Puck.Abstractions.Memory.ArrayCapacity.ElementOr(array: m_rows, index: slot, fallback: -1);
     /// <summary>Binds the arena the lanes are stored in and resolves every register slot's row.</summary>
     /// <param name="arena">The server's columnar store.</param>
     /// <param name="definitions">The world's compiled register file.</param>

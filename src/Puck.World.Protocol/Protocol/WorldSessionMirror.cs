@@ -4,6 +4,7 @@ using System.Numerics;
 using Puck.Abstractions;
 using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 using Puck.Commands;
 using Puck.Physics.Motion;
@@ -76,7 +77,6 @@ public sealed class WorldSessionMirror : IClientSink {
         }
     }
 
-    private static T At<T>(T[] column, int index) => ((((uint)index) < ((uint)column.Length)) ? column[index] : default!);
 
     private WorldDeliveredDocument m_document;
     private int m_definitionRevision;
@@ -495,10 +495,10 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>The entity's render body color, mirrored verbatim from the snapshot (a pending seat's is already
     /// gray-lerped server-side).</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public Vector3 BodyColor(int index) => At(column: Volatile.Read(location: ref m_extras).BodyColor, index: index);
+    public Vector3 BodyColor(int index) => ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_extras).BodyColor, index: index);
     public WorldBodyContactMode BodyContact(int index) {
         var contacts = Volatile.Read(location: ref m_kitBodyContacts);
-        var kit = At(column: Volatile.Read(location: ref m_extras).Kit, index: index);
+        var kit = ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_extras).Kit, index: index);
 
         return ((kit < contacts.Length)
             ? contacts[kit]
@@ -506,10 +506,10 @@ public sealed class WorldSessionMirror : IClientSink {
         );
     }
     /// <summary>The entity-owned procedural rig mirrored from the authoritative snapshot.</summary>
-    public byte CatalogRig(int index) => At(column: Volatile.Read(location: ref m_extras).CatalogRig, index: index);
+    public byte CatalogRig(int index) => ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_extras).CatalogRig, index: index);
     public FixedWorldCollider? Collider(int index) {
         var colliders = Volatile.Read(location: ref m_kitColliders);
-        var kit = At(column: Volatile.Read(location: ref m_extras).Kit, index: index);
+        var kit = ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_extras).Kit, index: index);
 
         return ((kit < colliders.Length)
             ? colliders[kit]
@@ -1149,10 +1149,10 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>Gets an entity's latest authoritative fact mask (<see cref="EntitySnapshot.Facts"/>) — not
     /// interpolated; the facts are discrete authority answers.</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public BodyFacts Facts(int index) => At(column: Volatile.Read(location: ref m_extras).Facts, index: index);
+    public BodyFacts Facts(int index) => ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_extras).Facts, index: index);
     /// <summary>Gets an entity's latest authoritative heading in radians about world up (<see cref="EntitySnapshot.Heading"/>)
     /// — not interpolated; the composition seam that reads it wants the authority's current value.</summary>
-    public float Heading(int index) => At(column: Volatile.Read(location: ref m_extras).Heading, index: index);
+    public float Heading(int index) => ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_extras).Heading, index: index);
     /// <summary>Whether the entity at <paramref name="index"/> was active (drawn) in the latest snapshot.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public bool IsActive(int index) => m_poses.IsActive(index: index);
@@ -1256,7 +1256,7 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <returns>The entity's look row.</returns>
     public WorldLook Look(int index) => WorldDefinitionRows.ResolveLook(
         rows: Definition.Looks,
-        index: At(column: Volatile.Read(location: ref m_extras).Look, index: index)
+        index: ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_extras).Look, index: index)
     );
     /// <summary>The entity's previous-tick render attitude (one interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>

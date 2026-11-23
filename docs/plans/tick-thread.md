@@ -598,14 +598,6 @@ Two readers are found by their effect and not by a server reference.
   this host step, or its clock is another process's
   (`WorldAuthorityEndpoint.ClockOwnedHere` is false). A world that steps less
   often than the host therefore never accumulates look steps.
-- **Render poses.** `WorldClient.UpdateRenderPoses` scans
-  `WorldClient.EntityCapacity` slots every frame and interpolates every
-  active body, at rest or not. The pose table already keeps the dense list of
-  bodies the last snapshot carried (`WorldPoseTable.Seen`). A delivery
-  records which of those moved (the two tick poses differ, or a correction is
-  still easing), and the frame interpolates that subset; a body at rest keeps
-  the pose its delivery wrote. The frame's cost follows moving bodies, not
-  capacity.
 
 ## What the tick calls outside the authority
 

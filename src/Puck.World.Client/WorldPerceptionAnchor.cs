@@ -44,10 +44,7 @@ public sealed class WorldPerceptionAnchor {
     /// possesses a body, or is out of range.</summary>
     /// <param name="slot">The 0-based local seat slot.</param>
     /// <returns>The engaged screen's index, or -1.</returns>
-    public int EngagedScreen(int slot) => ((((uint)slot) < ((uint)m_engagedScreen.Length))
-        ? m_engagedScreen[slot]
-        : -1
-    );
+    public int EngagedScreen(int slot) => Puck.Abstractions.Memory.ArrayCapacity.ElementOr(array: m_engagedScreen, index: slot, fallback: -1);
 
     /// <summary>The body index seat <paramref name="slot"/> perceives from.</summary>
     /// <param name="slot">The 0-based local seat slot.</param>

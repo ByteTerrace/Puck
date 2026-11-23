@@ -865,10 +865,7 @@ public sealed partial class WorldPopulation {
     /// uninhabited — one array index, no string work, the tick-path contract <c>placement:$each</c>/<c>$distance:</c>/
     /// <c>$los:</c>/etc. rely on.</summary>
     /// <param name="ordinal">The compiled placement ordinal.</param>
-    public int BodyForPlacementOrdinal(int ordinal) => ((((uint)ordinal) < ((uint)m_placementOrdinalToBody.Length))
-        ? m_placementOrdinalToBody[ordinal]
-        : -1
-    );
+    public int BodyForPlacementOrdinal(int ordinal) => Puck.Abstractions.Memory.ArrayCapacity.ElementOr(array: m_placementOrdinalToBody, index: ordinal, fallback: -1);
     /// <summary>Restores a just-detached federated peer after an aborted transfer, preserving its generation,
     /// admission facts, pose, dynamic state, and designation registers.</summary>
     public bool RestoreDetachedPeer(in WorldPeerEventEntry peer, IReadOnlyList<WorldAdmissionGrant> grantTemplates, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBodyTransferState dynamicState, IReadOnlyList<WorldTargetDesignation>? designations = null) {

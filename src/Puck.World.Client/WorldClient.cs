@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using Puck.Commands;
 using System.Numerics;
 using Puck.Maths;
@@ -348,7 +349,6 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_renderOrientation.AsSpan(start: from).Fill(value: Quaternion.Identity);
         for (var index = from; (index < length); index++) { m_easers[index].Reset(); }
     }
-    private static T At<T>(T[] column, int index) => ((((uint)index) < ((uint)column.Length)) ? column[index] : default!);
 
     /// <summary>Whether another live, claimed slot resolves to <paramref name="body"/> this tick. Used only after
     /// <see cref="SubmitAuthorityIntents"/> has established that the unclaimed seat's own submission carries no input, so
@@ -1001,11 +1001,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public Vector3 BodyColor(int index) {
         return (((index < PlayerRoster.MaxSlots) && m_roster.IsJoined(slot: index))
             ? m_roster.BodyColor(slot: index)
-            : At(column: m_color, index: index)
+            : ArrayCapacity.ElementOr(array: m_color, index: index)
         );
     }
     /// <summary>The entity-owned procedural catalog rig from the latest snapshot.</summary>
-    public byte CatalogRig(int index) => At(column: m_catalogRig, index: index);
+    public byte CatalogRig(int index) => ArrayCapacity.ElementOr(array: m_catalogRig, index: index);
     /// <inheritdoc/>
     public void DeliverAnswer(in QueryAnswer answer) {
         // Queries are synchronous over the loopback (the link returns the answer); nothing arrives on this lane yet.
@@ -1281,12 +1281,12 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public WorldEntityAddress EntityAddress(int index) => new(
         Authority: m_authority,
         Index: index,
-        Generation: At(column: m_generation, index: index)
+        Generation: ArrayCapacity.ElementOr(array: m_generation, index: index)
     );
     /// <summary>The entity's authoritative fact mask from the latest snapshot — the presentation's gate for
     /// fact-keyed animation. An inactive index reports whatever its last snapshot carried.</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public BodyFacts Facts(int index) => At(column: m_facts, index: index);
+    public BodyFacts Facts(int index) => ArrayCapacity.ElementOr(array: m_facts, index: index);
     /// <summary>Whether the entity is drawn this frame (present in the latest snapshot).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public bool IsActive(int index) => m_poses.IsActive(index: index);
@@ -1304,14 +1304,14 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// its eye out of.</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The index into the delivered definition's kit rows.</returns>
-    public int Kit(int index) => At(column: m_kit, index: index);
+    public int Kit(int index) => ArrayCapacity.ElementOr(array: m_kit, index: index);
     /// <summary>The entity's resolved look row index from the latest snapshot — the frame source's appearance selector
     /// (presentation-only).</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public byte LookIndex(int index) => At(column: m_look, index: index);
+    public byte LookIndex(int index) => ArrayCapacity.ElementOr(array: m_look, index: index);
     /// <summary>The entity's per-frame render attitude (interpolated and correction-eased).</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public Quaternion Orientation(int index) => ((((uint)index) < ((uint)m_renderOrientation.Length)) ? m_renderOrientation[index] : Quaternion.Identity);
+    public Quaternion Orientation(int index) => ArrayCapacity.ElementOr(array: m_renderOrientation, index: index, fallback: Quaternion.Identity);
     /// <summary>The placement row this entity inhabits, or <see langword="null"/> for a seat/peer — the frame source
     /// renders an inhabitant's creation geometry (a body-rooted stamp) instead of a catalog avatar.</summary>
     /// <param name="index">The 0-based entity index.</param>
@@ -1327,7 +1327,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
     /// <summary>The entity's per-frame render position (interpolated and correction-eased).</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public Vector3 Position(int index) => At(column: m_renderPosition, index: index);
+    public Vector3 Position(int index) => ArrayCapacity.ElementOr(array: m_renderPosition, index: index);
     /// <summary>Publishes the static-scene query field every presentation consumer shares.</summary>
     /// <param name="field">The evaluator built over the composed program's static layers, or <see langword="null"/>
     /// when the program admits no fixed-point query.</param>

@@ -153,18 +153,10 @@ public sealed class WorldPoseTable {
     public void Begin() => m_seen.Clear();
     /// <summary>Gets an entity's current attitude (the later interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index; one past <see cref="Capacity"/> reads the identity.</param>
-    public Quaternion CurrentOrientation(int index) {
-        var columns = Volatile.Read(location: ref m_columns);
-
-        return ((((uint)index) < ((uint)columns.Length)) ? columns.CurrentOrientation[index] : Quaternion.Identity);
-    }
+    public Quaternion CurrentOrientation(int index) => ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_columns).CurrentOrientation, index: index, fallback: Quaternion.Identity);
     /// <summary>Gets an entity's current position (the later interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index; one past <see cref="Capacity"/> reads the origin.</param>
-    public Vector3 CurrentPosition(int index) {
-        var columns = Volatile.Read(location: ref m_columns);
-
-        return ((((uint)index) < ((uint)columns.Length)) ? columns.CurrentPosition[index] : Vector3.Zero);
-    }
+    public Vector3 CurrentPosition(int index) => ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_columns).CurrentPosition, index: index);
     /// <summary>Ends a delivery: every slot the last delivery left live that this one did not admit goes inactive and
     /// forgets its placement, and the admitted slots become the live set.</summary>
     /// <param name="preserved">A slot to keep live and active though this delivery did not admit it (a seeded
@@ -230,19 +222,11 @@ public sealed class WorldPoseTable {
     }
     /// <summary>Gets the placement an entity inhabits, or <see langword="null"/> for none.</summary>
     /// <param name="index">The 0-based entity index; one past <see cref="Capacity"/> inhabits none.</param>
-    public string? PlacementId(int index) {
-        var columns = Volatile.Read(location: ref m_columns);
-
-        return ((((uint)index) < ((uint)columns.Length)) ? columns.PlacementId[index] : null);
-    }
+    public string? PlacementId(int index) => ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_columns).PlacementId, index: index);
     /// <summary>Gets an entity's pose-discontinuity counter: it moves on activation, a teleport and each
     /// <see cref="Discontinue"/>.</summary>
     /// <param name="index">The 0-based entity index; one past <see cref="Capacity"/> reads zero.</param>
-    public int PoseEpoch(int index) {
-        var columns = Volatile.Read(location: ref m_columns);
-
-        return ((((uint)index) < ((uint)columns.Length)) ? columns.PoseEpoch[index] : 0);
-    }
+    public int PoseEpoch(int index) => ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_columns).PoseEpoch, index: index);
     /// <summary>Resolves the lowest active entity index that inhabits a placement, as of the last
     /// <see cref="Complete"/> or <see cref="Seed"/>.</summary>
     /// <param name="placementId">The placement row id.</param>
@@ -270,18 +254,10 @@ public sealed class WorldPoseTable {
     }
     /// <summary>Gets an entity's previous attitude (the earlier interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index; one past <see cref="Capacity"/> reads the identity.</param>
-    public Quaternion PreviousOrientation(int index) {
-        var columns = Volatile.Read(location: ref m_columns);
-
-        return ((((uint)index) < ((uint)columns.Length)) ? columns.PreviousOrientation[index] : Quaternion.Identity);
-    }
+    public Quaternion PreviousOrientation(int index) => ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_columns).PreviousOrientation, index: index, fallback: Quaternion.Identity);
     /// <summary>Gets an entity's previous position (the earlier interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index; one past <see cref="Capacity"/> reads the origin.</param>
-    public Vector3 PreviousPosition(int index) {
-        var columns = Volatile.Read(location: ref m_columns);
-
-        return ((((uint)index) < ((uint)columns.Length)) ? columns.PreviousPosition[index] : Vector3.Zero);
-    }
+    public Vector3 PreviousPosition(int index) => ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_columns).PreviousPosition, index: index);
     /// <summary>Publishes an exact pose for an entity outside any snapshot (a committed route head): both endpoints
     /// hold it, the slot becomes live and active, and the epoch does not move.</summary>
     /// <param name="index">The 0-based entity index, below <see cref="WorldBodiesLimits.IndexLimit"/>; the table grows

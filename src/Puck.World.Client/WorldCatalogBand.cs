@@ -31,7 +31,7 @@ internal sealed class WorldCatalogBand(Action<List<int>> candidates, Func<int, b
     // The rig, look and colour a body's avatar is emitted with.
     public (byte Rig, WorldLook Look, Vector3 Color) AppearanceOf(int body) => appearance(body);
     // A body's first slot in the band, or -1 for a body that holds none.
-    public int SlotOf(int body) => ((((uint)body) < ((uint)m_slots.Length)) ? m_slots[body] : -1);
+    public int SlotOf(int body) => Puck.Abstractions.Memory.ArrayCapacity.ElementOr(array: m_slots, index: body, fallback: -1);
 
     public void Prepare() {
         m_scratch.Clear();

@@ -283,16 +283,16 @@ Partly true. A destination that ends a session admits the next one into the
 same mirror (`src/Puck.World.Server/WorldInstanceHost.ScreenSessions.cs:608-612`),
 and a delivered definition clears no body. Admission delivers a primer snapshot
 in the same call, and a snapshot retires every body it does not name
-(`WorldPoseTable.Complete`, `src/Puck.World.Protocol/Protocol/WorldPoseTable.cs:104-114`).
+(`WorldPoseTable.Complete`, `src/Puck.World.Protocol/Protocol/WorldPoseTable.cs:164-188`).
 That replaces membership. It does not replace the pose of a body both sessions
 hold at the same index: an admitted body that was already active takes its
 earlier endpoint from what the table held,
 
-`src/Puck.World.Protocol/Protocol/WorldPoseTable.cs:273-274`
+`src/Puck.World.Protocol/Protocol/WorldPoseTable.cs:340-341`
 
 ```csharp
-            m_previousPosition[index] = priorPosition;
-            m_previousOrientation[index] = priorOrientation;
+            columns.PreviousPosition[index] = priorPosition;
+            columns.PreviousOrientation[index] = priorOrientation;
 ```
 
 and the emitter interpolates between the two endpoints. The first draft called

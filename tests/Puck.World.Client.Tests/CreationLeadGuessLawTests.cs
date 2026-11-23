@@ -52,6 +52,7 @@ public sealed class CreationLeadGuessLawTests {
         public SdfFieldEvaluator? StaticField => inner.StaticField;
         public IWorldSeatGuess? SeatGuess => guess;
         public WorldPoseCarries Carries => inner.Carries;
+        public int EntityCapacity => inner.EntityCapacity;
         public float? SolidScale(string placementId) => inner.SolidScale(placementId: placementId);
         public WorldEntityAddress EntityAddress(int index) => inner.EntityAddress(index: index);
         public BodyFacts Facts(int index) => inner.Facts(index: index);
