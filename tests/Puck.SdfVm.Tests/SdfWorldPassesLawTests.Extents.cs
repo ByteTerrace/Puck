@@ -35,7 +35,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var node = view.Runtime.Node(instance: 0);
 
         Assert.Equal(expected: (Extent, Extent), actual: node.Extent);
-        Assert.Contains(collection: node.Plan!.Passes, filter: static pass => pass.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: "$resolve"));
+        Assert.True(condition: Reconstructs(plan: node.Plan!));
         var storage = gpu.DeviceLocal(part: "sdf.world$visibility", sizeBytes: ((24UL * 24) * SdfWorldPackage.VisibilityRecordByteLength));
 
         Assert.Equal(expected: ((24 * 24) * SdfWorldPackage.VisibilityRecordByteLength), actual: storage.Length);
@@ -59,13 +59,11 @@ public sealed partial class SdfWorldPassesLawTests {
             _ = view.Produce(context: in context);
             var row = view.Runtime.Latest!.Instances[0];
 
-            // The mesh, depth pyramid, surface, probe lookup, views and sky at the active grid, the key light's two shadow
-            // cascades at their own resolution (the frame's one stable shadow slot draws no second), and the resolve, the
-            // composite and the display at the output.
-            const long Cascade = SdfWorldPackage.MeshShadowResolution;
-
-            Assert.Equal(expected: ReconstructingPasses, actual: row.Passes);
-            Assert.Equal(expected: ((((6L * pixels) * pixels) + (2 * (Cascade * Cascade))) + (3 * (Extent * Extent))), actual: row.PassPixels);
+            // Every pass of the reconstructing graph renders: the mesh, depth pyramid, surface, probe lookup, views and sky
+            // at the active grid, and the resolve, the composite and the display at the output.
+            Assert.True(condition: Reconstructs(plan: node.Plan!));
+            Assert.Equal(expected: node.Plan!.Passes.Count, actual: row.Passes);
+            Assert.Equal(expected: (((6L * pixels) * pixels) + (3 * (Extent * Extent))), actual: row.PassPixels);
             var block = gpu.Memory(bufferHandle: gpu.BufferAt(binding: 0, set: gpu.BoundSetOf(group: ((uint)ShaderInterfaceGroup.Pass), part: SdfWorldPackage.Resolve)));
             var parameters = SdfWorldInterfaces.ResolveParameters;
 
@@ -87,12 +85,12 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         // Changing the ceiling rebuilds allocation while preserving the published output. Switching off the separate
         // grid removes the resolve and its scratch; switching back selects the same declared resolve topology.
-        foreach (var (ceiling, active, passes, renderPixels) in new[] {
-            (0.5f, 0.25f, ReconstructingPasses, 8u), (1f, 0f, NativePasses, 32u), (0.75f, 0.5f, ReconstructingPasses, 16u),
+        foreach (var (ceiling, active, reconstructs, renderPixels) in new[] {
+            (0.5f, 0.25f, true, 8u), (1f, 0f, false, 32u), (0.75f, 0.5f, true, 16u),
         }) {
             current = current with { Views = [current.Views[0] with { RenderScale = ceiling, ResolvedRenderScale = active }], Time = (current.Time + 1f) };
             TestLiveness.Until(step: () => {
-                if (!view.Produce(context: in context) || (node.Plan!.Passes.Count != passes)) {
+                if (!view.Produce(context: in context) || (Reconstructs(plan: node.Plan!) != reconstructs)) {
                     return false;
                 }
                 var passSet = gpu.BoundSetOf(group: ((uint)ShaderInterfaceGroup.Pass), part: SdfWorldPackage.Parts.Composite);
@@ -103,7 +101,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 return (BitConverter.ToUInt32(value: passBlock, startIndex: ((int)layout.BlockOffsetOf(member: SdfWorldPackage.ImageExtent))) == renderPixels);
             }, reason: () => node.LastSwapError?.ToString(), wait: view.Residency.WaitPipelineBuilds);
             Assert.Equal(expected: (Extent, Extent), actual: node.Extent);
-            Assert.Equal(expected: (passes == ReconstructingPasses), actual: node.Plan!.Storages.Any(predicate: static item => item.Versions.Any(predicate: static version => version.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.CurrentColor}"))));
+            Assert.Equal(expected: reconstructs, actual: node.Plan!.Storages.Any(predicate: static item => item.Versions.Any(predicate: static version => version.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.CurrentColor}"))));
         }
         // Each publication of the irradiance volume renders the view again (SdfWorldTables.UpdateTablesSignature).
         SettleWallLighting(view: view, context: context);

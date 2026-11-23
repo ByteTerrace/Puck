@@ -504,14 +504,18 @@ internal sealed class FakeGpuDevice :
     void IGpuBindings.WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => Hit(key: "IGpuBindings.WriteSampledImage");
     void IGpuBindings.WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) => Hit(key: "IGpuBindings.WriteSampler");
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => Hit(key: "IGpuBindings.WriteStorageImage");
+    // Builds create their slots' fences on pool threads side by side, so each call returns its own fence, never the
+    // shared LastCreatedFence another thread may have replaced in between.
     IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() {
         Hit(key: "IGpuQueueSubmitter.CreateSubmissionFence");
-        LastCreatedFence = new Fence(
+        var fence = new Fence(
             creation: Track(kind: "fence"),
             gpu: this
         );
 
-        return LastCreatedFence;
+        LastCreatedFence = fence;
+
+        return fence;
     }
     GpuQueueTimeline IGpuQueueSubmitter.Timeline {
         get {

@@ -32,12 +32,11 @@ public sealed partial class SdfWorldPassesLawTests {
         TestLiveness.Until(step: () => view.Produce(context: in context), reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason),
             wait: view.Residency.WaitPipelineBuilds);
         var node = view.Runtime.Node(instance: 0);
-        // A frame of the default lights holds one stable shadow slot, so the view runs no second slot's cascade.
-        var passes = ((ceiling < 1f) ? ReconstructingPasses : NativePasses);
+        var reconstructs = (ceiling < 1f);
 
         // The irradiance volume's first lighting, which creates its GPU work's objects as it starts and lands in wall time,
         // settles before the dip is measured.
-        TestLiveness.Until(step: () => (view.Produce(context: in context) && (node.Plan!.Passes.Count == passes) && !node.IsBuildingCandidate &&
+        TestLiveness.Until(step: () => (view.Produce(context: in context) && (Reconstructs(plan: node.Plan!) == reconstructs) && !node.IsBuildingCandidate &&
             !view.Residency.MeshIrradiance.Settling), reason: () => node.LastSwapError?.ToString(), wait: view.Residency.WaitPipelineBuilds);
         _ = view.Produce(context: in context);
         var buffers = gpu.BufferBytes;
@@ -46,6 +45,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var revision = node.WorkRevision;
         var created = CreatedPipelines(pipelines: pipelines);
         var latest = view.Runtime.Latest!.Instances[0].LatestFrame;
+        var plan = node.Plan!;
 
         gpu.ComputePipelineGateName = SdfKernelSet.StemOf(kernel: SdfKernel.Resolve);
         gpu.ComputePipelineGate = gate;
@@ -61,10 +61,10 @@ public sealed partial class SdfWorldPassesLawTests {
                 Assert.Equal(expected: RenderGraphInstanceStatus.Rendered, actual: row.Status);
                 Assert.True(condition: (row.LatestFrame > latest));
                 latest = row.LatestFrame;
-                // Every pass of the frame records the one grid of the graph that renders it: the native graph its
-                // output, the reconstructing graph the dipped grid.
-                Assert.Equal(expected: passes, actual: node.Plan!.Passes.Count);
-                Assert.Equal(expected: [((passes == ReconstructingPasses) ? ((uint)((Extent * ceiling) * dip)) : Extent)], actual: Grids(gpu: gpu));
+                // The graph the ceiling chose renders every frame of the dip, each pass at the one grid of that graph: the
+                // native graph its output, the reconstructing graph the dipped grid.
+                Assert.Same(expected: plan, actual: node.Plan);
+                Assert.Equal(expected: [(reconstructs ? ((uint)((Extent * ceiling) * dip)) : Extent)], actual: Grids(gpu: gpu, plan: plan));
                 Assert.Equal(expected: (buffers, pools, owned, revision, created), actual: (gpu.BufferBytes, gpu.PoolsCreated.Count, node.OwnedBytes, node.WorkRevision, CreatedPipelines(pipelines: pipelines)));
             }
             Assert.False(condition: node.IsBuildingCandidate);
@@ -86,18 +86,15 @@ public sealed partial class SdfWorldPassesLawTests {
             kernels: SdfTestPipelines.Kernels().With(bytecode: container, kernel: SdfKernel.Resolve));
         var context = GridContext(gpu: gpu);
 
-        TestLiveness.Until(step: () => (view.Produce(context: in context) && (view.Runtime.Node(instance: 0).Plan!.Passes.Count == ReconstructingPasses) &&
+        TestLiveness.Until(step: () => (view.Produce(context: in context) && Reconstructs(plan: view.Runtime.Node(instance: 0).Plan!) &&
             !view.Runtime.Node(instance: 0).IsBuildingCandidate), reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason),
             wait: view.Residency.WaitPipelineBuilds);
         Assert.Null(@object: view.Runtime.Node(instance: 0).LastSwapError);
-        Assert.Contains(collection: view.Runtime.Node(instance: 0).Plan!.Passes, filter: static pass => pass.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: "$resolve"));
     }
 
-    // The passes of a view of the default frame, whose lights hold one stable shadow slot (no second slot's cascade) and
-    // which draws no distant map: the mesh, pyramid, two cascades, surface, probe lookup, views, sky, composite and display,
-    // and the resolve when the view renders below its output.
-    private const int NativePasses = 10;
-    private const int ReconstructingPasses = (NativePasses + 1);
+    // Whether a view's graph reconstructs its output from a lower render grid: only that graph holds the resolve pass.
+    private static bool Reconstructs(ShaderPipelinePlan plan) =>
+        plan.Passes.Any(predicate: static pass => pass.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.Resolve}"));
 
     private static SdfTestView GridView(UploadModelGpu gpu, SdfWorldPipelineCatalog pipelines, Func<SdfFrame> capture, SdfKernelSet? kernels = null) =>
         new(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
@@ -106,11 +103,13 @@ public sealed partial class SdfWorldPassesLawTests {
     private static FrameContext GridContext(UploadModelGpu gpu) => new(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
         Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),
         StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
-    // The distinct render grids the frame's SDF passes recorded: each pass block's imageExtent, read through the interface
-    // its pass binds (the sky's for the sky and the composite, the resolve's for the resolve, the world's for the rest). The
-    // display pass's optical interface is the output's, not a render grid.
-    private static uint[] Grids(UploadModelGpu gpu) => [.. gpu.SetBinds!
-        .Where(predicate: static bind => ((bind.Group == ((uint)ShaderInterfaceGroup.Pass)) && (bind.Part is not (null or SdfWorldPackage.Display))))
+    // The distinct render grids the frame's passes of the plan recorded: each pass block's imageExtent, read through the
+    // interface its pass binds (the sky's for the sky and the composite, the resolve's for the resolve, the world's for the
+    // rest). The display pass's optical interface is the output's, not a render grid, and what the residency records
+    // outside the plan (its shadow solution, its GPU work) binds blocks of its own.
+    private static uint[] Grids(UploadModelGpu gpu, ShaderPipelinePlan plan) => [.. gpu.SetBinds!
+        .Where(predicate: bind => ((bind.Group == ((uint)ShaderInterfaceGroup.Pass)) && (bind.Part is { } part) && (part != SdfWorldPackage.Display) &&
+            plan.Passes.Any(predicate: pass => pass.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${part}"))))
         .DistinctBy(keySelector: static bind => bind.Set)
         .Select(selector: bind => {
             var layout = bind.Part switch {
