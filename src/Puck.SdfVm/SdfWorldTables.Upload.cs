@@ -2,8 +2,10 @@ using Puck.Abstractions.Gpu;
 
 namespace Puck.SdfVm;
 
-// The upload: one fenced submission a frame, recorded by the residency's staging before any pass records, ahead of every view's submission. It takes the next ring slot, waits the previous upload's fence, which signals once every submission queued
-// before it has finished, the views that read this slot two uploads earlier among them, flushes the slot's share of every
+// The upload: one fenced submission a frame, recorded by the residency's staging before any pass records, ahead of every
+// view's submission. It takes the next ring slot, waits the previous upload's fence, which signals once that upload and
+// every submission queued before it have finished, the views that read this slot two uploads earlier among them, but not
+// the views deferred after it (its fence answers from a signal of its own), flushes the slot's share of every
 // region, and records the fillers' first transitions, the regions' copies and the world's shadow layers (SdfWorldShadows),
 // each handing what it wrote to every shader stage that reads it in a later submission. The graph's
 // environment producer runs afterward, once its panorama images have been acquired.
@@ -37,7 +39,10 @@ public sealed partial class SdfWorldTables {
 
         var slot = ((int)(m_uploads % FrameRingSize));
 
-        // Waiting an upload completes it in the ledger before another upload reuses its ring slot.
+        // The previous upload's fence follows, on the queue, the views that read this slot an upload earlier. A batch
+        // answers an upload's fence from its own hand-over's signal (GpuQueueWork.OwnsSignal), never from the views
+        // deferred behind it, so this waits for the frame before the previous one and not for the frame just handed to
+        // the GPU. Waiting completes it in the ledger before another upload reuses its ring slot.
         if (m_uploads > 0UL) {
             m_frameFences[((int)((m_uploads - 1UL) % FrameRingSize))].Wait();
             m_completedUploads = m_uploads;

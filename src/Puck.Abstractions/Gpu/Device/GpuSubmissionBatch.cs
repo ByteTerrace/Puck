@@ -13,10 +13,10 @@ namespace Puck.Abstractions.Gpu;
 /// still deferred; only <see cref="Flush"/> closes it.</para>
 /// <para>What a fence proves follows from it: a fence answers from a signal queued after its own entries, so once it
 /// reads signaled its submission and every submission made before it have completed. It proves nothing about a
-/// submission made after it, even one deferred in the same batch. A background job's fenced submission
-/// (<see cref="GpuQueueWork.IsBackground"/>) is answered from its own hand-over's signal, never from a later frame's
-/// work: work that is not a background job's, deferred behind one, first hands the batch to the queue
-/// (<see cref="GpuSubmissionBatch{TEntry}.Admit"/>).</para>
+/// submission made after it, even one deferred in the same batch. A fenced submission whose category answers from a
+/// signal of its own (<see cref="GpuQueueWork.OwnsSignal"/>: a background job's, an upload's) is answered from its own
+/// hand-over's signal, never from a later frame's work: work of another category, deferred behind one, first hands the
+/// batch to the queue (<see cref="GpuSubmissionBatch{TEntry}.Admit"/>).</para>
 /// <para>Every hand-off counts in <see cref="GpuQueueWork"/>: its execute under the cause the split names and the
 /// category of the code that split it, and each list under the category it was deferred with. The backend counts the
 /// owner's signal at its native call.</para>
@@ -53,16 +53,19 @@ public abstract class GpuSubmissionBatch<TEntry> : GpuSubmissionBatch {
     private List<TEntry> m_handing = [];
     private List<GpuQueueCategory> m_handingOwners = [];
     private List<GpuBatchedSubmissionFence> m_handingFences = [];
-    // The background jobs' fences deferred since the last hand-over, and how many of them have since had work that is
-    // not a background job's deferred behind them. Admit hands the batch over before such work, so the second stays zero
-    // unless a derived batch defers past Admit; Split counts both (GpuQueueWork.Jobs).
+    // The background jobs' fences deferred since the last hand-over, and how many of them have since had work that does
+    // not answer from its own signal deferred behind them. Admit hands the batch over before such work, so the second
+    // stays zero unless a derived batch defers past Admit; Split counts both (GpuQueueWork.Jobs).
     private int m_jobs;
     private int m_lateJobs;
+    // Whether a fenced submission that answers from its own signal (GpuQueueWork.OwnsSignal) is deferred with no work of
+    // another category behind it; the next such work hands the batch over first.
+    private bool m_signalOwed;
 
     /// <summary>Readies the batch to defer a submission made now under the calling thread's
-    /// <see cref="GpuQueueWork.Current"/> category. A submission that is not a background job's
-    /// (<see cref="GpuQueueWork.IsBackground"/>), made while a background job's fenced submission is deferred, first hands
-    /// the deferred work to the queue (<see cref="GpuQueueCause.JobEnd"/>), so the job's fence answers from that
+    /// <see cref="GpuQueueWork.Current"/> category. A submission whose category does not answer from its own signal
+    /// (<see cref="GpuQueueWork.OwnsSignal"/>), made while a fenced submission whose category does is deferred, first
+    /// hands the deferred work to the queue (<see cref="GpuQueueCause.OwnSignal"/>), so that fence answers from the
     /// hand-over's signal rather than from the work deferred after it. <see cref="TryDefer"/> calls it; a derived batch
     /// that copies a submission into its own lists calls it before copying, since the hand-over it may make submits and
     /// clears those lists. A hand-over that fails rethrows its failure and leaves <paramref name="fence"/> abandoned
@@ -76,9 +79,9 @@ public abstract class GpuSubmissionBatch<TEntry> : GpuSubmissionBatch {
         if (!IsOpen) { return false; }
 
         fence?.RequireDrained();
-        if ((m_jobs != m_lateJobs) && !GpuQueueWork.IsBackground(category: GpuQueueWork.Current)) {
+        if (m_signalOwed && !GpuQueueWork.OwnsSignal(category: GpuQueueWork.Current)) {
             try {
-                Split(cause: GpuQueueCause.JobEnd);
+                Split(cause: GpuQueueCause.OwnSignal);
             } catch {
                 fence?.MarkAbandoned();
 
@@ -108,6 +111,7 @@ public abstract class GpuSubmissionBatch<TEntry> : GpuSubmissionBatch {
 
         var category = GpuQueueWork.Current;
         var background = GpuQueueWork.IsBackground(category: category);
+        var ownsSignal = GpuQueueWork.OwnsSignal(category: category);
 
         try {
             _ = m_entries.EnsureCapacity(capacity: (m_entries.Count + entries.Length));
@@ -125,8 +129,12 @@ public abstract class GpuSubmissionBatch<TEntry> : GpuSubmissionBatch {
         if (fence is not null) {
             m_fences.Add(item: fence);
             if (background) { m_jobs++; }
+            if (ownsSignal) { m_signalOwed = true; }
         }
-        if (!background) { m_lateJobs = m_jobs; }
+        if (!ownsSignal) {
+            m_lateJobs = m_jobs;
+            m_signalOwed = false;
+        }
 
         return true;
     }
@@ -146,6 +154,7 @@ public abstract class GpuSubmissionBatch<TEntry> : GpuSubmissionBatch {
         (m_fences, m_handingFences) = (m_handingFences, fences);
         m_jobs = 0;
         m_lateJobs = 0;
+        m_signalOwed = false;
         try {
             GpuQueueWork.Process.Execute(cause: cause, owners: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: owners));
             GpuQueueWork.Process.Jobs(handed: jobs, late: lateJobs);

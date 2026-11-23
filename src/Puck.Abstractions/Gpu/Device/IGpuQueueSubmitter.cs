@@ -11,8 +11,8 @@ namespace Puck.Abstractions.Gpu;
 /// see the deferred work first splits the batch, handing that work to the queue and keeping the batch open: waiting on a
 /// fence a deferred submission arms, <see cref="SubmitAndWait"/>, the device context's wait for idle, and every other
 /// operation on the device's queue. Every fence a hand-over's submissions arm signals once that hand-over retires, so a
-/// fence proves its own submission and every earlier one, never a later one; a background job deferred ahead of a
-/// frame's work takes a hand-over of its own. An external wait may split the batch before the waiting submission.</para>
+/// fence proves its own submission and every earlier one, never a later one; a background job's or an upload's fenced
+/// submission deferred ahead of a frame's work takes a hand-over of its own (<see cref="GpuQueueWork.OwnsSignal"/>). An external wait may split the batch before the waiting submission.</para>
 /// </summary>
 public interface IGpuQueueSubmitter {
     /// <summary>Gets the device generation's single completion timeline, shared by every residency and wrapper.

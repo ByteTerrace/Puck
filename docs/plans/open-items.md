@@ -1468,11 +1468,6 @@ The frame thread's CPU work, largest first:
   portal face each tick, with an occupancy dictionary write per pair
   (`WorldInstanceHost.Adjacency.cs`). A body-major loop with a bounds test
   before the occupancy write cuts it; the memo's T3 partitions it.
-- [low] The upload's fence wait (`SdfWorldTables.SubmitUpload`) is GPU
-  back-pressure, counted in `produce-fence`; the ring is two slots deep
-  (`SdfWorldTables.FrameRingSize`) while the graph allows three frames in
-  flight (`RenderGraphRuntime.DefaultInFlightFrames`). Measure whether a frame
-  waits on a ring slot before following the graph's count.
 
 The frame's GPU side:
 

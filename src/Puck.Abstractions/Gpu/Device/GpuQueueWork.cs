@@ -44,10 +44,11 @@ public enum GpuQueueCause : byte {
     Drain,
     /// <summary>An empty fenced submission split the batch so its fence follows every earlier submission.</summary>
     EmptyFence,
-    /// <summary>Work that is not a background job's was deferred behind a background job's fenced submission, so the
-    /// batch went to the queue where the job ends, and the job's fence answers from a signal of its own rather than the
-    /// frame's last (<see cref="GpuSubmissionBatch{TEntry}.Admit"/>).</summary>
-    JobEnd,
+    /// <summary>Other work was deferred behind a fenced submission that answers from a signal of its own (a background
+    /// job's or an upload's, <see cref="GpuQueueWork.OwnsSignal"/>), so the batch went to the queue where that submission
+    /// ends, and its fence answers from that hand-over's signal rather than the frame's last
+    /// (<see cref="GpuSubmissionBatch{TEntry}.Admit"/>).</summary>
+    OwnSignal,
 }
 
 /// <summary>
@@ -60,15 +61,16 @@ public enum GpuQueueCause : byte {
 /// presents, the interval a reading divides by; <c>waits</c> counts external waits put on a queue and
 /// <c>waits-reached</c> those dropped because their fence had already reached its value. <c>jobs</c> counts the background
 /// jobs' fenced submissions a batch handed to the queue (<see cref="IsBackground"/>), and <c>jobs.late</c> those among
-/// them whose fence answers from a signal queued behind later work that is not a background job's: zero means every job
-/// deferred in a batch was answered from its own hand-over's signal, ahead of the batch's owner.
+/// them whose fence answers from a signal queued behind later work that does not answer from its own signal
+/// (<see cref="OwnsSignal"/>): zero means every job deferred in a batch was answered from its own hand-over's signal,
+/// ahead of the batch's owner.
 /// <para>The counts are process-wide: every device of every backend, on any thread. A Vulkan fence or timeline signal
 /// rides its <c>vkQueueSubmit</c>, so <c>signals</c> counts the completions a submission carries there, not separate
 /// native calls.</para>
 /// </summary>
 public sealed class GpuQueueWork : IWorkCounterSource {
     private static readonly string[] CategoryNames = ["unattributed", "graph", "bake", "probe", "upload", "transfer", "readback", "present", "drain"];
-    private static readonly string[] CauseNames = ["unbatched", "batch-end", "door", "fence-wait", "external-wait", "drain", "empty-fence", "job-end"];
+    private static readonly string[] CauseNames = ["unbatched", "batch-end", "door", "fence-wait", "external-wait", "drain", "empty-fence", "own-signal"];
     [ThreadStatic] private static GpuQueueCategory CurrentCategory;
 
     private readonly WorkKind m_executes = Kind(name: "gpu.queue.executes");
@@ -116,11 +118,20 @@ public sealed class GpuQueueWork : IWorkCounterSource {
     public bool TryRead(WorkKind kind, out long value) => m_counts.TryRead(kind, out value);
 
     /// <summary>Gets whether <paramref name="category"/> names a background job: GPU work no pass of a frame waits on and
-    /// whose completion host code waits for (a bake's samples, a probe's answers). A batch gives such a job's fenced
-    /// submission a signal of its own (<see cref="GpuSubmissionBatch{TEntry}.Admit"/>).</summary>
+    /// whose completion host code waits for (a bake's samples, a probe's answers), counted in <c>jobs</c>.</summary>
     /// <param name="category">The category.</param>
     /// <returns>Whether it is <see cref="GpuQueueCategory.Bake"/> or <see cref="GpuQueueCategory.Probe"/>.</returns>
     public static bool IsBackground(GpuQueueCategory category) => (category is GpuQueueCategory.Bake or GpuQueueCategory.Probe);
+    /// <summary>Gets whether a fenced submission made under <paramref name="category"/> is answered from a signal of its
+    /// own, never from work of another category deferred behind it in a batch
+    /// (<see cref="GpuSubmissionBatch{TEntry}.Admit"/>): host code waits on such a fence to reuse what the submission
+    /// wrote or read what it copied back, so a fence answered from a later frame's work would hold the frame thread until
+    /// the GPU finished that frame. A background job's (<see cref="IsBackground"/>) and an upload's
+    /// (<see cref="GpuQueueCategory.Upload"/>: a residency's table ring, a source's staging) are; a frame's own passes,
+    /// whose slots are waited frames in flight later, share the batch's last signal.</summary>
+    /// <param name="category">The category.</param>
+    /// <returns>Whether the category's fenced submissions answer from a signal of their own.</returns>
+    public static bool OwnsSignal(GpuQueueCategory category) => (IsBackground(category: category) || (category == GpuQueueCategory.Upload));
     /// <summary>Counts the calling thread's queue work under <paramref name="category"/> until the returned scope is
     /// disposed, when the previous category returns: scopes nest, and the innermost names the work.</summary>
     /// <param name="category">The category.</param>
@@ -157,8 +168,8 @@ public sealed class GpuQueueWork : IWorkCounterSource {
     }
     /// <summary>Counts the background jobs' fenced submissions one hand-over of a batch carried.</summary>
     /// <param name="handed">The background jobs' fences the hand-over carried.</param>
-    /// <param name="late">Those among them deferred ahead of work that is not a background job's, whose fences therefore
-    /// answer from a signal queued behind that work.</param>
+    /// <param name="late">Those among them deferred ahead of work that does not answer from its own signal, whose fences
+    /// therefore answer from a signal queued behind that work.</param>
     public void Jobs(int handed, int late) {
         m_counts.Add(m_jobs, handed);
         m_counts.Add(m_jobsLate, late);

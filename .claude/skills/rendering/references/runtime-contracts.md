@@ -71,10 +71,14 @@ answers from its last fenced submission's signal. A fence proves its own
 submission and every submission before it, never one made after it: a lease, a
 retirement or a readback is keyed on the fence of the submission that last uses
 what it guards, never on an earlier fence that happens to share a hand-over.
-Background jobs (`GpuQueueWork.IsBackground`) deferred ahead of frame work take
-a hand-over of their own (`GpuSubmissionBatch.Admit`, cause `job-end`), so
-their fences, and any deferred before them, such as a residency's upload,
-answer before the frame's renders finish. Because one batch can reach the queue
+Fenced submissions whose category answers from its own signal
+(`GpuQueueWork.OwnsSignal`: background jobs and uploads) deferred ahead of
+frame work take a hand-over of their own (`GpuSubmissionBatch.Admit`, cause
+`own-signal`), so their fences, and any deferred before them, answer before
+the frame's renders finish. A residency's upload relies on it: the next upload
+waits on the previous one's fence before rewriting a ring slot
+(`SdfWorldTables.SubmitUpload`), and that wait must not reach the frame just
+handed to the GPU, or the frame thread and the GPU take turns. Because one batch can reach the queue
 in several hand-overs, code acting for a deferred submission after the flush
 asks that submission's own fence whether it reached the queue
 (`IGpuSubmissionFence.ReachedQueue`), never whether the flush succeeded. A node

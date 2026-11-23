@@ -1587,8 +1587,14 @@ Produce is split into `produce-work`, the frame thread's own work, and
 counted in `GpuBatchedSubmissionFence`'s one wait door): a produce that grows
 by its fence share is GPU back-pressure, not CPU work. Its usual home is the
 upload's ring wait (`SdfWorldTables.SubmitUpload` waits the previous upload's
-fence, so the frame thread waits for the GPU to finish the frame two back), and
-`begin` is the presenter's own wait for the previous frame. The `produce-work
+fence, so the frame thread waits for the GPU to finish the frame two back). That
+holds only because an upload's fence answers from a hand-over of its own
+(`GpuQueueWork.OwnsSignal`); a fence answered from the frame batch's last
+signal makes the frame thread wait for the frame it just submitted, and the
+CPU and GPU take turns (`produce-fence` near the GPU's frame time, interval
+near CPU plus GPU). `host.frames` does not name the waiting site; a stack
+sample taken inside `GpuBatchedSubmissionFence`'s wait does. `begin` is the
+presenter's own wait for the previous frame. The `produce-work
 parts` are `HostFrameWorkPart`s: `capture` is the residency's scene capture
 (`SdfWorldResidency.Capture`: the composition's pose and transform pack, the
 creations' drivers and effector surface probes, and the mesh dresser), never a
