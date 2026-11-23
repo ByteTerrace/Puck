@@ -300,6 +300,20 @@ packet; these are the ones owed now, most valuable first.
      reference the next cache sets are checked against, and the 24 tour
      exhibits' stored meshes are audited from it
      ([bake detail](#bake-detail)).
+3. **Three render-graph laws to read before calling them stale or real.**
+   Each fails in `SdfWorldPassesLawTests` on the head after the plan changes
+   of the GPU leap:
+   - `CadenceRunsExactlyTheChangedClass(palette, both)`: the cadence
+     assertion in its `Cadence` file fails.
+   - `PickingCopiesOnePixelOnlyOnDemandAndWaitsForCompletion`: three copies
+     where none was asked for.
+   - `TheViewsRecorderWritesTheLiveFadeCountAsync`: "Resource 'sdf.world$lit'
+     was refused at the frame's latch", from `SdfWorldPassRecorder.BindPorts`.
+
+   `ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput` and
+   `CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift` look stale (the probe
+   history port and the cascades' move out of the plan); update or delete
+   them when the class is next touched.
 
 ### Tooling caveats
 
