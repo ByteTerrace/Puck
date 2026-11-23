@@ -3,6 +3,11 @@ using Puck.Abstractions.Memory;
 
 namespace Puck.State;
 
+/// <summary>One committed change to a row's cells, as <see cref="StateArena.TryReadCellMoves"/> hands it to a reader.</summary>
+/// <param name="Row">The row's catalog ordinal.</param>
+/// <param name="Key">The changed cell's key, or the invalid default when the row changed in something other than a
+/// held cell's value (its members, their order, a cursor, a policy) and is taken whole.</param>
+public readonly record struct ArenaCellMove(int Row, CellKey Key);
 /// <summary>Committed key changes since the carrier's owner last cleared it. Structural changes conservatively
 /// invalidate the whole row, including deleted keys and changed audience declarations.</summary>
 /// <remarks>Marking, testing, accumulating and clearing cost the changes the window holds, never the rows and keys

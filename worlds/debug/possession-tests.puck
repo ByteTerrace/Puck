@@ -60,9 +60,10 @@ vehicleLooks(colors: ["#B5523B"])
 citizenDesign(domain: "pad")
 citizenLooks(coats: ["#3E6E8E"], hats: ["#2F2A26"])
 
-// The crossing spans x 4.5 .. 7.5 of the south straight; the vehicle's approach box is the 4.5 m of road before it.
+// The crossing spans x 4.5 .. 7.5 of the south straight; the vehicle's approach (`crossing-approach`) is the 4.5 m of
+// road before it.
 let possessionVehicles = [{ key: 3, group: "loop" }]
-let possessionCrossings = [{ region: "crossing", group: "loop", x0: 0, x1: 4.5, z0: -10, z1: -6, cx0: 4.5, cx1: 7.5, cz0: -11, cz1: -5 }]
+let possessionCrossings = [{ region: "crossing", approach: "crossing-approach", group: "loop", cx0: 4.5, cx1: 7.5, cz0: -11, cz1: -5 }]
 vehicleCrossings(vehicles: possessionVehicles, crossings: possessionCrossings)
 
 // The day: home until noon, work after it. It starts at 09:36 and runs a fiftieth of a day a second, so noon comes at
@@ -115,6 +116,14 @@ placements {
     position [6, 1.5, -8]
     region {
       halfExtents [1.5, 2, 3]
+    }
+  }
+  placement "crossing-approach" {
+    prototype: "place"
+    position [2.25, 1.5, -8]
+    region {
+      halfExtents [2.25, 2, 2]
+      capacity: 2
     }
   }
   placement "citizen" {

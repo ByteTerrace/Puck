@@ -2321,5 +2321,8 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"{path}.center and .yawDegrees must be finite.");
         }
+        if (region.Capacity is < 1) {
+            errors.Add(item: $"{path}.capacity {region.Capacity} must be at least 1: it is the occupants a rule's sweep over the region is priced at.");
+        }
     }
 }

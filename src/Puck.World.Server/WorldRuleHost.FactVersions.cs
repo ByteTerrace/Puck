@@ -18,6 +18,7 @@ public sealed partial class WorldRuleHost {
     private const int OccupancySource = 7;
     private const int ValueSource = 8;
     private const int FieldRowSource = 9;
+    private const int ProducerSource = 10;
 
     // The facts versioned by the value they answer: a read that names no binding (a literal seat, a compiled census)
     // and answers from host state alone, so its value moves only where the host's state does. Each is read again
@@ -37,10 +38,12 @@ public sealed partial class WorldRuleHost {
     private readonly List<ulong> m_fieldRowVersions = [];
     private readonly List<int> m_factSlotScratch = [];
     private bool m_evaluatingWorldRules;
-    private string? m_staleFactDerivation;
 
     private readonly Dictionary<int, HashSet<int>> m_positionTags = [];
+    // The regions whose occupancy a schedule names, each with the version last derived: an interaction's region
+    // (rebuilt with the interaction family) and the regions a rule reads or sweeps (kept until the rules recompile).
     private readonly List<(string Name, int Ordinal, ulong Version)> m_regions = [];
+    private readonly List<(string Name, int Ordinal, ulong Version)> m_ruleRegions = [];
     private CompiledRule[]? m_watchedInteractions;
     private StateArena? m_interactionArena;
 
@@ -142,9 +145,12 @@ public sealed partial class WorldRuleHost {
     private bool[] m_seenLive = [];
     private ulong[] m_poseVersions = [];
     private ulong[] m_factsVersions = [];
+    private BodyProducerStandDown[] m_seenProducer = [];
+    private ulong[] m_producerVersions = [];
     private ulong m_liveVersion;
     private bool m_watchPoses;
     private bool m_watchFacts;
+    private bool m_watchProducers;
     private bool m_factMovesAll = true;
     private readonly List<FactRead> m_factMoves = [];
 
@@ -185,8 +191,22 @@ public sealed partial class WorldRuleHost {
         m_fieldRows.Clear();
         m_seenFieldRows.Clear();
         m_fieldRowVersions.Clear();
+        m_ruleRegions.Clear();
         m_scheduleEpoch++;
         m_factMovesAll = true;
+    }
+
+    // Starts versioning one region's occupancy for a rule that reads or sweeps it, and answers the scope its fact
+    // names it by: the placement's ordinal, as an interaction's region is named.
+    internal int WatchRegion(string placementId) {
+        var ordinal = Host.PlacementOrdinalOf(id: placementId);
+
+        if (!m_ruleRegions.Exists(match: region => (region.Ordinal == ordinal))) {
+            m_ruleRegions.Add(item: (placementId, ordinal, Host.Events.OccupancyVersion(region: placementId)));
+            m_factMovesAll = true;
+        }
+
+        return ordinal;
     }
 
     /// <inheritdoc/>
@@ -226,9 +246,21 @@ public sealed partial class WorldRuleHost {
         ArgumentNullException.ThrowIfNull(argument: rows);
         ArgumentNullException.ThrowIfNull(argument: facts);
 
+        // The work sheet prices a fact that rests by its changes (WorldFactsCompileContext.Rests), which holds only
+        // while the fact is one this host versions: a rule reading an unversioned fact is judged every tick.
+        return (ScheduleFact(fact: fact, facts: facts, rows: rows) || (WorldFactsCompileContext.Rests(each: out _, fact: fact)
+            ? throw new InvalidOperationException(message: $"The work sheet prices '{fact}' as a fact at rest, and the rule host names no version for it.")
+            : false));
+    }
+    private bool ScheduleFact(ICompiledFact fact, List<int> rows, List<FactRead> facts) {
         if (fact is WorldClockOperand clock) {
             WatchClock(facet: clock.Reading);
             facts.Add(item: new FactRead(Body: (int)clock.Reading, Source: ClockSource));
+
+            return true;
+        }
+        if (fact is WorldRegionOccupancyOperand occupancy) {
+            facts.Add(item: new FactRead(Body: WatchRegion(placementId: occupancy.PlacementId), Source: OccupancySource));
 
             return true;
         }
@@ -293,6 +325,12 @@ public sealed partial class WorldRuleHost {
             case BodyFactOperand bodyFact when TryBodyScope(body: bodyFact.Body, scope: out var factScope):
                 WatchFacts();
                 facts.Add(item: new FactRead(Body: factScope, Source: BodyFactsSource));
+
+                return true;
+            // Why a body's producer stands down: the reasons a hold effect and the engagement fold write.
+            case ProducerOperand producer when TryBodyScope(body: producer.BodyA, scope: out var producerScope):
+                WatchProducers();
+                facts.Add(item: new FactRead(Body: producerScope, Source: ProducerSource));
 
                 return true;
             default:
@@ -365,6 +403,21 @@ public sealed partial class WorldRuleHost {
 
             return true;
         }
+        if (source == OccupancySource) {
+            // The scope is the placement's ordinal; the version is the one last derived, so it is the version the
+            // moved feed has reported.
+            foreach (var regions in (ReadOnlySpan<List<(string Name, int Ordinal, ulong Version)>>)[m_ruleRegions, m_regions]) {
+                foreach (var region in regions) {
+                    if (region.Ordinal == body) {
+                        version = region.Version;
+
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
         if (source == PlacementPoseSource) {
             var ordinal = ((body == FactRead.EachBody) ? EachPlacementOrdinal() : body);
 
@@ -390,6 +443,10 @@ public sealed partial class WorldRuleHost {
                 version = m_factsVersions[body];
 
                 return true;
+            case ProducerSource when (((uint)body) < ((uint)m_producerVersions.Length)):
+                version = m_producerVersions[body];
+
+                return true;
             case LiveBodiesSource when (body == FactRead.Whole):
                 version = m_liveVersion;
 
@@ -410,6 +467,7 @@ public sealed partial class WorldRuleHost {
         OccupancySource => "regionOccupancy",
         ValueSource => "value",
         FieldRowSource => "field",
+        ProducerSource => "producer",
         _ => $"source {source}",
     });
 
@@ -482,12 +540,14 @@ public sealed partial class WorldRuleHost {
         DeriveClocks();
         DeriveFields();
         BindInteractionInputs();
-        var regions = CollectionsMarshal.AsSpan(m_regions);
-        foreach (ref var region in regions) {
-            var version = Host.Events.OccupancyVersion(region.Name);
-            if (version != region.Version) {
-                region.Version = version;
-                m_factMoves.Add(new FactRead(OccupancySource, region.Ordinal));
+        foreach (var watched in (ReadOnlySpan<List<(string Name, int Ordinal, ulong Version)>>)[m_regions, m_ruleRegions]) {
+            foreach (ref var region in CollectionsMarshal.AsSpan(list: watched)) {
+                var version = Host.Events.OccupancyVersion(region: region.Name);
+
+                if (version != region.Version) {
+                    region.Version = version;
+                    m_factMoves.Add(item: new FactRead(Body: region.Ordinal, Source: OccupancySource));
+                }
             }
         }
 
@@ -500,6 +560,8 @@ public sealed partial class WorldRuleHost {
             Array.Resize(array: ref m_seenFacts, newSize: capacity);
             Array.Resize(array: ref m_poseVersions, newSize: capacity);
             Array.Resize(array: ref m_factsVersions, newSize: capacity);
+            Array.Resize(array: ref m_seenProducer, newSize: capacity);
+            Array.Resize(array: ref m_producerVersions, newSize: capacity);
             population.ResetFactCandidateTracking();
             SeeEverything();
             m_factMovesAll = true;
@@ -513,7 +575,7 @@ public sealed partial class WorldRuleHost {
         var slotCount = (fullScan ? capacity : m_factSlotScratch.Count);
 
         WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.FactDerives);
-        if (m_watchPoses || m_watchFacts) {
+        if (m_watchPoses || m_watchFacts || m_watchProducers) {
             WorldTickWork.Process.Add(amount: slotCount, kind: WorldTickWork.FactSlots);
         }
 
@@ -521,6 +583,9 @@ public sealed partial class WorldRuleHost {
             var index = (fullScan ? cursor : m_factSlotScratch[cursor]);
 
             _ = See(move: new FactRead(Body: index, Source: LiveBodiesSource), now: population.IsActive(index: index), seen: ref m_seenLive[index], version: ref m_liveVersion);
+            if (m_watchProducers) {
+                _ = See(move: new FactRead(Body: index, Source: ProducerSource), now: population.ProducerStandDown(index: index), seen: ref m_seenProducer[index], version: ref m_producerVersions[index]);
+            }
             if (!m_watchPoses && !m_watchFacts) {
                 continue;
             }
@@ -540,32 +605,8 @@ public sealed partial class WorldRuleHost {
                 _ = See(move: new FactRead(Body: index, Source: BodyFactsSource), now: ((body is not null) ? body.Facts : BodyFacts.None), seen: ref m_seenFacts[index], version: ref m_factsVersions[index]);
             }
         }
-        if (!fullScan && QuiescenceChecked && (m_staleFactDerivation is null)) {
-            VerifyFactCandidates(capacity: capacity, population: population);
-        }
         if (placementMoved) {
             m_factMoves.Add(item: new FactRead(Body: FactRead.Whole, Source: PlacementPoseSource));
-        }
-    }
-
-    private void VerifyFactCandidates(WorldPopulation population, int capacity) {
-        for (var index = 0; (index < capacity); index++) {
-            if (population.IsActive(index: index) != m_seenLive[index]) {
-                m_staleFactDerivation = $"fact derivation skipped active-state transition on slot {index}";
-                return;
-            }
-            if (!m_watchPoses && !m_watchFacts) {
-                continue;
-            }
-            var body = Host.Body(index: index);
-            if (m_watchPoses && (BodyPose.Of(body: body) != m_seenPose[index])) {
-                m_staleFactDerivation = $"fact derivation skipped pose change on slot {index}";
-                return;
-            }
-            if (m_watchFacts && (((body is not null) ? body.Facts : BodyFacts.None) != m_seenFacts[index])) {
-                m_staleFactDerivation = $"fact derivation skipped body-fact change on slot {index}";
-                return;
-            }
         }
     }
 
@@ -763,6 +804,13 @@ public sealed partial class WorldRuleHost {
         m_watchFacts = true;
         SeeEverything();
     }
+    private void WatchProducers() {
+        if (m_watchProducers) {
+            return;
+        }
+        m_watchProducers = true;
+        SeeEverything();
+    }
     // Takes what every slot answers now as seen, moving every version so nothing captured before can match.
     private void SeeEverything() {
         var population = Host.Population;
@@ -773,8 +821,10 @@ public sealed partial class WorldRuleHost {
             m_seenLive[index] = population.IsActive(index: index);
             m_seenPose[index] = BodyPose.Of(body: body);
             m_seenFacts[index] = ((body is not null) ? body.Facts : BodyFacts.None);
+            m_seenProducer[index] = population.ProducerStandDown(index: index);
             m_poseVersions[index]++;
             m_factsVersions[index]++;
+            m_producerVersions[index]++;
         }
         m_liveVersion++;
         m_factMovesAll = true;

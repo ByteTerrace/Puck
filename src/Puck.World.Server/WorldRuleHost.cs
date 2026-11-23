@@ -8,7 +8,25 @@ namespace Puck.World.Server;
 /// groups, interactions and tables, their edge latches, the decision, pattern, identity-fact and influence-fact
 /// runtimes, the queries, the trace and the world's own effect arms. The arena is the store every read and write
 /// addresses, and the world facts only the server can answer reach a fact as the facet its declaration names.</summary>
-public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTransformHost, IArenaUndoHost, IRuleOwner, IRuleRefusalSink, IWorldFacts, ILiveBodies, IWorldInputEvents {
+public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTransformHost, IArenaUndoHost, IRuleOwner, IRuleRefusalSink, IWorldFacts, ILiveBodies, IWorldInputEvents, IWorldRegionOccupants {
+    private readonly List<int> m_occupantScratch = [];
+
+    /// <inheritdoc/>
+    public void CollectRegionOccupants(string placementId, int priced, List<CellKey> into) {
+        m_occupantScratch.Clear();
+
+        var inside = Host.Events.CollectOccupants(into: m_occupantScratch, placementId: placementId);
+
+        if (inside > priced) {
+            WorldTickWork.Process.Add(amount: (inside - priced), kind: WorldTickWork.RegionSweepOverflow);
+        }
+        foreach (var body in m_occupantScratch) {
+            if (Arena.Keys.TryResolveIndex(index: body, key: out var key)) { into.Add(item: key); }
+        }
+    }
+    /// <inheritdoc/>
+    public FactRead ScheduleRegionOccupancy(string placementId) => new(Body: WatchRegion(placementId: placementId), Source: OccupancySource);
+
     /// <inheritdoc/>
     public void CollectInputEvents(WorldInputOwnerReference reference, List<CellKey> into) {
         if (!TryInputOwner(owner: out var owner, principal: out _, reference: reference)) { return; }

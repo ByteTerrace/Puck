@@ -49,6 +49,9 @@ public sealed class RuleLatch : IJournalParticipant {
         /// <summary>Gets how many times the evaluator visited the rule: one per sweep, or one per evaluation of a rule
         /// evaluated once.</summary>
         public long Visits { get; internal set; }
+        /// <summary>Gets how many of <see cref="Visits"/> snapshotted the sweep's whole key set: every visit of a
+        /// sweep judged in place, and only the full visits of one a due list judges per binding.</summary>
+        public long Sweeps { get; internal set; }
         /// <summary>Gets how many bindings the evaluator was asked to judge, skipped ones included.</summary>
         public long Evaluations { get; internal set; }
         /// <summary>Gets how many of <see cref="Evaluations"/> the schedule answered without running bindings or gate.</summary>

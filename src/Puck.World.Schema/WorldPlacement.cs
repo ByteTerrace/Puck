@@ -400,11 +400,16 @@ public sealed record WorldPlacementFace(
 /// sphere. Each must be finite and positive (validated).</param>
 /// <param name="Center">The volume's center in the placement's frame, world units (yawed with it, never scaled).</param>
 /// <param name="YawDegrees">A box's yaw about +Y in degrees, added to the placement's resolved yaw. Ignored by a sphere.</param>
+/// <param name="Capacity">How many occupants the work sheet prices a rule's <c>forEach: region(...)</c> sweep at: the
+/// bodies the author expects the place to hold at once. Absent for the most bodies that fit the volume
+/// (<see cref="WorldRuleWorkBudget.RegionSweepCapacity"/>). It prices and nothing else: the region senses and counts
+/// every body inside it, and a sweep binds every one.</param>
 public sealed record WorldPlacementRegion(
     float Radius = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Vector3? HalfExtents = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Vector3 Center = default,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float YawDegrees = 0f
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float YawDegrees = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Capacity = null
 ) {
     /// <summary>Gets whether the region is a box rather than a sphere.</summary>
     [JsonIgnore]

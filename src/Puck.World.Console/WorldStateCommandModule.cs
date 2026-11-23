@@ -479,6 +479,9 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             effects.Add(item: $"{effect.Describe}={effect.Cost(context: context)}");
         }
 
+        // The line as admission priced it: how many bindings it charges a check and a firing for, and why.
+        var priced = WorldRuleWorkBudget.Contributors(definition: definition).FirstOrDefault(predicate: line => ((line.IsInteraction == isInteraction) && string.Equals(a: line.Name, b: rule.Name, comparisonType: StringComparison.Ordinal)));
+
         return $"[world.budget.rules --why {rule.Name}{(isInteraction
             ? " interaction"
             : string.Empty)}: multiplier {WorldRuleWorkBudget.DescribeMultiplier(
@@ -490,7 +493,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         )}; effects [{string.Join(
             separator: ", ",
             values: effects
-        )}]]";
+        )}]{((priced.Name is null) ? string.Empty : $"; priced judged={priced.Judged} fired={priced.Firings}: {priced.Response}")}]";
     }
     private static string DescribeState(WorldStateReadView view) {
         // Named row lookup excludes generated pool storage too; summaries enumerate that same authored surface.
@@ -623,7 +626,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             bindability: CommandBindability.Unbindable,
             name: "world.budget.rules",
             audience: CommandAudience.Operator,
-            description: $"Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): {WorldBudgetRulesForms.Spelling}. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the firings a rule's maxFirings bounds it to when that is fewer (firings=), what one sweep costs before its first evaluation (setup), what one evaluation costs whether or not its gate holds (check), what one firing costs (fire), the line's total, and — when the gate pins literal cells to ranges — the cells and ranges it prices exclusively under; a trailing total line reads work=<sum of the exclusion tree> of <RuleCapacity.MaxWorkUnitsPerTick>, followed by the reference model, evidence digest, cycle bound, allowance, and certification status. '--why <rule>' prints one line's derivation terms instead: the multiplier's source and every effect's own cost, then the rule's read schedule (the rows and host facts it depends on, and why it is volatile when it is) and, for a Level rule, the schedule a firing that changed nothing stands on (every row it reads or writes). '--spent [top]' prints the measured sheet instead: per rule, the visits, the ticks a due list left it alone (elided=), the evaluations, skips, the skips that stood for a Level firing proven to change nothing (settled=) and firings the evaluator ran since the latches began, and the work units they spent at the same prices (setup per visit, check per evaluation that ran, fire per firing), costliest first, each with its schedule; its first line sums them over the ticks counted.",
+            description: $"Lists every rule's and interaction's priced work per tick, costliest first (Immediate): {WorldBudgetRulesForms.Spelling}. Each line carries the multiplier (the bindings one sweep can hold: a forEach row's capacity, a region's priced occupants, an interaction's carrier or pair count), the bindings it is charged a check for when that is fewer (judged=) and a firing for when that is fewer (firings=: a tick at rest plus one change for a rule judged by change, a rule's maxFirings otherwise), what one sweep costs before its first evaluation (setup), what one evaluation costs whether or not its gate holds (check), what one firing costs (fire), the line's total, its worst case when that is more (worst=: every binding judged and firing), and — when the gate pins literal cells to ranges — the cells and ranges it prices exclusively under; a trailing total line reads work=<sum of the exclusion tree> of <RuleCapacity.MaxWorkUnitsPerTick> and the worst tick (every line's worst case at once, reported and never refused), followed by the reference model, evidence digest, cycle bound, allowance, and certification status. '--why <rule>' prints one line's derivation terms instead: the multiplier's source, every effect's own cost and how the line was priced (what keeps it judged or firing at rest, and how many bindings one change opens), then the rule's read schedule (the rows and host facts it depends on, and why it is volatile when it is) and, for a Level rule, the schedule a firing that changed nothing stands on (every row it reads or writes). '--spent [top]' prints the measured sheet instead: per rule, the visits, the ticks a due list left it alone (elided=), the evaluations, skips, the skips that stood for a Level firing proven to change nothing (settled=) and firings the evaluator ran since the latches began, and the work units they spent at the same prices (setup per sweep that snapshotted its keys, check per evaluation that ran, fire per firing), costliest first, each with its schedule; its first line sums them over the ticks counted.",
             forms: WorldBudgetRulesForms,
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
@@ -683,14 +686,14 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
 
                     output.Add(item: $"[world.budget.rules {line.Name}{(line.IsInteraction
                         ? " interaction"
-                        : string.Empty)} x{line.Multiplier}{((line.Firings < line.Multiplier) ? $" firings={line.Firings}" : string.Empty)} setup={line.Cost.Setup} check={line.Cost.Check} fire={line.Cost.Effects} work={line.WorkUnits}{((line.Discriminators.Count > 0)
+                        : string.Empty)} x{line.Multiplier}{((line.Judged < line.Multiplier) ? $" judged={line.Judged}" : string.Empty)}{((line.Firings < line.Multiplier) ? $" firings={line.Firings}" : string.Empty)} setup={line.Cost.Setup} check={line.Cost.Check} fire={line.Cost.Effects} work={line.WorkUnits}{((RuleWork.Compare(left: line.WorstUnits, right: line.WorkUnits) != 0) ? $" worst={line.WorstUnits}" : string.Empty)}{((line.Discriminators.Count > 0)
                         ? $" exclusive {string.Join(
                             separator: ",",
                             values: line.Discriminators.Select(selector: pinned => pinned.Describe(catalog: server.Definition.StateCatalog))
                         )}"
                         : string.Empty)}]");
                 }
-                output.Add(item: $"[world.budget.rules total: work={report.HeuristicWorkUnitsPerTick} of {RuleCapacity.MaxWorkUnitsPerTick}]");
+                output.Add(item: $"[world.budget.rules total: work={report.HeuristicWorkUnitsPerTick} of {RuleCapacity.MaxWorkUnitsPerTick}; worst tick={report.WorkBudget.WorstWorkUnitsPerTick}]");
                 output.Add(item: $"[world.budget.rules reference: model={report.ModelId} evidence={report.EvidenceDigest} cycles={report.TotalBound} allowance={report.StepAllowanceCycles} certified={report.Admitted}]");
                 return new CommandResult(Output: string.Join(
                     separator: Environment.NewLine,

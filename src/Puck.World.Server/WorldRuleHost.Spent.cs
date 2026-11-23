@@ -14,22 +14,25 @@ public sealed partial class WorldRuleHost {
             : judged);
     }
 
-    /// <summary>Gets or sets whether every Level firing a schedule would answer for is fired anyway and held to
-    /// changing nothing (<see cref="RuleEvaluator.QuiescenceChecked"/>).</summary>
-    internal bool QuiescenceChecked {
-        get => m_evaluator.QuiescenceChecked;
+    /// <summary>Gets or sets whether every rule judges every binding in place every tick, with no schedule, kept
+    /// verdict or due list (<see cref="RuleEvaluator.SchedulingEnabled"/> off): the evaluation those stand for, which
+    /// a replay runs against a recording that used them. Either change forgets every cached verdict, since none was
+    /// kept while the schedules were off.</summary>
+    internal bool JudgesEveryBinding {
+        get => !m_evaluator.SchedulingEnabled;
         set {
-            m_staleFactDerivation = null;
-            m_evaluator.QuiescenceChecked = value;
+            if (value == JudgesEveryBinding) {
+                return;
+            }
+            m_evaluator.SchedulingEnabled = !value;
+            m_ruleGateHeld.InvalidateScheduler();
+            m_interactionGateHeld.InvalidateScheduler();
         }
     }
-    /// <summary>Gets the first Level firing or derived-fact skip the check found that did not settle again
-    /// (<see cref="RuleEvaluator.StaleQuiescence"/>), or <see langword="null"/>.</summary>
-    internal string? StaleQuiescence => (m_evaluator.StaleQuiescence ?? m_staleFactDerivation);
 
     /// <summary>Spells the measured rule sheet: per rule and interaction, what the evaluator ran since the latches
-    /// began (visits, evaluations, skips, the skips that stood for a settled Level firing, firings) and the work units that spent at the worst-case sheet's own
-    /// prices — a sweep's setup per visit, the check per evaluation that ran, the effects per firing — costliest
+    /// began (visits, evaluations, skips, the skips that stood for a settled Level firing, firings) and the work units that spent at the sheet's own
+    /// prices — a sweep's setup per sweep that snapshotted its keys, the check per evaluation that ran, the effects per firing — costliest
     /// first, each with the schedule that decides whether it may be skipped. Every count is deterministic, so two
     /// runs of one document and input print the same sheet.</summary>
     /// <param name="top">The most lines to print.</param>
@@ -98,7 +101,7 @@ public sealed partial class WorldRuleHost {
                     Name: rule.Name,
                     Schedule: DescribeSchedule(latch: latch, rule: rule),
                     Spent: spent,
-                    Work: (((spent.Visits * Price(work: cost.Setup)) + (ran * Price(work: cost.Check))) + (spent.Firings * Price(work: cost.Effects)))
+                    Work: (((spent.Sweeps * Price(work: cost.Setup)) + (ran * Price(work: cost.Check))) + (spent.Firings * Price(work: cost.Effects)))
                 ));
             }
         }

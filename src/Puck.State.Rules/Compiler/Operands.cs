@@ -45,6 +45,8 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
             live.CollectReads(into: into);
         } else {
             into.Add(item: new CellAccess(
+                Each: (KeyFrom is { IsEach: true }),
+                Indexed: (KeyFrom is { IsEachIndex: true }),
                 Key: ((KeyFrom is null)
                 ? Key
                 : default),

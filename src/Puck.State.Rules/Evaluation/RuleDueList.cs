@@ -2,32 +2,76 @@ using Puck.Maths;
 
 namespace Puck.State.Rules;
 
-/// <summary>One compiled family's due list: which rules (and, for a body sweep, which bodies) must be visited this
-/// tick, and the dependency index that pushes a rule onto it when something it reads moves. Built per compiled
-/// array, latch and host fact epoch; never hashed, and dropped whenever anything it relied on could have moved
-/// unseen (the arena replaced, the latch's scheduler caches forgotten), which marks every rule due.</summary>
+/// <summary>One compiled family's due list: which rules, and which bindings of a keyed sweep, must be visited this
+/// tick, and the dependency index that pushes a rule or one of its bindings onto it when something it reads moves.
+/// Built per compiled array, latch and host fact epoch; never hashed, and dropped whenever anything it relied on could
+/// have moved unseen (the arena replaced, the latch's scheduler caches forgotten), which marks every rule due.</summary>
 /// <remarks>
-/// <para>The invariant is <see cref="RuleEvaluator"/>'s: a rule left off the list is one whose in-place evaluation
-/// would reproduce its last verdict bit for bit. A rule goes on when its schedule is volatile or names a sweep set no
-/// version covers (always), when its last visit left a verdict to judge again (a Level gate that held, a refusal),
-/// or when a row or host fact its schedule names moved. The only producers of a move are the arena's moved-row feed,
-/// fed by the one door every row version passes (<see cref="StateArena.TryReadMoves"/>), and the host's moved-fact
-/// feed (<see cref="IStateReader.DrainFactMoves"/>), whose versions are what <see cref="RuleEvaluator"/>'s version door
-/// reads; a dependency neither feed can report keeps its schedule volatile.</para>
+/// <para>The invariant is <see cref="RuleEvaluator"/>'s: a binding left off the list is one whose in-place evaluation
+/// would reproduce its last verdict bit for bit. A rule goes on in full when its schedule is volatile or names a
+/// sweep set no version covers (always), when its last visit left a verdict to judge again (a Level gate that held,
+/// a refusal), or when something every one of its bindings reads moved. One binding of a keyed sweep goes on when a
+/// cell it reads under its own key, or a host fact read for its own body, moved (<see cref="RowReach.Each"/>,
+/// <see cref="FactRead.EachBody"/>). The only producers of a move are the arena's moved-cell feed, fed by the one
+/// door every committed change is described through (<see cref="StateArena.TryReadCellMoves"/>), and the host's
+/// moved-fact feed (<see cref="IStateReader.DrainFactMoves"/>), whose versions are what <see cref="RuleEvaluator"/>'s
+/// version door reads; a dependency neither feed can report keeps its schedule volatile.</para>
 /// <para>Order: a mark lands where the walk has not yet reached (this tick) or has passed (next tick), which is exactly
 /// where an in-place version check would first see the move.</para>
 /// </remarks>
 internal sealed class RuleDueList {
-    private enum Kind : byte {
+    /// <summary>How a rule is visited when it is due.</summary>
+    public enum Visit : byte {
+        /// <summary>Every tick, in full.</summary>
         Always,
-        Once,
+
+        /// <summary>When due, in full.</summary>
+        Whole,
+
+        /// <summary>A keyed row's sweep, due per key.</summary>
         RowSweep,
+
+        /// <summary>A live-body sweep, due per body.</summary>
         BodySweep,
+    }
+
+    // The keys a swept row held when a sweep last snapshotted it, shared by every rule sweeping the row. It stands
+    // while the row's structure version does: the row then holds the same cells in the same order, so a position
+    // names the same binding for every rule and across ticks.
+    public sealed class RowSnapshot {
+        public CellKey[] Keys = [];
+        public int Count;
+        public ulong Structure = ulong.MaxValue;
+
+        private readonly Dictionary<int, int> m_positions = [];
+        private bool m_indexed;
+
+        public void Take(List<CellKey> keys, ulong structure) {
+            if (Keys.Length < keys.Count) {
+                Keys = new CellKey[Math.Max(val1: keys.Count, val2: (Keys.Length * 2))];
+            }
+            keys.CopyTo(array: Keys);
+            Count = keys.Count;
+            Structure = structure;
+            m_indexed = false;
+        }
+        // A key's position in the snapshot, indexed on the first lookup after a snapshot.
+        public bool TryPositionOf(CellKey key, out int position) {
+            if (!m_indexed) {
+                m_positions.Clear();
+                for (var index = 0; (index < Count); index++) {
+                    m_positions[Keys[index].Ordinal] = index;
+                }
+                m_indexed = true;
+            }
+
+            return (m_positions.TryGetValue(key: key.Ordinal, value: out position) && (Keys[position] == key));
+        }
     }
 
     private readonly RuleEvaluator m_evaluator;
     private readonly IStateReader m_host;
-    private readonly Kind[] m_kinds;
+    private readonly Visit[] m_kinds;
     private readonly ulong[] m_due;
     // The walk each rule was last visited in, or -1: what a rule's elided ticks are counted from when it is next
     // visited or read, so a walk that visits few rules costs nothing for the rest.
@@ -36,21 +80,31 @@ internal sealed class RuleDueList {
     private int m_visits;
     private readonly bool[] m_full;
     private readonly ulong[] m_wake;
-    private readonly ulong[]?[] m_bodies;
+    // The due bindings of a keyed sweep: by body index for a body sweep, by position in the row's snapshot for a row
+    // sweep.
+    private readonly ulong[]?[] m_bindings;
     private readonly ulong[]?[] m_live;
+    // A row sweep's snapshot, and the structure version of the row the rule's due positions were marked against.
+    private readonly RowSnapshot?[] m_snapshots;
+    private readonly ulong[] m_sweptStructure;
     private readonly int m_epoch;
-    private readonly Dictionary<int, int[]> m_rowReaders;
+    // Readers by how they reach a row: every cell (any move of the row), the cell under $each (the binding the moved
+    // key names), a literal cell (that cell's moves), and every reader of the row for a move that names it whole.
+    private readonly Dictionary<int, int[]> m_anyRowReaders;
+    private readonly Dictionary<int, int[]> m_eachRowReaders;
+    private readonly Dictionary<(int Row, int Key), int[]> m_cellReaders;
+    private readonly Dictionary<int, int[]> m_wholeRowReaders;
     private readonly Dictionary<(int Source, int Body), int[]> m_literalFactReaders;
     // Every literal reader of a source, whatever body it names: a move the host reports for the source as a whole
     // (FactRead.Whole) reaches each of them, as it reaches the source's $each and whole readers.
     private readonly Dictionary<int, int[]> m_literalFactReadersBySource;
     private readonly Dictionary<int, int[]> m_eachFactReaders;
     private readonly Dictionary<int, int[]> m_wholeFactReaders;
-    private readonly List<int> m_rows = [];
+    private readonly List<ArenaCellMove> m_moves = [];
     private readonly List<int> m_liveNow = [];
 
     private StateArena? m_arena;
-    // The list's place in the arena's version moves: every row that moved before it has been pushed onto the list.
+    // The list's place in the arena's cell moves: every cell that moved before it has been pushed onto the list.
     private long m_movesRead = -1L;
     private long m_latchEpoch = -1L;
 
@@ -65,20 +119,27 @@ internal sealed class RuleDueList {
         Rules = rules;
         Latch = latch;
         States = latch.States(rules: rules);
-        m_kinds = new Kind[rules.Length];
+        m_kinds = new Visit[rules.Length];
         m_due = new ulong[rules.Length.CeilingDivide(divisor: 64)];
         m_settledWalk = new long[rules.Length];
         m_full = new bool[rules.Length];
         m_wake = new ulong[rules.Length];
         Array.Fill(array: m_wake, value: ulong.MaxValue);
-        m_bodies = new ulong[]?[rules.Length];
+        m_bindings = new ulong[]?[rules.Length];
         m_live = new ulong[]?[rules.Length];
+        m_snapshots = new RowSnapshot?[rules.Length];
+        m_sweptStructure = new ulong[rules.Length];
+        Array.Fill(array: m_sweptStructure, value: ulong.MaxValue);
 
-        var rowReaders = new Dictionary<int, List<int>>();
+        var anyRow = new Dictionary<int, List<int>>();
+        var eachRow = new Dictionary<int, List<int>>();
+        var cell = new Dictionary<(int Row, int Key), List<int>>();
+        var wholeRow = new Dictionary<int, List<int>>();
         var literal = new Dictionary<(int Source, int Body), List<int>>();
         var literalBySource = new Dictionary<int, List<int>>();
         var each = new Dictionary<int, List<int>>();
         var whole = new Dictionary<int, List<int>>();
+        var snapshots = new Dictionary<int, RowSnapshot>();
 
         static void Add<TKey>(Dictionary<TKey, List<int>> index, TKey key, int rule) where TKey : notnull {
             if (!index.TryGetValue(key: key, value: out var readers)) {
@@ -92,24 +153,53 @@ internal sealed class RuleDueList {
         for (var index = 0; (index < rules.Length); index++) {
             var rule = rules[index];
             var schedule = evaluator.ScheduleOf(rule: rule, state: States[index]);
-            var kind = Classify(rule: rule, schedule: schedule);
+            var kind = Classify(evaluator: evaluator, rule: rule, schedule: schedule);
 
             m_kinds[index] = kind;
-            if (kind == Kind.Always) {
+            if (kind == Visit.Always) {
                 continue;
             }
-            foreach (var row in schedule.Rows) {
-                Add(index: rowReaders, key: row, rule: index);
+            if (kind == Visit.RowSweep) {
+                if (!snapshots.TryGetValue(key: rule.ForEachOrdinal, value: out var snapshot)) {
+                    snapshots[rule.ForEachOrdinal] = snapshot = new RowSnapshot();
+                }
+                m_snapshots[index] = snapshot;
             }
+
+            void Rows(RuleSchedule read) {
+                for (var position = 0; (position < read.Rows.Length); position++) {
+                    var row = read.Rows[position];
+                    var reach = ((position < read.Reaches.Length) ? read.Reaches[position] : RowReach.Any);
+
+                    Add(index: wholeRow, key: row, rule: index);
+                    // Only a keyed sweep has a binding a moved key can name; any other rule that reads under $each is
+                    // evaluated whole.
+                    if (
+                        ((reach & RowReach.Any) != RowReach.None) ||
+                        (reach == RowReach.None) ||
+                        (((reach & RowReach.Each) != RowReach.None) && (kind == Visit.Whole))
+                    ) {
+                        Add(index: anyRow, key: row, rule: index);
+                    } else if ((reach & RowReach.Each) != RowReach.None) {
+                        Add(index: eachRow, key: row, rule: index);
+                    }
+                }
+                foreach (var read1 in read.Cells) {
+                    Add(index: cell, key: (read1.RowOrdinal, read1.Key.Ordinal), rule: index);
+                }
+            }
+
+            Rows(read: schedule);
+            // A sweep's set changes only with the swept row's structure, which a move names whole.
             foreach (var row in schedule.IterationRows) {
-                Add(index: rowReaders, key: row, rule: index);
+                Add(index: wholeRow, key: row, rule: index);
             }
             // A Level firing taken as settled stands on everything the firing reads or writes, so a move of any of it
-            // puts the rule back on the list.
+            // puts the rule, or the binding it reaches, back on the list.
             var firing = ((States[index].FiringSchedule is { Volatile: false } settles) ? settles : null);
 
-            foreach (var row in (firing?.Rows ?? [])) {
-                Add(index: rowReaders, key: row, rule: index);
+            if (firing is not null) {
+                Rows(read: firing);
             }
             foreach (var fact in schedule.Facts.Concat(schedule.IterationFacts).Concat(firing?.Facts ?? [])) {
                 switch (fact.Body) {
@@ -127,7 +217,10 @@ internal sealed class RuleDueList {
             }
         }
 
-        m_rowReaders = Freeze(index: rowReaders);
+        m_anyRowReaders = Freeze(index: anyRow);
+        m_eachRowReaders = Freeze(index: eachRow);
+        m_cellReaders = Freeze(index: cell);
+        m_wholeRowReaders = Freeze(index: wholeRow);
         m_literalFactReaders = Freeze(index: literal);
         m_literalFactReadersBySource = Freeze(index: literalBySource);
         m_eachFactReaders = Freeze(index: each);
@@ -149,37 +242,24 @@ internal sealed class RuleDueList {
         (m_epoch == epoch)
     );
     /// <summary>Returns the first due rule at or after <paramref name="from"/>, or -1.</summary>
-    public int NextDue(int from) {
-        for (var word = (from >> 6); (word < m_due.Length); word++) {
-            var bits = m_due[word];
-
-            if (word == (from >> 6)) {
-                bits &= (ulong.MaxValue << (from & 63));
-            }
-            if (bits != 0UL) {
-                return ((word << 6) + System.Numerics.BitOperations.TrailingZeroCount(value: bits));
-            }
-        }
-
-        return -1;
-    }
+    public int NextDue(int from) => NextBit(bits: m_due, from: from);
     /// <summary>Takes a rule off the list for its visit and records the visit, counting the walks since its last one
     /// into its <see cref="RuleLatch.RuleSpent.Elided"/>.</summary>
-    public void Visit(int index) {
+    public void BeginVisit(int index) {
         m_due[(index >> 6)] &= ~(1UL << (index & 63));
         States[index].Spent.Elided += (m_walk - m_settledWalk[index]);
         m_settledWalk[index] = (m_walk + 1L);
         m_visits++;
     }
-    /// <summary>Returns whether the rule is a body sweep the list tracks per body.</summary>
-    public bool IsBodySweep(int index) => (m_kinds[index] == Kind.BodySweep);
+    /// <summary>Returns how a rule is visited when it is due.</summary>
+    public Visit KindOf(int index) => m_kinds[index];
     /// <summary>Puts a visited rule back on the list for next tick when its verdict must be judged again: always for a
-    /// rule no schedule names, when any binding's verdict asks for it, and for a body sweep while any body (or the
-    /// whole sweep) is still due.</summary>
+    /// rule no schedule names, when any binding's verdict asks for it, and for a keyed sweep while any binding (or
+    /// the whole sweep) is still due.</summary>
     public void Settle(int index, bool rerun) {
         var again = m_kinds[index] switch {
-            Kind.Always => true,
-            Kind.BodySweep => (m_full[index] || AnyBody(index: index)),
+            Visit.Always => true,
+            Visit.BodySweep or Visit.RowSweep => (m_full[index] || AnyBinding(index: index)),
             _ => rerun,
         };
 
@@ -188,10 +268,10 @@ internal sealed class RuleDueList {
         }
     }
     /// <summary>Records the earliest deadline a visit's verdicts must be judged again at. A visit that judged or kept
-    /// every binding replaces the rule's wake; one that judged only some bodies keeps the earlier of the two, since
+    /// every binding replaces the rule's wake; one that judged only some bindings keeps the earlier of the two, since
     /// the bindings it passed over keep theirs.</summary>
     public void RecordWake(int index, ulong wake, bool whole) {
-        if (m_kinds[index] == Kind.Always) {
+        if (m_kinds[index] == Visit.Always) {
             return;
         }
         m_wake[index] = (whole ? wake : Math.Min(val1: m_wake[index], val2: wake));
@@ -245,9 +325,10 @@ internal sealed class RuleDueList {
         }
     }
     /// <summary>Pushes every move the arena and the host recorded since the last drain onto the list: the readers of
-    /// each moved row, and the readers of each moved host fact (only the moved body of a body sweep reading it for
-    /// <c>$each</c>). A replaced arena, a latch whose scheduler caches were forgotten, or a feed that reports every
-    /// dependency moved marks every rule due in full.</summary>
+    /// each moved cell (only the binding a moved key names, for a keyed sweep that reads the cell under
+    /// <c>$each</c>), and the readers of each moved host fact (only the moved body's binding, for a keyed sweep
+    /// reading it for <c>$each</c>). A replaced arena, a latch whose scheduler caches were forgotten, or a feed that
+    /// reports every dependency moved marks every rule due in full.</summary>
     public void Drain() {
         var arena = m_host.Arena;
 
@@ -258,6 +339,15 @@ internal sealed class RuleDueList {
             }
             m_arena = arena;
             m_movesRead = -1L;
+            // Every row a schedule names is one the list follows; the read below takes every row as moved.
+            foreach (var row in m_wholeRowReaders.Keys) {
+                arena.WatchCellMoves(rowOrdinal: row);
+            }
+            // Another arena counts its structure versions from its own start, so no snapshot stands against it.
+            Array.Fill(array: m_sweptStructure, value: ulong.MaxValue);
+            foreach (var snapshot in m_snapshots) {
+                snapshot?.Structure = ulong.MaxValue;
+            }
             MarkAll();
         }
         if (Latch.SchedulerEpoch != m_latchEpoch) {
@@ -265,14 +355,21 @@ internal sealed class RuleDueList {
             MarkAll();
         }
 
-        m_rows.Clear();
-        if (!arena.TryReadMoves(into: m_rows, place: ref m_movesRead)) {
+        m_moves.Clear();
+        if (!arena.TryReadCellMoves(into: m_moves, place: ref m_movesRead)) {
             MarkAll();
         } else {
-            foreach (var row in m_rows) {
-                if (m_rowReaders.TryGetValue(key: row, value: out var readers)) {
+            foreach (var move in m_moves) {
+                if (!move.Key.IsValid) {
+                    MarkReaders(index: m_wholeRowReaders, key: move.Row);
+
+                    continue;
+                }
+                MarkReaders(index: m_anyRowReaders, key: move.Row);
+                MarkReaders(index: m_cellReaders, key: (move.Row, move.Key.Ordinal));
+                if (m_eachRowReaders.TryGetValue(key: move.Row, value: out var readers)) {
                     foreach (var reader in readers) {
-                        MarkFull(index: reader);
+                        MarkKey(index: reader, key: move.Key);
                     }
                 }
             }
@@ -288,15 +385,11 @@ internal sealed class RuleDueList {
             return;
         }
         foreach (var moved in moves) {
-            if ((moved.Body >= 0) && m_literalFactReaders.TryGetValue(key: (moved.Source, moved.Body), value: out var literal)) {
-                foreach (var reader in literal) {
-                    MarkFull(index: reader);
-                }
+            if (moved.Body >= 0) {
+                MarkReaders(index: m_literalFactReaders, key: (moved.Source, moved.Body));
             }
-            if ((moved.Body == FactRead.Whole) && m_literalFactReadersBySource.TryGetValue(key: moved.Source, value: out var anyLiteral)) {
-                foreach (var reader in anyLiteral) {
-                    MarkFull(index: reader);
-                }
+            if (moved.Body == FactRead.Whole) {
+                MarkReaders(index: m_literalFactReadersBySource, key: moved.Source);
             }
             if (m_eachFactReaders.TryGetValue(key: moved.Source, value: out var each)) {
                 foreach (var reader in each) {
@@ -310,33 +403,46 @@ internal sealed class RuleDueList {
             }
         }
     }
-    /// <summary>Returns whether a body sweep is due in full, and clears that.</summary>
-    public bool TakeFull(int index) {
-        var full = m_full[index];
+    /// <summary>Returns whether a keyed sweep is due in full, and clears that with every binding's own mark.</summary>
+    /// <param name="index">The rule.</param>
+    /// <param name="force">Whether the sweep runs in full whatever was marked: its binding marks name nothing, since
+    /// the positions they were made against no longer stand.</param>
+    public bool TakeFull(int index, bool force = false) {
+        var full = (m_full[index] | force);
 
         m_full[index] = false;
-        if (full && (m_bodies[index] is { } bodies)) {
-            Array.Clear(array: bodies);
+        if (full && (m_bindings[index] is { } bindings)) {
+            Array.Clear(array: bindings);
         }
 
         return full;
     }
-    /// <summary>Returns whether a body sweep became due in full while it runs.</summary>
+    /// <summary>Returns whether a keyed sweep became due in full while it runs.</summary>
     public bool IsFull(int index) => m_full[index];
     /// <summary>Returns whether one body of a body sweep is due.</summary>
     public bool IsBodyDue(int index, int body) => (
-        (m_bodies[index] is { } bodies) &&
+        (m_bindings[index] is { } bodies) &&
         ((body >> 6) < bodies.Length) &&
         ((bodies[(body >> 6)] & (1UL << (body & 63))) != 0UL)
     );
-    /// <summary>Takes one body of a body sweep off the list for its evaluation.</summary>
-    public void ClearBody(int index, int body) {
-        if ((m_bodies[index] is { } bodies) && ((body >> 6) < bodies.Length)) {
-            bodies[(body >> 6)] &= ~(1UL << (body & 63));
+    /// <summary>Takes one binding of a keyed sweep off the list for its evaluation: a body's index, or a row sweep's
+    /// snapshot position.</summary>
+    public void ClearBinding(int index, int binding) {
+        if ((m_bindings[index] is { } bindings) && ((binding >> 6) < bindings.Length)) {
+            bindings[(binding >> 6)] &= ~(1UL << (binding & 63));
         }
     }
-    /// <summary>Keeps one body of a body sweep due for next tick: its verdict must be judged again.</summary>
-    public void MarkBodyNext(int index, int body) => MarkBody(body: body, index: index);
+    /// <summary>Keeps one binding of a keyed sweep due for next tick: its verdict must be judged again.</summary>
+    public void MarkBindingNext(int index, int binding) => SetBinding(binding: binding, index: index);
+    /// <summary>Returns the first due snapshot position of a row sweep at or after <paramref name="from"/>, or -1.</summary>
+    public int NextBindingDue(int index, int from) => ((m_bindings[index] is { } bindings) ? NextBit(bits: bindings, from: from) : -1);
+    /// <summary>Returns a row sweep's snapshot of the swept row's keys.</summary>
+    public RowSnapshot SnapshotOf(int index) => m_snapshots[index]!;
+    /// <summary>Returns whether a row sweep's due positions still name the bindings they were marked for: the rule
+    /// last swept the row in full at the structure the snapshot was taken at, and the row still has it.</summary>
+    public bool SnapshotStands(int index, ulong structure) => ((m_sweptStructure[index] == structure) && (m_snapshots[index]!.Structure == structure));
+    /// <summary>Records the structure of the swept row a row sweep's full visit ran over.</summary>
+    public void NoteSwept(int index, ulong structure) => m_sweptStructure[index] = structure;
     /// <summary>Records the bodies live as a body sweep's visit begins: the set its bindings are judged over, as a full
     /// sweep snapshots its keys.</summary>
     public void SnapshotLive(int index, List<int> live) {
@@ -359,7 +465,7 @@ internal sealed class RuleDueList {
     /// (already done by that end after a full sweep), and the body stays due only when it is live now, having joined
     /// during the sweep.</summary>
     public void ForgetUnswept(int index, ArenaJournal journal, CellKeyTable keys, RuleLatch latch, RuleLatch.RuleState state, bool swept) {
-        if ((m_bodies[index] is not { } bodies) || !AnyBody(index: index)) {
+        if ((m_bindings[index] is not { } bodies) || !AnyBinding(index: index)) {
             return;
         }
 
@@ -389,20 +495,24 @@ internal sealed class RuleDueList {
         }
     }
 
-    private static Kind Classify(CompiledRule rule, RuleSchedule schedule) {
+    private static Visit Classify(RuleEvaluator evaluator, CompiledRule rule, RuleSchedule schedule) {
         if (
             schedule.Volatile ||
             !schedule.IterationVersioned ||
             (rule.MaxFirings > 0) ||
             (rule.Zones is { References.Count: > 0 })
         ) {
-            return Kind.Always;
+            return Visit.Always;
+        }
+        // A rule its host evaluates binds what the host chooses, so no key or body of it is the list's to name.
+        if (evaluator.Owns(rule: rule)) {
+            return Visit.Whole;
         }
         if (rule.ForEachBodies) {
-            return Kind.BodySweep;
+            return Visit.BodySweep;
         }
 
-        return ((rule.ForEachOrdinal >= 0) ? Kind.RowSweep : Kind.Once);
+        return (((rule.ForEachOrdinal >= 0) && (rule.Iteration is null)) ? Visit.RowSweep : Visit.Whole);
     }
     private static Dictionary<TKey, int[]> Freeze<TKey>(Dictionary<TKey, List<int>> index) where TKey : notnull {
         var frozen = new Dictionary<TKey, int[]>(capacity: index.Count);
@@ -413,37 +523,102 @@ internal sealed class RuleDueList {
 
         return frozen;
     }
+    private static int NextBit(ulong[] bits, int from) {
+        for (var word = (from >> 6); (word < bits.Length); word++) {
+            var held = bits[word];
+
+            if (word == (from >> 6)) {
+                held &= (ulong.MaxValue << (from & 63));
+            }
+            if (held != 0UL) {
+                return ((word << 6) + System.Numerics.BitOperations.TrailingZeroCount(value: held));
+            }
+        }
+
+        return -1;
+    }
+    private void MarkReaders<TKey>(Dictionary<TKey, int[]> index, TKey key) where TKey : notnull {
+        if (index.TryGetValue(key: key, value: out var readers)) {
+            foreach (var reader in readers) {
+                MarkFull(index: reader);
+            }
+        }
+    }
     private void SetDue(int index) => m_due[(index >> 6)] |= (1UL << (index & 63));
     private void MarkFull(int index) {
         SetDue(index: index);
         m_full[index] = true;
     }
-    // A move of one body's fact: that body of a body sweep, or the whole rule otherwise. A move reported for the
-    // source as a whole marks the rule in full.
+    // A move of the cell one key names in a row the rule reads under $each: the binding that key is. A row sweep's
+    // binding is the key's position in the swept row's snapshot, a key the row does not hold being no binding of it;
+    // a body sweep's is the body index the key spells. A snapshot that no longer stands names no binding, so the rule
+    // is due in full, as it is when it is no keyed sweep.
+    private void MarkKey(int index, CellKey key) {
+        switch (m_kinds[index]) {
+            case Visit.RowSweep when m_full[index]:
+                return;
+            case Visit.RowSweep when SnapshotStands(index: index, structure: m_host.Arena.RowStructureVersion(rowOrdinal: Rules[index].ForEachOrdinal)):
+                if (m_snapshots[index]!.TryPositionOf(key: key, position: out var position)) {
+                    SetBinding(binding: position, index: index);
+                }
+
+                return;
+            case Visit.BodySweep:
+                if (m_host.Arena.Keys.TryCandidateIndex(index: out var body, key: key)) {
+                    SetBinding(binding: body, index: index);
+                }
+
+                return;
+            default:
+                MarkFull(index: index);
+
+                return;
+        }
+    }
+    // A move of one body's fact: that body's binding of a keyed sweep, or the whole rule otherwise. A move reported
+    // for the source as a whole marks the rule in full. A row sweep's binding for a body is the key that spells the
+    // body's index, which is what the host binds $each to for the read.
     private void MarkBody(int index, int body) {
-        if ((m_kinds[index] != Kind.BodySweep) || (body < 0)) {
+        if (body < 0) {
             MarkFull(index: index);
 
             return;
         }
+        switch (m_kinds[index]) {
+            case Visit.BodySweep:
+                SetBinding(binding: body, index: index);
 
-        var bodies = m_bodies[index];
-        var words = ((body >> 6) + 1);
+                return;
+            case Visit.RowSweep:
+                if (m_host.Arena.Keys.TryResolveIndex(index: body, key: out var key)) {
+                    MarkKey(index: index, key: key);
+                }
 
-        if ((bodies is null) || (bodies.Length < words)) {
-            var grown = new ulong[Math.Max(val1: words, val2: ((bodies?.Length ?? 0) * 2))];
+                return;
+            default:
+                MarkFull(index: index);
 
-            bodies?.CopyTo(array: grown, index: 0);
-            m_bodies[index] = bodies = grown;
+                return;
         }
-        bodies[(body >> 6)] |= (1UL << (body & 63));
+    }
+    private void SetBinding(int index, int binding) {
+        var bindings = m_bindings[index];
+        var words = ((binding >> 6) + 1);
+
+        if ((bindings is null) || (bindings.Length < words)) {
+            var grown = new ulong[Math.Max(val1: words, val2: ((bindings?.Length ?? 0) * 2))];
+
+            bindings?.CopyTo(array: grown, index: 0);
+            m_bindings[index] = bindings = grown;
+        }
+        bindings[(binding >> 6)] |= (1UL << (binding & 63));
         SetDue(index: index);
     }
-    private bool AnyBody(int index) {
-        if (m_bodies[index] is not { } bodies) {
+    private bool AnyBinding(int index) {
+        if (m_bindings[index] is not { } bindings) {
             return false;
         }
-        foreach (var word in bodies) {
+        foreach (var word in bindings) {
             if (word != 0UL) {
                 return true;
             }

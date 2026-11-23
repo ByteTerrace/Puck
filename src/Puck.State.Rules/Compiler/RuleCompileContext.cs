@@ -67,6 +67,55 @@ public class RuleCompileContext : IRuleCostContext {
     /// <summary>Resolves a document-owned each source; null leaves resolution to the core row and body vocabulary.</summary>
     public virtual RuleIteration? CompileIteration(StateChannelRef reference, string ruleName) => null;
 
+    private bool[]? m_rowRests;
+
+    /// <summary>Gets a value indicating whether the host the section runs on answers one search ply to every read
+    /// (<see cref="IStateReader.SearchPlyIsFixed"/>), so a read of it moves with nothing.</summary>
+    public virtual bool SearchPlyIsFixed => false;
+    /// <summary>Gets a value indicating whether the host the section runs on versions its live-body roster
+    /// (<see cref="IStateReader.TryScheduleLiveBodies"/>), so a body sweep is judged per body.</summary>
+    public virtual bool LiveBodiesVersioned => false;
+
+    /// <summary>Returns whether a host fact holds still on a tick in which nothing but time and motion passes, and is
+    /// one the host versions: a count, a flag or an event, rather than a pose or a clock. A fact that rests is priced
+    /// by its changes (<see cref="RuleResponse"/>); every other fact is priced as moving every tick, which is what a
+    /// fact the host cannot version costs too.</summary>
+    /// <param name="fact">The compiled fact.</param>
+    /// <param name="each">Whether the fact is read for the body bound to <c>$each</c>, so one move reaches one
+    /// binding.</param>
+    /// <returns><see langword="true"/> when the fact rests; the default answers <see langword="false"/> for every
+    /// fact, since only a host knows its own.</returns>
+    public virtual bool FactRests(ICompiledFact fact, out bool each) {
+        each = false;
+
+        return false;
+    }
+    /// <summary>Returns whether a row holds still on a tick in which no rule or host writes it: a document row with
+    /// no value-over-time trait on it or its cells, stored by the arena. It is the test a schedule applies to a row
+    /// it names (<see cref="RuleSchedule.Build"/>), read from declarations.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <returns><see langword="true"/> when the row rests.</returns>
+    public bool RowRests(int rowOrdinal) {
+        if (m_rowRests is null) {
+            var rows = StateCatalog.ExpandRows(Section);
+            var rests = new bool[Catalog.Count];
+
+            for (var ordinal = 0; (ordinal < rests.Length); ordinal++) {
+                var descriptor = Catalog.Descriptors[ordinal];
+
+                rests[ordinal] = (
+                    (descriptor.Lane == StateLane.Document) &&
+                    !descriptor.HostOwned &&
+                    (((uint)descriptor.LaneOrdinal) < ((uint)rows.Count)) &&
+                    !ArenaLayout.HasTraits(row: rows[descriptor.LaneOrdinal])
+                );
+            }
+            m_rowRests = rests;
+        }
+
+        return ((((uint)rowOrdinal) < ((uint)m_rowRests.Length)) && m_rowRests[rowOrdinal]);
+    }
+
     /// <summary>Gets the section's generator rows.</summary>
     public IReadOnlyList<GeneratorRow>? Generators { get; }
     /// <summary>Gets the section's lattice topologies.</summary>

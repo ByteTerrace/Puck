@@ -6,7 +6,12 @@ namespace Puck.State;
 /// <param name="RowOrdinal">The row's catalog ordinal, which is also its arena row ordinal.</param>
 /// <param name="Key">The interned cell key, or the invalid default for any cell of the row.</param>
 /// <param name="IsSet">For a write, whether it replaces the cell rather than accumulating into it.</param>
-public readonly record struct CellAccess(int RowOrdinal, CellKey Key, bool IsSet = false) {
+/// <param name="Each">Whether the cell is the one under the key the evaluation binds to <c>$each</c>, so one binding
+/// reaches one cell of the row. <paramref name="Key"/> is then the invalid default, since no one key names it.</param>
+/// <param name="Indexed">Whether the cell is one a cell under the <c>$each</c> key names (<c>row[index[$each]]</c>), so
+/// each binding reaches one cell of the row and the bindings share its cells. <paramref name="Key"/> is the invalid
+/// default: any cell of the row may be the one a binding reads.</param>
+public readonly record struct CellAccess(int RowOrdinal, CellKey Key, bool IsSet = false, bool Each = false, bool Indexed = false) {
     /// <summary>Gets a value indicating whether two accesses can touch the same cell.</summary>
     /// <param name="other">The other access.</param>
     /// <returns><see langword="true"/> when both name the same row and neither names a different cell of it.</returns>

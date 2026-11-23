@@ -27927,6 +27927,14 @@
                 "description": "A box\u0027s yaw about \u002BY in degrees, added to the placement\u0027s resolved yaw. Ignored by a sphere.",
                 "type": "number",
                 "default": 0
+              },
+              "capacity": {
+                "description": "The most occupants a rule\u0027s forEach: region(...) sweep binds in one tick, lowest body index first, and the multiplier the work sheet prices that sweep by; absent for the most bodies that fit the volume (RegionSweepCapacity). It bounds sweeps only: the region still senses and counts every body inside it.",
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "default": null
               }
             },
             "additionalProperties": false,

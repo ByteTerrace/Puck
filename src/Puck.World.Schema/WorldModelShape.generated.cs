@@ -4985,6 +4985,7 @@ public static partial class WorldModelShape {
                 M("halfExtents", typeof(global::System.Nullable<global::System.Numerics.Vector3>), typeof(global::Puck.World.WorldPlacementRegion), "HalfExtents", Read | Write, static value => ((global::Puck.World.WorldPlacementRegion)value).HalfExtents),
                 M("center", typeof(global::System.Numerics.Vector3), typeof(global::Puck.World.WorldPlacementRegion), "Center", Read | Write, static value => ((global::Puck.World.WorldPlacementRegion)value).Center),
                 M("yawDegrees", typeof(global::System.Single), typeof(global::Puck.World.WorldPlacementRegion), "YawDegrees", Read | Write, static value => ((global::Puck.World.WorldPlacementRegion)value).YawDegrees),
+                M("capacity", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldPlacementRegion), "Capacity", Read | Write, static value => ((global::Puck.World.WorldPlacementRegion)value).Capacity),
                 M("isBox", typeof(global::System.Boolean), typeof(global::Puck.World.WorldPlacementRegion), "IsBox", None),
                 M("volume", typeof(global::System.Double), typeof(global::Puck.World.WorldPlacementRegion), "Volume", None),
             ],

@@ -911,6 +911,63 @@ keys on. A record-like table of fixed fields states its field count by hand; a
 spelling that derives it from the fields is
 [open](../plans/open-items.md#language-and-authoring).
 
+**A rule is priced by what changes: a tick at rest plus one change.** The
+evaluator judges a binding only when something it reads moved (a due list per
+rule and per binding of a keyed sweep), and the sheet prices each such line by
+the same reading: the bindings judged and fired on a tick at rest, where time
+passes and bodies move but no state cell and no event-like fact changes, plus
+the bindings one change reaches (`RuleResponse.Of`,
+[analysis](../reference/state/analysis.md#price-by-change)). The worst tick,
+every binding of every line judged and firing, is reported beside it and
+never refused. The city's sheet, 1,920 citizens and 100 vehicles, fell from
+3.25 million units to 0.39 million under it, against a ceiling of 4.25
+million.
+
+The options weighed:
+
+- *Keys times worst case* (every binding of every line judged and firing every
+  tick). Rejected: it is true of no tick a change-driven evaluator runs but
+  the first, and a world of thousands of rules over thousands of bodies is
+  refused by it whatever it does. The city's dispatch rule alone was priced at
+  2.04 million units, as if all 1,920 citizens set out every tick, when each
+  sets out about ten times a day.
+- *A sound bound on one tick's change.* None exists below the worst case: every
+  group's schedule can turn over on one tick, and does at boot. A static
+  analysis that proved otherwise would have to know how fast a clock runs and
+  where bodies walk.
+- *An enforced cap* (the sweep stops at a declared number, as `maxFirings`
+  does, or a region binds only so many occupants). Sound, and kept as
+  `maxFirings` for an author who wants the batching. Rejected as the price's
+  basis: it changes what a rule means under load (a crossing's fifth queued
+  vehicle would drive through), and by "ergonomic is optimal" a rule written
+  plainly must not cost more than the same rule with a cap written on it.
+- *Admit only what recurs, and meter the rest.* Rejected as the whole answer:
+  a line that answers a change would be free on the sheet, and nothing would
+  refuse a document of ten thousand of them.
+- *A tick at rest plus one change per line.* Chosen. What recurs every tick is
+  priced in full; each line is charged its answer to one move of one thing it
+  reads, so the sheet grows with every line and with how far one change
+  reaches (one binding for `row[$each]`, every binding for a shared cell, an
+  even share through an index). It is an expectation, stated as one, with the
+  worst tick printed beside it and `world.budget.rules --spent` reading what a
+  run spent.
+
+What it costs authors: a Level rule that fires every tick its gate holds is
+priced as that. A rule that moves a state machine is priced by change when its
+firing closes its own gate in a shape the compiler reads
+(`RuleResponse.ClosesItself`), or when it is an Edge; a rule about a place
+sweeps the place's occupants (`forEach: region(placement)`) rather than testing
+every body's position, which is judged every tick. `world.budget.rules --why`
+names which case a line fell under.
+
+Enforcement: the sheet and the due list read one judgement walk
+(`RuleDataflow.CollectJudgement`), so they agree on what a line reads; what
+rests is one predicate per row and per fact, and the world host throws for a
+fact the sheet prices at rest that it cannot version
+(`WorldRuleHost.TryScheduleFact`). What it does not cover: the one-change
+assumption itself, which nothing enforces, and a firing that refuses every tick,
+which is priced as if it had landed.
+
 Enforcement: `RowCapacity` is the only room a price reads, and no context can be
 pointed at a live layout. What it does not cover: growth work and memory
 admission (`ReservationWork` over the whole layout, the arena byte and

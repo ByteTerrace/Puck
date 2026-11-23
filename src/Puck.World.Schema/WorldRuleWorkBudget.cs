@@ -11,13 +11,19 @@ namespace Puck.World;
 /// <param name="RuleRows">The rule count.</param>
 /// <param name="InteractionRows">The interaction count.</param>
 /// <param name="EvaluationSlots">The evaluations per tick, every multiplier summed.</param>
-/// <param name="WorkUnitsPerTick">The worst-case work units per tick, or why no number bounds them.</param>
+/// <param name="WorkUnitsPerTick">The work units per tick admission holds against the ceiling, or why no number
+/// bounds them: every line at its price (<see cref="RuleWorkContributor"/>), which for a rule a due list judges by
+/// change is a tick at rest plus one change, and for every other line every binding every tick.</param>
 /// <param name="FlockAffinityWorkUnitsPerTick">The flock-affinity share.</param>
 /// <param name="DecisionImagePointsPerTick">The pose-image points a decision perception pass copies.</param>
 /// <param name="DecisionGridBuildsPerTick">The grids a decision perception pass builds, one per distinct cell width.</param>
 /// <param name="DecisionGridPointsPerTick">The points those grids group.</param>
+/// <param name="WorstWorkUnitsPerTick">What a tick costs when every binding of every line is judged and every admitted
+/// one fires at once: the sum of the lines' worst cases. Reported beside the price; a tick like it (a boot, every
+/// group changing at once) is a spike, never the rule.</param>
 public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionRows, long EvaluationSlots, RuleWork WorkUnitsPerTick,
-    RuleWork FlockAffinityWorkUnitsPerTick = default, int DecisionImagePointsPerTick = 0, int DecisionGridBuildsPerTick = 0, long DecisionGridPointsPerTick = 0) {
+    RuleWork FlockAffinityWorkUnitsPerTick = default, int DecisionImagePointsPerTick = 0, int DecisionGridBuildsPerTick = 0, long DecisionGridPointsPerTick = 0,
+    RuleWork WorstWorkUnitsPerTick = default) {
     internal static IReadOnlyList<(string Rule, string Cell)> ContradictoryGates(CompiledRule[] rules, StateCatalog catalog) {
         var result = new List<(string, string)>();
 
@@ -106,11 +112,17 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         // All policies may reconsider together. The pose image is shared and visits every slot once; each distinct
         // grid keys its points, sorts them, and groups the sorted run into cells.
         var perceptionCost = (imagePoints + (decisionScales.Count * ((2L * definition.Population.Capacity) + RuleWorkBudget.IntrosortWork(count: definition.Population.Capacity))));
+        var worst = (flockCost + perceptionCost);
+
+        foreach (var line in lines) {
+            worst += line.WorstUnits;
+        }
 
         return new WorldRuleWorkBudget(
             RuleRows: rules.Length,
             InteractionRows: interactions.Length,
             EvaluationSlots: slots,
+            WorstWorkUnitsPerTick: worst,
             WorkUnitsPerTick: ((work + flockCost) + perceptionCost),
             FlockAffinityWorkUnitsPerTick: flockCost,
             DecisionImagePointsPerTick: imagePoints,
@@ -169,6 +181,8 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         for (var index = 0; (index < rules.Length); index++) {
             var rule = rules[index];
 
+            var place = order.Place(index: index).Line;
+
             contributors.Add(item: RuleWorkBudget.Contributor(
                 commit: (WritesGate(definition: definition, rule: rule, writes: writes) ? gate : 0L),
                 rule: rule,
@@ -179,7 +193,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 ),
                 isInteraction: false,
                 context: context,
-                order: order.Place(index: index).Line
+                // The host walks its ungrouped rules through a due list; a group's passes and a decision judge every
+                // binding in place (WorldRuleHost.EvaluateWorldRules).
+                inPlace: ((place < 0L) || ((rule as CompiledWorldFactsRule)?.Decision is not null)),
+                order: place
             ));
         }
         for (var index = 0; (index < interactions.Length); index++) {
@@ -284,7 +301,9 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             return (capacity, $"radius={region.Radius} — no solid-only kit footprint resolvable, population capacity {capacity}");
         }
 
-        var reach = ((((double)region.Radius) + footprint) / footprint);
+        // A box's centres lie within its half-diagonal on the ground plane, the radius of the disc that holds it.
+        var radius = ((region.HalfExtents is { } half) ? Math.Sqrt(d: ((((double)half.X) * half.X) + (((double)half.Z) * half.Z))) : region.Radius);
+        var reach = ((radius + footprint) / footprint);
         var packed = ((long)Math.Floor(d: (reach * reach)));
 
         return (
@@ -293,8 +312,23 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             min: 1L,
             value: packed
         ),
-            $"radius={region.Radius}, smallest solid-kit footprint={footprint} -> floor(((R+r)/r)^2)={packed}, clamped to population {capacity}"
+            $"radius={radius:0.###}, smallest solid-kit footprint={footprint} -> floor(((R+r)/r)^2)={packed}, clamped to population {capacity}"
         );
+    }
+    /// <summary>Returns the occupants a rule's <c>forEach: region(...)</c> sweep is priced at, with the terms that
+    /// produced it: the region's authored <see cref="WorldPlacementRegion.Capacity"/>, or the most carriers that fit
+    /// it (<see cref="RegionCapacityBound"/>), clamped to the population capacity.</summary>
+    /// <param name="definition">The world.</param>
+    /// <param name="placementId">The region-carrying placement's id.</param>
+    /// <returns>The bound and its derivation.</returns>
+    public static (long Bound, string Terms) RegionSweepCapacity(WorldDefinition definition, string placementId) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var population = ((long)definition.Population.Capacity);
+
+        return ((WorldDefinitionRows.FindPlacement(placements: definition.Placements, id: placementId)?.Region?.Capacity is { } authored)
+            ? (Math.Clamp(max: Math.Max(val1: 1L, val2: population), min: 1L, value: authored), $"region '{placementId}' capacity={authored}")
+            : RegionCapacityBound(definition: definition, placementId: placementId));
     }
 
     // Two bodies depenetrate only when both kits declare Solid contact (WorldBodyContactMode); an Overlap kit could
@@ -363,9 +397,9 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             ? "a forEach line's multiplier is its row's capacity, so author the capacity the row needs"
             : $"{string.Join(separator: ", ", values: uncapped.Select(selector: static name => $"'{name}'"))} declare no capacity and are priced at the {StateCapacity.MaxCellsPerRow}-cell ceiling they may grow to: author each one's capacity, or key it over a capped token domain");
 
-        return $"rules/interactions/flock affinities derive {(work.IsKnown
-            ? $"{work} worst-case work units per tick, exceeding"
-            : $"no bound on their work per tick ({work}), which cannot be admitted under")} the maximum of {RuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} ({fix}; world.budget.rules lists every line).";
+        return $"rules/interactions/flock affinities are priced at {(work.IsKnown
+            ? $"{work} work units per tick, exceeding"
+            : $"no bound on their work per tick ({work}), which cannot be admitted under")} the maximum of {RuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} ({fix}; world.budget.rules lists every line and how it is priced).";
     }
     /// <summary>Returns the keyed rows a compiled rule iterates, reads or writes whose price is the engine's cell
     /// ceiling only because they declare no capacity and no capped token domain: the rows whose capacity an author
@@ -439,7 +473,9 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                     ? $"pool sweep over '{pool.Name}' capacity={pool.Capacity}{firings}"
                     : ((rule.Iteration is WorldInputIteration events)
                         ? $"forEach inputEvents, the events one step admits={events.StepCapacity} (of {events.HistoryCapacity} retained){firings}"
-                        : "no forEach — priced once")))
+                        : ((rule.Iteration is WorldRegionIteration occupants)
+                            ? $"forEach region occupants, {RegionSweepCapacity(definition: definition, placementId: occupants.PlacementId).Terms}{firings}"
+                            : "no forEach — priced once"))))
         );
     }
     /// <summary>Returns the work units an expression costs against a document.</summary>

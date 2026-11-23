@@ -73,7 +73,7 @@ public static partial class WorldConstructs {
                     Kind: WorldMemberKind.Reference,
                     Name: "forEach",
                     Position: WorldMemberPosition.Property,
-                    Summary: "What the rule iterates, one evaluation per binding of `$each`: a keyed row's live keys, `$zones` for its zone table's entries, or `$bodies` for every live body in ascending index order."
+                    Summary: "What the rule iterates, one evaluation per binding of `$each`: a keyed row's live keys, `$zones` for its zone table's entries, `$bodies` for every live body in ascending index order, `region(placement)` for the bodies inside a placement's region, or `inputEvents(owner)` for the input events a step admitted. A sweep written as a call names its reserved channel by its arguments, as a gate's fact does."
                 ),
                 new(
                     DocumentKeys: ["maxFirings"],

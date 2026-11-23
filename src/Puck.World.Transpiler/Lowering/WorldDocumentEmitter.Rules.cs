@@ -149,6 +149,9 @@ public static partial class WorldDocumentEmitter {
                         scope: stmtScope
                     );
                     break;
+                case PropertyNode { Name: "forEach", Value: CallExpressionNode sweep }:
+                    obj["forEach"] = LowerSweepSource(scope: stmtScope, sweep: sweep);
+                    break;
                 case PropertyNode prop:
                     var loweredProp = LowerModelMember(holder: typeof(WorldRule), property: prop, scope: stmtScope);
                     DocumentLowering.AssignOrExtend(
@@ -220,6 +223,25 @@ public static partial class WorldDocumentEmitter {
     private static readonly Type? DecisionModel = WorldCallArguments.MemberType(member: "decision", owner: typeof(WorldRule));
     private static readonly Type? OptionModel = ((DecisionModel is null) ? null : WorldCallArguments.MemberType(member: "options", owner: DecisionModel));
 
+    // A sweep written as a call, `forEach: region(place)` or `forEach: inputEvents(seat)`, names a reserved channel
+    // by its arguments as a gate's fact does. Each argument is a compile-time value (a literal, a constant, a template
+    // parameter's member), and the document holds the channel's colon spelling.
+    private static JsonNode LowerSweepSource(CallExpressionNode sweep, DocumentScope scope) {
+        var text = new System.Text.StringBuilder(value: "$").Append(value: sweep.Name);
+
+        foreach (var argument in sweep.Arguments) {
+            if (argument.Name is not null) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.InvalidValue,
+                    message: $"'forEach: {sweep.Name}(...)' takes its arguments by position, and '{argument.Name}:' names one.",
+                    span: argument.Span
+                );
+            }
+            text.Append(value: ':').Append(value: DocumentLowering.LowerValue(expr: argument.Value, fieldKey: "forEach", scope: scope)?.ToString());
+        }
+
+        return JsonValue.Create(value: text.ToString());
+    }
     private static JsonNode? LowerModelMember(Type? holder, PropertyNode property, DocumentScope scope) => DocumentLowering.LowerMember(
         fieldKey: property.Name,
         holder: holder,

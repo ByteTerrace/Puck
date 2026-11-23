@@ -3257,8 +3257,10 @@ grow:
     body's pose and facts: every write of `WorldBody`'s position,
     orientation and previous position (about twenty sites across its
     partial files) goes through a setter that adds the slot to a
-    population-owned moved set. `puck test --reproduce` checks the narrowing
-    (`RuleEvaluator.QuiescenceChecked` runs `VerifyFactCandidates`).
+    population-owned moved set. `puck test --reproduce` checks the narrowing:
+    its replay judges every rule's every binding in place
+    (`RuleEvaluator.SchedulingEnabled` off), so a move the derivation missed
+    shows as a differing hash.
   - `WorldPerceptionImage.Freeze` copies every active body twice a tick (the
     flock's image and the decision image), and each query width rebuilds its
     `FixedSpatialNeighborhood` over every point. The copy can follow the same
