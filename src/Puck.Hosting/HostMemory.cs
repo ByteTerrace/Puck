@@ -134,6 +134,21 @@ public static partial class HostMemory {
 
         return ((CommitBytes() is { } commit) ? Math.Min(val1: available, val2: Math.Max(val1: 0L, val2: (commit.Limit - commit.Charge))) : available);
     }
+    [LibraryImport(libraryName: "kernel32.dll")]
+    private static partial nint CreateMemoryResourceNotification(int notificationType);
+    [LibraryImport(libraryName: "kernel32.dll")]
+    [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
+    private static partial bool QueryMemoryResourceNotification(nint handle, [MarshalAs(unmanagedType: UnmanagedType.Bool)] out bool state);
+
+    // The system's low-memory notification (LowMemoryResourceNotification, 0), opened once and kept for the process's
+    // life; zero off Windows or where the system refused it.
+    private static readonly Lazy<nint> LowMemoryNotification = new(valueFactory: static () => (OperatingSystem.IsWindows() ? CreateMemoryResourceNotification(notificationType: 0) : 0));
+
+    /// <summary>Returns whether the operating system says its available physical memory is running low: on Windows the
+    /// system-wide low-memory resource notification, which every process sees at once. Work that can wait gives its room
+    /// back while it stands. Linux publishes no such signal, and reads as not low.</summary>
+    /// <returns>Whether the signal is set.</returns>
+    public static bool LowMemorySignaled() => ((LowMemoryNotification.Value != 0) && QueryMemoryResourceNotification(handle: LowMemoryNotification.Value, state: out var low) && low);
     /// <summary>Returns the physical memory the machine has installed and the operating system can use, in bytes: on
     /// Windows the memory status's total physical bytes, on Linux <c>/proc/meminfo</c>'s <c>MemTotal</c>. Firmware and
     /// device reservations make it slightly less than the nominal size.</summary>

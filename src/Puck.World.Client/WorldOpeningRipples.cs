@@ -50,9 +50,10 @@ public sealed class WorldOpeningRipples {
             key: screen,
             value: out var opening
         )) {
-            opening = new Opening(capacity: capacity);
+            opening = new Opening();
             m_openings[screen] = opening;
         }
+        opening.Fit(capacity: capacity);
 
         if (seconds > opening.Seconds) {
             var normal = Vector3.Normalize(value: Vector3.Cross(
@@ -157,20 +158,29 @@ public sealed class WorldOpeningRipples {
 
     // One opening's memory: each body's last signed distance to the glass (NaN for none) and whether it touched, the
     // bodies the last advance read a pose for, and the contacts showing.
-    private sealed class Opening(int capacity) {
+    // Both per-body columns grow with the world (Fit), a new body standing nowhere.
+    private sealed class Opening {
         public List<int> Read { get; } = [];
 
         private readonly float[] m_u = new float[SdfScreenRipple.Contacts];
         private readonly float[] m_v = new float[SdfScreenRipple.Contacts];
         private readonly double[] m_start = new double[SdfScreenRipple.Contacts];
         private readonly float[] m_strength = new float[SdfScreenRipple.Contacts];
+        private float[] m_distance = [];
+        private bool[] m_touching = [];
 
-        public float[] Distance { get; } = Enumerable.Repeat(
-            count: capacity,
-            element: float.NaN
-        ).ToArray();
+        public float[] Distance => m_distance;
         public double Seconds { get; set; } = double.NegativeInfinity;
-        public bool[] Touching { get; } = new bool[capacity];
+        public bool[] Touching => m_touching;
+
+        public void Fit(int capacity) {
+            var from = m_distance.Length;
+
+            if (capacity <= from) { return; }
+            Array.Resize(array: ref m_distance, newSize: capacity);
+            Array.Resize(array: ref m_touching, newSize: capacity);
+            m_distance.AsSpan(start: from).Fill(value: float.NaN);
+        }
 
         // Records a contact in the slot that is empty or oldest.
         public void Add(double seconds, float strength, float u, float v) {

@@ -28,8 +28,12 @@ internal readonly record struct BodyProducerSensors(BodySensorTarget Candidate, 
 internal struct BodyProducerState {
     public int AcquiredTarget;
     public FixedQ4816 ActivityPhase;
+    // The FixedRateAccumulator remainders (over the engine tick base) the two oscillators carry between refreshes;
+    // assigning a phase outside the integration clears its remainder.
+    public long ActivityPhaseRemainder;
     public FixedQ4816 ActivityRate;
     public FixedQ4816 Phase;
+    public long PhaseRemainder;
     public FixedQ4816 PreferredAltitude;
     public FixedQ4816 WeaveFrequency;
     // Q32 raw — a curve-follow target's travelled arc length, wrapped/clamped to the compiled curve's own

@@ -5,6 +5,8 @@ using Xunit;
 namespace Puck.World.Client.Tests;
 
 public sealed class WorldCatalogAllocationLawTests {
+    // A body count past the appearance catalog: the representation scale these laws run at, not an engine bound.
+    private const int DenseBodies = 4096;
     private static SdfProgram Emit(int capacity, int rig, Func<int, bool> active) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
@@ -55,12 +57,12 @@ public sealed class WorldCatalogAllocationLawTests {
 
         Assert.True(condition: (WorldRigCatalog.InstructionCount(avatar: largest) > WorldRigCatalog.InstructionCount(avatar: smallest)));
         var native = Emit(
-            WorldBodiesLimits.CapacityCeiling,
+            DenseBodies,
             largest,
             index => (index == largest)
         );
         var moved = Emit(
-            WorldBodiesLimits.CapacityCeiling,
+            DenseBodies,
             largest,
             index => (index == smallest)
         );
@@ -74,7 +76,7 @@ public sealed class WorldCatalogAllocationLawTests {
             moved.Instructions.Count
         );
         var smallAtLargeSlot = Emit(
-            WorldBodiesLimits.CapacityCeiling,
+            DenseBodies,
             smallest,
             index => (index == largest)
         );
@@ -217,7 +219,7 @@ public sealed class WorldCatalogAllocationLawTests {
             partId: "pelvis",
             transformSlot: out var first
         ));
-        var transforms = new DynamicTransform[WorldRigCatalog.DynamicTransformCapacity];
+        var transforms = new DynamicTransform[((LastBody + 1) * WorldRigCatalog.TransformSlotsPerBody)];
         var origin = new Vector3(
             x: 1,
             y: 2,

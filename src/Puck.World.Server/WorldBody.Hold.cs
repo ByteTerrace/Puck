@@ -1291,9 +1291,9 @@ public sealed partial class WorldBody {
             return;
         }
 
-        var reach = PerStep(
-            stepTicks: stepTicks,
-            value: (hold.Pull * m_scale)
+        var reach = FixedTickConversion.ShareOfStep(
+            perSecond: (hold.Pull * m_scale),
+            stepTicks: stepTicks
         );
 
         m_position -= (m_holdNormal * ((error < reach)

@@ -159,7 +159,7 @@ public sealed class WorldEventFeed {
         ArgumentOutOfRangeException.ThrowIfNegative(value: capacity);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(
             value: capacity,
-            other: WorldBodiesLimits.CapacityCeiling
+            other: WorldBodiesLimits.IndexLimit
         );
 
         m_maximumTrackedPairs = MaximumTrackedPairsForCapacity(capacity: capacity);

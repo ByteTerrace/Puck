@@ -129,6 +129,24 @@ public sealed partial class HostProbe(string checkoutRoot) {
             return (0, double.NaN);
         }
     }
+    /// <summary>Reads the peaks a running process has reached: its private bytes and whole working set now or at the
+    /// operating system's own recorded peak, whichever is higher (Windows records both, so a peak between readings still
+    /// counts), and its private working set now, which no system records a peak of.</summary>
+    /// <param name="process">The running process, whose cached counters are refreshed first.</param>
+    /// <returns>The peaks; one with a counter the platform will not report is not <see cref="HostPeaks.Valid"/>.</returns>
+    public static HostPeaks PeaksOf(Process process) {
+        process.Refresh();
+
+        var (privateGb, workingSetGb) = Footprint(process: process);
+        var resident = ((Puck.Hosting.HostMemory.PrivateResidentBytes(processId: process.Id) is { } bytes) ? (bytes / 1073741824.0) : double.NaN);
+
+        try {
+            if (OperatingSystem.IsWindows()) { privateGb = Math.Max(val1: privateGb, val2: (process.PeakPagedMemorySize64 / 1073741824.0)); }
+            if (double.IsFinite(d: workingSetGb)) { workingSetGb = Math.Max(val1: workingSetGb, val2: (process.PeakWorkingSet64 / 1073741824.0)); }
+        } catch (Exception exception) when ((exception is Win32Exception or InvalidOperationException or NotSupportedException)) { }
+
+        return new HostPeaks(PrivateGb: privateGb, ResidentGb: HostRunningStart.ResidentOf(privateGb: privateGb, privateResidentGb: resident, workingSetGb: workingSetGb), WorkingSetGb: workingSetGb);
+    }
     /// <summary>Reads the CPU time a process has used in total.</summary>
     /// <param name="process">The process.</param>
     /// <returns>The seconds, or NaN when the platform will not say (the process exited, or belongs to another user).</returns>

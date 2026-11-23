@@ -99,26 +99,21 @@ public static class FixedTickConversion {
 
         return period;
     }
-    /// <summary>Returns the rate, in hertz, of a step that is a whole number of engine ticks wide: the inverse of
-    /// <see cref="PerRate(uint)"/>.</summary>
-    /// <param name="stepTicks">A step width in engine ticks; it must divide <see cref="TicksPerSecond"/> exactly.</param>
-    /// <returns>The exact rate <c><see cref="TicksPerSecond"/> / <paramref name="stepTicks"/></c>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
-    /// <exception cref="ArgumentException"><paramref name="stepTicks"/> does not divide <see cref="TicksPerSecond"/>
-    /// exactly, so the step has no whole rate.</exception>
-    public static ulong RateOfStep(ulong stepTicks) {
-        ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
+    /// <summary>Returns a per-second quantity's share of one step <paramref name="stepTicks"/> engine ticks wide,
+    /// <c>perSecond · stepTicks / <see cref="TicksPerSecond"/></c>, rounded once to nearest with ties to even. The step
+    /// may be any whole number of engine ticks, a divisor of a second or not. For a quantity integrated step after step,
+    /// where the rounding would accumulate, integrate through a <see cref="FixedRateAccumulator"/> bound to
+    /// <see cref="TicksPerSecond"/> instead: it carries what each step could not represent into the next.</summary>
+    /// <param name="perSecond">The quantity per second.</param>
+    /// <param name="stepTicks">The step width in engine ticks; zero answers zero.</param>
+    /// <returns>The rounded share, wrapped to the carrier on overflow as its operators wrap.</returns>
+    public static FixedQ4816 ShareOfStep(FixedQ4816 perSecond, ulong stepTicks) {
+        var negative = (perSecond.Value < 0L);
 
-        var rate = (TicksPerSecond / stepTicks);
-
-        if ((rate * stepTicks) != TicksPerSecond) {
-            throw new ArgumentException(
-                message: $"The step of {stepTicks} engine ticks must divide {TicksPerSecond} engine ticks per second exactly.",
-                paramName: nameof(stepTicks)
-            );
-        }
-
-        return rate;
+        return FixedQ4816.FromRawBits(value: FusedArithmetic.DivideProductSum(
+            denominator: (((UInt128)TicksPerSecond) << FixedQ4816.FractionBitCount),
+            numerator: (negative, (((UInt128)FusedArithmetic.RawMagnitude(value: perSecond.Value)) * stepTicks))
+        ));
     }
     /// <summary>Returns the number of whole steps of <paramref name="stepTicks"/> engine ticks that cover
     /// <paramref name="engineTicks"/>: the cross-rate bridge from an engine-tick span to a count of steps, rounded

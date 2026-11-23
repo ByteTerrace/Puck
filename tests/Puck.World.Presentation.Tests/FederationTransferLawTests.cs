@@ -475,7 +475,7 @@ public sealed partial class FederationTransferLawTests {
 
         writer.WriteString(value: "source/world");
         writer.WriteUInt64(value: 7UL);
-        writer.WriteInt32(value: (WorldBodiesLimits.CapacityCeiling + 1));
+        writer.WriteInt32(value: (WorldBodiesLimits.IndexLimit + 1));
 
         Assert.False(condition: WorldFederationCodec.TryDecodeCommit(
             body: writer.ToArray(),
@@ -2318,7 +2318,7 @@ public sealed partial class FederationTransferLawTests {
         writer.WriteInt32(value: 19);
         writer.WriteUInt64(value: 210UL);
         writer.WriteString(value: "destination/world");
-        writer.WriteInt32(value: (WorldBodiesLimits.CapacityCeiling + 1));
+        writer.WriteInt32(value: (WorldBodiesLimits.IndexLimit + 1));
 
         Assert.False(condition: WorldFederationCodec.TryDecodeSnapshot(
             body: writer.ToArray(),

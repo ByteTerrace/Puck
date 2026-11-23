@@ -273,18 +273,16 @@ public sealed partial class WorldPopulation {
                 System.Globalization.CultureInfo.InvariantCulture,
                 $" origin=({((double)tuning.Origin.X):0.###},{((double)tuning.Origin.Y):0.###},{((double)tuning.Origin.Z):0.###}) yaw={double.RadiansToDegrees(radians: ((double)tuning.YawRadians)):0.###}"
             );
-            var shared = ((domain.Sharing is { } sharing)
-                ? $",shared={domain.SharedResidentGoals}/{sharing.GoalCapacity},expanded={domain.SharedExpandedLast}/{sharing.ExpandedNodesPerTick},paths={domain.SharedPathsLast},capacityRefusals={domain.SharedCapacityRefusalsLast}"
-                : ",shared=none"
-            );
+            var shared = (tuning.Shared ? ",shared=fields" : ",shared=none");
+            var network = ((tuning.Network is { } named) ? $" network={named}" : string.Empty);
 
             var work = domain.BakeWork;
 
-            rows[index] = $"{domain.Name}:{tuning.Kind.ToString().ToLowerInvariant()} {tuning.Width}x{tuning.Depth}x{tuning.Layers} clear={domain.WalkableCellCount}/{domain.CellCount} edges={work.Edges} bake=grounds:{work.Grounds},occupancies:{work.Occupancies},edgeProofs:{work.EdgeProofs},allocated:{work.AllocatedBytes} connectivity={tuning.Connectivity.ToString().ToLowerInvariant()} search<={tuning.MaxExpandedNodes} path<={tuning.MaxPathNodes} medium={(tuning.Medium ?? "none")}{shared}{frame}";
+            rows[index] = $"{domain.Name}:{tuning.Kind.ToString().ToLowerInvariant()} {tuning.Width}x{tuning.Depth}x{tuning.Layers} clear={domain.WalkableCellCount}/{domain.CellCount} edges={work.Edges} bake=grounds:{work.Grounds},occupancies:{work.Occupancies},edgeProofs:{work.EdgeProofs},allocated:{work.AllocatedBytes} connectivity={tuning.Connectivity.ToString().ToLowerInvariant()} search<={tuning.MaxExpandedNodes} path<={tuning.MaxPathNodes} medium={(tuning.Medium ?? "none")}{shared}{network}{frame}";
         }
         var total = m_navigation.BakeWork;
 
-        return $"[world.navigation: retained={m_navigation.RetainedDomainCount},rebuilt={m_navigation.RebuiltDomainCount},rebaked={m_navigation.RebakedDomainCount} cells={m_navigation.CellCount} edges={total.Edges} bake=grounds:{total.Grounds},occupancies:{total.Occupancies},edgeProofs:{total.EdgeProofs},allocated:{total.AllocatedBytes} workspaceBytes={m_navigation.WorkspaceBytes} routeWorkspaceBytes={m_navigation.RouteWorkspaceBytes} junctions={m_navigation.JunctionCount}; {string.Join(
+        return $"[world.navigation: retained={m_navigation.RetainedDomainCount},rebuilt={m_navigation.RebuiltDomainCount},rebaked={m_navigation.RebakedDomainCount} cells={m_navigation.CellCount} edges={total.Edges} bake=grounds:{total.Grounds},occupancies:{total.Occupancies},edgeProofs:{total.EdgeProofs},allocated:{total.AllocatedBytes} workspaceBytes={m_navigation.WorkspaceBytes} routeWorkspaceBytes={m_navigation.RouteWorkspaceBytes} junctions={m_navigation.JunctionCount} goalFields={m_navigation.ResidentGoalFields},bytes:{m_navigation.GoalFieldBytes},evictions:{m_navigation.GoalFieldEvictions},lastTick=builds:{m_navigation.GoalFieldBuildsLast},cells:{m_navigation.GoalFieldCellsLast},steps:{m_navigation.GoalFieldStepsLast}; {string.Join(
             separator: "; ",
             values: rows
         )}]";
@@ -309,25 +307,25 @@ public sealed partial class WorldPopulation {
     public long NavigationCellCount => m_navigation.CellCount;
     /// <summary>Gets the fixed domain-search workspace allocated at compile time.</summary>
     public long NavigationWorkspaceBytes => m_navigation.WorkspaceBytes;
-    /// <summary>Gets the sum of shared per-tick or independent per-search caps across declared domains.</summary>
+    /// <summary>Gets the sum of declared search caps across domains: an independent domain's per-search expansion
+    /// budget, and a shared domain's cell count, which one goal field's derivation settles at most.</summary>
     public long NavigationDeclaredSearchWork => Enumerable.Range(
         0,
         m_navigation.Count
-    ).Sum(selector: index => ((long)(m_navigation[index].Sharing?.ExpandedNodesPerTick ?? m_navigation[index].Tuning.MaxExpandedNodes)));
+    ).Sum(selector: index => (m_navigation[index].Tuning.Shared ? m_navigation[index].CellCount : ((long)m_navigation[index].Tuning.MaxExpandedNodes)));
 
-    /// <summary>Gets active navigated producers, this tick's expansion total, and the maximum work they could
-    /// consume together if every follower had to replan on the same tick.</summary>
+    /// <summary>Gets this tick's goal-field work (fields derived, the cells they settled, the steps followers read) and
+    /// the fields resident.</summary>
+    public (int Builds, long Cells, long Steps, int Resident) NavigationGoalFieldWork =>
+        (m_navigation.GoalFieldBuildsLast, m_navigation.GoalFieldCellsLast, m_navigation.GoalFieldStepsLast, m_navigation.ResidentGoalFields);
+    /// <summary>Gets active navigated producers, this tick's expansion total (independent searches and goal-field
+    /// derivations), and the most work they could consume together if every follower replanned, or every shared
+    /// follower's goal were new, on the same tick.</summary>
     public (int Followers, long LastExpanded, long WorstExpanded) NavigationWork() {
         var followers = 0;
-        var expanded = 0L;
+        var expanded = m_navigation.GoalFieldCellsLast;
         var worst = 0L;
 
-        for (var domain = 0; (domain < m_navigation.Count); domain++) {
-            if (m_navigation[domain].Sharing is { } sharing) {
-                expanded += m_navigation[domain].SharedExpandedLast;
-                worst += sharing.ExpandedNodesPerTick;
-            }
-        }
         for (var index = 0; (index < Capacity); index++) {
             var entry = m_entries[index];
 
@@ -351,7 +349,7 @@ public sealed partial class WorldPopulation {
                 var domainIndex = producer.Target.Value.NavigationDomainIndex;
 
                 if (((uint)domainIndex) < ((uint)m_navigation.Count)) {
-                    if (m_navigation[domainIndex].Sharing is null) { worst += m_navigation[domainIndex].Tuning.MaxExpandedNodes; }
+                    worst += (m_navigation[domainIndex].Tuning.Shared ? m_navigation.CellCount : m_navigation[domainIndex].Tuning.MaxExpandedNodes);
                 }
             }
         }
@@ -366,9 +364,11 @@ public sealed partial class WorldPopulation {
             return 0L;
         }
         var state = m_entries[index].NavigationState;
+        // A goal-field follower holds no route: it has a way while its field gives it a step, and one waypoint left.
+        var follower = ((state.DomainIndex >= 0) && m_navigation[state.DomainIndex].Tuning.Shared);
 
         return facet switch {
-            "hasPath" => ((state.PathLength != 0)
+            "hasPath" => ((follower ? (state.Status is NavigationStatus.Active or NavigationStatus.Arrived) : (state.PathLength != 0))
             ? 1L
             : 0L),
             "active" => ((state.Status == NavigationStatus.Active)
@@ -377,26 +377,19 @@ public sealed partial class WorldPopulation {
             "arrived" => ((state.Status == NavigationStatus.Arrived)
             ? 1L
             : 0L),
-            "pending" => ((state.Status == NavigationStatus.Pending)
-            ? 1L
-            : 0L),
-            "capacity" => ((state.Status == NavigationStatus.CapacityLimited)
-            ? 1L
-            : 0L),
             "unreachable" => ((state.Status is NavigationStatus.Unreachable or NavigationStatus.SearchLimit or NavigationStatus.PathLimit or NavigationStatus.OutsideDomain)
             ? 1L
             : 0L),
-            "remaining" => Math.Max(
-            val1: 0,
-            val2: (state.PathLength - state.Waypoint)
-        ),
+            "remaining" => (follower
+                ? ((state.Status == NavigationStatus.Active) ? 1L : 0L)
+                : Math.Max(val1: 0, val2: (state.PathLength - state.Waypoint))),
             _ => 0L,
         };
     }
 
-    /// <summary>Appends route state that can affect rule reads and subsequent producer motion.</summary>
+    /// <summary>Appends route state that can affect rule reads and subsequent producer motion. Goal fields are not
+    /// state: a field is a function of its goal and the baked domains, whichever fields are resident.</summary>
     internal void AppendNavigationStateHash(ref Fnv1aHash hash) {
-        m_navigation.AppendSharedHash(hash: ref hash);
         hash.Add(value: ((uint)Capacity));
         for (var index = 0; (index < Capacity); index++) {
             var entry = m_entries[index];

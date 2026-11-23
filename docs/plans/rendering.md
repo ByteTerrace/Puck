@@ -23,6 +23,7 @@ observation left is listed under [deferred checks](#deferred-to-the-end). The
 | P1a, durable functional fixtures | [No-driver boot](#deferred-to-the-end) |
 | P1b, foundation qualification | [Reference devices and driver removal](#p1b--foundation-qualification) |
 | The RTX 2060's frame | [A reading of the player build, then the passes it names](#the-rtx-2060s-frame) |
+| The GPU frame's budget | [The stage budgets, the per-pixel storage budget and the steps to them](frame-budget.md#the-steps) |
 | P10, bound rows and tiers | [Hardware qualification at high](#deferred-to-the-end) |
 | P12, image sources | [Real camera](#deferred-to-the-end) |
 | P13, hit-to-source mapping and input | [Windows passthrough click](#p13--hit-to-source-mapping-and-input-destinations) |
@@ -870,7 +871,10 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
   views' nodes (`session$…`, `routed$…`) included, since every view keeps the
   history.
 - Bring the main view under its share of the frame at 2560 by 1440 on the RTX
-  4070, at native resolution under the `high` table's `renderScale: 1`. The
+  4070, at native resolution under the `high` table's `renderScale: 1`.
+  [The frame's budget](frame-budget.md) sets each stage's share, says where
+  the time goes and orders the steps; the items below are its views-pass
+  steps. The
   views pass walks only the lights that reach a tile and that its probes see
   ([decision](../decisions/rendering.md#a-pixel-walks-the-lights-that-reach-it-and-that-its-probes-see)),
   so what it costs now is the same in a room and in the open: its time follows

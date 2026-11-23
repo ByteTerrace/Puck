@@ -123,9 +123,9 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 (outcome < 0L) ||
-                (outcome > WorldBodiesLimits.CapacityCeiling)
+                (outcome > WorldBodiesLimits.IndexLimit)
             ) {
-                refusals.Add(item: $"bodies.capacity {outcome} is outside 0..{WorldBodiesLimits.CapacityCeiling}.");
+                refusals.Add(item: $"bodies.capacity {outcome} is outside 0..{WorldBodiesLimits.IndexLimit}, the body-index format bound.");
             } else {
                 _ = ValidateCore(
                     definition: (definition with { PopulationRaw = (definition.Population with { CapacityRaw = ((int)outcome) }) }),

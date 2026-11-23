@@ -50,27 +50,27 @@ public static partial class WorldAuthorityCheckpointCodec {
         var slots = reader.ReadArray(
             field: "arrival slots",
             readItem: static (ref WireReader r) => r.ReadInt32(),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         var members = reader.ReadArray(
             field: "arrival members",
             readItem: static (ref WireReader r) => WorldWireLeaves.ReadCommitMember(reader: ref r),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         var readopted = reader.ReadArray(
             field: "arrival readopted companions",
             readItem: static (ref WireReader r) => WorldWireLeaves.ReadEntityAddress(reader: ref r),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         var generations = reader.ReadArray(
             field: "arrival generations",
             readItem: static (ref WireReader r) => r.ReadInt32(),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         var leased = reader.ReadArray(
             field: "arrival leased ids",
             readItem: static (ref WireReader r) => r.ReadInt32(),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         var arrival = new WorldCrossingArrival(
             Generations: generations,
@@ -108,8 +108,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         for (var index = 0; (index < count); index++) {
             var slot = arrival.Slots[index];
 
-            if (((uint)slot) >= WorldBodiesLimits.CapacityCeiling) {
-                return $"arrival traveler {(index + 1)} lands at body:{slot}, outside 0..{(WorldBodiesLimits.CapacityCeiling - 1)}";
+            if (((uint)slot) >= WorldBodiesLimits.IndexLimit) {
+                return $"arrival traveler {(index + 1)} lands at body:{slot}, outside 0..{(WorldBodiesLimits.IndexLimit - 1)}";
             }
             for (var earlier = 0; (earlier < index); earlier++) {
                 if (arrival.Slots[earlier] == slot) {
@@ -458,17 +458,17 @@ public static partial class WorldAuthorityCheckpointCodec {
                 var landed = reader.ReadArray(
                     field: "settlement landed members",
                     readItem: static (ref WireReader r) => r.ReadInt32(),
-                    maximum: WorldBodiesLimits.CapacityCeiling
+                    maximum: WorldBodiesLimits.IndexLimit
                 );
                 var retired = reader.ReadArray(
                     field: "settlement retired members",
                     readItem: static (ref WireReader r) => r.ReadInt32(),
-                    maximum: WorldBodiesLimits.CapacityCeiling
+                    maximum: WorldBodiesLimits.IndexLimit
                 );
                 var forwarded = reader.ReadArray(
                     field: "settlement forwarded bodies",
                     readItem: static (ref WireReader r) => ReadForwardedBody(reader: ref r),
-                    maximum: WorldBodiesLimits.CapacityCeiling
+                    maximum: WorldBodiesLimits.IndexLimit
                 );
 
                 return new WorldCrossingRecord.Settlement(
@@ -493,7 +493,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     Burned: reader.ReadArray(
                         field: "tombstone burned slots",
                         readItem: static (ref WireReader r) => r.ReadInt32(),
-                        maximum: WorldBodiesLimits.CapacityCeiling
+                        maximum: WorldBodiesLimits.IndexLimit
                     ),
                     Key: key
                 );
@@ -517,7 +517,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                                         Incarnation: incarnation
                                     );
                                 },
-                                maximum: WorldBodiesLimits.CapacityCeiling
+                                maximum: WorldBodiesLimits.IndexLimit
                             ),
                             To: to,
                             TransferId: transferId
@@ -539,7 +539,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 var members = reader.ReadArray(
                     field: "hop members",
                     readItem: static (ref WireReader r) => ReadCustodyHopMember(reader: ref r),
-                    maximum: WorldBodiesLimits.CapacityCeiling
+                    maximum: WorldBodiesLimits.IndexLimit
                 );
 
                 return new WorldCrossingRecord.Hop(

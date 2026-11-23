@@ -67,6 +67,8 @@ public sealed class WorldSessionStampSource : IWorldStampSource {
     /// it.</remarks>
     public GpuRowChanges BodyChanges => m_bodyChanges.Reader;
     /// <inheritdoc/>
+    public int EntityCapacity => m_mirror.EntityCapacity;
+    /// <inheritdoc/>
     /// <remarks>Reading it closes a journal frame over whatever moved since the last read, so the first consumer of a
     /// frame publishes the changes and the rest read the same serial while nothing moves between them.</remarks>
     public long BodyChangesSerial {
@@ -81,7 +83,7 @@ public sealed class WorldSessionStampSource : IWorldStampSource {
                 m_mirror.CopyMovingBodies(bodies: m_moving);
             }
             if (whole || (m_delivered.Count > 0) || (m_moving.Count > 0)) {
-                m_bodyChanges.Begin(everything: whole, rows: WorldClient.EntityCapacity);
+                m_bodyChanges.Begin(everything: whole, rows: EntityCapacity);
                 if (!whole) {
                     for (var run = 0; (run < m_delivered.Count); run++) {
                         m_bodyChanges.Owe(count: m_delivered.Length(index: run), start: m_delivered.Start(index: run));

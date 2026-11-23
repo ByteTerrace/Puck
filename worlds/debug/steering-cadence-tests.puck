@@ -1,0 +1,225 @@
+// A crowd of steering producers under authored autonomy cadences that are not a whole number of authority ticks apart
+// from every stagger offset, nor divisors of a second: 300 roamers in three kits refresh their steering every 0.1 s,
+// 0.2 s and 0.7 s. The population staggers each kit's refreshes across its cadence, so a body's first refresh covers a
+// partial cadence (at 30 Hz, 0.2 s staggers into refreshes of 1 to 6 ticks, and 4 ticks is 2/15 s), and every refresh
+// advances the roam oscillator by the exact share of a second the refresh covered. The crowd runs, and two runs agree
+// bit for bit (`puck test worlds/debug/steering-cadence-tests.puck --reproduce`). steering-cadence-15hz-tests.puck runs
+// the same crowd at 15 Hz, where 0.1 s is a tick and a half and every steady refresh overshoots it.
+schema: "puck.world.definition.v1"
+documentId: "steering-cadence-tests"
+
+import "../standard/walker"
+import "../standard/kits"
+
+let crowd = 100
+
+bodies {
+  capacity: 301
+  localSeats: 1
+  networkPlayers: 0
+  reconnectGraceSeconds: 0
+  seatSpawns [start]
+  sleepAfterSeconds: 0s
+}
+
+spawnPoints [
+  { id: "start", position [0, 0, 40], yawDegrees: 0 }
+]
+
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  isActive: true
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, -18, 0]
+}
+
+// Nothing is ever designated, so the sensing producer finds no target and roams.
+targetRegisters [
+  { name: "errand", maximumRange: 60, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
+]
+
+bodyMotionPrograms [
+  {
+    kind: Producer
+    name: "roam"
+    operations [SenseNearestInCone, ProduceSteeringIntent, FaceSensorTarget]
+    target: designated(register: "errand")
+    version: "puck.body.program.v1"
+  }
+]
+
+// Rates with no short binary or decimal spelling, so every refresh leaves a remainder for the next to carry.
+let roamScalars = {
+  forward: 1
+  approach: 1
+  approachAltitudeGain: 0
+  standoffRadius: 1
+  orbit: 0
+  softRadius: 6
+  inwardGain: 2
+  turnScale: 3
+  weaveAmplitude: 0.7
+  weaveFrequencyBase: 0.73
+  weaveFrequencyRange: 0.41
+  activityRateBase: 1.37
+  activityRateRange: 0.53
+  altitudeBase: 0
+  altitudeGain: 0
+  altitudeRange: 0
+  pitchWave: 0
+  pressThreshold: 0
+  rollTurn: 0
+  strafeWave: 0.3
+  turnWave: 0.2
+  upWave: 0
+}
+
+kits [
+  {
+    name: "roamer10"
+    bodyContact: Overlap
+    bodyMotionProgram: "walk"
+    collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
+    autonomy {
+      motionSeconds: 0.1
+      steeringSeconds: 0.1
+    }
+    motion: walkerMotion
+    producers {
+      roam {
+        channels {}
+        scalars: roamScalars
+      }
+    }
+  }
+  {
+    name: "roamer20"
+    bodyContact: Overlap
+    bodyMotionProgram: "walk"
+    collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
+    autonomy {
+      motionSeconds: 0.1
+      steeringSeconds: 0.2
+    }
+    motion: walkerMotion
+    producers {
+      roam {
+        channels {}
+        scalars: roamScalars
+      }
+    }
+  }
+  {
+    name: "roamer70"
+    bodyContact: Overlap
+    bodyMotionProgram: "walk"
+    collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
+    autonomy {
+      motionSeconds: 0.2
+      steeringSeconds: 0.7
+    }
+    motion: walkerMotion
+    producers {
+      roam {
+        channels {}
+        scalars: roamScalars
+      }
+    }
+  }
+]
+
+looks [
+  {
+    name: "roamer"
+    scale: 1
+    source: creation(prototypeId: roamer)
+    motion {
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+    }
+  }
+]
+
+prototypes {
+  prototype "roamer" {
+    document {
+      name: "roamer"
+      schema: "puck.creation.v1"
+      palette [{ color: "#5B7DB1", roughness: 0.6 }]
+      shape Capsule "body" {
+        material: 0
+        position [0, 0.3, 0]
+        scale [0.3, 2.2, 0.3]
+      }
+    }
+  }
+  prototype "floor" {
+    document {
+      name: "floor"
+      schema: "puck.creation.v1"
+      palette [{ color: "#ADA69F", roughness: 0.85 }]
+      shape Box {
+        material: 0
+        position [0, -0.2, 0]
+        scale [120, 0.2, 120]
+      }
+    }
+  }
+}
+
+// Inhabited placements fill the capacity from the top down, the first placement highest: the 0.1 s crowd is bodies
+// 201 to 300, the 0.2 s crowd 101 to 200 and the 0.7 s crowd 1 to 100. Each crowd stands on one point, so the bodies
+// part only as their oscillators, varied per body, steer them apart.
+let crowds = [
+  { kit: "roamer10", x: -20 },
+  { kit: "roamer20", x: 0 },
+  { kit: "roamer70", x: 20 }
+]
+
+placements {
+  placement "floor" {
+    prototype: "floor"
+    position [0, 0, 0]
+    solid
+  }
+  for c in crowds {
+    placement $"{c.kit}" {
+      prototype: "roamer"
+      position [c.x, 0, 0]
+      inhabit {
+        count: crowd
+        distribution {
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+          region: disc(radius: 0.01)
+        }
+        kit: c.kit
+        look: "roamer"
+        source: producer(name: "roam")
+      }
+    }
+  }
+}
+
+test "a crowd steering at 0.1, 0.2 and 0.7 s roams apart and stays home" {
+  when {
+    ticks 450
+  }
+  expect {
+    distance(body, 201, body, 300) > 0.5
+    distance(body, 101, body, 200) > 0.5
+    distance(body, 1, body, 100) > 0.5
+    bodyPosition(body, 250, x) > -30
+    bodyPosition(body, 250, x) < -10
+    bodyPosition(body, 150, x) > -10
+    bodyPosition(body, 150, x) < 10
+    bodyPosition(body, 50, x) > 10
+    bodyPosition(body, 50, x) < 30
+  }
+}

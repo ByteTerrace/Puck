@@ -2114,7 +2114,7 @@ public static partial class WorldDefinitionValidator {
         if (portal.Capacity is { } capacity) {
             RequireIntRange(
                 errors: errors,
-                max: WorldBodiesLimits.CapacityCeiling,
+                max: WorldBodiesLimits.IndexLimit,
                 min: 1,
                 name: new Subject(Member: ".capacity", Path: path),
                 value: capacity

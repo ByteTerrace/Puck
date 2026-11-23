@@ -372,11 +372,11 @@ internal static class SdfMeshBakeReport {
         Say(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] slow residency={residency} group={selector} {(dynamic ? "dynamic" : $"instances={instances}")} stage={stage.ToString().ToLowerInvariant()} seconds={(ticks / ((double)Stopwatch.Frequency)):0.00} {text}"));
     }
     // The bake's own room, which its admissions are refused on: the machine's limit on play and authoring together and
-    // what authoring has left of it past play's entitlement (play's room in a player's build).
+    // what authoring has left of the machine's measured room past its margin (play's room in a player's build).
     private static string AuthoringRoom() {
         var host = MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host);
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"machine-limit={host.MachineLimit} authoring={(host.AuthoringOnPlayBar ? "on-play-bar" : "apart")} room={host.RoomFor(allowance: MemoryAllowance.Authoring)}");
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $"machine-limit={host.MachineLimit} low-memory={(host.MachineLowMemory ? "yes" : "no")} authoring={(host.AuthoringOnPlayBar ? "on-play-bar" : "apart")} room={host.RoomFor(allowance: MemoryAllowance.Authoring)}");
     }
     /// <summary>Writes the line for a group the memory account could not admit beside the groups already admitted.</summary>
     /// <param name="residency">The residency's name.</param>

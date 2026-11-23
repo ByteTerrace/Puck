@@ -1,7 +1,6 @@
 using Puck.Maths;
 using Puck.Networking;
 using Puck.Commands;
-using Puck.Physics.Navigation;
 
 namespace Puck.World.Server;
 
@@ -234,35 +233,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.Generations,
             writeItem: static (w, generation) => w.WriteInt32(value: generation)
         );
-        writer.WriteBoolean(value: (section.SharedNavigation is not null));
-        if (section.SharedNavigation is { } domains) {
-            writer.WriteArray(
-                items: domains,
-                writeItem: static (w, domain) => {
-                    w.WriteInt32(value: domain.Cursor);
-                    w.WriteArray(
-                        items: domain.Trees,
-                        writeItem: static (treeWriter, tree) => {
-                            treeWriter.WriteInt32(value: tree.Goal);
-                            treeWriter.WriteInt32(value: tree.Age);
-                            treeWriter.WriteArray(
-                                items: tree.Nodes,
-                                writeItem: static (nodeWriter, node) => {
-                                    nodeWriter.WriteInt32(value: node.Node);
-                                    nodeWriter.WriteInt32(value: node.Cost);
-                                    nodeWriter.WriteInt32(value: node.Next);
-                                    nodeWriter.WriteBoolean(value: node.Settled);
-                                }
-                            );
-                            treeWriter.WriteArray(
-                                items: tree.Pending,
-                                writeItem: static (pendingWriter, node) => pendingWriter.WriteInt32(value: node)
-                            );
-                        }
-                    );
-                }
-            );
-        }
         writer.WriteArray(
             items: section.Entries,
             writeItem: WritePopulationEntry
@@ -292,62 +262,16 @@ public static partial class WorldAuthorityCheckpointCodec {
         var generations = reader.ReadArray(
             field: "population slot generations",
             readItem: static (ref WireReader r) => r.ReadInt32(),
-            maximum: WorldBodiesLimits.CapacityCeiling
-        );
-        var shared = (reader.ReadBoolean()
-            ? reader.ReadArray(
-                field: "shared navigation domains",
-                readItem: static (ref WireReader domainReader) => {
-                    var cursor = domainReader.ReadInt32();
-                    var trees = domainReader.ReadArray(
-                        field: "shared navigation trees",
-                        readItem: static (ref WireReader treeReader) => {
-                            var goal = treeReader.ReadInt32();
-                            var age = treeReader.ReadInt32();
-                            var nodes = treeReader.ReadArray(
-                                field: "shared navigation nodes",
-                                readItem: static (ref WireReader nodeReader) =>
-                        new NavigationTreeNode(
-                            nodeReader.ReadInt32(),
-                            nodeReader.ReadInt32(),
-                            nodeReader.ReadInt32(),
-                            nodeReader.ReadBoolean()
-                        ),
-                                maximum: WorldNavigationCapacity.MaxCellsPerDomain
-                            );
-                            var pending = treeReader.ReadArray(
-                                field: "shared navigation pending starts",
-                                readItem: static (ref WireReader pendingReader) => pendingReader.ReadInt32(),
-                                maximum: WorldBodiesLimits.CapacityCeiling
-                            );
-
-                            return new NavigationTreeCheckpoint(
-                        Age: age,
-                        Goal: goal,
-                        Nodes: nodes,
-                        Pending: pending
-                    );
-                        },
-                        maximum: WorldNavigationCapacity.MaxSharedGoals
-                    );
-
-                    return new NavigationSharedCheckpoint(
-                        Cursor: cursor,
-                        Trees: trees
-                    );
-                },
-                maximum: WorldNavigationCapacity.MaxDomains
-            )
-            : null
+            maximum: WorldBodiesLimits.IndexLimit
         );
         var entries = reader.ReadArray(
             field: "population entries",
             readItem: static (ref WireReader r) => ReadPopulationEntry(reader: ref r),
             maximum: MaxCollectionCount
         );
-        var eventBodies = reader.ReadArray(field: "population event bodies", maximum: WorldBodiesLimits.CapacityCeiling,
+        var eventBodies = reader.ReadArray(field: "population event bodies", maximum: WorldBodiesLimits.IndexLimit,
             readItem: static (ref WireReader r) => r.ReadInt32());
-        var gravity = reader.ReadArray(field: "population sleeping gravity", maximum: WorldBodiesLimits.CapacityCeiling,
+        var gravity = reader.ReadArray(field: "population sleeping gravity", maximum: WorldBodiesLimits.IndexLimit,
             readItem: static (ref WireReader r) => (r.ReadInt32(), r.ReadOptional(readValue: static (ref WireReader v) => v.ReadFixedVector())));
         var attached = reader.ReadArray(field: "population attached solids", maximum: MaxCollectionCount,
             readItem: static (ref WireReader r) => new WorldAttachedSolidCheckpoint(r.ReadBoolean(), r.ReadFixedVector(), r.ReadFixedQuaternion(), FixedQ4816.FromRawBits(value: r.ReadInt64())));
@@ -359,7 +283,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             Generations: generations,
             Revision: revision,
             SeatKit: seatKit,
-            SharedNavigation: shared,
             SimulatedCount: simulatedCount,
             SleepingGravity: gravity
         );

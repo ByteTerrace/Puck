@@ -369,7 +369,7 @@ public sealed partial class FederationTransferLawTests {
         switch (fault) {
             case "duplicate": entries.Add(item: arrival); break;
             case "negative-slot": entries[index] = Reencoded(changed: decoded with { Slots = [-1, decoded.Slots[1]] }); break;
-            case "large-slot": entries[index] = Reencoded(changed: decoded with { Slots = [WorldBodiesLimits.CapacityCeiling, decoded.Slots[1]] }); break;
+            case "large-slot": entries[index] = Reencoded(changed: decoded with { Slots = [WorldBodiesLimits.IndexLimit, decoded.Slots[1]] }); break;
             case "repeated-slot": entries[index] = Reencoded(changed: decoded with { Slots = [decoded.Slots[0], decoded.Slots[0]] }); break;
             case "no-mobility":
                 entries[index] = Reencoded(changed: decoded with {

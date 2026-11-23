@@ -140,7 +140,7 @@ public sealed class WorldTransformOwners {
             rootPosition: rootPosition,
             scale: scale,
             transforms: table.Slice(
-                length: ((firstSlot is null) ? WorldRigCatalog.DynamicTransformCapacity : count),
+                length: ((firstSlot is null) ? (first + count) : count),
                 start: ((firstSlot is null) ? catalogBase : start)
             )
         );

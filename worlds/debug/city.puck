@@ -27,6 +27,10 @@ import "painting-kit"
 import "place-kit"
 import "walkers"
 import "city-day"
+import "../standard/bounds"
+import "../standard/domains"
+import "../standard/citizen"
+import "../standard/vehicle"
 
 // The city draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -118,7 +122,7 @@ let terraceLots = flatMap(range(0, 7), c => map(range(0, 18), r => {
 
 // The works' workshops, 22 by 16 m, three across and four deep about the works road; the quay's warehouses, 18 by 12 m,
 // six across in two rows; the civic halls west of the avenue.
-let shedLots = flatMap(map(range(0, 3), c => 62 + 30 * c), x => map([20, -2, -26, -72], z => { x: x, z: z }))
+let shedLots = flatMap(map(range(0, 3), c => 62 + 30 * c), x => map([20, -2, -26, -72], z => { x: x, z: z, yaw: (z == -72) ? 180 : 0 }))
 let warehouseLots = flatMap(map(range(0, 6), c => 20 + 24 * c), x => map([-160, -190], z => { x: x, z: z }))
 let hallLots = map([-110, -160, -190], z => { x: -22, z: z })
 
@@ -142,18 +146,119 @@ let roadStrips = [
   { id: "avenue", x0: -5, x1: 5, z0: -205, z1: -90 }
   { id: "cross-street", x0: -150, x1: 150, z0: -135, z1: -125 }
   { id: "works-road", x0: 40, x1: 150, z0: -55, z1: -45 }
+  { id: "quay-lane", x0: 30, x1: 40, z0: -135, z1: -90 }
+  { id: "east-lane", x0: 140, x1: 150, z0: -135, z1: -45 }
 ]
 
 // The districts' navigation domains, 1 m cells on whole-metre origins so neighbouring grids share cells where they
-// overlap, each reaching a few metres into its neighbours so a route crosses between them.
-navigation {
-  domains [
-    walkable("city-square", [-46, 0.05, -100], 1, 92, 100, 2.2, 3, 1024)
-    walkable("city-terraces", [-150, 0.05, -205], 1, 114, 245, 2.2, 3, 1024)
-    walkable("city-works", [36, 0.05, -100], 1, 114, 140, 2.2, 3, 1024)
-    walkable("city-quay", [-46, 0.05, -205], 1, 196, 119, 2.2, 3, 1024)
-  ]
+// overlap, each reaching a few metres into its neighbours so a route crosses between them. The four are one `pavement`
+// network of shared domains: a citizen heading to an anchor reads its step from that anchor's goal field, which
+// crosses the districts at their shared cells, rather than searching a route of its own.
+let pavement = { shared: true, network: "pavement" }
+
+
+
+// The vehicles (../standard/vehicle.puck): carts lapping two loops of four corner stops, the ring road round the square
+// and the works loop (the quay lane, the cross street, the east lane and the works road), at 8 m/s. They drive the
+// `roads` network: a shared domain over each road strip, its 1 m cells sized for a vehicle, each a metre longer at both
+// ends so neighbouring strips share cells at the corners, and never joined to the pavement. Their bodies sit below the
+// citizens', so the citizens keep the top of the capacity.
+let vehicleColors = ["#B5523B", "#2F7F7A", "#C98B2E", "#3E6E8E", "#6B8E4E", "#7A4E7E"]
+let roadDomains = map(
+  filter(roadStrips, strip => (strip.id != "avenue") and (strip.id != "cross-street")),
+  strip => surfaceDomain(
+    $"road-{strip.id}",
+    [(strip.x0 - 1), 0.05, (strip.z0 - 1)],
+    1,
+    (strip.x1 - strip.x0 + 2),
+    (strip.z1 - strip.z0 + 2),
+    2.2,
+    3,
+    256,
+    vehicleWalker
+  ) with { shared: true, network: "roads" }
+)
+// The works loop's stretch of the cross street, from the quay lane to the east lane.
+let worksCrossDomain = surfaceDomain("road-works-cross", [29, 0.05, -136], 1, 122, 12, 2.2, 3, 256, vehicleWalker) with {
+  shared: true
+  network: "roads"
 }
+let vehicleLoops = [
+  { stops [[35, -85], [35, -15], [-35, -15], [-35, -85]], perSide: 10 }
+  { stops [[145, -130], [145, -50], [35, -50], [35, -130]], perSide: 15 }
+]
+// Each vehicle starts on a side of its loop, driving to the stop that ends the side.
+let vehicleSpots = flatMap(vehicleLoops, loop => flatMap(range(0, 4), side => map(range(0, loop.perSide), k => {
+  stops: loop.stops
+  first: side
+  x: loop.stops[(side + 3) % 4][0] + (loop.stops[side][0] - loop.stops[(side + 3) % 4][0]) * (k + 0.5) / loop.perSide
+  z: loop.stops[(side + 3) % 4][1] + (loop.stops[side][1] - loop.stops[(side + 3) % 4][1]) * (k + 0.5) / loop.perSide
+})))
+let vehicleCount = length(vehicleSpots)
+
+navigation {
+  domains: concat(
+    [
+      walkable("city-square", [-46, 0.05, -100], 1, 92, 100, 2.2, 3, 1024) with pavement
+      walkable("city-terraces", [-150, 0.05, -205], 1, 114, 245, 2.2, 3, 1024) with pavement
+      walkable("city-works", [36, 0.05, -100], 1, 114, 140, 2.2, 3, 1024) with pavement
+      walkable("city-quay", [-46, 0.05, -205], 1, 196, 119, 2.2, 3, 1024) with pavement
+    ],
+    roadDomains,
+    [worksCrossDomain]
+  )
+}
+
+vehicleDesign(domain: "road-ring-north")
+vehicleLooks(colors: vehicleColors)
+vehicleRoutes(vehicles: map(range(0, vehicleCount), v => { key: 7 + vehicleCount - v, stops: vehicleSpots[v].stops, first: vehicleSpots[v].first }))
+
+// The citizens (../standard/citizen.puck). `citizenCount` of them, numbered down from the top of the body capacity
+// above the Moth's eight (avatars/moth.puck), in blocks of one look each: look `b` is block `b`, its citizens standing
+// in a disc on the open ground north of the square until the schedule sends them off.
+let citizenCount = 1920
+let citizenCoats = ["#B5523B", "#3E6E8E", "#6B8E4E", "#C98B2E", "#7A4E7E", "#D8CBB0"]
+let citizenHats = ["#2F2A26", "#8A5A3C", "#2F7F7A", "#C9BFAE"]
+let citizenLookCount = length(citizenCoats) * length(citizenHats)
+let citizenBlock = citizenCount / citizenLookCount
+let citizenTop = 7 + citizenCount + vehicleCount
+
+// Each citizen's anchors: a home at a terrace house's front lane, work at a workshop, warehouse or civic hall door or
+// behind a market stall, and the market inside the stall ring. Assignments step through the lists by coprime strides
+// so neighbours in a block live, work and shop in different places.
+let citizenHomes = map(terraceLots, lot => [lot.x, (lot.z - 6)])
+let citizenWorks = concat(
+  map(shedLots, lot => [lot.x, ((lot.yaw == 180) ? (lot.z + 10) : (lot.z - 10))]),
+  map(warehouseLots, lot => [lot.x, (lot.z - 7.5)]),
+  map(hallLots, lot => [lot.x, (lot.z - 11.5)]),
+  map(stallRing, stall => [(20.5 * sine(stall.yaw * 3.141592653589793 / 180)), (-50 + 20.5 * cosine(stall.yaw * 3.141592653589793 / 180))])
+)
+let citizenMarkets = map(stallRing, stall => [(14 * sine(stall.yaw * 3.141592653589793 / 180)), (-50 + 14 * cosine(stall.yaw * 3.141592653589793 / 180))])
+let citizenPeople = map(range(0, citizenCount), i => {
+  key: citizenTop - i
+  home: citizenHomes[i % length(citizenHomes)]
+  work: citizenWorks[(7 * i + 3) % length(citizenWorks)]
+  market: citizenMarkets[(5 * i) % length(citizenMarkets)]
+  group: i % 12
+})
+
+bodies {
+  capacity: 8 + citizenCount + vehicleCount
+}
+
+citizenDesign(domain: "city-square")
+citizenLooks(coats: citizenCoats, hats: citizenHats)
+citizenSchedule(
+  people: citizenPeople,
+  clock: cityDay,
+  phases: [
+    { from: 19, to: 7, anchor: "home" }
+    { from: 7, to: 12, anchor: "work" }
+    { from: 12, to: 13, anchor: "market" }
+    { from: 13, to: 17, anchor: "work" }
+    { from: 17, to: 19, anchor: "market" }
+  ]
+)
 
 placements {
   policy {
@@ -267,6 +372,7 @@ placements {
     placement $"shed-{lot.x}-{lot.z}" {
       prototype: "shed"
       position [lot.x, 0, lot.z]
+      yawDegrees: lot.yaw
       solid
     }
   }
@@ -282,6 +388,51 @@ placements {
       prototype: "civic-hall"
       position [lot.x, 0, lot.z]
       solid
+    }
+  }
+
+  // The citizens, a block of each look in a disc 10 m across: six blocks across the avenue's ground
+  // and four deep, between the arrival frame and the ring road.
+  for b in range(0, citizenLookCount) {
+    placement $"citizens-{b}" {
+      prototype: $"citizen-{floorDivide(b, length(citizenHats))}-{b % length(citizenHats)}"
+      position [(-36 + 14.4 * (b % 6)), 0, (-6 - 8.6 * floorDivide(b, 6))]
+      inhabit {
+        count: citizenBlock
+        kit: "citizen"
+        look: $"citizen-{floorDivide(b, length(citizenHats))}-{b % length(citizenHats)}"
+        source: producer(name: "citizenErrand")
+        distribution {
+          region: disc(radius: 5)
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+        }
+      }
+    }
+  }
+
+  // The vehicles, one placement each at its spot on its loop, below the citizens in the body capacity.
+  for (spot, v) in vehicleSpots {
+    placement $"vehicle-{v}" {
+      prototype: $"vehicle-{v % length(vehicleColors)}"
+      position [spot.x, 0, spot.z]
+      inhabit {
+        count: 1
+        kit: "vehicle"
+        look: $"vehicle-{v % length(vehicleColors)}"
+        source: producer(name: "vehicle")
+        distribution {
+          region: disc(radius: 0.01)
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+        }
+      }
     }
   }
 
@@ -307,27 +458,16 @@ placements {
 }
 
 prototypes {
-  // The ground: the town's bank down to the river, the river's water 0.8 m below it, and the far bank.
+  // The ground: the town's bank down to the river, the river's water 0.8 m below it, and the far bank, each given its
+  // world bounds, which boundsBox turns into the creation's author frame.
   prototype "floor" {
     document {
       name: "floor"
       palette: cityPalette
       schema: "puck.creation.v1"
-      shape Box "north-bank" {
-        material: paving
-        position [0, -1, -82.5]
-        scale [150, 1, 122.5]
-      }
-      shape Box "river" {
-        material: river
-        position [0, -1.4, -225]
-        scale [150, 0.6, 20]
-      }
-      shape Box "south-bank" {
-        material: stone
-        position [0, -1, -262.5]
-        scale [150, 1, 17.5]
-      }
+      boundsBox(label: "north-bank", x0: -150, x1: 150, y0: -2, y1: 0, z0: -205, z1: 40, slot: paving)
+      boundsBox(label: "river", x0: -150, x1: 150, y0: -2, y1: -0.8, z0: -245, z1: -205, slot: river)
+      boundsBox(label: "south-bank", x0: -150, x1: 150, y0: -2, y1: 0, z0: -280, z1: -245, slot: stone)
     }
   }
 
@@ -344,11 +484,7 @@ prototypes {
       palette: cityPalette
       schema: "puck.creation.v1"
       for strip in roadStrips {
-        shape Box $"road-{strip.id}" {
-          material: road
-          position [((strip.x0 + strip.x1) / 2), 0.01, ((strip.z0 + strip.z1) / 2)]
-          scale [((strip.x1 - strip.x0) / 2), 0.01, ((strip.z1 - strip.z0) / 2)]
-        }
+        boundsBox(label: $"road-{strip.id}", x0: strip.x0, x1: strip.x1, y0: 0, y1: 0.02, z0: strip.z0, z1: strip.z1, slot: road)
       }
     }
   }
@@ -430,7 +566,8 @@ prototypes {
     }
   }
 
-  // A civic hall west of the avenue: a 24 by 20 m cream hall with a tower over its north end.
+  // A civic hall west of the avenue: a 24 by 20 m cream hall with a tower over its south end (shapes are in the author
+  // frame, a half turn from the world's, so local +Z is world -Z).
   prototype "civic-hall" {
     document {
       name: "civic-hall"
@@ -490,7 +627,8 @@ prototypes {
     }
   }
 
-  // A market stall of each awning colour: a timber counter under an awning on four posts, open toward +Z.
+  // A market stall of each awning colour: a timber counter under an awning on four posts, the counter on the side its yaw
+  // turns to face the fountain.
   for awning in [{ name: "teal", slot: teal }, { name: "ochre", slot: ochre }] {
     prototype $"stall-{awning.name}" {
       document {

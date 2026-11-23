@@ -11,13 +11,13 @@ namespace Puck.World.Client;
 /// or by its easing, and rebuilds when it did. A body parks its catalog avatar only once the pool registered it (<see cref="WorldCreationInstances.HasBodyRegistration"/>): a stamp a full pool refused draws as its avatar.
 /// </summary>
 public sealed class WorldBodyStampCensus {
-    // Each active body's reads of its source's state mirror (its live scale), created on first need and released when
-    // the body leaves.
-    private readonly WorldStateLease?[] m_reads = new WorldStateLease?[WorldBodiesLimits.CapacityCeiling];
+    // Each active body's reads of its source's state mirror (its live scale), created on first need (growing with the
+    // highest body read) and released when the body leaves.
+    private WorldStateLease?[] m_reads = [];
     private readonly List<WorldCreationInstances.BodyStamp> m_stamps = new();
     // The presented live scale each stamped body's stamp baked (or the census last answered a move to), by body index,
     // and the scale row it was read from, so a move is answered once.
-    private readonly float[] m_bakedScale = new float[WorldBodiesLimits.CapacityCeiling];
+    private float[] m_bakedScale = [];
 
     private string? m_scaleRow;
 
@@ -27,6 +27,9 @@ public sealed class WorldBodyStampCensus {
 
     // The body's live scale through the state mirror slot its lease holds, acquired while the body is active.
     private float LiveBodyScale(IWorldStampSource source, WorldDefinition definition, int index) {
+        Puck.Abstractions.Memory.ArrayCapacity.EnsureLength(array: ref m_reads, required: (index + 1));
+        Puck.Abstractions.Memory.ArrayCapacity.EnsureLength(array: ref m_bakedScale, required: (index + 1));
+
         var reads = (m_reads[index] ??= new WorldStateLease());
 
         reads.Bind(
@@ -141,7 +144,7 @@ public sealed class WorldBodyStampCensus {
         // A body that left stops being read: its scale slot goes back to the mirror.
         foreach (var index in m_read) {
             if (!source.IsActive(index: index)) {
-                m_reads[index]?.Release();
+                if (index < m_reads.Length) { m_reads[index]?.Release(); }
             }
         }
 

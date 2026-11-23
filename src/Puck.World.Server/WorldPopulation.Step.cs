@@ -16,6 +16,8 @@ public sealed partial class WorldPopulation {
     private FixedQ4816[] m_regionResistance = [];
     private ulong m_fieldInputPass;
     private ulong[] m_fieldInputPasses = [];
+    // The producer fault last narrated for each body slot, so each transition is narrated once. Diagnostic only.
+    private readonly Puck.Abstractions.ReasonLatch<int> m_producerFaults = new();
 
     private static void ApplyVariation(Entry entry, CompiledBodyProducer producer, FixedQ4816 phase, FixedQ4816 weaveUnit, FixedQ4816 activityUnit, bool resetPhase) {
         entry.ProducerState.WeaveFrequency = (producer.Scalar(parameter: BodyProducerParameter.WeaveFrequencyBase) + (producer.Scalar(parameter: BodyProducerParameter.WeaveFrequencyRange) * weaveUnit));
@@ -25,7 +27,9 @@ public sealed partial class WorldPopulation {
             entry.ProducerState.CurveArcRaw = 0L;
             entry.NavigationState.Clear();
             entry.ProducerState.Phase = phase;
+            entry.ProducerState.PhaseRemainder = 0L;
             entry.ProducerState.ActivityPhase = (phase + (FixedQ4816.Tau * activityUnit));
+            entry.ProducerState.ActivityPhaseRemainder = 0L;
             entry.ProducerState.ActivityRate = (producer.Scalar(parameter: BodyProducerParameter.ActivityRateBase) + (producer.Scalar(parameter: BodyProducerParameter.ActivityRateRange) * activityUnit));
         }
     }
@@ -209,6 +213,9 @@ public sealed partial class WorldPopulation {
 
         var domain = m_navigation[target.NavigationDomainIndex];
 
+        if (domain.Tuning.Shared) {
+            return ReadGoalFieldTarget(domainIndex: target.NavigationDomainIndex, goal: in goal, self: in self, state: state, targetIndex: targetIndex);
+        }
         if (
             !domain.CoversRouteHeight(position: in self) ||
             !domain.CoversRouteHeight(position: in goal) ||
@@ -249,20 +256,12 @@ public sealed partial class WorldPopulation {
             state.DomainIndex = target.NavigationDomainIndex;
             state.GoalCell = goalCell;
             state.Waypoint = 1;
-            state.Status = ((domain.Sharing is not null)
-                ? domain.RequestShared(
-                    start,
-                    goalCell,
-                    state.WritablePath(),
-                    out state.PathLength
-                )
-                : domain.FindPath(
-                    start,
-                    goalCell,
-                    state.WritablePath(),
-                    out state.PathLength,
-                    out state.ExpandedLast
-                )
+            state.Status = domain.FindPath(
+                start,
+                goalCell,
+                state.WritablePath(),
+                out state.PathLength,
+                out state.ExpandedLast
             );
             if (state.PathLength == 0) {
                 state.Waypoint = 0;
@@ -308,6 +307,67 @@ public sealed partial class WorldPopulation {
             Index: targetIndex,
             Position: goal
         );
+    }
+    // The most goal-field steps one read follows past cells the body already stands within arrival distance of: a
+    // junction between two domains is a step at one place, and arrival distance is about a cell, so a read takes one or
+    // two.
+    private const int GoalFieldLookahead = 8;
+
+    // A shared domain's follower holds no route. Each read locates the body and its goal in the target domain's network
+    // and follows the goal's field from the body's cell, so a body pushed off its line reads the step from where it now
+    // stands, and a tick costs a step read per follower; a field is derived only for a goal no follower read before.
+    private BodySensorTarget ReadGoalFieldTarget(BodyNavigationState state, int domainIndex, in FixedVector3 self, in FixedVector3 goal, int targetIndex) {
+        if (
+            !TryLocateInNetwork(cell: out var cell, domain: out var domain, network: domainIndex, position: in self) ||
+            !TryLocateInNetwork(cell: out var goalCell, domain: out var goalDomain, network: domainIndex, position: in goal)
+        ) {
+            state.Clear(status: NavigationStatus.OutsideDomain);
+            return BodySensorTarget.None;
+        }
+
+        var field = m_navigation.GoalField(goalCell: goalCell, goalDomain: goalDomain);
+        var arrivalSquared = (m_navigation[domainIndex].Tuning.ArrivalDistance * m_navigation[domainIndex].Tuning.ArrivalDistance);
+
+        state.Clear();
+        state.DomainIndex = domainIndex;
+        for (var step = 0; (step < GoalFieldLookahead); step++) {
+            var status = m_navigation.GoalStep(cell: cell, domain: domain, field: field, nextCell: out var nextCell, nextDomain: out var nextDomain);
+
+            if (status == NavigationStatus.Arrived) {
+                break;
+            }
+            if (status != NavigationStatus.Active) {
+                state.Status = status;
+                return BodySensorTarget.None;
+            }
+
+            var waypoint = m_navigation[nextDomain].Foot(node: nextCell);
+            var distanceToWaypoint = (waypoint - self).LengthSquared;
+
+            if ((distanceToWaypoint > arrivalSquared) || (step == (GoalFieldLookahead - 1))) {
+                state.Status = NavigationStatus.Active;
+                return new BodySensorTarget(Index: targetIndex, Position: waypoint, DistanceSquared: distanceToWaypoint);
+            }
+            domain = nextDomain;
+            cell = nextCell;
+        }
+
+        var distanceSquared = (goal - self).LengthSquared;
+
+        state.Status = ((distanceSquared <= arrivalSquared) ? NavigationStatus.Arrived : NavigationStatus.Active);
+        return new BodySensorTarget(DistanceSquared: distanceSquared, Index: targetIndex, Position: goal);
+    }
+    // The walkable cell a position stands on in a domain's network: the domain's own cell first, else the nearest of its
+    // network's.
+    private bool TryLocateInNetwork(int network, in FixedVector3 position, out int domain, out int cell) {
+        var own = m_navigation[network];
+
+        if (own.CoversRouteHeight(position: in position) && own.TryCell(node: out cell, position: in position)) {
+            domain = network;
+            return true;
+        }
+
+        return m_navigation.TryLocate(cell: out cell, domain: out domain, network: network, position: in position);
     }
     // Advances a curve-follow arc position by one compiled step, then wraps (closed) or clamps (open) it back inside
     // [0, totalLengthRaw] — the persisted state never grows past the curve's own length, so it stays bounded across
@@ -785,18 +845,20 @@ public sealed partial class WorldPopulation {
         }
 
         elapsed = checked((elapsed + stepTicks));
-        remaining = ((remaining > stepTicks)
-            ? (remaining - stepTicks)
-            : 0UL
-        );
-        if (remaining > 0UL) {
+        if (remaining > stepTicks) {
+            remaining -= stepTicks;
             elapsedTicks = 0UL;
             return false;
         }
 
+        // Due on the first authority tick at or past this slot of the body's cadence grid. The next slot stays on that
+        // grid rather than restarting from this tick, so a cadence that is no whole number of authority ticks refreshes
+        // at its authored rate on average, each refresh covering the whole ticks it actually batched.
+        var overshoot = (stepTicks - remaining);
+
         elapsedTicks = elapsed;
         elapsed = 0UL;
-        remaining = period;
+        remaining = (period - (overshoot % period));
         return true;
     }
 
@@ -1141,6 +1203,24 @@ public sealed partial class WorldPopulation {
             }
 
             m_entries[index].Body?.EndSweepTick();
+
+            if (m_entries[index].Body?.ProducerFault is { } fault) {
+                if (m_producerFaults.Set(key: index, reason: fault) && (NarrationHub is { HasNarrationSink: true })) {
+                    NarrationHub.Narrate(
+                        channel: "body.producer",
+                        text: $"[body.producer: body {index} faulted at tick {tick}: {fault}; the run was refused and the body holds still until its producer runs clean]"
+                    );
+                }
+            } else if (
+                m_producerFaults.Clear(key: index) &&
+                (m_entries[index].Body is not null) &&
+                (NarrationHub is { HasNarrationSink: true })
+            ) {
+                NarrationHub.Narrate(
+                    channel: "body.producer",
+                    text: $"[body.producer: body {index} recovered at tick {tick}]"
+                );
+            }
         }
     }
     /// <summary>Returns a value indicating whether solid world geometry leaves the sight-offset segment between two live bodies unobstructed —

@@ -11,6 +11,8 @@ namespace Puck.World.Server.Tests;
 /// <summary>Whole-population acceptance evidence for the dense few-thousand-creature representation.</summary>
 [Collection(AllocationCollection.Name)]
 public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
+    // The dense population these laws run at: the representation scale they were written for, not an engine bound.
+    private const int DenseBodies = 4096;
     private static void Coincide(WorldFixture fixture) {
         for (var index = fixture.Server.Population.LocalSeatCount; (index < fixture.Server.Population.Capacity); index++) {
             fixture.Server.Body(index: index)!.Pose(
@@ -43,8 +45,8 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
 
         return definition with {
             PopulationRaw = definition.Population with {
-                CapacityRaw = WorldBodiesLimits.CapacityCeiling,
-                NetworkPlayers = (WorldBodiesLimits.CapacityCeiling - definition.Population.LocalSeats),
+                CapacityRaw = DenseBodies,
+                NetworkPlayers = (DenseBodies - definition.Population.LocalSeats),
                 DefaultPeerSourceRaw = (flocking
             ? IntentSource.Producer(name: "flock")
             : IntentSource.Idle),
@@ -84,7 +86,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
     [Fact]
     public void FourThousandCoincidentCreaturesStayBoundedDeterministicAndAllocationStable() {
         using var fixture = Fixtures.FreshServer(DenseDocument());
-        var expected = (WorldBodiesLimits.CapacityCeiling - fixture.Server.Population.LocalSeatCount);
+        var expected = (DenseBodies - fixture.Server.Population.LocalSeatCount);
 
         Assert.Equal(
             expected,
@@ -233,7 +235,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
                 motionSeconds: sample.Motion,
                 steeringSeconds: sample.Steering
             ));
-            var count = (WorldBodiesLimits.CapacityCeiling - fixture.Server.Population.LocalSeatCount);
+            var count = (DenseBodies - fixture.Server.Population.LocalSeatCount);
 
             Assert.Equal(
                 count,
@@ -256,7 +258,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
     public void DensePopulationPhaseCostsRemainVisible() {
         using var fixture = Fixtures.FreshServer(DenseDocument());
         var population = fixture.Server.Population;
-        var count = (WorldBodiesLimits.CapacityCeiling - population.LocalSeatCount);
+        var count = (DenseBodies - population.LocalSeatCount);
 
         Assert.Equal(
             count,
@@ -309,7 +311,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
             colliders: true
         ));
         var population = fixture.Server.Population;
-        var count = (WorldBodiesLimits.CapacityCeiling - population.LocalSeatCount);
+        var count = (DenseBodies - population.LocalSeatCount);
 
         Assert.Equal(
             count,
@@ -347,7 +349,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         };
         using var fixture = Fixtures.FreshServer(definition);
         var population = fixture.Server.Population;
-        var count = (WorldBodiesLimits.CapacityCeiling - population.LocalSeatCount);
+        var count = (DenseBodies - population.LocalSeatCount);
 
         Assert.Equal(
             count,
@@ -478,7 +480,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
     }
     [Fact]
     public void MaximumPopulationSnapshotFitsTheBoundedQuicFrame() {
-        var entries = new EntitySnapshot[WorldBodiesLimits.CapacityCeiling];
+        var entries = new EntitySnapshot[DenseBodies];
 
         for (var index = 0; (index < entries.Length); index++) {
             entries[index] = new EntitySnapshot(
@@ -522,7 +524,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
             userMessage: failure.ToString()
         );
         Assert.Equal(
-            WorldBodiesLimits.CapacityCeiling,
+            DenseBodies,
             decoded.Entries.Length
         );
     }

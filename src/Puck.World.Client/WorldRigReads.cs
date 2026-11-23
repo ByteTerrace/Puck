@@ -182,12 +182,12 @@ public sealed class WorldRigReads {
         index = read.Body;
         if (read.Reference is { } selector) {
             index = -1;
-            if (!m_lease.TryNumber(reference: selector, truth: true, value: out var held) || (held != MathF.Floor(x: held)) || (held < 0f) || (held >= WorldClient.EntityCapacity)) {
+            if (!m_lease.TryNumber(reference: selector, truth: true, value: out var held) || (held != MathF.Floor(x: held)) || (held < 0f) || (held >= WorldBodiesLimits.IndexLimit)) {
                 return false;
             }
             index = ((int)held);
         }
-        if ((m_client is not { } client) || (((uint)index) >= ((uint)WorldClient.EntityCapacity)) || !client.IsActive(index: index)) {
+        if ((m_client is not { } client) || !WorldBodiesLimits.IsBodyIndex(index: index) || !client.IsActive(index: index)) {
             index = -1;
 
             return false;

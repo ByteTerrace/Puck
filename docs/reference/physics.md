@@ -610,8 +610,9 @@ search allocates nothing here.
 When a host replaces its document, a domain keeps its workspace when its tuning
 and capacity are unchanged and its geometry part compares equal to the one it
 replaces. Equal parts answer every
-query the bake asked identically, so the bake (finished or in flight) and its
-shared destination trees carry over without sampling anything. Medium domains
+query the bake asked identically, so the bake (finished or in flight) carries
+over without sampling anything, and so does every goal field whose network keeps
+the same domains in the same order. Medium domains
 also require the same field revision. A domain whose tuning is unchanged but whose
 geometry part changed in part (a door's response swap) takes its predecessor's
 finished bake when the two parts bound their difference
@@ -624,31 +625,48 @@ while that worker is still running. A route read waits for the current bake.
 Any other domain compiles fresh, and a prior domain no runtime keeps has its
 bake in flight cancelled.
 
-A domain carrying `Shared` runs queued reverse-Dijkstra searches instead,
-with stable `(cost, nodeOrdinal)` ties and one aggregate expansion allowance
-per domain per simulation tick (each expansion inspects at most 26 edges).
-Resident goals take turns, one expansion at a time; unfinished requests
-continue on later calls to `BeginStep`. The shared tree can eventually cover
-every cell in the domain; `MaxExpandedNodes` remains the independent A* limit,
-while `MaxPathNodes` also bounds paths extracted from shared trees.
+Bodies navigating a domain marked `Shared` follow goal fields instead
+(`NavigationRuntime.GoalField`, `NavigationRuntime.GoalStep`). A goal field
+holds, for every cell of the goal's network that can reach the goal, the step a
+body standing there takes on a cheapest route: a neighbour in its domain, a
+junction into another domain at the same place, or the goal itself, one byte a
+cell (`NavigationGoalField`). It is derived whole the first time a goal is read:
+a reverse Dijkstra from the goal over the network's cells and junctions, each
+step costed exactly as `FindRoute` costs it, and then each cell's step chosen
+from the settled costs alone (the first forward step, in neighbour order and
+then junctions in ascending node order, that reaches a cell whose cost plus the
+step equals the cell's own; a junction only to the end settled first, so two
+coincident cells never point at each other). The choice reads final costs, never
+the order the search settled ties in, so a field is a function of its goal and
+the baked domains. Many bodies heading to one place read one field a step at a
+time and hold no route; a body pushed off its line reads the step from where it
+now stands, so a crowd never replans. A tick costs a step read or two per
+follower, and a field derivation per new goal or changed domain, never a search
+per body.
 
-The shared cache key is the domain and destination cell—not a leader,
-friendship, or requester identity. Completed trees are evicted
-least-recently-used using bounded, distinct recency ranks, so repeated
-requests cannot erase the order of other goals; pending requests pin a tree
-for the next search step, and a full cache with no idle slot reports
-`CapacityLimited` rather than launching an unbudgeted independent search. A
-change to the referenced medium field invalidates every resident tree; this
-implementation restarts affected trees rather than incrementally repairing
-them, so rapidly changing water can delay a distant request under a small
-budget. It does not provide crowd collision avoidance, bottleneck
-reservations, hierarchical long-distance routing, or group membership. The
+A field is a cache, not state: which fields are resident decides work and
+memory, never a step. The runtime keeps resident fields within
+`NavigationCapacity.GoalFieldBytes` and drops the least recently read past it;
+a dropped field is derived again with the same steps, and a field over a medium
+domain is derived again once the live medium's revision moves. Nothing
+checkpoints or hashes fields, so a restored authority with no field resident
+steps exactly as one that kept them. A goal moving cell to cell (a body chasing
+another) derives a field per cell it enters, which suits many bodies chasing one
+target; a few bodies each chasing their own are cheaper on independent A*. The
 many-agents/one-destination approach is informed by
 [Emerson's crowd pathfinding chapter](https://www.gameaipro.com/GameAIPro/GameAIPro_Chapter23_Crowd_Pathfinding_and_Steering_Using_Flow_Field_Tiles.pdf),
-using finite domain trees rather than that chapter's tiled hierarchy.
+with the network's whole domains in place of that chapter's tiles and portal
+graph. Bottleneck reservations, local avoidance at crowd density and a portal
+graph for networks too large to field whole are not provided.
 
-`NavigationRuntime.FindRoute` searches one route across every domain of a
-runtime: a bounded A* over the union of the domains' cells, each step's cost
+`NavigationSearchWork` counts the work (`physics.navigation` in
+`world.counters`): independent searches and their expansions, cross-domain
+routes and theirs, goal fields derived and the cells they settled, steps read
+and fields dropped. `world.navigation` reports the resident fields, their bytes
+and the last tick's builds, cells and steps.
+
+`NavigationRuntime.FindRoute` searches one route across the start domain's
+network: a bounded A* over the union of its domains' cells, each step's cost
 its length in millimetres, and on a surface one cell's length more for each cell
 short of `RouteClearanceCells` that the cell stepped onto stands from the edge of
 the walkable ground, so a route keeps off walls and passes a doorway through its
@@ -659,7 +677,8 @@ of its domain it can reach in a straight line. `Domain.IsStraightClear` checks
 the baked cells and clearance margin, then sweeps the agent along the actual
 line between samples. `TryLocateNear` also sweeps between the body's exact foot
 point and the candidate surface cell, so a cell across a wall cannot start the
-route. Two domains join at a
+route. Two domains of one network (`NavigationDomainInput.Network`, the
+authored `network`; unnamed domains share one network) join at a
 junction, a pair of walkable cells whose route positions share X and Z
 exactly and, between two surfaces, whose feet differ in height by no more than the lower
 step height (two volume cells must coincide; a medium domain joins none), so a
@@ -674,15 +693,8 @@ domain's footprint and, for a surface, its probe's height band
 multi-storey answer the single-ground surface grid lacks: a building whose
 stairwell repeats every storey is a domain per level and per storey's
 stairwell, joined on the treads and landings they share
-(`worlds/debug/navigation.puck`).
-
-`CaptureShared`/`RestoreShared`/`ValidateShared`/`AppendSharedHash` checkpoint
-and hash the shared scheduler: resident goals, discovered costs/successors,
-settled flags, pending starts, eviction ages, and the scheduler cursor. Node
-digests are cached in 64-cell blocks—only changed blocks rehash, and an
-unchanged tree contributes its cached digest in constant time. Pending starts
-hash in sorted order from their bounded request list, never by scanning the
-domain.
+(`worlds/debug/navigation.puck`). Route searches and goal fields share the
+junctions, each node's partners kept in ascending node order.
 
 ## Field lattice (`Fields/`)
 
@@ -800,9 +812,9 @@ thread-safe**.
 - **Rigid solver**—`FixedRigidWorld`, `FixedRigidManifold`, `FixedRigidContacts`,
   `FixedTwoBodyContact`, `FixedPairManifoldSlotTable`, `FixedTwoBodyKernel`.
 - **Navigation kernel**—`NavigationRuntime`, `NavigationRuntime.Domain`,
-  `NavigationDomainInput`, `NavigationCapacity`, `NavigationSharing`,
-  `INavigationMediumField`, `NavigationStatus`, `NavigationSharedCheckpoint`,
-  `NavigationTreeCheckpoint`, `NavigationTreeNode`.
+  `NavigationDomainInput`, `NavigationCapacity`, `NavigationGoalField`,
+  `INavigationMediumField`, `NavigationStatus`, `NavigationSearchWork`,
+  `NavigationRouteNode`, `INavigationRouteGoal`.
 
 ## Verification
 

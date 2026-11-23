@@ -76,32 +76,59 @@ public readonly record struct WorldPoseCarry(Quaternion Rotation, Vector3 Transl
 /// <summary>
 /// The in-place crossings a presentation mirror has seen, per entity: a counter that advances once per crossing and
 /// the last few carries, so a consumer that latched an entity's pose at one count carries it to the current one.
-/// Presentation only. An entity's history is allocated at its first crossing, so a mirror sized for every entity slot
-/// holds one reference and one count per slot until a body crosses.
+/// Presentation only. An entity's history is allocated at its first crossing, so the table holds one reference and one
+/// count per entity slot until a body crosses.
 /// </summary>
-/// <param name="capacity">The number of entity indices tracked.</param>
+/// <remarks>The table grows with its <see cref="WorldPoseTable"/> (<see cref="EnsureCapacity"/>): the counts and
+/// histories are replaced whole and published by reference, so a reader on another thread reads one complete
+/// generation, and a slot past it has never crossed.</remarks>
+/// <param name="capacity">The number of entity indices tracked before the table first grows.</param>
 public sealed class WorldPoseCarries(int capacity) {
     // A consumer further behind than this many crossings re-seeds instead, as it would after a teleport.
     private const int Depth = 4;
 
-    private readonly int[] m_epoch = new int[capacity];
-    // Each entity's last Depth carries, by crossing count modulo Depth; null until its first crossing. Record writes the
-    // history before it publishes the count, so a reader that sees a count past its own finds the history written.
-    private readonly WorldPoseCarry[]?[] m_rings = new WorldPoseCarry[]?[capacity];
+    // Each entity's crossing count and its last Depth carries, by crossing count modulo Depth; a history is null until
+    // its first crossing. Record writes the history before it publishes the count, so a reader that sees a count past
+    // its own finds the history written.
+    private sealed class Columns(int length) {
+        public readonly int[] Epoch = new int[length];
+        public readonly WorldPoseCarry[]?[] Rings = new WorldPoseCarry[]?[length];
+    }
 
+    private Columns m_columns = new(length: capacity);
+
+    /// <summary>Grows the table to hold at least <paramref name="count"/> entity indices, keeping every history; a
+    /// smaller count changes nothing. The caller serializes it with <see cref="Record"/>.</summary>
+    /// <param name="count">The number of entity indices to hold.</param>
+    public void EnsureCapacity(int count) {
+        var columns = m_columns;
+
+        if (count <= columns.Epoch.Length) { return; }
+
+        var grown = new Columns(length: count);
+
+        columns.Epoch.CopyTo(array: grown.Epoch, index: 0);
+        columns.Rings.CopyTo(array: grown.Rings, index: 0);
+        Volatile.Write(location: ref m_columns, value: grown);
+    }
     /// <summary>Returns an entity's crossing count.</summary>
-    /// <param name="index">The 0-based entity index.</param>
+    /// <param name="index">The 0-based entity index; one past the table has never crossed.</param>
     /// <returns>The count.</returns>
-    public int Epoch(int index) => Volatile.Read(location: ref m_epoch[index]);
+    public int Epoch(int index) {
+        var columns = Volatile.Read(location: ref m_columns);
+
+        return ((((uint)index) < ((uint)columns.Epoch.Length)) ? Volatile.Read(location: ref columns.Epoch[index]) : 0);
+    }
     /// <summary>Records one crossing of an entity.</summary>
-    /// <param name="index">The 0-based entity index.</param>
+    /// <param name="index">The 0-based entity index, within the table.</param>
     /// <param name="carry">The crossing's carry.</param>
     public void Record(int index, WorldPoseCarry carry) {
-        var next = (m_epoch[index] + 1);
+        var columns = m_columns;
+        var next = (columns.Epoch[index] + 1);
 
-        (m_rings[index] ??= new WorldPoseCarry[Depth])[(next % Depth)] = carry;
+        (columns.Rings[index] ??= new WorldPoseCarry[Depth])[(next % Depth)] = carry;
         Volatile.Write(
-            location: ref m_epoch[index],
+            location: ref columns.Epoch[index],
             value: next
         );
     }
@@ -113,7 +140,8 @@ public sealed class WorldPoseCarries(int capacity) {
     /// <returns><see langword="true"/> when the history covers the span; <see langword="false"/> when the caller is
     /// further behind than the history, or ahead of it, and re-seeds instead.</returns>
     public bool TrySince(int index, int since, out WorldPoseCarry carry) {
-        var current = Epoch(index: index);
+        var columns = Volatile.Read(location: ref m_columns);
+        var current = ((((uint)index) < ((uint)columns.Epoch.Length)) ? Volatile.Read(location: ref columns.Epoch[index]) : 0);
 
         carry = WorldPoseCarry.Identity;
 
@@ -128,7 +156,7 @@ public sealed class WorldPoseCarries(int capacity) {
             return true;
         }
 
-        var ring = Volatile.Read(location: ref m_rings[index])!;
+        var ring = Volatile.Read(location: ref columns.Rings[index])!;
 
         for (var epoch = (since + 1); (epoch <= current); epoch++) {
             carry = carry.Then(later: ring[(epoch % Depth)]);

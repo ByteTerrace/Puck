@@ -1,0 +1,35 @@
+// The garden's pond plot at 10,000 creatures, the population forcing workload: garden-crowd.puck's document with the
+// plot's count (pond.puck's `pondFlocks`) expanded at 10,000, so body storage, snapshots and every per-body client
+// table grow with the world here. The hounds and spiders keep their body
+// numbers; the dragonflies and fish take the rest. Its frames are dropped as the crowd's are. Measure it headless
+// (`--world worlds/debug/garden-throng.puck --devices none --headless`), reading `world.counters` over a `world.wait`.
+schema: "puck.world.definition.v1"
+basis: "garden"
+documentId: "garden-throng"
+import "pond"
+
+pondFlocks(creatures: 10000)
+
+placements {
+  placement "arrival" {
+    $drop: true
+  }
+  placement "far" {
+    $drop: true
+  }
+}
+
+// The pack's scenario among 9,990 flocking dragonflies and fish, the last of them past body 4,096: `puck test
+// worlds/debug/garden-throng.puck --reproduce` replays the whole throng bit for bit.
+test "among the throng, the pack follows the visitor to the bone and the last fish swims" {
+  when {
+    seat1: body.pose -20 0 -11.6 0 0 0
+    ticks 240
+  }
+  expect {
+    eventSeq >= 1
+    count(boneHolderTrust) >= 2
+    distance(body, 12, body, 0) <= 3
+    distance(body, 10003, body, 0) <= 40
+  }
+}

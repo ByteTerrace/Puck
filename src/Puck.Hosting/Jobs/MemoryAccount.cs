@@ -29,9 +29,9 @@ public enum MemoryAllowance {
     /// <summary>The play working set: resident meshes, region copies, staging, caches, store reads, the lighting. Held to
     /// the authored host bar less the headroom, and to the machine's room.</summary>
     Play,
-    /// <summary>Authoring work: held to the machine's room alone (its free physical memory and commit room, as the
-    /// account reads them, under three quarters of what it has installed), never to the play bar, unless the process is
-    /// a player's.</summary>
+    /// <summary>Authoring work: held to the machine's measured room alone (its free physical memory and commit room, as
+    /// the account reads them, less <see cref="MemoryAccount.AuthoringMargin"/>, and none while the system signals low
+    /// memory), never to the play bar or a share of the installed memory, unless the process is a player's.</summary>
     Authoring,
 }
 /// <summary>A consistent reading of owned storage and future admission promises, in bytes.</summary>
@@ -68,8 +68,10 @@ public readonly record struct MemoryReading(long Live, long Reserved, long Cache
 /// <see cref="MemoryAllowance.Play"/>) fits the authored
 /// host bar on what play holds and has promised, and fits the machine's room, which counts the private bytes beyond
 /// every owner; play's part of those bytes, past the bar with what play holds, marks pressure rather than shrinking the
-/// bar's room, since no admission can shrink them; authoring storage fits the machine's room past play's entitlement (the larger of what play holds and
-/// has promised and the bar's limit), so a bake never crowds play out of its budget. The one place
+/// bar's room, since no admission can shrink them; authoring storage fits the machine's measured room less
+/// <see cref="AuthoringMargin"/> on everything the pool holds and has promised, and nothing while the system signals low
+/// memory, so a bake draws on the machine's headroom and gives it back as the machine fills, and never waits on the
+/// part of play's budget play does not hold. The one place
 /// that enforces it is the account's room arithmetic (<c>Fits</c>, <c>FitsHostBar</c>), which
 /// every door reaches with the owner's allowance, and the allowance's held and promised bytes move only where an owner's
 /// charge or peak moves (<c>Owner.RecordChange</c>, <c>Owner.SetPeak</c>). A player's build counts authoring as play
@@ -77,8 +79,8 @@ public readonly record struct MemoryReading(long Live, long Reserved, long Cache
 /// </para>
 /// <para>
 /// A pool holds its admitted owners' bytes (host memory) and the device blocks the backends' ledgers placed in it. The
-/// host pool's limit is the budget, or the machine's free physical memory with what the pool already holds when that
-/// is smaller, less <see cref="Headroom"/>; the account reads the free memory itself, at most every
+/// host pool's play limit is the budget, or the machine's free physical memory with what the pool already holds, less
+/// authoring's bytes, when that is smaller, less <see cref="Headroom"/>; the account reads the free memory itself, at most every
 /// <see cref="AvailableInterval"/>. A discrete adapter's pool is limited by its segments: each segment's limit is its
 /// recorded budget less the larger of a tenth of it and the headroom (<see cref="Record"/>), lowered to what the segment
 /// holds when the device refuses an allocation there until the budget next changes.
@@ -133,6 +135,7 @@ public sealed class MemoryAccount {
     private long m_sampledOwnersAt;
 
     private readonly Func<long?> m_readAvailable;
+    private readonly Func<bool> m_readLowMemory;
     private readonly Func<long> m_clock;
     // Reads the process's private resident bytes beside the account's callers (ReadBeyond), one read at a time: the read
     // walks the process's working set, milliseconds in a large process, and the frame thread is among the callers. One
@@ -176,6 +179,8 @@ public sealed class MemoryAccount {
     private long? m_available;
     private long m_availableHeld;
     private long m_availableAt;
+    // Whether the system's low-memory signal stood at that reading: authoring has no room while it does.
+    private bool m_lowMemory;
     // The owner holding the process's one forced admission, the bytes it was forced with, and the forced admissions made.
     private Owner? m_forced;
     private long m_forcedBytes;
@@ -194,13 +199,17 @@ public sealed class MemoryAccount {
     /// <param name="clock">Reads the time, in <see cref="Stopwatch"/> ticks, which paces the free-memory reading, the
     /// pressure trim and a refused segment's probe; <see langword="null"/> reads
     /// <see cref="Stopwatch.GetTimestamp"/>.</param>
-    public MemoryAccount(Func<long?>? availablePhysicalBytes = null, long? installedPhysicalBytes = null, Func<long>? clock = null) {
+    /// <param name="lowMemorySignaled">Reads whether the system says its memory is running low, beside each free-memory
+    /// reading; <see langword="null"/> reads <see cref="HostMemory.LowMemorySignaled"/>.</param>
+    public MemoryAccount(Func<long?>? availablePhysicalBytes = null, long? installedPhysicalBytes = null, Func<long>? clock = null, Func<bool>? lowMemorySignaled = null) {
         var installed = (installedPhysicalBytes ?? (HostMemory.InstalledPhysicalBytes() ?? GC.GetGCMemoryInfo().TotalAvailableMemoryBytes));
 
         m_clock = (clock ?? Stopwatch.GetTimestamp);
         m_readAvailable = (availablePhysicalBytes ?? HostMemory.AdmissibleBytes);
+        m_readLowMemory = (lowMemorySignaled ?? HostMemory.LowMemorySignaled);
         DefaultBudget = DefaultBudgetOf(installedPhysicalBytes: installed);
         Headroom = Math.Clamp(max: (512L << 20), min: (16L << 20), value: (installed / 32));
+        AuthoringMargin = Math.Max(val1: Headroom, val2: (installed / 8));
     }
 
     /// <summary>Gets how long a reading of the machine's free physical memory stands before an admission reads it
@@ -253,6 +262,11 @@ public sealed class MemoryAccount {
     public static long DefaultBudgetOf(long installedPhysicalBytes) => Math.Max(val1: 0, val2: ((installedPhysicalBytes * 3) / 4));
     /// <summary>Gets the unspendable failure and allocator reserve.</summary>
     public long Headroom { get; }
+    /// <summary>Gets the free physical memory, in bytes, authoring work leaves the machine when it reserves: an eighth of
+    /// what is installed, and at least <see cref="Headroom"/>. It keeps the machine's memory load under the 90% at which
+    /// the .NET collector turns to full compacting collections to avoid paging, with room for the quarter-second lag of
+    /// the free-memory reading and for the garbage a bake makes that no owner names.</summary>
+    public long AuthoringMargin { get; }
     /// <summary>Gets the default cache allowance, governed by the same authority as job admission.</summary>
     public long CacheBudget => Math.Clamp((DefaultBudget / 12), (16L << 20), (512L << 20));
 
@@ -649,7 +663,11 @@ public sealed class MemoryAccount {
             long heldBefore;
             lock (m_gate) { heldBefore = HeldOf(PhysicalMemory.Host); }
             var available = m_readAvailable();
+            var low = m_readLowMemory();
             lock (m_gate) {
+                // The machine turning short asks the caches to give back once, as a limit falling under a pool does.
+                if (low && !m_lowMemory) { m_pressure = 1; }
+                m_lowMemory = low;
                 m_available = available;
                 // Do not credit an allocation that raced the sample as if it were already in that reading.
                 m_availableHeld = Math.Min(heldBefore, HeldOf(PhysicalMemory.Host));
@@ -731,37 +749,43 @@ public sealed class MemoryAccount {
     // Under m_gate: what play holds and has promised in a pool: everything but authoring's.
     private long PlayHeldOf(PhysicalMemory pool) => (HeldOf(pool: pool) - ((pool == PhysicalMemory.Host) ? AuthoringHeld : 0L));
     private long PlayPromisedOf(PhysicalMemory pool) => (PromisedOf(pool: pool) - ((pool == PhysicalMemory.Host) ? AuthoringPromised : 0L));
-    // Under m_gate: what the whole host pool (play and authoring) may hold and promise before the headroom: the budget an
-    // operator set or the machine-derived one, less the private bytes beyond the owners, and with a free-memory reading no
-    // more than what is free with what the pool held at that reading (the free memory already leaves out the bytes beyond
-    // the owners, so they are not taken from it again).
-    private long MachineBudget() {
-        var budget = ((m_budget ?? DefaultBudget) - m_privateBeyondHeld);
+    // Under m_gate: what the whole host pool (play and authoring) may hold and promise on the machine, leaving margin free:
+    // the admissible bytes last read (free physical memory, no more than the commit headroom) with what the pool held at
+    // that reading. The free memory already leaves out the private bytes beyond the owners and every other program's, so
+    // nothing is taken from it again. An operator's cap (SetBudget) less the private bytes beyond the owners and the
+    // headroom also bounds it, and with no reading the machine-derived budget stands in for it. Play's own budget (the
+    // bar, or three quarters of what is installed) is not part of it: that holds play alone (LimitOf).
+    private long MachineLimit(long margin) {
+        long? measured = ((m_available is { } available) ? (available.AddSaturating(right: m_availableHeld) - margin) : null);
 
-        return ((m_available is { } available) ? Math.Min(val1: budget, val2: available.AddSaturating(right: m_availableHeld)) : budget);
+        if ((m_budget is null) && (measured is { } free)) { return Math.Max(val1: 0L, val2: free); }
+
+        var cap = (((m_budget ?? DefaultBudget) - m_privateBeyondHeld) - Headroom);
+
+        return Math.Max(val1: 0L, val2: ((measured is { } room) ? Math.Min(val1: cap, val2: room) : cap));
     }
-    // Under m_gate: the machine's budget less the headroom.
-    private long MachineLimit() => Math.Max(val1: 0L, val2: (MachineBudget() - Headroom));
-    // Under m_gate: what play's owners may hold and promise under the authored bar: the bar less the headroom; null
-    // without a bar. The private bytes beyond the owners are not taken from it: no admission can shrink them, so a limit
-    // that fell as they grew would refuse the owners (a mesh store read, which then bakes again) exactly while unclaimed
-    // memory balloons, and starve what the account manages to make room for what it cannot. They mark pressure instead
-    // (NotePressure), and are driven down where they are made; the machine's limit, which counts them, still bounds play.
-    private long? BarLimit() => ((m_hostBar is { } bar) ? Math.Max(val1: 0L, val2: (Math.Min(val1: bar, val2: (m_budget ?? DefaultBudget)) - Headroom)) : null);
-    // Under m_gate: the room authoring apart from play has left for a new promise: the machine's limit less what
-    // authoring holds and has promised and less play's entitlement, the larger of what play holds and has promised and
-    // its bar's limit, so a bake draws on the headroom past play's budget and never crowds play out of it. Without a bar,
-    // play is entitled only to what it holds and has promised. Negative when the pool stands past it.
-    private long AuthoringRoomLocked() =>
-        ((MachineLimit() - (AuthoringHeld + AuthoringPromised)) - Math.Max(val1: (PlayHeldOf(pool: PhysicalMemory.Host) + PlayPromisedOf(pool: PhysicalMemory.Host)), val2: (BarLimit() ?? 0L)));
+    // Under m_gate: the machine's limit for the whole pool, leaving the headroom.
+    private long MachineLimit() => MachineLimit(margin: Headroom);
+    // Under m_gate: the room authoring apart from play has left for a new promise: the machine's limit, leaving the
+    // authoring margin, less what the whole pool holds and has promised; none while the system's low-memory signal stands.
+    // Play's budget is not reserved out of it: what play holds is already out of the free memory and what it has promised
+    // is taken here, and play's growth past both is bounded by its bar, not by keeping a bake waiting for it. Negative when
+    // the pool stands past it.
+    private long AuthoringRoomLocked() {
+        var room = ((MachineLimit(margin: AuthoringMargin) - HeldOf(pool: PhysicalMemory.Host)) - PromisedOf(pool: PhysicalMemory.Host));
+
+        return (m_lowMemory ? Math.Min(val1: 0L, val2: room) : room);
+    }
     // Under m_gate: a pool's spend limit, or null where nothing bounds it (a device pool no reading names). The host
-    // pool's is play's: the bar's limit, and no more than the machine's limit leaves once authoring's bytes are taken
-    // out.
+    // pool's is play's: its budget (the authored bar, or the operator's or machine-derived budget) less the headroom, and
+    // no more than the machine's limit leaves once authoring's bytes are taken out. The private bytes beyond the owners
+    // are not taken from the budget: no admission can shrink them, so a limit that fell as they grew would refuse the
+    // owners (a mesh store read, which then bakes again) exactly while unclaimed memory balloons, and starve what the
+    // account manages to make room for what it cannot. They mark pressure instead (NotePressure), and are driven down
+    // where they are made; the machine's limit, which counts them, still bounds play.
     private long? LimitOf(PhysicalMemory pool) {
         if (pool == PhysicalMemory.Host) {
-            var play = (MachineLimit() - (AuthoringHeld + AuthoringPromised));
-
-            if (BarLimit() is { } bar) { play = Math.Min(val1: play, val2: bar); }
+            var play = Math.Min(val1: (MachineLimit() - (AuthoringHeld + AuthoringPromised)), val2: (HostBudget - Headroom));
 
             return Math.Max(val1: 0L, val2: play);
         }
@@ -825,13 +849,14 @@ public sealed class MemoryAccount {
     // that can wait, fit the bar on what play holds and has promised, headroom spent: ordinary admission (Fits) leaves
     // the headroom, and what work needs to progress at all (the forced job, an owner's progress floor) may spend it, so
     // work still settles, one job at a time, under the bar. Storage that cannot give way is not held to it
-    // (AdmitPastLimit). Authoring storage apart from play reserves only past
-    // play's entitlement (Fits), but a charge past its reservation (a bake stage's scratch its peak does not cover) is
-    // transient and needs only the machine: its measured room for storage that gives way, its budget for storage that
-    // cannot, so a busy machine defers a bake's next group rather than restarting one already running.
+    // (AdmitPastLimit). Authoring storage apart from play reserves only within
+    // the authoring margin (Fits), but a charge past its reservation (a bake stage's scratch its peak does not cover) is
+    // transient and may spend the margin: the machine's limit leaving the headroom for storage that gives way, and all of
+    // the measured room for storage that cannot, so a busy machine defers a bake's next group rather than restarting one
+    // already running.
     private bool FitsHostBar(PhysicalMemory pool, long extra, MemoryAllowance allowance = MemoryAllowance.Play, bool givesWay = false) {
         if ((pool != PhysicalMemory.Host) || (extra <= 0L)) { return true; }
-        if (Apart(allowance: allowance)) { return (extra <= (((givesWay ? MachineBudget() : (m_budget ?? DefaultBudget)) - HeldOf(pool: pool)) - PromisedOf(pool: pool))); }
+        if (Apart(allowance: allowance)) { return (extra <= ((MachineLimit(margin: (givesWay ? Headroom : 0L)) - HeldOf(pool: pool)) - PromisedOf(pool: pool))); }
 
         return ((m_hostBar is not { } bar) || (extra <= ((Math.Min(val1: bar, val2: DefaultBudget) - PlayHeldOf(pool: pool)) - PlayPromisedOf(pool: pool))));
     }
@@ -950,6 +975,7 @@ public sealed class MemoryAccount {
                 .OrderByDescending(keySelector: static taker => taker.Bytes)
                 .ThenBy(keySelector: static taker => taker.Taker, comparer: StringComparer.Ordinal)],
             MachineLimit = (host ? MachineLimit() : null),
+            MachineLowMemory = (host && m_lowMemory),
             PlayBeyondHeld = (host ? m_playBeyondHeld : 0L),
             PrivateBeyondHeld = (host ? m_privateBeyondHeld : 0L),
         };

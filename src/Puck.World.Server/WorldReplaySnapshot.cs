@@ -987,7 +987,7 @@ public sealed partial class WorldReplaySnapshot {
             case 20:
                 return new WorldReplayEntry.FederatedIntents(Held: reader.ReadArray(
                     field: "federated intents",
-                    maximum: WorldBodiesLimits.CapacityCeiling,
+                    maximum: WorldBodiesLimits.IndexLimit,
                     readItem: WorldWireLeaves.ReadFederatedInput
                 ));
             case 16 or 17 or 18:
@@ -1131,18 +1131,18 @@ public sealed partial class WorldReplaySnapshot {
         var generations = reader.ReadArray(
             field: "arrival generations",
             readItem: static (ref WireReader r) => r.ReadInt32(),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         var rolledBack = reader.ReadBoolean();
         var adopted = reader.ReadArray(
             field: "arrival home bindings",
             readItem: static (ref WireReader r) => WorldIdentityProjectionWire.ReadOptional(reader: ref r),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         var readopted = reader.ReadArray(
             field: "arrival readopted companions",
             readItem: static (ref WireReader r) => WorldWireLeaves.ReadEntityAddress(reader: ref r),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         var bindings = reader.ReadArray(
             field: "arrival companion bindings",
@@ -1151,7 +1151,7 @@ public sealed partial class WorldReplaySnapshot {
                 Slot: b.ReadInt32(),
                 Generation: b.ReadInt32()
             )),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         var outcome = new WorldArrivalOutcome(
             Adopted: adopted,
@@ -1242,10 +1242,10 @@ public sealed partial class WorldReplaySnapshot {
 
         if (
             !reader.Failed &&
-            (((uint)slot) >= WorldBodiesLimits.CapacityCeiling)
+            (((uint)slot) >= WorldBodiesLimits.IndexLimit)
         ) {
             reader.Fail(
-                detail: $"departure of transfer {transferId} names body:{slot}, outside 0..{(WorldBodiesLimits.CapacityCeiling - 1)}",
+                detail: $"departure of transfer {transferId} names body:{slot}, outside 0..{(WorldBodiesLimits.IndexLimit - 1)}",
                 refusal: WireRefusal.PayloadMalformed
             );
         }
@@ -1286,13 +1286,13 @@ public sealed partial class WorldReplaySnapshot {
         var outcome = reader.ReadString(field: "transfer outcome");
         var departedSlots = reader.ReadArray(
             field: "transfer departed-slot count",
-            maximum: WorldBodiesLimits.CapacityCeiling,
+            maximum: WorldBodiesLimits.IndexLimit,
             readItem: static (ref WireReader r) => {
                 var slot = r.ReadInt32();
 
-                if (((uint)slot) >= WorldBodiesLimits.CapacityCeiling) {
+                if (((uint)slot) >= WorldBodiesLimits.IndexLimit) {
                     r.Fail(
-                        detail: $"transfer departed-slot {slot} is out of range (expected 0..{(WorldBodiesLimits.CapacityCeiling - 1)})",
+                        detail: $"transfer departed-slot {slot} is out of range (expected 0..{(WorldBodiesLimits.IndexLimit - 1)})",
                         refusal: WireRefusal.PayloadMalformed
                     );
                 }

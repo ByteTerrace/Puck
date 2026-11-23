@@ -92,11 +92,11 @@ public readonly record struct WorldBodiesDefaults(
     /// <summary>Gets the total authoritative body capacity, including reserved local seats — ABSENT resolves to
     /// <see cref="LocalSeats"/> plus <see cref="NetworkPlayers"/> (no simulated peers beyond the seats the document
     /// actually declares). While a <see cref="CapacityRow"/> read is PENDING (pre-resolve validation, before the boot
-    /// resolver settles the row into <see cref="CapacityRaw"/>) this reads the admission ceiling, so capacity-bounded
-    /// checks stay permissive exactly once and exact on the post-resolve revalidation.</summary>
+    /// resolver settles the row into <see cref="CapacityRaw"/>) this reads <see cref="WorldBodiesLimits.UnsettledCapacity"/>,
+    /// so capacity-bounded checks stay permissive exactly once and exact on the post-resolve revalidation.</summary>
     [JsonIgnore]
     public int Capacity => (CapacityRaw ?? ((CapacityRow is not null)
-        ? WorldBodiesLimits.CapacityCeiling
+        ? WorldBodiesLimits.UnsettledCapacity
         : (LocalSeats + NetworkPlayers)));
     /// <summary>Gets the inert census — zero local seats, zero capacity, no simulated peers.</summary>
     public static WorldBodiesDefaults Default { get; } = new();

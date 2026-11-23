@@ -130,7 +130,6 @@ public sealed partial class WorldPopulation {
             Generations: m_entries.Select(selector: entry => entry.Generation).ToArray(),
             EventBodies: m_eventBodies.ToArray(),
             SleepingGravity: [.. m_sleepGravity.OrderBy(keySelector: static pair => pair.Key).Select(selector: static pair => (pair.Key, pair.Value))],
-            SharedNavigation: m_navigation.CaptureShared(),
             AttachedSolids: MovingSolids?.CaptureAttached(),
             Revision: m_revision,
             SeatKit: m_seatKit,
@@ -237,6 +236,7 @@ public sealed partial class WorldPopulation {
             ActiveName: entry.ProducerState.ActiveProducerName,
             ActiveNavigationDomainIndex: entry.ProducerState.ActiveProducerNavigationDomainIndex,
             ActivityPhase: entry.ProducerState.ActivityPhase,
+            ActivityPhaseRemainder: entry.ProducerState.ActivityPhaseRemainder,
             ActivityRate: entry.ProducerState.ActivityRate,
             CurveArcRaw: entry.ProducerState.CurveArcRaw,
             Flock: new WorldPopulationFlockCheckpoint(
@@ -248,6 +248,7 @@ public sealed partial class WorldPopulation {
                 Target: entry.ProducerState.FlockTarget
             ),
             Phase: entry.ProducerState.Phase,
+            PhaseRemainder: entry.ProducerState.PhaseRemainder,
             PreferredAltitude: entry.ProducerState.PreferredAltitude,
             WeaveFrequency: entry.ProducerState.WeaveFrequency
         );
@@ -309,7 +310,6 @@ public sealed partial class WorldPopulation {
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
         ValidateCheckpoint(checkpoint: checkpoint);
-        m_navigation.RestoreShared(checkpoints: checkpoint.SharedNavigation);
         if (MovingSolids is { } attached) { attached.RestoreAttached(rows: (checkpoint.AttachedSolids ?? [])); }
 
         // Restore is replacement. All caller-controlled entry and route addresses were preflighted above, before
@@ -422,6 +422,7 @@ public sealed partial class WorldPopulation {
                 ActiveProducerName = producer.ActiveName,
                 ActiveProducerNavigationDomainIndex = producer.ActiveNavigationDomainIndex,
                 ActivityPhase = producer.ActivityPhase,
+                ActivityPhaseRemainder = producer.ActivityPhaseRemainder,
                 ActivityRate = producer.ActivityRate,
                 CurveArcRaw = producer.CurveArcRaw,
                 FlockDesired = producer.Flock.Desired,
@@ -431,6 +432,7 @@ public sealed partial class WorldPopulation {
                 FlockSeeded = producer.Flock.Seeded,
                 FlockTarget = producer.Flock.Target,
                 Phase = producer.Phase,
+                PhaseRemainder = producer.PhaseRemainder,
                 PreferredAltitude = producer.PreferredAltitude,
                 WeaveFrequency = producer.WeaveFrequency,
             };
@@ -526,7 +528,6 @@ public sealed partial class WorldPopulation {
         ) {
             throw new InvalidOperationException(message: $"population checkpoint simulated count {checkpoint.SimulatedCount} lies outside 0..{PeerCapacity}.");
         }
-        m_navigation.ValidateShared(checkpoints: checkpoint.SharedNavigation);
         if (
             (checkpoint.Generations is null) ||
             (checkpoint.Generations.Length != Capacity) ||
@@ -583,6 +584,11 @@ public sealed partial class WorldPopulation {
                 (captured.Body.Motion.CarriedBy == captured.Index)
             ) {
                 throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} names an invalid carrier index {captured.Body.Motion.CarriedBy}.");
+            }
+            static bool OutsideSecond(long remainder) => ((remainder <= -((long)FixedTickConversion.TicksPerSecond)) || (remainder >= ((long)FixedTickConversion.TicksPerSecond)));
+
+            if (OutsideSecond(remainder: captured.Producer.PhaseRemainder) || OutsideSecond(remainder: captured.Producer.ActivityPhaseRemainder)) {
+                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} carries a producer phase remainder outside one engine second.");
             }
             var bodyKitIndex = CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit);
 
@@ -747,20 +753,19 @@ public sealed partial class WorldPopulation {
 
         var domain = m_navigation[state.DomainIndex];
 
-        if (
-            (domain.Sharing is null) &&
-            (state.Status is NavigationStatus.Pending or NavigationStatus.CapacityLimited)
-        ) {
-            throw new InvalidOperationException(message: "population checkpoint shared navigation status requires a shared domain.");
-        }
-        if (
-            (domain.Sharing is not null) &&
-            (state.ExpandedLast != 0)
-        ) {
-            throw new InvalidOperationException(message: "population checkpoint shared search work belongs to its domain, not a body.");
-        }
         if (activeProducerDomainIndex != state.DomainIndex) {
             throw new InvalidOperationException(message: $"population checkpoint route domain {state.DomainIndex} does not match active producer domain {activeProducerDomainIndex}.");
+        }
+        // A goal-field follower holds no route, goal cell or search work of its own: its next read derives everything
+        // from its pose and its goal.
+        if (domain.Tuning.Shared) {
+            if ((state.GoalCell != -1) || (path.Length != 0) || (state.Waypoint != 0) || (state.ExpandedLast != 0)) {
+                throw new InvalidOperationException(message: $"population checkpoint goal-field follower of domain '{domain.Name}' carries route data.");
+            }
+            if (state.Status is not (NavigationStatus.Active or NavigationStatus.Arrived or NavigationStatus.Unreachable)) {
+                throw new InvalidOperationException(message: $"population checkpoint goal-field follower cannot carry status '{state.Status}'.");
+            }
+            return;
         }
         if (((uint)state.GoalCell) >= ((uint)domain.CellCount)) {
             throw new InvalidOperationException(message: $"population checkpoint navigation goal {state.GoalCell} lies outside domain '{domain.Name}'.");
@@ -781,7 +786,7 @@ public sealed partial class WorldPopulation {
             throw new InvalidOperationException(message: $"population checkpoint navigation waypoint {state.Waypoint} lies outside its {path.Length}-node path.");
         }
         if (path.Length == 0) {
-            if (state.Status is not (NavigationStatus.Unreachable or NavigationStatus.SearchLimit or NavigationStatus.PathLimit or NavigationStatus.Pending or NavigationStatus.CapacityLimited)) {
+            if (state.Status is not (NavigationStatus.Unreachable or NavigationStatus.SearchLimit or NavigationStatus.PathLimit)) {
                 throw new InvalidOperationException(message: $"population checkpoint navigation status '{state.Status}' requires a stored path.");
             }
         } else {

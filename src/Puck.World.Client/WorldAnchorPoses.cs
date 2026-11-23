@@ -79,7 +79,7 @@ public static class WorldAnchorPoses {
             case WorldAnchor.Group group when (scope.Source is WorldClient client):
                 pose = new SdfAnchor(
                     Orientation: Quaternion.Identity,
-                    Position: WorldGroupAnchors.ComputeRaw(client: client, group: group, maxPopulation: WorldClient.EntityCapacity).Centroid
+                    Position: WorldGroupAnchors.ComputeRaw(client: client, group: group, maxPopulation: client.EntityCapacity).Centroid
                 );
 
                 return true;
@@ -101,7 +101,7 @@ public static class WorldAnchorPoses {
     /// <param name="pose">The pose, or default.</param>
     /// <returns><see langword="false"/> when the entity is out of range or inactive.</returns>
     public static bool TryEntity(int body, in WorldAnchorScope scope, out SdfAnchor pose) {
-        if ((((uint)body) >= ((uint)WorldClient.EntityCapacity)) || !scope.Source.IsActive(index: body)) {
+        if (!WorldBodiesLimits.IsBodyIndex(index: body) || !scope.Source.IsActive(index: body)) {
             pose = default;
 
             return false;
@@ -192,7 +192,7 @@ public static class WorldAnchorPoses {
         return new SdfAnchor(Position: position, Orientation: orientation);
     }
     private static bool TryPart(int body, string partId, in WorldAnchorScope scope, out SdfAnchor pose) {
-        if ((((uint)body) < ((uint)WorldClient.EntityCapacity)) && (scope.Source is WorldClient client) && (scope.Stamps is { } stamps)) {
+        if (WorldBodiesLimits.IsBodyIndex(index: body) && (scope.Source is WorldClient client) && (scope.Stamps is { } stamps)) {
             return WorldEntityPartResolver.TryPackedPose(
                 client: client,
                 entityIndex: body,

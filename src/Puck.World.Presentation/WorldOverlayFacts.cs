@@ -295,7 +295,7 @@ public sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
             _ => -1,
         };
 
-        return (((uint)body) < ((uint)WorldClient.EntityCapacity));
+        return WorldBodiesLimits.IsBodyIndex(index: body);
     }
     // Subject to position, through the one anchor resolver: a body subject rides its drawn root, and a placement its live
     // pose, else its rest pose; one the frame draws nothing for resolves no position.

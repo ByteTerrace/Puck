@@ -400,6 +400,47 @@ public sealed class HostAdmissionLawTests {
         Assert.Equal(expected: 12.0, actual: new HostStartTracker().ExpectedPeaks(kind: HostStartKind.WindowedWorld, thresholds: machine).PrivateGb);
         Assert.True(condition: HostAdmission.Wait("start", false, false, () => Sample(commit: 10, limit: 19, ram: 13), clock, _ => Assert.Fail(message: "an idle machine admits at once"), error, CancellationToken.None, machine, TimeSpan.FromMinutes(minutes: 30), null, HostStartKind.WindowedWorld, new HostStartTracker()));
     }
+    // On an idle 16 GB machine 9.6 GB of memory is free and the pressure floor is 2 GB, so an unmeasured windowed World's
+    // fallback working set (0.7 of its 12 GB budget, 8.4 GB) does not fit and nothing else is running to wait for. The guess
+    // is held to the 7.6 GB the idle machine can give, so the World runs and teaches the window its real peak; the same guess
+    // beside a running start still waits, commit still judges the start by the whole guess, and a profile this machine has
+    // measured is never clamped, so a measured need that does not fit is refused.
+    [Fact]
+    public void AnUnmeasuredProfileIsHeldToWhatTheIdleMachineCanGiveSoItCanRunAndBeMeasured() {
+        var machine = HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6);
+        var idle = Sample(commit: 10, limit: 19, ram: 9.6);
+        var beside = Sample(commit: 10, limit: 19, ram: 9.6, starts: [new(Id: 900, Kind: HostStartKind.HeavySuite, PrivateGb: 2, PrivateResidentGb: 1, Ready: true, StartTicks: 900)]);
+        using var directory = new Puck.Testing.TemporaryDirectory();
+
+        var lone = new HostStartTracker().Judge(reading: idle, kind: HostStartKind.WindowedWorld, thresholds: machine, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (true, true, 12.0, 7.6), actual: (lone.CommitCovered, lone.PhysicalCovered, lone.OwnGb, Math.Round(value: lone.ResidentOwnGb, digits: 6)));
+        Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: idle, tracker: new HostStartTracker(), clock: new GateClock(), on: machine));
+        Assert.False(condition: Admits(kind: HostStartKind.WindowedWorld, reading: beside, tracker: new HostStartTracker(), clock: new GateClock(), on: machine));
+
+        // Once measured, the profile is no longer clamped: a learned 10 GB resident does not fit 9.6 GB free, and is judged by
+        // the lesser of it and the 8.4 GB fallback, which does not fit either.
+        Observed(directory.RootPath, new GateClock(), HostStartKind.WindowedWorld, id: 1, privateGb: 11, workingSetGb: 12, privateResidentGb: 10);
+
+        var measured = new HostStartTracker(directory.RootPath).Judge(reading: idle, kind: HostStartKind.WindowedWorld, thresholds: machine, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (false, 8.4), actual: (measured.PhysicalCovered, Math.Round(value: measured.ResidentOwnGb, digits: 6)));
+    }
+    // A World that is stopped records what it reached as one settled observation of its profile, though nothing sampled it
+    // while it ran and it never lasted a plateau, and the profile's window then judges the next start of it.
+    [Fact]
+    public void AStoppingWorldRecordsItsPeaksWithoutHavingBeenSampled() {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        var windowed = new HostStartProfile(Kind: HostStartKind.WindowedWorld, Device: "directx");
+        var tracker = new HostStartTracker(directory.RootPath);
+
+        tracker.Finish(profile: windowed, process: (5, 1), peaks: new HostPeaks(PrivateGb: 6.5, ResidentGb: 4.25, WorkingSetGb: 5.0));
+
+        var learned = new HostStartTracker(directory.RootPath).ExpectedPeaks(kind: windowed);
+
+        Assert.Equal(expected: (6.5, 4.25, 5.0), actual: (learned.PrivateGb, learned.ResidentGb, learned.WorkingSetGb));
+        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb, actual: new HostStartTracker(directory.RootPath).ExpectedPeaks(kind: HostStartKind.WindowedWorld).PrivateGb);
+    }
     // Starts that have not finished growing hold their remaining working-set growth out of free memory too: a headless
     // World that has not reported ready keeps the start waiting that would be admitted beside it once it has.
     [Fact]
