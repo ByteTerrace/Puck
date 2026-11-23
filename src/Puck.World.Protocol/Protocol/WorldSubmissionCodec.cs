@@ -882,7 +882,7 @@ public static partial class WorldSubmissionCodec {
             : Fail(
                 WorldCodecRefusal.PrincipalShapeInvalid,
                 principal.Kind switch {
-                    PrincipalKind.Peer when !WorldBodiesLimits.IsBodyIndex(index: principal.Index) => $"Peer principal index {principal.Index} is outside 0..{(WorldBodiesLimits.CapacityCeiling - 1)}",
+                    PrincipalKind.Peer when !WorldBodiesLimits.IsBodyIndex(index: principal.Index) => $"Peer principal index {principal.Index} is outside 0..{(WorldBodiesLimits.IndexLimit - 1)}",
                     PrincipalKind.World => $"{principal.Describe()} cannot act from outside — the world's own authored program acts inside this process (a rule's effects, a kit's generate effect) and is stamped by the server itself; a submitter claiming it would be asserting the world's structural exemption from outside",
                     _ => $"{principal.Kind} principal has index {principal.Index}, generation {principal.Generation}, name '{principal.Name}'",
                 }

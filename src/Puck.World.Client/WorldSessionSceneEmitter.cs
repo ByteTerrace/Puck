@@ -89,7 +89,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private IReadOnlyList<WorldScreen> m_textRows = [];
 
 
-    private readonly Vector3[]? m_bodyColors;
+    private Vector3[]? m_bodyColors;
 
     private int m_bodyColorRevision;
 
@@ -182,7 +182,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         m_mirror = mirror;
         m_bodyColor = (bodyColor ?? mirror.BodyColor);
-        m_bodyColors = ((bodyColor is null) ? null : new Vector3[WorldBodiesLimits.CapacityCeiling]);
+        m_bodyColors = ((bodyColor is null) ? null : []);
         m_onlyPrototypes = onlyPrototypes;
         m_shadowSettings = shadowSettings;
         m_effectiveCameraName = effectiveCameraName;
@@ -793,8 +793,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         destination[2] = m_bakedColorRevision;
 
         destination[3] = m_catalog.Revision;
-        if (m_bodyColors is { } colors) {
-            // The avatars the program draws are the only bodies whose colour it bakes.
+        if (m_bodyColors is not null) {
+            // The avatars the program draws are the only bodies whose colour it bakes; the record grows with the band.
+            Puck.Abstractions.Memory.ArrayCapacity.EnsureLength(array: ref m_bodyColors, required: m_catalog.BodySpan);
+            var colors = m_bodyColors;
             foreach (var index in m_catalog.Bodies) {
                 var color = m_bodyColor(arg: index);
 

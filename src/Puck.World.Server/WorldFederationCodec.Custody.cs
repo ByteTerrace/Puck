@@ -44,7 +44,7 @@ public static partial class WorldFederationCodec {
         incarnations = reader.ReadArray(
             field: "hop query companions",
             readItem: static (ref WireReader r) => WorldWireLeaves.ReadEntityAddress(reader: ref r),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         return Finish(
             failure: out failure,
@@ -80,7 +80,7 @@ public static partial class WorldFederationCodec {
         answers = reader.ReadArray(
             field: "hop query answers",
             readItem: static (ref WireReader r) => r.ReadOptional(readValue: static (ref WireReader n) => n.ReadUInt64()),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         return Finish(
             failure: out failure,
@@ -133,7 +133,7 @@ public static partial class WorldFederationCodec {
                 Incarnation: WorldWireLeaves.ReadEntityAddress(reader: ref r),
                 Epoch: r.ReadUInt64()
             ),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         return Finish(
             failure: out failure,
@@ -188,7 +188,7 @@ public static partial class WorldFederationCodec {
                     Verdict: (WorldHopVerdict)verdict
                 );
             },
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         return Finish(
             failure: out failure,
@@ -255,7 +255,7 @@ public static partial class WorldFederationCodec {
         landed = reader.ReadOptionalClass(readValue: static (ref WireReader r) => r.ReadArray(
             field: "status landed members",
             readItem: static (ref WireReader i) => i.ReadInt32(),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         ));
         status = (WorldTransferStatus)raw;
         return reader.TryFinish(failure: out _) && Enum.IsDefined(value: status);

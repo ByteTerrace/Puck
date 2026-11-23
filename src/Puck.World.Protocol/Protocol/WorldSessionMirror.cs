@@ -47,8 +47,36 @@ namespace Puck.World.Client;
 /// progress.</para>
 /// </remarks>
 public sealed class WorldSessionMirror : IClientSink {
-    // The bounded entity table uses the same schema ceiling as the client. Appearance-catalog size is unrelated.
-    private const int EntityCapacity = WorldBodiesLimits.CapacityCeiling;
+    // The entity extras the pose table does not keep, at one length. Grown with the pose table by Extend before a writer
+    // touches a slot, and replaced whole, so a lock-free reader reads one complete generation and bounds its index
+    // against it (At): a slot past it reads as never delivered.
+    private sealed class Extras(int length) {
+        public readonly Vector3[] BodyColor = new Vector3[length];
+        public readonly byte[] CatalogRig = new byte[length];
+        public readonly BodyFacts[] Facts = new BodyFacts[length];
+        public readonly int[] Generation = new int[length];
+        public readonly float[] Heading = new float[length];
+        public readonly byte[] Kit = new byte[length];
+        public readonly byte[] Look = new byte[length];
+
+        public int Length => Heading.Length;
+
+        public Extras Grown(int length) {
+            var grown = new Extras(length: length);
+
+            BodyColor.CopyTo(array: grown.BodyColor, index: 0);
+            CatalogRig.CopyTo(array: grown.CatalogRig, index: 0);
+            Facts.CopyTo(array: grown.Facts, index: 0);
+            Generation.CopyTo(array: grown.Generation, index: 0);
+            Heading.CopyTo(array: grown.Heading, index: 0);
+            Kit.CopyTo(array: grown.Kit, index: 0);
+            Look.CopyTo(array: grown.Look, index: 0);
+
+            return grown;
+        }
+    }
+
+    private static T At<T>(T[] column, int index) => ((((uint)index) < ((uint)column.Length)) ? column[index] : default!);
 
     private WorldDeliveredDocument m_document;
     private int m_definitionRevision;
@@ -313,14 +341,8 @@ public sealed class WorldSessionMirror : IClientSink {
     private long m_tickBits;
     private long m_engineTickBits;
 
-    private readonly WorldPoseTable m_poses = new(capacity: EntityCapacity);
-    private readonly float[] m_heading = new float[EntityCapacity];
-    private readonly BodyFacts[] m_facts = new BodyFacts[EntityCapacity];
-    private readonly Vector3[] m_bodyColor = new Vector3[EntityCapacity];
-    private readonly byte[] m_look = new byte[EntityCapacity];
-    private readonly byte[] m_catalogRig = new byte[EntityCapacity];
-    private readonly byte[] m_kit = new byte[EntityCapacity];
-    private readonly int[] m_generation = new int[EntityCapacity];
+    private readonly WorldPoseTable m_poses = new();
+    private Extras m_extras = new(length: 0);
     // Serializes the two writers of the entity arrays: a route seed written by the transfer/route thread and ordinary
     // snapshots arriving on the observer task. Per-field render reads stay lock-free and need no whole-tick record;
     // a whole-image reader reads the published image instead (m_images) and never this gate.
@@ -468,15 +490,15 @@ public sealed class WorldSessionMirror : IClientSink {
     public WorldEntityAddress Address(int index) => new(
         Authority: Authority,
         Index: index,
-        Generation: Volatile.Read(location: ref m_generation[index])
+        Generation: GenerationOf(index: index)
     );
     /// <summary>The entity's render body color, mirrored verbatim from the snapshot (a pending seat's is already
     /// gray-lerped server-side).</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public Vector3 BodyColor(int index) => m_bodyColor[index];
+    public Vector3 BodyColor(int index) => At(column: Volatile.Read(location: ref m_extras).BodyColor, index: index);
     public WorldBodyContactMode BodyContact(int index) {
         var contacts = Volatile.Read(location: ref m_kitBodyContacts);
-        var kit = m_kit[index];
+        var kit = At(column: Volatile.Read(location: ref m_extras).Kit, index: index);
 
         return ((kit < contacts.Length)
             ? contacts[kit]
@@ -484,10 +506,10 @@ public sealed class WorldSessionMirror : IClientSink {
         );
     }
     /// <summary>The entity-owned procedural rig mirrored from the authoritative snapshot.</summary>
-    public byte CatalogRig(int index) => m_catalogRig[index];
+    public byte CatalogRig(int index) => At(column: Volatile.Read(location: ref m_extras).CatalogRig, index: index);
     public FixedWorldCollider? Collider(int index) {
         var colliders = Volatile.Read(location: ref m_kitColliders);
-        var kit = m_kit[index];
+        var kit = At(column: Volatile.Read(location: ref m_extras).Kit, index: index);
 
         return ((kit < colliders.Length)
             ? colliders[kit]
@@ -572,6 +594,7 @@ public sealed class WorldSessionMirror : IClientSink {
     // constructed.
     private void FillImage(SnapshotImage image) {
         var extent = m_extent;
+        var extras = m_extras;
 
         if (image.Entries.Length < extent) {
             image.Entries = new ImageEntry[((int)(((uint)extent)).NextPowerOfTwo())];
@@ -579,15 +602,15 @@ public sealed class WorldSessionMirror : IClientSink {
         for (var index = 0; (index < extent); index++) {
             image.Entries[index] = new ImageEntry(
                 Active: m_poses.IsActive(index: index),
-                CatalogRig: m_catalogRig[index],
-                Color: m_bodyColor[index],
+                CatalogRig: extras.CatalogRig[index],
+                Color: extras.BodyColor[index],
                 CurrentOrientation: m_poses.CurrentOrientation(index: index),
                 CurrentPosition: m_poses.CurrentPosition(index: index),
-                Facts: m_facts[index],
-                Generation: m_generation[index],
-                Heading: m_heading[index],
-                Kit: m_kit[index],
-                Look: m_look[index],
+                Facts: extras.Facts[index],
+                Generation: extras.Generation[index],
+                Heading: extras.Heading[index],
+                Kit: extras.Kit[index],
+                Look: extras.Look[index],
                 PlacementId: m_poses.PlacementId(index: index),
                 PoseEpoch: m_poses.PoseEpoch(index: index),
                 PreviousOrientation: m_poses.PreviousOrientation(index: index),
@@ -607,8 +630,25 @@ public sealed class WorldSessionMirror : IClientSink {
         m_arrivals.CopyTo(array: image.Arrivals, index: 0);
         image.ArrivalCount = m_arrivalCount;
     }
-    private void Extend(int index) {
+    // Grows the pose table and the extras to hold a slot before a writer touches it, and returns the extras the writer
+    // writes. Under m_snapshotWriteGate; the index is a body index (WorldBodiesLimits.IsBodyIndex).
+    private Extras Extend(int index) {
         if (index >= m_extent) { m_extent = (index + 1); }
+        m_poses.EnsureCapacity(count: m_extent);
+
+        var extras = m_extras;
+
+        if (extras.Length < m_poses.Capacity) {
+            extras = extras.Grown(length: m_poses.Capacity);
+            Volatile.Write(location: ref m_extras, value: extras);
+        }
+
+        return extras;
+    }
+    private int GenerationOf(int index) {
+        var generation = Volatile.Read(location: ref m_extras).Generation;
+
+        return ((((uint)index) < ((uint)generation.Length)) ? Volatile.Read(location: ref generation[index]) : 0);
     }
 
     // One slot of a published image: what CaptureBodyImage hands out, before resolving the kit and look against the
@@ -834,7 +874,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 var index = entry.Index;
 
                 if (
-                    (((uint)index) >= EntityCapacity) ||
+                    !WorldBodiesLimits.IsBodyIndex(index: index) ||
                     (preserveSeed && (seeded is { } preserved) && (index == preserved.Index) &&
                         (!string.Equals(
                             a: snapshot.Authority,
@@ -845,28 +885,28 @@ public sealed class WorldSessionMirror : IClientSink {
                     continue;
                 }
 
-                Extend(index: index);
+                var extras = Extend(index: index);
                 // What a body's presented inputs read besides its look (BodyChanges), as they stood before the entry.
                 var moved = (
                     (m_poses.IsActive(index: index) != entry.Active) ||
-                    (m_facts[index] != entry.Facts) ||
-                    (m_generation[index] != entry.Generation) ||
+                    (extras.Facts[index] != entry.Facts) ||
+                    (extras.Generation[index] != entry.Generation) ||
                     (m_poses.CurrentPosition(index: index) != entry.Position) ||
                     (m_poses.CurrentOrientation(index: index) != entry.Orientation) ||
                     (m_poses.PreviousPosition(index: index) != m_poses.CurrentPosition(index: index)) ||
                     (m_poses.PreviousOrientation(index: index) != m_poses.CurrentOrientation(index: index))
                 );
 
-                m_bodyColor[index] = entry.BodyColor;
-                m_kit[index] = entry.Kit;
-                m_look[index] = entry.Look;
-                m_catalogRig[index] = entry.CatalogRig;
+                extras.BodyColor[index] = entry.BodyColor;
+                extras.Kit[index] = entry.Kit;
+                extras.Look[index] = entry.Look;
+                extras.CatalogRig[index] = entry.CatalogRig;
                 Volatile.Write(
-                    location: ref m_generation[index],
+                    location: ref extras.Generation[index],
                     value: entry.Generation
                 );
-                m_heading[index] = entry.Heading;
-                m_facts[index] = entry.Facts;
+                extras.Heading[index] = entry.Heading;
+                extras.Facts[index] = entry.Facts;
                 // The pose table publishes the entry's active flag last, after every field above, so a reader on
                 // another thread (a federated observer delivers on its socket task) that acquires IsActive sees the
                 // completed record.
@@ -949,7 +989,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 // A body's action state rides its entry, applied for every entry this delivery admitted.
                 foreach (ref readonly var entry in snapshot.Entries.Span) {
                     if (
-                        (((uint)entry.Index) < ((uint)EntityCapacity)) &&
+                        WorldBodiesLimits.IsBodyIndex(index: entry.Index) &&
                         m_poses.Admitted(index: entry.Index)
                     ) {
                         m_stateView.ApplyBodyState(
@@ -1109,13 +1149,16 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>Gets an entity's latest authoritative fact mask (<see cref="EntitySnapshot.Facts"/>) — not
     /// interpolated; the facts are discrete authority answers.</summary>
     /// <param name="index">The 0-based entity index.</param>
-    public BodyFacts Facts(int index) => m_facts[index];
+    public BodyFacts Facts(int index) => At(column: Volatile.Read(location: ref m_extras).Facts, index: index);
     /// <summary>Gets an entity's latest authoritative heading in radians about world up (<see cref="EntitySnapshot.Heading"/>)
     /// — not interpolated; the composition seam that reads it wants the authority's current value.</summary>
-    public float Heading(int index) => m_heading[index];
+    public float Heading(int index) => At(column: Volatile.Read(location: ref m_extras).Heading, index: index);
     /// <summary>Whether the entity at <paramref name="index"/> was active (drawn) in the latest snapshot.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public bool IsActive(int index) => m_poses.IsActive(index: index);
+    /// <summary>Gets the number of entity slots the mirror holds: the highest body a delivery or a seeded route named,
+    /// rounded up as the mirror grows with the destination. A slot past it is inactive.</summary>
+    public int EntityCapacity => m_poses.Capacity;
     /// <summary>Appends the index of every entity the latest snapshot left active, in ascending order: the pose table's
     /// live set (<see cref="WorldPoseTable.Live"/>), read between two deliveries, never the capacity.</summary>
     /// <param name="bodies">The list the indices are appended to.</param>
@@ -1148,7 +1191,7 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <see langword="null"/>.</exception>
     public bool CollectBodyChanges(GpuRowCursor cursor, GpuUploadRuns into) {
         // Deliveries publish the journal, possibly on a socket task; it holds its own lock.
-        return m_bodyJournal.Collect(cursor: cursor, into: into, rows: EntityCapacity, through: -1L);
+        return m_bodyJournal.Collect(cursor: cursor, into: into, rows: m_poses.Capacity, through: -1L);
     }
     /// <summary>Appends the index of every entity whose interpolation endpoints differ in the latest delivery, the
     /// entities whose interpolated pose moves with the presentation alpha between deliveries.</summary>
@@ -1164,7 +1207,7 @@ public sealed class WorldSessionMirror : IClientSink {
     // Closes one journal frame over the delivery just applied and finds the entities it left moving. Under
     // m_snapshotWriteGate.
     private void PublishBodyChanges() {
-        _ = m_bodyJournal.Publish(everything: m_deliveredWhole, owed: m_deliveredChanges.Members, rows: EntityCapacity);
+        _ = m_bodyJournal.Publish(everything: m_deliveredWhole, owed: m_deliveredChanges.Members, rows: m_poses.Capacity);
         m_deliveredChanges.Clear();
         m_deliveredWhole = false;
         m_moving.Clear();
@@ -1213,7 +1256,7 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <returns>The entity's look row.</returns>
     public WorldLook Look(int index) => WorldDefinitionRows.ResolveLook(
         rows: Definition.Looks,
-        index: m_look[index]
+        index: At(column: Volatile.Read(location: ref m_extras).Look, index: index)
     );
     /// <summary>The entity's previous-tick render attitude (one interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
@@ -1266,10 +1309,10 @@ public sealed class WorldSessionMirror : IClientSink {
     public void SeedRoute(in WorldAuthorityRouteDescription route) {
         var index = route.Entity.Index;
 
-        if (((uint)index) >= EntityCapacity) {
+        if (!WorldBodiesLimits.IsBodyIndex(index: index)) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(route),
-                message: $"route entity {index} exceeds mirror capacity {EntityCapacity}"
+                message: $"route entity {index} is outside 0..{(WorldBodiesLimits.IndexLimit - 1)}, the body-index format bound"
             );
         }
 
@@ -1280,16 +1323,17 @@ public sealed class WorldSessionMirror : IClientSink {
             );
             var position = route.Position.ToVector3();
             var orientation = route.Orientation.ToQuaternion();
+            var extras = Extend(index: index);
 
             // A route carries one attitude; its yaw is the heading.
-            m_heading[index] = VectorFunctions.YawOf(attitude: orientation);
-            m_bodyColor[index] = route.BodyColor;
-            m_kit[index] = route.Kit;
-            m_look[index] = route.Look;
-            m_catalogRig[index] = route.CatalogRig;
+            extras.Heading[index] = VectorFunctions.YawOf(attitude: orientation);
+            extras.BodyColor[index] = route.BodyColor;
+            extras.Kit[index] = route.Kit;
+            extras.Look[index] = route.Look;
+            extras.CatalogRig[index] = route.CatalogRig;
             // A route describes no action state, so a new occupant of the slot reads none until its first snapshot
             // entry, and a reader takes its own default (a body's scale reads one) in place of a stale or zero value.
-            if (m_generation[index] != route.Entity.Generation) {
+            if (extras.Generation[index] != route.Entity.Generation) {
                 lock (m_followGate) {
                     m_stateView.ForgetBodyState(body: index);
 
@@ -1305,7 +1349,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 }
             }
             Volatile.Write(
-                location: ref m_generation[index],
+                location: ref extras.Generation[index],
                 value: route.Entity.Generation
             );
             Volatile.Write(
@@ -1329,7 +1373,6 @@ public sealed class WorldSessionMirror : IClientSink {
             PublishBodyChanges();
             m_seededRouteEntity = route.Entity;
             m_seededRouteTick = route.Tick;
-            Extend(index: index);
             PublishImage();
         }
     }

@@ -38,15 +38,18 @@ public interface IWorldStampSource {
     /// <summary>Gets the serial of the latest frame <see cref="BodyChanges"/> holds, which a consumer collects
     /// through; zero for a source that keeps no journal.</summary>
     long BodyChangesSerial => 0L;
+    /// <summary>Gets the number of entity slots the source holds: the highest body a delivery named, rounded up as the
+    /// source grows with its world. An entity past it is inactive.</summary>
+    int EntityCapacity { get; }
 
     /// <summary>Appends the index of every active entity, in ascending order, so a consumer that visits each active
     /// entity never asks every index of the capacity. The default, for a source that keeps no list of them, asks every
-    /// index.</summary>
+    /// index below <see cref="EntityCapacity"/>.</summary>
     /// <param name="bodies">The list the indices are appended to.</param>
     void CopyActiveBodies(List<int> bodies) {
         ArgumentNullException.ThrowIfNull(argument: bodies);
 
-        for (var index = 0; (index < WorldClient.EntityCapacity); index++) {
+        for (var index = 0; (index < EntityCapacity); index++) {
             if (IsActive(index: index)) {
                 bodies.Add(item: index);
             }

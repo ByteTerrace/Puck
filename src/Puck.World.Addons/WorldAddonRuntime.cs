@@ -150,8 +150,8 @@ public sealed partial class WorldAddonRuntime : IWorldAddonHost {
     }
     // The wire carries a handle in two u16 lanes while the table counts in int. A value past either lane cannot be
     // expressed and must never be truncated into one that can: the wrapped pair would be a LIVE handle naming something
-    // else. Unreachable on today's table sizes (a projection is bounded by the population), which is exactly why it is
-    // worth a check rather than a comment.
+    // else. A projection is bounded by the population, which may pass 65,535 bodies, so a handle past a lane is withheld
+    // and reported by name.
     private static bool TryPack(MountedAddon addon, WorldHandle handle, out ushort index, out ushort generation) {
         if (
             (((uint)handle.Index) > ushort.MaxValue) ||

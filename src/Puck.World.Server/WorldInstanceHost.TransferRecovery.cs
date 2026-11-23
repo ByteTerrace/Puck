@@ -143,7 +143,7 @@ public sealed partial class WorldInstanceHost {
             ) { Refuse(reason: "commit and rollback cannot both be confirmed"); }
             if (
                 (pending.MemberCount <= 0) ||
-                (pending.MemberCount > WorldBodiesLimits.CapacityCeiling) ||
+                (pending.MemberCount > WorldBodiesLimits.IndexLimit) ||
                 (pending.CommitMembers.Count != pending.Landed.Count) ||
                 (pending.RollbackOnly
                 ? (pending.Landed.Count > pending.MemberCount)
@@ -190,7 +190,7 @@ public sealed partial class WorldInstanceHost {
                 followedSeats |= member.FollowedSeatMask;
                 if (
                     (((uint)member.SourceSlot) >= ((uint)row.Server.Population.Capacity)) ||
-                    (((uint)member.TargetSlot) >= WorldBodiesLimits.CapacityCeiling) ||
+                    (((uint)member.TargetSlot) >= WorldBodiesLimits.IndexLimit) ||
                     !sourceSlots.Add(item: member.SourceSlot) ||
                     !targetSlots.Add(item: member.TargetSlot) ||
                     !observers.Add(item: member.Mobility.Incarnation)

@@ -326,7 +326,8 @@ public static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldKeyLightCommandModule>();
 
         // The server's entity table — the four local seats plus up to 124 network stand-ins the world.population verb
-        // activates — the one body system the snapshot reports (up to 4096 bodies, rendered through the hybrid avatar/crowd representation).
+        // activates — the one body system the snapshot reports, sized by the world's authored capacity and rendered through the
+        // hybrid avatar/crowd representation.
         services.AddSingleton<WorldPopulation>();
 
         // The render-capacity oracle the server consults before applying a render-relevant mutation, and the boot

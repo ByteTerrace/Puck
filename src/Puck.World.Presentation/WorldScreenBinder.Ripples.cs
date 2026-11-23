@@ -26,19 +26,19 @@ public sealed partial class WorldScreenBinder {
         }
 
         // The world's active bodies, never every index of its capacity.
+        // A source that names no active list offers no bodies to touch the glass.
         m_rippleBodies.Clear();
+        var capacity = 0;
+
         if (m_anchors is IWorldStampSource source) {
             source.CopyActiveBodies(bodies: m_rippleBodies);
-        } else {
-            for (var body = 0; (body < WorldClient.EntityCapacity); body++) {
-                m_rippleBodies.Add(item: body);
-            }
+            capacity = source.EntityCapacity;
         }
 
         ripple = m_ripples.Advance(
             active: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_rippleBodies),
             bodies: m_anchors,
-            capacity: WorldClient.EntityCapacity,
+            capacity: capacity,
             halfHeight: row.HalfHeight,
             halfWidth: row.HalfWidth,
             origin: row.Origin,

@@ -83,12 +83,12 @@ public sealed class WorldFederationSnapshotWireLawTests(ITestOutputHelper output
         Assert.False(condition: WorldFederationCodec.TryDecodeSnapshot(body: WorldFederationCodec.EncodeSnapshot(snapshot: in snapshot), failure: out var failure, snapshot: out _));
         Assert.Equal(expected: Puck.Networking.WireRefusal.PayloadMalformed, actual: failure.Refusal);
     }
-    /// <summary>A table at the engine's body ceiling, every body carrying the most register slots a definition may
+    /// <summary>A dense 4,096-body table, every body carrying the most register slots a definition may
     /// declare, encodes larger than the 4 MiB the receiver's cap once was, and is within the cap now.</summary>
     [Fact]
-    public void ACeilingTableOfFullRegisterFilesIsWithinTheReceiversCap() {
+    public void ADenseTableOfFullRegisterFilesIsWithinTheReceiversCap() {
         var state = new long[StateCapacity.MaxBodySlots];
-        var entries = new EntitySnapshot[WorldBodiesLimits.CapacityCeiling];
+        var entries = new EntitySnapshot[4096];
 
         for (var index = 0; (index < entries.Length); index++) {
             entries[index] = Entity(index: index, continuity: EntityContinuity.Continuous, state: state);

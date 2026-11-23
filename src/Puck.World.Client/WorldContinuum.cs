@@ -119,7 +119,7 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
                 comparisonType: StringComparison.Ordinal
             )) {
                 if (
-                    (((uint)entityIndex) < WorldClient.EntityCapacity) &&
+                    WorldBodiesLimits.IsBodyIndex(index: entityIndex) &&
                     m_client.IsActive(index: entityIndex) &&
                     (m_client.EntityAddress(index: entityIndex) == entity)
                 ) {
@@ -439,7 +439,7 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
 
         if (
             (body < 0) ||
-            (((uint)body) >= WorldClient.EntityCapacity) ||
+            !WorldBodiesLimits.IsBodyIndex(index: body) ||
             !m_client.IsActive(index: body) ||
             !string.Equals(
                 a: Route(slot: slot).Endpoint.Authority,

@@ -188,7 +188,7 @@ public sealed class WorldCensusSourceLawTests {
                         instanceIdentity: identity
                     ),
                     low: ((long)WorldBodiesLimits.LocalSeatCount),
-                    high: ((long)WorldBodiesLimits.CapacityCeiling)
+                    high: ((long)WorldBodiesLimits.IndexLimit)
                 );
                 Assert.False(condition: TryLoad(
                     definition: definition,

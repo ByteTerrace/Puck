@@ -997,8 +997,8 @@ tape > submitted > producer > zero.
 
 ## The entity table (`WorldPopulation.cs`, `WorldBody.cs`)
 
-Capacities are single-sourced in `WorldBodiesLimits`
-(`Puck.World.Schema`): up to 4096 authoritative bodies, of which indices 0–3 are
+A world holds its authored `bodies.capacity` of authoritative bodies, bounded only
+by the body-index format (`WorldBodiesLimits.IndexLimit`), of which indices 0–3 are
 the reserved local seats and the rest host simulated stand-ins and network
 peers. The client reserves 128 full-detail catalog rigs and represents later
 active indices with one-instance coarse capsules, keeping the worst-case SDF

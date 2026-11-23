@@ -423,7 +423,7 @@ public static partial class WorldFactsCompiler {
                 (source.HalfAngleDegrees <= 0) ||
                 (source.HalfAngleDegrees > 180) ||
                 (source.CandidateBudget < 1) ||
-                (source.CandidateBudget > WorldBodiesLimits.CapacityCeiling) ||
+                (source.CandidateBudget > WorldBodiesLimits.IndexLimit) ||
                 (source.MaxCandidates < 1) ||
                 (source.MaxCandidates > WorldRuleCapacity.MaxDecisionCandidates) ||
                 (source.MaxCandidates > source.CandidateBudget)

@@ -1026,9 +1026,9 @@ public static partial class WorldDefinitionValidator {
 
         if (
             (definition.Population.Capacity < localSeats) ||
-            (definition.Population.Capacity > WorldBodiesLimits.CapacityCeiling)
+            (definition.Population.Capacity > WorldBodiesLimits.IndexLimit)
         ) {
-            errors.Add(item: $"bodies.capacity {definition.Population.Capacity} is outside {localSeats}..{WorldBodiesLimits.CapacityCeiling}.");
+            errors.Add(item: $"bodies.capacity {definition.Population.Capacity} is outside {localSeats}..{WorldBodiesLimits.IndexLimit}: a world holds at least its local seats and at most the body-index format bound.");
         }
 
         ValidatePopulationCapacityRow(definition.Population, definition.State, errors);

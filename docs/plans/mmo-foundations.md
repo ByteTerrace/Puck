@@ -158,14 +158,18 @@ yet route them.
   the admission policy or the issuer's trust changes or its window ends. No
   decision rested on the old behaviour; the identity abstraction still wants a
   signature over the challenge, not a bearer token.
-- **Hard caps.** A world holds at most 4096 bodies
-  (`WorldBodiesLimits.CapacityCeiling`, sized with the client's per-entity
-  view arrays), a host at most 256 authenticated federation connections
+- **Hard caps.** A world's body storage is its authored capacity, and every
+  client, mirror and presentation table grows to the highest body a delivery
+  names; the only body bound is the index format's
+  (`WorldBodiesLimits.IndexLimit`), which a document past it refuses by name
+  and every decoder checks before it allocates. A single snapshot is bounded by
+  the federation frame, whose encoder refuses an over-cap snapshot by name. A
+  host holds at most 256 authenticated federation connections
   (`WorldPeerHost.MaximumFederationConnections`), and a server's mailbox is one
   unbounded channel with no quota per connection. The register settles no
   population ceiling; its layers and spatial shards are how a zone grows past
-  one world, so the caps fit it. What decides each cap, and a per-connection
-  ingress bound that refuses by name, is open items' scale item.
+  one world, so the caps fit it. What decides the connection cap, and a
+  per-connection ingress bound that refuses by name, is open items' scale item.
 - **Authority storage.** The register's storage abstraction asks for fenced,
   conditional writes and an append that answers only once the store knows the
   outcome. The silo's journal now publishes immutable segments through the

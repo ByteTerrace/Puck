@@ -2675,7 +2675,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             throw new WorldRenderCapacityRefusedException(
                 innerException: capacity,
                 message: (((((((string)$"the composed render scene exceeds the engine's {capacity.Limit}-{capacity.Capacity} ceiling — {definition.Placements.Count} placement row(s), {definition.Screens.Count} screen(s), ")
-                    + $"population {WorldBodiesLimits.CapacityCeiling} body slots, and ")
+                    + $"population {definition.Population.Capacity} body slots, and ")
                     + $"{WorldAdjacencyBands.ProjectionCapacity(definition: definition)} adjacency band(s) at ")
                     + $"{WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid(s) + {WorldAdjacencyGeometry.MaximumEntitiesPerBand} ")
                     + $"body(ies) each. Author fewer rows, or fewer adjacency edges (a band is reserved for every direct ")

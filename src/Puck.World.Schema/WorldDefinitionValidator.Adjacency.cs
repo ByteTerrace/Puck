@@ -70,7 +70,7 @@ public static partial class WorldDefinitionValidator {
             if (adjacency.Capacity is { } borderCapacity) {
                 RequireIntRange(
                     errors: errors,
-                    max: WorldBodiesLimits.CapacityCeiling,
+                    max: WorldBodiesLimits.IndexLimit,
                     min: 1,
                     name: new Subject(Member: ".capacity", Path: path),
                     value: borderCapacity

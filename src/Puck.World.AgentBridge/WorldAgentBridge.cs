@@ -37,7 +37,7 @@ public sealed class WorldAgentBridge {
         ArgumentOutOfRangeException.ThrowIfNegative(value: bodyIndex);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
             value: bodyIndex,
-            other: WorldBodiesLimits.CapacityCeiling
+            other: WorldBodiesLimits.IndexLimit
         );
         if (principal.Kind is not (PrincipalKind.Seat or PrincipalKind.Console or PrincipalKind.Addon or PrincipalKind.Peer)) {
             throw new ArgumentOutOfRangeException(

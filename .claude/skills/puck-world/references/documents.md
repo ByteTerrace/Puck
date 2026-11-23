@@ -217,7 +217,7 @@ its whole authority surface.
 
 ## Capacity constants
 
-- WorldBodiesLimits.CapacityCeiling is 4,096; each world authors its actual capacity. Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screen bindings 32 and bounded volumes 64; representation overflow refuses explicitly.
+- Each world authors its actual body capacity, bounded only by the body-index format (`WorldBodiesLimits.IndexLimit`); client and presentation tables grow to the highest body delivered. Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screen bindings 32 and bounded volumes 64; representation overflow refuses explicitly.
 - `WorldHudCapacity` (`WorldHud.cs`): see [hud.md](hud.md).
 - `StateCapacity` (`Puck.State/StateRow.cs`): `MaxRows = 1024`,
   `MaxCellsPerRow = TopologyCompilation.MaxCells` (an authored `capacity` may only narrow it),

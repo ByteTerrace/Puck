@@ -50,13 +50,13 @@ public sealed partial class WorldInstanceHost {
                 (record.SourceIncarnation != record.Mobility.Incarnation) ||
                 string.IsNullOrWhiteSpace(value: record.SourceIncarnation.Authority) ||
                 (record.SourceIncarnation.Generation < 0) ||
-                (((uint)record.SourceIncarnation.Index) >= WorldBodiesLimits.CapacityCeiling) ||
+                (((uint)record.SourceIncarnation.Index) >= WorldBodiesLimits.IndexLimit) ||
                 (record.Mobility.Epoch == 0) ||
                 (record.SourceAuthority != row.Server.AuthorityIdentity) ||
                 string.IsNullOrWhiteSpace(value: record.DestinationAddress.Authority) ||
                 (record.DestinationAddress.Index != record.DestinationBodyIndex) ||
                 (record.DestinationAddress.Generation != 0) ||
-                (((uint)record.DestinationBodyIndex) >= WorldBodiesLimits.CapacityCeiling)
+                (((uint)record.DestinationBodyIndex) >= WorldBodiesLimits.IndexLimit)
             ) {
                 Refuse(reason: "invalid or duplicated incarnation, source namespace, destination, or ownership epoch");
             }

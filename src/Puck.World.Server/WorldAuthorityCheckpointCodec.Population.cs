@@ -292,7 +292,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var generations = reader.ReadArray(
             field: "population slot generations",
             readItem: static (ref WireReader r) => r.ReadInt32(),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
         var shared = (reader.ReadBoolean()
             ? reader.ReadArray(
@@ -318,7 +318,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                             var pending = treeReader.ReadArray(
                                 field: "shared navigation pending starts",
                                 readItem: static (ref WireReader pendingReader) => pendingReader.ReadInt32(),
-                                maximum: WorldBodiesLimits.CapacityCeiling
+                                maximum: WorldBodiesLimits.IndexLimit
                             );
 
                             return new NavigationTreeCheckpoint(
@@ -345,9 +345,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             readItem: static (ref WireReader r) => ReadPopulationEntry(reader: ref r),
             maximum: MaxCollectionCount
         );
-        var eventBodies = reader.ReadArray(field: "population event bodies", maximum: WorldBodiesLimits.CapacityCeiling,
+        var eventBodies = reader.ReadArray(field: "population event bodies", maximum: WorldBodiesLimits.IndexLimit,
             readItem: static (ref WireReader r) => r.ReadInt32());
-        var gravity = reader.ReadArray(field: "population sleeping gravity", maximum: WorldBodiesLimits.CapacityCeiling,
+        var gravity = reader.ReadArray(field: "population sleeping gravity", maximum: WorldBodiesLimits.IndexLimit,
             readItem: static (ref WireReader r) => (r.ReadInt32(), r.ReadOptional(readValue: static (ref WireReader v) => v.ReadFixedVector())));
         var attached = reader.ReadArray(field: "population attached solids", maximum: MaxCollectionCount,
             readItem: static (ref WireReader r) => new WorldAttachedSolidCheckpoint(r.ReadBoolean(), r.ReadFixedVector(), r.ReadFixedQuaternion(), FixedQ4816.FromRawBits(value: r.ReadInt64())));

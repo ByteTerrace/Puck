@@ -1115,7 +1115,7 @@ public static partial class WorldFederationCodec {
         WorldFederationResponse.Ack => 0,
         WorldFederationResponse.ProjectionInvalidated => WireLimits.MaxStringBytes,
         WorldFederationResponse.Authenticated => (((2 * sizeof(int)) + WireLimits.MaxStringBytes) + MaxProofBytes),
-        WorldFederationResponse.Status => ((2 + sizeof(int)) + (sizeof(int) * WorldBodiesLimits.CapacityCeiling)),
+        WorldFederationResponse.Status => ((2 + sizeof(int)) + (sizeof(int) * WorldBodiesLimits.IndexLimit)),
         WorldFederationResponse.HopQueryReply => MaxFrameBytes,
         WorldFederationResponse.HopAnswer => MaxFrameBytes,
         WorldFederationResponse.CustodyReply => sizeof(byte),
@@ -1226,7 +1226,7 @@ public static partial class WorldFederationCodec {
 
         var count = reader.ReadCount(
             field: "commit member count",
-            maximum: WorldBodiesLimits.CapacityCeiling,
+            maximum: WorldBodiesLimits.IndexLimit,
             minimum: 1
         );
 
@@ -1474,7 +1474,7 @@ public static partial class WorldFederationCodec {
         var floor = reader.ReadUInt64();
         var count = reader.ReadCount(
             field: "reservation traveler count",
-            maximum: WorldBodiesLimits.CapacityCeiling,
+            maximum: WorldBodiesLimits.IndexLimit,
             minimum: 1
         );
 
@@ -1535,7 +1535,7 @@ public static partial class WorldFederationCodec {
         var deadline = reader.ReadUInt64();
         var count = reader.ReadCount(
             field: "reservation reply body count",
-            maximum: WorldBodiesLimits.CapacityCeiling,
+            maximum: WorldBodiesLimits.IndexLimit,
             minimum: 0
         );
 
@@ -1555,7 +1555,7 @@ public static partial class WorldFederationCodec {
         var acceptedMembers = reader.ReadOptionalClass(readValue: static (ref WireReader r) => r.ReadArray(
             field: "reservation reply accepted members",
             readItem: static (ref WireReader i) => i.ReadInt32(),
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         ));
         var refusals = reader.ReadArray(
             field: "reservation reply refusals",
@@ -1576,7 +1576,7 @@ public static partial class WorldFederationCodec {
                     Reason: ((WorldCompanionRefusal)why)
                 );
             },
-            maximum: WorldBodiesLimits.CapacityCeiling
+            maximum: WorldBodiesLimits.IndexLimit
         );
 
         if (!reader.Failed && (acceptedMembers is { } leased) && (leased.Length != count)) {
@@ -1695,7 +1695,7 @@ public static partial class WorldFederationCodec {
         }
 
         if (
-            (((uint)entity.Index) >= ((uint)WorldBodiesLimits.CapacityCeiling)) ||
+            (((uint)entity.Index) >= ((uint)WorldBodiesLimits.IndexLimit)) ||
             (entity.Generation < 0)
         ) {
             reader.Fail(
@@ -1769,7 +1769,7 @@ public static partial class WorldFederationCodec {
         var authority = reader.ReadString(field: "snapshot authority");
         var count = reader.ReadCount(
             field: "snapshot entry count",
-            maximum: WorldBodiesLimits.CapacityCeiling,
+            maximum: WorldBodiesLimits.IndexLimit,
             minimum: 0
         );
 
@@ -1882,7 +1882,7 @@ public static partial class WorldFederationCodec {
             var target = reader.ReadInt32();
             var generation = reader.ReadInt32();
             if (!WorldGameplayCue.IsValidName(name) || payload?.Length > WorldRuleCapacity.MaxCuePayloadLength ||
-                target < -1 || target >= WorldBodiesLimits.CapacityCeiling || generation < 0 || (target == -1 && generation != 0)) {
+                target < -1 || target >= WorldBodiesLimits.IndexLimit || generation < 0 || (target == -1 && generation != 0)) {
                 reader.Fail(WireRefusal.PayloadMalformed, "invalid snapshot cue");
             }
             cues[index] = new(name, payload, target < 0 ? null : target, tick, argument, generation);

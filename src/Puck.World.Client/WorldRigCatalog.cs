@@ -121,8 +121,6 @@ public static class WorldRigCatalog {
         Reach = reach;
     }
 
-    /// <summary>The compact dynamic-transform lane of the procedural catalog.</summary>
-    public static int DynamicTransformCapacity => (WorldBodiesLimits.CapacityCeiling * MaxLeafCount);
     public static int MaxInstructionCount => (MaxLeafCount * InstructionsPerLeaf);
     /// <summary>The minimum and maximum authored instruction counts of any catalog avatar.</summary>
     public static int MinInstructionCount => (MinLeafCount * InstructionsPerLeaf);

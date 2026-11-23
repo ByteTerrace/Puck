@@ -210,9 +210,9 @@ public static class WorldConsoleCommands {
             WorldConsoleCommandParameterKind.Body => static (string value, out string canonical) => {
                 canonical = value;
 
-                return ((CommandArgs.TryParseInt(text: value, value: out var body) && (body >= 0) && (body < WorldBodiesLimits.CapacityCeiling))
+                return ((CommandArgs.TryParseInt(text: value, value: out var body) && (body >= 0) && (body < WorldBodiesLimits.IndexLimit))
                     ? null
-                    : $"is not a body index (0..{(WorldBodiesLimits.CapacityCeiling - 1)})");
+                    : $"is not a body index (0..{(WorldBodiesLimits.IndexLimit - 1)})");
             }
             ,
             WorldConsoleCommandParameterKind.Choice => (string value, out string canonical) => Choose(admitted: values, canonical: out canonical, noun: "choice", value: value),

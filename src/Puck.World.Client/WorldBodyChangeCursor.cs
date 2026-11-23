@@ -29,7 +29,7 @@ internal sealed class WorldBodyChangeCursor {
         m_collects++;
 
         // A source with no journal answers whole every time: the revision it is collected at moves with each collect.
-        var whole = m_cursor.Collect(into: m_runs, reader: journal, revision: ((journal is null) ? m_collects : 0L), rows: WorldClient.EntityCapacity, table: source, through: source.BodyChangesSerial);
+        var whole = m_cursor.Collect(into: m_runs, reader: journal, revision: ((journal is null) ? m_collects : 0L), rows: source.EntityCapacity, table: source, through: source.BodyChangesSerial);
 
         m_cursor.Commit();
         if (whole) {

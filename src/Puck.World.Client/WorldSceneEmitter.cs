@@ -356,7 +356,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// seat traveling another authority's route follows the route's pose in its own range, and local seats fire one
     /// footstep cue per gait half-cycle.</remarks>
     public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) {
-        m_animator.SetCatalogSlots(m_catalog.Slots, context.SlotBase);
+        m_animator.SetCatalogSlots(band: m_catalog, slotBase: context.SlotBase);
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;

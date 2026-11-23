@@ -28,23 +28,26 @@ internal delegate bool WorldCatalogAvatarPose(int body, out Vector3 position, ou
 /// prepare, a frame that owes the whole table, another source or slot base, and a source with no journal read every
 /// avatar.</remarks>
 internal sealed class WorldCatalogAvatars {
-    private readonly int[] m_accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
+    private int[] m_accentMaterials = [];
     private readonly MarkedIndexSet m_awake = new();
     private readonly WorldBodyChangeCursor m_bodyCursor = new();
-    private readonly int[] m_bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
+    private int[] m_bodyMaterials = [];
     private readonly List<int> m_changedBodies = [];
     // The source's Carries count each avatar's latched world-space state was last carried to.
-    private readonly int[] m_carryEpoch = new int[WorldBodiesLimits.CapacityCeiling];
-    private readonly bool[] m_follows = new bool[WorldBodiesLimits.CapacityCeiling];
-    private readonly WorldAvatarGait[] m_gaits = new WorldAvatarGait[WorldBodiesLimits.CapacityCeiling];
-    private readonly SecondOrderFollower4[] m_orientationFollower = new SecondOrderFollower4[WorldBodiesLimits.CapacityCeiling];
-    private readonly WorldTransformOwners m_owners = new(capacity: WorldBodiesLimits.CapacityCeiling);
+    private int[] m_carryEpoch = [];
+    private bool[] m_follows = [];
+    private WorldAvatarGait[] m_gaits = [];
+    private SecondOrderFollower4[] m_orientationFollower = [];
+    private readonly WorldTransformOwners m_owners = new(capacity: 0);
     private IWorldStampSource? m_packedSource;
     private int m_packedSlotBase = -1;
-    private readonly SecondOrderFollower3[] m_positionFollower = new SecondOrderFollower3[WorldBodiesLimits.CapacityCeiling];
-    private readonly SecondOrderResponse[] m_response = new SecondOrderResponse[WorldBodiesLimits.CapacityCeiling];
+    private SecondOrderFollower3[] m_positionFollower = [];
+    private SecondOrderResponse[] m_response = [];
     private int[] m_visits = [];
     private bool m_wakeAll = true;
+    private float[] m_gaitAmplitudes = [];
+    private int[] m_rigs = [];
+    private float[] m_scales = [];
 
     /// <summary>Initializes a new instance of the <see cref="WorldCatalogAvatars"/> class.</summary>
     /// <param name="band">The bodies that draw as a catalog rig and the slots they hold.</param>
@@ -52,9 +55,9 @@ internal sealed class WorldCatalogAvatars {
         ArgumentNullException.ThrowIfNull(argument: band);
 
         Band = band;
-        m_holdsSlot = body => (Band.Slots[body] >= 0);
+        m_holdsSlot = body => (Band.SlotOf(body: body) >= 0);
         m_rigFor = body => Rigs[body];
-        m_slotFor = body => Band.Slots[body];
+        m_slotFor = body => Band.SlotOf(body: body);
     }
 
     // What the catalog emitter asks of each body, made once.
@@ -66,13 +69,13 @@ internal sealed class WorldCatalogAvatars {
     public WorldCatalogBand Band { get; }
     /// <summary>Gets the gait amplitude each body's emitted look scales its phase by, latched when the program is
     /// built.</summary>
-    public float[] GaitAmplitudes { get; } = new float[WorldBodiesLimits.CapacityCeiling];
+    public float[] GaitAmplitudes => m_gaitAmplitudes;
     /// <summary>Gets the catalog rig each body's geometry was emitted with, latched when the program is built: the pack
     /// poses the rig the live program holds, never one a later delivery names.</summary>
-    public int[] Rigs { get; } = new int[WorldBodiesLimits.CapacityCeiling];
+    public int[] Rigs => m_rigs;
     /// <summary>Gets the uniform render scale each body's geometry was emitted at, latched when the program is
     /// built.</summary>
-    public float[] Scales { get; } = new float[WorldBodiesLimits.CapacityCeiling];
+    public float[] Scales => m_scales;
     /// <summary>Gets the number of avatars the latest <see cref="Pack"/> read.</summary>
     public int VisitCount { get; private set; }
 
@@ -84,6 +87,7 @@ internal sealed class WorldCatalogAvatars {
     /// <param name="noseFactor">The accent-material color multiplier (<c>playerDefaults.noseFactor</c>).</param>
     /// <param name="dynamics">The document's dynamics rows.</param>
     public void EmitPalette(SdfProgramBuilder builder, float noseFactor, IReadOnlyList<DynamicsRow> dynamics) {
+        Fit();
         foreach (var body in Band.Bodies) {
             var (rig, look, color) = Band.AppearanceOf(body: body);
 
@@ -123,7 +127,27 @@ internal sealed class WorldCatalogAvatars {
     /// so the next pack reads every avatar.</summary>
     public void Prepare() {
         Band.Prepare();
+        Fit();
         m_wakeAll = true;
+    }
+    // Grows every per-body column to the band's body span, so the band's highest body has a record; a body past it
+    // holds no slot and is never read.
+    private void Fit() {
+        var length = Band.BodySpan;
+
+        if (length <= m_gaits.Length) { return; }
+        Array.Resize(array: ref m_accentMaterials, newSize: length);
+        Array.Resize(array: ref m_bodyMaterials, newSize: length);
+        Array.Resize(array: ref m_carryEpoch, newSize: length);
+        Array.Resize(array: ref m_follows, newSize: length);
+        Array.Resize(array: ref m_gaits, newSize: length);
+        Array.Resize(array: ref m_orientationFollower, newSize: length);
+        Array.Resize(array: ref m_positionFollower, newSize: length);
+        Array.Resize(array: ref m_response, newSize: length);
+        Array.Resize(array: ref m_gaitAmplitudes, newSize: length);
+        Array.Resize(array: ref m_rigs, newSize: length);
+        Array.Resize(array: ref m_scales, newSize: length);
+        m_owners.EnsureCapacity(capacity: length);
     }
     /// <summary>Packs the avatars something woke into their catalog slots: each rides its presented pose plus a
     /// distance-driven gait phase, through its root follower when its look names one, and a body the scene no longer
@@ -141,6 +165,7 @@ internal sealed class WorldCatalogAvatars {
     public void Pack(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved, IWorldStampSource source, WorldCreationInstances pool, float deltaSeconds, WorldCatalogAvatarPose? pose = null, Action<Vector3>? footstep = null) {
         var everything = (moved.Everything || m_wakeAll || (context.SlotBase != m_packedSlotBase) || !ReferenceEquals(objA: source, objB: m_packedSource));
 
+        Fit();
         m_wakeAll = false;
         m_packedSlotBase = context.SlotBase;
         m_packedSource = source;
@@ -159,12 +184,12 @@ internal sealed class WorldCatalogAvatars {
         }
 
         foreach (var body in m_changedBodies) {
-            if (Band.Slots[body] >= 0) { _ = m_awake.Add(index: body); }
+            if (Band.SlotOf(body: body) >= 0) { _ = m_awake.Add(index: body); }
         }
         // A seat a scene resolves the pose of may follow another authority's route, which no journal names.
         if (pose is not null) {
             for (var seat = 0; (seat < WorldBodiesLimits.LocalSeatCount); seat++) {
-                if (Band.Slots[seat] >= 0) { _ = m_awake.Add(index: seat); }
+                if (Band.SlotOf(body: seat) >= 0) { _ = m_awake.Add(index: seat); }
             }
         }
 
@@ -172,7 +197,7 @@ internal sealed class WorldCatalogAvatars {
         var count = m_awake.Drain(members: ref m_visits);
 
         foreach (var body in m_visits.AsSpan(start: 0, length: count)) {
-            if (Band.Slots[body] >= 0) {
+            if (Band.SlotOf(body: body) >= 0) {
                 PackBody(body: body, context: in context, deltaSeconds: deltaSeconds, footstep: footstep, moved: moved, pool: pool, pose: pose, slots: slots, source: source);
             }
         }
@@ -197,7 +222,7 @@ internal sealed class WorldCatalogAvatars {
             }
         }
         if (!presented) {
-            WorldMirroredAvatarBand.Park(firstSlot: (context.SlotBase + Band.Slots[body]), gait: ref gait, moved: moved, owner: body, owners: m_owners, parkPosition: context.ParkPosition, table: slots);
+            WorldMirroredAvatarBand.Park(firstSlot: (context.SlotBase + Band.SlotOf(body: body)), gait: ref gait, moved: moved, owner: body, owners: m_owners, parkPosition: context.ParkPosition, table: slots);
 
             return;
         }
@@ -252,7 +277,7 @@ internal sealed class WorldCatalogAvatars {
         }
 
         WorldMirroredAvatarBand.Pack(
-            m_owners, body, in gait, moved, slots, Band.Slots[body], body, context.SlotBase,
+            m_owners, body, in gait, moved, slots, Band.SlotOf(body: body), body, context.SlotBase,
             Rigs[body], Scales[body], GaitAmplitudes[body], position, orientation, (follows ? deltaSeconds : 1f)
         );
         // An avatar whose slots moved is read again until a pack leaves them unchanged: its follower may still settle.

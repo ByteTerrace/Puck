@@ -311,7 +311,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         var slot = PlayerRoster.SlotFromDisplay(number: player);
         var target = m_roster.DriveTarget(slot: slot);
 
-        m_facts.NoteSpoke(bodyIndex: ((((uint)target) < ((uint)WorldClient.EntityCapacity))
+        m_facts.NoteSpoke(bodyIndex: (WorldBodiesLimits.IsBodyIndex(index: target)
             ? target
             : slot));
     }

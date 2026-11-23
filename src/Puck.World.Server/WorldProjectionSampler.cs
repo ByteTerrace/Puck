@@ -51,7 +51,7 @@ public sealed class WorldProjectionSampler {
             if (
                 (entry.Continuity.Kind == EntityContinuityKind.Continuous) ||
                 (view is { } bodyView && !bodyView.Contains(entry.Index, entry.Generation)) ||
-                (uint)entry.Index >= WorldBodiesLimits.CapacityCeiling
+                (uint)entry.Index >= WorldBodiesLimits.IndexLimit
             ) { continue; }
             var hint = m_pendingContinuity.TryGetValue(entry.Index, out var held) && held.Generation == entry.Generation
                 ? held.Hint.Then(entry.Continuity) : entry.Continuity;

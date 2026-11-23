@@ -3221,13 +3221,28 @@ grow:
   Derive the record's landed members and generations without landing, or keep
   the first landing out of the simulation until the record settles. Check: an
   asynchronous crossing in `CrossingInFlightLawTests` admits each traveler once.
-- [medium] Hard caps with no admission story: 4096 bodies a world
-  (`WorldBodiesLimits.CapacityCeiling`), 256 authenticated federation
+- [medium] Hard caps with no admission story: 256 authenticated federation
   connections a host (`WorldPeerHost.MaximumFederationConnections`), and one
   unbounded mailbox per server (`WorldServer.RunOnTickThreadAsync`'s channel)
   with no quota per connection, so one peer can queue work without limit.
   Decide each cap from the shard and interest design above, and give ingress
   a per-connection bound that refuses by name.
+- [high] Two population scans a tick follow the population, not what changed:
+  the rule host's fact derivation compares every slot
+  (`world.tick.fact-slots`, about one per body a tick) and the perception
+  image a flock or a decision freezes copies every body
+  (`world.tick.perception-points`, about two per body a tick). On
+  `worlds/debug/garden-throng.puck` (10,008 bodies) they read about 10,100
+  and 20,100 a tick. Feed both from the population's moved set, as the
+  client's body journal does.
+- [medium] The adjacency emitter keeps neighbour-body presentation state at a
+  fixed stride (`WorldAdjacencySceneEmitter.BodyStride`): a neighbour body at
+  or past it does not draw across the seam and narrates as truncated. Key the
+  band's gait, owner and latch state by rank in the band's emitted list (at
+  most `MaxEntitiesPerBand`), with the entity address guarding reuse.
+- [medium] `WorldSessionMirror.FillImage` copies every slot below the
+  mirror's extent into each published image, once a delivery; copy only the
+  slots the delivery changed into the image it replaces.
 
 Companions, beside the protocol's steps:
 

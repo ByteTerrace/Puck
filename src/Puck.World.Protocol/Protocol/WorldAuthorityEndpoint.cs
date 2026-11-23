@@ -163,7 +163,7 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     /// <summary>Reads the render identity belonging to the same complete entity claim as <see cref="TryEntityPose(in WorldEntityAddress, out Vector3, out Quaternion)"/>.</summary>
     public bool TryEntityAppearance(in WorldEntityAddress entity, out Vector3 bodyColor, out WorldLook look, out byte catalogRig) {
         if (
-            (((uint)entity.Index) < WorldBodiesLimits.CapacityCeiling) &&
+            (((uint)entity.Index) < WorldBodiesLimits.IndexLimit) &&
             m_mirror.IsActive(index: entity.Index) &&
             (m_mirror.Address(index: entity.Index) == entity)
         ) {
@@ -189,7 +189,7 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     /// <returns>Whether the entity is active in this authority.</returns>
     public bool TryEntityHeading(int index, out float heading, out int poseEpoch) {
         if (
-            (((uint)index) < WorldBodiesLimits.CapacityCeiling) &&
+            (((uint)index) < WorldBodiesLimits.IndexLimit) &&
             m_mirror.IsActive(index: index)
         ) {
             heading = m_mirror.Heading(index: index);
@@ -206,7 +206,7 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     /// authority handoff.</summary>
     public bool TryEntityPose(int index, out Vector3 position, out Quaternion orientation) {
         if (
-            (((uint)index) < WorldBodiesLimits.CapacityCeiling) &&
+            (((uint)index) < WorldBodiesLimits.IndexLimit) &&
             m_mirror.IsActive(index: index)
         ) {
             position = m_mirror.CurrentPosition(index: index);
@@ -228,7 +228,7 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     /// <returns><see langword="true"/> when the entity is the active occupant of its slot.</returns>
     public bool TryPresentedEntityPose(in WorldEntityAddress entity, out Vector3 position, out Quaternion orientation) {
         if (
-            (((uint)entity.Index) < WorldBodiesLimits.CapacityCeiling) &&
+            (((uint)entity.Index) < WorldBodiesLimits.IndexLimit) &&
             m_mirror.IsActive(index: entity.Index) &&
             (m_mirror.Address(index: entity.Index) == entity)
         ) {
@@ -246,7 +246,7 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
     /// <summary>Reads a pose only when the complete generation-addressed identity is still the active occupant.</summary>
     public bool TryEntityPose(in WorldEntityAddress entity, out Vector3 position, out Quaternion orientation) {
         if (
-            (((uint)entity.Index) < WorldBodiesLimits.CapacityCeiling) &&
+            (((uint)entity.Index) < WorldBodiesLimits.IndexLimit) &&
             m_mirror.IsActive(index: entity.Index) &&
             (m_mirror.Address(index: entity.Index) == entity)
         ) {

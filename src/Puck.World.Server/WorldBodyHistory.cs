@@ -97,7 +97,7 @@ public sealed class WorldSnapshotReceiver {
             if (payload.Length < 12) { return false; }
             var ordinal = BinaryPrimitives.ReadInt64LittleEndian(payload);
             var count = BinaryPrimitives.ReadInt32LittleEndian(payload[8..]);
-            if (ordinal >= stamp.Ordinal || (uint)count > WorldBodiesLimits.CapacityCeiling ||
+            if (ordinal >= stamp.Ordinal || (uint)count > WorldBodiesLimits.IndexLimit ||
                 count > (payload.Length - 12) / sizeof(int)) { return false; }
             baseline = m_history.Find(stamp with { Ordinal = ordinal });
             if (baseline is null) { return false; }
@@ -109,7 +109,7 @@ public sealed class WorldSnapshotReceiver {
         var updates = snapshot.Entries.Span;
         var last = -1;
         foreach (ref readonly var entry in updates) {
-            if (entry.Index <= last || (uint)entry.Index >= WorldBodiesLimits.CapacityCeiling) { return false; }
+            if (entry.Index <= last || (uint)entry.Index >= WorldBodiesLimits.IndexLimit) { return false; }
             last = entry.Index;
         }
         if (baseline is null) {
