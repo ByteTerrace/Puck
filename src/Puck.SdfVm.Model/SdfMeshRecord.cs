@@ -81,8 +81,9 @@ public static class SdfMeshRecord {
     /// view's edge search compares to find where two objects meet, the same for every draw of one object, a chunk of its
     /// mesh included, so the search can see no draw.</summary>
     public const int ObjectKeyShift = 8;
-    /// <summary>The object key's largest value.</summary>
-    public const uint ObjectKeyMask = (uint.MaxValue >> ObjectKeyShift);
+    /// <summary>The object key's largest value: the bits a visibility record keeps of it
+    /// (<see cref="SdfVisibility.ObjectKeyBits"/>), which the flags word holds above <see cref="ObjectKeyShift"/>.</summary>
+    public const uint ObjectKeyMask = ((1u << SdfVisibility.ObjectKeyBits) - 1u);
     /// <summary>The flag a record carries when its draw is clipped by a plane (a nonzero <see cref="ClipPlaneWord"/>),
     /// so a reader that only asks whether a point lies beside the cut reads the plane for such a draw alone.</summary>
     public const uint ClipFlag = 16u;

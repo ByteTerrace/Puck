@@ -401,6 +401,9 @@ public static class SdfIsaHlsl {
         declarations.Section(title: "The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.");
         declarations.Real(name: "SDF_VISIBILITY_NORMAL_SCALE", value: SdfOctahedral.SignedScale(bits: SdfVisibility.NormalBits));
         declarations.Bits(name: "SDF_VISIBILITY_ZERO_NORMAL", value: SdfVisibility.ZeroNormal);
+        declarations.Section(title: "The visibility record's material and frame slot words (SdfVisibility): the bits each field fills below the object key's.");
+        declarations.Count(name: "SDF_VISIBILITY_MATERIAL_BITS", value: SdfVisibility.MaterialBits);
+        declarations.Count(name: "SDF_VISIBILITY_FRAME_SLOT_BITS", value: SdfVisibility.FrameSlotBits);
         declarations.Section(title: "The mesh region's draw record (SdfMeshRecord) and the level shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshLevelShift).");
         declarations.Count(name: "SDF_MESH_DRAW_WORDS", value: SdfMeshRecord.DrawWords);
         declarations.Count(name: "SDF_MESH_POSE_WORDS", value: SdfMeshRecord.PoseWords);

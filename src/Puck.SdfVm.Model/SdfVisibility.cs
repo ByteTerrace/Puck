@@ -32,6 +32,19 @@ public static partial class SdfVisibility {
     /// <summary>The normal word of a record with no normal: the reserved coordinate pair (-32768, -32768), which no
     /// encoded direction produces.</summary>
     public const uint ZeroNormal = 0x8000_8000u;
+    /// <summary>The bits of the record's material word the material fills: every material and screen material fits
+    /// them. The low bits of the hit's draw's object key (<c>SdfMeshDraw.ObjectKey</c>) fill the bits above them, so a
+    /// view's edge search reads a hit's keys from its record and no draw.</summary>
+    public const int MaterialBits = 17;
+    /// <summary>The material word's material field.</summary>
+    public const uint MaterialMask = ((1U << MaterialBits) - 1U);
+    /// <summary>The bits of the record's frame slot word that hold the hit's draw's frame slot plus one, zero for a draw
+    /// with none: one more bit than a transform slot takes. The bit above them is set where the hit lies beside its
+    /// draw's clip plane, and the object key's remaining bits fill the rest of the word.</summary>
+    public const int FrameSlotBits = 25;
+    /// <summary>The bits an object key takes in a record: those above the material and those above the frame slot's
+    /// clip bit.</summary>
+    public const int ObjectKeyBits = ((32 - MaterialBits) + (31 - FrameSlotBits));
 
     /// <summary>Packs an identity.</summary>
     /// <param name="kind">The kind.</param>
