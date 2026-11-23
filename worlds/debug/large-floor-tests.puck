@@ -1,0 +1,53 @@
+// A solid floor far larger than the contact grid's cells: one box 300 by 245 m with its top at y = 0, authored at
+// z -82.5. A creation's shapes are in its author frame, a half turn about up from the world's, so the box lies across
+// world z -40 to 205 (CreationFrame): a body dropped anywhere over that footprint stands, to its far corner, and one
+// dropped just past its near edge falls. `puck test worlds/debug/large-floor-tests.puck --reproduce`.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "large-floor-tests"
+
+prototypes {
+  prototype "floor" {
+    document {
+      name: "floor"
+      palette [{ color: "#C9BFAE" }]
+      schema: "puck.creation.v1"
+      shape Box "bank" { material: 0  position [0, -1, -82.5]  scale [150, 1, 122.5] }
+    }
+  }
+}
+
+test "a body dropped by the floor's near edge stands" {
+  when {
+    seat1: body.pose 0 1 -39.5 0 0 0 0
+    ticks 60
+  }
+  expect {
+    bodyPosition(body, 0, y) > -0.05
+    bodyPosition(body, 0, y) < 0.05
+    fact(body, 0, Grounded) == 1
+  }
+}
+
+test "a body dropped by the floor's far corner stands" {
+  when {
+    seat1: body.pose -149.5 1 204.5 0 0 0 0
+    ticks 60
+  }
+  expect {
+    bodyPosition(body, 0, y) > -0.05
+    bodyPosition(body, 0, y) < 0.05
+    fact(body, 0, Grounded) == 1
+  }
+}
+
+test "a body dropped past the near edge, where the authored z would put floor, falls" {
+  when {
+    seat1: body.pose 0 1 -41 0 0 0 0
+    ticks 60
+  }
+  expect {
+    bodyPosition(body, 0, y) < -1
+    fact(body, 0, Grounded) == 0
+  }
+}
