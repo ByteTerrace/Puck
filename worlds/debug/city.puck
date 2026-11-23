@@ -838,9 +838,9 @@ spawnPoints [
   { id: "city-market", position [0, 0, -38], yawDegrees: 0 }
 ]
 
-// The sun the city's day cycle (city-day.puck) turns, and an exposure whose floor follows that day as the hall's
-// follows the valley's (hall.puck): EV 7 from dawn to dusk, down to EV 2 at night, keyed a stop and a quarter above the
-// meter by day so the cream walls read white.
+// The sun the city's day cycle (city-day.puck) turns, and an exposure whose floor follows that day: EV 7 from dawn to
+// dusk, keyed a stop and a quarter above the meter so the cream walls read white; at night a floor of EV 3.5 and a stop
+// under the meter, so the town stays dark and the lamps' pools and lit windows carry it rather than a lifted average.
 render {
   farDistance: 600
   lighting {
@@ -868,21 +868,21 @@ render {
     minimum {
       clock: cityDay
       keys [
-        { at: 0, value: 2 }
-        { at: 18900, value: 2 }
+        { at: 0, value: 3.5 }
+        { at: 18900, value: 3.5 }
         { at: 23400, value: 7 }
         { at: 63000, value: 7 }
-        { at: 67500, value: 2 }
+        { at: 67500, value: 3.5 }
       ]
     }
     compensation {
       clock: cityDay
       keys [
-        { at: 0, value: 0 }
-        { at: 18900, value: 0 }
+        { at: 0, value: -1 }
+        { at: 18900, value: -1 }
         { at: 23400, value: 1.25 }
         { at: 63000, value: 1.25 }
-        { at: 67500, value: 0 }
+        { at: 67500, value: -1 }
       ]
     }
     maximum: 16
