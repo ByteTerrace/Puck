@@ -40,7 +40,13 @@ public sealed partial class WorldBody {
         m_rigidStepTicks = 0UL;
     }
 
-    private void NotifyPopulationWake() => m_population?.BodyWoke(index: m_populationIndex);
+    private void NotifyPopulationWake() {
+        if (m_stepLog is { } log) { log.Woke(index: m_populationIndex); } else { m_population?.BodyWoke(index: m_populationIndex); }
+    }
+    // A changed body fact, through the partition's log while one steps the body.
+    private void NotifyPopulationFactChanged() {
+        if (m_stepLog is { } log) { log.FactChanged(index: m_populationIndex); } else { m_population?.NoteBodyFactChanged(index: m_populationIndex); }
+    }
     // The body's side of the population's discontinuity door (WorldPopulation.DisturbBody): every change that makes
     // the body's contacts describe something it no longer is (a teleport, a collider or rigid-facet change) calls this
     // before it lands, so whatever rests on the body or holds it wakes and the contacts are forgotten. A body outside a
@@ -157,7 +163,7 @@ public sealed partial class WorldBody {
         if (m_sleepIdleTicks >= sleepAfterTicks) {
             m_asleepSinceTick = tick;
             IdleSleepGravity = SolvedGravity;
-            m_population?.NoteBodyFactChanged(index: m_populationIndex);
+            NotifyPopulationFactChanged();
         }
     }
 }

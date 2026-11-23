@@ -128,8 +128,9 @@ swept by a rotating collider between samples belongs to
 `FixedMotionTuning.Shaping` (`FixedBodyShaping[]`): the first row whose gate
 opens governs—a row with no `Across` facet shapes the whole vector through
 the engage/release response law (`FixedShapingAlong`), a row carrying one runs
-the anisotropic drive decomposition instead (body-frame longitudinal/lateral/
-residual lanes, each converging at its own rate), and a row naming `Dynamics`
+the anisotropic drive decomposition instead (heading-frame longitudinal/lateral/
+residual lanes, each converging at its own rate, the longitudinal one on the
+commanded target's advance along the heading), and a row naming `Dynamics`
 (a compiled `Puck.Maths.SecondOrderDynamics.SecondOrderStep`, a pole-matched
 second-order follower the host steps once per tick) shapes it through that
 follower instead of either—exactly one of `Along` or `Dynamics` per row. The

@@ -122,9 +122,19 @@ public static partial class WorldDefinitionValidator {
                     var step = chapter.Steps[stepIndex];
                     var at = $"{chapterPath}.steps[{stepIndex}] ({step?.Opcode})";
 
-                    void Place(string? place, string member) {
+                    // A step that names the world it is played in names that world's places, which this document need
+                    // not author; the seat driver checks them against what that world delivers.
+                    void Place(string? place, string member, string? world) {
+                        if ((world is not null) && !string.Equals(a: world, b: definition.DocumentId, comparisonType: StringComparison.Ordinal)) {
+                            return;
+                        }
                         if ((place is not null) && !places.Contains(item: place)) {
                             errors.Add(item: $"{at}.{member} '{place}' names no region placement.");
+                        }
+                    }
+                    void World(string? world) {
+                        if ((world is not null) && string.IsNullOrWhiteSpace(value: world)) {
+                            errors.Add(item: $"{at}.world names no world.");
                         }
                     }
 
@@ -149,9 +159,10 @@ public static partial class WorldDefinitionValidator {
                             if (!(go.Within > 0f)) {
                                 errors.Add(item: $"{at}.within must be above zero.");
                             }
-                            Place(place: go.Place, member: "place");
+                            World(world: go.World);
+                            Place(member: "place", place: go.Place, world: go.World);
                             foreach (var corridor in (go.Corridor ?? [])) {
-                                Place(place: corridor, member: "corridor");
+                                Place(member: "corridor", place: corridor, world: go.World);
                             }
                             break;
                         case WorldRouteStep.Cross cross:
@@ -179,7 +190,8 @@ public static partial class WorldDefinitionValidator {
                             if (!(press.Seconds > 0f)) {
                                 errors.Add(item: $"{at}.seconds must be above zero.");
                             }
-                            Place(place: press.Until, member: "until");
+                            World(world: press.World);
+                            Place(member: "until", place: press.Until, world: press.World);
                             break;
                     }
                 }

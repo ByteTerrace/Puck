@@ -67,6 +67,9 @@ public sealed class WorldSeatDriver {
     private ulong m_deadline;
     private string? m_routeWorld;
     private int m_routeIndex = -1;
+    // Whether the chapter plans any path, and the world whose navigation it last started baking.
+    private bool m_navigates;
+    private string? m_preparedIn;
     private ulong m_lastAssert;
     // The step's path: its steering corners and the one steered at, whether a corridor is checked, the world it was
     // planned in, and the progress watch.
@@ -155,6 +158,8 @@ public sealed class WorldSeatDriver {
         m_lines.Clear();
         m_routeWorld = null;
         m_routeIndex = -1;
+        m_preparedIn = null;
+        m_navigates = chapter.Steps.Any(predicate: static step => step is WorldRouteStep.Go { Direct: false });
         Release();
         NextStep(tick: tick, rateHz: rateHz);
     }
@@ -176,6 +181,12 @@ public sealed class WorldSeatDriver {
 
         Read = read;
         Visit(read: in read, tick: tick);
+        // A chapter that navigates starts the navigation of each world it enters baking at once, so the walk across a
+        // threshold covers the bake its next path waits for.
+        if (m_navigates && !string.Equals(a: m_preparedIn, b: read.World, comparisonType: StringComparison.Ordinal)) {
+            m_senses.Navigation(endpoint: read.Endpoint).Prepare();
+            m_preparedIn = read.World;
+        }
         // A stick held while the body goes nowhere is a wall, as a player meets one. A body that moves, however it is
         // moved, starts the watch again, and so does an authority whose ticks are not the last one's.
         if (!m_driving || (read.Body.Tick < m_stallTick) || (Planar(from: m_stallOrigin, to: read.Position) > FixedQ4816.FromDouble(value: StallMetres))) {
@@ -233,10 +244,10 @@ public sealed class WorldSeatDriver {
     public static string Describe(WorldRouteStep step) => step switch {
         WorldRouteStep.PoseBody pose => (pose.Spawn is { } spawn) ? $"pose spawn {spawn}" : $"pose {Vector(pose.Point)} yaw {Number(pose.YawDegrees)}",
         WorldRouteStep.Line line => $"line {line.Text}",
-        WorldRouteStep.Go go => $"go {(go.Place ?? Vector(go.Point))} pace {go.Pace}{(go.Direct ? " direct" : string.Empty)} within {Number(go.Within)}{((go.Corridor is { Count: > 0 } corridor) ? $" corridor {string.Join(separator: ',', values: corridor)}" : string.Empty)}",
+        WorldRouteStep.Go go => $"go {(go.Place ?? Vector(go.Point))}{((go.World is { } world) ? $" in {world}" : string.Empty)} pace {go.Pace}{(go.Direct ? " direct" : string.Empty)} within {Number(go.Within)}{((go.Corridor is { Count: > 0 } corridor) ? $" corridor {string.Join(separator: ',', values: corridor)}" : string.Empty)}",
         WorldRouteStep.Cross cross => $"cross {Number(cross.HeadingDegrees)}{(cross.Relative ? " relative" : string.Empty)}{((cross.Until is { } until) ? $" until {until}" : string.Empty)} pace {cross.Pace} metres {Number(cross.Metres)}",
         WorldRouteStep.Rest rest => $"rest {Number(rest.Seconds)}{((rest.FaceDegrees is { } face) ? $" face {Number(face)}" : string.Empty)}{((rest.LookAt is { } look) ? $" look {Vector(look)}" : string.Empty)}",
-        WorldRouteStep.PressAction press => $"press {press.Action}{((press.Until is { } until) ? $" until {until}" : string.Empty)} seconds {Number(press.Seconds)}",
+        WorldRouteStep.PressAction press => $"press {press.Action}{((press.Until is { } until) ? $" until {until}" : string.Empty)}{((press.World is { } world) ? $" in {world}" : string.Empty)} seconds {Number(press.Seconds)}",
         _ => "unknown",
     };
 
@@ -263,6 +274,11 @@ public sealed class WorldSeatDriver {
     // What the step asks of the controls this tick: a direction to travel (none to stand), whether it ends at a point to
     // stop at and how far that is, the next corner's distance and turn, the facing to turn the camera onto, and the pace.
     private readonly record struct Steer(bool Moves, FixedQ4816 Dx, FixedQ4816 Dz, FixedQ4816 Stop, FixedQ4816 CornerDistance, FixedQ4816 CornerTurn, bool Faces, FixedQ4816 Facing, string Pace);
+
+    // Whether the seat stands in the world a step names by its documentId; a step that names none is played wherever
+    // the seat stands.
+    private static bool Stands(string? world, in WorldSeatSenses.Reading read) =>
+        ((world is null) || string.Equals(a: world, b: read.Endpoint.Definition.DocumentId, comparisonType: StringComparison.Ordinal));
 
     private void Visit(in WorldSeatSenses.Reading read, ulong tick) {
         var place = ((read.World == WorldDefinitionLoader.BootInstanceName) ? read.Place : $"{read.World}:{read.Place}");
@@ -365,7 +381,7 @@ public sealed class WorldSeatDriver {
                 if (elapsed >= 1UL) {
                     m_tap = null;
                 }
-                if ((press.Until is { } until) && read.Places.Contains(value: until)) {
+                if ((press.Until is { } until) && Stands(world: press.World, read: in read) && read.Places.Contains(value: until)) {
                     NextStep(tick: tick, rateHz: rateHz);
                 } else if (elapsed >= (ulong)Math.Ceiling(a: (press.Seconds * rateHz))) {
                     if (press.Until is null) {
@@ -428,6 +444,10 @@ public sealed class WorldSeatDriver {
     }
 
     private Steer Go(WorldRouteStep.Go go, in WorldSeatSenses.Reading read, Steer still, ulong tick, int rateHz, bool planned = false) {
+        if (!Stands(world: go.World, read: in read)) {
+            Fail(kind: "route", place: read.Place, reason: $"step {m_step} ({Describe(step: go)}) is played in the world '{go.World}', and the seat stands in '{read.Endpoint.Definition.DocumentId}' ({read.World})", tick: tick);
+            return still;
+        }
         if (go.Place is { } place) {
             if (read.Places.Contains(value: place)) {
                 NextStep(tick: tick, rateHz: rateHz);
@@ -515,7 +535,14 @@ public sealed class WorldSeatDriver {
 
     // Plans the step's path from where the body stands: straight at the goal for a direct step, otherwise the navigation
     // domains' route straightened to its corners, with the places its nodes stand in as the corridor.
+    // A navigated path waits for the navigation of the world the seat stands in to finish baking off the pump: the
+    // body stands, and the step plans on the tick it is ready, within the chapter's time.
     private bool Plan(WorldRouteStep.Go go, in WorldSeatSenses.Reading read, ulong tick, bool stuck = false) {
+        if (!go.Direct && (m_senses.Navigation(endpoint: read.Endpoint) is { Ready: false } baking)) {
+            baking.Prepare();
+            m_plannedIn = null;
+            return false;
+        }
         Plans++;
         m_plannedIn = read.World;
         m_corners.Clear();

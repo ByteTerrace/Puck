@@ -37,7 +37,7 @@ Part of [`puck.world.definition.v1`](documents.md). See
   principals only — see references/addons.md's "World events" section);
   `WorldPlacement.Region` (`WorldPlacementRegion`) is the document-side
   facet a region name addresses — a sphere or an oriented box in the placement's resolved frame
-  (`WorldPlacementRegion.ShapeAt`), keyed by the placement's own `Id`; `body.place` lists the regions a body stands in. `WorldPlacement.Attach`
+  (`WorldPlacementRegion.ShapeAt`), keyed by the placement's own `Id`; `body.place` lists the regions a body stands in, and `world.region <placement> [instance:<name>]` echoes one region's latched count (what a rule's `region(...)` reads), its occupants, and any body latched but no longer inside or inside but not latched (`WorldEventFeed.AuditRegion`). `WorldPlacement.Attach`
   (`WorldPlacementAttach`) is a placement's BODY-ATTACHMENT facet — a
   0-based `body:<n>`-indexed target plus a local offset rotated into the
   body's own frame. It derives TWICE off the one authored facet: the

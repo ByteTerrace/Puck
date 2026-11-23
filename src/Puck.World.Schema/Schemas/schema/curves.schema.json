@@ -5,7 +5,7 @@
     "null"
   ],
   "items": {
-    "description": "One named curves row: an ordered list of curvature-declaring knots that Compiled derives into a curvature-continuous cubic-B\u00E9zier spline (Steven Wittens\u0027 construction \u2014 see CurvatureSpline). The author declares intent (positions, tangent directions, endpoint curvatures); the engine derives the machinery (tangent lengths) at compile time, exactly \u2014 no control-point document shape ever ships. The section is OPTIONAL and every reference to a row is nullable, so an unauthored world is unchanged.",
+    "description": "One named curves row: an ordered list of curvature-declaring knots that Compiled derives into a cubic-B\u00E9zier spline (Steven Wittens\u0027 construction \u2014 see CurvatureSpline). The author declares intent (positions, tangent directions, endpoint curvatures); the engine derives the machinery (tangent lengths) at compile time, exactly \u2014 no control-point document shape ever ships. The section is OPTIONAL and every reference to a row is nullable, so an unauthored world is unchanged.",
     "type": [
       "object",
       "null"
@@ -34,8 +34,16 @@
               "type": "number"
             },
             "curvature": {
-              "description": "The signed planar curvature at this knot, under the cross2(a, b) = a.X\u00B7b.Z \u2212 a.Z\u00B7b.X convention: positive curvature turns from the tangent toward \u002BZ faster than toward \u2212Z. Must fall within \u00B1MaxCurvature.",
+              "description": "The signed planar curvature at this knot, under the cross2(a, b) = a.X\u00B7b.Z \u2212 a.Z\u00B7b.X convention: positive curvature turns from the tangent toward \u002BZ faster than toward \u2212Z. Must fall within \u00B1MaxCurvature. The segment leaving the knot reaches it, and so does the segment arriving unless IncomingCurvature is authored.",
               "type": "number"
+            },
+            "incomingCurvature": {
+              "description": "The signed curvature the segment arriving at this knot reaches there, when it differs from Curvature; omitted, the curvature is continuous through the knot. An arc ending into a straight authors the arc\u0027s curvature here and zero as Curvature: the tangent stays continuous while the curvature jumps. Must fall within \u00B1MaxCurvature.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
             }
           },
           "required": [

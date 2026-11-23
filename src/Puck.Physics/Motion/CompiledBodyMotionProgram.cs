@@ -42,6 +42,8 @@ public enum BodyMotionProgramRefusal : byte {
     OpcodeInadmissible,
     ParameterMissing,
     ParameterUnknown,
+    /// <summary>An operation is selected without the operation whose result it reads.</summary>
+    OpcodeRequired,
 }
 /// <summary>Reports a construction-time body motion program refusal.</summary>
 public sealed class BodyMotionProgramException : ArgumentException {
@@ -245,6 +247,19 @@ public sealed class CompiledBodyMotionProgram {
                 detail: $"planarTarget parameterizes '{BodyMotionOp.ComputePlanarTargetVelocity}' against the heading '{BodyMotionOp.ResolveYawAttitudeAndPlanarFrame}' resolves, and the program does not select both",
                 name: name,
                 refusal: BodyMotionProgramRefusal.ParameterUnknown
+            );
+        }
+        // ShapeVelocity converges velocity on the target a compute operation resolves; without one, every row would
+        // shape toward rest and the body could never move.
+        if (
+            seen.Contains(item: BodyMotionOp.ShapeVelocity) &&
+            !seen.Contains(item: BodyMotionOp.ComputePlanarTargetVelocity) &&
+            !seen.Contains(item: BodyMotionOp.ComputeLocalTargetVelocity)
+        ) {
+            throw Refuse(
+                detail: $"'{BodyMotionOp.ShapeVelocity}' shapes velocity toward the target '{BodyMotionOp.ComputePlanarTargetVelocity}' or '{BodyMotionOp.ComputeLocalTargetVelocity}' resolves, and the program selects neither",
+                name: name,
+                refusal: BodyMotionProgramRefusal.OpcodeRequired
             );
         }
         var phaseLists = new List<BodyMotionOp>[8];

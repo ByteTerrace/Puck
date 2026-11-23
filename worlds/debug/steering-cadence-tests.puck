@@ -45,7 +45,7 @@ bodyMotionPrograms [
     kind: Producer
     name: "roam"
     operations [SenseNearestInCone, ProduceSteeringIntent, FaceSensorTarget]
-    target: designated(register: "errand")
+    target: designated(register: "errand", fallback: Roam)
     version: "puck.body.program.v1"
   }
 ]

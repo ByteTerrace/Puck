@@ -143,16 +143,21 @@ size and topology.
    - A player walking through a crowd is not blocked; citizens step around
      (captures from the square at three hours of the day).
    - `puck test --reproduce` on the city's scenario agrees bit for bit.
-3. **Vehicles and market.** About 100 vehicles on the ring and cross streets,
-   and the market's trade.
-   - Every vehicle completes its loop and stops at each stop (state reading
-     per vehicle).
-   - No vehicle and walker share a cell (counted over a day).
-   - A player buys at a stall: the escrow, payment and goods rows change as
-     the market's rules say.
+3. **Vehicles and market.** About 100 vehicles lapping the road loops, and the
+   market's trade.
+   - Every vehicle laps its loop (`vehicleStop` advancing per vehicle).
+   - A vehicle in a crossing's approach box holds while the crossing's region
+     has an occupant, and resumes once it is empty (`vehicleHeld` per
+     vehicle), so no vehicle drives through a walker.
+   - A player buys at a stall: the purse, goods, stock and till rows change
+     as the market's rules say.
+   - The vehicles move onto road `curve` targets once a curve follower can
+     stand down and resume, the mechanism possession also needs.
 4. **Look and night.** The city to the visual bar.
    - About 500 lights over the night (the lights table's count read from
-     `world.counters` or the render report).
+     `world.counters` or the render report). The street lamps light once a
+     state-switched light's visibility no longer depends on its power when
+     the volume traced it.
    - Ink outlines and selective hatching authored through the ink phase.
    - Captures from at least four sides at noon, dusk and night, judged by a
      look critic against the bar and the gallery side by side.

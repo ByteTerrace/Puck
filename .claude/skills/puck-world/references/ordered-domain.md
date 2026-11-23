@@ -261,7 +261,9 @@ device image of the composition (non-role) channels; movement roles ride
 Per-entity intent sources: `IntentSource` = `Live`, `Idle`, `Producer(name)`
 (a named producer program, whose `ProduceSteeringIntent` op dispatches between
 its roam and approach runtime shapes on whether this tick's sense found a
-target); the per-tick merge rule is tape > submitted > producer > zero, with
+target; a producer reading a register — `designated`, `navigated` — holds the
+body still while the register is empty or cleared unless its target source
+states `fallback: Roam`); the per-tick merge rule is tape > submitted > producer > zero, with
 `body.press` always overlaying.
 
 ## Admission test

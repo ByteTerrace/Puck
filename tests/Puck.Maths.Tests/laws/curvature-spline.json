@@ -366,5 +366,62 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "curvature-spline.straight-within-heading-rounding",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "StraightHeadingToleranceRaw" },
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "Compile" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a zero-curvature segment at the headings 0, π/2, π and -π/2 (no Q16 yaw but 0 holds its sine or cosine at zero), a diagonal whose yaw is its knots' own bearing rounded to the nearest raw, and a straight whose ends spell its heading as π and -π, each compiles to the exact line: equal tangent lengths of a third of the chord and curvature exactly zero at seventeen stations; along +X a yaw one raw off the chord still compiles straight while a yaw two raws off refuses TangentCurvatureInconsistent, so the tolerance is one raw and no wider",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "curvature-spline.curvature-jump",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CurvatureSplineKnot", "Name": "IncomingCurvature" },
+      { "Type": "Puck.Maths.CurvatureSplineKnot", "Name": "ArrivingCurvature" },
+      { "Type": "Puck.Maths.CurvatureSpline", "Name": "Compile" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a closed rounded rectangle whose four straights meet true circular corners (each corner two 45° segments at curvature 1/r, its end knots declaring the arc's curvature on the arc side and zero on the straight side) compiles: every straight's middle reads curvature exactly zero, every corner's middle reads 1/r within 1/64 of it, and at each corner's end knots the station one raw before and the knot station itself read the two sides of the jump (1/r within the band on the arc side, exactly zero on the straight side); the same rectangle with transition corners (curvature zero at both corner ends, 1/r at the middle, every knot continuous) compiles too, its straights exactly zero at their middles",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "curvature-spline.nearest-station",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.CompiledCurvatureSpline", "Name": "NearestStationRaw" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "on the closed rounded rectangle with circular corners, the position EvaluateRaw returns at each of sixty-four stations, and that position moved half a unit along the curve's normal to either side, each finds its own station again within 2^-8 units (on the closed curve's wrap, the distance is taken the short way round the loop); a point beyond an open straight's start finds station zero and one beyond its end the total length",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]
