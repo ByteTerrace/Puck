@@ -27,6 +27,8 @@ import "painting-kit"
 import "place-kit"
 import "walkers"
 import "city-day"
+import "../standard/domains"
+import "../standard/citizen"
 
 // The city draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -152,8 +154,59 @@ navigation {
     walkable("city-terraces", [-150, 0.05, -205], 1, 114, 245, 2.2, 3, 1024)
     walkable("city-works", [36, 0.05, -100], 1, 114, 140, 2.2, 3, 1024)
     walkable("city-quay", [-46, 0.05, -205], 1, 196, 119, 2.2, 3, 1024)
+    // The citizens' one domain over the whole bank, 2 m cells sized for the standard walker (../standard/domains.puck),
+    // so a citizen routes between any two districts.
+    surfaceDomain("city-streets", [-150, 0.05, -205], 2, 150, 123, 2.2, 3, 1024)
   ]
 }
+
+
+// The citizens (../standard/citizen.puck). `citizenCount` of them, numbered down from the top of the body capacity
+// above the Moth's eight (avatars/moth.puck), in blocks of one look each: look `b` is block `b`, its citizens standing
+// in a disc on the open ground north of the square until the schedule sends them off.
+let citizenCount = 480
+let citizenCoats = ["#B5523B", "#3E6E8E", "#6B8E4E", "#C98B2E", "#7A4E7E", "#D8CBB0"]
+let citizenHats = ["#2F2A26", "#8A5A3C", "#2F7F7A", "#C9BFAE"]
+let citizenLookCount = length(citizenCoats) * length(citizenHats)
+let citizenBlock = citizenCount / citizenLookCount
+let citizenTop = 7 + citizenCount
+
+// Each citizen's anchors: a home at a terrace house's front lane, work at a workshop, warehouse or civic hall door or
+// behind a market stall, and the market inside the stall ring. Assignments step through the lists by coprime strides
+// so neighbours in a block live, work and shop in different places.
+let citizenHomes = map(terraceLots, lot => [lot.x, (lot.z + 6)])
+let citizenWorks = concat(
+  map(shedLots, lot => [lot.x, (lot.z + 10)]),
+  map(warehouseLots, lot => [lot.x, (lot.z + 7.5)]),
+  map(hallLots, lot => [lot.x, (lot.z + 11.5)]),
+  map(stallRing, stall => [(20.5 * sine(stall.yaw * 3.141592653589793 / 180)), (-50 + 20.5 * cosine(stall.yaw * 3.141592653589793 / 180))])
+)
+let citizenMarkets = map(stallRing, stall => [(14 * sine(stall.yaw * 3.141592653589793 / 180)), (-50 + 14 * cosine(stall.yaw * 3.141592653589793 / 180))])
+let citizenPeople = map(range(0, citizenCount), i => {
+  key: citizenTop - i
+  home: citizenHomes[i % length(citizenHomes)]
+  work: citizenWorks[(7 * i + 3) % length(citizenWorks)]
+  market: citizenMarkets[(5 * i) % length(citizenMarkets)]
+  shift: (i % 12) / 288
+})
+
+bodies {
+  capacity: 8 + citizenCount
+}
+
+citizenDesign(domain: "city-streets")
+citizenLooks(coats: citizenCoats, hats: citizenHats)
+citizenSchedule(
+  people: citizenPeople,
+  clock: cityDay,
+  phases: [
+    { name: "night", from: 19, to: 7, anchor: "home" }
+    { name: "morning", from: 7, to: 12, anchor: "work" }
+    { name: "lunch", from: 12, to: 13, anchor: "market" }
+    { name: "afternoon", from: 13, to: 17, anchor: "work" }
+    { name: "evening", from: 17, to: 19, anchor: "market" }
+  ]
+)
 
 placements {
   policy {
@@ -282,6 +335,29 @@ placements {
       prototype: "civic-hall"
       position [lot.x, 0, lot.z]
       solid
+    }
+  }
+
+  // The citizens, a block of each look in a disc 10 m across: six blocks across the avenue's ground
+  // and four deep, between the arrival frame and the ring road.
+  for b in range(0, citizenLookCount) {
+    placement $"citizens-{b}" {
+      prototype: $"citizen-{floorDivide(b, length(citizenHats))}-{b % length(citizenHats)}"
+      position [(-36 + 14.4 * (b % 6)), 0, (-6 - 8.6 * floorDivide(b, 6))]
+      inhabit {
+        count: citizenBlock
+        kit: "citizen"
+        look: $"citizen-{floorDivide(b, length(citizenHats))}-{b % length(citizenHats)}"
+        source: producer(name: "citizenErrand")
+        distribution {
+          region: disc(radius: 5)
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+        }
+      }
     }
   }
 
