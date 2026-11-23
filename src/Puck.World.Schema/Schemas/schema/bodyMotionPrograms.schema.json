@@ -111,6 +111,14 @@
               },
               "register": {
                 "type": "string"
+              },
+              "fallback": {
+                "enum": [
+                  "Hold",
+                  "Roam"
+                ],
+                "default": "Hold",
+                "title": "BodyTargetFallback"
               }
             },
             "required": [
@@ -148,6 +156,14 @@
               },
               "register": {
                 "type": "string"
+              },
+              "fallback": {
+                "enum": [
+                  "Hold",
+                  "Roam"
+                ],
+                "default": "Hold",
+                "title": "BodyTargetFallback"
               }
             },
             "required": [

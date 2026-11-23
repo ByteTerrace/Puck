@@ -51,5 +51,17 @@ internal static partial class LawRegistry {
             claim: Subjects.CurvatureSplineEvaluateCurvature,
             id: "curvature-spline.evaluate-curvature"
         ),
+        ClaimCase(
+            claim: Subjects.CurvatureSplineStraightWithinHeadingRounding,
+            id: "curvature-spline.straight-within-heading-rounding"
+        ),
+        ClaimCase(
+            claim: Subjects.CurvatureSplineCurvatureJump,
+            id: "curvature-spline.curvature-jump"
+        ),
+        ClaimCase(
+            claim: Subjects.CurvatureSplineNearestStation,
+            id: "curvature-spline.nearest-station"
+        ),
     ];
 }

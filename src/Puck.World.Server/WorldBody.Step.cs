@@ -1626,45 +1626,47 @@ public sealed partial class WorldBody {
         }
         scratch.Velocity = m_planarVelocity;
     }
-    // The drive decomposition: split the carried velocity into body-frame longitudinal/lateral/residual components,
-    // converge each at its own authored rate, and recompose — the anisotropy a kart's feel needs and the isotropic
-    // MoveToward cannot express. Longitudinal follows the bipolar throttle (accelerate toward the commanded fraction
-    // of scratch.MoveSpeed — the resolved, envelope-clamped move speed, the same value EffectiveMoveSpeed echoes;
-    // back-throttle reverses sign while moving forward and travels backward from rest at the unenveloped backward
-    // speed; the over-speed excess bleeds at release, which is also the centered-throttle coast). A held speed
-    // multiplier applies to scratch.MoveSpeed AFTER the clamp, on top of the resolved base rate, never inside it —
-    // the envelope pins the base, the boost rides on top. Lateral and residual slip converge to zero at the row's
-    // own lateral rate — a held-gated drift row authored ahead of the ordinary anisotropic row is how a kart's
-    // lateral grip swaps while held. A contact-pinned variant (turn.pitchRate zero) has no drive or lateral
-    // authority while airborne: a launched kart holds its velocity and gravity owns the arc.
+    // The drive decomposition: split the carried velocity into heading-frame longitudinal/lateral/residual
+    // components, converge each at its own authored rate, and recompose — the anisotropy a wheeled body's feel needs
+    // and the isotropic MoveToward cannot express. The heading is the attitude the frame operation resolved, never
+    // the translation basis: under a World move frame those are the world's axes, and a wheeled body grips across the
+    // way it faces, not across world X.
+    //
+    // Longitudinal converges on the commanded target's advance along the heading — the velocity
+    // ComputePlanarTargetVelocity resolved, so a seat's throttle, a World-framed stick and a producer's steering all
+    // drive it alike, with the envelope-clamped move speed and any held multiplier already applied. Commanded
+    // backward while moving forward reverses sign at the reversal rate, and from rest travels backward at the
+    // commanded fraction of the move speed times the unenveloped backward speed; the over-speed excess bleeds at
+    // release, which is also the coast with nothing commanded. Lateral and residual slip converge to zero at the
+    // row's own lateral rate, whatever the target asks across the heading — a held-gated drift row authored ahead of
+    // the ordinary anisotropic row is how a kart's lateral grip swaps while held. A contact-pinned variant
+    // (turn.pitchRate zero) has no drive or lateral authority while airborne: a launched kart holds its velocity and
+    // gravity owns the arc.
     private void ShapeAnisotropicVelocityRow(in FixedShapingAlong along, in FixedShapingAcross across, ref BodyMotionScratch scratch) {
-        var throttle = Role(
-            intent: in scratch.Intent,
-            role: ChannelRole.MoveAdvance
+        var facing = scratch.Orientation.Rotate(vector: -FixedVector3.UnitZ);
+        var right = scratch.Orientation.Rotate(vector: FixedVector3.UnitX);
+        var advance = FixedVector3.Dot(
+            left: scratch.TargetVelocity,
+            right: facing
         );
         var hasAuthority = ((m_tuning.Turn.PitchRate > FixedQ4816.Zero) || m_grounded);
         var velocity = m_planarVelocity;
         var longitudinal = FixedVector3.Dot(
             left: velocity,
-            right: scratch.Facing
+            right: facing
         );
         var lateral = FixedVector3.Dot(
             left: velocity,
-            right: scratch.Right
+            right: right
         );
-        var residual = ((velocity - (scratch.Facing * longitudinal)) - (scratch.Right * lateral));
+        var residual = ((velocity - (facing * longitudinal)) - (right * lateral));
 
         if (hasAuthority) {
             FixedQ4816 target, rate;
             ShapingInstant instant;
 
-            if (throttle > FixedQ4816.Zero) {
-                var commanded = ApplySpeedHeld(
-                    baseSpeed: scratch.MoveSpeed,
-                    intent: in scratch.Intent
-                );
-
-                target = (throttle * commanded);
+            if (advance > FixedQ4816.Zero) {
+                target = advance;
                 rate = ((longitudinal <= target)
                     ? along.Engage
                     : along.Release
@@ -1673,13 +1675,21 @@ public sealed partial class WorldBody {
                     ? ShapingInstant.Engage
                     : ShapingInstant.Release
                 );
-            } else if (throttle < FixedQ4816.Zero) {
+            } else if (advance < FixedQ4816.Zero) {
                 if (longitudinal > FixedQ4816.Zero) {
                     target = FixedQ4816.Zero;
                     rate = along.ReversalRate;
                     instant = ShapingInstant.Reversal;
                 } else {
-                    target = (throttle * along.BackwardSpeed);
+                    var ceiling = ApplySpeedHeld(
+                        baseSpeed: scratch.MoveSpeed,
+                        intent: in scratch.Intent
+                    );
+
+                    target = ((ceiling > FixedQ4816.Zero)
+                        ? (FixedQ4816.Clamp(value: (advance / ceiling), minimum: NegativeOne, maximum: FixedQ4816.Zero) * along.BackwardSpeed)
+                        : FixedQ4816.Zero
+                    );
                     rate = along.Engage;
                     instant = ShapingInstant.Engage;
                 }
@@ -1728,7 +1738,7 @@ public sealed partial class WorldBody {
             }
         }
 
-        m_planarVelocity = (((scratch.Facing * longitudinal) + (scratch.Right * lateral)) + residual);
+        m_planarVelocity = (((facing * longitudinal) + (right * lateral)) + residual);
         scratch.Velocity = m_planarVelocity;
         scratch.TargetVelocity = m_planarVelocity;
     }

@@ -110,8 +110,7 @@ public static class BodyMotionProgramRoles {
     public static bool RequiresRole(this CompiledBodyMotionProgram program, ChannelRole role) => role switch {
         ChannelRole.MoveAdvance or ChannelRole.MoveStrafe => (program.Contains(operation: BodyMotionOp.ComputePlanarTargetVelocity)
             || program.Contains(operation: BodyMotionOp.SnapYawToPlanarIntent)
-            || program.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)
-            || (program.Contains(operation: BodyMotionOp.ShapeVelocity) && (role == ChannelRole.MoveAdvance))),
+            || program.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)),
         ChannelRole.Turn => (program.Contains(operation: BodyMotionOp.ResolveYawAttitudeAndPlanarFrame)
             || program.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
             || program.Contains(operation: BodyMotionOp.ResolveDriveFrame)),
@@ -451,9 +450,7 @@ public sealed class CompiledBodyProducer {
             program: program,
             target: source
         );
-        var producesSteering = program.Contains(operation: BodyMotionOp.ProduceSteeringIntent);
-        var senses = program.Contains(operation: BodyMotionOp.SenseNearestInCone);
-        var roamActive = (producesSteering && (!senses || BodyProducerParameterVocabulary.IsRoamAuthored(scalars: parameters.Scalars)));
+        var roamActive = RoamReachable(parameters: parameters, program: program, target: source);
 
         var scalars = new FixedQ4816[ParameterCount];
 
@@ -540,6 +537,20 @@ public sealed class CompiledBodyProducer {
             : null)
         );
     }
+    // Whether ProduceSteeringIntent's roam shape can run, which makes its roam scalars required. Without sensing it is
+    // the op's only shape, so selecting the op requires it outright; accepting an empty bare producer would compile a
+    // permanently inert program. With sensing it is the fallback for a tick that finds no target. A sensed cone
+    // activates it by an authored roam-exclusive scalar. A register (designated, navigated) names its target, so an
+    // empty or cleared one holds the body still unless the target source states `fallback: Roam`; a curve always has a
+    // target. A roam scalar a producer cannot reach names nothing the program reads and is refused.
+    private static bool RoamReachable(CompiledBodyMotionProgram program, BodyTargetSource? target, BodyProgramParameters parameters) =>
+        program.Contains(operation: BodyMotionOp.ProduceSteeringIntent) &&
+        (!program.Contains(operation: BodyMotionOp.SenseNearestInCone) || (target switch {
+            BodyTargetSource.Designated designated => (designated.Fallback == BodyTargetFallback.Roam),
+            BodyTargetSource.Navigated navigated => (navigated.Fallback == BodyTargetFallback.Roam),
+            BodyTargetSource.CurveFollow => false,
+            _ => BodyProducerParameterVocabulary.IsRoamAuthored(scalars: parameters.Scalars),
+        }));
     /// <summary>Computes one producer program's full required-scalar set from its selected operations and authored
     /// arguments — the ONE derivation both this type's <see cref="Compile"/> and the schema validator
     /// (<c>WorldDefinitionValidator.Motion.cs</c>'s <c>ValidateProducerParameters</c>) read, so a required-set rule
@@ -560,13 +571,7 @@ public sealed class CompiledBodyProducer {
         var senses = program.Contains(operation: BodyMotionOp.SenseNearestInCone);
         var producesSteering = program.Contains(operation: BodyMotionOp.ProduceSteeringIntent);
 
-        // With sensing, roam is an optional fallback and its exclusive scalar presence activates it. Without
-        // sensing, roam is the op's only reachable shape, so selecting ProduceSteeringIntent requires it outright;
-        // accepting an empty bare producer would compile a permanently inert program.
-        if (
-            producesSteering &&
-            (!senses || BodyProducerParameterVocabulary.IsRoamAuthored(scalars: parameters.Scalars))
-        ) {
+        if (RoamReachable(parameters: parameters, program: program, target: target)) {
             required.UnionWith(other: BodyProducerParameterVocabulary.SteeringScalars);
         }
         // The approach shape ProduceSteeringIntent runs is reachable only on a tick this program's own sensing
