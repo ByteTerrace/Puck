@@ -15,7 +15,8 @@ through it crosses there with no load. The garden holds two frames of its own
 that lead back, and the far one stands in view through the garden painting, so
 the wing shows a portal seen through a portal. West of its frames the garden
 grows a pond plot of hounds, spiders, dragonflies and fish
-([garden.md](garden.md)).
+([garden.md](garden.md)). A sixth painting, onto a bustling city of its own,
+is planned in [the city](../../docs/plans/city.md).
 
 ## Open it
 

@@ -100,8 +100,11 @@ public sealed partial class HostProbe(string checkoutRoot) {
     [LibraryImport(libraryName: "kernel32.dll", EntryPoint = "GetDiskFreeSpaceExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
     private static partial bool GetDiskFreeSpaceEx(string directory, out ulong available, out ulong total, out ulong free);
-    // Busy and total CPU time since boot, in the platform's ticks.
-    private static (ulong Idle, ulong Total)? CpuTimes() {
+    /// <summary>Gets the ticks <see cref="CpuTimes"/> counts in one second: 100-nanosecond units on Windows, jiffies on Linux.</summary>
+    public static double CpuTicksPerSecond => (OperatingSystem.IsWindows() ? 10_000_000.0 : 100.0);
+    /// <summary>Reads the machine's idle and total CPU time, summed over every logical processor, since boot.</summary>
+    /// <returns>The idle and total time in <see cref="CpuTicksPerSecond"/> ticks, or <see langword="null"/> when the platform cannot say.</returns>
+    public static (ulong Idle, ulong Total)? CpuTimes() {
         if (OperatingSystem.IsWindows()) {
             // Kernel time includes idle time.
             return (GetSystemTimes(idle: out var idle, kernel: out var kernel, user: out var user)
@@ -126,12 +129,24 @@ public sealed partial class HostProbe(string checkoutRoot) {
             return (0, double.NaN);
         }
     }
-    // The CPU time a process has used in total, in seconds; NaN when the platform will not say.
-    private static double CpuSeconds(Process process) {
+    /// <summary>Reads the CPU time a process has used in total.</summary>
+    /// <param name="process">The process.</param>
+    /// <returns>The seconds, or NaN when the platform will not say (the process exited, or belongs to another user).</returns>
+    public static double CpuSeconds(Process process) {
         try {
             return process.TotalProcessorTime.TotalSeconds;
         } catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or NotSupportedException) {
             return double.NaN;
+        }
+    }
+    /// <summary>Reads when a process started.</summary>
+    /// <param name="process">The process.</param>
+    /// <returns>The local start time, or <see cref="DateTime.MinValue"/> when the platform will not say.</returns>
+    public static DateTime StartOf(Process process) {
+        try {
+            return process.StartTime;
+        } catch (Exception exception) when ((exception is Win32Exception or InvalidOperationException or NotSupportedException)) {
+            return DateTime.MinValue;
         }
     }
     private static double FreeRamGb() =>
@@ -192,13 +207,7 @@ public sealed partial class HostProbe(string checkoutRoot) {
 
         foreach (var process in Process.GetProcesses()) {
             using (process) {
-                DateTime started;
-
-                try {
-                    started = process.StartTime;
-                } catch (Exception exception) when ((exception is Win32Exception or InvalidOperationException or NotSupportedException)) {
-                    started = DateTime.MinValue;
-                }
+                var started = StartOf(process: process);
 
                 tree[process.Id] = (ProcessInspection.ParentId(processId: process.Id), started);
 

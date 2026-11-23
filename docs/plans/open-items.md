@@ -958,14 +958,13 @@ as real use does (AGENTS.md).
   over `world.tick.interest-bodies`) and the authority's tick. Check: the
   hosted debug world holds its tick with the crowd connected, and the counts
   fill [replication](replication.md#measurements-to-take)'s table.
-- [high] **A town.** A populated place in the valley with hundreds of
-  autonomous inhabitants whose behaviour is Puck programs (schedules, paths
-  between places, feet on the ground), drawn and lit as everything else is.
-  The nearest workload is `worlds/debug/garden-crowd.puck`, 128 creatures
-  measured headless only. A town drives the serial kit-body advance
-  ([job system](#engine-job-system)), the frame's field queries and draw
-  records ([the CPU frame](#the-cpu-frame)), interest, and a crowd of
-  distinct looks in residency. Check: the route crosses it at the frame bar.
+- [high] **A town**, now [the city](city.md): a world of its own behind a
+  gallery painting, with about 2,000 scheduled citizens, about 100 vehicles,
+  a market and about 500 lights, owned by the RTX 2060 machine's session. It
+  drives the serial kit-body advance ([job system](#engine-job-system)), the
+  frame's field queries and draw records ([the CPU frame](#the-cpu-frame)),
+  interest, and a crowd of distinct looks in residency. Its stages,
+  acceptance and expected engine gaps live in its plan.
 - [high] **A moon on another authority.** Every federation run so far is a
   loopback pair on one machine. Host a moon's world elsewhere (a second silo,
   or a player's host) and reach it through a portal across the two

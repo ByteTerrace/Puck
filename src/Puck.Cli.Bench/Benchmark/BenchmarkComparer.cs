@@ -15,7 +15,7 @@ internal enum BenchmarkOutcome {
 
 /// <summary>A comparison the comparer will not make, by the name of what stops it.</summary>
 /// <param name="Code">The refusal's name: <see cref="BenchmarkComparison.AnotherRoute"/>, <see cref="BenchmarkComparison.UnlikeConditions"/>,
-/// <see cref="BenchmarkComparison.BeganInLockstep"/> or <see cref="BenchmarkComparison.MissingMetric"/>.</param>
+/// <see cref="BenchmarkComparison.BeganInLockstep"/>, <see cref="BenchmarkComparison.DisturbedRun"/> or <see cref="BenchmarkComparison.MissingMetric"/>.</param>
 /// <param name="Message">What differs, naming both sides.</param>
 internal sealed record BenchmarkRefusal(string Code, string Message);
 
@@ -29,7 +29,7 @@ internal sealed record BenchmarkDelta(string Name, double Baseline, double Candi
     /// <summary>Gets the candidate less the baseline.</summary>
     public double Difference => (Candidate - Baseline);
     /// <summary>Gets the difference as a percentage of the baseline, or <see langword="null"/> when the baseline is zero.</summary>
-    public double? Percent => ((Baseline == 0.0) ? null : ((Difference / Math.Abs(value: Baseline)) * 100.0));
+    public double? Percent => ((Baseline == 0.0) ? null : ((Difference / Math.Abs(value: Baseline)) *100.0));
 }
 
 /// <summary>One chapter's comparison.</summary>
@@ -81,6 +81,8 @@ internal sealed class BenchmarkComparison {
     public const string BeganInLockstep = "began-in-lockstep";
     /// <summary>The refusal for a metric one report holds and the other lacks.</summary>
     public const string MissingMetric = "missing-metric";
+    /// <summary>The refusal for a run whose conditions (competing load, another World, a held GPU clock) make its timings untrustworthy.</summary>
+    public const string DisturbedRun = "disturbed-run";
 
     /// <summary>Compares two benchmark reports, backend by backend.</summary>
     /// <param name="baseline">The baseline's <c>benchmark</c> section.</param>
@@ -131,6 +133,11 @@ internal sealed class BenchmarkComparison {
         foreach (var (side, run) in new[] { ("baseline", baseline), ("candidate", candidate) }) {
             if (run["lockstepAtEntry"]?.GetValue<bool>() == true) {
                 refusals.Add(item: new(Code: BeganInLockstep, Message: $"the {side} run began with presentation locked to ticks, which makes every frame of it a tick-paced frame"));
+            }
+        }
+        foreach (var (side, run) in new[] { ("baseline", baseline), ("candidate", candidate) }) {
+            if (BenchmarkConditions.ReasonsOf(run: run) is { Count: > 0 } reasons) {
+                refusals.Add(item: new(Code: DisturbedRun, Message: $"the {side} run's conditions make its timings untrustworthy: {string.Join(separator: "; ", values: reasons)}"));
             }
         }
         if (refusals.Count > 0) {
