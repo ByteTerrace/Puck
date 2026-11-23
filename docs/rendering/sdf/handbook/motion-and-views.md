@@ -265,7 +265,15 @@ thread while the installed graph keeps presenting; a window authors no
 resolution. It draws as clear glass at the luminance of the world beyond it
 (the mapping record's face, `SdfScreenFace.Opening`); between refreshes every consumer reads its
 latest completed image. A view nothing shows renders nothing and keeps its
-last image. The cost of every view is priced in the schedule and
+last image, but not the storage of the extent it was last seen at: once no
+schedule has rendered it for `WorldViewGraphHost.ParkedShrinkFrames` while its
+glass is out of sight, held or occluded, and its image still holds
+`ParkedShrinkPixels` or more, it renders at its least share
+(`WorldPortalVisibility.ArrivalShare`) until its node installs that extent
+(`WorldViewGraphHost.ReserveShrinks`). The resize retires the larger graph, and
+the small image stands for the light the face emits and for the frame the glass
+is next seen in, so a window walked up to, or through, does not hold a
+display's worth of per-pixel storage from then on. The cost of every view is priced in the schedule and
 `world.budget` like any instance's, with no fixed view count.
 
 Nothing a portal adds may hold the world's own view. The World places that

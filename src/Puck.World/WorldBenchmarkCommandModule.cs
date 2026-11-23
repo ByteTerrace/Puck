@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Puck.Abstractions;
+using Puck.Abstractions.Memory;
 using Puck.Abstractions.Presentation;
 using Puck.Assets;
 using Puck.Commands;
@@ -28,7 +29,8 @@ namespace Puck.World;
 /// <para>Nothing in a run pauses, settles or waits: the world keeps its own pacing, and the run records what the host
 /// did (<see cref="HostFrameRecording"/>). A chapter whose span the run cannot vouch for is written disturbed with
 /// the reason, and its statistics are still written beside it: lockstep presentation in any iteration, the simulation
-/// stepping no tick for <see cref="StallMilliseconds"/>, or a step the seat's ingress refused.</para>
+/// stepping no tick for <see cref="StallMilliseconds"/>, a step the seat's ingress refused, or the device's memory
+/// rising in the chapter to what the system budgets the process, where a pass that touches moved memory waits for it.</para>
 /// <para>A run may play its route more than once (<c>loops</c>), each loop armed from the one before it ends on the
 /// tick after it, so every loop of a fresh run lands on ticks its caller chose.</para>
 /// <para>Every member runs on the host pump.</para>
@@ -143,6 +145,10 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         public AdapterTelemetrySummary? Adapter { get; set; }
         public long ShedAtBegin { get; set; }
         public long Shed { get; set; }
+        // The device's own memory across the chapter (DeviceLedger): the most its ledger had held at once as the chapter
+        // began and as it ended, with what the system budgeted the process and used beyond the ledger at its end.
+        public long DevicePeakAtBegin { get; set; }
+        public (long Peak, long Budget, long Beyond) Device { get; set; }
         // A route chapter's outcome, copied from the seat driver as it ends.
         public bool Arrived { get; set; }
         public string? Failure { get; set; }
@@ -797,6 +803,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             chapter.BeginIndex = (m_recording?.Count ?? 0);
             chapter.BeginStamp = Stopwatch.GetTimestamp();
             chapter.ShedAtBegin = (timeline?.ShedSteps ?? 0L);
+            chapter.DevicePeakAtBegin = DeviceLedger().Peak;
 
             return new CommandResult(Output: $"[world.benchmark: chapter {index} \"{chapter.Name}\" begins]");
         }
@@ -804,6 +811,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         chapter.EndIndex = (m_recording?.Count ?? 0);
         chapter.EndStamp = Stopwatch.GetTimestamp();
         chapter.Shed = ((timeline?.ShedSteps ?? 0L) - chapter.ShedAtBegin);
+        chapter.Device = DeviceLedger();
         chapter.Adapter = m_adapter?.Summarize(from: chapter.BeginStamp, to: chapter.EndStamp);
 
         if (!chapter.LastOfLoop) {
@@ -955,8 +963,37 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         if (chapter.Adapter?.HeldReason is { } held) {
             reasons.Add(item: held);
         }
+        // A chapter that raised the most the device ever held to what the system budgets the process is one in which
+        // the system moved memory: a pass that touched it waited for it, so a pass's reading there is not its cost.
+        var (peak, budget, beyond) = chapter.Device;
+
+        if ((budget > 0L) && (peak > chapter.DevicePeakAtBegin) && ((peak + beyond) >= budget)) {
+            reasons.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"the device's memory held {(peak >> 20)} MiB at once with {(beyond >> 20)} MiB beyond the ledger, past the {(budget >> 20)} MiB the system budgets the process (a pass that touched moved memory waited for it)"));
+        }
 
         return reasons;
+    }
+    // The device's own memory now: the most its ledger has held at once, what the system budgets the process there, and
+    // what the system counts in use beyond what the ledger holds (the driver's and the swapchain's). Zeroes on unified
+    // memory and without a device.
+    private static (long Peak, long Budget, long Beyond) DeviceLedger() {
+        var pools = Puck.Hosting.Jobs.MemoryAccount.Shared.ReadPools();
+        var (peak, held, budget, usage) = (0L, 0L, 0L, 0L);
+
+        foreach (var segment in pools.SegmentAdmissions) {
+            if (segment.Segment.Pool == PhysicalMemory.Device) {
+                peak += segment.Peak;
+                held += segment.Held;
+            }
+        }
+        foreach (var segment in pools.DeviceReading.Segments) {
+            if (segment.Segment.Pool == PhysicalMemory.Device) {
+                budget += (long)segment.Budget;
+                usage += (long)(segment.Usage ?? 0UL);
+            }
+        }
+
+        return (peak, budget, Math.Max(val1: 0L, val2: (usage - held)));
     }
 
     // The gates the body's pose fails, the gates this read cannot judge, and whether the chapter ended at all.
@@ -1022,7 +1059,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.benchmark",
-            description: $"Plays a route through the running world in real time and reports every host iteration of it: {WorldBenchmarkForms.Spelling}. A route named by a routes row of the running document is played chapter by chapter by its seat program, which works the seat's own controls each tick toward the chapter's places; a chapter arrives when its steps finish and fails, naming the kind, the tick and the place, on a stick held while the body goes nowhere, on leaving the places its path crosses, on a lost path or past its time limit; its driver is the seat's client and reads only what the seat's authority delivered, in this process or another, and each chapter is armed as the one before it ends. Otherwise a route is the test blocks of a .puck source whose names start with the prefix (every one, with none or '-'), each a chapter played in declaration order: its when lines are armed through the seat's own ingress at their ticks, as a headless puck test submits them, and its expect lines are its arrival. The first line lands {LeadTicks} ticks after the run is armed, or at the tick 'at' names when that is later, and each chapter follows the one before by {GapTicks} ticks. 'loops' plays the route that many times (at most {MaxLoops}), each loop armed from the tick the one before it ends on, so a run is reported as its cold first loop, its warm second and its steady rest. A run armed before the world's first tick (a paused boot) is fresh: every line lands on a tick its caller chose from the boot image, so its state hashes compare with another fresh run's armed at the same tick. Any other run is attached, starts wherever the world stands, and its hashes are informational. Nothing in a run pauses, settles or waits, and lockstep presentation is turned off for its span and restored after. A route whose paths need the seat's navigation baked first waits for the bake before it arms, off the tick and without holding the call: the line answers at once, world.benchmark reads the bake's progress, and the run starts when it is baked or is reported as never started once 'timeout' seconds have passed. That wait is the run's preparation, written beside its frames and in none of them. Every host iteration from the first chapter's start is recorded past host.frames' ring, and the host's first iterations through that start are its boot span. Each chapter ends with the body's pose judged against its position and grounded gates (arrived or off course), the authority's state hash, its identity (the hash of its program), and its iterations' statistics: interval and work (the interval less the pacer's wait) as mean, median, 95th, 99th and 99.9th percentile and maximum, the counts whose work passed the budget (default one 60 Hz period), twice it, 50 ms and 100 ms, pacing deviation, collections and ticks shed; the iterations over budget with their tick, the body's last sampled position and their phases; each GPU pass's mean and maximum over samples taken every {SampleTicks} ticks; and the raw answers of world.residency, the render.record, gpu.queue and sdf counters and host.memory at both ends, whose change a reader takes. A chapter is written disturbed, with the reason and its statistics beside it, when presentation was locked to ticks in any iteration, the simulation stepped no tick for {StallMilliseconds:0} ms, or a step did not answer as authored. The run writes run.json (puck.benchmark.run.v2) and frames.csv (one row per iteration) to the output directory, by default benchmarks/<local date and time> under the run's state root. The imported authored HUD panel follows a playing run by default; overlay on|off|auto overrides that visibility on demand. The report records that choice and the closing rolling GPU timestamp window, including the overlay pass when measured. With no argument it reads the running route's chapter and tick, or the last run's summary. Each chapter's first tick releases, ahead of its own lines, every control the chapter before it left held, so a chapter starts from released input whatever came before it. stop ends the run where it stands, drops its armed lines, lets go every control the lines that reached the seat left held and writes the partial report, listing every requested loop; a run that passes its wall-time limit (default {DefaultTimeoutSeconds} s) ends the same way, and so does a run whose World shuts down. Refused while world.at lines are armed: a run owns the pinned lines while it plays. An iteration is the host loop's interval, never the time a frame stood on the display, and a headless host records iterations without a renderer.",
+            description: $"Plays a route through the running world in real time and reports every host iteration of it: {WorldBenchmarkForms.Spelling}. A route named by a routes row of the running document is played chapter by chapter by its seat program, which works the seat's own controls each tick toward the chapter's places; a chapter arrives when its steps finish and fails, naming the kind, the tick and the place, on a stick held while the body goes nowhere, on leaving the places its path crosses, on a lost path or past its time limit; its driver is the seat's client and reads only what the seat's authority delivered, in this process or another, and each chapter is armed as the one before it ends. Otherwise a route is the test blocks of a .puck source whose names start with the prefix (every one, with none or '-'), each a chapter played in declaration order: its when lines are armed through the seat's own ingress at their ticks, as a headless puck test submits them, and its expect lines are its arrival. The first line lands {LeadTicks} ticks after the run is armed, or at the tick 'at' names when that is later, and each chapter follows the one before by {GapTicks} ticks. 'loops' plays the route that many times (at most {MaxLoops}), each loop armed from the tick the one before it ends on, so a run is reported as its cold first loop, its warm second and its steady rest. A run armed before the world's first tick (a paused boot) is fresh: every line lands on a tick its caller chose from the boot image, so its state hashes compare with another fresh run's armed at the same tick. Any other run is attached, starts wherever the world stands, and its hashes are informational. Nothing in a run pauses, settles or waits, and lockstep presentation is turned off for its span and restored after. A route whose paths need the seat's navigation baked first waits for the bake before it arms, off the tick and without holding the call: the line answers at once, world.benchmark reads the bake's progress, and the run starts when it is baked or is reported as never started once 'timeout' seconds have passed. That wait is the run's preparation, written beside its frames and in none of them. Every host iteration from the first chapter's start is recorded past host.frames' ring, and the host's first iterations through that start are its boot span. Each chapter ends with the body's pose judged against its position and grounded gates (arrived or off course), the authority's state hash, its identity (the hash of its program), and its iterations' statistics: interval and work (the interval less the pacer's wait) as mean, median, 95th, 99th and 99.9th percentile and maximum, the counts whose work passed the budget (default one 60 Hz period), twice it, 50 ms and 100 ms, pacing deviation, collections and ticks shed; the iterations over budget with their tick, the body's last sampled position and their phases; each GPU pass's mean and maximum over samples taken every {SampleTicks} ticks; and the raw answers of world.residency, the render.record, gpu.queue and sdf counters and host.memory at both ends, whose change a reader takes. A chapter is written disturbed, with the reason and its statistics beside it, when presentation was locked to ticks in any iteration, the simulation stepped no tick for {StallMilliseconds:0} ms, a step did not answer as authored, or the device's memory rose in the chapter to what the system budgets the process (a pass that touched moved memory waited for it, so its reading is not its cost). The run writes run.json (puck.benchmark.run.v2) and frames.csv (one row per iteration) to the output directory, by default benchmarks/<local date and time> under the run's state root. The imported authored HUD panel follows a playing run by default; overlay on|off|auto overrides that visibility on demand. The report records that choice and the closing rolling GPU timestamp window, including the overlay pass when measured. With no argument it reads the running route's chapter and tick, or the last run's summary. Each chapter's first tick releases, ahead of its own lines, every control the chapter before it left held, so a chapter starts from released input whatever came before it. stop ends the run where it stands, drops its armed lines, lets go every control the lines that reached the seat left held and writes the partial report, listing every requested loop; a run that passes its wall-time limit (default {DefaultTimeoutSeconds} s) ends the same way, and so does a run whose World shuts down. Refused while world.at lines are armed: a run owns the pinned lines while it plays. An iteration is the host loop's interval, never the time a frame stood on the display, and a headless host records iterations without a renderer.",
             forms: WorldBenchmarkForms,
             handler: (context, args) => {
                 if (args.Count == 2 && args.Is(0, "overlay")) {
