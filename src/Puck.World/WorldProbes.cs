@@ -95,11 +95,7 @@ internal sealed partial class WorldProbes : ISnapshotInputCapture, IDisposable {
         ArgumentNullException.ThrowIfNull(argument: screens);
 
         m_world = world;
-        m_presented = !string.Equals(
-            a: world,
-            b: WorldDefinitionLoader.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        );
+        m_presented = !WorldDefinitionLoader.IsBootInstance(name: world);
         m_clock = clock;
         m_focus = focus;
         m_passes = passes;

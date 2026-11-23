@@ -107,11 +107,7 @@ public sealed partial class WorldScreenBinder {
             var endpoint = feed.Observation?.Window;
             var home = (
                 (endpoint is not null) &&
-                string.Equals(
-                    a: feed.InstanceName,
-                    b: WorldDefinitionLoader.BootInstanceName,
-                    comparisonType: StringComparison.Ordinal
-                )
+                WorldDefinitionLoader.IsBootInstance(name: feed.InstanceName)
             );
 
             feed.Home = home;

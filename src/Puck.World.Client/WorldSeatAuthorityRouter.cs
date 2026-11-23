@@ -206,11 +206,7 @@ public sealed class WorldSeatAuthorityRouter {
         }
 
         var routed = default(CommandResult);
-        var tag = ((tagInstance && !string.Equals(
-            a: route.Endpoint.Identity,
-            b: WorldDefinitionLoader.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        ))
+        var tag = ((tagInstance && !WorldDefinitionLoader.IsBootInstance(name: route.Endpoint.Identity))
             ? route.Endpoint.Identity
             : null
         );

@@ -101,11 +101,7 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
         m_shares = shares;
         World = world;
         Mappings = new WorldScreenMappingSet(world: world);
-        m_filmsProbeCameras = !string.Equals(
-            a: world,
-            b: WorldDefinitionLoader.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        );
+        m_filmsProbeCameras = !WorldDefinitionLoader.IsBootInstance(name: world);
     }
 
     /// <summary>Gets the presented world's definition as the level last reconciled it, or <see langword="null"/> before

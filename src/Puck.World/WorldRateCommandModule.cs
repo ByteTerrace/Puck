@@ -67,11 +67,7 @@ internal sealed class WorldRateCommandModule(WorldInstanceHost instances, WorldR
     // Tapes a pause/resume that targets the BOOT instance specifically — the tape's own scope (see
     // WorldReplayTape.NoteRateLever's remarks). A named instance's own lever never reaches the tape.
     private void NoteBootLever(string name, bool paused) {
-        if (string.Equals(
-            a: name,
-            b: WorldInstanceHost.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )) {
+        if (WorldDefinitionLoader.IsBootInstance(name: name)) {
             m_replayTape.NoteRateLever(paused: paused);
         }
     }

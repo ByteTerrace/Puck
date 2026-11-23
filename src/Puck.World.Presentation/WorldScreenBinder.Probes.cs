@@ -36,11 +36,7 @@ public sealed partial class WorldScreenBinder {
     /// <param name="world">The name of the world instance whose probe host runs the probe.</param>
     /// <param name="id">The <c>probes[].id</c>, a seat-relative instance's key, or a <c>cameras[]</c> row name.</param>
     /// <returns>The key.</returns>
-    public static string ProbeKey(string world, string id) => (string.Equals(
-        a: world,
-        b: WorldDefinitionLoader.BootInstanceName,
-        comparisonType: StringComparison.Ordinal
-    )
+    public static string ProbeKey(string world, string id) => (WorldDefinitionLoader.IsBootInstance(name: world)
         ? id
         : GeneratedName.Join(world, id));
     /// <summary>Records that a probe host runs for a world shown through a screen, or why none can, so every probe source
@@ -53,11 +49,7 @@ public sealed partial class WorldScreenBinder {
     /// host that reconciles it.</summary>
     /// <param name="world">The name of the world instance.</param>
     public void ForgetProbeWorld(string world) {
-        if (!string.Equals(
-            a: world,
-            b: WorldDefinitionLoader.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )) {
+        if (!WorldDefinitionLoader.IsBootInstance(name: world)) {
             _ = m_probeWorlds.Remove(key: world);
         }
     }
@@ -85,11 +77,7 @@ public sealed partial class WorldScreenBinder {
 
         foreach (var screens in m_nestedOwners.Keys) {
             if (
-                !string.Equals(
-                    a: screens.World,
-                    b: WorldDefinitionLoader.BootInstanceName,
-                    comparisonType: StringComparison.Ordinal
-                ) &&
+                !WorldDefinitionLoader.IsBootInstance(name: screens.World) &&
                 (screens.Definition is { } definition)
             ) {
                 _ = worlds.TryAdd(
@@ -252,11 +240,7 @@ public sealed partial class WorldScreenBinder {
             return false;
         }
 
-        var boot = string.Equals(
-            a: world,
-            b: WorldDefinitionLoader.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        );
+        var boot = WorldDefinitionLoader.IsBootInstance(name: world);
         WorldCamera? camera = null;
         WorldNestedCamera presented = default;
 
@@ -363,11 +347,7 @@ public sealed partial class WorldScreenBinder {
 
         Detach(feed: feed);
 
-        if (string.Equals(
-            a: world,
-            b: WorldDefinitionLoader.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )) {
+        if (WorldDefinitionLoader.IsBootInstance(name: world)) {
             ReleaseOrphanedCameraView(name: feed.Name);
         } else if (!m_disposed) {
             ReconcileViews();
