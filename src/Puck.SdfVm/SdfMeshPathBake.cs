@@ -742,6 +742,19 @@ public sealed partial class SdfMeshPathBake {
         internal readonly SdfMesh? TraceOf(SdfMeshBakeGroup group) => Held((Group)group).Trace;
         // The tier the mesh a group draws was baked at: the replaced group's while a replacement lands ahead.
         internal readonly int TierOf(SdfMeshBakeGroup group) => (Held((Group)group).Replaces ?? group).Tier;
+        // The floor a group keeps of its own shape beside the finer tier it draws (Group.CurrentFloor), which a view too
+        // coarse for that tier draws in its place (SdfMeshBand); null where the group draws its floor, keeps none, draws
+        // another shape's stand-in, or is glass or skinned, whose passes take every mesh's own triangles.
+        internal readonly SdfMesh? FloorOf(SdfMeshBakeGroup group) {
+            var held = Held((Group)group);
+
+            return (((held.CurrentFloor is { } floor) && (held.Shown is { } shown) && !ReferenceEquals(objA: floor, objB: shown) &&
+                ((held.Replaces ?? held).Tier < held.CoarsestTier) && !held.Glass && shown.Members.IsEmpty && floor.Members.IsEmpty)
+                ? floor
+                : null);
+        }
+        // The coarsest tier of a group, its floor's.
+        internal readonly int CoarsestTierOf(SdfMeshBakeGroup group) => Held((Group)group).CoarsestTier;
         internal readonly IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) => Owner.CopiesOf(group: group);
         // Records that the frame's draws stand at the captured product revision, once they are published; after the
         // release too, since it reads no group.

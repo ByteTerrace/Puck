@@ -406,7 +406,7 @@ public readonly record struct SdfMeshDraw {
         ReferenceEquals(objA: Trace, objB: other.Trace) && (Piece == other.Piece) && (Glass == other.Glass) && (FrameSlot == other.FrameSlot) &&
         (UsesRootMaterialFrame == other.UsesRootMaterialFrame) && CarryRotation.Equals(other: other.CarryRotation) &&
         CarryTranslation.Equals(other: other.CarryTranslation) && CarryScale.Equals(obj: other.CarryScale) && ClipPlane.Equals(other: other.ClipPlane) &&
-        (Displacement == other.Displacement) && (PlacedBySlot ? SlotScale.Equals(obj: other.SlotScale) : Matrix.Equals(other: other.Matrix));
+        (Displacement == other.Displacement) && (Band == other.Band) && (PlacedBySlot ? SlotScale.Equals(obj: other.SlotScale) : Matrix.Equals(other: other.Matrix));
     /// <summary>Returns a hash of the fields <see cref="Equals(SdfMeshDraw)"/> compares.</summary>
     /// <returns>The hash.</returns>
     public override int GetHashCode() =>
@@ -415,7 +415,8 @@ public readonly record struct SdfMeshDraw {
             (PlacedBySlot ? SlotScale.GetHashCode() : Matrix.GetHashCode()),
             CarryTranslation,
             CarryScale,
-            ClipPlane
+            ClipPlane,
+            Band
         );
 
     /// <summary>Gets a stable surface identity for motion history when the picking identity also carries changing pose metadata.</summary>
@@ -487,6 +488,13 @@ public readonly record struct SdfMeshDraw {
     /// <summary>Gets the heights the draw's mesh, a height field's baked reference, is displaced by as it is drawn, or
     /// <see langword="null"/> for a draw drawn as its mesh was baked.</summary>
     public SdfMeshDisplacement? Displacement { get; init; }
+    /// <summary>Gets which of its bake group's resident detail tiers the draw stands for (<see cref="SdfMeshBand"/>):
+    /// none, the default, for a draw every pass draws.</summary>
+    public SdfMeshBand Band { get; init; }
+    /// <summary>Gets whether the draw belongs to the static scene the irradiance volume traces: a static draw
+    /// (<see cref="IsStatic"/>) that is not a group's floor standing beside its finer tier
+    /// (<see cref="SdfMeshBand.IsFloor"/>), whose placement the finer tier's draw already gives the scene.</summary>
+    public bool InStaticScene => (IsStatic && !Band.IsFloor);
 
     /// <summary>Returns whether two draws stage the same GPU record, bounds, picking identity and motion interpretation,
     /// including the exact bits of each floating-point field.</summary>
@@ -541,6 +549,7 @@ public readonly record struct SdfMeshDraw {
             !Equals(objA: this.MotionIdentity, objB: other.MotionIdentity) ||
             (BitConverter.SingleToInt32Bits(value: this.CarryScale) != BitConverter.SingleToInt32Bits(value: other.CarryScale)) ||
             (this.Displacement != other.Displacement) ||
+            (this.Band != other.Band) ||
             !Equals(objA: this.Identity, objB: other.Identity)
         ) {
             return false;
@@ -993,6 +1002,10 @@ public static class SdfMeshRegion {
         writer[SdfMeshRecord.DisplacementWord] = ((draw.Displacement is { } displacement) ? ((uint)displacement.Handle) : SdfFrameSampled.None);
         writer[(SdfMeshRecord.SelectionWord + 11)] = generation;
         writer[(SdfMeshRecord.SelectionWord + 15)] = ((uint)mesh.Levels.Count);
+        Span<uint> band = stackalloc uint[SdfMeshRecord.BandWords];
+
+        draw.Band.Write(words: band);
+        for (var word = 0; (word < SdfMeshRecord.BandWords); word++) { writer[(SdfMeshRecord.BandWord + word)] = band[word]; }
 
         return new(ChangedWords: writer.ChangedWords, PackedWords: writer.PackedWords, SelectionComputed: boxChanged);
     }

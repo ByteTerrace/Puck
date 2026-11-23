@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.SdfVm;
@@ -60,15 +59,15 @@ public sealed partial class WorldScreenBinder {
 
         return frameSource;
     }
-    // A WINDOW session's fit (WorldWindowFrustumFit.FitFrom), asked as its view dresses: the eye is the camera the view
+    // A WINDOW session's fit (WorldWindowFrustumFit.FitFrom), asked as its view dresses: the viewer is the camera the view
     // of the world the glass stands in renders with in this same frame (the boot world's viewer, the first seat presented
     // in a routed world, or the camera of the window one level up), the apertures that world's face and the counterpart
     // the destination's mirror declares, and the glass that world's row.
-    private static Func<CameraSnapshot?> FitWindow(SessionFeed feed) => WorldWindowFrustumFit.FitFrom(
+    private static Func<WorldWindowFit?> FitWindow(SessionFeed feed) => WorldWindowFrustumFit.FitFrom(
         destination: () => feed.Mirror.Definition,
-        eye: feed.Eye,
         local: feed.Local,
-        screen: feed.Row
+        screen: feed.Row,
+        viewer: feed.Viewer
     );
     // Settles every session's and infinity layer's access, then every session's route, for the frame being prepared,
     // before the presenter latches its views and before the view graph host binds them (WorldViewGraphHost.BeginFrame
@@ -148,7 +147,7 @@ public sealed partial class WorldScreenBinder {
     // resolution policy. A fitted window's mesh demand measures in the display pixels its glass spans (WindowDemandOf)
     // and holds to its frustum, the aperture from the viewer's eye.
     private SdfViewSnapshot SharedViewOf(SessionFeed feed) {
-        var camera = CameraOf(feed: feed, fitted: out var fitted);
+        var camera = CameraOf(feed: feed, fit: out var fit);
         var view = ResolveResolution(
             height: ((uint)(feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight)),
             name: feed.RegistrationName,
@@ -163,11 +162,11 @@ public sealed partial class WorldScreenBinder {
             width: ((uint)(feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth))
         );
 
-        if (!fitted) { return view; }
+        if (fit is not { Window: var window }) { return view; }
 
         return ((WindowDemandOf(fitted: in camera) is > 0f and var shown)
-            ? (view with { DemandHeight = shown, DemandWithinView = true })
-            : (view with { DemandWithinView = true }));
+            ? (view with { DemandHeight = shown, DemandWithinView = true, ImageWindow = window })
+            : (view with { DemandWithinView = true, ImageWindow = window }));
     }
     // The display pixels a fitted window's glass spans from the presentation's viewer, which its mesh demand measures
     // projected sizes in; zero before a dress has published a viewer, when the view measures in its own image. A window
@@ -205,10 +204,10 @@ public sealed partial class WorldScreenBinder {
             _ = host.HostFrame(context: in m_frameContext);
         }
     }
-    // The eye a window of the boot world fits to: the camera the presentation's viewer renders with this frame.
-    private Vector3? ViewerEye() => ((m_viewports is { } viewports)
-        ? WorldWindowFrustumFit.ViewerEye(viewports: viewports)
-        : null);
+    // The camera a window of the boot world fits to: the one the presentation's viewer renders with this frame
+    // (WorldSeatViewports.Viewer), with a seat resolving a view the lowest such seat's, the camera a pointer ray through
+    // that view is cast from, so the texel the window shows at a glass point and a click there look along one line.
+    private CameraSnapshot? ViewerCamera() => m_viewports?.Viewer;
     // The glass a window of the boot world stands in: its screen's row, read as its view dresses.
     private Func<WorldScreen?> BootRowOf(int screen) => () => RowOf(screen: screen);
 }

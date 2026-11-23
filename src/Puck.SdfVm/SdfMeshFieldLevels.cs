@@ -146,7 +146,7 @@ public sealed class SdfMeshFieldLevels {
         m_cell = cell;
         m_options = options;
         m_tolerance = (options.ToleranceShare * cell);
-        m_normalCosine = MathF.Cos(x: float.DegreesToRadians(degrees: SdfMeshCollapse.NormalDegrees[^1]));
+        m_normalCosine = MathF.Cos(x: float.DegreesToRadians(degrees: SdfMeshCollapse.ResolvedDegrees));
 
         var positions = reference.Positions.Span;
         var indices = reference.Indices.Span;

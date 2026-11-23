@@ -35,6 +35,7 @@ public static partial class SdfFrameBlock {
     private static readonly int DisableAmbientOcclusion = Offset(member: SdfWorldPackage.DisableAmbientOcclusion);
     private static readonly int GeometryOnly = Offset(member: SdfWorldPackage.GeometryOnly);
     private static readonly int ScreenFidelity = Offset(member: SdfWorldPackage.ScreenFidelity);
+    private static readonly int ScreenWindows = Offset(member: SdfWorldPackage.ScreenWindows);
     private static readonly int DisableScreenLights = Offset(member: SdfWorldPackage.DisableScreenLights);
     private static readonly int DisableSoftShadows = Offset(member: SdfWorldPackage.DisableSoftShadows);
     private static readonly int FarDistance = Offset(member: SdfWorldPackage.FarDistance);
@@ -163,6 +164,16 @@ public static partial class SdfFrameBlock {
     /// <param name="row">The first named detail row.</param>
     public static void WriteWorkCounterDetailRow(Span<byte> block, uint row) =>
         WriteUInt32(block: block, offset: WorkCounterDetailRow, value: row);
+    /// <summary>Writes the part of each screen's glass its source's image spans (<see cref="SdfWorldPackage.ScreenWindows"/>),
+    /// which <see cref="Write"/> leaves alone: the windows follow the images the pass samples, whose publications its
+    /// signature folds already (<see cref="SdfWorldPasses"/>).</summary>
+    /// <param name="block">The pass block, at least <see cref="SizeBytes"/> bytes.</param>
+    /// <param name="windows">One window a screen, by screen index; at most <see cref="SdfWorldPackage.ScreenSourceCount"/>.</param>
+    public static void WriteScreenWindows(Span<byte> block, ReadOnlySpan<Vector4> windows) {
+        for (var screen = 0; (screen < Math.Min(val1: windows.Length, val2: SdfWorldPackage.ScreenSourceCount)); screen++) {
+            WriteVector4(block: block, offset: (ScreenWindows + (screen * 16)), value: windows[screen]);
+        }
+    }
     /// <summary>Returns the forward distance of the plane a perspective view's surfaces are rendered from: the larger of
     /// <see cref="CameraSnapshot.Near"/> and <see cref="SdfWorldPackage.MinimumNear"/>. The mesh pass clips there
     /// (<see cref="ViewProjection.Create"/>'s <c>near</c>). The pass block carries the camera's own near distance, which

@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Commands;
 using Puck.Hosting;
@@ -82,8 +81,8 @@ public sealed partial class WorldScreenBinder {
         m_nestedOwners.Add(
             key: screens,
             value: new NestedOwner(
-                Eye: () => (scene.TrySeatCamera(camera: out var camera)
-                    ? camera.Position
+                Viewer: () => (scene.TrySeatCamera(camera: out var camera)
+                    ? camera
                     : null),
                 Feed: null,
                 Instance: scene.Authority,
@@ -147,8 +146,8 @@ public sealed partial class WorldScreenBinder {
             );
         }
     }
-    // The eye a window among a feed's destination's screens fits to: the camera the feed renders that world with.
-    private Func<Vector3?> EyeOf(SessionFeed feed) => () => CameraOf(feed: feed).Position;
+    // The camera a window among a feed's destination's screens fits to: the one the feed renders that world with.
+    private Func<CameraSnapshot?> ViewerOf(SessionFeed feed) => () => CameraOf(feed: feed);
     // The world a feed's destination's glass stands in, read as its view dresses.
     private static Func<WorldDefinition?> DestinationOf(SessionFeed feed) => () => feed.Mirror.Definition;
 
@@ -160,19 +159,19 @@ public sealed partial class WorldScreenBinder {
 
     // The camera a feed renders its destination with this frame: a window's fit, or its ordinary projection while the fit
     // has no answer and for a camera projection.
-    private CameraSnapshot CameraOf(SessionFeed feed) => CameraOf(feed: feed, fitted: out _);
-    // CameraOf, and whether the camera is a window's fit.
-    private CameraSnapshot CameraOf(SessionFeed feed, out bool fitted) {
+    private CameraSnapshot CameraOf(SessionFeed feed) => CameraOf(feed: feed, fit: out _);
+    // CameraOf, and the window's fit when the camera is one.
+    private CameraSnapshot CameraOf(SessionFeed feed, out WorldWindowFit? fit) {
         if (
             (feed.Projection == WorldScreenProjection.Window) &&
-            (feed.WindowFit?.Invoke() is { } fit)
+            (feed.WindowFit?.Invoke() is { } fitted)
         ) {
-            fitted = true;
+            fit = fitted;
 
-            return fit;
+            return fitted.Camera;
         }
 
-        fitted = false;
+        fit = null;
 
         return WorldSessionSceneEmitter.ResolveCamera(
             cameraName: feed.EffectiveCamera,

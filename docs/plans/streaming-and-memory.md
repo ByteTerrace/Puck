@@ -994,7 +994,7 @@ staging and capture to demand in this order:
     shows capturing unchanged visible residencies remains a real cost, let a
     view stand on client change records
     ([the presentation view](runtime-and-delivery.md#the-presentation-view)).
-    Keep all non-packed refusals (`SdfWorldTables.ForcesRender`, pending picks,
+    Keep all non-packed refusals (sampled images that moved, pending picks,
     render scale, binding changes, sharpness, image history, runtime freshness,
     convergence and allocation) outside the shortcut: none of them is a packed
     byte, so equal hashes cannot stand for them. The audit rules:

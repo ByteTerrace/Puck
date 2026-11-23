@@ -67,8 +67,22 @@ in place behind one handle, so no table hash sees it. A pass that samples one fo
 its read's publication and taint into its signature (`SdfWorldPasses.ReadSignatureOf`,
 whose `ReadsOf` lists which parts sample which images; an unlisted part folds every
 screen), and the rest stand on their own inputs. A screen is never a reason to
-force every pass. Only the whole view, which sees no publication, renders while a
-screen shows a source (`SdfWorldTables.ForcesRender`).
+force every pass. The whole view stands on the same images: the render graph hands
+`IRenderGraphPackageFactory.IsUnchanged` what each read will bind this frame
+(`RenderGraphReadStands`: a producer already declared unchanged, read at its current
+frame), and `SdfWorldPasses.ReadsStand` holds every screen the views pass or the sky
+samples, and every infinity image, to the publication the view's latest render
+observed, so a still screen in a still view renders nothing.
+
+A window session's frustum is fitted to the part of its glass its viewer sees
+(`WorldPortalVisibility.Window`, `WorldWindowFrustumFit.FitFrom`), and the host
+sizes its image by that part (`WorldPortalVisibility.Coverage`), so a glass at the
+near plane or past the image's edges renders about a texel a pixel of what can be
+seen. The window rides the view (`SdfViewSnapshot.ImageWindow`); `SdfWorldPasses`
+notes it as each render is prepared, on the frame thread, and the sampling view
+writes the window of the image it binds into `screenWindows`, which
+`sampleScreenSurface` maps the source through. Never compute the window again on
+the sampling side: a held or standing image keeps the window it was rendered at.
 
 A pass signs with its motion scope's revision, not the residency's
 (`SdfMotionScope`, [decision](../../../docs/decisions/rendering.md#a-pass-stands-on-what-it-can-show)):
@@ -196,6 +210,20 @@ occlusion/selection pipeline; a selection diagnostic needs a rebuilt host.
 For an independent vertex check, `world.cull off` and one fixed `world.detail`
 level make the mesh, glass and cascades select the same geometry: each cascade
 must count twice the mesh vertices plus exactly the glass vertices.
+
+Each view draws a bake group at the detail its own pixels need. Where the bake keeps
+a group's floor of its own shape beside the finer tier it draws
+(`SdfMeshPathBake.FrameAccess.FloorOf`), the dresser binds the floor's pieces after
+the mesh's in every placement's rows and gives all of them one band (`SdfMeshBand`):
+the sphere about both meshes' box and the floor's cell. `sdfSelectionBandKeeps` draws
+the floor where its cell projects under half a pixel (a view) or half a texel (a
+cascade) and the finer tier everywhere else, deciding from the shared words and the
+draw's pose alone, so exactly one tier of a placement draws; a finer tier yields only
+while every floor row it names stands. Floor rows stay out of the irradiance volume's
+static scene (`SdfMeshDraw.InStaticScene`). Below the floor, the collapse's last two
+levels (`SdfMeshCollapse.CellShares`) serve views far smaller than the tier was
+demanded for. The selection marks clamp a level past the second to it, so
+`drawn.*.level2` counts the second level's triangles for those draws.
 
 Draw selection reads the retained `SdfWorldTables` staged draw span, the same
 records whose boxes and GPU records were uploaded. Never borrow the frame source's

@@ -52,21 +52,16 @@ public sealed partial class SdfWorldPasses {
 
         if (images.Frame != m_frame) {
             images.Frame = m_frame;
+            images.List = reads;
             Observe(images: images, latch: in latch, reads: reads);
         }
         Span<bool> screens = stackalloc bool[SdfWorldTables.MaxScreenSurfaces];
-        Span<bool> sky = stackalloc bool[SdfWorldTables.MaxScreenSurfaces];
 
-        // Only a declared screen binds a source (SdfWorldResidency.DeclareScreens); the sky samples the declared screens
-        // its layers name.
-        view.Residency.DeclareScreens(declared: screens);
-        if (sampled == ExternalReads.Sky) { frame.Sky.MarkScreens(screens: sky); }
-        // The views pass's scope holds the cull its mesh pass draws this frame (MotionOf, asked first).
-        var faces = ((part == SdfWorldPackage.Parts.Views) ? entry.DrawnOf(scope: DrawScope.Mesh, tables: tables).Motion : null);
+        MarkSampled(entry: entry, frame: frame, screens: screens, sky: (sampled == ExternalReads.Sky), tables: tables, view: view, views: (part == SdfWorldPackage.Parts.Views));
         var hash = Fnv1aHash.Create();
 
         for (var screen = 0; (screen < screens.Length); screen++) {
-            if (!screens[screen] || ((sampled == ExternalReads.Sky) && !sky[screen]) || ((faces is not null) && !tables.ScreenFaceShows(scope: faces, screen: screen))) { continue; }
+            if (!screens[screen]) { continue; }
             if (!Fold(hash: ref hash, images: images, read: view.Residency.ScreenRead(reads: reads, screen: screen, view: view.View))) { return null; }
         }
         if (sampled == ExternalReads.Sky) {
@@ -81,6 +76,47 @@ public sealed partial class SdfWorldPasses {
             hash.Add(value: unchecked((ulong)read));
             hash.Add(value: unchecked((ulong)((read >= 0) ? images.Revisions[read] : 0L)));
             return true;
+        }
+    }
+    // Marks the screens a part samples: every declared screen (only a declared screen binds a source,
+    // SdfWorldResidency.DeclareScreens), only those a sky layer names for the sky and the composite, and only those whose
+    // face the mesh scope's cull keeps for the views pass, whose scope holds the cull its mesh pass draws this frame
+    // (MotionOf, asked first).
+    private static void MarkSampled(Entry entry, SdfWorldView view, SdfFrame frame, SdfWorldTables tables, Span<bool> screens, bool sky, bool views) {
+        Span<bool> named = stackalloc bool[SdfWorldTables.MaxScreenSurfaces];
+
+        view.Residency.DeclareScreens(declared: screens);
+        if (sky) { frame.Sky.MarkScreens(screens: named); }
+        var faces = (views ? entry.DrawnOf(scope: DrawScope.Mesh, tables: tables).Motion : null);
+
+        for (var screen = 0; (screen < screens.Length); screen++) {
+            screens[screen] &= ((!sky || named[screen]) && ((faces is null) || tables.ScreenFaceShows(scope: faces, screen: screen)));
+        }
+    }
+    // Whether every image of another instance the view's passes sample stands this frame with the publication its latest
+    // render sampled (RenderGraphReadStands), so the whole view may stand while a screen shows a source: the screens the
+    // views pass and the sky sample (MarkSampled, ReadsOf) and the view's infinity images. A screen with no source
+    // samples the filler and stands; one whose source the view has never observed does not.
+    private bool ReadsStand(Entry entry, SdfWorldView view, SdfWorldTables tables, in RenderGraphReadStands stands) {
+        var frame = view.Residency.Frame!;
+        var images = entry.Reads;
+        Span<bool> views = stackalloc bool[SdfWorldTables.MaxScreenSurfaces];
+        Span<bool> sky = stackalloc bool[SdfWorldTables.MaxScreenSurfaces];
+
+        MarkSampled(entry: entry, frame: frame, screens: views, sky: false, tables: tables, view: view, views: true);
+        MarkSampled(entry: entry, frame: frame, screens: sky, sky: true, tables: tables, view: view, views: false);
+        for (var screen = 0; (screen < views.Length); screen++) {
+            if ((views[screen] || sky[screen]) && (view.Residency.ScreenProducerOf(screen: screen, view: view.View) is { } producer) && !Stands(producer: producer, stands: in stands)) { return false; }
+        }
+        foreach (var binding in (frame.Views[Math.Min(val1: view.View, val2: (frame.Views.Count - 1))].SkyViews ?? [])) {
+            if ((binding.Producer is { } producer) && !Stands(producer: producer, stands: in stands)) { return false; }
+        }
+        return true;
+
+        bool Stands(string producer, in RenderGraphReadStands stands) {
+            var read = ((images?.List is { } list) ? list.IndexOf(producer: producer) : -1);
+
+            return ((read >= 0) && !images!.Unknown[read] && stands.TryStanding(producer: producer, publication: out var publication) && (publication == images.Publications[read]));
         }
     }
     // Reads the image each read of the instance binds this frame, as its recorders bind it, without taking its lease: a
@@ -112,6 +148,8 @@ public sealed partial class SdfWorldPasses {
 
     // The image each read of an instance bound at its last observation (Observe), by its position in the instance's reads.
     private sealed class ReadImages {
+        // The instance's reads the observation was taken over, whose positions index the arrays below.
+        public RenderGraphExternalReads? List;
         public ReferenceRevision[] Publications = [];
         public DeliveryLabel[] Labels = [];
         public bool[] Unknown = [];

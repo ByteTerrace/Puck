@@ -423,6 +423,7 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_MESH_SKIN_FLAG", value: SdfMeshRecord.SkinFlag);
         declarations.Bits(name: "SDF_MESH_WORLD_MATERIAL_FLAG", value: SdfMeshRecord.WorldMaterialFlag);
         declarations.Count(name: "SDF_MESH_DISPLACEMENT_WORD", value: SdfMeshRecord.DisplacementWord);
+        declarations.Count(name: "SDF_MESH_BAND_WORD", value: SdfMeshRecord.BandWord);
         declarations.Section(title: "The frame's sampled table (SdfFrameSampled): a handle with no entry, a height field entry's header, and the reference height its baked reference stands at.");
         declarations.Bits(name: "SDF_FRAME_SAMPLED_NONE", value: SdfFrameSampled.None);
         declarations.Count(name: "SDF_FRAME_SAMPLED_HEADER_WORDS", value: SdfFrameSampled.HeaderWords);

@@ -193,6 +193,11 @@ public static partial class SdfWorldPackage {
     /// seat framing the screen it engaged carries its ease's weight here, so at 1 a framed picture is its source scaled;
     /// every other view carries 0.</summary>
     public const string ScreenFidelity = "screenFidelity";
+    /// <summary>The pass-group value holding, for each screen the view samples, the part of the screen's glass its
+    /// source's image spans (<c>float4[ScreenSourceCount]</c>: left, top, right and bottom in the glass's image
+    /// coordinates): a window whose frustum was fitted to the part of the glass its viewer sees renders that part alone,
+    /// and the screen shading maps the image there. The unit rectangle for every other screen.</summary>
+    public const string ScreenWindows = "screenWindows";
     /// <summary>The view-local stamp fade: first transform slot, slot count and opacity.</summary>
     public const string StampFade = "stampFade";
     /// <summary>The view-local pose overlay: first transform slot, slot count and first overlay row, each a whole number
@@ -366,6 +371,7 @@ public static partial class SdfWorldPackage {
         Value(name: DisableScreenLights, type: ShaderValueType.Uint),
         Value(name: GeometryOnly, type: ShaderValueType.Uint),
         Value(name: ScreenFidelity, type: ShaderValueType.Float),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: ScreenSourceCount, name: ScreenWindows, type: ShaderValueType.Float4),
         Value(name: StampFade, type: ShaderValueType.Float3),
         Value(name: PoseOverlay, type: ShaderValueType.Uint3),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: (MeshShadowEntries * MeshShadowCascadeRows), name: MeshShadowCascades, type: ShaderValueType.Float4),

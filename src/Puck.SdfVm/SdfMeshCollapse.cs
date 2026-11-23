@@ -25,11 +25,19 @@ namespace Puck.SdfVm;
 /// </summary>
 public static class SdfMeshCollapse {
     /// <summary>The share of a mesh's contour cell (<see cref="SdfMesh.BakeCell"/>, its largest side) each coarser level's
-    /// vertices stay within, finest first.</summary>
-    public static ReadOnlySpan<float> CellShares => [0.25f, 2f];
+    /// vertices stay within, finest first. The first two serve the views that resolve the mesh's own tier; the last two
+    /// serve the views far smaller than the one its tier was demanded for (a screen a few dozen pixels high, a shadow
+    /// texel metres across), which take a level only where its error projects under a pixel or a texel
+    /// (<see cref="SdfMeshDetail"/>), so a tiny view draws a tiny mesh.</summary>
+    public static ReadOnlySpan<float> CellShares => [0.25f, 2f, 8f, 32f];
     /// <summary>The angle, in degrees, each level's interpolated normal at a vertex's nearest point stays within of the
     /// vertex's own normal, finest first.</summary>
-    public static ReadOnlySpan<float> NormalDegrees => [2f, 6f];
+    public static ReadOnlySpan<float> NormalDegrees => [2f, 6f, 15f, 30f];
+    /// <summary>The normal angle, in degrees, the levels a view resolving the mesh's own tier takes stay within: the
+    /// second level's, which the field levels' witnesses hold too (<see cref="SdfMeshFieldLevels"/>).</summary>
+    public static float ResolvedDegrees => NormalDegrees[(ResolvedLevels - 1)];
+    /// <summary>The levels a view resolving the mesh's own tier takes, finest first (<see cref="CellShares"/>).</summary>
+    public const int ResolvedLevels = 2;
 
     /// <summary>The most of the next finer level's triangles a level keeps and still is made: one that saves less is not
     /// worth its region words.</summary>
@@ -70,7 +78,11 @@ public static class SdfMeshCollapse {
         var levels = new List<SdfMeshLevel>(capacity: CellShares.Length);
         var kept = mesh.TriangleCount;
 
-        for (var level = 0; (level < CellShares.Length); level++) {
+        // A mesh whose features are preserved (lettering) makes only the levels a view resolving its tier takes: its
+        // strokes are what it shows, which the coarser levels' wider normal bounds would let merge.
+        var levelCount = (preserveFeatures ? ResolvedLevels : CellShares.Length);
+
+        for (var level = 0; (level < levelCount); level++) {
             var made = collapser.Run(cosine: Math.Cos(d: ((NormalDegrees[level] * Math.PI) / 180.0)), error: (CellShares[level] * cell));
 
             if (made.TriangleCount > (KeptShare * kept)) {

@@ -1573,23 +1573,15 @@ The frame's GPU side:
   route's portal chapters. One shadow solution per residency, read by every
   view of it, is the fix; it must cover the union of its views' eyes, since a
   session world's views look at places no player stands in.
-- [medium] A small view is vertex-bound: a session view a few dozen pixels
-  high draws each group at the tier its residency's largest view demands
-  (`SdfMeshDemand`), at that tier's coarsest collapse level, so it can draw
-  more vertices than the main view. A view's draws should take a tier and
-  level its own size asks for; dropping only sub-pixel boxes moved no measured
-  view.
-- [medium] A portal whose glass reaches the camera's near plane, or runs past
-  the image's edges, renders its whole aperture into an image no larger than
-  its consumer's (`WorldPortalVisibility.Coverage` answers the whole image), so
-  close up it is sampled below a texel a pixel and shades texels no one sees.
-  Fitting the session's frustum to the visible part of the glass, with the
-  glass's image map naming that part, renders it at the pixels it covers.
-- [low] A view whose world binds a screen never stands whole
-  (`SdfWorldTables.ForcesRender`); its passes stand on the screens'
-  publications instead. The render graph could carry an unbound read's
-  publication into the instance's unchanged decision so a still screen inside
-  a still view renders nothing.
+- [medium] A small view is still vertex-bound by draw count. A view takes a
+  group's floor where its own pixels allow (`SdfMeshBand`) and the collapse's
+  coarsest levels below it (`SdfMeshCollapse.CellShares`), yet a session view
+  about twenty pixels high in the east wing still draws a few hundred draws
+  at about a thousand triangles each: pieces of chunked static meshes, whose
+  seams stay fixed through every level (`SdfMeshChunks`), and small creations
+  whose floor is already their coarsest mesh. A level that may move a chunk's
+  seam where both neighbours take it, or a cull by projected size larger than
+  a pixel, is the next step.
 - [medium] Confirm whether the bench's default `world.indirect medium` is the
   bar's highest quality; if not, every frame reading sits below the bar's
   setting.

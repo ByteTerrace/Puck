@@ -7,7 +7,7 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 // The cadence: whether a view's latest render stands for the frame the tables hold now. A view stands only when its
-// signature equals the one it last rendered at and nothing unhashed forces a render (ForcesRender).
+// signature equals the one it last rendered at and the cadence gate is on (SdfWorldResidency.IsUnchanged).
 //
 // The whole-view signature folds every packed table and the frame block. PassSignature partitions the same inputs:
 // geometry owns the field and camera; shadow owns directions and the fitted cascades; lighting owns the screens' tables,
@@ -44,8 +44,8 @@ namespace Puck.SdfVm;
 //   - m_meshIrradianceRevision : each publication of the irradiance volume, which the device copies into one table
 //                          behind the same binding; a lighting value too, so only the shading passes gather it again.
 // Not covered by any packed span: a screen's image, which its source updates in place behind the same handle. A pass
-// that samples one folds the image's publication into its signature (SdfWorldPasses.ReadSignatureOf); the whole view,
-// which sees no publication, renders while any screen shows a source (ForcesRender).
+// that samples one folds the image's publication into its signature (SdfWorldPasses.ReadSignatureOf); the whole view
+// stands only while each image it samples stands with the publication its latest render sampled (SdfWorldPasses.ReadsStand).
 // The pass block's temporal values (jitter, previous view) and the previous transform tables belong to each instance's
 // history, not the tables: SdfWorldPasses.IsUnchanged holds them through SdfTemporalHistory.Stands, by the poses of the
 // instance's own scope (SdfMotionScope.Poses).
@@ -358,21 +358,6 @@ public sealed partial class SdfWorldTables {
     }
     private static void AddMembers(ref Fnv1aHash hash, Span<byte> block, (int Offset, int Length)[] members) {
         foreach (var member in members) { hash.Add(values: block.Slice(length: member.Length, start: member.Offset)); }
-    }
-    /// <summary>Returns whether the frame the tables hold forces every view to render whatever its signature: the cadence
-    /// gate is off, or a view samples another instance's image (a screen showing a source, a sky layer's infinity image),
-    /// which changes in place behind the same handle. A view's passes identify those images by their publications instead
-    /// (<see cref="SdfWorldPasses"/>), which the whole view's signature cannot see.</summary>
-    /// <param name="frame">The frame the tables packed.</param>
-    /// <returns><see langword="true"/> when no view's latest render may stand for the frame.</returns>
-    public bool ForcesRender(SdfFrame frame) {
-        ArgumentNullException.ThrowIfNull(argument: frame);
-
-        if (!frame.EnableCadenceGate || (BoundScreenCount() != 0u)) { return true; }
-        for (var view = 0; (view < frame.Views.Count); view++) {
-            if (frame.Views[view].SkyViews is { Count: > 0 }) { return true; }
-        }
-        return false;
     }
 
     /// <summary>Returns the 64-bit FNV-1a signature of what one view renders from in the frame the tables hold: the

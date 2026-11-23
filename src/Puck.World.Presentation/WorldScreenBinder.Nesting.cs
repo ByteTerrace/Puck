@@ -1,4 +1,4 @@
-using System.Numerics;
+using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Sources;
 using Puck.Commands;
 using Puck.Hosting;
@@ -132,7 +132,7 @@ public sealed partial class WorldScreenBinder {
 
         feed.Nested = screens;
         m_nestedOwners[screens] = new NestedOwner(
-            Eye: EyeOf(feed: feed),
+            Viewer: ViewerOf(feed: feed),
             Feed: feed,
             Instance: feed.InstanceName,
             Local: DestinationOf(feed: feed),
@@ -427,7 +427,7 @@ public sealed partial class WorldScreenBinder {
 
     // What one level's screens present: the instance whose screen sessions they show, the world their glass stands in,
     // and the eye a window among them fits to, with the feed or routed scene the level belongs to.
-    private sealed record NestedOwner(string Instance, Func<WorldDefinition?> Local, Func<Vector3?> Eye, SessionFeed? Feed, WorldRoutedScene? Scene) {
+    private sealed record NestedOwner(string Instance, Func<WorldDefinition?> Local, Func<CameraSnapshot?> Viewer, SessionFeed? Feed, WorldRoutedScene? Scene) {
         public InfinityEntry? Infinity { get; init; }
         // The extents of the source instances the level's screens show, which its mappings publish at.
         public NestedImages? Images { get; set; }
@@ -527,7 +527,7 @@ public sealed partial class WorldScreenBinder {
                 resolution: source.Resolution,
                 screenIndex: screen
             ) {
-                Eye = owner.Eye,
+                Viewer = owner.Viewer,
                 Local = owner.Local,
                 ParentFeed = owner.Feed,
                 ParentInfinity = owner.Infinity,

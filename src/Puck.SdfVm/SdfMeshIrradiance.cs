@@ -506,7 +506,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         for (var row = 0; (row < rows.Count); row++) {
             var draw = rows[row];
 
-            if (!draw.IsStatic) { continue; }
+            if (!draw.InStaticScene) { continue; }
             if (!HasComparableTransform(in draw)) { return false; }
             (ByReference<SdfMesh>, Matrix4x4, int) key = (draw.Mesh, draw.FixedPlacement, draw.Material);
 
@@ -1627,7 +1627,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             for (var row = m_keyRuns.Start(index: run); (row < (m_keyRuns.Start(index: run) + m_keyRuns.Length(index: run))); row++) {
                 if (m_drawStatic[row]) { m_keyValue = m_keyValue.Remove(element: m_drawKeys[row]); m_keyStatic--; }
                 var draw = draws[row];
-                var isStatic = draw.IsStatic;
+                var isStatic = draw.InStaticScene;
 
                 m_drawStatic[row] = isStatic;
                 if (isStatic) { m_staticRows.Add(item: row); } else { m_staticRows.Remove(item: row); }
@@ -1693,7 +1693,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         foreach (var index in m_staticRows) {
             var draw = meshDraws[index];
 
-            if (!draw.IsStatic) { continue; }
+            if (!draw.InStaticScene) { continue; }
             if ((draw.Trace is not null) && (draw.Piece == 0)) { floors++; }
             count = TraceDraws(count: count, draw: in draw, into: ref snapshot);
         }

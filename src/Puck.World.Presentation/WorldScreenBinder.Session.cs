@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.SdfVm;
 using Puck.Commands;
@@ -241,7 +240,7 @@ public sealed partial class WorldScreenBinder {
             resolution: session.Resolution,
             screenIndex: index
         ) {
-            Eye = ViewerEye,
+            Viewer = ViewerCamera,
             Local = BootDefinition,
             Row = BootRowOf(screen: index),
         };
@@ -393,8 +392,8 @@ public sealed partial class WorldScreenBinder {
         // The routed world whose own screen this is, or null.
         public WorldRoutedScene? RootScene { get; init; }
 
-        // The eye a window fits to, the world its glass stands in, and its glass's row, each read as the view dresses.
-        public Func<Vector3?> Eye { get; init; } = static () => null;
+        // The camera a window fits to, the world its glass stands in, and its glass's row, each read as the view dresses.
+        public Func<CameraSnapshot?> Viewer { get; init; } = static () => null;
         public Func<WorldDefinition?> Local { get; init; } = static () => null;
         public Func<WorldScreen?> Row { get; init; } = static () => null;
 
@@ -430,7 +429,7 @@ public sealed partial class WorldScreenBinder {
         public ContentAccess Content { get; } = new(level: AccessOf(observation: hosted.Observation), mirror: hosted.Mirror);
         public bool Home { get; set; }
 
-        public Func<CameraSnapshot?>? WindowFit { get; set; }
+        public Func<WorldWindowFit?>? WindowFit { get; set; }
         // Whether the views are configured for the feed (RegisterSessionView).
         public bool Registered { get; set; }
         // The emitter and frame source a residency of the feed's own renders, built the first time it needs one

@@ -835,8 +835,8 @@ wrongly keeps its picture also lowers the count the work is judged by.
 
 - The existing refusals stay outside the shortcut. No view keeps its
   picture while meshes are pending, lighting is settling or a source is
-  waiting, or while a screen's image is rewritten in place
-  (`SdfWorldTables.ForcesRender`).
+  waiting, or while an image it samples has moved
+  (`SdfWorldPasses.ReadsStand`).
 - An audit compares each skipped view with the full decision the
   residency makes today, and counts views that were eligible, skipped and
   audited. A check that never skips audits nothing and would pass, so the

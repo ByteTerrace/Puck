@@ -542,7 +542,8 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         uint level = min(state.y, d.w);
         if (step == SDF_OCCLUSION_EARLY_STEP) {
             kept = ((draw % slices) == slice) &&
-                (splitExit || (((a.w >> 1u) & 1u) == (header.w & 1u))) && (unboxed || sdfSelectionKeeps(boxCenter, boxX, boxY, boxZ));
+                (splitExit || (((a.w >> 1u) & 1u) == (header.w & 1u))) && (unboxed || sdfSelectionKeeps(boxCenter, boxX, boxY, boxZ)) &&
+                sdfSelectionBandKeeps(record, unboxed, header.x);
             if (kept) {
                 level = sdfSelectionLevel(record, state, unboxed, boxCenter, boxX, boxY, boxZ, asfloat(b.w), c.w, d.w);
                 state.y = level;

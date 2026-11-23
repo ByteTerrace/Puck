@@ -132,7 +132,7 @@
 #define SDF_VISIBILITY_ZERO_NORMAL  0x80008000u
 
 // The mesh region's draw record (SdfMeshRecord) and the level shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshLevelShift).
-#define SDF_MESH_DRAW_WORDS             51u
+#define SDF_MESH_DRAW_WORDS             58u
 #define SDF_MESH_POSE_WORDS             12u
 #define SDF_MESH_SCALE_WORD             0u
 #define SDF_MESH_MATERIAL_WORD          12u
@@ -160,6 +160,7 @@
 #define SDF_MESH_SKIN_FLAG              0x00000004u
 #define SDF_MESH_WORLD_MATERIAL_FLAG    0x00000008u
 #define SDF_MESH_DISPLACEMENT_WORD      50u
+#define SDF_MESH_BAND_WORD              51u
 
 // The frame's sampled table (SdfFrameSampled): a handle with no entry, a height field entry's header, and the reference height its baked reference stands at.
 #define SDF_FRAME_SAMPLED_NONE            0xFFFFFFFFu

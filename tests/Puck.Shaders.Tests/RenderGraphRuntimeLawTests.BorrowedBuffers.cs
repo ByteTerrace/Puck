@@ -139,7 +139,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) => Inner.BuildAsync(cancellationToken: cancellationToken, context: context);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => Inner.Create(built: built, context: context, groups: groups);
         public IShaderPipelineStorageCounter? CounterOf(string instance) => Inner;
-        public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) => Inner.Unchanged;
+        public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context, in RenderGraphReadStands reads) => Inner.Unchanged;
     }
     private sealed class BorrowedPackage(IGpuBuffer buffer) : IRenderGraphPackageFactory {
         public SharedBufferOwner? LiveOwner { get; set; }
@@ -168,7 +168,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         }
         private int m_builds;
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) => new Recorder(owner: this, part: context.Part);
-        public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) => Unchanged;
+        public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context, in RenderGraphReadStands reads) => Unchanged;
 
         private sealed class Recorder(BorrowedPackage owner, string? part) : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
             private string? m_version;

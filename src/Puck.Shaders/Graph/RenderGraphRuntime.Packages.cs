@@ -192,17 +192,46 @@ public sealed partial class RenderGraphRuntime {
     // Whether every distinct package factory of a package-only graph says nothing the instance renders from changed.
     private bool PackagesUnchanged(int index, string instance, long unreadFrames, in FrameContext context) {
         var factories = m_instanceFactories[index];
+        var reads = new RenderGraphReadStands(consumer: index, runtime: this);
 
         for (var position = 0; (position < factories.Length); position++) {
             if (!factories[position].IsUnchanged(
                 context: in context,
                 instance: instance,
+                reads: in reads,
                 unreadFrames: unreadFrames
             )) {
                 return false;
             }
         }
 
+        return true;
+    }
+    // Whether a consumer's read of a producer binds, this frame, the image the producer published before
+    // (RenderGraphReadStands): the producer is a graph instance CollectUnchanged has already declared unchanged, which it
+    // does in render order, so a producer the consumer reads is decided before it, and the consumer reads its current
+    // frame. Anything else (an external producer, one that renders this frame, a previous-frame read) is an image that
+    // may move.
+    internal bool TryStandingRead(int consumer, string producer, out ReferenceRevision publication) {
+        publication = default;
+
+        var index = m_set.IndexOf(name: producer);
+
+        if ((index < 0) || (m_producers[index] is not null) || !m_unchangedIndices.Contains(index: index)) { return false; }
+
+        var read = false;
+
+        foreach (var edge in m_set.Reads[consumer]) {
+            if (edge.Producer != index) { continue; }
+            if (edge.PreviousFrame) { return false; }
+            read = true;
+        }
+        if (!read) { return false; }
+
+        var latest = LatestOf(index: index, latch: in m_latch);
+
+        if ((latest.Frame < 0) || !latest.Image.IsSameDeviceImage || !latest.Publication.IsPublished()) { return false; }
+        publication = latest.Publication;
         return true;
     }
     // Counts the frames an instance stays unread: nothing the display shows reaches it, though something still names it.

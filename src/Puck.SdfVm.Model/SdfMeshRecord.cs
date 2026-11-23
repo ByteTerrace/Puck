@@ -9,8 +9,8 @@ namespace Puck.SdfVm;
 /// carry every world position and normal the draw resolves goes through last (a unit rotation quaternion, a translation,
 /// then the uniform scale a position takes before the translation), the world-space clip plane (<c>dot(n, x) + d</c>, a
 /// point with a negative value not drawn; all zeros draws everything), the shared level table's address and count, the
-/// draw's bounds and selection metadata, and the handle of the heights the draw is displaced by
-/// (<see cref="DisplacementWord"/>).
+/// draw's bounds and selection metadata, the handle of the heights the draw is displaced by
+/// (<see cref="DisplacementWord"/>), and the detail band the draw stands in (<see cref="BandWord"/>).
 /// <para>
 /// A draw with a frame slot rides it: its object-to-world transform is the slot's row of the frame's dynamic transforms
 /// (position and orientation) at the scale its record holds (<see cref="ScaleWord"/>), so a body that moves rewrites its
@@ -28,11 +28,18 @@ public static class SdfMeshRecord {
     /// object-space unit takes in the world before the carry.</summary>
     public const int ScaleWord = 0;
     /// <summary>The words of one draw's record.</summary>
-    public const int DrawWords = 51;
+    public const int DrawWords = 58;
     /// <summary>The handle, in the frame's sampled table (<see cref="SdfFrameSampled"/>), of the heights a height field's
     /// draw displaces its baked reference by, or <see cref="SdfFrameSampled.None"/> for a draw drawn as it was
     /// baked.</summary>
     public const int DisplacementWord = 50;
+    /// <summary>The first of the detail band's words (<c>SdfMeshBand</c>): the sphere's object-space center and radius
+    /// as floats, the pixel the group's floor stands at as a float (positive for a fine draw, negative for a floor, zero
+    /// for a draw every pass draws), then, for a fine draw, the first staged row of its placement's floor and how many
+    /// rows the floor takes.</summary>
+    public const int BandWord = 51;
+    /// <summary>The words of the detail band (<see cref="BandWord"/>).</summary>
+    public const int BandWords = 7;
     /// <summary>The first of four four-word rows used by GPU draw selection: center and flags; half X and stretch;
     /// half Y and staged instance generation; half Z and level count. The box is in world space, or, for a record
     /// carrying <see cref="SlotBoxFlag"/>, in its frame slot's frame before the slot's pose, the record's scale and its
