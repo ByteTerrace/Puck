@@ -67,8 +67,6 @@ public sealed partial class SdfMeshPathBake {
     // observes.
     private long m_regionBudgetBytes = long.MaxValue;
 
-    // The tier a pixel demands under the bias the budget holds.
-    private int TierOf(float pixel) => SdfMeshTier.Of(pixel: SdfMeshTier.Biased(halfRungs: Volatile.Read(location: ref m_bias), pixel: pixel));
     /// <summary>Returns the tier a plan bakes each group at: the coarsest whose cell stays under half a display pixel at
     /// the group's planned box from the nearest demand point (<see cref="SdfMeshTier.Of"/>, <see cref="SdfMeshDemand.PixelAt(SdfMeshBakeGroup, IReadOnlyList{DynamicTransform})"/>),
     /// a dynamic group's box carried into world space by its slot's transform among <paramref name="transforms"/> and
