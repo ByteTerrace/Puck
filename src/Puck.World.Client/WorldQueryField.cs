@@ -24,6 +24,11 @@ public sealed class WorldQueryField {
         Responding = responding;
     }
 
+    /// <summary>Converts one evaluator into a field with no responding part.</summary>
+    /// <param name="field">The evaluator, or <see langword="null"/>.</param>
+    /// <returns>The field, or <see langword="null"/> for no evaluator.</returns>
+    [return: System.Diagnostics.CodeAnalysis.NotNullIfNotNull(parameterName: nameof(field))]
+    public static implicit operator WorldQueryField?(SdfFieldEvaluator? field) => ((field is null) ? null : new(fixedPart: field));
     /// <summary>Gets the part that changes only with a definition delivery.</summary>
     public SdfFieldEvaluator Fixed { get; }
     /// <summary>Gets the part a response sweep moves, or <see langword="null"/>.</summary>
