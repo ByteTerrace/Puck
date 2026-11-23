@@ -126,7 +126,7 @@ public sealed class WorldRigidDynamicsLawTests {
         var arriving = fixture.Server.Body(index: b)!;
         var feed = new WorldEventFeed(capacity: population.Capacity);
 
-        feed.Collect(definition: document, population: population);
+        feed.Collect(definition: document, listeners: WorldEventListeners.Everyone, population: population);
         var regionId = document.Placements[0].Id;
 
         Assert.True(condition: feed.IsOccupant(body: a, placementId: regionId));
@@ -134,12 +134,12 @@ public sealed class WorldRigidDynamicsLawTests {
             PlacementRowsRaw = [.. document.Placements.Select(selector: row => row with { Region = null })],
         };
 
-        feed.Collect(definition: withoutRegion, population: population);
+        feed.Collect(definition: withoutRegion, listeners: WorldEventListeners.Everyone, population: population);
         sleeping.Glide(position: sleeping.FixedPosition with { X = FixedQ4816.FromInteger(value: 11) });
         for (var tick = 0; ((tick < 300) && (population.SleepingRigidBodies != 2)); tick++) { fixture.Step(); }
         Assert.Equal(expected: 2, actual: population.SleepingRigidBodies);
         // Re-adding an unchanged region after movement while it was absent must reconsider frozen occupants.
-        feed.Collect(definition: document, population: population);
+        feed.Collect(definition: document, listeners: WorldEventListeners.Everyone, population: population);
         Assert.False(condition: feed.IsOccupant(body: a, placementId: regionId));
         var before = sleeping.FixedPosition;
 

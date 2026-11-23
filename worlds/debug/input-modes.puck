@@ -18,6 +18,8 @@ inputModes {
         { name: "suited", values ["1"], channels: concat(movement, controls, ["rise", "flight", "dash"]) }
         { name: "pilot-noclip", values ["2"], channels: concat(movement, controls, ["rise"]) }
         { name: "suited-noclip", values ["3"], channels: concat(movement, controls, ["rise", "flight", "dash"]) }
+        // A craft (the launch field's ship): a body no seat is, which flies on the movement and rise channels.
+        { name: "craft", values ["4"], channels: concat(movement, ["rise"]) }
       ]
       suspendedBy [
         { family: "engagement", states ["tabletop", "machine", "screen", "body"] }

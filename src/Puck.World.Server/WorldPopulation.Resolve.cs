@@ -835,7 +835,7 @@ public sealed partial class WorldPopulation {
             if (
                 !m_entries[index].Active ||
                 (BodyContact(index: index) != WorldBodyContactMode.Solid) ||
-                (m_entries[index].Body is not { Collider: not null } body) ||
+                (m_entries[index].Body is not { Collider: not null, MountedOn: null } body) ||
                 (!body.OrdinaryAdvanceAdmitted && (body.CarriedBy is null))
             ) {
                 continue;

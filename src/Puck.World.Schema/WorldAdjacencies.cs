@@ -633,6 +633,15 @@ public static class WorldAdjacencyPolicy {
                         candidate = new FixedQ4816(Value: magnitude);
                         break;
                     }
+                case WorldCollider.FromCreation:
+                    // A collider read off a creation is whatever volumes that creation compiles to: the sphere that
+                    // encloses them all bounds how far the body reaches from its origin.
+                    if (FixedWorldCollider.Compile(collider: collider, creations: definition.Creations) is not { } compiled) {
+                        reason = $"kit '{kit.Name}' reads its collider from a creation that compiles to no volume";
+                        return false;
+                    }
+                    candidate = Puck.Physics.FixedDynamicBodyContacts.BroadphaseRadius(volumes: compiled.Volumes);
+                    break;
                 default:
                     reason = $"kit '{kit.Name}' uses a collider whose border reach cannot be proven";
                     return false;

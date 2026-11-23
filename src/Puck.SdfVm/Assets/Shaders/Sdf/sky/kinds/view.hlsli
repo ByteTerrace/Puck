@@ -4,7 +4,7 @@
 // layer rotation. A direction behind the camera plane or outside the rectangle draws nothing. Each consumer supplies its
 // own fitted records and image bindings, indexed by the packed layer ordinal; no authored screen index is allocated.
 // The image is clamped half a source pixel inside its extent; an instance with no completed image draws the layer's
-// fallback colour instead. Either way the evaluation counts one shown texel, which is what
+// fallback colour instead, or nothing when the layer's alpha is its coverage. Either way the evaluation counts one shown texel, which is what
 // the host reads back to demand the instance's next frame; a pass that binds no infinity images (the environment map's) draws
 // nothing and counts nothing. Opaque unless the layer is far geometry, whose image alpha is its coverage and whose RGB
 // is premultiplied. Unpremultiply after filtering so the layer blend applies coverage once, including at edges. One evaluation
@@ -52,8 +52,10 @@ float4 sdfSkyViewLayer(SdfSkyView view, SdfSkyLayer layer, SdfSkySample sample) 
 
     sdfCountSky(layer.Detail, 0u, 0u, 1u, 0u, 1u);
 
+    // A view whose alpha is its coverage has nothing to cover with until its image arrives, so the layers under it
+    // show; a view that fills its region draws its fallback there.
     if ((view.ImageSlot < 0) || (view.ImageSlot >= (int)SDF_SKY_MAX_LAYERS)) {
-        return float4((view.Fallback * view.Intensity), 1.0);
+        return ((view.Coverage != 0u) ? float4(0.0, 0.0, 0.0, 0.0) : float4((view.Fallback * view.Intensity), 1.0));
     }
 
     uint image = (uint)view.ImageSlot;

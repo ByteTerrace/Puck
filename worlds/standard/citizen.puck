@@ -124,7 +124,9 @@ template citizenLooks(coats, hats, skin = "#E2B48C", trousers = "#4A4038") {
 // The clock is read once per group, never once per citizen: a rule per phase writes each group's current anchor
 // (1 home, 2 work, 3 market) into `citizenGroupAnchor`, and one rule sends each citizen whose group's anchor differs
 // from the one it last went to (`citizenAt`) to its own point of that anchor, counting the visit in `citizenVisits`. A
-// citizen's rule compares two cells; the day's arithmetic runs for twelve groups.
+// citizen's rule compares two cells; the day's arithmetic runs for twelve groups. A citizen a seat possesses
+// (`body.engage body:<n>` with Drive over it) is skipped: the seat walks it, its producer standing down, and once
+// released it routes from where it stands to the anchor its group is at, which may have moved on meanwhile.
 template citizenSchedule(people, phases, clock, groups = 12, groupDayFraction = 0.00347) {
   state {
     world [
@@ -189,7 +191,7 @@ template citizenSchedule(people, phases, clock, groups = 12, groupDayFraction = 
   }
 
   rule "citizen-go" {
-    when citizenGroupAnchor[citizenGroup[$each]] != 0 and citizenAt[$each] != citizenGroupAnchor[citizenGroup[$each]]
+    when citizenGroupAnchor[citizenGroup[$each]] != 0 and citizenAt[$each] != citizenGroupAnchor[citizenGroup[$each]] and producer(each, possessed) == 0
     mode: Level
     forEach: citizenGroup
     designate(

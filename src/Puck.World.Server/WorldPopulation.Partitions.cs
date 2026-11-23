@@ -139,8 +139,10 @@ public sealed partial class WorldPopulation {
     // Whether a body's producer reads only what a partition may read: the frozen image, its own entry, a curve, and a
     // shared domain's resident goal field. A route search (one workspace per domain), a sight test (the target field's
     // query) and a flock affinity (an authority expression) stay serial.
+    // A producer that stands down runs none of its program, as a body naming none does.
     private bool ProducerIsLocal(Entry entry, WorldBody body, int index) {
         if (
+            (entry.ProducerState.StandDown != BodyProducerStandDown.None) ||
             (body.Source.ProducerName is not { } name) ||
             (ResolveProducer(entry: entry, name: name, table: m_kits[ResolveKitIndex(index: index)].Producers) is not { } producer)
         ) {
@@ -203,7 +205,7 @@ public sealed partial class WorldPopulation {
             ) {
                 continue;
             }
-            if (step.SteeringDue && (entry.ProducerLookup is { } producer) && (player.Source.ProducerName is not null)) {
+            if (step.SteeringDue && (entry.ProducerState.StandDown == BodyProducerStandDown.None) && (entry.ProducerLookup is { } producer) && (player.Source.ProducerName is not null)) {
                 perceives |= ((producer.Flock is not null) || (producer.Target?.Source is BodyTargetSource.Sensed));
                 if (producer.Flock is { MovementDomainIndex: >= 0 } flock) { m_navigation[flock.MovementDomainIndex].EnsureBaked(); }
                 PrepareGoalField(entry: entry, producer: producer, self: player.FixedPosition);

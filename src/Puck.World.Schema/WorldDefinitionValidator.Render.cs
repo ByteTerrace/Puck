@@ -657,6 +657,9 @@ public static partial class WorldDefinitionValidator {
                         if (string.IsNullOrWhiteSpace(value: view.Destination)) {
                             errors.Add(item: $"{layerPath}.destination is required: a view shows the session of a destination world.");
                         }
+                        if ((view.Bound is { } bound) && !(VectorFunctions.IsFinite(vector: bound.Center) && float.IsFinite(f: bound.Radius) && (bound.Radius > 0f))) {
+                            errors.Add(item: $"{layerPath}.bound is a finite center and a positive radius.");
+                        }
 
                         ValidateInfinityView(
                             anchor: view.Anchor,

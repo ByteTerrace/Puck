@@ -8440,7 +8440,7 @@
                     "title": "WorldRenderSkyLayerPanel"
                   },
                   {
-                    "description": "Another world, seen at infinity: a second sdf.world instance (sky$\u003Cname\u003E) rendering the destination\u0027s session from a fixed anchor in it, turned with the viewer\u0027s camera and never translated by it. It renders only while the viewer\u0027s previous frame showed it, and only the rectangle its mask covers (a cone, or the whole frustum without a mask). The camera alone sees it, since the environment map binds no screen. At most SdfSky.MaxInfinityViews view and far layers a world, nested worlds included; a view that cannot render draws its Fallback colour.",
+                    "description": "Another world in the sky: a second sdf.world instance (sky$\u003Cname\u003E) rendering the destination\u0027s session from an anchor in it, turned with the viewer\u0027s camera. Without Follow the camera stays at the anchor, so the destination is a backdrop at infinity; with it the camera moves as the viewer does, so the destination is a place at a distance that grows as the viewer nears it, and the two worlds share one frame. It renders only while the viewer\u0027s previous frame showed it, and only the rectangle its mask covers (a cone, the cone its Bound subtends, or the whole frustum with neither). The camera alone sees it, since the environment map binds no screen. At most SdfSky.MaxInfinityViews view and far layers a world, nested worlds included; a view that cannot render draws its Fallback colour.",
                     "properties": {
                       "$type": {
                         "const": "view"
@@ -8462,7 +8462,7 @@
                         "default": null
                       },
                       "anchor": {
-                        "description": "The point in the destination the camera sits at, whatever the viewer does. Absent is its origin.",
+                        "description": "The point in the destination the camera sits at, whatever the viewer does; with Follow, the point of the destination this world\u0027s origin stands at. Absent is its origin.",
                         "default": null,
                         "title": "DocumentVector3",
                         "anyOf": [
@@ -8578,6 +8578,61 @@
                             "additionalProperties": false
                           }
                         ]
+                      },
+                      "follow": {
+                        "description": "Whether the camera moves with the viewer\u0027s. Absent is not.",
+                        "type": [
+                          "boolean",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "bound": {
+                        "description": "The sphere that bounds what the view shows, in the destination\u0027s coordinates. Absent is none.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "center": {
+                            "description": "The sphere\u0027s centre, in the destination\u0027s coordinates.",
+                            "title": "DocumentVector3",
+                            "anyOf": [
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                },
+                                "minItems": 3,
+                                "maxItems": 3
+                              },
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                              }
+                            ]
+                          },
+                          "radius": {
+                            "description": "The sphere\u0027s radius, in world units, positive.",
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "center",
+                          "radius"
+                        ],
+                        "additionalProperties": false,
+                        "default": null,
+                        "title": "WorldRenderSkyLayerWorldSkyViewBound"
+                      },
+                      "coverage": {
+                        "description": "Whether the view draws only the destination\u0027s geometry, so this world\u0027s sky shows around it. Absent is not: the destination\u0027s own sky fills the view.",
+                        "type": [
+                          "boolean",
+                          "null"
+                        ],
+                        "default": null
                       },
                       "layerName": {
                         "type": [
@@ -54023,6 +54078,220 @@
                       ],
                       "additionalProperties": false,
                       "title": "WorldEffectSetBodyState"
+                    },
+                    {
+                      "description": "Holds a world-addressed body\u0027s producer: it stands down, its body coasting to rest under its motion program, until a rule releases it with ReleaseProducer. A hold is one reason a producer stands down and possession another; the producer starts again, from where the body stands, once neither holds. A rule reads both through producer(each, held|possessed|down).",
+                      "properties": {
+                        "$type": {
+                          "const": "holdProducer"
+                        },
+                        "key": {
+                          "description": "The body \u2014 an index, a $cell: indirection, or a bound key.",
+                          "title": "StateChannelRef",
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "channel"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "channel": {
+                                  "type": "string"
+                                },
+                                "arguments": {
+                                  "type": "array",
+                                  "items": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "object",
+                                        "required": [
+                                          "zone"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "zone": {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone"
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "type": "object",
+                                        "required": [
+                                          "expression"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "expression": {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "binding",
+                                "field"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "binding": {
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "pool",
+                                "slot",
+                                "field"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "pool": {
+                                  "type": "string"
+                                },
+                                "slot": {
+                                  "type": "integer"
+                                },
+                                "field": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "key"
+                      ],
+                      "additionalProperties": false,
+                      "title": "WorldEffectHoldProducer"
+                    },
+                    {
+                      "description": "Releases a world-addressed body\u0027s producer from a HoldProducer hold; releasing a body that is not held does nothing.",
+                      "properties": {
+                        "$type": {
+                          "const": "releaseProducer"
+                        },
+                        "key": {
+                          "description": "The body \u2014 an index, a $cell: indirection, or a bound key.",
+                          "title": "StateChannelRef",
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "channel"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "channel": {
+                                  "type": "string"
+                                },
+                                "arguments": {
+                                  "type": "array",
+                                  "items": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "object",
+                                        "required": [
+                                          "zone"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "zone": {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone"
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "type": "object",
+                                        "required": [
+                                          "expression"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "expression": {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "binding",
+                                "field"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "binding": {
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "pool",
+                                "slot",
+                                "field"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "pool": {
+                                  "type": "string"
+                                },
+                                "slot": {
+                                  "type": "integer"
+                                },
+                                "field": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "key"
+                      ],
+                      "additionalProperties": false,
+                      "title": "WorldEffectReleaseProducer"
                     }
                   ],
                   "title": "ActionEffect"

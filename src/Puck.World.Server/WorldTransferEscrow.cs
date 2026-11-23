@@ -241,7 +241,8 @@ public enum WorldTransferArrival : byte {
 /// destination keeps on the occupant for the routes it describes. <c>Profile</c> is the traveler's identity projection
 /// at commit, which the destination lands in place of the reservation's. <c>MemberId</c> is the request-local id of the
 /// leased member it lands (negative stands for its ordinal); <c>Companion</c> is what a companion carries, its ticket the
-/// one home granted for this hop.</summary>
+/// one home granted for this hop. <c>Drives</c> is the incarnation of the body the traveler rode across, which the
+/// destination hands it to drive again once both have landed.</summary>
 public sealed record WorldTransferCommitMember(
     WorldIdentityProjection? Profile,
     WorldTransferArrival Arrival,
@@ -254,7 +255,8 @@ public sealed record WorldTransferCommitMember(
     WorldContinuumTrajectory? Continuum = null,
     FixedQ4816 TravelTurn = default,
     int MemberId = -1,
-    WorldTransferCompanion? Companion = null
+    WorldTransferCompanion? Companion = null,
+    WorldEntityAddress? Drives = null
 ) {
     /// <summary>Gets the action registers the traveller carries. Carrying none is the empty continuity: an
     /// absent one reads as <see cref="WorldTransferActionContinuity.Empty"/>, so a commit means the same whichever
@@ -1352,9 +1354,48 @@ public sealed partial class WorldTransferEscrow {
                     slot: slot
                 );
             }
+            if (member.Drives is { } driven) {
+                ResumeDrive(
+                    driven: driven,
+                    slot: slot
+                );
+            }
         }
 
         return reply;
+    }
+    // Hands a landed participant the body it drove across: the live body here that holds the incarnation the commit
+    // names takes the participant's control set, with its own body left out, under a Drive grant minted with it, as the
+    // camera application's is (WorldInputRuntime's camera mode). The body crossed as every autonomous traveler does,
+    // idle, since its driver stayed behind until now; it wakes on live input again, which an idle body masks. A body
+    // that has not landed here, or that the grant table refuses, leaves the participant driving itself.
+    private void ResumeDrive(int slot, WorldEntityAddress driven) {
+        var population = m_server.Population;
+        var principal = ((slot < population.LocalSeatCount)
+            ? Principal.Seat(slot: slot)
+            : population.PeerPrincipal(index: slot));
+
+        for (var index = 0; (index < population.Capacity); index++) {
+            if (
+                (index == slot) ||
+                !population.IsActive(index: index) ||
+                (population.ResolveIncarnation(authority: m_server.AuthorityIdentity, index: index) != driven)
+            ) {
+                continue;
+            }
+
+            var target = GrantSubject.Body(index: index);
+
+            if (
+                m_server.GrantTable.TryPrepareGrant(new(principal, WorldCapability.Drive, target, false, Budget: ushort.MaxValue), Principal.Console, out var grant, out _) &&
+                m_server.Engagement.Compose(actingPrincipal: Principal.Console, entityIndex: slot, exclusive: true, target: target, targetPrincipal: principal)
+            ) {
+                grant!.Install();
+                population.EntryBody(index: index)?.SetIntentSource(source: IntentSource.Live);
+            }
+
+            return;
+        }
     }
 
     /// <summary>Binds a re-drive's taped identity to the one detached identity its id names: built from the first
