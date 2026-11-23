@@ -64,9 +64,16 @@ public readonly record struct WorldEventEdge(WorldEventFamily Family, GrantSubje
 /// retained first. A saturated crowd therefore has
 /// bounded work and memory and may omit lower-priority new proximity pairs. It is deliberately not a claim about
 /// physical contact response.</para>
+/// <para><b>Collision pairs are sensed only for listened bodies.</b> A collision edge reaches only an addon holding an
+/// event-budgeted observe grant over one of its bodies, so a pair is sensed only when <see cref="WorldEventListeners"/>
+/// names one of its bodies: every body under a wildcard grant, else the bodies the grants name. A crowd no grant
+/// observes costs collision sensing nothing, and with named bodies the work follows their neighbourhoods. The listened
+/// set is grant-table state, so the edges stay deterministic; it is checkpointed, and a body that joins it searches its
+/// whole neighbourhood once.</para>
 /// <para>Frozen bodies retain their region and overlap results. Collection visits awake/changed bodies and their
 /// nearby frozen neighbours, in stable sweep/slot order. A changed region frame rechecks every occupant; a changed
-/// collision policy reconsiders the complete image. Begin-budget work left over is resumed on later collections.</para>
+/// collision policy reconsiders the complete listened image. Begin-budget work left over is resumed on later
+/// collections.</para>
 /// <para><b>Route edges are pushed, not diffed.</b> <see cref="WorldGrants"/> reports changes from the Control-route
 /// storage every producer shares, including engagement, repair, and direct grant/revoke outcomes. The server resolves
 /// a Seat/Peer principal to its body index and queues the corresponding edge; principals that drive no body produce no
@@ -116,6 +123,19 @@ public sealed class WorldEventFeed {
     private readonly bool[] m_bodyChanged;
     private readonly bool[] m_collisionIncluded;
     private readonly int[] m_nearbySleeping;
+    private readonly int[] m_queryHits;
+
+    // The bodies collision edges are collected for as of the latest collection: every body under m_listenAll, else
+    // m_listenedBodies (ascending, distinct) with m_listened as its membership. A pair is sensed only when one of its
+    // bodies is listened, so this is the only state that decides which pairs exist; it is checkpointed beside the
+    // overlap table, and a body that joins it searches its whole neighbourhood once, as a policy edit does.
+    private readonly bool[] m_listened;
+    private List<int> m_listenedBodies = [];
+    private List<int> m_listenScratch = [];
+    private readonly List<int> m_freshListened = [];
+    private bool m_listenAll;
+    private readonly FixedSweepSphere[] m_listenSpheres;
+    private readonly FixedSweepGrid m_listenGrid;
 
     // Only membership matters here: the complete candidate image is sorted by X/slot before any pair is visited.
     private readonly HashSet<int> m_collisionPending = [];
@@ -171,6 +191,10 @@ public sealed class WorldEventFeed {
         m_changedPresent = new bool[capacity];
         m_collisionIncluded = new bool[capacity];
         m_nearbySleeping = new int[capacity];
+        m_queryHits = new int[capacity];
+        m_listened = new bool[capacity];
+        m_listenSpheres = new FixedSweepSphere[capacity];
+        m_listenGrid = new FixedSweepGrid(capacity: capacity);
         m_collisionPairKeys = new ulong[m_maximumTrackedPairs];
         m_collisionTransitions = new CollisionTransition[checked((m_maximumTrackedPairs * 2))];
         _ = m_overlapping.EnsureCapacity(capacity: m_maximumTrackedPairs);
@@ -184,6 +208,11 @@ public sealed class WorldEventFeed {
     public int CollisionTrackedPairs => m_overlapping.Count;
     /// <summary>Exact collision overlap tests performed by this tick's collection.</summary>
     public int CollisionOverlapTests { get; private set; }
+    /// <summary>Gets the bodies the latest collection placed in its collision broadphase.</summary>
+    public int CollisionBroadphaseBodies { get; private set; }
+    /// <summary>Gets the bodies whose collision edges a held event-budgeted observe grant could deliver as of the latest
+    /// collection: the population's capacity under a wildcard grant.</summary>
+    public int CollisionListenedBodies { get; private set; }
     /// <summary>Gets the exact body/region containment tests this tick's collection performed: every body against a
     /// region whose frame changed, and otherwise each changed body inside a region's bounds or leaving it.</summary>
     public int RegionBodyTests { get; private set; }
@@ -195,6 +224,9 @@ public sealed class WorldEventFeed {
             hash.Add(value: policy.MaxPairsPerBody);
             hash.Add(value: policy.BeginBudget);
         }
+        hash.Add(value: ((byte)(m_listenAll ? 1 : 0)));
+        hash.Add(value: m_listenedBodies.Count);
+        foreach (var index in m_listenedBodies) { hash.Add(value: index); }
         hash.Add(value: m_collisionPending.Count);
         if (m_collisionPending.Count > 0) {
             for (var index = 0; (index < m_bodyChanged.Length); index++) {
@@ -220,7 +252,8 @@ public sealed class WorldEventFeed {
             (checkpoint.Overlapping is null) ||
             (checkpoint.RegionOccupancy is null) ||
             (checkpoint.Links is null) ||
-            (checkpoint.CollisionPending is null)
+            (checkpoint.CollisionPending is null) ||
+            (checkpoint.CollisionListened is null)
         ) {
             throw new InvalidOperationException(message: "event feed checkpoint contains a null collection.");
         }
@@ -239,6 +272,14 @@ public sealed class WorldEventFeed {
                 throw new InvalidOperationException(message: "event feed checkpoint carries invalid collision discovery work.");
             }
             previousPending = index;
+        }
+        var previousListened = -1;
+
+        foreach (var index in checkpoint.CollisionListened) {
+            if ((index <= previousListened) || (((uint)index) >= ((uint)m_listened.Length)) || checkpoint.CollisionListenAll) {
+                throw new InvalidOperationException(message: "event feed checkpoint carries invalid collision listeners.");
+            }
+            previousListened = index;
         }
         if (checkpoint.Overlapping.Count > m_maximumTrackedPairs) {
             throw new InvalidOperationException(message: $"event feed checkpoint carries {checkpoint.Overlapping.Count} overlap pairs; this population admits at most {m_maximumTrackedPairs}.");
@@ -319,15 +360,25 @@ public sealed class WorldEventFeed {
             Now: now
         );
     }
-    private void CollectCollisions(WorldPopulation population, WorldCollisionEvents policy, ReadOnlySpan<int> changedBodies) {
-        Array.Clear(array: m_collisionDegrees);
-        Array.Clear(array: m_collisionIncluded);
+    private void CollectCollisions(WorldPopulation population, WorldCollisionEvents policy, ReadOnlySpan<int> changedBodies, WorldEventListeners listeners) {
         CollisionCandidates = 0;
         CollisionLimitedBodies = 0;
         CollisionOverlapTests = 0;
+        CollisionBroadphaseBodies = 0;
         var policyChanged = (m_collisionPolicy != policy);
 
         m_collisionPolicy = policy;
+
+        var everyoneJoined = UpdateListeners(capacity: population.Capacity, listeners: listeners);
+
+        CollisionListenedBodies = (m_listenAll ? population.Capacity : m_listenedBodies.Count);
+        // No listened body and no relationship left to end: nothing to sense, so the crowd costs nothing.
+        if (!m_listenAll && (m_listenedBodies.Count == 0) && (m_overlapping.Count == 0)) {
+            m_collisionPending.Clear();
+            return;
+        }
+        Array.Clear(array: m_collisionDegrees);
+        Array.Clear(array: m_collisionIncluded);
 
         var pairCount = 0;
 
@@ -344,7 +395,8 @@ public sealed class WorldEventFeed {
         );
 
         // Existing overlap relationships have continuity priority over new discoveries. Validate them in pair order,
-        // retaining the first pairs admitted by a newly-lowered degree limit and ending the rest deterministically.
+        // retaining the first pairs admitted by a newly-lowered degree limit and ending the rest deterministically. A
+        // pair neither of whose bodies is listened any longer ends.
         var transitionCount = 0;
 
         for (var ordinal = 0; (ordinal < pairCount); ordinal++) {
@@ -353,6 +405,7 @@ public sealed class WorldEventFeed {
             var b = ((int)PackedIntPair.Low(value: key));
             var retained = (
                 (policy.MaxPairsPerBody > 0) &&
+                (Listened(index: a) || Listened(index: b)) &&
                 (m_collisionDegrees[a] < policy.MaxPairsPerBody) &&
                 (m_collisionDegrees[b] < policy.MaxPairsPerBody) &&
                 population.IsActive(index: a) &&
@@ -380,116 +433,23 @@ public sealed class WorldEventFeed {
         }
 
         var bodyCount = 0;
+        var begins = 0;
 
         if (policy.MaxPairsPerBody > 0) {
-            foreach (var index in changedBodies) { IncludeNeighbours(index: index); }
-            foreach (var index in m_collisionPending) { IncludeNeighbours(index: index); }
-            m_collisionPending.Clear();
-
-            void IncludeNeighbours(int index) {
-                Include(index: index);
-                if ((population.EntryBody(index: index) is { } body) && population.IsActive(index: index)) {
-                    var nearby = population.NearbySleepingBodies(body: body, destination: m_nearbySleeping, reach: body.BroadphaseRadius);
-
-                    for (var neighbour = 0; (neighbour < nearby); neighbour++) { Include(index: m_nearbySleeping[neighbour]); }
-                }
-            }
-            // A policy edit can admit a previously budget-limited unchanged pair. Reconsider the complete image
-            // once for that edit, never on an ordinary tick.
-            if (policyChanged) {
-                for (var index = 0; (index < population.Capacity); index++) { Include(index: index); }
+            if (m_listenAll) {
+                DiscoverAll(changed: changedBodies, reconsider: (policyChanged || everyoneJoined));
+            } else {
+                DiscoverListened(changed: changedBodies, reconsider: policyChanged);
             }
         }
-        m_collisionGrid.Rebuild(spheres: m_collisionBodies.AsSpan(start: 0, length: bodyCount));
+        CollisionBroadphaseBodies = bodyCount;
 
-        void Include(int index) {
-            if (
-                m_collisionIncluded[index] ||
-                !population.IsActive(index: index) ||
-                (population.EntryBody(index: index) is not { Collider: { } collider } body)
-            ) {
-                return;
-            }
-            m_collisionIncluded[index] = true;
-            m_collisionBodies[bodyCount++] = new FixedSweepSphere(
-                Index: index,
-                Center: body.FixedPosition,
-                Radius: body.BroadphaseRadius,
-                Active: (policyChanged || m_bodyChanged[index])
-            );
-        }
-
-        // Discover new pairs through the population's own broadphase: the grid culls on every axis of the bodies'
-        // bounding spheres before it charges a candidate, and an unchanged body searches changed bodies only. The exact
-        // compound-volume test follows. Both the inspected-candidate and retained-degree bounds hold even when every
-        // body occupies the same point.
-        var begins = 0;
-        var grid = m_collisionGrid;
-
-        for (var leftOrdinal = 0; (leftOrdinal < bodyCount); leftOrdinal++) {
-            if (begins >= policy.BeginBudget) {
-                break;
-            }
-            var left = grid.Sphere(ordinal: leftOrdinal);
-
-            if (m_collisionDegrees[left.Index] >= policy.MaxPairsPerBody) {
-                continue;
-            }
-            grid.BeginPairs(activeOnly: !left.Active, candidateBudget: policy.CandidateBudget, leftOrdinal: leftOrdinal);
-            while (grid.NextPair(rightOrdinal: out var rightOrdinal)) {
-                CollisionCandidates++;
-                var right = grid.Sphere(ordinal: rightOrdinal);
-
-                if (
-                    (m_collisionDegrees[left.Index] >= policy.MaxPairsPerBody) ||
-                    (m_collisionDegrees[right.Index] >= policy.MaxPairsPerBody)
-                ) {
-                    continue;
-                }
-
-                var a = Math.Min(
-                    val1: left.Index,
-                    val2: right.Index
-                );
-                var b = Math.Max(
-                    val1: left.Index,
-                    val2: right.Index
-                );
-
-                if (
-                    m_overlapping.Contains(item: (a, b)) ||
-                    !TestOverlap(
-                    a: population.EntryBody(index: left.Index)!,
-                    b: population.EntryBody(index: right.Index)!
-                )
-                ) {
-                    continue;
-                }
-
-                _ = m_overlapping.Add(item: (a, b));
-                m_collisionDegrees[a]++;
-                m_collisionDegrees[b]++;
-                begins++;
-                AddCollisionTransition(
-                    a: a,
-                    b: b,
-                    count: ref transitionCount,
-                    now: true
-                );
-                if (begins >= policy.BeginBudget) {
-                    break;
-                }
-            }
-            if (grid.PairsLimited) {
-                CollisionLimitedBodies++;
-            }
-        }
-
+        // A spent begin budget leaves discovery to resume on later collections for every listened body with room.
         if ((policy.BeginBudget > 0) && (begins >= policy.BeginBudget)) {
             for (var ordinal = 0; (ordinal < bodyCount); ordinal++) {
                 var index = m_collisionBodies[ordinal].Index;
 
-                if (m_collisionDegrees[index] < policy.MaxPairsPerBody) { m_collisionPending.Add(item: index); }
+                if ((m_collisionDegrees[index] < policy.MaxPairsPerBody) && Listened(index: index)) { m_collisionPending.Add(item: index); }
             }
         }
 
@@ -514,10 +474,215 @@ public sealed class WorldEventFeed {
             ));
         }
 
+        // Every body listened: the awake (changed) bodies, any pending work and the sleepers near each, swept once in
+        // sweep order, so an unchanged body searches changed bodies only. The grid culls on every axis of the bodies'
+        // bounding spheres before it charges a candidate, and the exact compound-volume test follows. Both the
+        // inspected-candidate and retained-degree bounds hold even when every body occupies the same point.
+        void DiscoverAll(ReadOnlySpan<int> changed, bool reconsider) {
+            // A policy edit, or a wildcard listener arriving, can admit a previously unsensed unchanged pair.
+            // Reconsider the complete image once for that edit, never on an ordinary tick.
+            if (reconsider) {
+                Array.Fill(array: m_bodyChanged, value: true);
+                for (var index = 0; (index < population.Capacity); index++) { Include(index: index); }
+            }
+            foreach (var index in changed) { IncludeWithSleepers(index: index); }
+            foreach (var index in m_collisionPending) { IncludeWithSleepers(index: index); }
+            m_collisionPending.Clear();
+
+            var grid = m_collisionGrid;
+
+            grid.Rebuild(spheres: m_collisionBodies.AsSpan(start: 0, length: bodyCount));
+            for (var leftOrdinal = 0; (leftOrdinal < bodyCount); leftOrdinal++) {
+                if (begins >= policy.BeginBudget) {
+                    break;
+                }
+                var left = grid.Sphere(ordinal: leftOrdinal);
+
+                if (m_collisionDegrees[left.Index] >= policy.MaxPairsPerBody) {
+                    continue;
+                }
+                grid.BeginPairs(activeOnly: !left.Active, candidateBudget: policy.CandidateBudget, leftOrdinal: leftOrdinal);
+                while (grid.NextPair(rightOrdinal: out var rightOrdinal)) {
+                    CollisionCandidates++;
+                    if (!TryBegin(left: left.Index, right: grid.Sphere(ordinal: rightOrdinal).Index)) {
+                        break;
+                    }
+                }
+                if (grid.PairsLimited) {
+                    CollisionLimitedBodies++;
+                }
+            }
+        }
+
+        // Only some bodies listened: the broadphase holds the listened bodies, the sleepers near each that changed, and
+        // the changed bodies whose bounds meet a listened body's, found against a grid of the listened bodies alone. Each
+        // listened body then queries its own bounds, so the work follows the listened bodies' neighbourhoods and an
+        // unlistened crowd adds only one bounds test per changed body. A pair of two listened bodies is taken from its
+        // lesser index; a pair of two unchanged bodies is never visited.
+        void DiscoverListened(ReadOnlySpan<int> changed, bool reconsider) {
+            foreach (var index in m_freshListened) { m_bodyChanged[index] = true; }
+            if (reconsider) {
+                foreach (var index in m_listenedBodies) { m_bodyChanged[index] = true; }
+            }
+
+            var listenCount = 0;
+            var reach = FixedAabb.Empty;
+
+            foreach (var index in m_listenedBodies) {
+                if (!population.IsActive(index: index) || (population.EntryBody(index: index) is not { Collider: not null } body)) { continue; }
+                var sphere = new FixedSweepSphere(Index: index, Center: body.FixedPosition, Radius: body.BroadphaseRadius);
+
+                m_listenSpheres[listenCount++] = sphere;
+                reach = reach.Enclose(other: sphere.Bounds);
+                IncludeWithSleepers(index: index, sleepers: m_bodyChanged[index]);
+            }
+            if (listenCount == 0) {
+                m_collisionPending.Clear();
+                return;
+            }
+            m_listenGrid.Rebuild(spheres: m_listenSpheres.AsSpan(start: 0, length: listenCount));
+            foreach (var index in changed) { IncludeNear(index: index); }
+            foreach (var index in m_collisionPending) { IncludeNear(index: index); }
+            m_collisionPending.Clear();
+
+            var grid = m_collisionGrid;
+
+            grid.Rebuild(spheres: m_collisionBodies.AsSpan(start: 0, length: bodyCount));
+            foreach (var left in m_listenedBodies) {
+                if (begins >= policy.BeginBudget) {
+                    break;
+                }
+                if (!m_collisionIncluded[left] || (m_collisionDegrees[left] >= policy.MaxPairsPerBody)) {
+                    continue;
+                }
+                var leftBody = population.EntryBody(index: left)!;
+                var hits = grid.Query(box: FixedAabb.Around(center: leftBody.FixedPosition, radius: leftBody.BroadphaseRadius), destination: m_queryHits);
+                var inspected = 0;
+
+                for (var hit = 0; (hit < hits); hit++) {
+                    var right = m_queryHits[hit];
+
+                    if ((right == left) || (!m_bodyChanged[left] && !m_bodyChanged[right]) || (m_listened[right] && (right < left))) {
+                        continue;
+                    }
+                    if (inspected >= policy.CandidateBudget) {
+                        CollisionLimitedBodies++;
+                        break;
+                    }
+                    inspected++;
+                    CollisionCandidates++;
+                    if (!TryBegin(left: left, right: right)) {
+                        break;
+                    }
+                }
+            }
+
+            void IncludeNear(int index) {
+                if (
+                    m_listened[index] ||
+                    m_collisionIncluded[index] ||
+                    !population.IsActive(index: index) ||
+                    (population.EntryBody(index: index) is not { Collider: not null } body)
+                ) {
+                    return;
+                }
+                var bounds = FixedAabb.Around(center: body.FixedPosition, radius: body.BroadphaseRadius);
+
+                if (bounds.Intersects(other: reach) && (m_listenGrid.Query(box: bounds, destination: m_queryHits) > 0)) { Include(index: index); }
+            }
+        }
+
+        void IncludeWithSleepers(int index, bool sleepers = true) {
+            Include(index: index);
+            if (sleepers && (population.EntryBody(index: index) is { } body) && population.IsActive(index: index)) {
+                var nearby = population.NearbySleepingBodies(body: body, destination: m_nearbySleeping, reach: body.BroadphaseRadius);
+
+                for (var neighbour = 0; (neighbour < nearby); neighbour++) { Include(index: m_nearbySleeping[neighbour]); }
+            }
+        }
+        void Include(int index) {
+            if (
+                m_collisionIncluded[index] ||
+                !population.IsActive(index: index) ||
+                (population.EntryBody(index: index) is not { Collider: not null } body)
+            ) {
+                return;
+            }
+            m_collisionIncluded[index] = true;
+            m_collisionBodies[bodyCount++] = new FixedSweepSphere(
+                Index: index,
+                Center: body.FixedPosition,
+                Radius: body.BroadphaseRadius,
+                Active: m_bodyChanged[index]
+            );
+        }
+        // Begins the pair when both bodies have degree left and their volumes overlap; false once the begin budget is
+        // spent.
+        bool TryBegin(int left, int right) {
+            if (
+                (m_collisionDegrees[left] >= policy.MaxPairsPerBody) ||
+                (m_collisionDegrees[right] >= policy.MaxPairsPerBody)
+            ) {
+                return true;
+            }
+
+            var a = Math.Min(
+                val1: left,
+                val2: right
+            );
+            var b = Math.Max(
+                val1: left,
+                val2: right
+            );
+
+            if (
+                m_overlapping.Contains(item: (a, b)) ||
+                !TestOverlap(
+                a: population.EntryBody(index: left)!,
+                b: population.EntryBody(index: right)!
+            )
+            ) {
+                return true;
+            }
+
+            _ = m_overlapping.Add(item: (a, b));
+            m_collisionDegrees[a]++;
+            m_collisionDegrees[b]++;
+            begins++;
+            AddCollisionTransition(
+                a: a,
+                b: b,
+                count: ref transitionCount,
+                now: true
+            );
+            return (begins < policy.BeginBudget);
+        }
         bool TestOverlap(WorldBody a, WorldBody b) {
             CollisionOverlapTests++;
             return Overlaps(a: a, b: b);
         }
+    }
+    private bool Listened(int index) => (m_listenAll || m_listened[index]);
+    // Reads this collection's listeners and records which bodies joined them since the last; true when a wildcard
+    // listener arrived, so every body joined at once.
+    private bool UpdateListeners(WorldEventListeners listeners, int capacity) {
+        var everyone = listeners.Listened(bodies: m_listenScratch, capacity: capacity);
+        var wasEveryone = m_listenAll;
+
+        m_freshListened.Clear();
+        if (!everyone && !wasEveryone) {
+            var previous = 0;
+
+            foreach (var index in m_listenScratch) {
+                while ((previous < m_listenedBodies.Count) && (m_listenedBodies[previous] < index)) { previous++; }
+                if ((previous >= m_listenedBodies.Count) || (m_listenedBodies[previous] != index)) { m_freshListened.Add(item: index); }
+            }
+        }
+        foreach (var index in m_listenedBodies) { m_listened[index] = false; }
+        foreach (var index in m_listenScratch) { m_listened[index] = true; }
+        (m_listenedBodies, m_listenScratch) = (m_listenScratch, m_listenedBodies);
+        m_listenAll = everyone;
+        return (everyone && !wasEveryone);
     }
     // The link pass. Sign/unit: StaleTicks counts SIMULATION ticks since the last delivered refresh, 0 on the tick a
     // refresh landed. A row whose compiled grace is zero (unauthored) is held at 0 and emits nothing, so an
@@ -793,6 +958,8 @@ public sealed class WorldEventFeed {
         PendingRoutes: [.. m_pendingRoutes],
         CollisionPolicy: m_collisionPolicy,
         CollisionPending: [.. m_collisionPending.Order()],
+        CollisionListenAll: m_listenAll,
+        CollisionListened: [.. m_listenedBodies],
         SeatOccupied: [.. m_seatOccupied],
         Overlapping: [.. m_overlapping.OrderBy(keySelector: static pair => pair.A).ThenBy(keySelector: static pair => pair.B)],
         RegionOccupancy: [.. m_regionOccupancy.Select(selector: static pair => (pair.Key, ((bool[])pair.Value.Bodies.Clone())))],
@@ -809,7 +976,9 @@ public sealed class WorldEventFeed {
     /// read pump stages them for delivery.</summary>
     /// <param name="definition">The live world definition (its placements, for region rows).</param>
     /// <param name="population">The live population (positions, activity, seat occupancy).</param>
-    public void Collect(WorldDefinition definition, WorldPopulation population) {
+    /// <param name="listeners">The bodies collision edges are collected for; a pair with no listened body is never
+    /// sensed.</param>
+    public void Collect(WorldDefinition definition, WorldPopulation population, WorldEventListeners listeners) {
         m_edges.Clear();
         RegionBodyTests = 0;
         Array.Clear(array: m_bodyChanged);
@@ -827,13 +996,32 @@ public sealed class WorldEventFeed {
         CollectCollisions(
             population: population,
             policy: definition.Collision.Events,
-            changedBodies: changedBodies
+            changedBodies: changedBodies,
+            listeners: listeners
         );
         CollectLinks(definition: definition);
 
         m_edges.AddRange(collection: m_pendingRoutes);
         m_pendingRoutes.Clear();
         population.CompleteBodyEvents();
+        CountWork();
+    }
+    private void CountWork() {
+        var work = WorldEventWork.Process;
+        var collisionEdges = 0;
+
+        foreach (var edge in m_edges) {
+            if (edge.Family is WorldEventFamily.CollisionBegin or WorldEventFamily.CollisionEnd) { collisionEdges++; }
+        }
+        work.Add(kind: WorldEventWork.Collects, amount: 1L);
+        work.Add(kind: WorldEventWork.CollisionListenedBodies, amount: CollisionListenedBodies);
+        work.Add(kind: WorldEventWork.CollisionBroadphaseBodies, amount: CollisionBroadphaseBodies);
+        work.Add(kind: WorldEventWork.CollisionCandidates, amount: CollisionCandidates);
+        work.Add(kind: WorldEventWork.CollisionPairTests, amount: CollisionOverlapTests);
+        work.Add(kind: WorldEventWork.CollisionOverlaps, amount: m_overlapping.Count);
+        work.Add(kind: WorldEventWork.RegionBodyTests, amount: RegionBodyTests);
+        work.Add(kind: WorldEventWork.Edges, amount: m_edges.Count);
+        work.Add(kind: WorldEventWork.CollisionEdges, amount: collisionEdges);
     }
     /// <summary>Lists the regions (places) one body stands in as of the latest collection: the same occupancy latches
     /// region edges and <c>$region:</c> rule reads come from, innermost first (the smallest volume, so a room inside a
@@ -855,6 +1043,40 @@ public sealed class WorldEventFeed {
         frame.HasCenter &&
         frame.Shape.Contains(point: point)
     ));
+    /// <summary>Reads one region's occupancy two ways: the latches the region pass keeps, which <see cref="OccupantCount"/>
+    /// and a rule's <c>region(...)</c> count, and the active bodies whose position the region's volume holds in the frame
+    /// the latest collection sensed it in. Read between ticks, the two agree unless a body moved without the pass seeing
+    /// it.</summary>
+    /// <param name="placementId">The region-carrying placement's stable id.</param>
+    /// <param name="population">The population the feed collects, whose bodies are tested.</param>
+    /// <param name="latched">Receives the latched bodies' indices in ascending order, cleared first.</param>
+    /// <param name="inside">Receives the indices of the active bodies the volume holds in ascending order, cleared first.</param>
+    /// <returns><see langword="true"/> when the latest collection sensed the placement as a region; otherwise the lists
+    /// stay empty.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="population"/>, <paramref name="latched"/> or
+    /// <paramref name="inside"/> is <see langword="null"/>.</exception>
+    public bool AuditRegion(string placementId, WorldPopulation population, List<int> latched, List<int> inside) {
+        ArgumentNullException.ThrowIfNull(argument: population);
+        ArgumentNullException.ThrowIfNull(argument: latched);
+        ArgumentNullException.ThrowIfNull(argument: inside);
+        latched.Clear();
+        inside.Clear();
+        if (!m_regionFrames.TryGetValue(key: placementId, value: out var frame)) {
+            return false;
+        }
+        if (m_regionOccupancy.TryGetValue(key: placementId, value: out var occupancy)) {
+            for (var body = 0; (body < occupancy.Bodies.Length); body++) {
+                if (occupancy.Bodies[body]) { latched.Add(item: body); }
+            }
+        }
+        for (var body = 0; (frame.HasCenter && (body < population.Capacity)); body++) {
+            if (population.IsActive(index: body) && (population.EntryBody(index: body) is { } entry) && frame.Shape.Contains(point: entry.FixedPosition)) {
+                inside.Add(item: body);
+            }
+        }
+
+        return true;
+    }
     /// <summary>Reports whether one body is inside a placement's region as of this tick's collection.</summary>
     /// <param name="placementId">The placement carrying the region facet.</param>
     /// <param name="body">The body's 0-based entity index.</param>
@@ -990,6 +1212,11 @@ public sealed class WorldEventFeed {
         m_collisionPolicy = checkpoint.CollisionPolicy;
         m_collisionPending.Clear();
         foreach (var index in checkpoint.CollisionPending) { m_collisionPending.Add(item: index); }
+        foreach (var index in m_listenedBodies) { m_listened[index] = false; }
+        m_listenedBodies.Clear();
+        m_listenedBodies.AddRange(collection: checkpoint.CollisionListened);
+        foreach (var index in m_listenedBodies) { m_listened[index] = true; }
+        m_listenAll = checkpoint.CollisionListenAll;
 
         m_edges.Clear();
         m_edges.AddRange(collection: checkpoint.Edges);

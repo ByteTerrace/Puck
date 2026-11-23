@@ -2,6 +2,13 @@ using Puck.Maths;
 
 namespace Puck.Physics.Navigation;
 
+/// <summary>Whether a navigation runtime is read-only, shared by the runtime and the domains it reads.</summary>
+internal sealed class NavigationReadGate {
+    /// <summary>Gets a gate for a domain no runtime has bound yet; nothing makes it read-only.</summary>
+    public static NavigationReadGate Open => new();
+    /// <summary>Gets or sets whether the runtime is read-only.</summary>
+    public bool ReadOnly { get; set; }
+}
 /// <summary>Result of one bounded deterministic route search.</summary>
 public enum NavigationStatus : byte {
     None,
@@ -23,6 +30,35 @@ public enum NavigationStatus : byte {
 public sealed partial class NavigationRuntime {
     private readonly Domain[] m_domains;
     private readonly bool[] m_retained;
+    private readonly NavigationReadGate m_gate = new();
+
+    /// <summary>Marks the runtime read-only until the returned scope is disposed: reads from several threads at once
+    /// may run, and every operation that writes a shared part of the runtime throws instead (a domain's bake
+    /// adoption, a goal field's derivation or cache read, a cross-domain route search, a network join). A path
+    /// search within one domain stays allowed, each on a workspace of its own.</summary>
+    /// <returns>The scope that ends the read-only span.</returns>
+    /// <exception cref="InvalidOperationException">The runtime is already read-only.</exception>
+    public ReadOnlyScope EnterReadOnly() {
+        if (m_gate.ReadOnly) {
+            throw new InvalidOperationException(message: "The navigation runtime is already read-only.");
+        }
+        m_gate.ReadOnly = true;
+        return new ReadOnlyScope(gate: m_gate);
+    }
+    /// <summary>The span <see cref="EnterReadOnly"/> opened; disposing it makes the runtime writable again.</summary>
+    public readonly ref struct ReadOnlyScope {
+        private readonly NavigationReadGate m_gate;
+
+        internal ReadOnlyScope(NavigationReadGate gate) => m_gate = gate;
+        /// <summary>Ends the read-only span.</summary>
+        public void Dispose() => m_gate.ReadOnly = false;
+    }
+    // Throws while the runtime is read-only: the door every shared write passes.
+    private void ThrowIfReadOnly(string operation) {
+        if (m_gate.ReadOnly) {
+            throw new InvalidOperationException(message: $"A read-only navigation runtime refused {operation}; it runs only on the thread that owns the runtime.");
+        }
+    }
 
     /// <summary>Compiles a runtime over the given domains.</summary>
     /// <param name="domains">The compiled domain tunings, in stable authored order.</param>
@@ -39,9 +75,13 @@ public sealed partial class NavigationRuntime {
     /// network is the same kept domains in the same order stays resident.</param>
     /// <param name="work">The ledger the runtime counts its searches into; <see langword="null"/> counts into
     /// <see cref="NavigationSearchWork.Process"/>.</param>
+    /// <param name="areas">The area types the cells carry, which cost profiles price; <see langword="null"/> is
+    /// <see cref="NavigationAreaSet.None"/>. Each domain's <see cref="NavigationDomainInput.Area"/> must name a type of
+    /// it or be -1.</param>
     /// <exception cref="InvalidOperationException"><paramref name="domains"/> is non-empty and
     /// <paramref name="geometry"/> is <see langword="null"/>.</exception>
-    public NavigationRuntime(IReadOnlyList<NavigationDomainInput> domains, IContactField? geometry, INavigationMediumField? fields, NavigationCapacity capacity, NavigationRuntime? previous = null, NavigationSearchWork? work = null) {
+    /// <exception cref="ArgumentOutOfRangeException">A domain's area type lies outside <paramref name="areas"/>.</exception>
+    public NavigationRuntime(IReadOnlyList<NavigationDomainInput> domains, IContactField? geometry, INavigationMediumField? fields, NavigationCapacity capacity, NavigationRuntime? previous = null, NavigationSearchWork? work = null, NavigationAreaSet? areas = null) {
         if (
             (domains.Count != 0) &&
             (geometry is null)
@@ -49,6 +89,14 @@ public sealed partial class NavigationRuntime {
             throw new InvalidOperationException(message: "navigation domains require the static contact geometry.");
         }
 
+        areas ??= NavigationAreaSet.None;
+        // An equal set marks every cell alike: keep the prior object, so the domains' derived area maps stay valid.
+        m_areas = (((previous is not null) && previous.m_areas.Equals(other: areas)) ? previous.m_areas : areas);
+        foreach (var row in domains) {
+            if ((row.Area < -1) || (row.Area >= m_areas.TypeCount)) {
+                throw new ArgumentOutOfRangeException(paramName: nameof(domains), actualValue: row.Area, message: $"navigation domain '{row.Name}' names an area type outside the area set.");
+            }
+        }
         m_domains = new Domain[domains.Count];
         m_retained = new bool[domains.Count];
         var retained = 0;
@@ -112,6 +160,8 @@ public sealed partial class NavigationRuntime {
         m_joined = new bool[(m_domains.Length * m_domains.Length)];
         foreach (var domain in m_domains) {
             domain.Work = m_work;
+            domain.Gate = m_gate;
+            domain.Areas = m_areas;
         }
         if (previous is not null) {
             AdoptGoalFields(previous: previous);
@@ -120,8 +170,11 @@ public sealed partial class NavigationRuntime {
 
     private readonly NavigationCapacity m_capacity;
     private readonly NavigationSearchWork m_work;
+    private readonly NavigationAreaSet m_areas;
 
     public int Count => m_domains.Length;
+    /// <summary>Gets the area types the runtime's cells carry.</summary>
+    public NavigationAreaSet Areas => m_areas;
     /// <summary>Gets the number of domain workspaces retained from the prior runtime installation.</summary>
     public int RetainedDomainCount { get; }
     /// <summary>Gets the number of domain workspaces compiled for this runtime installation.</summary>
@@ -165,13 +218,12 @@ public sealed partial class NavigationRuntime {
 
         private static readonly FixedQ4816 SquareRootTwo = FixedQ4816.FromDouble(value: 1.4142135623730951);
 
-        private readonly int[] m_closedStamp;
-        private readonly int[] m_cost;
-        private readonly NodeHeap m_open;
-        private readonly int[] m_openStamp;
-        private readonly int[] m_parent;
-
-        private int m_searchStamp;
+        // The path searches' workspaces: a search rents one and returns it, so searches on several threads at once each
+        // hold their own, and a domain no search reaches allocates none.
+        private readonly Puck.Abstractions.Collections.SharedPool<SearchWorkspace> m_searches;
+        private long m_searchBytes;
+        // The reader's gate: while it is read-only, a read that would adopt a bake throws instead.
+        private NavigationReadGate m_gate = NavigationReadGate.Open;
 
         // The adopted bake's arrays: empty until EnsureBaked adopts one, never written afterwards.
         private bool[] m_walkable = [];
@@ -224,12 +276,8 @@ public sealed partial class NavigationRuntime {
                 : -1
             );
             CellCount = checked(((Tuning.Width * Tuning.Depth) * Tuning.Layers));
-            m_cost = new int[CellCount];
-            m_parent = new int[CellCount];
-            m_openStamp = new int[CellCount];
-            m_closedStamp = new int[CellCount];
-            m_open = new NodeHeap(cells: CellCount);
             m_mediumRevision = MediumValueRevision;
+            m_searches = new(create: NewSearch);
         }
 
         // The live medium's revision when the domain was compiled; a domain whose medium has moved on is not retained.
@@ -241,6 +289,8 @@ public sealed partial class NavigationRuntime {
         internal ulong MediumValueRevision => ((m_mediumField >= 0) ? m_fields!.ValueRevision(field: m_mediumField) : 0UL);
         // The ledger the runtime that reads the domain counts into.
         internal NavigationSearchWork Work { set => m_work = value; }
+        // The gate of the runtime that reads the domain.
+        internal NavigationReadGate Gate { set => m_gate = value; }
 
         /// <summary>Returns the part of a geometry one domain's queries can reach: the
         /// <see cref="IRegionalContactField.Within"/> part of its footprint's region, or the whole geometry.</summary>
@@ -289,15 +339,26 @@ public sealed partial class NavigationRuntime {
         /// with none in flight the bake runs on the calling thread.</summary>
         /// <remarks>Every kernel read that depends on the bake calls this itself. A host calls it only when it restores
         /// state computed from a bake the kernel cannot see, such as a stored route.</remarks>
+        /// <exception cref="InvalidOperationException">The domain is not baked and its runtime is read-only
+        /// (<see cref="EnterReadOnly"/>): a bake is adopted only on the thread that owns the runtime.</exception>
         public void EnsureBaked() {
             if (m_bake is not null) {
                 return;
             }
+            ThrowIfReadOnly();
             Adopt(bake: ((m_pending is { } pending)
                 ? pending.GetAwaiter().GetResult()
                 : Bake(cancellation: CancellationToken.None, geometry: m_geometry)));
         }
+        // Adopt is the one door a bake enters the domain through, so a read-only runtime refuses every adoption, whichever
+        // read asked; EnsureBaked also asks before it waits for or runs a bake.
+        private void ThrowIfReadOnly() {
+            if (m_gate.ReadOnly) {
+                throw new InvalidOperationException(message: $"Navigation domain '{Name}' was read unbaked while its runtime is read-only; bake it before the reads begin.");
+            }
+        }
         private void Adopt(NavigationDomainBake bake) {
+            ThrowIfReadOnly();
             m_bake = bake;
             m_pending = null;
             m_rebakeBasis = null;
@@ -326,6 +387,10 @@ public sealed partial class NavigationRuntime {
             m_capacity = capacity;
             return true;
         }
+        // Whether a tuning proves the same cells and edges as this domain's: equal in everything but the area type its
+        // unmarked cells take, which only prices a route. A domain whose area type changed is rebuilt (its goal fields
+        // priced the old type), and its partial rebake from this one proves nothing again.
+        internal bool SameBake(in NavigationDomainInput row) => ((row with { Area = Tuning.Area }) == Tuning);
 
         private bool SameMediumRevision(INavigationMediumField? fields) {
             if (
@@ -378,7 +443,9 @@ public sealed partial class NavigationRuntime {
                 return (int)m_bake!.Work.Walkable;
             }
         }
-        public long WorkspaceBytes => checked(((long)CellCount) * ((((6L * sizeof(int)) + sizeof(long)) + sizeof(uint)) + sizeof(byte)));
+        /// <summary>Gets the bytes the domain holds per cell for its bake (ground, edges, walkability) and the bytes of
+        /// every path-search workspace it has allocated, one per search that ran at once.</summary>
+        public long WorkspaceBytes => checked((((long)CellCount) * ((sizeof(long) + sizeof(uint)) + sizeof(byte))) + Interlocked.Read(location: ref m_searchBytes));
 
         // Actual off-center locomotion needs a continuous proof: a cached grid edge certifies only the line
         // between its cell centers. Surface locomotion has a different support/clearance contract.
@@ -498,16 +565,20 @@ public sealed partial class NavigationRuntime {
         /// <param name="path">Receives the route's cells from start to goal.</param>
         /// <param name="pathLength">The route's cell count, zero when no route is returned.</param>
         /// <param name="expanded">The nodes the search settled.</param>
+        /// <param name="profile">What the route pays for each area type and which it never enters; <see langword="null"/>
+        /// is <see cref="NavigationCostProfile.Neutral"/>.</param>
         /// <returns><see cref="NavigationStatus.Active"/> with a route, <see cref="NavigationStatus.Arrived"/> when the
         /// start is the goal, or why no route was returned.</returns>
-        public NavigationStatus FindPath(int start, int goal, Span<int> path, out int pathLength, out int expanded) {
-            var status = SearchPath(expanded: out expanded, goal: goal, path: path, pathLength: out pathLength, start: start);
+        public NavigationStatus FindPath(int start, int goal, Span<int> path, out int pathLength, out int expanded, NavigationCostProfile? profile = null) {
+            var status = SearchPath(expanded: out expanded, goal: goal, path: path, pathLength: out pathLength, profile: (profile ?? NavigationCostProfile.Neutral), start: start);
 
             m_work.Add(amount: 1, kind: NavigationSearchWork.Searches);
             m_work.Add(amount: expanded, kind: NavigationSearchWork.SearchExpansions);
             return status;
         }
-        private NavigationStatus SearchPath(int start, int goal, Span<int> path, out int pathLength, out int expanded) {
+        // The profile travels with the search rather than in a field, so searches on several threads at once each price
+        // their steps by their own.
+        private NavigationStatus SearchPath(int start, int goal, Span<int> path, NavigationCostProfile profile, out int pathLength, out int expanded) {
             pathLength = 0;
             expanded = 0;
             if (
@@ -522,76 +593,69 @@ public sealed partial class NavigationRuntime {
                 return NavigationStatus.Arrived;
             }
 
-            BeginSearch();
-            Open(
-                cost: 0,
-                goal: goal,
-                node: start,
-                parent: -1
-            );
-            while (m_open.Count != 0) {
-                var current = m_open.Pop(order: new GoalOrder(
-                    domain: this,
-                    goal: goal
-                ));
+            var workspace = m_searches.Rent();
 
-                m_closedStamp[current] = m_searchStamp;
-                expanded++;
-                if (current == goal) {
-                    return Reconstruct(
-                        goal: goal,
-                        path: path,
-                        pathLength: out pathLength
-                    );
-                }
-                if (expanded >= Tuning.MaxExpandedNodes) {
-                    return NavigationStatus.SearchLimit;
-                }
+            try {
+                var order = new SearchOrder(workspace: workspace);
 
-                foreach (var step in Neighbors(node: current)) {
-                    var next = step.Node;
+                workspace.Begin();
+                Open(cost: 0L, goal: goal, node: start, order: order, parent: -1, profile: profile, workspace: workspace);
+                while (workspace.Open.Count != 0) {
+                    var current = workspace.Open.Pop(order: order);
 
-                    if (
-                        !CanTraverse(
-                        current: current,
-                        dx: step.Dx,
-                        dy: step.Dy,
-                        dz: step.Dz,
-                        next: next,
-                        x: step.X,
-                        y: step.Y,
-                        z: step.Z
-                    ) ||
-                        (m_closedStamp[next] == m_searchStamp)
-                    ) {
-                        continue;
+                    workspace.ClosedStamp[current] = workspace.Stamp;
+                    expanded++;
+                    if (current == goal) {
+                        return Reconstruct(goal: goal, path: path, pathLength: out pathLength, workspace: workspace);
                     }
-                    var nextCost = checked((m_cost[current] + step.Cost));
+                    if (expanded >= Tuning.MaxExpandedNodes) {
+                        return NavigationStatus.SearchLimit;
+                    }
 
-                    if (
-                        (m_openStamp[next] != m_searchStamp) ||
-                        (nextCost < m_cost[next])
-                    ) {
-                        Open(
-                            cost: nextCost,
-                            goal: goal,
-                            node: next,
-                            parent: current
-                        );
+                    foreach (var step in Neighbors(node: current)) {
+                        var next = step.Node;
+
+                        if (
+                            !CanTraverse(
+                            current: current,
+                            dx: step.Dx,
+                            dy: step.Dy,
+                            dz: step.Dz,
+                            next: next,
+                            x: step.X,
+                            y: step.Y,
+                            z: step.Z
+                        ) ||
+                            (workspace.ClosedStamp[next] == workspace.Stamp)
+                        ) {
+                            continue;
+                        }
+                        var stepCost = (profile.IsNeutral ? step.Cost : profile.Scale(area: AreaCodes()[next], cost: step.Cost));
+
+                        if (stepCost < 0L) {
+                            continue;
+                        }
+                        var nextCost = checked((workspace.Cost[current] + stepCost));
+
+                        if (
+                            (workspace.OpenStamp[next] != workspace.Stamp) ||
+                            (nextCost < workspace.Cost[next])
+                        ) {
+                            Open(cost: nextCost, goal: goal, node: next, order: order, parent: current, profile: profile, workspace: workspace);
+                        }
                     }
                 }
+                return NavigationStatus.Unreachable;
+            } finally {
+                m_searches.Return(item: workspace);
             }
-            return NavigationStatus.Unreachable;
         }
+        // Builds a workspace for a search that found none idle, counting its bytes into WorkspaceBytes.
+        private SearchWorkspace NewSearch() {
+            var created = new SearchWorkspace(cells: CellCount);
 
-        private void BeginSearch() {
-            m_open.Clear();
-            m_searchStamp++;
-            if (m_searchStamp == int.MaxValue) {
-                Array.Clear(array: m_openStamp);
-                Array.Clear(array: m_closedStamp);
-                m_searchStamp = 1;
-            }
+            _ = Interlocked.Add(location1: ref m_searchBytes, value: created.Bytes);
+            return created;
         }
         private bool AdmitsAxes(int axes) => ((Tuning.Kind == NavigationKind.Surface) || Tuning.Connectivity switch {
             NavigationConnectivity.Axis => (axes == 1),
@@ -722,35 +786,9 @@ public sealed partial class NavigationRuntime {
 
             return (((ordinal % 3) - 1), ((ordinal / 9) - 1), (((ordinal / 3) % 3) - 1));
         }
-        // f = g + h, then the smaller h, then the lower index: a total order, so the heap never breaks a tie itself.
-        private int Compare(int left, int right, int goal) {
-            var leftH = Heuristic(
-                goal: goal,
-                node: left
-            );
-            var rightH = Heuristic(
-                goal: goal,
-                node: right
-            );
-            var f = (m_cost[left] + leftH).CompareTo(value: (m_cost[right] + rightH));
-
-            return ((f != 0)
-                ? f
-                : ((leftH != rightH)
-                    ? leftH.CompareTo(value: rightH)
-                    : left.CompareTo(value: right)
-            ));
-        }
-
-        private readonly struct GoalOrder(Domain domain, int goal) : IComparer<int> {
-            public int Compare(int x, int y) => domain.Compare(
-                goal: goal,
-                left: x,
-                right: y
-            );
-        }
-
-        private int Heuristic(int node, int goal) {
+        // The cells left in Chebyshev measure at the straight step's cost, scaled by the search profile's least
+        // multiplier so it stays a lower bound.
+        private long Heuristic(int node, int goal, NavigationCostProfile profile) {
             Coordinates(
                 node: node,
                 x: out var nx,
@@ -763,13 +801,13 @@ public sealed partial class NavigationRuntime {
                 y: out var gy,
                 z: out var gz
             );
-            return checked((Math.Max(
+            return profile.ScaleHeuristic(distance: checked(((long)Math.Max(
                 val1: Math.Abs(value: (nx - gx)),
                 val2: Math.Max(
                     val1: Math.Abs(value: (ny - gy)),
                     val2: Math.Abs(value: (nz - gz))
                 )
-            ) * StraightCost));
+            )) * StraightCost));
         }
 
         public bool IsWalkable(int node) {
@@ -801,30 +839,22 @@ public sealed partial class NavigationRuntime {
             z = (yz % Tuning.Depth);
             y = (yz / Tuning.Depth);
         }
-        private void Open(int node, int cost, int parent, int goal) {
-            m_cost[node] = cost;
-            m_parent[node] = parent;
-            var order = new GoalOrder(
-                domain: this,
-                goal: goal
-            );
-
-            if (m_openStamp[node] != m_searchStamp) {
-                m_openStamp[node] = m_searchStamp;
-                m_open.Push(
-                    node: node,
-                    order: order
-                );
+        // The heuristic is stored as the node opens, so the search orders by f = g + h, then the smaller h, then the lower
+        // index (SearchOrder): a total order, so the heap never breaks a tie itself.
+        private void Open(int node, long cost, int parent, int goal, NavigationCostProfile profile, SearchOrder order, SearchWorkspace workspace) {
+            workspace.Cost[node] = cost;
+            workspace.Parent[node] = parent;
+            workspace.Heuristic[node] = Heuristic(goal: goal, node: node, profile: profile);
+            if (workspace.OpenStamp[node] != workspace.Stamp) {
+                workspace.OpenStamp[node] = workspace.Stamp;
+                workspace.Open.Push(node: node, order: order);
             } else {
-                m_open.Decrease(
-                    node: node,
-                    order: order
-                );
+                workspace.Open.Decrease(node: node, order: order);
             }
         }
-        private NavigationStatus Reconstruct(int goal, Span<int> path, out int pathLength) {
+        private NavigationStatus Reconstruct(int goal, Span<int> path, out int pathLength, SearchWorkspace workspace) {
             pathLength = 0;
-            for (var node = goal; (node >= 0); node = m_parent[node]) {
+            for (var node = goal; (node >= 0); node = workspace.Parent[node]) {
                 if (
                     (pathLength >= path.Length) ||
                     (pathLength >= Tuning.MaxPathNodes)

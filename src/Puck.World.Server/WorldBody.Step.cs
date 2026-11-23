@@ -7,205 +7,6 @@ using Puck.Physics;
 namespace Puck.World.Server;
 
 public sealed partial class WorldBody {
-    /// <summary>Advances the body by one exact host-owned simulation step from its single merged intent: a live tape
-    /// segment if one is queued, otherwise the tick's submitted intent. The selected program chooses fixed domain
-    /// operations while the host retains phase order and the contact point.</summary>
-    /// <param name="tick">The explicit simulation tick whose staged durable inputs may enter.</param>
-    /// <param name="stepTicks">The exact engine ticks this call advances.</param>
-    /// <param name="engageProbeOrdinal">The context-sensitive-button interception (the RPG A-button): a channel
-    /// ordinal to test for a rising edge against this same tick's composed intent, before any integration runs, or
-    /// <see langword="null"/> for no probe (every body away from an engageable-by-channel screen, and every world
-    /// with none — the default, zero-cost path). <see cref="Puck.World.Server.WorldServer.Step"/> resolves eligibility
-    /// (screen radius, machine-bearing, un-engaged, authority) before calling this and supplies the ordinal only when
-    /// eligible; a fired edge here only reports it — the caller performs the actual
-    /// <see cref="Puck.World.Server.WorldEngagement.Compose"/> afterward, through the same authority path a manual
-    /// <c>body.engage</c> takes.</param>
-    /// <param name="entityIndex">The source body's population index.</param>
-    /// <param name="effectTargets">The pre-step entity target image.</param>
-    /// <param name="effectOutputs">Receives non-self effects for post-advance application.</param>
-    /// <param name="designationOutputs">Receives authored target-register submissions.</param>
-    /// <param name="generatorInvocations">Receives staged <c>generate</c> effect firings, enqueued through the
-    /// ordinary mutation pipeline after the whole population advance.</param>
-    /// <returns><see langword="true"/> when <paramref name="engageProbeOrdinal"/>'s rising edge fired this tick
-    /// (the caller should engage); otherwise <see langword="false"/>.</returns>
-    /// <param name="scratch">The step scratch the caller owns, which this step captures the body into before it begins
-    /// and restores from if its sweep is refused (<see cref="StepScratch"/>).</param>
-    /// <param name="sleepAfterTicks">The authored <c>bodies.sleepAfterSeconds</c> idle floor, in engine ticks, this body sleeps under
-    /// once cleared with no motion and no incoming intent; 0 (the default) never sleeps — see
-    /// <see cref="UpdateSleepEligibility"/>.</param>
-    /// <param name="contactFieldVersion">The population's current <see cref="WorldPopulation.ContactFieldVersion"/>,
-    /// folded into this body's own idle bookkeeping so a contact-surface change under it is never mistaken for rest.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
-    internal bool Advance(ulong tick, ulong stepTicks, StepScratch scratch, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, ulong sleepAfterTicks = 0UL, ulong contactFieldVersion = 0UL) {
-        ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
-        if (PopulationSleeping) { return false; }
-
-        // Captured before ExecuteProgram can move m_position — the swept portal-crossing
-        // scan's segment start for this step. A hard teleport between scans overwrites this separately (CommitTeleport).
-        m_previousPosition = m_position;
-        var previousOrientationForSleep = m_orientation;
-
-        // A carried body's pose and rigid velocity are DERIVED from its carrier every tick (WorldBody.FollowCarrier,
-        // called from WorldPopulation.UpdateCarriedBodies after both advance passes complete) — its own integration
-        // is suspended for as long as CarriedBy stays set, so this tick's Advance is a pure no-op rather than
-        // running gravity/contact against a pose FollowCarrier is about to overwrite anyway.
-        if (m_carriedByIndex >= 0) {
-            return false;
-        }
-
-        // A rigid kit hands the whole step to the population's rigid solve instead of the grounded/free motion program:
-        // no intent, action track, or hold list applies to a passive rigid entity. The step is prepared here and solved
-        // with every other rigid body once all of them have advanced (WorldPopulation.Rigid.cs).
-        if (m_rigid is not null) {
-            PrepareRigidStep(
-                entityIndex: entityIndex,
-                stepTicks: stepTicks
-            );
-
-            return false;
-        }
-
-        // Producer observations enter history before motion, just like external input. A refused sweep does not
-        // erase an accepted observation or turn the same held sample into another press on the following tick.
-        var inputRuntime = m_stateLane?.Input;
-
-        if (InputImages.HasProducer && SourceNamesProducer(source: InputImages.Source) && (inputRuntime is not null)) {
-            using var admission = Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickAdmission);
-
-            InputImagesEdit.Producer = inputRuntime.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
-        }
-
-        // A refused sweep is a full block: everything this step writes from here on is undone when its contact phase
-        // meets a refusal, and the outputs it emitted are withdrawn (WorldBody.SweepRefusal.cs).
-        CaptureMotion(scratch: scratch);
-        inputRuntime?.BeginKitStep();
-        var inputEpoch = InputEpoch;
-        var effectOutputCount = (effectOutputs?.Count ?? 0);
-        var designationOutputCount = (designationOutputs?.Count ?? 0);
-        var generatorInvocationCount = (generatorInvocations?.Count ?? 0);
-        var refused = false;
-
-        ApplyDurableInput(tick: tick);
-        MaterializeDefaultLanePresses(stepTicks: stepTicks);
-
-        // The full merged intent for this sub-step: NextIntent expresses the whole precedence (movement channels —
-        // tape > submitted, gated by the possession latch — with the action-track lanes overlaid). StageProducer
-        // stages an intent for every body every tick, including a kit with no producer at all (it stages the inert
-        // default) — so "had incoming intent" for the sleep floor below reads the resolved vector after this call,
-        // not the raw pre-resolve flags, which would read true for a body nothing is actually driving.
-        var intent = NextIntent(body: entityIndex, stepTicks: stepTicks, tick: tick);
-        var hadIncomingIntentForSleep = (intent != default);
-
-        // Captured EVERY Advance, regardless of the latch — a mirrored application set needs this body's resolved
-        // intent for its targets' translation/passthrough even while the avatar keeps integrating below. Reading it costs nothing beyond a struct copy already computed above.
-        InputReadbacksEdit.EngagedIntent = intent;
-
-        // The SAME edge test ProcessLaneActions uses below (bit crossing the ordinal's threshold, previous tick's bit
-        // clear) — computed here, ahead of integration, so a fired edge can preempt it entirely rather than firing a
-        // bound action (a jump) the same tick it engages.
-        var engageEdge = ((engageProbeOrdinal is { } probeOrdinal)
-            && (intent[probeOrdinal] >= m_channelThresholds[probeOrdinal])
-            && !Action.PreviousBit[probeOrdinal]);
-
-        if (
-            InputImages.Engaged ||
-            engageEdge
-        ) {
-            // Captured (InputImages.Engaged, i.e. capture:true), OR this tick's press is being diverted into an engage instead
-            // of reaching the body (engageEdge): either way the resolved intent never reaches the avatar (no pose
-            // integration, so the snapshot holds it stable). The action track below still advances, so a timed press
-            // drains identically whether the intent drives the avatar or the route target.
-        } else {
-            // The tether facet reads its own attach/detach/reel channels directly (never through the kit's action
-            // table — see WorldBody.Tether.cs), so it runs here, ahead of the program dispatch below, on the SAME
-            // "intent reaches the avatar" gate as everything else in this branch. A detach that fires this tick
-            // falls through to the ordinary ExecuteProgram path below in the SAME tick, already carrying the
-            // momentum DetachTether wrote into the vertical/planar channels. Gravity stays on while a tether holds
-            // and the kit's own program keeps integrating; WorldPopulation.ResolveTethers clamps the result to the
-            // rope AFTER every body this tick has advanced.
-            ProcessTetherIntent(intent: in intent);
-            ProcessTetherReel(
-                intent: in intent,
-                stepTicks: stepTicks
-            );
-
-            {
-                // moveSpeed goes through ResolveMoveSpeed: the rate reads live off the seated profile every frame
-                // (an identity.motion edit is real-time; a profileless stand-in falls back to the tuning's speed),
-                // clamped by the kit's own authored Speed.Envelope when declared. The clamp lands BEFORE
-                // ExecuteProgram ever sees the value, so the sim never observes an unclamped speed, and
-                // EffectiveMoveSpeed's read-back echo performs the same resolve. No envelope (the default) is a
-                // no-op clamp elided entirely; a kit pinning its speed outright authors min == max.
-                var moveSpeed = ResolveMoveSpeed();
-                var turnSpeed = ResolveTurnRate();
-
-                m_sweepRefusal = ContactRefusal.None;
-
-                ExecuteProgram(
-                    designationOutputs: designationOutputs,
-                    effectOutputs: effectOutputs,
-                    effectTargets: effectTargets,
-                    entityIndex: entityIndex,
-                    generatorInvocations: generatorInvocations,
-                    intent: intent,
-                    moveSpeed: moveSpeed,
-                    stepTicks: stepTicks,
-                    turnSpeed: turnSpeed
-                );
-
-                refused = (m_sweepRefusal != ContactRefusal.None);
-            }
-        }
-
-        if (refused) {
-            RestoreMotion(scratch: scratch);
-            inputRuntime?.CompleteKitStep(accepted: false);
-            // Selection reconciliation can retune the body; restore the exact captured motion over that old kit.
-            RestoreMotion(scratch: scratch);
-            // A refused motion step still consumes its one-tick publications. They are sampled again by their
-            // producers next tick; restoring the motion must not turn a missed impulse into a retained request.
-            InputImagesEdit.Submitted = default;
-            InputImagesEdit.HasSubmitted = false;
-            InputImagesEdit.Held = default;
-            InputImagesEdit.Producer = default;
-            InputImagesEdit.HasProducer = false;
-            effectOutputs?.RemoveRange(index: effectOutputCount, count: (effectOutputs.Count - effectOutputCount));
-            designationOutputs?.RemoveRange(index: designationOutputCount, count: (designationOutputs.Count - designationOutputCount));
-            generatorInvocations?.RemoveRange(index: generatorInvocationCount, count: (generatorInvocations.Count - generatorInvocationCount));
-        } else {
-            // A firing may have installed a different bank. Never write old-slot bits over its continuing baseline.
-            if (InputEpoch != inputEpoch) { intent = InputReadbacks.EngagedIntent; }
-            // The previous-bit image is written once after action evaluation; timed presses drain even under capture.
-            for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-                ActionEdit.PreviousBit[ordinal] = (intent[ordinal] >= m_channelThresholds[ordinal]);
-            }
-
-            for (var lane = 0; (lane < ActionLaneCount); lane++) {
-                ActionEdit.TimerTicks[lane] = SubtractSaturating(
-                    value: Action.TimerTicks[lane],
-                    amount: stepTicks
-                );
-            }
-
-            // The held-channel image is a one-tick publish, like the submitted intent: the client republishes it every
-            // submission, so a missed tick reads no channels rather than a stale hold.
-            InputImagesEdit.Held = default;
-            m_affectingSubject = -1;
-
-            UpdateSleepEligibility(
-                contactFieldVersion: contactFieldVersion,
-                hadIncomingIntent: hadIncomingIntentForSleep,
-                moved: ((m_position != m_previousPosition) || (m_orientation != previousOrientationForSleep)),
-                sleepAfterTicks: sleepAfterTicks,
-                stepTicks: stepTicks,
-                tick: tick
-            );
-            inputRuntime?.CompleteKitStep(accepted: true);
-        }
-
-        if ((m_position != m_previousPosition) || (m_orientation != previousOrientationForSleep)) { NotifyPopulationWake(); }
-        return engageEdge;
-    }
     internal bool ApplyTargetedEffect(int sourceIndex, CompiledBodyInstruction instruction, bool validatedFiring = false) {
         var slot = ((instruction.StateName is null)
             ? -1
@@ -417,8 +218,12 @@ public sealed partial class WorldBody {
     // Normalization gives a fixed overlay speed even at partial stick deflection.
     private FixedVector3 ImpulseDirection(in CompiledBodyInstruction instruction, in PlayerIntent intent, FixedQuaternion orientation) {
         if (instruction.UseMoveDirection) {
-            var scratch = new BodyMotionScratch { Intent = intent, Orientation = orientation, Up = m_up };
+            var scratch = default(BodyMotionScratch);
             FixedVector3 direction;
+
+            scratch.Intent = intent;
+            scratch.Orientation = orientation;
+            scratch.Up = m_up;
 
             if (!TryCommandedMoveDirection(direction: out direction, scratch: ref scratch)) {
                 var (forward, strafe) = PlanarIntent(intent: in intent);
@@ -786,24 +591,26 @@ public sealed partial class WorldBody {
                 throw new InvalidOperationException(message: $"Body program reached uncompiled opcode value {((int)instruction.Operation)}.");
         }
     }
-    private void ExecuteProgram(PlayerIntent intent, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, ulong stepTicks, int entityIndex, BodyEffectTargets effectTargets, List<BodyEffectOutput>? effectOutputs, List<WorldDesignation>? designationOutputs, List<WorldGeneratorInvocation>? generatorInvocations) {
+    private void ExecuteProgram(in PlayerIntent intent, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, ulong stepTicks, int entityIndex, BodyEffectTargets effectTargets, List<BodyEffectOutput>? effectOutputs, List<WorldDesignation>? designationOutputs, List<WorldGeneratorInvocation>? generatorInvocations) {
         m_entityIndex = entityIndex;
-        var scratch = new BodyMotionScratch {
-            AttitudeUp = m_up,
-            DesignationOutputs = designationOutputs,
-            EffectOutputs = effectOutputs,
-            EffectTargets = effectTargets,
-            EntityIndex = entityIndex,
-            GeneratorInvocations = generatorInvocations,
-            GoverningShapingRow = -1,
-            Intent = intent,
-            MoveSpeed = moveSpeed,
-            NextPosition = m_position,
-            Orientation = m_orientation,
-            StepTicks = stepTicks,
-            TurnSpeed = turnSpeed,
-            Up = m_up,
-        };
+        // Written field by field into the zeroed local: an object initializer builds a temporary and copies the whole
+        // scratch, references included, into the local through the runtime's bulk write barrier on every step.
+        var scratch = default(BodyMotionScratch);
+
+        scratch.AttitudeUp = m_up;
+        scratch.DesignationOutputs = designationOutputs;
+        scratch.EffectOutputs = effectOutputs;
+        scratch.EffectTargets = effectTargets;
+        scratch.EntityIndex = entityIndex;
+        scratch.GeneratorInvocations = generatorInvocations;
+        scratch.GoverningShapingRow = -1;
+        scratch.Intent = intent;
+        scratch.MoveSpeed = moveSpeed;
+        scratch.NextPosition = m_position;
+        scratch.Orientation = m_orientation;
+        scratch.StepTicks = stepTicks;
+        scratch.TurnSpeed = turnSpeed;
+        scratch.Up = m_up;
 
         // Refresh the shared shaping-table recency clocks (a Recently window refills while its fact holds, decays
         // otherwise) once, before phase 0, so every phase's gate read — a frame op's turnScale, ShapeVelocity's own
@@ -945,7 +752,9 @@ public sealed partial class WorldBody {
         m_overlayRemaining -= ticks;
         if (m_overlayRemaining == 0) { m_overlayVelocity = default; m_overlayAccumulator.Reset(); }
     }
-    private PlayerIntent NextIntent(ulong stepTicks, ulong tick, int body) {
+    // A step outside the kit transaction (StepIsLocal) has no tape, timed press or script controller, so it admits no
+    // script observation (scripts: false) and reaches no input runtime.
+    private PlayerIntent NextIntent(ulong stepTicks, ulong tick, int body, bool scripts) {
         var movement = default(PlayerIntent);
         var tapeActor = default(Principal);
         var resolved = false;
@@ -978,7 +787,8 @@ public sealed partial class WorldBody {
             }
         }
 
-        var acceptedScript = AdmitScriptInput(body: body, tape: movement, tapeActor: tapeActor, tick: tick);
+        if (!scripts) { m_scriptAccepted = default; }
+        var acceptedScript = (scripts ? AdmitScriptInput(body: body, tape: movement, tapeActor: tapeActor, tick: tick) : movement);
 
         if (resolved) { movement = acceptedScript; }
         if (!resolved) {

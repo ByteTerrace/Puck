@@ -8,7 +8,7 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
     /// <summary>Gets the latest peer-advance cadence work. Counts only bodies whose kit authors a nonzero cadence.</summary>
-    public WorldAutonomyStatistics AutonomyStatistics { get; private set; }
+    public WorldAutonomyStatistics AutonomyStatistics => m_serialWork.Autonomy;
 
     // The field-input pass (SampleFieldInputs): each region's travel resistance this pass, the pass counter, and the
     // pass each slot last sampled in, so a body the pass skipped samples before it advances. Derived each tick from the
@@ -25,6 +25,7 @@ public sealed partial class WorldPopulation {
         if (resetPhase) {
             entry.ProducerState.AcquiredTarget = -1;
             entry.ProducerState.CurveArcRaw = 0L;
+            entry.ProducerState.CurveArcRemainder = 0L;
             entry.NavigationState.Clear();
             entry.ProducerState.Phase = phase;
             entry.ProducerState.PhaseRemainder = 0L;
@@ -89,10 +90,14 @@ public sealed partial class WorldPopulation {
             AffectingSubject: (entry.Body?.AffectingSubject ?? -1)
         );
     }
-    private BodyProducerSensors ReadProducerSensors(int selfIndex, Entry entry, int currentTarget, in FixedVector3 self, CompiledBodyProducer producer) {
+    // Every producer reads another body through the tick's frozen image (m_perception), never its live pose: a body's
+    // view of the others is the same whichever bodies stepped before it, so it does not depend on the order bodies
+    // step in or on how many threads step them. A body the freeze did not find reads as absent.
+    private BodyProducerSensors ReadProducerSensors(int selfIndex, Entry entry, int currentTarget, in FixedVector3 self, CompiledBodyProducer producer, ProducerWork work, ulong stepTicks) {
+        var image = m_perception!;
         var candidate = BodySensorTarget.None;
         var targetSource = producer.Target;
-        var frozen = (producer.Flock is not null);
+        var flock = (producer.Flock is not null);
 
         if (targetSource?.Source is BodyTargetSource.Designated) {
             var designated = entry.Designations[targetSource.Value.RegisterIndex];
@@ -102,16 +107,8 @@ public sealed partial class WorldPopulation {
                     position: designated.Point,
                     distanceSquared: (designated.Point - self).LengthSquared
                 );
-            } else if (
-                designated.HasBody &&
-                (designated.Index < Capacity) &&
-                m_entries[designated.Index].Active &&
-                (m_entries[designated.Index].Body is { } designatedBody)
-            ) {
-                var position = (frozen
-                    ? m_perception!.Position(index: designated.Index)
-                    : designatedBody.FixedPosition
-                );
+            } else if (designated.HasBody && image.Present(index: designated.Index)) {
+                var position = image.Position(index: designated.Index);
 
                 candidate = new BodySensorTarget(
                     Index: designated.Index,
@@ -120,7 +117,7 @@ public sealed partial class WorldPopulation {
                 );
             }
         } else if (
-            frozen &&
+            flock &&
             (targetSource?.Source is BodyTargetSource.Sensed)
         ) {
             candidate = ReadFlockTarget(
@@ -128,7 +125,7 @@ public sealed partial class WorldPopulation {
                 self: self
             );
         } else if (targetSource?.Source is BodyTargetSource.Sensed sensed) {
-            candidate = SenseNearest(selfIndex: selfIndex, sensed: sensed, source: targetSource.Value, self: in self);
+            candidate = SenseNearest(selfIndex: selfIndex, sensed: sensed, source: targetSource.Value, self: in self, work: work);
         } else if (targetSource?.Source is BodyTargetSource.CurveFollow) {
             var fixedSource = targetSource.Value;
 
@@ -137,7 +134,9 @@ public sealed partial class WorldPopulation {
 
                 entry.ProducerState.CurveArcRaw = AdvanceCurveArc(
                     arcRaw: entry.ProducerState.CurveArcRaw,
-                    stepRaw: fixedSource.ArcStepRaw,
+                    rate: fixedSource.ArcRate,
+                    remainder: ref entry.ProducerState.CurveArcRemainder,
+                    stepTicks: stepTicks,
                     totalLengthRaw: compiled.TotalLengthRaw,
                     closed: compiled.Closed
                 );
@@ -154,54 +153,50 @@ public sealed partial class WorldPopulation {
                 entry: entry,
                 self: self,
                 target: targetSource.Value,
-                frozen: frozen
+                work: work
             );
         }
 
-        var current = (frozen
-            ? ((candidate.Index == currentTarget)
-                ? candidate
-                : BodySensorTarget.None)
-            : (((currentTarget >= 0) && (currentTarget < Capacity) && m_entries[currentTarget].Active && (m_entries[currentTarget].Body is { } held))
-                ? new BodySensorTarget(
-                    Index: currentTarget,
-                    Position: (frozen
-                    ? m_perception!.Position(index: currentTarget)
-                    : held.FixedPosition),
-                    DistanceSquared: ((frozen
-                    ? m_perception!.Position(index: currentTarget)
-                    : held.FixedPosition) - self).LengthSquared
-                )
-                : BodySensorTarget.None
-        ));
+        BodySensorTarget current;
+
+        if (flock) {
+            current = ((candidate.Index == currentTarget) ? candidate : BodySensorTarget.None);
+        } else if (image.Present(index: currentTarget)) {
+            var held = image.Position(index: currentTarget);
+
+            current = new BodySensorTarget(Index: currentTarget, Position: held, DistanceSquared: (held - self).LengthSquared);
+        } else {
+            current = BodySensorTarget.None;
+        }
 
         return new BodyProducerSensors(
             Candidate: candidate,
             CurrentTarget: current
         );
     }
-    private BodySensorTarget ReadNavigatedTarget(Entry entry, in FixedVector3 self, in FixedBodyTargetSource target, bool frozen) {
+    // The goal a navigated target names: its point, or the frozen pose of the body it designates; false when it names
+    // neither.
+    private bool TryNavigationGoal(Entry entry, in FixedBodyTargetSource target, out FixedVector3 goal, out int targetIndex) {
+        var designation = entry.Designations[target.RegisterIndex];
+
+        targetIndex = WorldTargetDesignation.PointIndex;
+        if (designation.IsPoint) {
+            goal = designation.Point;
+            return true;
+        }
+        if (designation.HasBody && m_perception!.Present(index: designation.Index)) {
+            goal = m_perception.Position(index: designation.Index);
+            targetIndex = designation.Index;
+            return true;
+        }
+        goal = default;
+        return false;
+    }
+    private BodySensorTarget ReadNavigatedTarget(Entry entry, in FixedVector3 self, in FixedBodyTargetSource target, ProducerWork work) {
         var state = entry.NavigationState;
 
         state.ExpandedLast = 0;
-        var designation = entry.Designations[target.RegisterIndex];
-        FixedVector3 goal;
-        var targetIndex = WorldTargetDesignation.PointIndex;
-
-        if (designation.IsPoint) {
-            goal = designation.Point;
-        } else if (
-            designation.HasBody &&
-            (designation.Index < Capacity) &&
-            m_entries[designation.Index].Active &&
-            (m_entries[designation.Index].Body is { } designatedBody)
-        ) {
-            goal = (frozen
-                ? m_perception!.Position(index: designation.Index)
-                : designatedBody.FixedPosition
-            );
-            targetIndex = designation.Index;
-        } else {
+        if (!TryNavigationGoal(entry: entry, goal: out var goal, target: in target, targetIndex: out var targetIndex)) {
             state.Clear(status: NavigationStatus.NoTarget);
             return BodySensorTarget.None;
         }
@@ -214,7 +209,7 @@ public sealed partial class WorldPopulation {
         var domain = m_navigation[target.NavigationDomainIndex];
 
         if (domain.Tuning.Shared) {
-            return ReadGoalFieldTarget(domainIndex: target.NavigationDomainIndex, goal: in goal, self: in self, state: state, targetIndex: targetIndex);
+            return ReadGoalFieldTarget(domainIndex: target.NavigationDomainIndex, entry: entry, goal: in goal, profile: NavigationProfile(index: target.NavigationProfileIndex), self: in self, targetIndex: targetIndex, work: work);
         }
         if (
             !domain.CoversRouteHeight(position: in self) ||
@@ -261,7 +256,8 @@ public sealed partial class WorldPopulation {
                 goalCell,
                 state.WritablePath(),
                 out state.PathLength,
-                out state.ExpandedLast
+                out state.ExpandedLast,
+                NavigationProfile(index: target.NavigationProfileIndex)
             );
             if (state.PathLength == 0) {
                 state.Waypoint = 0;
@@ -313,19 +309,42 @@ public sealed partial class WorldPopulation {
     // two.
     private const int GoalFieldLookahead = 8;
 
+    // Locates a shared-domain follower and its goal in the target domain's network: false when either stands outside it.
+    private bool TryLocateGoalRead(int domainIndex, in FixedVector3 self, in FixedVector3 goal, out int domain, out int cell, out int goalDomain, out int goalCell) {
+        goalDomain = -1;
+        goalCell = -1;
+        return (TryLocateInNetwork(cell: out cell, domain: out domain, network: domainIndex, position: in self) &&
+            TryLocateInNetwork(cell: out goalCell, domain: out goalDomain, network: domainIndex, position: in goal));
+    }
     // A shared domain's follower holds no route. Each read locates the body and its goal in the target domain's network
     // and follows the goal's field from the body's cell, so a body pushed off its line reads the step from where it now
-    // stands, and a tick costs a step read per follower; a field is derived only for a goal no follower read before.
-    private BodySensorTarget ReadGoalFieldTarget(BodyNavigationState state, int domainIndex, in FixedVector3 self, in FixedVector3 goal, int targetIndex) {
-        if (
-            !TryLocateInNetwork(cell: out var cell, domain: out var domain, network: domainIndex, position: in self) ||
-            !TryLocateInNetwork(cell: out var goalCell, domain: out var goalDomain, network: domainIndex, position: in goal)
-        ) {
-            state.Clear(status: NavigationStatus.OutsideDomain);
-            return BodySensorTarget.None;
-        }
+    // stands, and a tick costs a step read per follower; a field is derived only for a goal no follower read before. A
+    // kit partition reads what its plan located and resolved (PrepareGoalField) from the same pose, goal and profile, and
+    // derives nothing: the cache is one thread's.
+    private BodySensorTarget ReadGoalFieldTarget(Entry entry, int domainIndex, in FixedVector3 self, in FixedVector3 goal, NavigationCostProfile profile, int targetIndex, ProducerWork work) {
+        var state = entry.NavigationState;
+        NavigationGoalField field;
+        int cell;
+        int domain;
 
-        var field = m_navigation.GoalField(goalCell: goalCell, goalDomain: goalDomain);
+        if (work.Partitioned) {
+            if (entry.PreparedGoalField is not { } prepared) {
+                state.Clear(status: NavigationStatus.OutsideDomain);
+                return BodySensorTarget.None;
+            }
+            // The plan resolved the field under the producer's profile; one under another would price another route.
+            field = (prepared.Profile.Equals(other: profile)
+                ? prepared
+                : throw new InvalidOperationException(message: $"Body {entry.Index}'s goal field was resolved under another cost profile than its kit partition reads."));
+            cell = entry.PreparedGoalFrom.Cell;
+            domain = entry.PreparedGoalFrom.Domain;
+        } else {
+            if (!TryLocateGoalRead(cell: out cell, domain: out domain, domainIndex: domainIndex, goal: in goal, goalCell: out var goalCell, goalDomain: out var goalDomain, self: in self)) {
+                state.Clear(status: NavigationStatus.OutsideDomain);
+                return BodySensorTarget.None;
+            }
+            field = m_navigation.GoalField(goalCell: goalCell, goalDomain: goalDomain, profile: profile);
+        }
         var arrivalSquared = (m_navigation[domainIndex].Tuning.ArrivalDistance * m_navigation[domainIndex].Tuning.ArrivalDistance);
 
         state.Clear();
@@ -357,6 +376,24 @@ public sealed partial class WorldPopulation {
         state.Status = ((distanceSquared <= arrivalSquared) ? NavigationStatus.Arrived : NavigationStatus.Active);
         return new BodySensorTarget(DistanceSquared: distanceSquared, Index: targetIndex, Position: goal);
     }
+    // Locates, serially and before a kit partition steers the body, its shared navigated producer's cell and goal
+    // from the pose and goal the partition will read, and resolves the goal field, so the partition reads a resident
+    // field and locates nothing. No field means the body or its goal stands outside the network. Locating reads and
+    // bakes the network domains the partition's steps will read.
+    private void PrepareGoalField(Entry entry, CompiledBodyProducer producer, in FixedVector3 self) {
+        entry.PreparedGoalField = null;
+        if (
+            (producer.Target is not { Source: BodyTargetSource.Navigated } target) ||
+            (((uint)target.NavigationDomainIndex) >= ((uint)m_navigation.Count)) ||
+            !m_navigation[target.NavigationDomainIndex].Tuning.Shared ||
+            !TryNavigationGoal(entry: entry, goal: out var goal, target: in target, targetIndex: out _) ||
+            !TryLocateGoalRead(cell: out var cell, domain: out var domain, domainIndex: target.NavigationDomainIndex, goal: in goal, goalCell: out var goalCell, goalDomain: out var goalDomain, self: in self)
+        ) {
+            return;
+        }
+        entry.PreparedGoalField = m_navigation.GoalField(goalCell: goalCell, goalDomain: goalDomain, profile: NavigationProfile(index: target.NavigationProfileIndex));
+        entry.PreparedGoalFrom = (domain, cell);
+    }
     // The walkable cell a position stands on in a domain's network: the domain's own cell first, else the nearest of its
     // network's.
     private bool TryLocateInNetwork(int network, in FixedVector3 position, out int domain, out int cell) {
@@ -369,13 +406,19 @@ public sealed partial class WorldPopulation {
 
         return m_navigation.TryLocate(cell: out cell, domain: out domain, network: network, position: in position);
     }
-    // Advances a curve-follow arc position by one compiled step, then wraps (closed) or clamps (open) it back inside
-    // [0, totalLengthRaw] — the persisted state never grows past the curve's own length, so it stays bounded across
-    // an arbitrarily long run and CompiledCurvatureSpline.EvaluateRaw's own wrap/clamp is redundant with, never a
-    // substitute for, this one (EvaluateRaw wraps its ARGUMENT; this wraps the STORED accumulator). Both arcRaw and
-    // stepRaw arrive already bounded well under long's range (CurvatureSpline's own MaxCoordinate/
-    // MaxTangentChordRatio caps bound totalLengthRaw far below 2^62), so the addition itself cannot overflow.
-    private static long AdvanceCurveArc(long arcRaw, long stepRaw, long totalLengthRaw, bool closed) {
+    // Advances a curve-follow arc position by its rate over the engine ticks a producer step covers (the remainder
+    // carried in `remainder`, so a batched steering cadence travels what the same span of single ticks would), then
+    // wraps (closed) or clamps (open) it back inside [0, totalLengthRaw] — the persisted state never grows past the
+    // curve's own length, so it stays bounded across an arbitrarily long run and CompiledCurvatureSpline.EvaluateRaw's
+    // own wrap/clamp is redundant with, never a substitute for, this one (EvaluateRaw wraps its ARGUMENT; this wraps the
+    // STORED accumulator). The rate is Q16 and the arc Q32, so the integrated step widens by 16 bits; a step covers at
+    // most a cadence of a second at a validated rate, and CurvatureSpline's own MaxCoordinate/MaxTangentChordRatio caps
+    // bound totalLengthRaw far below 2^62, so the addition cannot overflow.
+    private static long AdvanceCurveArc(long arcRaw, FixedQ4816 rate, ref long remainder, ulong stepTicks, long totalLengthRaw, bool closed) {
+        var accumulator = FixedRateAccumulator.FromRemainder(remainder: remainder, ticksPerSecond: ((long)FixedTickConversion.TicksPerSecond));
+        var stepRaw = (accumulator.Integrate(elapsedTicks: stepTicks, ratePerSecond: rate).Value << FixedQ4816.FractionBitCount);
+
+        remainder = accumulator.Remainder;
         var next = unchecked((arcRaw + stepRaw));
 
         if (!closed) {
@@ -578,25 +621,71 @@ public sealed partial class WorldPopulation {
         }
         return entry.ProducerLookup;
     }
-    // Run the named producer before motion. Live and Idle name no producer.
-    private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks) {
-        using var work = Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickProducers);
+    /// <summary>Returns why body <paramref name="index"/>'s producer stands down, the read a rule's
+    /// <c>$producer:</c> channel answers.</summary>
+    /// <param name="index">The 0-based body index.</param>
+    /// <returns>The reasons, or <see cref="BodyProducerStandDown.None"/> for a running producer or an index that holds
+    /// no active body.</returns>
+    public BodyProducerStandDown ProducerStandDown(int index) => (((((uint)index) < ((uint)Capacity)) && m_entries[index].Active)
+        ? m_entries[index].ProducerState.StandDown
+        : BodyProducerStandDown.None);
+    /// <summary>Sets or clears one reason body <paramref name="index"/>'s producer stands down. The producer stops on
+    /// the body's next producer step while any reason holds, and starts again from where the body stands once none
+    /// does (see <see cref="BodyProducerStandDown"/>).</summary>
+    /// <param name="index">The 0-based body index.</param>
+    /// <param name="reason">The reason to set or clear.</param>
+    /// <param name="standDown">Whether the reason holds.</param>
+    /// <returns><see langword="false"/> when the index holds no active body.</returns>
+    /// <exception cref="InvalidOperationException">A kit partition is running: the reasons change only in a serial
+    /// phase (a rule's firing, the engagement fold), so a partition's steer never sees them move.</exception>
+    public bool SetProducerStandDown(int index, BodyProducerStandDown reason, bool standDown) {
+        ThrowIfPartitioned();
+        if ((((uint)index) >= ((uint)Capacity)) || !m_entries[index].Active) { return false; }
+        ref var state = ref m_entries[index].ProducerState.StandDown;
+
+        state = (standDown ? (state | reason) : (state & ~reason));
+        return true;
+    }
+    /// <summary>Makes <paramref name="possessed"/> the bodies that stand down for
+    /// <see cref="BodyProducerStandDown.Possessed"/>: each gains the reason, and every body that held it and is not
+    /// listed loses it. Called once a tick by <see cref="WorldEngagement.FoldTick"/>, which derives the list from the
+    /// grant table.</summary>
+    /// <param name="possessed">The possessed body indices; duplicates are allowed.</param>
+    internal void SyncPossession(List<int> possessed) {
+        ThrowIfPartitioned();
+        // Recomputed whole from the grant table each tick, so a restored or scope-replayed flag can never outlive the
+        // application that set it.
+        for (var index = 0; (index < Capacity); index++) {
+            m_entries[index].ProducerState.StandDown &= ~BodyProducerStandDown.Possessed;
+        }
+        foreach (var index in possessed) {
+            _ = SetProducerStandDown(index: index, reason: BodyProducerStandDown.Possessed, standDown: true);
+        }
+    }
+    // Run the named producer before motion. Live and Idle name no producer, and a producer that stands down runs as
+    // none does. It writes only this body's own entry, so a partition may stage it.
+    private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks, ProducerWork work) {
+        // A kit partition's steer fork is measured whole (RunKitPartitions), not body by body.
+        using var measure = (work.Partitioned ? default : Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickProducers));
 
         body.SetFlockMovementDomain(domain: null);
         var kitIndex = ResolveKitIndex(index: index);
 
         if (
+            (entry.ProducerState.StandDown != BodyProducerStandDown.None) ||
             (body.Source.ProducerName is not { } name) ||
             (ResolveProducer(entry: entry, name: name, table: m_kits[kitIndex].Producers) is not { } producer)
         ) {
-            // Leaving the producer lane is itself a producer transition. Do not let a prior route (or curve
-            // station) remain observable through rule facts while the body is idle, live-driven, or names a
-            // producer that the current kit does not carry.
+            // Leaving the producer lane is itself a producer transition, so returning to it starts the producer again
+            // from where the body stands (below). Do not let a prior route (or curve station) remain observable
+            // through rule facts while the body is idle, live-driven, stood down, or names a producer that the
+            // current kit does not carry.
             if (entry.ProducerState.ActiveProducerName is not null) {
                 entry.ProducerState.ActiveProducerName = null;
                 entry.ProducerState.ActiveProducerCurveIndex = -1;
                 entry.ProducerState.ActiveProducerNavigationDomainIndex = -1;
                 entry.ProducerState.CurveArcRaw = 0L;
+                entry.ProducerState.CurveArcRemainder = 0L;
                 entry.NavigationState.Clear(status: NavigationStatus.NoTarget);
                 entry.ProducerState.FlockSeeded = false;
             }
@@ -631,6 +720,7 @@ public sealed partial class WorldPopulation {
             entry.ProducerState.CurveArcRaw = ((((uint)curveIndex) < ((uint)m_curveRows.Count))
                 ? m_curveRows[curveIndex].Compiled.NearestStationRaw(position: body.FixedPosition)
                 : 0L);
+            entry.ProducerState.CurveArcRemainder = 0L;
             entry.ProducerState.ActiveProducerNavigationDomainIndex = navigationDomainIndex;
             entry.NavigationState.Clear();
             entry.ProducerState.FlockSeeded = false;
@@ -644,7 +734,8 @@ public sealed partial class WorldPopulation {
                 entry: entry,
                 index: index,
                 producer: producer,
-                stepTicks: stepTicks
+                stepTicks: stepTicks,
+                work: work
             );
         }
         var sensors = ReadProducerSensors(
@@ -652,7 +743,9 @@ public sealed partial class WorldPopulation {
             entry: entry,
             currentTarget: entry.ProducerState.AcquiredTarget,
             self: body.FixedPosition,
-            producer: producer
+            producer: producer,
+            work: work,
+            stepTicks: stepTicks
         );
 
         if (producer.Flock is not null) {
@@ -749,7 +842,8 @@ public sealed partial class WorldPopulation {
                     body: body,
                     entry: entry,
                     index: slot,
-                    stepTicks: stepTicks
+                    stepTicks: stepTicks,
+                    work: m_serialWork
                 );
 
                 var probe = ((!engageProbeOrdinals.IsEmpty && (engageProbeOrdinals[slot] >= 0))
@@ -764,17 +858,15 @@ public sealed partial class WorldPopulation {
                 );
 
                 engageEdges[slot] = body.Advance(
-                    designationOutputs: m_designationOutputs,
-                    effectOutputs: m_effectOutputs,
                     effectTargets: targets,
                     engageProbeOrdinal: probe,
                     entityIndex: slot,
-                    generatorInvocations: m_generatorInvocations,
-                        scratch: m_stepScratch,
+                    outputs: m_outputs,
+                    scratch: m_stepScratch,
                     stepTicks: stepTicks,
                     tick: tick
                 );
-                RecordFlockMotion(body: body);
+                RecordFlockMotion(body: body, work: m_serialWork);
             }
         }
     }
@@ -868,7 +960,9 @@ public sealed partial class WorldPopulation {
     /// <summary>Advances every active simulated stand-in by one sub-step: a named producer runs before motion, then
     /// every peer body integrates. A live <c>body.fly</c> tape or
     /// a submitted intent overrides the producer per the merge rule; an <see cref="IntentSource.Idle"/> peer holds
-    /// still between tape segments yet its tapes still play. The local seats are advanced separately by
+    /// still between tape segments yet its tapes still play. The bodies whose step is local advance first, in kit
+    /// partitions forked across <paramref name="jobs"/>, and every other body then advances serially in index order;
+    /// the result is the same at any worker count. The local seats are advanced separately by
     /// <see cref="AdvanceSeats"/>.</summary>
     /// <remarks>Runs first, before any body (peer or seat) advances this tick, so an attached solid placement's
     /// colliders (<see cref="WorldColliderSet.RefreshAttached"/>) are refreshed exactly once and every body's push
@@ -879,13 +973,13 @@ public sealed partial class WorldPopulation {
     /// <param name="tick">The authority tick being advanced.</param>
     /// <param name="stepTicks">The sub-step duration in engine ticks.</param>
     /// <param name="stepStartEngineTick">The engine-time boundary at the start of the sub-step.</param>
+    /// <param name="jobs">The pool the kit partitions fork across, or <see langword="null"/> to run them on the calling
+    /// thread; the result is the same either way.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
-    public void AdvanceSimulated(WorldDefinition definition, ulong tick, ulong stepTicks, ulong stepStartEngineTick) {
+    public void AdvanceSimulated(WorldDefinition definition, ulong tick, ulong stepTicks, ulong stepStartEngineTick, Puck.Hosting.Jobs.JobPool? jobs = null) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
         SimulatedBodyVisits = 0;
         m_rigidTickStepTicks = stepTicks;
-
-        AutonomyStatistics = default;
 
         if (MovingSolids is { } attached) { attached.RefreshAttached(definition: definition, engineTick: stepStartEngineTick, population: this, tick: tick); }
         var stepBodies = PrepareBodyStep();
@@ -911,144 +1005,174 @@ public sealed partial class WorldPopulation {
         // change mid-loop (nothing here writes either) can never wake half a tick's peers and not the other half.
         var contactFieldVersion = ContactFieldVersion;
 
-        foreach (var index in stepBodies) {
-            var entry = m_entries[index];
+        // The kit advance split (WorldPopulation.Partitions.cs): the bodies whose step is local advance first, in fixed
+        // partitions of slots over the frozen image, and every other body then advances here, serially, in index order.
+        PlanKitStep(contactFieldVersion: contactFieldVersion, stepBodies: stepBodies, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks);
+        RunKitPartitions(contactFieldVersion: contactFieldVersion, jobs: jobs, tick: tick);
+        foreach (var index in m_serialKitBodies) {
+            AdvanceSerialBody(contactFieldVersion: contactFieldVersion, index: index, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks, tick: tick);
+        }
+    }
+    // One body's whole step inside the kit transaction: its cadence, its producer and its advance, as a body whose step
+    // may write state, reach other bodies or emit outputs takes it.
+    private void AdvanceSerialBody(int index, ulong tick, ulong stepTicks, ulong stepStartEngineTick, ulong contactFieldVersion) {
+        var entry = m_entries[index];
 
-            // Network peers AND inhabitants advance here (both own their body and run a deterministic producer until a
-            // transport/possession supplies intents). An inactive entry has no body.
-            if (
-                !entry.Active ||
-                (entry.Kind == PopulationKind.LocalSeat) ||
-                (entry.Body is not { } player)
-            ) {
-                continue;
-            }
-            SimulatedBodyVisits++;
+        // Network peers AND inhabitants advance here (both own their body and run a deterministic producer until a
+        // transport/possession supplies intents). An inactive entry has no body.
+        if (
+            !entry.Active ||
+            (entry.Kind == PopulationKind.LocalSeat) ||
+            (entry.Body is not { } player) ||
+            !TryPlanAutonomy(contactFieldVersion: contactFieldVersion, entry: entry, index: index, player: player, step: out var step, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks)
+        ) {
+            return;
+        }
 
-            // An asleep body that wakes for nothing this tick costs nothing beyond this check — no staging, no
-            // cadence bookkeeping, no Advance. See WorldBody.Sleep.cs.
-            if (player.TryDeferSleepingAdvance(contactFieldVersion: contactFieldVersion)) {
-                continue;
-            }
-            EnsureFieldInputs(body: player, index: index);
-
-            var kit = m_kits[KitIndex(index: index)];
-            var locallyAutonomous = (
-                !entry.IsRemoteHuman &&
-                !player.Source.IsLive &&
-                !player.HasMotionTape &&
-                !player.RequiresFullRateAutonomy
+        if (step.SteeringDue) {
+            StageProducer(
+                body: player,
+                entry: entry,
+                index: index,
+                stepTicks: step.SteeringTicks,
+                work: m_serialWork
             );
-            var motionPeriod = (locallyAutonomous
-                ? kit.AutonomousMotionTicks
-                : 0UL
-            );
-            var steeringPeriod = ((!entry.IsRemoteHuman && player.Source.IsProducer)
-                ? kit.AutonomousSteeringTicks
-                : 0UL
-            );
-            ref var autonomy = ref entry.AutonomyState;
-            var ordinal = (index - LocalSeatCount);
+            SeedSteering(entry: entry, motionPeriod: step.MotionPeriod, player: player, steeringPeriod: step.SteeringPeriod, work: m_serialWork);
+        }
+        if (!step.Moves) {
+            return;
+        }
+        if (
+            !step.SteeringDue &&
+            entry.AutonomyState.SteeringSeeded
+        ) {
+            player.StageProducerIntent(intent: in entry.AutonomyState.SteeringIntent);
+        }
+        var targets = ReadEffectTargets(
+            selfIndex: index,
+            entry: entry,
+            self: player.FixedPosition
+        );
 
-            BindCadence(
-                motionPeriod,
-                ordinal,
-                PeerCapacity,
-                ref autonomy.MotionPeriodTicks,
-                ref autonomy.MotionElapsedTicks,
-                ref autonomy.MotionRemainingTicks
-            );
-            BindCadence(
-                steeringPeriod,
-                ordinal,
-                PeerCapacity,
-                ref autonomy.SteeringPeriodTicks,
-                ref autonomy.SteeringElapsedTicks,
-                ref autonomy.SteeringRemainingTicks
-            );
+        player.Advance(
+            tick: tick,
+            stepTicks: step.MotionTicks,
+            entityIndex: index,
+            effectTargets: targets,
+            outputs: m_outputs,
+            scratch: m_stepScratch,
+            sleepAfterTicks: m_sleepAfterTicks,
+            contactFieldVersion: contactFieldVersion
+        );
+        WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.Advances);
+        RecordFlockMotion(body: player, work: m_serialWork);
+    }
+    // What a non-seat body does this tick under its autonomy cadence: whether its producer runs and over how many
+    // engine ticks, and whether it moves and over how many.
+    private readonly record struct AutonomyStep(bool SteeringDue, ulong SteeringTicks, ulong SteeringPeriod, ulong MotionPeriod, bool Moves, ulong MotionTicks);
 
-            var steeringDue = CadenceDue(
-                elapsed: ref autonomy.SteeringElapsedTicks,
-                elapsedTicks: out var steeringTicks,
-                period: steeringPeriod,
-                remaining: ref autonomy.SteeringRemainingTicks,
-                stepTicks: stepTicks
-            );
+    // Settles a non-seat body's sleep, field inputs and cadence for the tick, the same for a serial body and a kit
+    // partition's: false for a sleeper that nothing wakes. A body whose motion is not due is marked deferred, and one
+    // whose ordinary advance is not admitted restarts its motion cadence and does not move.
+    private bool TryPlanAutonomy(Entry entry, WorldBody player, int index, ulong stepTicks, ulong stepStartEngineTick, ulong contactFieldVersion, out AutonomyStep step) {
+        step = default;
+        // An asleep body that wakes for nothing this tick costs nothing beyond this check — no staging, no cadence
+        // bookkeeping, no Advance. See WorldBody.Sleep.cs.
+        if (player.TryDeferSleepingAdvance(contactFieldVersion: contactFieldVersion)) {
+            return false;
+        }
+        EnsureFieldInputs(body: player, index: index);
 
-            if (steeringDue) {
-                StageProducer(
-                    body: player,
-                    entry: entry,
-                    index: index,
-                    stepTicks: steeringTicks
-                );
-                if (
-                    player.Source.IsProducer &&
-                    ((steeringPeriod != 0UL) || (motionPeriod != 0UL))
-                ) {
-                    autonomy.SteeringIntent = player.StagedProducerIntent;
-                    autonomy.SteeringSeeded = true;
-                } else {
-                    autonomy.SteeringIntent = default;
-                    autonomy.SteeringSeeded = false;
-                }
-                if (steeringPeriod != 0UL) {
-                    AutonomyStatistics = AutonomyStatistics with { SteeringUpdates = (AutonomyStatistics.SteeringUpdates + 1) };
-                }
-            }
+        var kit = m_kits[KitIndex(index: index)];
+        // A possessed body is driven by a participant, so it moves at the full rate; a producer that stands down has
+        // no steering to batch.
+        var standDown = entry.ProducerState.StandDown;
+        var locallyAutonomous = (
+            !entry.IsRemoteHuman &&
+            !player.Source.IsLive &&
+            !player.HasMotionTape &&
+            !player.RequiresFullRateAutonomy &&
+            ((standDown & BodyProducerStandDown.Possessed) == 0)
+        );
+        var motionPeriod = (locallyAutonomous
+            ? kit.AutonomousMotionTicks
+            : 0UL
+        );
+        var steeringPeriod = ((!entry.IsRemoteHuman && Producing(entry: entry, player: player))
+            ? kit.AutonomousSteeringTicks
+            : 0UL
+        );
+        ref var autonomy = ref entry.AutonomyState;
+        var ordinal = (index - LocalSeatCount);
 
-            if (!CadenceDue(
-                elapsed: ref autonomy.MotionElapsedTicks,
-                elapsedTicks: out var motionTicks,
-                period: motionPeriod,
-                remaining: ref autonomy.MotionRemainingTicks,
-                stepTicks: stepTicks
-            )) {
-                player.DeferOrdinaryAdvance();
-                if (motionPeriod != 0UL) {
-                    AutonomyStatistics = AutonomyStatistics with { MotionDeferred = (AutonomyStatistics.MotionDeferred + 1) };
-                }
-                continue;
-            }
+        BindCadence(
+            motionPeriod,
+            ordinal,
+            PeerCapacity,
+            ref autonomy.MotionPeriodTicks,
+            ref autonomy.MotionElapsedTicks,
+            ref autonomy.MotionRemainingTicks
+        );
+        BindCadence(
+            steeringPeriod,
+            ordinal,
+            PeerCapacity,
+            ref autonomy.SteeringPeriodTicks,
+            ref autonomy.SteeringElapsedTicks,
+            ref autonomy.SteeringRemainingTicks
+        );
 
+        var steeringDue = CadenceDue(
+            elapsed: ref autonomy.SteeringElapsedTicks,
+            elapsedTicks: out var steeringTicks,
+            period: steeringPeriod,
+            remaining: ref autonomy.SteeringRemainingTicks,
+            stepTicks: stepTicks
+        );
+        var moves = CadenceDue(
+            elapsed: ref autonomy.MotionElapsedTicks,
+            elapsedTicks: out var motionTicks,
+            period: motionPeriod,
+            remaining: ref autonomy.MotionRemainingTicks,
+            stepTicks: stepTicks
+        );
+
+        if (!moves) {
+            player.DeferOrdinaryAdvance();
             if (motionPeriod != 0UL) {
-                AutonomyStatistics = AutonomyStatistics with { MotionUpdates = (AutonomyStatistics.MotionUpdates + 1) };
+                m_serialWork.Autonomy = m_serialWork.Autonomy with { MotionDeferred = (m_serialWork.Autonomy.MotionDeferred + 1) };
             }
-
-            var accumulatedStart = checked(((stepStartEngineTick + stepTicks) - motionTicks));
-
-            if (!player.TryBeginOrdinaryAdvance(stepStartEngineTick: accumulatedStart)) {
+        } else {
+            if (motionPeriod != 0UL) {
+                m_serialWork.Autonomy = m_serialWork.Autonomy with { MotionUpdates = (m_serialWork.Autonomy.MotionUpdates + 1) };
+            }
+            if (!player.TryBeginOrdinaryAdvance(stepStartEngineTick: checked(((stepStartEngineTick + stepTicks) - motionTicks)))) {
                 autonomy.MotionElapsedTicks = 0UL;
                 autonomy.MotionRemainingTicks = motionPeriod;
-                continue;
+                moves = false;
             }
+        }
+        step = new AutonomyStep(SteeringDue: steeringDue, SteeringTicks: steeringTicks, SteeringPeriod: steeringPeriod, MotionPeriod: motionPeriod, Moves: moves, MotionTicks: motionTicks);
+        return true;
+    }
+    // Keeps a batched body's staged steering for the motion steps between its steering refreshes.
+    // Whether the body's producer runs: its source names one and nothing stands it down.
+    private static bool Producing(Entry entry, WorldBody player) => (player.Source.IsProducer && (entry.ProducerState.StandDown == BodyProducerStandDown.None));
+    private static void SeedSteering(Entry entry, WorldBody player, ulong steeringPeriod, ulong motionPeriod, ProducerWork work) {
+        ref var autonomy = ref entry.AutonomyState;
 
-            if (
-                !steeringDue &&
-                autonomy.SteeringSeeded
-            ) {
-                player.StageProducerIntent(intent: in autonomy.SteeringIntent);
-            }
-            var targets = ReadEffectTargets(
-                selfIndex: index,
-                entry: entry,
-                self: player.FixedPosition
-            );
-
-            player.Advance(
-                tick: tick,
-                stepTicks: motionTicks,
-                entityIndex: index,
-                effectTargets: targets,
-                effectOutputs: m_effectOutputs,
-                designationOutputs: m_designationOutputs,
-                generatorInvocations: m_generatorInvocations,
-                scratch: m_stepScratch,
-                sleepAfterTicks: m_sleepAfterTicks,
-                contactFieldVersion: contactFieldVersion
-            );
-            WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.Advances);
-            RecordFlockMotion(body: player);
+        if (
+            Producing(entry: entry, player: player) &&
+            ((steeringPeriod != 0UL) || (motionPeriod != 0UL))
+        ) {
+            autonomy.SteeringIntent = player.StagedProducerIntent;
+            autonomy.SteeringSeeded = true;
+        } else {
+            autonomy.SteeringIntent = default;
+            autonomy.SteeringSeeded = false;
+        }
+        if (steeringPeriod != 0UL) {
+            work.Autonomy = work.Autonomy with { SteeringUpdates = (work.Autonomy.SteeringUpdates + 1) };
         }
     }
     /// <summary>Overrides an already-active seat's own pose and velocity — the mapped-arrival half of a portal
@@ -1167,7 +1291,7 @@ public sealed partial class WorldPopulation {
     /// writes for the completed tick.</summary>
     public void CompleteStep(ulong tick) {
         m_adjacencyTick = (tick + 1);
-        foreach (var output in m_effectOutputs) {
+        foreach (var output in m_outputs.Effects) {
             if (
                 (((uint)output.TargetIndex) < ((uint)m_entries.Length)) &&
                 (m_entries[output.TargetIndex].Body is { } target)
@@ -1178,7 +1302,7 @@ public sealed partial class WorldPopulation {
                 );
             }
         }
-        m_effectOutputs.Clear();
+        m_outputs.Effects.Clear();
 
         m_durableStateOutputs.Clear();
         for (var index = 0; (index < m_entries.Length); index++) {

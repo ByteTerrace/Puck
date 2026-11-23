@@ -241,7 +241,8 @@ public enum WorldTransferArrival : byte {
 /// destination keeps on the occupant for the routes it describes. <c>Profile</c> is the traveler's identity projection
 /// at commit, which the destination lands in place of the reservation's. <c>MemberId</c> is the request-local id of the
 /// leased member it lands (negative stands for its ordinal); <c>Companion</c> is what a companion carries, its ticket the
-/// one home granted for this hop.</summary>
+/// one home granted for this hop. <c>Drives</c> is the incarnation of the body the traveler rode across, which the
+/// destination hands it to drive again once both have landed.</summary>
 public sealed record WorldTransferCommitMember(
     WorldIdentityProjection? Profile,
     WorldTransferArrival Arrival,
@@ -254,7 +255,8 @@ public sealed record WorldTransferCommitMember(
     WorldContinuumTrajectory? Continuum = null,
     FixedQ4816 TravelTurn = default,
     int MemberId = -1,
-    WorldTransferCompanion? Companion = null
+    WorldTransferCompanion? Companion = null,
+    WorldEntityAddress? Drives = null
 ) {
     /// <summary>Gets the action registers the traveller carries. Carrying none is the empty continuity: an
     /// absent one reads as <see cref="WorldTransferActionContinuity.Empty"/>, so a commit means the same whichever
@@ -604,6 +606,20 @@ public sealed partial class WorldTransferEscrow {
             Registers: [.. member.ActionContinuity.Registers]
         ),
     };
+    // The lowest free body in [first, limit) whose kit runs the source, or -1.
+    private int LowestFreeSupporting(bool[] consumed, int first, int limit, IntentSource source) {
+        for (var slot = first; ((slot < limit) && (slot < consumed.Length)); slot++) {
+            if (!consumed[slot] && m_server.Population.SupportsSource(index: slot, refusal: out _, source: source)) {
+                return slot;
+            }
+        }
+
+        return -1;
+    }
+    // A reservation member as a refusal names it: its ordinal in the request, the body it is in the source authority,
+    // and the source that drives it, never the destination body a refusal considered for it.
+    private static string DescribeTraveler(int index, in WorldTransferReservationMember member, WorldTransferReservationRequest request) =>
+        $"traveler {(index + 1)} (body:{member.PreferredSlot} of '{request.SourceAuthority}', {member.Source})";
     private static int PreferredOrLowestFree(bool[] consumed, int preferred, int first, int limit) {
         if (
             (preferred >= first) &&
@@ -1338,9 +1354,48 @@ public sealed partial class WorldTransferEscrow {
                     slot: slot
                 );
             }
+            if (member.Drives is { } driven) {
+                ResumeDrive(
+                    driven: driven,
+                    slot: slot
+                );
+            }
         }
 
         return reply;
+    }
+    // Hands a landed participant the body it drove across: the live body here that holds the incarnation the commit
+    // names takes the participant's control set, with its own body left out, under a Drive grant minted with it, as the
+    // camera application's is (WorldInputRuntime's camera mode). The body crossed as every autonomous traveler does,
+    // idle, since its driver stayed behind until now; it wakes on live input again, which an idle body masks. A body
+    // that has not landed here, or that the grant table refuses, leaves the participant driving itself.
+    private void ResumeDrive(int slot, WorldEntityAddress driven) {
+        var population = m_server.Population;
+        var principal = ((slot < population.LocalSeatCount)
+            ? Principal.Seat(slot: slot)
+            : population.PeerPrincipal(index: slot));
+
+        for (var index = 0; (index < population.Capacity); index++) {
+            if (
+                (index == slot) ||
+                !population.IsActive(index: index) ||
+                (population.ResolveIncarnation(authority: m_server.AuthorityIdentity, index: index) != driven)
+            ) {
+                continue;
+            }
+
+            var target = GrantSubject.Body(index: index);
+
+            if (
+                m_server.GrantTable.TryPrepareGrant(new(principal, WorldCapability.Drive, target, false, Budget: ushort.MaxValue), Principal.Console, out var grant, out _) &&
+                m_server.Engagement.Compose(actingPrincipal: Principal.Console, entityIndex: slot, exclusive: true, target: target, targetPrincipal: principal)
+            ) {
+                grant!.Install();
+                population.EntryBody(index: index)?.SetIntentSource(source: IntentSource.Live);
+            }
+
+            return;
+        }
     }
 
     /// <summary>Binds a re-drive's taped identity to the one detached identity its id names: built from the first
@@ -1809,7 +1864,7 @@ public sealed partial class WorldTransferEscrow {
             );
 
             if (slot < 0) {
-                return WorldTransferReservationReply.Refused(reason: $"destination has no free body index for traveler {(index + 1)}; no queue was created");
+                return WorldTransferReservationReply.Refused(reason: $"destination has no free body index for {DescribeTraveler(index: index, member: in member, request: request)}; no queue was created");
             }
 
             // One question at reserve, asked of whichever authority will actually drive the body at commit: may it.
@@ -1826,6 +1881,25 @@ public sealed partial class WorldTransferEscrow {
                     return WorldTransferReservationReply.Refused(reason: $"{member.Principal.Describe()} cannot enter body:{slot} — {standing.DescribeDenial()}");
                 }
             } else {
+                // A traveler lands on a free body whose kit runs its source: the preferred or lowest free one when it
+                // does, otherwise the lowest free one that does.
+                if (!m_server.Population.SupportsSource(
+                    index: slot,
+                    source: member.Source,
+                    refusal: out var sourceRefusal
+                )) {
+                    var supporting = LowestFreeSupporting(
+                        consumed: consumed,
+                        first: firstSlot,
+                        limit: seatLimit,
+                        source: member.Source
+                    );
+
+                    if (supporting < 0) {
+                        return WorldTransferReservationReply.Refused(reason: $"{DescribeTraveler(index: index, member: in member, request: request)} cannot enter: no free body here runs its source ({sourceRefusal}, the first free body:{slot})");
+                    }
+                    slot = supporting;
+                }
                 if (
                     member.LandsHuman &&
                     !ArrivalDrives(
@@ -1833,14 +1907,7 @@ public sealed partial class WorldTransferEscrow {
                     slot: slot
                 )
                 ) {
-                    return WorldTransferReservationReply.Refused(reason: $"traveler {(index + 1)} cannot enter body:{slot} — '{request.SourceAuthority}' is admitted but its authored admission grants confer no Drive over the body an arrival is assigned");
-                }
-                if (!m_server.Population.SupportsSource(
-                    index: slot,
-                    source: member.Source,
-                    refusal: out var sourceRefusal
-                )) {
-                    return WorldTransferReservationReply.Refused(reason: $"traveler {(index + 1)} cannot enter body:{slot} — {sourceRefusal}");
+                    return WorldTransferReservationReply.Refused(reason: $"{DescribeTraveler(index: index, member: in member, request: request)} cannot enter body:{slot} — '{request.SourceAuthority}' is admitted but its authored admission grants confer no Drive over the body an arrival is assigned");
                 }
             }
 

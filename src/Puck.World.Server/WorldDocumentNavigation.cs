@@ -46,6 +46,7 @@ public sealed class WorldDocumentNavigation : IWorldSeatNavigation {
 
         WorldColliderSet? colliders = null;
         IContactField? geometry = null;
+        var areas = WorldNavigationAreas.Compile(definition: definition);
 
         if (!WorldContactSelection.RequiresField(collision: definition.Collision)) {
             colliders = WorldColliderSet.Build(definition: definition, previous: previous?.m_colliders);
@@ -63,7 +64,8 @@ public sealed class WorldDocumentNavigation : IWorldSeatNavigation {
                     GoalFieldBytes: WorldNavigationCapacity.MaxGoalFieldBytes,
                     MaxMediumSegmentSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions
                 ),
-                domains: WorldPopulation.CompileNavigationDomains(definition: definition),
+                areas: areas.Set,
+                domains: WorldPopulation.CompileNavigationDomains(areas: areas, definition: definition),
                 fields: null,
                 geometry: geometry,
                 previous: previous?.m_runtime

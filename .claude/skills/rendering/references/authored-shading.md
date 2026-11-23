@@ -7,6 +7,21 @@ share a register, and only surviving outputs emit instructions. The world
 vocabulary's `WorldShadeLowering` uses the ordinary parser, lexical scopes,
 template/function expansion and compile-time loops; it does not run a second DSL.
 
+A program has four phases (`SdfShadePhase`, `SdfShadeProgram.PhaseCount`):
+surface, light, compose and ink, each a header vector of its slice. The ink
+phase draws a line over the composed colour: it reads `ink.under`, `ink.line`
+and `ink.exposure` beside the stamp, writes `color` and `coverage`, and runs
+only through `sdfShadeInkPhase`, where one of its line inputs is live (an
+`edge.*` distance within the reach, or `ink.line` above zero). Admission
+refuses an ink phase that reads no line input, and prices the phase as if
+every pixel ran it (`SdfShadeProgram.PixelWork`). The `line` channel carries a
+per-pixel line to it: a light phase's `line` output, folded by maximum over
+the walk, then `compose.line` and the compose phase's own `line`. The `edge.*`
+members are the view's edge search's (`passes/sdf-views-filter.hlsli`, the
+[handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#ink)),
+far for a pixel whose view searched none and on every glass interface.
+`surface.pixel` is the world size of a display pixel, the unit of every width.
+
 The stamp and allowed phase reads are `SdfShadeOps.Inputs`; output members and
 types are `SdfShadeProgram.OutputType`. A light's direction, reach, probe share
 and visibility are evaluated once (`sdfLightInputs`) and read by both the default
@@ -77,7 +92,9 @@ by content and identity as before, and a definition object shared by a key's
 uses is compiled once (`SdfShadeProgram.Compile`'s per-instance table). The
 bake never reads a program, so the table leaves the bake identity alone.
 
-`WorldShadeLowering` binds each runtime argument through an immutable typed view;
+A structural argument read out of a record (`pen.uneven`) enters as its value
+(`WorldShadeLowering.BindParameter`), since inside a phase a dotted name is a
+stamp member. `WorldShadeLowering` binds each runtime argument through an immutable typed view;
 integer expectations cross `let`, `select`, conditional and function bindings.
 One source argument may supply float and uint views without changing either slot.
 Admission labels live parameters by their output uses, ignoring declaration order
@@ -118,8 +135,8 @@ output, clamp domains and normalize normals. A light phase's assigned outputs
 word, a constant per arm in a specialized kernel: `sdfShadeAssigned`) are terms
 the default response never computes (`sdfLightResponse`'s `replaced`), so a cel
 band pays for no GGX lobe it discards, and a non-finite authored light term falls
-back to no light. `SdfShadeHlsl.Invocation` generates the surface, light and compose doors
-used by both the views and glass kernels. Glass supplies contact and thickness;
+back to no light. `SdfShadeHlsl.Invocation` generates the surface, light, compose and ink doors
+used by both the views and glass kernels (the glass stage calls no ink door yet). Glass supplies contact and thickness;
 authored roughness drives both its light response and its optical frost and
 environment. The standard water program keeps the underlying glass smooth while
 its reveal supplies foam, selected by the `flow` template's structural glass argument.
@@ -135,8 +152,8 @@ for comparison. A program that omits the surface phase keeps the material's
 layers as its surface (`sdfShadeHas(binding, 0u)` in the views and glass stages,
 `SdfShadeProgram.Authors` on the CPU); the standard's `cel` relies on it. While
 `world.toon off` suppresses every cel style, `sdfShadeBinding` marks a styled
-material's binding unstyled (`sdfToonAuthored`), and `sdfShadeHas` reads its light
-and compose phases as omitted. A material with no program inherits `WorldRenderDefaults.Shade`
+material's binding unstyled (`sdfToonAuthored`), and `sdfShadeHas` reads its light,
+compose and ink phases as omitted. A material with no program inherits `WorldRenderDefaults.Shade`
 (`render.shade`); `world.shade default <program|document>` selects an admitted
 named scene program or restores that document default. `SdfFrameBlock.WriteShadeDefault`
 carries its identity and parameter range; `SdfWorldTables.PackShadeDefault`
@@ -144,7 +161,9 @@ uploads its code and parameters after the scene's appearance words.
 
 `SdfAppearance.Pack` alone places admitted programs in the appearance tail.
 Its material stride is generated from `MaterialVectorsPerEntry`. Row 32 carries
-program and parameter ranges; row 33 carries demand and read flags. All program
+program and parameter ranges; row 33 carries demand and read flags.
+`SdfShadeReads.Edges` (a live read of an `edge.*` member in any phase) is what
+makes a frame's views search for edges (`SdfFrameBlock`'s `inkEdges`). All program
 operands and shape side-table addresses are slice-relative. `sdfShadeRead` checks
 the relative range and the enclosing allocation before reading; shape helpers
 receive a relocated address only after their complete side table passes it.

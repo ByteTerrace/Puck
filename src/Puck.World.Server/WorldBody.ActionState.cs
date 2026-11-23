@@ -461,6 +461,7 @@ public sealed partial class WorldBody {
     // read-back register (what was requested, who wrote it, why) is rebuilt, and a slot declared again under the same
     // name, kind and lifetime keeps its read-back so it still describes the value the lane holds.
     private void CompileActionState(CompiledActionStateSlot[]? state) {
+        MarkKitLocalStale();
         var previousDefinitions = m_actionStateDefinitions;
         var previousRequested = m_actionStateRequested;
         var previousWriters = m_actionStateLastWriter;
@@ -576,7 +577,8 @@ public sealed partial class WorldBody {
         )
         : 0UL
     );
-    private void WriteStateRaw(int slot, long raw) => m_stateLane?.Write(
+    // A body a kit partition steps never writes a register (StepIsLocal): the lanes are the arena's, which one thread writes.
+    private void WriteStateRaw(int slot, long raw) => ((m_stepLog is null) ? m_stateLane : throw new InvalidOperationException(message: "A body stepped in a kit partition wrote an action-state register."))?.Write(
         ordinal: m_stateOrdinal,
         raw: raw,
         slot: slot

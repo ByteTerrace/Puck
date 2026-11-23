@@ -621,6 +621,16 @@ public static partial class WorldFactsVocabulary {
                 discriminator: "setBodyState",
                 effectType: typeof(WorldEffect.SetBodyState)
             ),
+            new WorldFactsEffectArm(
+                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveProducerHold(context: context, hold: true, key: ((WorldEffect.HoldProducer)effect).Key, ruleName: ruleName),
+                discriminator: "holdProducer",
+                effectType: typeof(WorldEffect.HoldProducer)
+            ),
+            new WorldFactsEffectArm(
+                compile: static (effect, ruleName, context) => WorldFactsCompiler.ResolveProducerHold(context: context, hold: false, key: ((WorldEffect.ReleaseProducer)effect).Key, ruleName: ruleName),
+                discriminator: "releaseProducer",
+                effectType: typeof(WorldEffect.ReleaseProducer)
+            ),
         ],
         keys: [new WorldFactsPairKeyFamily()],
         operands: [new WorldFactsOperandFamily()],

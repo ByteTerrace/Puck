@@ -44,21 +44,69 @@ take over must already run what a player would run.
 | Perspective | Built on | To build |
 |---|---|---|
 | City builder | The city's state rows and rules: anchors, schedules, stock, routes and crossings are cells a rule reads | A top-down camera layout and authored verbs (zoning a lot, placing a stall, routing a loop) that write those rows through the ordinary grant-checked mutations |
-| Driver | Vehicles are bodies with a kit, a `route` register and the road network | Possession of a vehicle's body, a driving camera and bindings; the producer stands down while a seat drives |
-| A citizen | Citizens are bodies on a schedule | Possession of a citizen's body; the schedule's rules skip a possessed citizen and resume it from where it stands once released |
+| Driver | Vehicles are bodies with a kit, a `route` register and the road network; possessing one stands its producer down and its route rules skip it | A driving camera and bindings |
+| A citizen | Citizens are bodies on a schedule; possessing one stands its producer down, the schedule skips it, and released it routes from where it stands | A walking camera and verbs for a possessed citizen |
 | Shifting | Rules gated on state | The account's progression rows decide which perspectives a seat may enter |
 
 Possession exists in the engine: a seat's control set names another body
 (`{ body:<n> }`), a Drive grant over that body authorizes it, and the seat's
 camera, listener and HUD move to the possessed body
 ([engagement](../../.claude/skills/puck-world/references/engagement.md#possession-swaps-the-perceived-world-not-just-the-driven-body)).
+The body's producer stands down while it is possessed or a rule holds it
+(`holdProducer`), and rules read both through `producer(each, …)`
+([the schema reference](../../src/Puck.World.Schema/README.md#a-producer-stands-down-holds-and-possession)).
+A player's car yielding at a crossing is still open: the crossing rule holds a
+vehicle's producer, which a possessed vehicle has already stood down.
 The perspectives interact through one simulation: a builder's edit changes
 where citizens go and vehicles drive, a possessed citizen still holds a
 crossing, and a player's car yields at it as the others do. Many players
 inhabiting the city's bodies against a remote authority is the MMO-shaped
 stress stage 5 measures.
 
-## What exists
+### Zoned districts and platform-generated sections
+
+The owner's ruling, as evidence: "Does the city have residential, commercial,
+agricultural, etc districts? Imagine SimCity or Cities Skylines, except with
+players who might take possession of NPCs and whatnot. Also remember that
+Azure integration can/should be used to generate sections of the world (the
+granaries example, expanded)."
+
+The intent, as the rule:
+- **The city is a living simulation of zones.** Residential, commercial,
+  industrial, agricultural (farms and fields beyond the river), civic and
+  port districts are authored zone rows. Homes, jobs, shopping and the
+  market's goods come from the zones, so goods flow from farm to granary to
+  market to home, with demand, growth and building levels in the manner of a
+  city-building game. All of it is Puck rules and programs in
+  `worlds/standard`, a generic city simulation any world imports, never a
+  city-only engine feature. The builder perspective's verbs zone and build
+  through the same rows, and every citizen and vehicle stays possessable
+  throughout.
+- **Sections of a world are generated from the hosting platform.** The
+  [game design](../game/design.md) already holds it: the world is the
+  operational twin of the platform that hosts it, and every reading of the
+  platform enters as observation rows that a module's placements, bodies and
+  rules read, with no cloud noun and no game noun in the engine. A city
+  district is generated that way: storage as warehouse stock, traffic as
+  vehicle flow, queues as lines at the market, compute as factory activity.
+  It changes as the deployment does. Provider independence holds: rows and
+  abstractions only, no provider noun in engine or world vocabulary.
+
+What exists for the generated district (read at the head this was written
+against; recheck before building):
+- An observation reads an approved collection into ordinary state rows and
+  nothing else, a resource listing or a metrics series alike
+  ([extension configuration](../../src/Puck.World.Server/ExtensionConfiguration.md#observe-a-collection));
+  the debug world's [granary board](../../worlds/debug/granaries.md) reads
+  storage accounts that way, and the hosting example feeds a `Fixed` row from
+  a metrics observation.
+- A placement's `deal` mints one child placement per state cell, so a
+  warehouse can stand per observed store; an `inhabit` count can be a state
+  cell, so vehicle flow or a market queue can follow a metric.
+- Host approval lives outside the package (`worlds/hosting`), per world, so
+  the city needs its own approved configuration; the hosted deployment's
+  verification already carries a `storage-inventory` observation.
+
 
 Each row cites the code it was read from; recheck it before building on it.
 
@@ -73,8 +121,8 @@ Each row cites the code it was read from; recheck it before building on it.
 | Lights | `point(...)` and `spot(...)` in `render.lighting.lights`, powered from state cells, riding bodies by `anchor: entity(...)`, made in arrays by `map` | `SdfLights.MaxLights = 128` per frame; point and spot lights shadow only through the irradiance probes; 500 lights needs [illumination](illumination.md)'s many-lights step |
 | A market | Escrow, refund and settle compose from ordinary effects (schema README, "A market"); `auction.puck` is the nearest content | None known |
 | Repeated buildings | `for`/`map` placements; a rigid creation bakes once and each copy costs a transform and a draw ([rendering decision](../decisions/rendering.md)) | One near copy sets every copy's baked detail ([virtual geometry](virtual-geometry.md)) |
-| Toon look | `standard/shading.puck` `cel`, `standard/styles.puck` `celMaterial`/`celStyle`, `standard/tones.puck` | The outline is the fixed detector in `shade/sdf-toon-outline.hlsli` |
-| Ink and hatching | `ink-checks.puck` draws a terminator and a broken contour from today's stamp | [Ink](ink.md) steps 1 to 9 are open; `SdfShadePhase { Surface, Light, Compose }` has no ink phase; no hatching exists |
+| Toon look | `standard/shading.puck` `cel`, `standard/styles.puck` `celMaterial`/`celStyle`, `standard/tones.puck` | None known |
+| Ink and hatching | A program's `ink` phase over the view's edge search; `standard/ink.puck` `inked`, `hatched` and `standardInk`, which `celMaterial` and `celHatched` lay over the band; the city's `cityStyle` carries its own ink | No line on glass or water, no seam of a smooth blend, and no part boundary inside one bake group ([ink](ink.md#build-order)) |
 | The benchmark | `benchmark-route.puck` chapters; `gardenSeam` already crosses a painting with a `cross` step, and `go` plans over the destination's navigation | Against a remote authority the route does not yet arrive in every chapter ([benchmark](benchmark.md)) |
 
 ## The city
@@ -143,13 +191,16 @@ size and topology.
    - A player walking through a crowd is not blocked; citizens step around
      (captures from the square at three hours of the day).
    - `puck test --reproduce` on the city's scenario agrees bit for bit.
-3. **Vehicles and market.** About 100 vehicles on the ring and cross streets,
-   and the market's trade.
-   - Every vehicle completes its loop and stops at each stop (state reading
-     per vehicle).
-   - No vehicle and walker share a cell (counted over a day).
-   - A player buys at a stall: the escrow, payment and goods rows change as
-     the market's rules say.
+3. **Vehicles and market.** About 100 vehicles lapping the road loops, and the
+   market's trade.
+   - Every vehicle laps its loop (`vehicleStop` advancing per vehicle).
+   - A vehicle in a crossing's approach box holds while the crossing's region
+     has an occupant, and resumes once it is empty (`vehicleHeld` per
+     vehicle), so no vehicle drives through a walker.
+   - A player buys at a stall: the purse, goods, stock and till rows change
+     as the market's rules say.
+   - The vehicles move onto road `curve` targets once a curve follower can
+     stand down and resume, the mechanism possession also needs.
 4. **Look and night.** The city to the visual bar.
    - About 500 lights over the night (the lights table's count read from
      `world.counters` or the render report).
@@ -170,6 +221,31 @@ size and topology.
    - From the builder's view, a verb moves a stall or rezones a lot, and the
      citizens' and vehicles' routes follow on the next anchor change.
    - A perspective the seat has not unlocked is refused by name.
+7. **Zoned districts.** After the vehicles move onto road curves. The city's
+   districts become zone rows (residential, commercial, industrial,
+   agricultural, civic, port) in a standard city-simulation module, with farm
+   fields beyond the river.
+   - Each citizen's home, job and shopping come from the zones' rows, read by
+     state, never from a hand-written list.
+   - Goods flow from farm to granary to market to home: the market's stock
+     rows fill from deliveries the vehicles carry, and empty as citizens buy.
+   - Demand and growth: a zone with unmet demand gains a building level (a
+     placement's response swaps its prototype) over city days.
+   - The builder's verbs zone a lot and place a building through the same
+     rows; a possessed citizen or vehicle keeps its place in the flow.
+8. **A platform-generated district.** The works and its warehouses are
+   generated from the hosting platform's observation rows.
+   - A warehouse stands per observed store (`deal` over the observation's
+     rows), its stock read from the store's size.
+   - Vehicle flow and the market's queue follow metric rows through `inhabit`
+     counts read from state.
+   - Run locally with the fixture provider and against the hosted deployment
+     with its approved configuration: the district changes when the
+     deployment does, with no provider noun in the city's documents.
+   - Gaps to name as found: observation providers for traffic, queues and
+     compute beyond resource listings and metrics; an approved configuration
+     reaching a federated world such as the city; and a composed district
+     regenerating as rows change without a reload.
 
 **The benchmark chapter.** From stage 1, `benchmark-route.puck` gains a
 `citySeam` chapter: the route walks to the city painting, crosses with a

@@ -199,7 +199,7 @@ public static partial class WorldDefinitionValidator {
             name: "routes",
             granularity: WorldValidationGranularity.Section,
             owns: WorldDocumentInputs.Of(WorldDocumentInput.SeatPrograms, WorldDocumentInput.Routes),
-            reads: WorldDocumentInputs.Of(WorldDocumentInput.PlacementRows, WorldDocumentInput.SpawnPoints, WorldDocumentInput.Channels),
+            reads: WorldDocumentInputs.Of(WorldDocumentInput.PlacementRows, WorldDocumentInput.SpawnPoints, WorldDocumentInput.Channels, WorldDocumentInput.DocumentId),
             validate: static (run, _) => ValidateRoutes(definition: run.Definition, errors: run.Errors)
         ),
         new(

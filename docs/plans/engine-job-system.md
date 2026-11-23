@@ -516,22 +516,18 @@ keeps that order and forks three phases:
 **E1's scope.** Only rigid bodies partition. A rigid kit "hands the whole step to
 the population's rigid solve instead of the grounded/free motion program: no
 intent, action track, or hold list applies" (`WorldBody.Step.cs`), and
-`PrepareRigidStep` touches the body's own fields alone. A kit body's advance cannot partition without a
-larger change, because it is an arena transaction: `BeginKitStep` opens a scope
-on the one journal (`WorldInputRuntime.Effects`, called from `WorldBody`'s
-step), validation writes and rewinds the arena, a foreign state effect mutates
-another body at once, and a selector commit (`CommitKitEffects`) synchronizes
-every input owner. Kit bodies and seats therefore stay serial, in today's
-order, with today's semantics: no frozen cross-body image is introduced, the
-flock keeps its own frozen image (`WorldPopulation.Flock`), and goal-field reads
-(`NavigationRuntime.GoalField`, whose steps do not depend on order but whose
-cache is single-threaded) and flock perception keep their caller order. The one semantic
-consequence of E1: a kit body reads a rigid body's post-step pose whatever their
-relative index, where today a kit body with a lower index reads the rigid body's
-pre-step pose. A scenario with a kit producer targeting a rigid body changes
-hash once; the change is re-recorded in step T2 and holds at every count. The
-rigid share of a debug-world tick is not in the measurements and is read in T2
-before the step proceeds.
+`PrepareRigidStep` touches the body's own fields alone. A kit body whose step
+can write state cannot partition without a larger change, because its step is an
+arena transaction: `BeginKitStep` opens a scope on the one journal
+(`WorldInputRuntime.Effects`, called from `WorldBody`'s step), validation writes
+and rewinds the arena, a foreign state effect mutates another body at once, and
+a selector commit (`CommitKitEffects`) synchronizes every input owner. Such kit
+bodies and the seats stay serial; the kit advance split (below) partitions every
+kit body whose step is local. Every producer reads other bodies through the
+frozen perception image (`WorldPopulation.ReadProducerSensors`), so a kit
+producer reads a rigid body's pre-step pose whatever their relative index, and
+E1 changes no producer's view. The rigid share of a debug-world tick is not in
+the measurements and is read in T2 before the step proceeds.
 
 **What partitioning kit bodies would need**, so the larger change is named and
 not left as a hole: the kit transaction becomes per partition, with a journal
@@ -544,77 +540,82 @@ runs against the partition's view; and the input runtime's undo state
 redesign with its own review, filed in the packet, and nothing in this memo's
 steps depends on it.
 
-**The kit advance split (K1 to K4).** A town makes the kit advance the tick's
-largest serial phase: 1,920 citizens and 100 vehicles, all kit bodies, with
-autonomy batching about 770 advances a tick. Most of those bodies never use the
-transaction's hard parts. A citizen's step writes no arena state, makes no
-foreign effect and commits no selector; it reads other bodies only through its
-producer. So the split runs the bodies whose step is local in fixed partitions,
-and everything else serially, unchanged, after the join. The full per-partition
-transaction above remains the step for kits that write state.
+**The kit advance split (built).** A town makes the kit advance the tick's
+largest serial phase: 1,920 citizens and 100 vehicles, all kit bodies. Most of
+those bodies never use the transaction's hard parts: a citizen's step writes no
+arena state, makes no foreign effect and commits no selector, and it reads other
+bodies only through its producer. `WorldPopulation.AdvanceSimulated` therefore
+advances every body whose step is local in fixed kit partitions, and every other
+body afterwards, serially, in index order (`AdvanceSerialBody`), inside the kit
+transaction. `WorldPopulation.Partitions.cs` holds the mechanism and its
+invariant; in short:
 
-- **The invariant.** A body advanced in a partition writes only its own motion
-  fields (the `WorldBody` state `CaptureMotion` captures), its own
-  `Entry.ProducerState`, `NavigationState` and `AutonomyState`, and the logs of
-  its partition. It reads other bodies only through one image frozen before the
-  fork, and the arena only through reads that build no cache.
-- **What enforces it.** Three things together:
-  - **Eligibility from the compiled kit.** `CompiledBodyMotionProgram` and the
-    producer table say whether a kit can write state (`SetState`, `AddState`,
-    `StartTimer`), name a non-self target, emit an effect, designation or
-    generator output, or need the input runtime (an `InputImages` producer). A
-    body is eligible only when none of these holds and it is not carried,
-    rigid, tethered, holding or seated. The check is one predicate on the kit
-    and the entry, computed at the serial pre-pass, so a kit that gains a
-    state op is serial by construction.
-  - **One read path for other bodies.** Every producer reads another body's
-    pose through the perception image (`m_perception`). Today only flock
-    producers do (`ReadProducerSensors`' `frozen` flag), so a sensor, a
-    designated target or an acquired target reads the live pose of a body that
-    may already have stepped this tick. Making every producer read the image
-    changes state hashes once, and makes a body's view independent of the
-    index order, so it is the same at every worker count.
-  - **Partition-owned outputs.** The population's step scratch, its effect,
-    designation and generator lists, and the per-body counters
-    (`WorldBodyWork`, a `WorkCounterSet`, not sharded) become per partition and
-    are merged at the join in (loop, entity index) order, contract rule 4.
-- **Where the guarantee stops.** A body's own sleep and wake bookkeeping, and
-  the flock motion record (`RecordFlockMotion`), touch population storage. The
-  first is per-body and the second is appended per partition and merged. The
-  navigation goal-field cache (`NavigationRuntime.GoalField`) is
-  single-threaded and derives a field on a miss, so the pre-pass derives every
-  goal field a due steering body will ask for, serially, before the fork, and a
-  partition only reads resident fields. A miss inside a partition is a defect
-  that throws, never a derivation on a worker. The contact field's candidate
-  list is already `[ThreadStatic]` (`FixedStaticContactField`); which of
-  `WorldColliderSet`'s working lists a kit sweep writes is K1's first question,
-  as it was T2's for rigid bodies.
+- **Which bodies.** `WorldBody.StepIsLocal` and `WorldPopulation.ProducerIsLocal`,
+  read at the serial plan from the body as compiled now: no action binding, no
+  running or fact-reset timer and no fact-reset counter away from its initial
+  value (`RegistersRestThisStep`), no hold that spends a register, no rigid,
+  carry or tether facet, not carried or parked, no tape, press, staged durable
+  input, capture, pending continuum or script controller, no entity-aware
+  contact field; and a producer with no flock affinity (an authority expression
+  over the arena). Route searches, goal fields and sight tests partition. The
+  standard walker kit's registers and its ground and fall holds pass.
+- **The phases.** A serial plan (sleep, field inputs, cadence, the goal fields
+  and perception neighbourhoods the partitions will read), a steer fork (each
+  due producer), a serial input pass, and a move fork (motion program, contacts,
+  settlement), then the join. The step is split
+  (`WorldBody.AdmitProducerObservation`, `BeginStepCore`, `MoveStep`, `EndStep`)
+  because every producer-driven body admits its observation through the one
+  input runtime (`WorldInputRuntime.AdmitProgramSnapshot`) before it resolves its
+  intent; that admission alone runs in the input pass, in index order, and the
+  rest runs in the move fork with no kit scope. A fork hands out a few jobs of
+  consecutive partitions, and a phase with few bodies runs on the forking thread.
+- **A partition** is a run of `WorldPopulation.KitPartitionSlots` slots, the
+  slot-notes partition, so a body's section writes land in its own partition's
+  notes and need no merge.
+- **What enforces it.** Every producer reads other bodies through the frozen
+  image (`ReadProducerSensors`), so a body's view does not depend on which bodies
+  stepped first. A body in a partition reaches its population only through its
+  bound `WorldBodyStepLog`; the population's shared mutators and the input
+  runtime's entry points throw while a partition runs
+  (`WorldPopulation.ThrowIfPartitioned`), and a register write from a partition
+  throws (`WorldBody.WriteStateRaw`), at one worker as at many. Logs, outputs and
+  counts merge in ascending partition order, and one worker runs the same
+  partitions inline. A partition reads only the goal field the plan resolved
+  (`PrepareGoalField`) and only neighbourhoods the plan built
+  (`WorldPerceptionImage.BuildDeclared`), and throws on a miss. The navigation
+  runtime is read-only while a fork runs (`NavigationRuntime.EnterReadOnly`): a
+  goal field read, a cross-domain route search or a bake adoption throws, and a
+  domain's own path search (`NavigationRuntime.Domain.FindPath`) rents a
+  workspace of its own.
+- **Where it stops.** A body whose step writes state stays serial; the
+  per-partition transaction above is the step for it. The input pass is serial
+  work proportional to the moving local bodies.
 
-The steps, each with the check that shows it worked:
+Open: the city's per-tick kit advance read in the lead's quiet window on the
+2060 against the 30 Hz authority target (`physics.bodies.local-advances` against
+`physics.bodies.advances` shows the share that runs in partitions).
 
-1. **K1: every producer reads the frozen image.** The perception image is built
-   whenever a kit's producer can read another body, not only for flocks and
-   sensed targets (`CompileFlocks`), and `ReadProducerSensors` and
-   `ReadEffectTargets` read it for every producer. Check: `puck test
-   --reproduce --workers 1,4` on `garden-crowd`, `garden-throng` and
-   `city-tests`; hashes change once and are re-recorded where a scenario
-   records one.
-2. **K2: eligibility and the pre-pass.** The serial pre-pass walks the step's
-   bodies in today's order, binds cadence, stages the steering of serial
-   bodies, derives the goal fields due steering bodies need, and sorts eligible
-   bodies into their fixed 32-body partitions. Nothing forks yet; eligible
-   bodies advance serially in partition order. Check: a counter of eligible and
-   serial advances (`world.counters world.tick`) shows the city's citizens and
-   vehicles eligible, and the K1 reproduce still agrees at 1 and 4 workers.
-3. **K3: partition-owned scratch and outputs.** The step scratch, output lists
-   and body counters move to per-partition owners merged at the join. Check:
-   the same reproduce, and the outputs a garden scenario counts (effects,
-   designations) are equal at 1 and 4 workers.
-4. **K4: the fork.** Eligible partitions run through `JobPool.Fork` under
-   `JobClass.Tick`, then serial bodies advance in today's order after the join.
-   Check: `--reproduce --workers 1,4` on the three worlds agrees bit for bit,
-   and the city's per-tick kit advance moves off the tick thread, read in the
-   lead's quiet window on the 2060 against the 30 Hz authority target.
+Open: the serial input pass, one `WorldInputRuntime.AdmitProgramSnapshot` per
+moving local body (`physics.bodies.local-advances` counts them). Its steady case
+already short-circuits inside the producer (`WorldInputProducer.ObserveSnapshotAt`)
+and the owner (`WorldInputOwner.TryAdmit`); what remains is the checks whose
+answer can change between ticks: the drive gate and grants
+(`WorldGrants.Allows`), the session's liveness, the body's generation, and the
+input-mode selection (`WorldInputRuntime.TrySynchronize`, which reads the selected kit through
+`WorldPopulation.CandidateKitName`, engagement and body-state selectors). Neither
+a skip nor a partitioned admission is exact without one of two changes:
+- **A skip** needs a version key covering every input of those checks (the
+  grant table's revision, its drive gates, the session table, the body's
+  generation, the selector cells and engagement), so an unchanged key with an
+  unchanged image and no events provably admits nothing new. Its admission still
+  advances the owner's `ObservationTick`, which is hashed and checkpointed; a
+  skip would make that tick the last one that changed, a deliberate state
+  change.
+- **A partitioned admission** needs every read on that path to build no cache
+  on a worker: `WorldBodyStateReads.PlanFor` (behind `CandidateKitName`) and the
+  grant expansions are the first to audit, then the owner-local writes are
+  partition-owned as the step's are.
+The quiet-window reading decides whether the pass is worth either.
 
 **E3's occupancy.** `WorldPortalOccupancy` keeps every seat in one
 `Dictionary`, which `Observe` writes and `Forget` removes from; distinct keys

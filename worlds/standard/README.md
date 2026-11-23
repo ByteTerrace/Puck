@@ -79,9 +79,14 @@ hands `bodies.sleepAfterSeconds` the idle floor `kits.puck` authors
 (`idleSleepAfter`, half a second): how long a body nothing drives or moves stays
 idle before its motion program stops until something wakes it.
 
-`styles.puck` is a library of cel styles (`celStyle`, `celHardStyle`, `continuousStyle`): a palette row names one
-as its own (`toon: celStyle`) and a world names one as the default every other material inherits
-(`render { toon: celStyle }`), which `world.toon` switches live.
+`styles.puck` is a library of cel styles (`celStyle`, `celHardStyle`): `celMaterial(row, style)` lays a style's band
+and its ink on a palette row, `celHatched` adds the ink's strokes in the shade, and `celPaint` is the band with no
+line. Each marks its row styled, which `world.toon` switches live; `continuousStyle` keeps a row unstyled.
+
+`ink.puck` is the library of lines: the `ink` and `inkHatched` shade templates, which draw the edges a view finds
+(silhouettes, folds, the boundaries between objects and between materials) by a program's ink phase, and the inks
+that carry their values (`standardInk`, `boldInk`). `inked(row, pen)` and `hatched(row, pen)` lay one over any row's
+program, and a world restyles one with `standardInk with { ... }`.
 
 `tones.puck` is a library of display transforms (`filmicTone`): a world names one as its `render.tone`, the curve each
 view's exposed light goes through before its display pass encodes it, and a world with none shows its exposed light as

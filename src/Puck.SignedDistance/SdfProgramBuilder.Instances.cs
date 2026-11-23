@@ -74,12 +74,6 @@ public sealed partial class SdfProgramBuilder {
         );
         RequireNonNegative(value: (material.Bleed ?? Vector3.One), paramName: nameof(material), subject: "A material bleed tint");
         RequireNonNegative(value: material.Receive, paramName: nameof(material), subject: "A material indirect receive gain");
-        if (material.Toon is { Enabled: true, IsValid: false }) {
-            throw new ArgumentOutOfRangeException(
-                nameof(material),
-                $"A material cel style must lie within the ranges render.toon admits; got {material.Toon}."
-            );
-        }
         if (!SdfLanes.IsLane(lane: material.EmissiveLane)) {
             throw new ArgumentOutOfRangeException(
                 nameof(material),

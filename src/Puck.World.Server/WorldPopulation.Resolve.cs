@@ -61,7 +61,7 @@ public sealed partial class WorldPopulation {
         // retargets every follower on delivery without a second per-tick indirection.
         m_curveRows = definition.Curves;
         m_curves = WorldCurveTable.Compile(curves: definition.Curves);
-        m_navigationTable = WorldNavigationDomainTable.Compile(domains: definition.Navigation.Rows);
+        m_navigationTable = WorldNavigationDomainTable.Compile(section: definition.Navigation);
         m_inputKits = new FixedWorldKit[InputCatalog.Mappings.Length][];
         var mappedKits = new Dictionary<WorldChannelTable, FixedWorldKit[]>();
 
@@ -164,8 +164,12 @@ public sealed partial class WorldPopulation {
             ? derivedSolids
             : null
         );
+        var areas = WorldNavigationAreas.Compile(definition: definition);
+
+        m_navigationAreas = areas;
         m_navigation = new NavigationRuntime(
-            domains: CompileNavigationDomains(definition: definition),
+            areas: areas.Set,
+            domains: CompileNavigationDomains(areas: areas, definition: definition),
             geometry: NavigationGeometry(contact: m_baseContactField),
             fields: ((m_fieldRegions.Length == 0) ? null : new NavigationMediumFieldAdapter(regions: m_fieldRegions)),
             capacity: new NavigationCapacity(
@@ -835,7 +839,7 @@ public sealed partial class WorldPopulation {
             if (
                 !m_entries[index].Active ||
                 (BodyContact(index: index) != WorldBodyContactMode.Solid) ||
-                (m_entries[index].Body is not { Collider: not null } body) ||
+                (m_entries[index].Body is not { Collider: not null, MountedOn: null } body) ||
                 (!body.OrdinaryAdvanceAdmitted && (body.CarriedBy is null))
             ) {
                 continue;

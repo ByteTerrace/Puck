@@ -429,8 +429,11 @@ void sdfGlassPixel(uint2 pixel) {
             float3 passed = ((1.0 - fresnel) * transmittance);
             float3 revealedAlbedo = max((material.albedo - baseAlbedo * (1.0 - revealed)) / max(revealed, 1.0e-6), 0.0);
             float3 cover = (((sdfShadeBound(shadeBinding) ? revealedAlbedo : material.flowColor.rgb) * received) * air * attenuation);
+            // An interface raises no line: the glass pass searches no edge and draws no ink.
+            float linework = 0.0;
+
             shown = sdfShadeComposePhase(shadeBinding, shadeStamp, radiance, rim, highlights, attenuation,
-                indirect, environment, environment * fresnel, localGain, shown / max(air, 1.0e-12)) * air;
+                indirect, environment, environment * fresnel, localGain, shown / max(air, 1.0e-12), linework) * air;
             float luminous = ((1.0 - fresnel) * dot(transmittance, PuckRec709Luminance));
 
             if (isNear) {

@@ -1164,12 +1164,12 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
   and selector commits synchronize every owner (`WorldInputRuntime.Effects.cs`).
   It is a State and Server design with its own cross-family review, taken
   after T1 to T3 measure what remains serial. At scale it is the limit:
-  [a town](#the-debug-world-at-mmo-scale)'s hundreds of inhabitants are kit
-  bodies, so their tick is serial until this transaction exists. The bodies
-  whose step writes no state (a town's citizens and vehicles) need less: the
-  kit advance split
-  ([K1 to K4](engine-job-system.md#the-steps-phases)) runs them in fixed
-  partitions over one frozen pose image and leaves state-writing kits serial.
+  [a town](#the-debug-world-at-mmo-scale)'s inhabitants are kit
+  bodies. The bodies
+  whose step writes no state (a town's citizens and vehicles) already advance
+  in kit partitions
+  ([the kit advance split](engine-job-system.md#the-steps-phases)) over one
+  frozen pose image; this transaction is what the state-writing kits wait on.
 - [medium] The rule phase's remaining volatile and visit costs are the memo's
   ([rule evaluation stays serial](engine-job-system.md#rule-evaluation-stays-serial)).
 - [medium] Snapshot emission's entity rows, which T1 partitioned, are a small
@@ -2507,11 +2507,26 @@ migrated to standard programs.
 ### Ink
 
 Owner: rendering, one lane a step · ordinary · Next:
-[the plan](ink.md#build-order)'s step 1, one unit for a line's width (display
-pixels per view), then steps 2 and 3 in sequence, since they touch the same
-generated tables. Nothing of the plan is built. Its step 6 deletes the
-built-in toon and curvature lines once the standard package has moved off
-them, so no other lane renames that vocabulary meanwhile.
+[the plan](ink.md#build-order)'s step 1, the presented bursts that say whether
+a searched line and the hatching hold in motion, then step 2, which deletes
+the toon and curvature built-ins the standard package no longer reads; no
+other lane renames that vocabulary meanwhile. The ink phase, the edge search
+and the standard's ink are built ([what is built](ink.md#what-is-built)).
+
+- [high] The edge search is over [the frame budget](frame-budget.md#the-budget)'s
+  ink share: about 0.9 ms at 2560 by 1440 against 0.4, scaled from a lane's
+  reading in a smaller window. The lead's quiet window reads `views-filter`
+  and `views` at the bar's size with and without `SDF_VIEWS_OMIT_INK`; the
+  cut is the search's memory traffic, as the budget says.
+- [medium] `world.shaders.reload` and `world.reload` reach the boot world
+  alone: a federated world a seat has crossed into (the city) keeps its
+  kernels and its documents, so its look cannot be iterated without a
+  restart. Found styling the city's ink.
+- [medium] A fold seen at a grazing angle can read as an occlusion
+  ([the neighbour pass](ink.md#the-neighbour-pass)): the two classes are told
+  apart by the nearer surface's tangent plane alone. A look that weighs
+  silhouettes and creases very differently shows a line that changes weight
+  along such a fold.
 
 - [low] The material cut now shares the contour's crease threshold. A chamfer
   whose faces meet between that threshold and the old one has not been looked
@@ -4659,6 +4674,16 @@ fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
 [Code size](code-size.md) holds the measured map, the generator families and
 their lane order; this packet keeps the single duplicates and leads.
+
+- Two A* searches over a navigation domain's baked edges: `NavigationRuntime.Domain.FindPath`
+  (`SearchPath`, per-domain workspace arrays, step costs in thousandths of a cell, no clearance
+  surcharge) for a non-shared domain's followers, and `NavigationRuntime.FindRoute` (`SearchRoute`,
+  one runtime workspace, millimetre costs with the clearance surcharge, junctions) for everything
+  else. Both now price areas through `NavigationCostProfile`. `FindPath` becomes `FindRoute`
+  confined to one domain with the domain's own expansion and path budgets, which deletes the
+  per-domain search arrays; non-shared routes then keep off walls as shared ones do. Check the
+  volume-domain budgets (`worlds/debug/navigation.puck` and the World Games navigation laws) against
+  `FindRoute`'s horizontal heuristic before landing it.
 
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`

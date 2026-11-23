@@ -147,7 +147,7 @@ Puck.World extends the rule compiler the way any host does (see
   `$population`, `$physics:quiescent` (optionally scoped to a keyed placement
   roster or a replay scope's stable bodies), `$region:`, `$influence:`, `$machine:`,
   `$argmax:`, `$argmin:`, `$distance:`, `$los:`, `$upright:`, `$fact:`,
-  `$bodyPosition:`, `$engaged:`, `$bodyState:`, `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
+  `$bodyPosition:`, `$engaged:`, `$bodyState:`, `$identity:`, `$nav:`, `$producer:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
   `$clock:`, `$board:cellOf:`, and the seated-seat reads `$board:engaged:`,
   `$board:pointer:` and `$board:side:` (a seat at an engageable tabletop, the
   [Schema README](../../../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)).
@@ -172,7 +172,11 @@ Puck.World extends the rule compiler the way any host does (see
   impulses (`setVerticalVelocity`, `scaleVerticalVelocity`, `planarImpulse`,
   `applyRigidImpulse`), `startTimer`, `designate`, `emitCue`,
   `pose` and `poseCell`, `paintField`, placement and HUD panel upserts and
-  removals, `setIdentityFact`, `setBodyState`, and `save`. `setBodyState(key:
+  removals, `setIdentityFact`, `setBodyState`, `holdProducer` and
+  `releaseProducer`, and `save`. `holdProducer(key: $each)` stands the named
+  body's producer down until `releaseProducer(key: $each)`, and
+  `producer(each, held|possessed|down)` reads why it stands down
+  ([the schema reference](../../../src/Puck.World.Schema/README.md#a-producer-stands-down-holds-and-possession)). `setBodyState(key:
   0, state: "suit", expression: 1 - bodyState(body, 0, suit))` writes a
   `state.body` Counter of the body it names, the register a kit's own
   `setState` writes; the register crosses to another world with the body, and

@@ -87,24 +87,33 @@ public sealed partial class SdfMeshPathBake {
     private Func<SdfMeshBakeGroup, int> Tiers(IReadOnlyList<DynamicTransform> transforms, bool copies = true, Func<SdfMeshBakeGroup, bool>? arrives = null) {
         if (PlannedTier is { } planned) { return planned; }
 
+        // A plan made before any view has been observed knows no demand: it asks each group's floor, never the rung past
+        // it a missing demand point would read as, which the first observed frame would bake again finer.
         Func<SdfMeshBakeGroup, int> demanded = (copies
-            ? (group => TierOf(pixel: PlannedPixel(group: group, transforms: transforms)))
-            : (group => TierOf(pixel: Demand.PixelAt(group: group, transforms: transforms))));
+            ? (group => ((Demand.Count == 0) ? group.FloorTier : TierOf(pixel: PlannedPixel(group: group, transforms: transforms))))
+            : (group => ((Demand.Count == 0) ? group.FloorTier : TierOf(pixel: Demand.PixelAt(group: group, transforms: transforms)))));
         if (arrives is null) { return demanded; }
-        // A group arriving with nothing of its own to draw plans its floor: the last tier, which the plan holds to the
-        // coarsest rung that changes its mesh. It owes its demanded tier, which Retier starts once the floor stands, and
-        // keeps the floor beside it (Group.KeepFloorOf), which every view far smaller than the one the tier was demanded
-        // for draws in its place (SdfMeshBand). A group arriving out of view does the same, ordered behind those in view
-        // (RankOf), since a view of it that turns up later small (a screen, a portal, a distant shadow) draws the floor.
+        // A group arriving with nothing of its own to draw plans its floor: its floor tier, or the tier its demand asks
+        // where that is coarser still, which is then all it owes. It owes its demanded tier otherwise, which Retier
+        // starts once the floor stands, and keeps the floor beside it (Group.KeepFloorOf), which every view far smaller
+        // than the one the tier was demanded for draws in its place (SdfMeshBand). A group arriving out of view does the
+        // same, ordered behind those in view (RankOf), since a view of it that turns up later small (a screen, a portal,
+        // a distant shadow) draws the floor.
         return group => {
-            if (!arrives(arg: group)) { return demanded(arg: group); }
+            var asked = demanded(arg: group);
+
+            if (!arrives(arg: group) || (asked >= group.FloorTier)) { return asked; }
             ((Group)group).FirstDetailOwed = true;
-            return SdfMeshTier.Last;
+            return group.FloorTier;
         };
     }
+    // Whether a group planned past its floor tier finished with no surface and nothing else to show: its lattice's cells
+    // are wider than the group's parts, which a finer rung, at the latest its floor, resolves.
+    private static bool MeshedNothingPastFloor(Group group) =>
+        (group.Done && !group.Failed && (group.Mesh is null) && (group.Replaces is null) && (group.Tier > group.FloorTier));
     // Whether a selector arrives with nothing to draw, given the group the bake held at it: none, or one still bringing its
     // floor with nothing shown yet. Such a group plans its floor first (Tiers).
-    private static bool Arrives(Group? old) => ((old is null) || ((old.Shown is null) && (old.Tier == old.CoarsestTier)));
+    private static bool Arrives(Group? old) => ((old is null) || ((old.Shown is null) && old.AtFloor));
     // Whether a planned group arrives with nothing of its own to draw: its selector does (above), or no group the bake
     // held has its shape, so an edit made it (a shape moved, resized or added) and whatever its selector draws is the
     // shape before the edit. Its floor lands first and shows the edit at once; the detail follows. A group whose
@@ -225,7 +234,9 @@ public sealed partial class SdfMeshPathBake {
             }
             if (!group.Done || group.Ahead) { continue; }
             m_replacing.RemoveAt(index: at);
-            if (group.Mesh is null) {
+            // A finer rung taken because the replaced one meshed nothing takes its place whatever it meshed, so the next
+            // decision steps down from it (MeshedNothingPastFloor).
+            if ((group.Mesh is null) && ((replaced.Mesh is not null) || (group.Tier > replaced.Tier))) {
                 // The replaced group keeps drawing, and a finer tier is not tried until the demand asks another; the
                 // replacement retires, letting go of the floor it kept.
                 replaced.RetierRefused = true;
@@ -364,6 +375,10 @@ public sealed partial class SdfMeshPathBake {
             // The tier a frame draws is the replaced group's while a replacement is still to land.
             var resident = (group.Replaces ?? group).Tier;
 
+            // A lattice past the floor steps over a part thinner than its cells, and one that meshed nothing covers
+            // nothing: the group owes the rung below it, down to its floor, whatever its demand asks.
+            if (MeshedNothingPastFloor(group: group)) { demanded = Math.Min(val1: demanded, val2: (resident - 1)); }
+
             Decide(group: group, index: index, pixel: pixel, demanded: demanded, resident: resident);
             if ((demanded == resident) && !group.FirstDetailOwed && (group.Replaces is null)) {
                 attention.Drop(group: group);
@@ -416,7 +431,9 @@ public sealed partial class SdfMeshPathBake {
             owed++;
             error = MathF.Max(x: error, y: (SdfMeshTier.Cell(tier: resident) / pixel));
             frames = Math.Max(val1: frames, val2: group.OwedFrames);
-            if (!group.Done || (group.Mesh is null) || (group.Replaces is not null) || group.RetierRefused || group.Ahead) { return; }
+            // A group that meshed nothing owes its finer tier like any other: a finer lattice may find the surface its
+            // cells stepped over, and one that finds none takes its place and owes nothing more.
+            if (!group.Done || group.Failed || (group.Replaces is not null) || group.RetierRefused || group.Ahead) { return; }
             if (group.OwedFrames < SdfMeshTier.HoldFrames) {
                 owedWaiting++;
                 return;
@@ -490,7 +507,9 @@ public sealed partial class SdfMeshPathBake {
         if (m_detail is { } detail) {
             Volatile.Write(location: ref m_bias, value: detail.Decide(report: new SdfDetailReport(
                 AnySpare: anySpare,
-                CanLower: (!over && (owed == 0) && (inFlight == 0) && (landing == 0) && (firstsInFlight == 0) && (firstsOwed == 0) && ((bias == 0) || (FinerBytes(bias: bias) <= target))),
+                // The finer tiers in flight are counted at what they are expected to add, so a residency in motion, which
+                // always owes some tier, can still give the bias back; an arrival's first details are unknown bytes and wait.
+                CanLower: (!over && (firstsInFlight == 0) && (firstsOwed == 0) && ((bias == 0) || (FinerBytes(bias: bias).AddSaturating(right: (filled - named)) <= target))),
                 Elapsed: elapsed,
                 Over: over
             )));

@@ -324,11 +324,11 @@ public sealed class SdfMeshDresser : IDisposable {
         var placements = (copies?.Count ?? 1);
         var chunked = ((copies is null) && (mesh.Chunks.Count > 0));
         var band = ((floor is null) ? SdfMeshBand.None : SdfMeshBand.Of(
-            floorTier: access.CoarsestTierOf(group: group),
+            floorTier: access.FloorTierOf(group: group),
             high: Vector3.Max(value1: mesh.PositionHigh, value2: floor.PositionHigh),
             low: Vector3.Min(value1: mesh.PositionLow, value2: floor.PositionLow)
         ));
-        var floorTier = ((floor is null) ? tier : access.CoarsestTierOf(group: group));
+        var floorTier = ((floor is null) ? tier : access.FloorTierOf(group: group));
 
         for (var placement = 0; (placement < placements); placement++) {
             var copy = ((copies is null) ? -1 : copies[placement]);
@@ -545,6 +545,8 @@ public sealed class SdfMeshDresser : IDisposable {
                     Glass = (m_group?.Glass ?? false),
                     IsDynamic = copy.IsDynamic,
                     MotionIdentity = m_motionIdentity,
+                    // Every group and piece of one placed copy is one object.
+                    ObjectKey = CopyObjectKey(copy: m_copyIndex),
                     Piece = m_piece,
                     Tier = ((m_group is null) ? -1 : m_tier),
                     Trace = m_trace,
@@ -569,6 +571,8 @@ public sealed class SdfMeshDresser : IDisposable {
                 // A displaced surface is never static (SdfMeshDraw.IsStatic), whatever its placement does.
                 Displacement = m_group.Displacement,
                 IsDynamic = m_group.Dynamic,
+                // Every piece and tier of one bake group is one object.
+                ObjectKey = GroupObjectKey(firstInstance: m_group.FirstInstance),
                 Piece = m_piece,
                 Tier = m_tier,
                 Trace = m_trace,
@@ -576,6 +580,12 @@ public sealed class SdfMeshDresser : IDisposable {
             };
             return true;
         }
+
+        // The object keys (SdfMeshDraw.ObjectKey): a placed copy's from its index in the frame's copies, a bake group's
+        // from its first program instance, in two halves of the key's range so no copy shares a group's.
+        private const uint GroupObjectKeys = ((SdfMeshRecord.ObjectKeyMask >> 1) + 1u);
+        private static uint CopyObjectKey(int copy) => (1u + (((uint)copy) % (GroupObjectKeys - 1u)));
+        private static uint GroupObjectKey(int firstInstance) => (GroupObjectKeys | (((uint)firstInstance) & (GroupObjectKeys - 1u)));
     }
 
 }

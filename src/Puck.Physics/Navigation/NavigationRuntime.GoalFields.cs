@@ -6,8 +6,8 @@ namespace Puck.Physics.Navigation;
 /// there takes on a cheapest route to the goal, across the network's domains and the junctions joining them. Many bodies
 /// heading to one place read one field, each a step at a time, so a body holds no route of its own and a body pushed off
 /// its line simply reads the step from where it now stands.</summary>
-/// <remarks>A field is a pure function of the goal and the baked domains of its network (and the live medium a medium
-/// domain reads), derived whole when first read (<see cref="NavigationRuntime.GoalField"/>). Which fields are resident
+/// <remarks>A field is a pure function of the goal, the cost profile it prices areas by, the baked domains of its network
+/// and their areas (and the live medium a medium domain reads), derived whole when first read (<see cref="NavigationRuntime.GoalField"/>). Which fields are resident
 /// decides only work and memory: a dropped field is derived again with the same steps, so no field is simulation state,
 /// and nothing checkpoints or hashes it. One byte per reached cell holds the step: a neighbour slot in the domain, a
 /// junction to another domain, the goal itself, or no route.</remarks>
@@ -18,9 +18,10 @@ public sealed class NavigationGoalField {
     internal const byte NoRoute = 0xFE;
     internal const byte FirstJunction = 26;
 
-    internal NavigationGoalField(int goalDomain, int goalCell, NavigationRuntime.Domain[] members, int[] memberOf, byte[]?[] steps, ulong[] mediumRevisions, int reachedCells) {
+    internal NavigationGoalField(int goalDomain, int goalCell, NavigationCostProfile profile, NavigationRuntime.Domain[] members, int[] memberOf, byte[]?[] steps, ulong[] mediumRevisions, int reachedCells) {
         GoalDomain = goalDomain;
         GoalCell = goalCell;
+        Profile = profile;
         Members = members;
         MemberOf = memberOf;
         Steps = steps;
@@ -35,6 +36,9 @@ public sealed class NavigationGoalField {
     public int GoalDomain { get; }
     /// <summary>Gets the goal cell.</summary>
     public int GoalCell { get; }
+    /// <summary>Gets the cost profile the field's steps are cheapest under: bodies that price areas differently read
+    /// different fields toward one goal.</summary>
+    public NavigationCostProfile Profile { get; }
     /// <summary>Gets the cells from which the goal can be reached, the goal included.</summary>
     public int ReachedCells { get; }
 
@@ -50,14 +54,15 @@ public sealed class NavigationGoalField {
 
     // The same steps for a replacement runtime that keeps the field's domains in the same order at other indices; the
     // step chunks are never written after a derivation, so the two share them.
-    internal NavigationGoalField Rebound(int goalDomain, int[] memberOf) => new(goalCell: GoalCell, goalDomain: goalDomain, mediumRevisions: MediumRevisions, memberOf: memberOf, members: Members, reachedCells: ReachedCells, steps: Steps) {
+    internal NavigationGoalField Rebound(int goalDomain, int[] memberOf) => new(goalCell: GoalCell, goalDomain: goalDomain, mediumRevisions: MediumRevisions, memberOf: memberOf, members: Members, profile: Profile, reachedCells: ReachedCells, steps: Steps) {
         LastRead = LastRead,
         NetworkJoined = false,
     };
 }
 
 public sealed partial class NavigationRuntime {
-    private readonly Dictionary<int, NavigationGoalField> m_goalFields = [];
+    // Keyed by the goal's runtime node and the profile, which compares by its costs.
+    private readonly Dictionary<(int Node, NavigationCostProfile Profile), NavigationGoalField> m_goalFields = [];
     private GoalFieldWorkspace? m_goalWorkspace;
     private long m_goalFieldBytes;
     private long m_goalFieldReads;
@@ -72,7 +77,9 @@ public sealed partial class NavigationRuntime {
     /// <summary>Gets the cells goal-field derivations settled since the last <see cref="BeginStep"/>.</summary>
     public long GoalFieldCellsLast { get; private set; }
     /// <summary>Gets the goal-field steps read since the last <see cref="BeginStep"/>.</summary>
-    public long GoalFieldStepsLast { get; private set; }
+    public long GoalFieldStepsLast => Interlocked.Read(location: ref m_goalFieldStepsLast);
+    // Counted with an interlock: GoalStep reads a resident field and may run on several threads at once.
+    private long m_goalFieldStepsLast;
     /// <summary>Gets the goal fields dropped from a full cache over the runtime's life.</summary>
     public long GoalFieldEvictions { get; private set; }
 
@@ -80,23 +87,28 @@ public sealed partial class NavigationRuntime {
     public void BeginStep() {
         GoalFieldBuildsLast = 0;
         GoalFieldCellsLast = 0;
-        GoalFieldStepsLast = 0;
+        m_goalFieldStepsLast = 0;
     }
 
-    /// <summary>Returns the goal field toward a walkable cell, deriving it when it is not resident or a live medium it
-    /// reads has changed since it was derived. Bakes every domain of the goal's network and joins them.</summary>
+    /// <summary>Returns the goal field toward a walkable cell under a cost profile, deriving it when it is not resident or
+    /// a live medium it reads has changed since it was derived. Bakes every domain of the goal's network and joins them.</summary>
     /// <param name="goalDomain">The goal cell's domain index.</param>
     /// <param name="goalCell">The goal cell; must be walkable.</param>
+    /// <param name="profile">What the field's routes pay for each area type and which they never enter;
+    /// <see langword="null"/> is <see cref="NavigationCostProfile.Neutral"/>. Equal profiles share one field.</param>
     /// <returns>The field.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="goalDomain"/> is not a domain index, or
     /// <paramref name="goalCell"/> is not a walkable cell of it.</exception>
-    public NavigationGoalField GoalField(int goalDomain, int goalCell) {
+    /// <exception cref="InvalidOperationException">The runtime is read-only (<see cref="EnterReadOnly"/>).</exception>
+    public NavigationGoalField GoalField(int goalDomain, int goalCell, NavigationCostProfile? profile = null) {
+        ThrowIfReadOnly(operation: "a goal field read");
+        profile ??= NavigationCostProfile.Neutral;
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: ((uint)goalDomain), other: ((uint)m_domains.Length), paramName: nameof(goalDomain));
         if (!m_domains[goalDomain].IsWalkable(node: goalCell)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(goalCell), actualValue: goalCell, message: "a goal field needs a walkable goal cell.");
         }
 
-        var key = (m_offsets[goalDomain] + goalCell);
+        var key = ((m_offsets[goalDomain] + goalCell), profile);
 
         if (m_goalFields.TryGetValue(key: key, value: out var field) && IsCurrent(field: field)) {
             // A field kept from a prior runtime reads junctions this runtime has not joined yet.
@@ -111,12 +123,12 @@ public sealed partial class NavigationRuntime {
             Drop(key: key, field: field);
         }
 
-        field = BuildGoalField(goalDomain: goalDomain, goalCell: goalCell);
+        field = BuildGoalField(goalDomain: goalDomain, goalCell: goalCell, profile: profile);
         field.LastRead = ++m_goalFieldReads;
         m_goalFields[key] = field;
         m_goalFieldBytes += field.Bytes;
         while ((m_goalFieldBytes > m_capacity.GoalFieldBytes) && (m_goalFields.Count > 1)) {
-            var oldest = -1;
+            var oldest = default((int, NavigationCostProfile));
             var oldestRead = long.MaxValue;
 
             foreach (var (candidateKey, candidate) in m_goalFields) {
@@ -144,7 +156,7 @@ public sealed partial class NavigationRuntime {
     /// <see cref="NavigationStatus.Unreachable"/> when no route leads from the cell to the goal.</returns>
     public NavigationStatus GoalStep(NavigationGoalField field, int domain, int cell, out int nextDomain, out int nextCell) {
         ArgumentNullException.ThrowIfNull(argument: field);
-        GoalFieldStepsLast++;
+        _ = Interlocked.Increment(location: ref m_goalFieldStepsLast);
         m_work.Add(amount: 1, kind: NavigationSearchWork.FieldSteps);
         nextDomain = domain;
         nextCell = cell;
@@ -186,7 +198,7 @@ public sealed partial class NavigationRuntime {
         }
         return true;
     }
-    private void Drop(int key, NavigationGoalField field) {
+    private void Drop((int, NavigationCostProfile) key, NavigationGoalField field) {
         _ = m_goalFields.Remove(key: key);
         m_goalFieldBytes -= field.Bytes;
     }
@@ -198,11 +210,12 @@ public sealed partial class NavigationRuntime {
         return m_domains.Where(predicate: domain => ((domain == goal) || Joins(left: domain, right: goal))).ToArray();
     }
     // A reverse Dijkstra over the network's cells and junctions from the goal, each step costed as the route search costs
-    // it (its length in millimetres plus the clearance surcharge of the cell stepped onto, a junction free), then each
+    // it (its length in millimetres plus the clearance surcharge of the cell stepped onto, times the profile's multiplier
+    // for that cell's area; a junction free; no step onto an area the profile excludes), then each
     // reached cell's step chosen from the settled costs alone: the first of its forward steps, in neighbour order and then
     // its junctions in ascending order, whose cost plus the cell it reaches equals the cell's own. The choice reads only
     // final costs, never the order the search settled ties in, so the field is a function of the graph.
-    private NavigationGoalField BuildGoalField(int goalDomain, int goalCell) {
+    private NavigationGoalField BuildGoalField(int goalDomain, int goalCell, NavigationCostProfile profile) {
         var members = NetworkOf(goalDomain: goalDomain);
 
         JoinNetwork(members: members);
@@ -210,7 +223,7 @@ public sealed partial class NavigationRuntime {
         var workspace = (m_goalWorkspace ??= new GoalFieldWorkspace(cells: checked((int)CellCount)));
         var memberOf = new int[m_domains.Length];
         Span<int> from = stackalloc int[MaxRouteSteps];
-        Span<int> cost = stackalloc int[MaxRouteSteps];
+        Span<long> cost = stackalloc long[MaxRouteSteps];
         Span<byte> slots = stackalloc byte[MaxRouteSteps];
 
         Array.Fill(array: memberOf, value: -1);
@@ -224,13 +237,14 @@ public sealed partial class NavigationRuntime {
             var domainIndex = DomainOf(node: node);
             var domain = m_domains[domainIndex];
             var offset = m_offsets[domainIndex];
-            var count = domain.RoutePredecessors(node: (node - offset), from: from, cost: cost);
+            var count = domain.RoutePredecessors(node: (node - offset), from: from, cost: cost, profile: profile);
 
             workspace.Settle(node: node);
             for (var index = 0; (index < count); index++) {
                 workspace.Relax(node: (offset + from[index]), cost: (workspace.Cost[node] + cost[index]));
             }
-            if (m_junctions.TryGetValue(key: node, value: out var partners)) {
+            // A junction hop onto a cell the profile excludes is no step either.
+            if (domain.Admits(node: (node - offset), profile: profile) && m_junctions.TryGetValue(key: node, value: out var partners)) {
                 foreach (var partner in partners) {
                     if (memberOf[DomainOf(node: partner)] >= 0) {
                         workspace.Relax(node: partner, cost: workspace.Cost[node]);
@@ -263,7 +277,7 @@ public sealed partial class NavigationRuntime {
 
             var target = workspace.Cost[node];
             var step = NavigationGoalField.NoRoute;
-            var count = domain.RouteSteps(node: (node - offset), next: from, cost: cost, slot: slots);
+            var count = domain.RouteSteps(node: (node - offset), next: from, cost: cost, profile: profile, slot: slots);
 
             for (var index = 0; (index < count); index++) {
                 if (workspace.IsSettled(node: (offset + from[index])) && ((workspace.Cost[(offset + from[index])] + cost[index]) == target)) {
@@ -275,7 +289,10 @@ public sealed partial class NavigationRuntime {
             // two coincident cells from each pointing at the other.
             if ((step == NavigationGoalField.NoRoute) && m_junctions.TryGetValue(key: node, value: out var partners)) {
                 for (var rank = 0; (rank < partners.Count); rank++) {
-                    if ((memberOf[DomainOf(node: partners[rank])] >= 0) && workspace.SettledBefore(node: partners[rank], ordinal: ordinal) && (workspace.Cost[partners[rank]] == target)) {
+                    var partnerDomain = DomainOf(node: partners[rank]);
+
+                    if ((memberOf[partnerDomain] >= 0) && workspace.SettledBefore(node: partners[rank], ordinal: ordinal) && (workspace.Cost[partners[rank]] == target) &&
+                        m_domains[partnerDomain].Admits(node: (partners[rank] - m_offsets[partnerDomain]), profile: profile)) {
                         step = checked((byte)(NavigationGoalField.FirstJunction + rank));
                         break;
                     }
@@ -290,11 +307,15 @@ public sealed partial class NavigationRuntime {
         GoalFieldCellsLast += settled;
         m_work.Add(amount: 1, kind: NavigationSearchWork.FieldBuilds);
         m_work.Add(amount: settled, kind: NavigationSearchWork.FieldCells);
-        return new NavigationGoalField(goalCell: goalCell, goalDomain: goalDomain, mediumRevisions: revisions, memberOf: memberOf, members: members, reachedCells: settled, steps: steps);
+        return new NavigationGoalField(goalCell: goalCell, goalDomain: goalDomain, mediumRevisions: revisions, memberOf: memberOf, members: members, profile: profile, reachedCells: settled, steps: steps);
     }
-    // Keeps a prior runtime's goal fields whose network is the same domain objects in the same order here: equal baked
-    // domains, so equal junctions in the same ascending order, and so every step means what it meant.
+    // Keeps a prior runtime's goal fields whose network is the same domain objects in the same order here, under the same
+    // area set: equal baked domains, so equal junctions in the same ascending order, equal area costs, and so every step
+    // means what it meant.
     private void AdoptGoalFields(NavigationRuntime previous) {
+        if (!ReferenceEquals(objA: m_areas, objB: previous.m_areas)) {
+            return;
+        }
         foreach (var field in previous.m_goalFields.Values) {
             var goalDomain = Array.IndexOf(array: m_domains, value: previous.m_domains[field.GoalDomain]);
 
@@ -308,7 +329,7 @@ public sealed partial class NavigationRuntime {
             for (var member = 0; (member < field.Members.Length); member++) {
                 memberOf[Array.IndexOf(array: m_domains, value: field.Members[member])] = member;
             }
-            m_goalFields[(m_offsets[goalDomain] + field.GoalCell)] = field.Rebound(goalDomain: goalDomain, memberOf: memberOf);
+            m_goalFields[((m_offsets[goalDomain] + field.GoalCell), field.Profile)] = field.Rebound(goalDomain: goalDomain, memberOf: memberOf);
             m_goalFieldBytes += field.Bytes;
             m_goalFieldReads = Math.Max(val1: m_goalFieldReads, val2: field.LastRead);
         }

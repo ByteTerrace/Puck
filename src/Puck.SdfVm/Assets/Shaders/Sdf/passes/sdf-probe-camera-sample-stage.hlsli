@@ -52,7 +52,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         if ((key & SDF_MESH_IRRADIANCE_INVALID) == 0u && sdfMeshIrradianceHolds(address, key, cell)) {
             float3 toward = (cell + 0.5) * spacing + sdfMeshProbeOffset(address) - origin.xyz;
             float distance = length(toward);
-            if (distance <= SDF_MESH_IRRADIANCE_CAMERA_SAMPLE_COINCIDENT || probeClear(origin.xyz, toward / distance, distance, lane)) {
+            if (distance <= SDF_MESH_IRRADIANCE_CAMERA_SAMPLE_COINCIDENT || probeClear(origin.xyz, toward / distance, distance, lane, false)) {
                 float3 weights = lerp(1 - fraction, fraction, (float3)high);
                 float weight = weights.x * weights.y * weights.z;
                 cameraSampleWeight[lane] = weight;

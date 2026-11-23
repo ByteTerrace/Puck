@@ -460,6 +460,18 @@ much of the Moth's floor is fine cells spent where no view resolves them, which
 The question is taken up again when D7 has been measured on a rebuilt creation
 and a place still shows a floor the collapse cannot lower.
 
+That measurement came from the memory side, on the whole debug world: a tier
+ladder that ends at each group's unrefined lattice leaves most groups at that
+floor and most of the mesh region in it
+([the streaming plan's decision 5](streaming-and-memory.md#decision-5-the-unit-is-a-tier-and-the-coarsest-tier-is-the-floor)).
+The answer built is D7's, not a level: the ladder continues past the floor as
+tiers whose lattices are coarser, each its own product baked on demand, judged
+by the half-pixel demand rule and not by the error contract above. It lowers
+what a far group holds, not the level a drawn mesh falls to, so this ruling
+stands for levels. The outward offset this decision measured is the candidate
+for what those coarse tiers still lose, a part thinner than a cell, and option
+1d's dilation is how the streaming plan proposes to apply it.
+
 What the visibility plan calls V3c, field-derived levels as a bake experiment,
 is this measurement and is closed with it.
 

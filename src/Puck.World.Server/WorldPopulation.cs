@@ -92,7 +92,7 @@ public sealed partial class WorldPopulation {
     /// producers, never the declared set or palette, so it does not bump the <see cref="Revision"/>.</summary>
     public IntentSource DefaultPeerSource => m_defaultPeerSource;
     /// <summary>The authored designation submissions emitted during the most recently completed tick.</summary>
-    public IReadOnlyList<WorldDesignation> DesignationOutputs => m_designationOutputs;
+    public IReadOnlyList<WorldDesignation> DesignationOutputs => m_outputs.Designations;
     /// <summary>The durable writes emitted by the most recently completed tick.</summary>
     public IReadOnlyList<DurableStateOutput> DurableStateOutputs => m_durableStateOutputs;
     /// <summary>Number of pairs admitted to narrow phase by the most recently completed broadphase.</summary>
@@ -111,7 +111,7 @@ public sealed partial class WorldPopulation {
     /// <summary>The <c>generate</c> effect firings staged by the most recently completed tick's advance — drained and
     /// enqueued through the ordinary mutation pipeline by <c>WorldServer.Step</c>, mirroring
     /// <see cref="DesignationOutputs"/>'s own shape.</summary>
-    public IReadOnlyList<WorldGeneratorInvocation> GeneratorInvocationOutputs => m_generatorInvocations;
+    public IReadOnlyList<WorldGeneratorInvocation> GeneratorInvocationOutputs => m_outputs.Generators;
     /// <summary>The live look rows (the authored rows, or the implicit single catalog look) the census resolves against.</summary>
     public IReadOnlyList<WorldLook> LookRows => m_lookRows;
     /// <summary>The number of entity-table slots currently eligible for destination-authored census bodies. Inhabitants,
@@ -318,18 +318,19 @@ public sealed partial class WorldPopulation {
     private IReadOnlyList<WorldCurveRow> m_curveRows = [];
     private WorldCurveTable m_curves = WorldCurveTable.Empty;
     private WorldNavigationDomainTable m_navigationTable = WorldNavigationDomainTable.Empty;
+    // The area types and cost profiles a navigated target's FixedBodyTargetSource.NavigationProfileIndex selects from.
+    private WorldNavigationAreas? m_navigationAreas;
     private NavigationRuntime m_navigation = null!;
     // The definition's LOOK rows (empty ⇒ the implicit single catalog look), resolved by CompileFixedTables. Each
     // entry's LookIndex points into this list. PRESENTATION-ONLY — the snapshot carries it to the client's renderer.
     private IReadOnlyList<WorldLook> m_lookRows = [WorldLook.Implicit];
     private WorldRowAssignment m_lookAssignment = null!;
     private IntentSource m_defaultPeerSource = IntentSource.Live;
-    private readonly List<BodyEffectOutput> m_effectOutputs = [];
-    // The one scratch every body step this population runs captures into and restores a refused sweep from
-    // (WorldBody.StepScratch). Bodies step one at a time, so one serves them all and no body holds a snapshot of its own.
+    private readonly WorldBody.StepOutputs m_outputs = new();
+    // The one scratch every serial body step this population runs captures into and restores a refused sweep from
+    // (WorldBody.StepScratch). Serial bodies step one at a time, so one serves them all; a kit partition keeps one per
+    // body it steps.
     private readonly WorldBody.StepScratch m_stepScratch = new();
-    private readonly List<WorldDesignation> m_designationOutputs = [];
-    private readonly List<WorldGeneratorInvocation> m_generatorInvocations = [];
     private readonly List<DurableStateOutput> m_durableStateOutputs = [];
     private readonly WorldActionStateLane m_actionStateLane = new();
     private static readonly FixedVector3 LocalForward = new(
@@ -509,6 +510,11 @@ public sealed partial class WorldPopulation {
         public IReadOnlyDictionary<string, CompiledBodyProducer>? ProducerLookupTable;
         public string? ProducerLookupName;
         public CompiledBodyProducer? ProducerLookup;
+        // The goal field this tick's kit plan resolved for the body's shared navigated producer (PrepareGoalField), the
+        // only field its kit partition reads; derived scratch, never state.
+        public Puck.Physics.Navigation.NavigationGoalField? PreparedGoalField;
+        // The cell the plan located the body on for that field's read.
+        public (int Domain, int Cell) PreparedGoalFrom;
         public required int Index { get; init; }
         public required WorldActionStateLane Lane { get; init; }
         // The occupant's implicit procedural rig, separate from its authority-local slot. Explicit authored looks can

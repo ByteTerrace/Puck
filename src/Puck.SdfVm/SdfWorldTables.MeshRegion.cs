@@ -83,6 +83,7 @@ public sealed partial class SdfWorldTables {
     /// account has asked for a trim, also releases placement claims the latest draws no longer name.</summary>
     internal void ServiceMemoryTrim() {
         ServiceRetirements();
+        m_shadows?.Upkeep();
         if (Interlocked.Exchange(location1: ref m_meshTrimRequested, value: 0) == 0) { return; }
         try {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Trims);
@@ -1228,8 +1229,10 @@ public sealed partial class SdfWorldTables {
     // backing against the grant. A growth refused all the same (the pool had no room for it, or the device said no) leaves
     // the region as it is: the placements past what it holds are taken back and refused (SdfMeshRegionArena.Clip), their
     // draws wait, and nothing throws. Draw records the buffer cannot hold are the floor, which a residency cannot draw
-    // without: their growth is reserved whatever the pool holds and admitted past the limit, counted. Only a device that
-    // refuses that too is an error.
+    // without: their growth is reserved whatever the pool holds and admitted past the limit, counted. A device that
+    // refuses that too can no longer hold the presentation it was given, which is what a lost device is: the refusal is
+    // raised as one (DeviceLostException), so the host rebuilds the device and every residency lands again under the
+    // limit the refusal left, where the selector's bias coarsens what fits. The World does not end on it.
     private void EnsureMeshRegionCapacity(ulong bytes) {
         var current = ((ulong)m_meshRegion.ByteCount);
 
@@ -1263,7 +1266,7 @@ public sealed partial class SdfWorldTables {
                 replaced = m_meshRegion.Grow(byteCount: ((long)grown));
             } catch (GpuMemoryRefusedException refusal) {
                 m_meshGrant.Kept(refused: true);
-                throw new InvalidOperationException(innerException: refusal, message: $"The mesh region holds {current} bytes and the device refused the {grown} its draw records need.");
+                throw new DeviceLostException(innerException: refusal, message: $"The mesh region holds {current} bytes and the device refused the {grown} its draw records need; the presentation rebuilds under what the device still grants.");
             }
         }
 

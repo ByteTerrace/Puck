@@ -448,6 +448,10 @@ public static class WorldWireLeaves {
             value: member.Continuum,
             writeValue: WriteContinuum
         );
+        writer.WriteOptional(
+            value: member.Drives,
+            writeValue: WriteEntityAddress
+        );
     }
     /// <summary>Reads what <see cref="WriteCommitMemberMotion"/> writes, as a member with no profile.</summary>
     public static WorldTransferCommitMember ReadCommitMemberMotion(ref WireReader reader) {
@@ -479,11 +483,15 @@ public static class WorldWireLeaves {
         var continuum = reader.ReadOptional(
             readValue: static (ref WireReader r) => ReadContinuum(reader: ref r)
         );
+        var drives = reader.ReadOptional(
+            readValue: static (ref WireReader r) => ReadEntityAddress(reader: ref r)
+        );
 
         return new WorldTransferCommitMember(
             ActionContinuity: actionContinuity,
             BodyMotionProgramName: bodyMotionProgramName,
             Continuum: continuum,
+            Drives: drives,
             Arrival: arrival,
             PlanarVelocity: planarVelocity,
             Position: position,

@@ -439,12 +439,10 @@ public sealed class CompiledBodyProducer {
     /// <param name="targets">The world's compiled target-register table.</param>
     /// <param name="curves">The world's compiled curves-row table.</param>
     /// <param name="navigation">The world's compiled navigation-domain table.</param>
-    /// <param name="simulationRateHz">The world's own simulation rate — a curve-follow target's per-tick arc step
-    /// divisor.</param>
     /// <returns>The compiled producer binding.</returns>
     /// <exception cref="BodyMotionProgramException">An authored key names no parameter this program's operations
     /// read, or a required parameter is missing.</exception>
-    public static CompiledBodyProducer Compile(CompiledBodyMotionProgram program, BodyTargetSource? source, BodyProgramParameters parameters, WorldChannelTable channels, WorldTargetRegisterTable targets, WorldCurveTable curves, WorldNavigationDomainTable navigation, int simulationRateHz) {
+    public static CompiledBodyProducer Compile(CompiledBodyMotionProgram program, BodyTargetSource? source, BodyProgramParameters parameters, WorldChannelTable channels, WorldTargetRegisterTable targets, WorldCurveTable curves, WorldNavigationDomainTable navigation) {
         var requiredScalars = ResolveRequiredScalars(
             parameters: parameters,
             program: program,
@@ -531,7 +529,6 @@ public sealed class CompiledBodyProducer {
                     curves: curves,
                     navigation: navigation,
                     registers: targets,
-                    simulationRateHz: simulationRateHz,
                     source: target
                 )
             : null)

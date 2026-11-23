@@ -75,7 +75,7 @@ public sealed class WorldInfinityViewScene : ISdfFrameDresser {
         foreach (var view in views) {
             m_fittedViews.Add(item: view with {
                 Quality = QualityOf(levers: m_spec.Levers) with {
-                    GeometryOnly = (m_spec.Kind == InfinityViewKind.Far),
+                    GeometryOnly = m_spec.Covers,
                 },
             });
         }

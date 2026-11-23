@@ -1,13 +1,11 @@
 using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.SignedDistance;
-using Puck.World.Authoring;
 
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     private static void ValidateRenderResolution(WorldDefinition definition, List<string> errors) {
-        ValidateToon(definition.Render.Toon, errors);
         // Every program the world uses, once: its uses name these rows, so a program 135 creations share admits once.
         foreach (var (key, program) in (definition.ShadesRaw ?? new Dictionary<string, SdfShadeDefinition>())) {
             try { _ = SdfShadeProgram.Compile(program); }
@@ -68,11 +66,6 @@ public static partial class WorldDefinitionValidator {
                 RequireRange(scale, 0.125f, 1f, $"{path}[{index}].renderScale", errors);
             }
             previous = (float.IsFinite(f: row.Share) ? Math.Max(val1: previous, val2: row.Share) : previous);
-        }
-    }
-    private static void ValidateToon(ToonStyleDocument? toon, List<string> errors) {
-        if (toon is not null) {
-            errors.AddRange(collection: toon.Refusals(path: "render.toon"));
         }
     }
     private static void ValidateBloom(Puck.Hosting.CameraBloom? bloom, string path, List<string> errors) {
@@ -663,6 +656,9 @@ public static partial class WorldDefinitionValidator {
                 case WorldRenderSkyLayer.View view: {
                         if (string.IsNullOrWhiteSpace(value: view.Destination)) {
                             errors.Add(item: $"{layerPath}.destination is required: a view shows the session of a destination world.");
+                        }
+                        if ((view.Bound is { } bound) && !(VectorFunctions.IsFinite(vector: bound.Center) && float.IsFinite(f: bound.Radius) && (bound.Radius > 0f))) {
+                            errors.Add(item: $"{layerPath}.bound is a finite center and a positive radius.");
                         }
 
                         ValidateInfinityView(

@@ -13,16 +13,28 @@ public sealed partial class WorldInputRuntime {
         ((target.Source.ProducerName == source) && m_host.Population.SupportsSource(body, target.Source, out _))));
 
     internal PlayerIntent AdmitScriptSnapshot(Principal actor, int body, PlayerIntent image, ulong tick) {
+        m_host.Population.ThrowIfPartitioned();
         if (TryPublishSnapshotCore(actor, body, BodyScriptSource, image, tick, default, out var owner, out var principal, out var batch, out var reason) &&
             TryAdmitSynchronized(alreadyPermitted: (actor.Kind == PrincipalKind.World), batch: in batch, owner: owner!, reason: out reason)) { return ProjectSnapshot(batch: batch, body: body); }
         RejectControllerBatch(principal: principal);
         m_host.Output.Narrate("input.refused", reason);
         return default;
     }
+    /// <summary>Returns whether a body holds a script controller, whose interval its step admits.</summary>
+    /// <param name="body">The body's population index.</param>
+    /// <returns><see langword="true"/> when some owner of the body is a script controller.</returns>
+    internal bool HasBodyScripts(int body) {
+        if (!m_bodyOwners.TryGetValue(key: body, value: out var owners)) { return false; }
+        foreach (var owner in owners) {
+            if (owner.Controller is { Source: BodyScriptSource }) { return true; }
+        }
+        return false;
+    }
     /// <summary>Finishes the interval of every script controller of the body that did not observe this tick. A
     /// controller admitted under an earlier generation of the body (it left through a door and came back) has no
     /// interval in this admission and is retired first, so completing the rest never changes the owner list it walks.</summary>
     internal void CompleteBodyScripts(int body, ulong tick) {
+        m_host.Population.ThrowIfPartitioned();
         if (!m_bodyOwners.TryGetValue(key: body, value: out var owners)) { return; }
         var generation = m_host.Population.Generation(index: body);
 
@@ -48,6 +60,7 @@ public sealed partial class WorldInputRuntime {
     /// <summary>Admits a world's own compiled producer before its body consumes the resulting image. The
     /// structural actor is local-only; external submissions cannot claim the World principal.</summary>
     internal PlayerIntent AdmitProgramSnapshot(int body, PlayerIntent image, ulong tick) {
+        m_host.Population.ThrowIfPartitioned();
         if (m_host.Body(index: body) is not { Source.ProducerName: { } source }) { return default; }
         if (!TryPublishSnapshotCore(Principal.World, body, source, image, tick, default, out var owner, out var principal, out var batch, out var reason) ||
             !TryAdmitSynchronized(alreadyPermitted: true, batch: in batch, owner: owner!, reason: out reason)) {

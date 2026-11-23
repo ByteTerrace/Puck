@@ -824,7 +824,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             WorldRenderSkyLayer.Pattern pattern => into.Add(blend: blend, label: label, opacity: opacity, parameters: PatternOf(mirror: mirror, nits: nits, pattern: pattern), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Panel panel => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanelOf(mirror: mirror, nits: nits, panel: panel, site: site), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Panorama panorama => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanoramaOf(mirror: mirror, nits: nits, panorama: panorama, site: site), tier: tier, visibility: visibility),
-            WorldRenderSkyLayer.View view => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: false, fallback: view.Fallback, mirror: mirror, nits: nits), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.View view => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: (view.Coverage == true), fallback: view.Fallback, mirror: mirror, nits: nits), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Far far => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: true, fallback: far.Fallback, mirror: mirror, nits: nits), tier: tier, visibility: visibility),
             _ => -1,
         };

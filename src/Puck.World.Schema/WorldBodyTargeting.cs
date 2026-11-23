@@ -71,28 +71,15 @@ public sealed class WorldTargetRegisterTable {
 /// <param name="MinimumDot">The cosine of the sensed cone half-angle, or zero for a designated/curve source.</param>
 /// <param name="RegisterIndex">The designated register index, or <c>-1</c> for a sensed/curve source.</param>
 /// <param name="CurveIndex">The curve row's compact index, or <c>-1</c> for a sensed/designated source.</param>
-/// <param name="ArcStepRaw">The per-tick arc-length increment, Q32 raw — the exact rational
-/// <see cref="BodyTargetSource.CurveFollow.Rate"/><c> / simulationRateHz</c> rounded once at compile time so the
-/// runtime step is a single addition, never a division. Zero for a sensed/designated source.</param>
+/// <param name="ArcRate">The arc length a curve-follow target travels per second, in metres, rounded once from
+/// <see cref="BodyTargetSource.CurveFollow.Rate"/>. A producer step integrates it over the engine ticks the step covers,
+/// keeping the remainder, so the target travels the same distance a second at any steering cadence or simulation rate.
+/// Zero for a sensed/designated source.</param>
 /// <param name="NavigationDomainIndex">The bounded navigation-domain index, or <c>-1</c> for a non-navigated source.</param>
 /// <param name="NavigationKind">The navigated domain's topology; surface for non-navigated sources.</param>
-public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, FixedQ4816 Range, FixedQ4816 MinimumDot, int RegisterIndex, int CurveIndex = -1, long ArcStepRaw = 0L, int NavigationDomainIndex = -1, WorldNavigationKind NavigationKind = WorldNavigationKind.Surface) {
-    // rate/simulationRateHz rounded once to Q32: rate parses to Q16 at the authoring boundary (the same one rounding
-    // every authored float takes), then the division to Q32 is the ONE further rounding — never repeated per tick.
-    // simulationRateHz <= 0 (an unvalidated caller) rounds to zero rather than dividing by zero.
-    private static long CompileArcStepRaw(float rate, int simulationRateHz) {
-        var rateRaw = FixedQ4816.FromDouble(value: rate).Value;
-
-        return (FixedPointRounding.TryRoundRational(
-            denominator: simulationRateHz,
-            fractionBitCount: 16,
-            numerator: rateRaw,
-            result: out var arcStepRaw
-        )
-            ? arcStepRaw
-            : 0L
-        );
-    }
+/// <param name="NavigationProfileIndex">The navigated target's cost profile ordinal in
+/// <see cref="WorldNavigationSection.Profiles"/>, or <c>-1</c> for none (every area costs one).</param>
+public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, FixedQ4816 Range, FixedQ4816 MinimumDot, int RegisterIndex, int CurveIndex = -1, FixedQ4816 ArcRate = default, int NavigationDomainIndex = -1, WorldNavigationKind NavigationKind = WorldNavigationKind.Surface, int NavigationProfileIndex = -1) {
     private static FixedBodyTargetSource CompileNavigated(
         BodyTargetSource source,
         BodyTargetSource.Navigated navigated,
@@ -119,7 +106,8 @@ public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, Fix
             : -1),
             NavigationKind: (hasDomain
             ? navigation.Kind(index: domainIndex)
-            : WorldNavigationKind.Surface)
+            : WorldNavigationKind.Surface),
+            NavigationProfileIndex: navigation.ProfileOf(name: navigated.Profile)
         );
     }
 
@@ -128,10 +116,7 @@ public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, Fix
     /// <param name="registers">The world's compiled target-register table.</param>
     /// <param name="curves">The world's compiled curves-row table.</param>
     /// <param name="navigation">The world's compiled navigation-domain table.</param>
-    /// <param name="simulationRateHz">The world's own simulation rate — the per-tick arc step's divisor. A
-    /// <see cref="BodyTargetSource.CurveFollow"/> source at rate 0 (never validated through) compiles a zero step
-    /// rather than dividing.</param>
-    public static FixedBodyTargetSource Compile(BodyTargetSource source, WorldTargetRegisterTable registers, WorldCurveTable curves, WorldNavigationDomainTable navigation, int simulationRateHz) => source switch {
+    public static FixedBodyTargetSource Compile(BodyTargetSource source, WorldTargetRegisterTable registers, WorldCurveTable curves, WorldNavigationDomainTable navigation) => source switch {
         BodyTargetSource.Sensed sensed => new FixedBodyTargetSource(
         Source: source,
         Range: FixedQ4816.FromDouble(value: sensed.Range),
@@ -160,10 +145,7 @@ public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, Fix
         )
         ? curveIndex
         : -1),
-        ArcStepRaw: CompileArcStepRaw(
-            rate: curve.Rate,
-            simulationRateHz: simulationRateHz
-        )
+        ArcRate: FixedQ4816.FromDouble(value: curve.Rate)
     ),
         BodyTargetSource.Navigated navigated => CompileNavigated(
         navigated: navigated,

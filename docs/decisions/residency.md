@@ -162,9 +162,17 @@ demand and priority rather than creating executors.
   (`MemoryAccount.SetDeviceBar`), as the host's does, so storage admitted
   past the limit still lands under the bar while the elastic owners give
   its room back.
-- **The unit that leaves is a bake tier.** Each group's coarsest tier that
-  still covers it stays as its floor, and the tier a view demands is detail
-  above it, so evicting hands the draws back to the floor and bakes nothing.
+- **The unit that leaves is a bake tier.** Each group's floor tier, its own
+  unrefined lattice (`SdfMeshTier.Floor`), stays as its floor, and the tier a
+  view demands is detail above it, so evicting hands the draws back to the
+  floor and bakes nothing.
+- **The ladder does not end at the floor.** Past its floor a tier coarsens the
+  lattice itself, down to a rung whose cell fits only a few times along the
+  group (`SdfMeshTier.Coarsest`), so a group a view resolves at a few pixels
+  holds a few cells and the one bias always has a rung left to coarsen to. A
+  ladder that ends at the floor does neither: the debug world's floors alone
+  are most of its mesh region and most of its groups draw theirs, so a bias
+  has nothing there to coarsen.
 - **Prediction decides arrival, and observation decides retention.** What a
   view would resolve is computed ahead from planned boxes, so a turn or a
   first sight finds its meshes. What a pass actually used is read back, and
