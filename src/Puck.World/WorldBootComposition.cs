@@ -188,6 +188,8 @@ public static class WorldBootComposition {
         // The certified body sweeps every authoritative shape runs: what proving a moving body's travel costs.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Physics.FixedContactSweepWork.Process);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Physics.FixedStaticContactWork.Process);
+        // Route searches, goal fields derived and the steps bodies read from them: what finding the way costs.
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Physics.Navigation.NavigationSearchWork.Process);
         // The bodies each tick steps, and the parked rigid bodies a contact-field change wakes.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldBodyWork.Process);
         // The population scans a tick takes beside stepping bodies: fact derivations, continuation folds, perception images.

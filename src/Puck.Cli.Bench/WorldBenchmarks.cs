@@ -565,7 +565,7 @@ internal static class WorldBenchmarks {
 
     // The deterministic work behind a tick, in report order: the bodies the population steps and the parked ones a field
     // change woke or left asleep, the analytic solver's work, the certified sweep's work and the immutable field's bounds
-    // work it spends.
+    // work it spends, and the navigation searches and goal-field steps bodies read.
     // Kinds belong to the measured source, not to the CLI's build. A frozen build can declare a different set;
     // enumerating it also includes newly added counters without maintaining a second list beside the sources.
     private static readonly (IWorkCounterSource Source, WorkKind Kind)[] TickWork = new IWorkCounterSource[] {
@@ -573,6 +573,7 @@ internal static class WorldBenchmarks {
         Puck.World.Server.WorldTickWork.Process,
         FixedStaticContactWork.Process,
         FixedContactSweepWork.Process,
+        Puck.Physics.Navigation.NavigationSearchWork.Process,
         SdfBoundsCache.ProcessWork,
         SdfFieldEvaluator.PointWork,
     }.SelectMany(source => source.WorkKinds.ToArray().Where(kind => kind.Class == WorkClass.Deterministic).Select(kind => (Source: source, Kind: kind))).ToArray();
