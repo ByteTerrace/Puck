@@ -23,7 +23,8 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
         var first = new WorldAuthorityBlobStore(
             store: blobs,
             target: target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         );
         var fence = await first.AcquireActivationAsync(
             cancellationToken: cancellation,
@@ -70,7 +71,8 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
         var restarted = new WorldAuthorityBlobStore(
             store: blobs,
             target: target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         );
         var loaded = await restarted.LoadRecoveryRootAsync(
             identity,
@@ -164,7 +166,8 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
         var store = new WorldAuthorityBlobStore(
             store: blobs,
             target: target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         );
         var oldFence = await store.AcquireActivationAsync(
             cancellationToken: cancellation,
@@ -232,7 +235,8 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
         var store = new WorldAuthorityBlobStore(
             store: blobs,
             target: target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         );
         var fence = await store.AcquireActivationAsync(
             cancellationToken: cancellation,
@@ -316,7 +320,8 @@ public sealed class WorldAuthorityRecoveryRootLawTests {
         var store = new WorldAuthorityBlobStore(
             store: blobs,
             target: target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         );
         var fence = await store.AcquireActivationAsync(
             cancellationToken: cancellation,

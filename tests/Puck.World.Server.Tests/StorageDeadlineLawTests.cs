@@ -29,7 +29,8 @@ public sealed class StorageDeadlineLawTests {
         var store = new WorldAuthorityBlobStore(
             store: stalling,
             target: Target,
-            timeProvider: clock
+            timeProvider: clock,
+            documentDirectory: null
         );
         var load = store.LoadRootAsync(
             cancellationToken: TestToken,

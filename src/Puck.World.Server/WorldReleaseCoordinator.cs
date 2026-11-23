@@ -260,11 +260,54 @@ public sealed class WorldReleaseCoordinator {
             cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false);
     }
+    /// <summary>Returns why a deployment from <paramref name="source"/> to <paramref name="target"/> cannot carry hosted
+    /// state across its definitions, or <see langword="null"/> when it can. A world whose published definition changes
+    /// anywhere but its metadata (<see cref="WorldReleaseMetadataTransition.ChangesOutsideMetadata"/>) has no admitted
+    /// preservation rule, and hosted data is scratch until its owner says otherwise, so the deployment starts its target
+    /// fresh (<see cref="BeginResetAsync"/>) instead of refusing. A metadata-only change carries state through the
+    /// metadata transition. Worlds whose definition pins are equal are not read.</summary>
+    /// <param name="archive">The verified package reader holding both manifests' definition files.</param>
+    /// <param name="source">The active release.</param>
+    /// <param name="target">The release being deployed.</param>
+    /// <param name="documentDirectory">The directory the definitions' relative paths resolve beside
+    /// (<see cref="WorldSiloDefinition.DocumentDirectory"/>), or <see langword="null"/> for documents that author none.</param>
+    /// <param name="cancellationToken">The token that cancels package reads.</param>
+    /// <returns>The reset's reason, naming the first changed world, or <see langword="null"/>.</returns>
+    /// <exception cref="InvalidDataException">A changed world's package definition does not parse.</exception>
+    public static async Task<string?> FindDefinitionResetAsync(WorldReleaseArchive archive, WorldReleaseManifest source, WorldReleaseManifest target,
+        string? documentDirectory, CancellationToken cancellationToken) {
+        ArgumentNullException.ThrowIfNull(archive);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        foreach (var key in source.DefinitionFiles.Keys.Order(comparer: StringComparer.Ordinal)) {
+            if (
+                !target.DefinitionFiles.TryGetValue(key: key, value: out var targetFile) ||
+                string.Equals(a: source.Definitions[key], b: target.Definitions[key], comparisonType: StringComparison.Ordinal)
+            ) { continue; }
+            var before = await ParsePackageAsync(archive, source, source.DefinitionFiles[key], documentDirectory, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            var after = await ParsePackageAsync(archive, target, targetFile, documentDirectory, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (WorldReleaseMetadataTransition.ChangesOutsideMetadata(after: after, before: before)) {
+                return $"the release changes '{key}' outside its metadata, which no preservation rule carries state across";
+            }
+        }
+        return null;
+    }
+    private static async Task<WorldDefinition> ParsePackageAsync(WorldReleaseArchive archive, WorldReleaseManifest manifest, string file, string? documentDirectory,
+        CancellationToken cancellationToken) {
+        var bytes = await archive.ReadFileAsync(manifest, file, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+
+        return (WorldDefinitionLoader.TryParseBeside(definition: out var definition, documentDirectory: documentDirectory, reason: out var reason, sourceName: file, utf8: bytes)
+            ? definition
+            : throw new InvalidDataException(message: reason));
+    }
     /// <summary>Returns why the active source's captured state cannot be carried into this build, or
-    /// <see langword="null"/> when it can. This is the one place a deployment decides to reset: a world whose checkpoint
-    /// this build cannot decode means the hosted state predates a format change, and hosted data is scratch until its
-    /// owner says otherwise, so the deployment starts its target fresh (<see cref="BeginResetAsync"/>) instead of
-    /// refusing. State that decodes is carried, and any later qualification failure still refuses.</summary>
+    /// <see langword="null"/> when it can: a world whose checkpoint this build cannot decode means the hosted state
+    /// predates a format change, and hosted data is scratch until its owner says otherwise, so the deployment starts its
+    /// target fresh (<see cref="BeginResetAsync"/>) instead of refusing. State that decodes is carried, and any later
+    /// qualification failure still refuses. A deployment decides to reset in one place,
+    /// <c>WorldReleaseFixtureBuilder.BuildAsync</c>, which asks <see cref="FindDefinitionResetAsync"/> first and this
+    /// second.</summary>
     /// <param name="checkpoints">The source's captured checkpoint bytes, by world name.</param>
     /// <param name="documentDirectory">The directory the hosted documents' relative paths resolve beside under this build
     /// (<see cref="WorldSiloDefinition.DocumentDirectory"/>), exactly as the silo that would restore the state decodes
@@ -288,7 +331,8 @@ public sealed class WorldReleaseCoordinator {
         }
         return null;
     }
-    /// <summary>Claims the group for a deployment that discards the active source's unreadable state
+    /// <summary>Claims the group for a deployment that discards the active source's state because its definitions change
+    /// outside metadata (<see cref="FindDefinitionResetAsync"/>) or its state does not decode
     /// (<see cref="FindStateReset"/>): the target qualifies alone from its own fresh state, as a first deployment does,
     /// and the claiming write records the reset in the operation's history. The source still drains and its protected
     /// roots still permit pre-commit recovery; Activate replaces every drained root with the target's fresh one.</summary>
@@ -298,7 +342,7 @@ public sealed class WorldReleaseCoordinator {
     /// <param name="qualificationRunner">The runner that qualifies <paramref name="target"/> from a fixture without
     /// gameplay.</param>
     /// <param name="operationId">The new operation's identifier.</param>
-    /// <param name="reason">Why the source's state is discarded, as <see cref="FindStateReset"/> named it.</param>
+    /// <param name="reason">Why the source's state is discarded, as <see cref="FindDefinitionResetAsync"/> or <see cref="FindStateReset"/> named it.</param>
     /// <param name="cancellationToken">The token that cancels qualification and the guarded write.</param>
     /// <returns>The claimed group, or a conflict naming why it was not claimed.</returns>
     public async Task<WorldReleaseGroupOutcome> BeginResetAsync(

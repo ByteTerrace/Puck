@@ -20,7 +20,8 @@ public sealed class WorldAuthorityBlobStoreTests {
     public async Task AppendJournalAsync_BeforeAnyCheckpoint_Refuses() {
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
 
         var outcome = await store.AppendJournalAsync(
@@ -39,7 +40,8 @@ public sealed class WorldAuthorityBlobStoreTests {
     public async Task AppendJournalAsync_ThenLoadJournalTailAsync_RoundTripsInOrder() {
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
         var identity = Identity();
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -98,7 +100,8 @@ public sealed class WorldAuthorityBlobStoreTests {
     public async Task CheckpointWithOlderTick_CannotRegressAuthoritativeCheckpoint() {
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
         var identity = Identity();
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -133,7 +136,8 @@ public sealed class WorldAuthorityBlobStoreTests {
     public async Task CheckpointWithoutCapturedCoverage_NeverErasesLaterJournalTail() {
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
         var identity = Identity();
         var fence = await store.AcquireActivationAsync(
@@ -190,7 +194,8 @@ public sealed class WorldAuthorityBlobStoreTests {
     public async Task ALoadOfANeverWrittenIdentity_ReturnsNull(string load) {
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
 
         Assert.Null(@object: ((load == "definition")
@@ -207,7 +212,8 @@ public sealed class WorldAuthorityBlobStoreTests {
     public async Task LoadJournalTailAsync_WithNoAppends_IsEmptyNotAFault() {
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
         var tail = await store.LoadJournalTailAsync(
             afterOrdinal: 0,
@@ -226,7 +232,8 @@ public sealed class WorldAuthorityBlobStoreTests {
         var fake = new FakeObjectBlobStore();
         var store = new WorldAuthorityBlobStore(
             store: fake,
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
         var identity = Identity();
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -270,7 +277,8 @@ public sealed class WorldAuthorityBlobStoreTests {
     public async Task PausedWriterAfterTakeover_IsRefusedByFence() {
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
         var identity = Identity();
         var first = await store.AcquireActivationAsync(
@@ -312,7 +320,8 @@ public sealed class WorldAuthorityBlobStoreTests {
     public async Task PublishDefinitionAsync_ThenLoadDefinitionAsync_RoundTrips() {
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
         var identity = Identity();
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -344,7 +353,8 @@ public sealed class WorldAuthorityBlobStoreTests {
     public async Task ReceiptOperationId_BindsActorAndPayloadAcrossReplay() {
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
         var identity = Identity();
         var fence = await store.AcquireActivationAsync(
@@ -436,7 +446,8 @@ public sealed class WorldAuthorityBlobStoreTests {
         var fake = new ThrowAfterRootCommitStore();
         var store = new WorldAuthorityBlobStore(
             store: fake,
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
         var identity = Identity();
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -515,7 +526,8 @@ public sealed class WorldAuthorityBlobStoreTests {
         var fake = new FakeObjectBlobStore();
         var store = new WorldAuthorityBlobStore(
             store: fake,
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
         var identity = Identity();
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -558,7 +570,8 @@ public sealed class WorldAuthorityBlobStoreTests {
     public async Task WriteCheckpointAsync_Twice_AdvancesOrdinalAndLatestNamesTheSecond() {
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
         var identity = Identity();
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -607,7 +620,7 @@ public sealed class WorldAuthorityBlobStoreTests {
     [Fact]
     public async Task CoveringCheckpointsRetireLiveObjectsAndKeepProtectedRecoveryPayloads() {
         var fake = new FakeObjectBlobStore();
-        var store = new WorldAuthorityBlobStore(fake, Target);
+        var store = new WorldAuthorityBlobStore(fake, Target, documentDirectory: null);
         var identity = Identity();
         var token = TestContext.Current.CancellationToken;
         var fence = (await store.AcquireActivationAsync(identity, token))!.Value;

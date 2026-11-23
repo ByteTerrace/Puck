@@ -252,6 +252,7 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
         Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services: services);
         using var provider = services.BuildServiceProvider();
         var authority = new WorldAuthorityBlobStore(
+            documentDirectory: documentDirectory,
             store: provider.GetRequiredService<IObjectBlobStore>(),
             target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
                 path1: leg,
@@ -431,6 +432,7 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
         // as the bootstrap publishes it (WorldReleaseFixtureBuilder, AzureCommand.InitializeWorldReleaseBootstrapAsync).
         if (source is null) {
             var fixtureAuthority = new WorldAuthorityBlobStore(
+                documentDirectory: documentDirectory,
                 store: provider.GetRequiredService<IObjectBlobStore>(),
                 target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
                     path1: fixture,

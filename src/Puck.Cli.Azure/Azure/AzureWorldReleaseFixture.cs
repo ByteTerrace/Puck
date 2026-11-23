@@ -5,8 +5,9 @@ namespace Puck.Cli.Azure;
 
 public static partial class AzureCommand {
     // Exports the source's current state and builds the qualification fixture from it, or from bootstrap's definitions
-    // without gameplay when there is no source. When successor is given and the source's state does not decode under this
-    // build, the fixture is successor's fresh one instead and Reset names why (WorldReleaseFixtureBuilder.BuildAsync).
+    // without gameplay when there is no source. When successor is given and changes a definition outside its metadata, or
+    // the source's state does not decode under this build, the fixture is successor's fresh one instead and Reset names
+    // why (WorldReleaseFixtureBuilder.BuildAsync).
     private static async Task<(string Directory, string? Reset)> PrepareWorldReleaseFixtureAsync(WorldReleaseContext context, AzureWorldReleaseDeployment? source,
         WorldReleaseManifest bootstrap, Guid requestId, CancellationToken token, WorldReleaseManifest? successor = null) {
         WorldReleaseFixtureManifest? snapshot = null;

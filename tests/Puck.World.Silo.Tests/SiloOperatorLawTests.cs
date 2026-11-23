@@ -132,7 +132,8 @@ public sealed class SiloOperatorLawTests {
         var backend = new WorldAuthorityBlobStore(
             store: store,
             target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath),
-            timeProvider: clock
+            timeProvider: clock,
+            documentDirectory: null
         );
         var ct = TestContext.Current.CancellationToken;
 

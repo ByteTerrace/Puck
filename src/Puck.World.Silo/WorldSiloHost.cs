@@ -162,10 +162,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         m_blobStore = blobStore;
         m_routing = routing;
         m_storageTarget = storageTarget;
-        m_documentDirectory = ((definition.DocumentDirectory is { } documentDirectory)
-            ? Path.GetFullPath(path: documentDirectory)
-            : null
-        );
+        m_documentDirectory = definition.ResolveDocumentDirectory();
         m_store = new WorldAuthorityBlobStore(
             documentDirectory: m_documentDirectory,
             machines: m_machineCatalog,

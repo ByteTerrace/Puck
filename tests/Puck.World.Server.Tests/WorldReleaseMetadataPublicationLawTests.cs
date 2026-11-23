@@ -117,7 +117,8 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
         var outcome = await scenario.ApplyAsync(store: new WorldAuthorityBlobStore(
             store: scenario.Blobs,
             target: scenario.Target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         ));
 
         Assert.True(
@@ -265,7 +266,8 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
             winner = await new WorldAuthorityBlobStore(
                 store: scenario.Inner,
                 target: scenario.Target,
-                timeProvider: new VirtualClock()
+                timeProvider: new VirtualClock(),
+                documentDirectory: null
             ).AcquireActivationAsync(
                 scenario.Identity,
                 Token
@@ -483,7 +485,8 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
         var restarted = new WorldAuthorityBlobStore(
             store: scenario.Blobs,
             target: scenario.Target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         );
 
         outcome = await scenario.ApplyAsync(store: restarted);

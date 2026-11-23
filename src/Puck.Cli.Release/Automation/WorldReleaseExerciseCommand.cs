@@ -110,6 +110,7 @@ public static class WorldReleaseExerciseCommand {
         using var provider = services.BuildServiceProvider();
         var blobs = provider.GetRequiredService<IObjectBlobStore>();
         var authority = new WorldAuthorityBlobStore(
+            documentDirectory: definition.ResolveDocumentDirectory(),
             store: blobs,
             target: target
         );

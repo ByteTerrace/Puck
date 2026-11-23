@@ -190,7 +190,10 @@ The Azure activation adapter calls this publisher for changed definitions.
 Before live drain, the CLI uses the same publisher on disposable forward and
 reverse fixtures and compares complete imports in both packaged images. Only
 metadata changes can pass; unsupported definition sections and conflicting live
-values refuse. Qualification is repeated for rollback against the latest state.
+values refuse. A deployment never reaches that refusal for a definition changed
+outside metadata: `WorldReleaseCoordinator.FindDefinitionResetAsync`, using the
+transition's own comparison (`WorldReleaseMetadataTransition.ChangesOutsideMetadata`),
+sends it down the reset path while hosted data is scratch. Qualification is repeated for rollback against the latest state.
 Published package definitions are parsed as composed documents, so a boot draw
 may still be unfilled. The checkpoint's live definition and undo base use the
 strict saved-state reader. Both packages are parsed through

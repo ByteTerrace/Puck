@@ -154,7 +154,8 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
             target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: "fake-store"),
-            machines: catalog
+            machines: catalog,
+            documentDirectory: null
         );
         var identity = new WorldAuthorityIdentity(
             Owner: Guid.NewGuid(),

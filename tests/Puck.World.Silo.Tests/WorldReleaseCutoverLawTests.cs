@@ -1219,7 +1219,8 @@ public sealed partial class WorldReleaseCutoverLawTests {
             Authority = new(
                 store: m_store,
                 target: m_target,
-                timeProvider: Clock
+                timeProvider: Clock,
+                documentDirectory: null
             );
             Groups = new(
                 owner: m_owner,

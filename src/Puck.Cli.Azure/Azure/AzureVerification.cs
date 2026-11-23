@@ -527,6 +527,10 @@ public static partial class AzureCommand {
         Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services: services);
         using (var provider = services.BuildServiceProvider()) {
             var authority = new WorldAuthorityBlobStore(
+                documentDirectory: Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: Path.Combine(
+                    path1: fixture,
+                    path2: "worlds"
+                ))),
                 store: provider.GetRequiredService<IObjectBlobStore>(),
                 target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
                     path1: fixture,

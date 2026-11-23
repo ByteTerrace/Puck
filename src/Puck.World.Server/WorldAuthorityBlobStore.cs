@@ -45,13 +45,14 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     /// is one the hosting activation can accept; null defers provider checks and the activation admits for itself.</param>
     /// <param name="timeProvider">The host clock every <see cref="OperationTimeout"/> runs on; <see langword="null"/> is
     /// <see cref="TimeProvider.System"/>.</param>
-    /// <param name="documentDirectory">The directory a recovered definition's relative paths resolve beside
-    /// (<see cref="WorldDefinition.DocumentDirectory"/>): the host's layout of the hosted documents, such as a silo
-    /// document's <see cref="WorldSiloDefinition.DocumentDirectory"/>; <see langword="null"/> gives them none.</param>
+    /// <param name="documentDirectory">The directory every definition this store reads or decodes (published definitions,
+    /// checkpoints, release packages) resolves its relative paths beside (<see cref="WorldDefinition.DocumentDirectory"/>):
+    /// the host's layout of the hosted documents, such as <see cref="WorldSiloDefinition.ResolveDocumentDirectory"/>;
+    /// <see langword="null"/> only for documents that author no relative path. Required, so every store names it.</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> or <paramref name="target"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="target"/> is a directory target whose per-blob budget is below
     /// <see cref="MaximumBlobBytes"/>.</exception>
-    public WorldAuthorityBlobStore(IObjectBlobStore store, ObjectStorageTarget target, IMachineValidationCatalog? machines = null, TimeProvider? timeProvider = null, string? documentDirectory = null) {
+    public WorldAuthorityBlobStore(IObjectBlobStore store, ObjectStorageTarget target, string? documentDirectory, IMachineValidationCatalog? machines = null, TimeProvider? timeProvider = null) {
         ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: target);
         // The one door every authority store passes: a local target too small for the largest checkpoint the codec

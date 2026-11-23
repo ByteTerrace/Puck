@@ -378,9 +378,13 @@ refuses with its cause when it cannot; abandons a Prepare operation or an uncapt
 any roots it saved unrecorded); and recovers every other pre-commit operation's source, finishing a drain's capture
 first. So every failed release leaves a group the next deploy can follow without a hand-run resume or an Azure change,
 except a committed release that cannot be admitted. `WorldReleaseCoordinatorSafetyLawTests.ADeploymentFollowsWhateverItsPredecessorLeftPending`
-drives each phase against a host fake that makes the worker's durable writes. A source export this build cannot decode
-resets instead of refusing (hosted data is scratch): `WorldReleaseCoordinator.FindStateReset` is the one decision,
-called by `WorldReleaseFixtureBuilder.BuildAsync` with the deploy's successor and the asset layout the silo resolves
+drives each phase against a host fake that makes the worker's durable writes. A deploy that cannot carry its source's
+state resets instead of refusing (hosted data is scratch). `WorldReleaseFixtureBuilder.BuildAsync` is the one decision:
+with the deploy's successor it first asks `WorldReleaseCoordinator.FindDefinitionResetAsync`, which resets when a world's
+package definition changes outside its metadata (`WorldReleaseMetadataTransition.ChangesOutsideMetadata`, the comparison
+the transition itself refuses on), then `WorldReleaseCoordinator.FindStateReset`, which resets a source export this
+build cannot decode. `WorldReleaseFixtureBuilderTests` shows a metadata-only successor carrying the captured state and
+an edit outside metadata building the fresh fixture. `FindStateReset` decodes with the asset layout the silo resolves
 relative paths beside (`LocalWorldsDirectory`), because a checkpoint embeds its definition with those paths unresolved and
 decodes only beside that directory, exactly as `WorldSiloHost` decodes it; every release-path decode of a checkpoint
 (the fixture builder, `WorldAuthorityBlobStore`, `WorldReleaseRestore`, the qualification transition) takes the same

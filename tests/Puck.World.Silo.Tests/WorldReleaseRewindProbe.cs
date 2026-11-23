@@ -31,7 +31,8 @@ public sealed partial class WorldReleaseCutoverLawTests {
         var authority = new WorldAuthorityBlobStore(
             store: blobs,
             target: target,
-            timeProvider: clock
+            timeProvider: clock,
+            documentDirectory: null
         );
         var archive = new WorldReleaseArchive(
             blobs,

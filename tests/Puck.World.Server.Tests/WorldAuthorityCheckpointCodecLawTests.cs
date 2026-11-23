@@ -374,7 +374,8 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
         var store = new WorldAuthorityBlobStore(
             store: new FakeObjectBlobStore(),
-            target: Target
+            target: Target,
+            documentDirectory: null
         );
         var identity = new WorldAuthorityIdentity(
             Owner: Guid.NewGuid(),

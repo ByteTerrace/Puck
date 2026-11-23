@@ -1059,19 +1059,24 @@ and every other pre-commit operation recovers its source. Nothing an Azure
 operation already did is retracted outside that recovery.
 
 Hosted data is scratch until its owner says otherwise (AGENTS.md rule 5), so a
-deploy whose source state predates a format change resets it rather than
-refusing or migrating it. The decision has one home,
-`WorldReleaseCoordinator.FindStateReset`, which the fixture builder calls on the
-source's export, decoding beside the asset layout the silo resolves relative paths
-against, as the silo does: a checkpoint this build cannot decode there makes the deploy build the
+deploy that cannot carry its source's state resets it rather than refusing or
+migrating it. The decision has one home, `WorldReleaseFixtureBuilder.BuildAsync`,
+which asks two questions in order. `WorldReleaseCoordinator.FindDefinitionResetAsync`
+compares the two releases' package definitions: a world whose definition changes
+anywhere but its metadata has no preservation rule yet, so its state resets, while a
+metadata-only change carries state through the metadata transition.
+`WorldReleaseCoordinator.FindStateReset` then decodes the source's export beside the
+asset layout the silo resolves relative paths against, as the silo does: a
+checkpoint this build cannot decode there resets too. Either answer makes the deploy build the
 new release's fresh fixture, qualify it alone as a first deployment, and claim
 the group with `BeginResetAsync`, which records a `reset:` entry and its reason
 in the operation's history. The source still drains and its protected roots
 still permit pre-commit recovery; at Activate,
 `WorldAuthorityBlobStore.PrepareReleaseResetAsync` replaces each drained root
 with the new release's definition and no gameplay, without reading the old
-state. State that decodes is carried as before, and a qualification that fails
-on it still refuses. The reset lives in history rather than a member of its own
+state. State that decodes under a metadata-only change is carried, and a
+qualification that fails on it still refuses. A rollback asks neither question
+and refuses a definition change outside metadata. The reset lives in history rather than a member of its own
 because the draining source, an earlier build, reads the group record.
 
 Release Azure prepares the package before deploying it. Deploy automatically

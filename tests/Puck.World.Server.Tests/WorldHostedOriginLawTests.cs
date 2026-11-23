@@ -273,7 +273,7 @@ public sealed class WorldHostedOriginLawTests {
         var target = WorldAuthorityBlobStore.DirectoryTarget(directory.RootPath);
         var identity = new WorldAuthorityIdentity(Guid.NewGuid(), SafeName.Parse("table"));
         var blobs = PuckStorageTestComposition.BuildStore();
-        var store = new WorldAuthorityBlobStore(blobs, target);
+        var store = new WorldAuthorityBlobStore(blobs, target, documentDirectory: null);
         var token = TestContext.Current.CancellationToken;
         var address = new ObjectBlobAddress(identity.Owner, $"{WorldOwnedWorldSync.HostedPrivateNamespace}/table/authority/root");
         var image = System.Text.Json.JsonSerializer.SerializeToNode(WorldAuthorityRoot.Empty with { Version = 1 })!.AsObject();
@@ -301,7 +301,7 @@ public sealed class WorldHostedOriginLawTests {
         var target = WorldAuthorityBlobStore.DirectoryTarget(directory.RootPath);
         var identity = new WorldAuthorityIdentity(Guid.NewGuid(), SafeName.Parse("private-world"));
         var token = TestContext.Current.CancellationToken;
-        WorldAuthorityBlobStore Open() => new(PuckStorageTestComposition.BuildStore(), target, timeProvider: new VirtualClock());
+        WorldAuthorityBlobStore Open() => new(PuckStorageTestComposition.BuildStore(), target, timeProvider: new VirtualClock(), documentDirectory: null);
         var first = Open();
         var row = new WorldStateRow(CellName.Parse("dice"), CellKind.Int, Draw: new Draw(PrivateStream: true,
             Timing: DrawTiming.Event, Generator: new StateGenerator(Source: GeneratorSource.StreamDraw)));
@@ -323,7 +323,7 @@ public sealed class WorldHostedOriginLawTests {
         var identity = new WorldAuthorityIdentity(Guid.NewGuid(), SafeName.Parse("private-world"));
         var token = TestContext.Current.CancellationToken;
         var blobs = PuckStorageTestComposition.BuildStore();
-        WorldAuthorityBlobStore Store(string path) => new(blobs, WorldAuthorityBlobStore.DirectoryTarget(directory.PathOf(path)));
+        WorldAuthorityBlobStore Store(string path) => new(blobs, WorldAuthorityBlobStore.DirectoryTarget(directory.PathOf(path)), documentDirectory: null);
         var source = Store("source");
         var qualification = Store("qualification");
         var fence = (await source.AcquireActivationAsync(identity, token))!.Value;
@@ -391,7 +391,8 @@ public sealed class WorldHostedOriginLawTests {
         var backend = new WorldAuthorityBlobStore(
             store: store,
             target: target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         );
         var owner = Guid.NewGuid();
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -480,7 +481,8 @@ public sealed class WorldHostedOriginLawTests {
         Assert.True(condition: (await new WorldAuthorityBlobStore(
             store: store,
             target: target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         ).PublishDefinitionAsync(
             new(
                 Owner: owner,

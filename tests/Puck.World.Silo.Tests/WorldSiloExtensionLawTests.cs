@@ -212,7 +212,8 @@ public sealed class WorldSiloExtensionLawTests {
             Assert.True(condition: (await new WorldAuthorityBlobStore(
                 store: Store,
                 target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: m_directory.RootPath),
-                timeProvider: Clock
+                timeProvider: Clock,
+                documentDirectory: null
             ).PublishDefinitionAsync(
                 Identity,
                 Document(),

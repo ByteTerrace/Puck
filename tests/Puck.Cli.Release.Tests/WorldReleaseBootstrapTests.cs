@@ -32,7 +32,8 @@ public sealed class WorldReleaseBootstrapTests {
         var token = TestContext.Current.CancellationToken;
         var authority = new WorldAuthorityBlobStore(
             store: blobs,
-            target: target
+            target: target,
+            documentDirectory: null
         );
         var archive = new WorldReleaseArchive(
             blobs,
@@ -184,7 +185,8 @@ public sealed class WorldReleaseBootstrapTests {
         var token = TestContext.Current.CancellationToken;
         var authority = new WorldAuthorityBlobStore(
             store: blobs,
-            target: target
+            target: target,
+            documentDirectory: null
         );
         var archive = new WorldReleaseArchive(
             blobs,

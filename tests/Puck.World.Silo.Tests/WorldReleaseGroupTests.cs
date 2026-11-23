@@ -337,7 +337,8 @@ public sealed class WorldReleaseGroupTests {
         var backend = new WorldAuthorityBlobStore(
             store: store,
             target: target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         );
 
         Assert.True(condition: (await backend.PublishDefinitionAsync(
@@ -491,7 +492,8 @@ public sealed class WorldReleaseGroupTests {
         var backend = new WorldAuthorityBlobStore(
             store: store,
             target: target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         );
 
         Assert.True(condition: (await backend.PublishDefinitionAsync(

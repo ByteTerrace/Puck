@@ -149,7 +149,8 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
             Backend = new WorldAuthorityBlobStore(
                 store: Store,
                 target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: m_directory.RootPath),
-                timeProvider: new VirtualClock()
+                timeProvider: new VirtualClock(),
+                documentDirectory: null
             );
         }
 

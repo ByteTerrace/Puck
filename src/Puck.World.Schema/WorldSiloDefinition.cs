@@ -120,4 +120,12 @@ public sealed record WorldSiloDefinition(
 
     /// <summary>Gets the document schema tag — <see cref="SchemaVersion"/> for a well-formed document.</summary>
     public string Schema { get; init; } = SchemaVersion;
+
+    /// <summary>Returns <see cref="DocumentDirectory"/> as the silo resolves it: full, against the current working
+    /// directory, and forward-slashed; <see langword="null"/> when the silo names none.</summary>
+    /// <returns>The resolved directory, or <see langword="null"/>.</returns>
+    public string? ResolveDocumentDirectory() => ((DocumentDirectory is { } named)
+        ? Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: named))
+        : null
+    );
 }

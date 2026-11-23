@@ -57,7 +57,8 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
         var outcome = await scenario.CreateFixtureAsync(store: new(
             store: hook,
             target: scenario.Target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         ));
 
         Assert.False(condition: outcome.Ok);
@@ -185,7 +186,8 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
         var restarted = new WorldAuthorityBlobStore(
             store: scenario.Blobs,
             target: scenario.Target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         );
 
         Assert.Equal(
@@ -285,7 +287,8 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
         await Assert.ThrowsAsync<IOException>(testCode: () => scenario.CreateFixtureAsync(store: new(
             store: fault,
             target: scenario.Target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         )));
         if (point != 2) {
             Assert.Null(value: await scenario.Fixture.LoadRootAsync(
@@ -372,12 +375,14 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
                     path1: m_directory.RootPath,
                     path2: "source"
                 )),
-                timeProvider: new VirtualClock()
+                timeProvider: new VirtualClock(),
+                documentDirectory: null
             );
             Fixture = new(
                 store: Blobs,
                 target: Target,
-                timeProvider: new VirtualClock()
+                timeProvider: new VirtualClock(),
+                documentDirectory: null
             );
         }
 

@@ -17,18 +17,22 @@ namespace Puck.Cli.Automation;
 /// <see langword="null"/> for documents that author none.</param>
 public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldReleaseArchive releases, WorldReleaseFixtureArchive fixtures, string? documentDirectory = null) {
     /// <summary>Builds the qualification fixture for <paramref name="release"/> from <paramref name="snapshot"/>, or a
-    /// bootstrap fixture without gameplay when <paramref name="snapshot"/> is <see langword="null"/>. A snapshot whose
-    /// state this build cannot decode (<see cref="WorldReleaseCoordinator.FindStateReset"/>) builds
-    /// <paramref name="successor"/>'s bootstrap fixture instead, so a deployment resets rather than refuses; with no
-    /// successor it refuses. Nothing is written before that decision.</summary>
+    /// bootstrap fixture without gameplay when <paramref name="snapshot"/> is <see langword="null"/>. This is the one
+    /// place a deployment decides to reset hosted state: when <paramref name="successor"/> changes a definition outside
+    /// its metadata (<see cref="WorldReleaseCoordinator.FindDefinitionResetAsync"/>), or the snapshot's state does not
+    /// decode under this build (<see cref="WorldReleaseCoordinator.FindStateReset"/>), the fixture is
+    /// <paramref name="successor"/>'s bootstrap fixture instead, so the deployment resets rather than refuses. Without a
+    /// successor only the state is checked, and a state that does not decode refuses. Nothing is written before that
+    /// decision.</summary>
     /// <param name="release">The release whose definitions the fixture holds: the deployment's source when a snapshot is
     /// given, else the release being bootstrapped.</param>
     /// <param name="owner">The owner of every world in the release.</param>
     /// <param name="snapshot">The source's retained capture, or <see langword="null"/> for a bootstrap fixture.</param>
     /// <param name="directory">The fresh directory the fixture is written to.</param>
     /// <param name="token">The token that cancels reads and writes.</param>
-    /// <param name="successor">The release a deployment starts fresh when the snapshot's state cannot be decoded, or
-    /// <see langword="null"/> to refuse such a snapshot.</param>
+    /// <param name="successor">The release being deployed, which starts fresh when it changes a definition outside its
+    /// metadata or the snapshot's state cannot be decoded; <see langword="null"/> to refuse a snapshot that does not
+    /// decode.</param>
     /// <returns>Why the snapshot's state was reset and the successor's bootstrap fixture built, or
     /// <see langword="null"/> when the fixture holds what was asked for.</returns>
     /// <exception cref="InvalidDataException">The snapshot does not match the release's inventory, or its state cannot
@@ -45,7 +49,22 @@ public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRele
         var checkpoints = new SortedDictionary<string, ReadOnlyMemory<byte>>(comparer: StringComparer.Ordinal);
         string? reset = null;
 
-        if (snapshot is not null) {
+        if (
+            (snapshot is not null) &&
+            (successor is not null)
+        ) {
+            reset = await WorldReleaseCoordinator.FindDefinitionResetAsync(
+                archive: releases,
+                cancellationToken: token,
+                documentDirectory: documentDirectory,
+                source: release,
+                target: successor
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        }
+        if (
+            (snapshot is not null) &&
+            (reset is null)
+        ) {
             foreach (var world in snapshot.Worlds.Keys) {
                 checkpoints.Add(
                     key: world,
@@ -60,13 +79,16 @@ public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRele
                 checkpoints: checkpoints,
                 documentDirectory: documentDirectory
             );
-            if (reset is not null) {
-                if (successor is null) {
-                    throw new InvalidDataException(message: $"qualification snapshot checkpoint refused — {reset}. Capture a new release fixture with the current authority.");
-                }
-                release = successor;
-                snapshot = null;
+            if (
+                (reset is not null) &&
+                (successor is null)
+            ) {
+                throw new InvalidDataException(message: $"qualification snapshot checkpoint refused — {reset}. Capture a new release fixture with the current authority.");
             }
+        }
+        if (reset is not null) {
+            release = successor!;
+            snapshot = null;
         }
         var worlds = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
 

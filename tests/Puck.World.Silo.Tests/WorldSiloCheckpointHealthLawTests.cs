@@ -52,7 +52,8 @@ public sealed class WorldSiloCheckpointHealthLawTests {
         Assert.True(condition: (await new WorldAuthorityBlobStore(
             store: store,
             target: target,
-            timeProvider: clock
+            timeProvider: clock,
+            documentDirectory: null
         ).PublishDefinitionAsync(
             identity,
             Fixtures.BuildDocument(),

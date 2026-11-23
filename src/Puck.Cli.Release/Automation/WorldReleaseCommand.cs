@@ -63,10 +63,7 @@ public static class WorldReleaseCommand {
         // documents run in, which holds the patches, scores, sample sets and machine content they name. The package
         // carries only the documents and release artifacts, so its own directory is never that layout; a silo naming no
         // directory refuses a relative path here exactly as it would at activation.
-        var documentDirectory = ((silo.DocumentDirectory is { } named)
-            ? Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: named))
-            : null
-        );
+        var documentDirectory = silo.ResolveDocumentDirectory();
 
         foreach (var row in silo.Worlds.OrderBy(keySelector: static row => row.Owner).ThenBy(
             static row => row.World.ToString(),

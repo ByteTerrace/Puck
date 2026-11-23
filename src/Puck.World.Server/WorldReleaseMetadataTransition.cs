@@ -126,6 +126,18 @@ public static class WorldReleaseMetadataTransition {
         )
     );
 
+    /// <summary>Returns whether two published definitions differ anywhere but their metadata: a change this transition
+    /// does not preserve, so a deployment that carries one resets hosted state
+    /// (<see cref="WorldReleaseCoordinator.FindDefinitionResetAsync"/>).</summary>
+    /// <param name="before">The source release's published definition.</param>
+    /// <param name="after">The target release's published definition.</param>
+    /// <returns><see langword="true"/> when the canonical documents differ once metadata is set aside.</returns>
+    public static bool ChangesOutsideMetadata(WorldDefinition before, WorldDefinition after) {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+        return !WorldDefinitionSerialization.Serialize(definition: before with { Metadata = null }).AsSpan()
+            .SequenceEqual(other: WorldDefinitionSerialization.Serialize(definition: after with { Metadata = null }));
+    }
     /// <summary>Applies only the published metadata changes to both the live definition and its undo base.
     /// Arrays are indivisible values; object members merge independently. A changed live value refuses the
     /// transition, including when it already equals the requested target. Custom object key order may change
@@ -168,8 +180,7 @@ public static class WorldReleaseMetadataTransition {
                 sourceName: "target release definition"
             )
         ) { return false; }
-        if (!WorldDefinitionSerialization.Serialize(definition: before with { Metadata = null }).AsSpan()
-            .SequenceEqual(other: WorldDefinitionSerialization.Serialize(definition: after with { Metadata = null }))) {
+        if (ChangesOutsideMetadata(after: after, before: before)) {
             reason = "release definition changes outside metadata have no admitted preservation rule";
             return false;
         }

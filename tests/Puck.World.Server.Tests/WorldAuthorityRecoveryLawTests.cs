@@ -12,7 +12,8 @@ public sealed class WorldAuthorityRecoveryLawTests {
         var store = new WorldAuthorityBlobStore(
             store: blobs,
             target: target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         );
         var identity = new WorldAuthorityIdentity(
             Owner: Guid.NewGuid(),

@@ -292,7 +292,8 @@ public sealed class WorldReleaseFixtureBuilderTests {
         ));
         var authority = new WorldAuthorityBlobStore(
             store: blobs,
-            target: local
+            target: local,
+            documentDirectory: null
         );
 
         foreach (var row in silo.Worlds) {
@@ -512,7 +513,8 @@ public sealed class WorldReleaseFixtureBuilderTests {
             target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
                 path1: complete,
                 path2: "store"
-            ))
+            )),
+            documentDirectory: null
         );
 
         foreach (var row in silo.Worlds) {
@@ -635,7 +637,8 @@ public sealed class WorldReleaseFixtureBuilderTests {
             target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
                 path1: metadataCopy,
                 path2: "store"
-            ))
+            )),
+            documentDirectory: null
         );
 
         foreach (var row in silo.Worlds) {
@@ -781,6 +784,63 @@ public sealed class WorldReleaseFixtureBuilderTests {
             searchOption: SearchOption.AllDirectories,
             searchPattern: "receipt.json"
         ));
+        // A deployment decides to reset where its fixture is built: the metadata-only candidate carries the captured
+        // state, and the edit outside metadata starts the candidate fresh, without gameplay, as a first deployment does.
+        var succession = new WorldReleaseFixtureBuilder(
+            blobs: blobs,
+            fixtures: capturedArchive,
+            releases: archive
+        );
+        var successions = new Dictionary<WorldReleaseManifest, (string Directory, string? Reset)>();
+
+        foreach (var successor in new[] { candidate, unsupported }) {
+            var successionDirectory = Path.Combine(
+                path1: temporary.RootPath,
+                path2: ("succession-" + successions.Count)
+            );
+
+            successions.Add(
+                key: successor,
+                value: (successionDirectory, await succession.BuildAsync(
+                    directory: successionDirectory,
+                    owner: owner,
+                    release: release,
+                    snapshot: capture,
+                    successor: successor,
+                    token: token
+                ))
+            );
+        }
+        Assert.Null(@object: successions[candidate].Reset);
+        Assert.Contains(
+            actualString: successions[unsupported].Reset,
+            expectedSubstring: "outside its metadata"
+        );
+        foreach (var (successor, (successionDirectory, _)) in successions) {
+            var succeeded = new WorldAuthorityBlobStore(
+                store: blobs,
+                target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
+                    path1: successionDirectory,
+                    path2: "store"
+                )),
+                documentDirectory: null
+            );
+
+            foreach (var row in silo.Worlds) {
+                var root = await succeeded.LoadRootAsync(
+                    cancellationToken: token,
+                    identity: new(
+                        Owner: owner,
+                        World: row.World
+                    )
+                );
+
+                Assert.Equal(
+                    (successor == candidate),
+                    root is { Root.HoldsGameplay: true }
+                );
+            }
+        }
         await QualifyVerdictsAsync(
             fixture: complete,
             release: release,
@@ -874,7 +934,8 @@ public sealed class WorldReleaseFixtureBuilderTests {
                         path1: Path.GetDirectoryName(path: proofPath)!,
                         path2: leg,
                         path3: "store"
-                    ))
+                    )),
+                    documentDirectory: null
                 );
 
                 foreach (var row in silo.Worlds) {

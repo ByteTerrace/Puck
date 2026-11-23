@@ -473,8 +473,11 @@ coordinator, rollback and restore, the deployment guide's runbook.
 
 **Delivers:** group-scoped restore that refuses when later external transfers
 or durable effects cannot be reconciled (inspection on an isolated copy stays
-possible); the preservation rules for definition edits, written to the boundary
-that an edit beyond metadata is a new release; and release-pair qualification
+possible); the preservation rules for definition edits beyond metadata, written
+to the boundary that such an edit is a new release (until they exist, and while
+deployed data is scratch, a deployment that carries one resets the group's hosted
+state: `WorldReleaseFixtureBuilder.BuildAsync` asks
+`WorldReleaseCoordinator.FindDefinitionResetAsync`); and release-pair qualification
 with packaged images replacing the deployment fallback (`puck world release
 qualify` passes metadata-only definition deltas today and refuses other
 sections; Azure acceptance is open). A release is an immutable manifest naming

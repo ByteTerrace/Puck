@@ -100,7 +100,8 @@ public sealed class WorldSiloDocumentDirectoryLawTests {
         var backend = new WorldAuthorityBlobStore(
             store: store,
             target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath),
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         );
         var published = await backend.PublishDefinitionAsync(identity, WithRelativeCabinet(), TestContext.Current.CancellationToken);
 

@@ -274,7 +274,8 @@ public sealed class WorldReleaseFixtureArchiveLawTests {
         var authority = new WorldAuthorityBlobStore(
             store: blobs,
             target: target,
-            timeProvider: new VirtualClock()
+            timeProvider: new VirtualClock(),
+            documentDirectory: null
         );
         var identity = new WorldAuthorityIdentity(
             Owner: owner,

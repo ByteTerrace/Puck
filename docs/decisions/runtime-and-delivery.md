@@ -203,7 +203,12 @@ belong to the continuing world.
 deployment, and the preservation rules are written to that boundary. The
 authored delta is computed apart from live state, applied only as admitted
 changes, and reversed by rollback with the same conflict checks; rollback never
-installs the old definition wholesale.
+installs the old definition wholesale. Only a metadata change has a preservation
+rule today. While deployed data is scratch (AGENTS.md rule 5), a deployment that
+changes a definition outside its metadata resets that group's hosted state and
+starts the new release fresh, as a first deployment does, rather than refusing;
+the preservation rules for other edits remain open work, and once the owner
+declares hosted data durable such a deployment refuses until a rule carries it.
 
 **Uncapturable machine state is not captured.** A pair carrying machines
 qualifies by boot-anchored reproduction, so addon guest state, applied screen
