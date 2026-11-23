@@ -140,9 +140,10 @@ are evidence for.
    stands, so the debug world's second residency, seen through a window inside
    a painting, held the same gibibyte as the one the seat stands in, and the
    one detail bias coarsened both to fit. Holding such a view's demand to the
-   display pixels it is presented over did not shrink that region: at the
-   bias the budget forces, both residencies already hold their coarsest tiers,
-   so the lever is one residency a world, not demand
+   display pixels it is presented over did not shrink that region
+   (`world.residency`'s `region-named` read the same, above its
+   `region-budget`, with the bias at its ceiling), so the lever is one
+   residency a world, not demand
    ([nested views](streaming-and-memory.md#nested-views-fitted-windows-authored-quality-and-standing-feeds)).
 3. **The debug world is resident twice.** A session whose stream is not what a
    whole reader is handed (`WorldSceneShare.SharesAuthority`) renders a scene of
