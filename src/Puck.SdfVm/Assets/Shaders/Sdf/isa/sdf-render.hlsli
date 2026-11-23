@@ -173,15 +173,11 @@
 #define SDF_OCCLUSION_DEPTH_STEP          1u
 #define SDF_OCCLUSION_LATE_STEP           2u
 #define SDF_OCCLUSION_SIGHT_STEP          3u
-#define SDF_RECEIVER_STEP                 4u
-#define SDF_RECEIVER_REDUCE_STEP          5u
 #define SDF_SHADOW_OPTICAL_CLEAR_STEP     6u
 #define SDF_SHADOW_OPTICAL_TILE_EDGE      16u
 #define SDF_SHADOW_OPTICAL_TEXEL_WORDS    3u
 #define SDF_OCCLUSION_COUNT_STEP          7u
 #define SDF_OCCLUSION_COMPACT_STEP        8u
-#define SDF_RECEIVER_SHIFT                4u
-#define SDF_RECEIVER_ROW                  14u
 #define SDF_COMPACT_ROW                   15u
 #define SDF_SIGHT_ROW                     16u
 #define SDF_SHADOW_CULLED_ENTRY_PHASE     5u

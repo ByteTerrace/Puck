@@ -30,7 +30,7 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (MeshShadowTexelsOffset + (index * sizeof(uint))), value: (rendered ? ((uint)cascades.TexelsOf(index: index)) : 0u));
         }
 
-        for (var index = 0; (index < SdfWorldPackage.MeshShadowCascadeCount); index++) {
+        for (var index = 0; (index < SdfWorldPackage.MeshShadowEntries); index++) {
             var camera = cascades[index];
             var row = (MeshShadowCascadesOffset + ((index * SdfWorldPackage.MeshShadowCascadeRows) * 16));
 
@@ -46,13 +46,15 @@ public static partial class SdfFrameBlock {
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
     /// <param name="camera">The cascade's light camera.</param>
     /// <param name="texels">The texels along each side of the cascade's depth.</param>
-    public static void WriteShadowCamera(Span<byte> block, in SdfMeshShadowCamera camera, int texels) {
+    /// <param name="aspect">The camera's plane's width over its height: one for a whole cascade, the rectangle's for one
+    /// rectangle of a cascade drawn through a viewport of its own.</param>
+    public static void WriteShadowCamera(Span<byte> block, in SdfMeshShadowCamera camera, int texels, float aspect = 1f) {
         WriteVector3(block: block, offset: ViewPosition, value: camera.Position);
         WriteVector3(block: block, offset: ViewRight, value: camera.Right);
         WriteVector3(block: block, offset: ViewUp, value: camera.Up);
         WriteVector3(block: block, offset: ViewForward, value: camera.Forward);
         WriteSingle(block: block, offset: TanHalfFieldOfView, value: camera.HalfHeight);
-        WriteSingle(block: block, offset: AspectRatio, value: 1f);
+        WriteSingle(block: block, offset: AspectRatio, value: aspect);
         WriteSingle(block: block, offset: FrustumOffset, value: 0f);
         WriteSingle(block: block, offset: (FrustumOffset + sizeof(float)), value: 0f);
         WriteSingle(block: block, offset: NearDistance, value: camera.Near);

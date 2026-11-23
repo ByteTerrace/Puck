@@ -583,7 +583,7 @@ is a new interpretation of a row index, and each holder of one is covered:
   - A pick is stamped with the table, by reference, and with the revision of
     the rows its hit was drawn from. A hit's row comes from the mesh pass's
     target, so the mesh pass notes, per view instance, the table and revision
-    it records under, as `SdfWorldPasses.SubmittedFar` keeps a drawn layer's
+    it records under, as `SdfWorldShadows.Submitted` keeps a drawn layer's
     camera; a recording that is abandoned restores the note before it. The
     views pass, which prepares the pick (`SdfWorldPicker.Take`), stamps that
     note and not the frame's latest revision. A view whose mesh pass stood

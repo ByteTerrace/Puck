@@ -144,15 +144,15 @@ compares the whole word. The rules:
   pass reads across.
 - **An index is allocated when its body is first drawn and retired when the
   body has not been drawn for longer than any reader may hold a cascade or a
-  history that names it.** The tables know the holds: the far cascade's
-  (`SdfWorldPasses.Rates`, bounded by the authored far rate, `SdfFrame.FarShadows`),
+  history that names it.** The tables know the holds: each shadow entry's
+  (`SdfWorldShadows`, held until the light's turn tolerance, a cell crossing or
+  a static change redraws it whole, its rectangles redrawn as casters move),
   a V5 static cache's, and V1's history by instance generation. Each hold
   records the frame it was drawn; an index freed at frame F is reusable only
-  once every hold drawn at or before F has been redrawn. The far cascade's
-  two layers are two holds: a split refresh draws its depth and its exit layer
-  on consecutive frames (`SdfFarLayers`), so each layer records its own frame
-  and the older bounds reuse. Until then a held cascade's B1 stays a true
-  statement about the bodies it saw.
+  once every hold drawn at or before F has been redrawn. A rectangle redraw is
+  a hold of its own over its texels, so a body's index reuses once every
+  rectangle and layer that drew it has been redrawn. Until then a held
+  entry's B1 stays a true statement about the bodies it saw.
 - **Reuse advances the generation**, so a word from a cascade or history
   older than the table accounts for can never equal a live body's word. The
   hold rule makes the mismatch impossible; the generation makes an
@@ -271,10 +271,10 @@ compilation to four ulp, so none is allowed.
 
 In metres, at the near half of a cascade's reversed-Z range where depth lies
 in [0.5, 1), one ulp is `R · 2^-24` with `R` the cascade's depth range
-`2 · radius + casters - 1` (`SdfMeshShadowCascades.Cascade`). With the
+`2 · halfExtent + casters - 1` (`SdfMeshShadowCascades.HalfExtentOf`). With the
 default coverage (16 m near, 120 m far, 200 m of casters) the near cascade's
-`R` is about 231 m and the far cascade's about 439 m, so `ε` is 55 µm and
-105 µm; an authored coverage of 20 km gives 4.8 mm. A chord of one body
+`R` is about 235 m and the far cascade's about 465 m, so `ε` is 56 µm and
+111 µm; an authored coverage of 20 km gives 4.8 mm. A chord of one body
 thinner than `ε` along the light reads lit on its dark side; no other
 surface, of any body, is affected.
 

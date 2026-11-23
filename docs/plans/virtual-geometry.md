@@ -786,15 +786,17 @@ with a page identity that includes light projection, geometry and deformation
 incarnation, level and layer (Codex **[record]**), and the day program and
 wind refuse it today; a page pool that allocates and rasterizes only the
 texels receivers demand pays wherever demand is sparse, whether or not every
-page is dirty, and a moving sun does not refuse it. Puck already computes the
-demand: `sdf-caster-receivers.hlsli` reprojects every covered camera sample
-into light-space occupancy cells for the far cascade. The admission measure
+page is dirty, and a moving sun does not refuse it. The demand is every view's
+covered camera samples reprojected into light-space occupancy cells, a mask the
+per-view far cascade once computed (`sdf-caster-receivers.hlsli` in git
+history) before the world's shared, cached entries (`SdfWorldShadows`)
+replaced it. The admission measure
 for a paging experiment is the occupied share of each cascade's texels, read
 from that mask under the moving sun, the meadow's wind, a narrow portal view
 and a sparse-receiver view (the lead's measurement window, no build); a far
 cascade whose receivers occupy a small share of its map in representative
 views briefs the experiment, which pages all three layers together with the
-filter footprint's margin (`SdfMeshCull.ShadowFilterTexels`) and is judged by
+filter footprint's margin (eighteen texels, the widest search disk and the normal offset) and is judged by
 texels written and bytes against the full-layer cascade. Until that measure is
 read, 8c stays rejected. The transmission plan's identity peel is unaffected.
 

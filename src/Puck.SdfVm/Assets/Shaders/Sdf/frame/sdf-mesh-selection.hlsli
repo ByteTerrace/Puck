@@ -26,10 +26,8 @@ void sdfSelectionBox(uint record, uint4 a, uint4 b, uint4 c, uint4 d, out float3
 float sdfSelectionRadius(float3 axis, float3 x, float3 y, float3 z) {
     return (abs(dot(axis, x)) + abs(dot(axis, y))) + abs(dot(axis, z));
 }
-bool sdfSelectionBeyond(float3 axis, float offset, float3 relative, float3 x, float3 y, float3 z, float3 sweep, float reach) {
-    float nearest = (((dot(axis, relative) + offset) - abs(dot(axis, x))) - abs(dot(axis, y))) - abs(dot(axis, z));
-    nearest += min(0.0, dot(axis, sweep));
-    return (nearest - reach * length(axis)) >= 0.0;
+bool sdfSelectionBeyond(float3 axis, float offset, float3 relative, float3 x, float3 y, float3 z) {
+    return ((((dot(axis, relative) + offset) - abs(dot(axis, x))) - abs(dot(axis, y))) - abs(dot(axis, z))) >= 0.0;
 }
 bool sdfSelectionWithin(float3 axis, float low, float high, float3 relative, float3 x, float3 y, float3 z) {
     float middle = dot(relative, axis);
@@ -39,41 +37,32 @@ bool sdfSelectionWithin(float3 axis, float low, float high, float3 relative, flo
 bool sdfSelectionKeeps(float3 center, float3 x, float3 y, float3 z) {
     float kind = asfloat(sdfMeshOcclusionCandidates[4]).x;
     if (kind == 0.0) { return true; }
+    // Kind 3 keeps every caster in a shadow entry's light box whichever way any view faces (SdfMeshCull.OfLightBox).
+    if (kind == 3.0) {
+        float4 origin = asfloat(sdfMeshOcclusionCandidates[10]);
+        float4 lightRight = asfloat(sdfMeshOcclusionCandidates[11]);
+        float4 lightUp = asfloat(sdfMeshOcclusionCandidates[12]);
+        float3 lightForward = asfloat(sdfMeshOcclusionCandidates[13]).xyz;
+        float3 offset = center - origin.xyz;
+        return (sdfSelectionWithin(lightRight.xyz, -origin.w, origin.w, offset, x, y, z) &&
+            sdfSelectionWithin(lightUp.xyz, -origin.w, origin.w, offset, x, y, z) &&
+            sdfSelectionWithin(lightForward, lightRight.w, lightUp.w, offset, x, y, z));
+    }
+    // Kind 1 keeps what may lie in a view's frustum before its far distance (SdfMeshCull.Of).
     float4 eye = asfloat(sdfMeshOcclusionCandidates[5]);
     float4 right = asfloat(sdfMeshOcclusionCandidates[6]);
     float4 up = asfloat(sdfMeshOcclusionCandidates[7]);
     float4 forward = asfloat(sdfMeshOcclusionCandidates[8]);
     float4 lens = asfloat(sdfMeshOcclusionCandidates[9]);
-    float far = eye.w;
-    float3 sweep = 0.0;
-    float reach = 0.0;
-    // Kind 2 is a cascade conditioned on the view's receivers, kind 3 one that keeps every caster in its light box
-    // whichever way the view faces (SdfMeshCull.OfLightBox).
-    if (kind >= 2.0) {
-        float4 origin = asfloat(sdfMeshOcclusionCandidates[10]);
-        float4 lightRight = asfloat(sdfMeshOcclusionCandidates[11]);
-        float4 lightUp = asfloat(sdfMeshOcclusionCandidates[12]);
-        float3 lightForward = asfloat(sdfMeshOcclusionCandidates[13]).xyz;
-        float3 relative = center - origin.xyz;
-        if (!sdfSelectionWithin(lightRight.xyz, -origin.w, origin.w, relative, x, y, z) ||
-            !sdfSelectionWithin(lightUp.xyz, -origin.w, origin.w, relative, x, y, z) ||
-            !sdfSelectionWithin(lightForward, lightRight.w, lightUp.w, relative, x, y, z)) { return false; }
-        if (kind == 3.0) { return true; }
-        float3 sphere = origin.xyz + lightForward * (lightUp.w - origin.w);
-        float deepest = dot(sphere - eye.xyz, forward.xyz) + origin.w;
-        reach = lens.w;
-        far = min(far, deepest) + reach;
-        sweep = lightForward * (lightUp.w - lightRight.w);
-    }
     float3 relative = center - eye.xyz;
     float vertical = right.w * (1.0 + lens.z);
     float horizontal = up.w * vertical;
-    return !(sdfSelectionBeyond(-forward.xyz, forward.w, relative, x, y, z, sweep, reach) ||
-        sdfSelectionBeyond(forward.xyz, -far, relative, x, y, z, sweep, reach) ||
-        sdfSelectionBeyond(right.xyz - (lens.x + horizontal) * forward.xyz, 0.0, relative, x, y, z, sweep, reach) ||
-        sdfSelectionBeyond((lens.x - horizontal) * forward.xyz - right.xyz, 0.0, relative, x, y, z, sweep, reach) ||
-        sdfSelectionBeyond(up.xyz - (lens.y + vertical) * forward.xyz, 0.0, relative, x, y, z, sweep, reach) ||
-        sdfSelectionBeyond((lens.y - vertical) * forward.xyz - up.xyz, 0.0, relative, x, y, z, sweep, reach));
+    return !(sdfSelectionBeyond(-forward.xyz, forward.w, relative, x, y, z) ||
+        sdfSelectionBeyond(forward.xyz, -eye.w, relative, x, y, z) ||
+        sdfSelectionBeyond(right.xyz - (lens.x + horizontal) * forward.xyz, 0.0, relative, x, y, z) ||
+        sdfSelectionBeyond((lens.x - horizontal) * forward.xyz - right.xyz, 0.0, relative, x, y, z) ||
+        sdfSelectionBeyond(up.xyz - (lens.y + vertical) * forward.xyz, 0.0, relative, x, y, z) ||
+        sdfSelectionBeyond((lens.y - vertical) * forward.xyz - up.xyz, 0.0, relative, x, y, z));
 }
 // Whether a draw's detail band keeps it in this pass (SdfMeshBand, SDF_MESH_BAND_WORD): a draw with no band always, a
 // group's floor where its cell projects to at most half a display pixel over the nearest point of the band's sphere (a

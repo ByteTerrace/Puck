@@ -77,10 +77,6 @@ public sealed class SdfKernelInterfaces {
     public const int MeshOcclusionLateStep = 2;
     /// <summary>Portal sight step.</summary>
     public const int MeshOcclusionSightStep = 3;
-    /// <summary>Receiver marking step.</summary>
-    public const int MeshReceiverStep = 4;
-    /// <summary>Receiver hierarchy reduction step.</summary>
-    public const int MeshReceiverReduceStep = 5;
     /// <summary>Clears the optical texels that an earlier raster dirtied.</summary>
     public const int MeshShadowOpticalClearStep = 6;
     /// <summary>Compaction count step: each group of candidates counts the commands a phase emitted in its slots.</summary>
@@ -88,10 +84,6 @@ public sealed class SdfKernelInterfaces {
     /// <summary>Compaction step: each group copies a phase's emitted commands, in candidate order, to the phase's
     /// compact list after the counts of the groups before it, and the last group writes the phase's draw count.</summary>
     public const int MeshOcclusionCompactStep = 8;
-    /// <summary>Cascade texels per receiver cell, as a power of two.</summary>
-    public const int MeshReceiverShift = 4;
-    /// <summary>Receiver sample grid and jitter row.</summary>
-    public const int MeshReceiverRow = 14;
     /// <summary>The compaction row: the command slots a phase holds, the first word of the compact lists, the first word
     /// of the group counts and the groups a phase counts.</summary>
     public const int MeshCompactRow = 15;

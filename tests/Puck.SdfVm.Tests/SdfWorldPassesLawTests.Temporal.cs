@@ -306,10 +306,10 @@ public sealed partial class SdfWorldPassesLawTests {
     public void ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput() {
         using var rig = new TemporalRig(views: 1, temporal: true);
 
-        // The temporal fragment with its display stage, its one stable shadow slot drawing no second slot's cascade, and no distant map while the frame has none.
+        // The temporal fragment with its display stage; no view draws shadows, which are its world's.
         Assert.Equal(
             actual: rig.Passes.FragmentOf(instance: "world")!.Passes.Select(selector: static pass => pass.Name),
-            expected: SdfWorldPackage.WithDisplay(fragment: SdfWorldPackage.TemporalFragment, quality: BloomQuality.Off).Passes.Select(selector: static pass => pass.Name).Where(predicate: static name => (name is not (SdfWorldPackage.Parts.ShadowSecond or SdfWorldPackage.Parts.ShadowDistant)))
+            expected: SdfWorldPackage.WithDisplay(fragment: SdfWorldPackage.TemporalFragment, quality: BloomQuality.Off).Passes.Select(selector: static pass => pass.Name)
         );
         var plan = rig.World.Plan!;
 

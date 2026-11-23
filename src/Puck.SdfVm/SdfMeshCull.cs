@@ -3,18 +3,13 @@ using Puck.Abstractions.Cameras;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// What one raster pass of a view keeps of a frame's mesh draws: a view's mesh and glass passes the draws whose box
-/// (<see cref="SdfMeshBox"/>) may lie in the view's frustum before the frame's far distance, a shadow cascade the draws
-/// whose box lies in its light's box and, swept along the light, may shadow a receiver the view shows, a held shadow map
-/// the draws whose box lies in its light's box (<see cref="OfLightBox"/>), and <see cref="None"/> every draw. A draw with
-/// no host box is always kept. Two culls are equal when they keep by the same values, which a consumer that holds one
-/// across frames compares (<see cref="SdfMotionScope"/>).
+/// What one raster pass keeps of a frame's mesh draws: a view's mesh and glass passes the draws whose box
+/// (<see cref="SdfMeshBox"/>) may lie in the view's frustum before the frame's far distance, a world's shadow entry the
+/// draws whose box lies in its light's box (<see cref="OfLightBox"/>), and <see cref="None"/> every draw. A draw with no
+/// host box is always kept. Two culls are equal when they keep by the same values, which a consumer that holds one across
+/// frames compares (<see cref="SdfMotionScope"/>).
 /// </summary>
 public readonly record struct SdfMeshCull {
-    /// <summary>The texels beside a receiver a cascade's shadow filter reads at most: the blocker search's widest disk
-    /// (<c>SdfMeshShadowMaxTexels</c>, <c>passes/sdf-surface-stage.hlsli</c>) and the receiver's normal offset, rounded
-    /// up.</summary>
-    public const float ShadowFilterTexels = 18f;
     /// <summary>The share of a view's near distance a draw is kept in front of: a face standing on the near plane, as a
     /// portal frame's face stands on the glass a window's camera starts at, rasterizes where its depth rounds onto the
     /// plane, so the cull keeps what lies within a thousandth of the distance before it.</summary>
@@ -24,27 +19,23 @@ public readonly record struct SdfMeshCull {
     private readonly SdfMeshShadowCamera m_cascade;
     private readonly float m_far;
     private readonly float m_margin;
-    private readonly float m_reach;
     private readonly byte m_kind;
 
-    private SdfMeshCull(byte kind, CameraSnapshot camera, float far, float margin, SdfMeshShadowCamera cascade, float reach) {
+    private SdfMeshCull(byte kind, CameraSnapshot camera, float far, float margin, SdfMeshShadowCamera cascade) {
         m_kind = kind;
         m_camera = camera;
         m_far = far;
         m_margin = margin;
         m_cascade = cascade;
-        m_reach = reach;
     }
 
     /// <summary>Gets the cull that keeps every draw.</summary>
     public static SdfMeshCull None => default;
 
-    /// <summary>Returns what the cull keeps by, for a report: the view's frustum, a cascade's casters, a light's box, or
-    /// every draw.</summary>
+    /// <summary>Returns what the cull keeps by, for a report: the view's frustum, a light's box, or every draw.</summary>
     /// <returns>The name.</returns>
     public override string ToString() => (m_kind switch {
         1 => "view",
-        2 => "cascade",
         3 => "light-box",
         _ => "every-draw",
     });
@@ -57,7 +48,7 @@ public readonly record struct SdfMeshCull {
         rows[2] = new(m_camera.Right, m_camera.TanHalfFieldOfView);
         rows[3] = new(m_camera.Up, m_camera.AspectRatio);
         rows[4] = new(m_camera.Forward, m_camera.Near);
-        rows[5] = new(m_camera.FrustumOffset.X, m_camera.FrustumOffset.Y, m_margin, m_reach);
+        rows[5] = new(m_camera.FrustumOffset.X, m_camera.FrustumOffset.Y, m_margin, 0f);
         rows[6] = new(m_cascade.Position, m_cascade.HalfHeight);
         rows[7] = new(m_cascade.Right, m_cascade.Near);
         rows[8] = new(m_cascade.Up, m_cascade.Far);
@@ -75,37 +66,18 @@ public readonly record struct SdfMeshCull {
         cascade: default,
         far: far,
         kind: 1,
-        margin: SdfMeshBox.MarginOf(height: height, width: width),
-        reach: 0f
+        margin: SdfMeshBox.MarginOf(height: height, width: width)
     );
-    /// <summary>Returns the cull of one of a view's shadow cascades.</summary>
-    /// <param name="cascade">The cascade's light camera.</param>
-    /// <param name="camera">The view's camera, whose receivers the cascade shadows.</param>
-    /// <param name="far">The frame's far distance, in world units.</param>
-    /// <param name="texels">The texels across a side of the cascade's depth.</param>
-    /// <param name="width">The pixels across the view's render extent.</param>
-    /// <param name="height">The pixels down the view's render extent.</param>
-    /// <returns>The cull.</returns>
-    public static SdfMeshCull Of(in SdfMeshShadowCamera cascade, in CameraSnapshot camera, float far, int texels, uint width, uint height) => new(
-        camera: camera,
-        cascade: cascade,
-        far: far,
-        kind: 2,
-        margin: SdfMeshBox.MarginOf(height: height, width: width),
-        reach: (ShadowFilterTexels * ((2f * cascade.HalfHeight) / Math.Max(val1: texels, val2: 1)))
-    );
-
-    /// <summary>Returns the cull of a shadow map held across camera turns and moves (the distant map): the draws whose box
-    /// lies in its light's box, whatever the view shows.</summary>
-    /// <param name="cascade">The map's light camera.</param>
+    /// <summary>Returns the cull of a world's shadow entry (<see cref="SdfWorldShadows"/>), held across every view's turns
+    /// and moves: the draws whose box lies in its light's box, whatever any view shows.</summary>
+    /// <param name="cascade">The entry's light camera.</param>
     /// <returns>The cull.</returns>
     public static SdfMeshCull OfLightBox(in SdfMeshShadowCamera cascade) => new(
         camera: default,
         cascade: cascade,
         far: 0f,
         kind: 3,
-        margin: 0f,
-        reach: 0f
+        margin: 0f
     );
 
     /// <summary>Returns whether the pass draws a draw of a given box.</summary>
@@ -115,7 +87,6 @@ public readonly record struct SdfMeshCull {
         (box is not { } bounded) ||
         (m_kind switch {
             1 => bounded.MaySee(camera: in m_camera, far: m_far, margin: m_margin),
-            2 => (bounded.MayCast(cascade: in m_cascade) && bounded.MayShadow(camera: in m_camera, cascade: in m_cascade, far: m_far, margin: m_margin, reach: m_reach)),
             3 => bounded.MayCast(cascade: in m_cascade),
             _ => true,
         })

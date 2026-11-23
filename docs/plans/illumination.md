@@ -710,12 +710,10 @@ them; its checks in build step 1 are owed to a GPU leg.
   further to the side is not found, which removes the outer part of every soft
   edge wider than that. Both are [transmission](transmission.md#implementation-steps)'s
   metre-sized filter.
-- Two smaller costs: each cascade's bounding sphere sits on the view's forward
-  axis, so a camera turn moves the far cascade's centre and forces a redraw
-  that could have been held; and a program with glass shadows holds three
-  optical-depth buffers per shadowed view sized with the shadow tier
-  (`SdfWorldPackage.WithShadows`), 144 MB of the 252 MB such a view holds at
-  the highest tier, with a whole-buffer clear on every cascade draw.
+- The cascades are a world's, eye-centred and cached, and every view reads them
+  ([the decision](../decisions/rendering.md#a-worlds-shadows-are-drawn-once-and-cost-what-moved)),
+  so a camera turn moves no cascade and a program with glass shadows holds its
+  three optical-depth buffers once an anchor, not once a view.
 
 **The design, and what each part still owes.**
 

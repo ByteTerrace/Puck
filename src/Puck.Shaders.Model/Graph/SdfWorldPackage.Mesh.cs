@@ -3,8 +3,8 @@ namespace Puck.Shaders;
 public static partial class SdfWorldPackage {
     /// <summary>The pass-block value holding the cascade set's orthographic light cameras (<c>SdfMeshShadowCascades</c>),
     /// four rows each: position and half height, right and aspect, up and near distance, forward and far distance
-    /// (<c>float4</c>, <see cref="MeshShadowCascadeRows"/> a camera of <see cref="MeshShadowCascadeCount"/>): each entry's,
-    /// then the camera the far entry's exit layer was drawn from.</summary>
+    /// (<c>float4</c>, <see cref="MeshShadowCascadeRows"/> a camera of <see cref="MeshShadowEntries"/>): each entry's, the
+    /// camera its world's one shadow solution drew it from (<c>SdfWorldShadows</c>).</summary>
     public const string MeshShadowCascades = "meshShadowCascades";
     /// <summary>The pass-block value holding the cascade set's entries the frame rendered, a prefix of the set; zero when
     /// no slotted light emits or the view skips shadows (<c>uint</c>).</summary>
@@ -19,8 +19,8 @@ public static partial class SdfWorldPackage {
     /// <c>Secondary</c>), and <c>0xFFFFFFFF</c> past the rendered entries (<c>uint4</c>).</summary>
     public const string MeshShadowRoles = "meshShadowRoles";
     /// <summary>The pass-block value holding the texels along each side of each cascade entry's depth, zero past the
-    /// rendered entries (<c>uint4</c>): the view's shadow quality selects the cascades' and the authored distant map the
-    /// distant entry's (<see cref="WithShadows"/>).</summary>
+    /// rendered entries (<c>uint4</c>): the world's shadow quality selects the cascades' and the authored distant map the
+    /// distant entry's.</summary>
     public const string MeshShadowTexels = "meshShadowTexels";
     /// <summary>The pass-block value holding the lattices one bake dispatch samples, <see cref="MeshBakeLatticeRows"/> rows
     /// each: the first sample's world position and, as bits, the lattice's first sample in the dispatch; the spacing along
@@ -44,7 +44,9 @@ public static partial class SdfWorldPackage {
     /// <summary>The far shadow cascade's depth, sampled by the surface pass.</summary>
     public const string MeshShadowFar = "meshShadowFar";
     /// <summary>The near shadow cascade's exit layer, sampled by the surface pass: per texel the depth of the nearest
-    /// face turned from the light, where the light leaves the first solid it crosses (<see cref="Parts.ShadowNearExit"/>).</summary>
+    /// face turned from the light, where the light leaves the first solid it crosses, zero (the far plane) where none was
+    /// drawn. A receiver turned from the light compares against it, so the body the light crosses to reach that receiver
+    /// lets it through while any solid in front of that body still shadows it.</summary>
     public const string MeshShadowNearExit = "meshShadowNearExit";
     /// <summary>The far shadow cascade's exit layer, sampled by the surface pass.</summary>
     public const string MeshShadowFarExit = "meshShadowFarExit";
@@ -85,17 +87,13 @@ public static partial class SdfWorldPackage {
     public const int MeshIrradianceLevelCount = 3;
     /// <summary>The secondary shadow role's cascade depth, sampled by the surface pass.</summary>
     public const string MeshShadowSecond = "meshShadowSecond";
-    /// <summary>The entries of a view's cascade set (<c>SdfMeshShadowCascades</c>), each with its own depth targets and
-    /// pass: the primary role's near and far, then the secondary role's, then the primary role's distant map.</summary>
+    /// <summary>The entries of a world's cascade set (<c>SdfMeshShadowCascades</c>), each with its own depth layers: the
+    /// primary role's near and far, then the secondary role's, then the primary role's distant map.</summary>
     public const int MeshShadowEntries = 4;
-    /// <summary>The light cameras the pass block carries: each cascade entry's, then the camera the far entry's exit layer
-    /// was drawn from, which trails the far camera by a frame while a refresh draws the far entry's two layers on
-    /// consecutive frames.</summary>
-    public const int MeshShadowCascadeCount = (MeshShadowEntries + 1);
     /// <summary>The rows one cascade's light camera takes in <see cref="MeshShadowCascades"/>.</summary>
     public const int MeshShadowCascadeRows = 4;
     /// <summary>The most texels along each side of one shadow cascade's depth, which full shadow quality renders; a lower
-    /// quality renders a power-of-two fraction of it (<see cref="WithShadows"/>).</summary>
+    /// quality renders a power-of-two fraction of it.</summary>
     public const int MeshShadowResolution = 2048;
     /// <summary>The side in texels of an optical-shadow clear tile.</summary>
     public const uint ShadowOpticalTileEdge = 16;
@@ -116,125 +114,4 @@ public static partial class SdfWorldPackage {
     public const string MeshShadowFarOptical = "meshShadowFarOptical";
     /// <summary>The second light's cascade optical-depth term.</summary>
     public const string MeshShadowSecondOptical = "meshShadowSecondOptical";
-    private static readonly string[] ShadowOpticalStorages = [Parts.ShadowNearOptical, Parts.ShadowFarOptical, Parts.ShadowSecondOptical];
-
-    /// <summary>Adds optical storage and dependencies to the cascades of a program with positive glass shadow density.</summary>
-    /// <param name="fragment">The fragment before cascade sizing.</param>
-    /// <returns>The fragment with its optical cascades.</returns>
-    public static RenderGraphPackageFragment WithGlassShadows(RenderGraphPackageFragment fragment) {
-        ArgumentNullException.ThrowIfNull(fragment);
-        return fragment with {
-            Resources = [.. fragment.Resources, .. ShadowOpticalStorages.Select(static name => ShadowOptical(name, MeshShadowResolution))],
-            Passes = [.. fragment.Passes.Select(static pass => {
-                var cascade = Array.IndexOf(ShadowParts, pass.Name);
-                if (cascade >= 0) {
-                    return pass with {
-                        Outputs = [.. pass.Outputs, new ResourceReference(Name: ShadowOpticalStorages[cascade])],
-                        OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.FragmentWrite],
-                    };
-                }
-                return pass.Name != Parts.Surface ? pass : pass with {
-                    Inputs = [.. pass.Inputs, .. ShadowOpticalStorages.Select(static name => new ResourceReference(Name: name))],
-                    InputAccesses = [.. pass.InputAccesses, .. ShadowOpticalStorages.Select(static _ => RenderGraphPortAccess.ComputeRead)],
-                };
-            })],
-        };
-    }
-
-    // The cascades that carry glass extinction, in the order of their optical storages.
-    private static readonly string[] ShadowParts = [Parts.ShadowNear, Parts.ShadowFar, Parts.ShadowSecond];
-    private static readonly string[] DistantStorages = [Parts.ShadowDistantDepth, Parts.ShadowDistantExit];
-    private static readonly string[] DistantBackStorages = [Parts.ShadowDistantBackDepth, Parts.ShadowDistantBackExit];
-    private static readonly string[] FarStaticStorages = [Parts.ShadowFarStaticDepth, Parts.ShadowFarStaticExit];
-    private static readonly string[] ShadowStorages = [
-        Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth,
-        Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit,
-        .. ShadowOpticalStorages,
-    ];
-
-    /// <summary>Returns a fragment without the shadow cascades, for a view whose quality skips shadows: no cascade pass, no
-    /// cascade depth, and a surface pass that reads none, so the view allocates none of the cascades and its surface pass
-    /// binds the tables' filler in their place.</summary>
-    /// <param name="fragment">The fragment, any of the package's.</param>
-    /// <returns>The fragment without the cascades.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="fragment"/> is <see langword="null"/>.</exception>
-    public static RenderGraphPackageFragment WithoutShadows(RenderGraphPackageFragment fragment) {
-        ArgumentNullException.ThrowIfNull(argument: fragment);
-
-        return Without(fragment: fragment, parts: [.. ShadowParts, Parts.ShadowDistant], storages: [.. ShadowStorages, .. DistantStorages]);
-    }
-    /// <summary>Returns a fragment whose cascades are <paramref name="texels"/> a side, with the second shadow slot's
-    /// cascade only when <paramref name="second"/> and the distant map only when <paramref name="distantTexels"/> is
-    /// positive, at that size, with its back map only when <paramref name="distantSliced"/>, and the far cascade's static
-    /// layer only when <paramref name="farStatic"/>: a view allocates the cascades its shadow quality, its world's shadow
-    /// slots, its world's distant map and its far cascade's rate draw, and no more. The back map's two depths are further
-    /// outputs of the distant pass, which draws a redraw spread over several frames into them and copies them into the map
-    /// the surface pass reads once its last share is drawn. The static layer's two depths are further outputs of the far
-    /// pass, which draws the static scene's casters into them and copies them into its depth and exit layer before it
-    /// draws the moving casters.</summary>
-    /// <param name="fragment">The fragment, any of the package's that holds the cascades.</param>
-    /// <param name="texels">The texels along each side of every cascade, from 1 through <see cref="MeshShadowResolution"/>.</param>
-    /// <param name="second">Whether the fragment keeps the second shadow slot's cascade.</param>
-    /// <param name="distantTexels">The texels along each side of the distant map, from 1 through
-    /// <see cref="MeshDistantShadowMaxResolution"/>, or zero for a fragment without it.</param>
-    /// <param name="distantSliced">Whether the distant map keeps a back map for redraws spread over several frames;
-    /// ignored without the distant map.</param>
-    /// <param name="farStatic">Whether the far cascade keeps a static layer, which a cascade refreshed at a reduced rate
-    /// holds between static changes.</param>
-    /// <returns>The fragment with the cascades sized and chosen.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="fragment"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="texels"/> lies outside 1 through
-    /// <see cref="MeshShadowResolution"/>, or <paramref name="distantTexels"/> is negative or past
-    /// <see cref="MeshDistantShadowMaxResolution"/>.</exception>
-    public static RenderGraphPackageFragment WithShadows(RenderGraphPackageFragment fragment, int texels, bool second, int distantTexels, bool distantSliced = false, bool farStatic = false) {
-        ArgumentNullException.ThrowIfNull(argument: fragment);
-        ArgumentOutOfRangeException.ThrowIfLessThan(value: texels, other: 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: texels, other: MeshShadowResolution);
-        ArgumentOutOfRangeException.ThrowIfNegative(value: distantTexels);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: distantTexels, other: MeshDistantShadowMaxResolution);
-
-        var shaped = (second ? fragment : Without(fragment: fragment, parts: [Parts.ShadowSecond], storages: [Parts.ShadowSecondDepth, Parts.ShadowSecondExit, Parts.ShadowSecondOptical]));
-
-        shaped = ((distantTexels > 0) ? shaped : Without(fragment: shaped, parts: [Parts.ShadowDistant], storages: DistantStorages));
-        if ((distantTexels > 0) && distantSliced) {
-            shaped = shaped with {
-                Passes = [.. shaped.Passes.Select(selector: static pass => ((pass.Name != Parts.ShadowDistant) ? pass : (pass with {
-                    OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
-                    Outputs = [.. pass.Outputs, .. DistantBackStorages.Select(selector: static name => new ResourceReference(Name: name))],
-                })))],
-                Resources = [.. shaped.Resources, .. DistantBackStorages.Select(selector: name => ShadowDepth(name: name, texels: distantTexels))],
-            };
-        }
-        if (farStatic) {
-            shaped = shaped with {
-                Passes = [.. shaped.Passes.Select(selector: static pass => ((pass.Name != Parts.ShadowFar) ? pass : (pass with {
-                    OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
-                    Outputs = [.. pass.Outputs, .. FarStaticStorages.Select(selector: static name => new ResourceReference(Name: name))],
-                })))],
-                Resources = [.. shaped.Resources, .. FarStaticStorages.Select(selector: name => ShadowDepth(name: name, texels: texels))],
-            };
-        }
-
-        return (shaped with {
-            Resources = [.. shaped.Resources.Select(selector: resource => ((DistantStorages.Contains(value: resource.Name) || DistantBackStorages.Contains(value: resource.Name))
-                ? ShadowDepth(name: resource.Name, texels: distantTexels)
-                : ((ShadowStorages.Contains(value: resource.Name) && (texels != MeshShadowResolution))
-                    ? (ShadowOpticalStorages.Contains(resource.Name) ? ShadowOptical(resource.Name, texels) : ShadowDepth(name: resource.Name, texels: texels))
-                    : resource)))],
-        });
-    }
-    // The fragment without some of its passes and storages, its other passes reading none of the storages.
-    private static RenderGraphPackageFragment Without(RenderGraphPackageFragment fragment, string[] parts, string[] storages) => fragment with {
-        Passes = [.. fragment.Passes.Where(predicate: pass => !parts.Contains(value: pass.Name)).Select(selector: pass => {
-            var kept = Enumerable.Range(start: 0, count: pass.Inputs.Count).Where(predicate: index => !storages.Contains(value: pass.Inputs[index].Name)).ToArray();
-
-            return ((kept.Length == pass.Inputs.Count)
-                ? pass
-                : (pass with {
-                    InputAccesses = [.. kept.Select(selector: index => pass.InputAccesses[index])],
-                    Inputs = [.. kept.Select(selector: index => pass.Inputs[index])],
-                }));
-        })],
-        Resources = [.. fragment.Resources.Where(predicate: resource => !storages.Contains(value: resource.Name))],
-    };
 }
