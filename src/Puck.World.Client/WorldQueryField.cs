@@ -40,15 +40,7 @@ public sealed class WorldQueryField {
     /// <param name="maxDist">The farthest distance tested.</param>
     /// <param name="hit">The nearer hit, or default.</param>
     /// <returns>Whether any part was hit.</returns>
-    public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) {
-        var found = Fixed.Raycast(dir: dir, hit: out hit, maxDist: maxDist, origin: origin);
-
-        if ((Responding is { } responding) && responding.Raycast(dir: dir, hit: out var other, maxDist: (found ? hit.Distance : maxDist), origin: origin) && (!found || (other.Distance < hit.Distance))) {
-            hit = other;
-            found = true;
-        }
-        return found;
-    }
+    public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) => Cast(dir: dir, hit: out hit, maxDist: maxDist, origin: origin, radius: null);
     /// <summary>Sweeps a sphere against the union (<see cref="IWorldQuery.SphereCast"/>): the nearer of the parts' hits.</summary>
     /// <param name="origin">The sweep's origin.</param>
     /// <param name="dir">The sweep's direction.</param>
@@ -56,15 +48,21 @@ public sealed class WorldQueryField {
     /// <param name="maxDist">The farthest distance swept.</param>
     /// <param name="hit">The nearer hit, or default.</param>
     /// <returns>Whether any part was hit.</returns>
-    public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) {
-        var found = Fixed.SphereCast(dir: dir, hit: out hit, maxDist: maxDist, origin: origin, radius: radius);
+    public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) => Cast(dir: dir, hit: out hit, maxDist: maxDist, origin: origin, radius: radius);
+    // The nearer of the parts' hits, each part cast with its own march out to the nearest hit so far: a ray when no radius
+    // is given, else a sphere sweep.
+    private bool Cast(FixedPosition origin, FixedVector3 dir, FixedQ4816? radius, FixedQ4816 maxDist, out RayHit hit) {
+        var found = CastPart(dir: dir, hit: out hit, maxDist: maxDist, origin: origin, part: Fixed, radius: radius);
 
-        if ((Responding is { } responding) && responding.SphereCast(dir: dir, hit: out var other, maxDist: (found ? hit.Distance : maxDist), origin: origin, radius: radius) && (!found || (other.Distance < hit.Distance))) {
+        if ((Responding is { } responding) && CastPart(dir: dir, hit: out var other, maxDist: (found ? hit.Distance : maxDist), origin: origin, part: responding, radius: radius) && (!found || (other.Distance < hit.Distance))) {
             hit = other;
             found = true;
         }
         return found;
     }
+    private static bool CastPart(SdfFieldEvaluator part, FixedPosition origin, FixedVector3 dir, FixedQ4816? radius, FixedQ4816 maxDist, out RayHit hit) => ((radius is { } sphere)
+        ? part.SphereCast(dir: dir, hit: out hit, maxDist: maxDist, origin: origin, radius: sphere)
+        : part.Raycast(dir: dir, hit: out hit, maxDist: maxDist, origin: origin));
     /// <summary>Tests whether a sphere overlaps any part (<see cref="IWorldQuery.Overlap"/>).</summary>
     /// <param name="center">The sphere's center.</param>
     /// <param name="radius">The sphere's radius.</param>
