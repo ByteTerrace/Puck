@@ -18,6 +18,10 @@ public sealed partial class WorldServer {
         }
     }
 
+    /// <summary>Resolves which authority each of this world's adjacency neighbours is and attaches to it. The host
+    /// calls it at a boundary where no authority it steps holds a prepared or executing tick
+    /// (<see cref="WorldAdjacencyFields.ResolveNeighbours"/>).</summary>
+    public void ResolveAdjacencyNeighbours() => m_adjacencyFields?.ResolveNeighbours();
     internal ImmutableArray<WorldAdjacencyProjection> PrepareAdjacency(ulong tick) {
         if (m_adjacencies is null) { return []; }
         if (m_population.HasAdjacencyImage(tick)) { return m_population.AdjacencyProjections; }
@@ -48,12 +52,27 @@ public sealed partial class WorldServer {
         if (ReferenceEquals(PreparingArrival, this)) { PrepareAdjacencyContacts(); }
     }
 
-    /// <summary>Prepares the upcoming tick's adjacency input for a continuum applied at a host boundary.</summary>
+    /// <summary>Pins the upcoming tick's adjacency input at a host boundary, for a continuum applied there. Each call
+    /// reads the neighbours' records again, so the input leaves out every body that has landed here since the last:
+    /// a neighbour's record still shows a traveler at the slot it left until that neighbour's next delivery. The
+    /// tick's correction allowance opens with the first call and carries through the tick.</summary>
     public void PrepareAdjacencyContacts() {
         lock (AuthorityGate) {
             if (m_adjacencies is null || m_tick.PendingReason is not null) { return; }
-            var tick = NextInputTick;
-            m_population.BeginAdjacencyContacts(tick, PrepareAdjacency(tick));
+            m_population.BeginAdjacencyContacts(NextInputTick, (m_adjacencyFields is { } fields) ? fields.Prepare() : [.. m_adjacencies.Visuals()]);
         }
+    }
+
+    /// <summary>Lands a recorded arrival again under the preparation a live arrival lands under
+    /// (<see cref="WorldTransferEscrow.TryReland"/>), so a re-drive pins the same input the recording did.</summary>
+    /// <param name="arrival">The recorded arrival.</param>
+    /// <param name="recorded">The outcome the recording kept.</param>
+    /// <param name="reason">Why the arrival did not land again, or empty.</param>
+    /// <returns><see langword="true"/> when the arrival landed as recorded.</returns>
+    internal bool RelandArrival(WorldCrossingArrival arrival, WorldArrivalOutcome? recorded, out string reason) {
+        using var gate = EnterAuthorityGate();
+        using var prepare = PrepareArrivals();
+
+        return m_transferEscrow.TryReland(arrival: arrival, reason: out reason, recorded: recorded);
     }
 }

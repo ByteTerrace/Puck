@@ -153,6 +153,20 @@ public sealed partial class WorldInstanceHost {
         m_wavePhase = WavePhase.Idle;
     }
     // Whether the row's instance is still the one running under its name: an earlier row's settle can stop it.
+    // Whether every authority this host steps stands between ticks: none holds a tick that is prepared, executing or
+    // held on a dependency. Only then may one authority read another's live definition and observation door.
+    private bool NoTickPending() {
+        if (m_stepThread.InFlight) {
+            return false;
+        }
+        foreach (var instance in m_instances.Values) {
+            if (instance.Server.Tick.PendingReason is not null) {
+                return false;
+            }
+        }
+
+        return true;
+    }
     private bool StillRuns(WaveRow row) => (m_instances.TryGetValue(key: row.Instance.Name, value: out var current) && ReferenceEquals(objA: current, objB: row.Instance));
     // Whether the row still runs and may take another tick.
     private bool StillSteps(WaveRow row) => (StillRuns(row: row) && !row.Instance.Server.IsRetiring && !row.Instance.Server.Tick.ExecutionInterrupted);
@@ -162,6 +176,17 @@ public sealed partial class WorldInstanceHost {
     private bool ComposeWave(WaitDeadline deadline) {
         m_wave.Clear();
         m_waveNext = 0;
+        // No row holds a prepared tick yet, so each may read its neighbours' authorities here; once the first row below
+        // is prepared, a later row's prepare may not (WorldAdjacencyFields).
+        if (NoTickPending()) {
+            for (var index = 0; (index < m_waveRowCount); index++) {
+                var row = m_waveRows[index];
+
+                if (!row.Administrative && !row.Done && StillSteps(row: row)) {
+                    row.Instance.Server.ResolveAdjacencyNeighbours();
+                }
+            }
+        }
         for (var index = 0; (index < m_waveRowCount); index++) {
             var row = m_waveRows[index];
 

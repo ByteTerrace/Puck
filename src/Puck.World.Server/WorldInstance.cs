@@ -145,6 +145,9 @@ public sealed class WorldInstance : IDisposable {
     /// the durable stop, 0) — nothing is banked toward a step that will not happen, and resuming continues on the
     /// identical schedule the instance would have kept had it never paused.</summary>
     public ulong ScheduleAccumulatorTicks { get; set; }
+    /// <summary>Gets or sets whether a human occupied a body of this instance when the host last read it between two
+    /// of its ticks. The host answers from it while the instance holds a tick, when its population may not be read.</summary>
+    public bool OccupiedBetweenTicks { get; set; }
     /// <summary>This instance's own authoritative server — a distinct object graph per instance.</summary>
     public WorldServer Server { get; }
     /// <summary>The document path this instance currently answers for.</summary>

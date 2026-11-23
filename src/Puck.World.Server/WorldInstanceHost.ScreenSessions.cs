@@ -151,17 +151,23 @@ public sealed partial class WorldInstanceHost {
     private readonly Dictionary<string, int> m_screenDepths = new(comparer: StringComparer.Ordinal);
     private readonly Queue<string> m_screenDepthQueue = new();
 
-    // Whether an instance has a body a human occupies: someone stands in it.
+    // Whether an instance has a body a human occupies: someone stands in it. An instance that holds a tick (prepared,
+    // executing or held on a dependency while another row of its wave settles) answers as it stood before that tick:
+    // its population is its authority's until the tick completes.
     private static bool IsOccupied(WorldInstance instance) {
-        var population = instance.Server.Population;
-
-        for (var index = 0; (index < population.Capacity); index++) {
-            if (population.IsHumanOccupied(bodyIndex: index)) {
-                return true;
-            }
+        if (instance.Server.Tick.PendingReason is not null) {
+            return instance.OccupiedBetweenTicks;
         }
 
-        return false;
+        var population = instance.Server.Population;
+        var occupied = false;
+
+        for (var index = 0; (!occupied && (index < population.Capacity)); index++) {
+            occupied = population.IsHumanOccupied(bodyIndex: index);
+        }
+        instance.OccupiedBetweenTicks = occupied;
+
+        return occupied;
     }
 
     // The boot world's nesting depth (views.nestingDepth): how many observations deep a presentation shows another

@@ -820,6 +820,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// flight and answers <see cref="WorldStepThread.ExecuteWait"/>; <see langword="null"/> waits for the tick.</param>
     public ulong TryStepAuthority(WorldServer server, WorldReplayTape? tape, Action<ulong> publishTick, in FixedStepContext context, HostPacing pacing,
         WaitDeadline deadline, out WaitReason? pending, WaitDeadline? collectBy = null) {
+        // No authority holds a tick here, this one included, so it may read its neighbours.
+        if (NoTickPending()) {
+            server.ResolveAdjacencyNeighbours();
+        }
         var completed = WorldServerStepShell.TryStep(server, tape, publishTick, in context, pacing, deadline, out pending, m_stepThread, collectBy);
 
         // The tick's poses are delivered: a seat routed to this world presents the look step the tick carried.
