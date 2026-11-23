@@ -187,6 +187,9 @@ public sealed partial class WorldScreenBinder {
             }
 
             window.View = SharedViewOf(feed: feed);
+            // What the glass shows of its world on the display, which weighs and lights the scene it is a view of.
+            window.DisplayShare = (Settings?.NestedDisplayShare(view: feed.RegistrationName) ?? 1f);
+            window.IndirectLevels = (Settings?.NestedIndirectLevels(view: feed.RegistrationName) ?? 0);
         }
     }
     // Captures the world's frame for this frame before a session view dresses its own, so a window's fit reads the seat

@@ -763,12 +763,12 @@ public sealed partial class SdfMeshPathBake {
             var held = Held((Group)group);
 
             return (((held.CurrentFloor is { } floor) && (held.Shown is { } shown) && !ReferenceEquals(objA: floor, objB: shown) &&
-                ((held.Replaces ?? held).Tier < held.CoarsestTier) && !held.Glass && shown.Members.IsEmpty && floor.Members.IsEmpty)
+                !(held.Replaces ?? held).AtFloor && !held.Glass && shown.Members.IsEmpty && floor.Members.IsEmpty)
                 ? floor
                 : null);
         }
-        // The coarsest tier of a group, its floor's.
-        internal readonly int CoarsestTierOf(SdfMeshBakeGroup group) => Held((Group)group).CoarsestTier;
+        // The tier the floor a group keeps was baked at.
+        internal readonly int FloorTierOf(SdfMeshBakeGroup group) => Held((Group)group).KeptFloorTier;
         internal readonly IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) => Owner.CopiesOf(group: group);
         // Records that the frame's draws stand at the captured product revision, once they are published; after the
         // release too, since it reads no group.
@@ -2011,8 +2011,10 @@ public sealed partial class SdfMeshPathBake {
         // Every cell of text the surface can enter refines (its glyph region is a bound's), so the slab's thin axis needs
         // only a sample through its middle; FinalMinimum there would have the refinement split cells already finer than
         // the stroke detail as many times again, spending the fine-sample budget across the slab's depth.
-        var minimum = (text ? TextMinimum : FinalMinimum);
-        var lattice = (Lattice(gradients: true, group: group, longest: FinalSamples, minimum: minimum) with { Gradients = false });
+        // A tier past the group's floor coarsens the lattice itself, and its thin axes with it.
+        var longest = FinalLongest(group: group);
+        var minimum = Math.Min(val1: (text ? TextMinimum : FinalMinimum), val2: longest);
+        var lattice = (Lattice(gradients: true, group: group, longest: longest, minimum: minimum) with { Gradients = false });
         var coarse = MathF.Max(x: lattice.Cell.X, y: MathF.Max(x: lattice.Cell.Y, y: lattice.Cell.Z));
         // The group's tier floors every spacing it asks: a view that resolves no finer cell is baked none.
         var tierCell = SdfMeshTier.Cell(tier: group.Tier);
@@ -2043,14 +2045,22 @@ public sealed partial class SdfMeshPathBake {
             }
         }
         if (regions.Count == 0) {
-            return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) { TierCell = tierCell };
+            return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) { PastFloor = (group.Tier > group.FloorTier), TierCell = tierCell };
         }
 
         return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
             Factor = regions.Max(selector: static region => region.Factor),
             Regions = [.. regions],
+            PastFloor = (group.Tier > group.FloorTier),
             TierCell = tierCell,
         };
+    }
+    // The samples a group's final lattice takes along the longest axis of its box as it stands: FinalSamples at or under
+    // its floor tier, and past it the corners of the cells its tier's cell fits there (SdfMeshTier.LatticeSamples).
+    private static int FinalLongest(Group group) {
+        var extent = (group.High - group.Low);
+
+        return SdfMeshTier.LatticeSamples(floor: group.FloorTier, longestExtent: MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z)), most: FinalSamples, tier: group.Tier);
     }
     // The fine cells along each axis a region whose own spacing is `spacing` asks a final lattice of `coarse` spacing to
     // split a coarse cell into: the fewest that reach it, from two to `most`. The lattice splits each region cell the
@@ -2074,7 +2084,10 @@ public sealed partial class SdfMeshPathBake {
             finest = MathF.Min(x: finest, y: MemberCell(radius: radius));
         }
 
-        var lattice = BudgetedLattice(finest: finest, group: group, widest: (longest / (FinalSamples - 1)));
+        // A tier past the group's floor coarsens the lattice itself: no member's own spacing is finer than its cell.
+        var samples = FinalLongest(group: group);
+        var widest = (longest / (samples - 1));
+        var lattice = BudgetedLattice(finest: ((samples < FinalSamples) ? widest : finest), group: group, minimum: Math.Min(val1: FinalMinimum, val2: samples), widest: widest);
         var spacing = lattice.Cell;
         var coarse = MathF.Max(x: spacing.X, y: MathF.Max(x: spacing.Y, y: spacing.Z));
         var regions = new List<SdfLatticeRegion>();
@@ -2104,6 +2117,7 @@ public sealed partial class SdfMeshPathBake {
         return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
             Factor = factor,
             Regions = [.. regions],
+            PastFloor = (group.Tier > group.FloorTier),
             TierCell = tierCell,
         };
     }
@@ -2278,14 +2292,20 @@ public sealed partial class SdfMeshPathBake {
 
     // Let detected sheets use a finer split when a part's ordinary grid still leaves room above the bake's fine spacing.
     // A finer virtual grid also subdivides transition cells, so keep a lattice already near that spacing on its own grid.
+    // A lattice past its group's floor (FinalLattice.PastFloor) splits a sheet's cells no finer than PastFloorThinShare of
+    // its tier's cell: the view that demanded the tier resolves no finer, and a sheet split to the bake's fine spacing
+    // would cost such a rung the triangles the tier exists to drop.
     private static int ThinSplit(FinalLattice final, int factor) {
         var cell = final.Lattice.Cell;
         var shortest = MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z));
+        var finest = (final.PastFloor ? MathF.Max(x: FineCell, y: (final.TierCell * PastFloorThinShare)) : FineCell);
 
-        while ((factor <= (MaxDetailRefinement / 2)) && (shortest >= (2 * factor * FineCell))) { factor *= 2; }
+        while ((factor <= (MaxDetailRefinement / 2)) && (shortest >= (2 * factor * finest))) { factor *= 2; }
 
         return factor;
     }
+    // The share of its tier's cell a lattice past its group's floor splits a sheet's cells to at the finest.
+    private const float PastFloorThinShare = 0.25f;
 
     // A final lattice's simultaneous peak: its own samples, and the fine samples its refinement measures, at most the
     // bound its spacing and factor allow (SdfSampledLattice.FineSampleBound) until the refinement names them.
@@ -3006,6 +3026,8 @@ public sealed partial class SdfMeshPathBake {
                     // judge a verdict on it.
                     Owner?.Touch(group: this);
                     Owner?.Judgeable(group: this);
+                    // One that meshed nothing past its floor owes a finer rung, which the next tier decision reads.
+                    if ((m_mesh is null) && (Tier > FloorTier)) { Owner?.Attend(group: this); }
                     AwaitResidency();
                     Memory.ReleaseReservation();
                     EndShare();
@@ -3392,20 +3414,21 @@ public sealed partial class SdfMeshPathBake {
 
         private SdfMesh? m_floor;
 
-        // The mesh a group planned at its coarsest tier landed, kept with its own claim while a finer tier draws, so the
-        // group shows it again the moment that tier is refused or evicted (SdfMeshPathBake.Evict); the geometry it was
-        // baked from, which a floor carried across a replan no longer matches. The group's own product is its floor
-        // when it is planned at its coarsest tier (Floor).
+        // The mesh a group planned at or past its floor tier landed, kept with its own claim while a finer tier draws, so
+        // the group shows it again the moment that tier is refused or evicted (SdfMeshPathBake.Evict); the geometry it
+        // was baked from, which a floor carried across a replan no longer matches, and the tier it was baked at. The
+        // group's own product is its floor when it is planned at or past its floor tier (Floor).
         public SdfMesh? KeptFloor => m_floor;
         public SdfMeshGeometry? FloorGeometry { get; private set; }
+        public int KeptFloorTier { get; private set; }
         // The shape (Shape) of the group the kept floor was baked for: a floor of another shape (an edit since, or a
         // selector another placement now holds) stands in for the group but is not its geometry.
         private UInt128 m_floorShape;
         // What the trace judge said of the kept floor (SdfMeshTraceJudge), shared by every group that keeps the same
         // floor, so a verdict reaching a group the floor has since passed to still counts.
         public TraceVerdict? FloorVerdict { get; private set; }
-        // The group's floor: its own product at its coarsest tier, else the one it keeps.
-        public SdfMesh? Floor => ((Tier == CoarsestTier) ? Mesh : m_floor);
+        // The group's floor: its own product at or past its floor tier, else the one it keeps.
+        public SdfMesh? Floor => (AtFloor ? Mesh : m_floor);
         // The kept floor where it is of the group's own shape.
         public SdfMesh? CurrentFloor => (((m_floor is { } floor) && (m_floorShape == Shape)) ? floor : null);
         // The group's own product, once it has landed: not the stand-in it took from the group it replaced.
@@ -3414,36 +3437,37 @@ public sealed partial class SdfMeshPathBake {
         // The mesh the irradiance volume traces in place of the one the group draws (SdfMeshDraw.Trace), or null to trace
         // the drawn one: the group's floor, which the plan alone chooses, so a view's retier or the budget's bias leaves
         // the trace scene standing. A floor of the group's own shape kept beside a finer tier, unless the trace judge
-        // declined it; at the coarsest tier the group's own floor product once it draws it, and until then what the group
-        // it replaces traces, where that group is of the same shape. Nothing else: a group drawing its stand-in of
+        // declined it; at or past the floor tier the group's own floor product once it draws it, and until then what the
+        // group it replaces traces, where that group is of the same shape. Nothing else: a group drawing its stand-in of
         // another shape, or no floor of its own shape, traces what it draws.
         public SdfMesh? Trace {
             get {
                 if (CurrentFloor is { } kept) { return ((FloorVerdict?.Declined ?? false) ? null : kept); }
-                if (Tier != CoarsestTier) { return null; }
+                if (!AtFloor) { return null; }
                 if (!Ahead && (OwnProduct is { } own)) { return own; }
                 return (((Replaces is { } replaced) && (replaced.Shape == Shape)) ? replaced.Trace : null);
             }
         }
         // Whether the trace judge owes a verdict on the kept floor: it is of the group's shape, unjudged, and the group's
         // own finer product has landed to hold it to.
-        public bool OwesVerdict => ((CurrentFloor is not null) && (FloorVerdict is { State: TraceVerdict.Unjudged }) && (Tier != CoarsestTier) && (OwnProduct is not null));
+        public bool OwesVerdict => ((CurrentFloor is not null) && (FloorVerdict is { State: TraceVerdict.Unjudged }) && !AtFloor && (OwnProduct is not null));
         // The finer product a verdict holds the kept floor to (OwesVerdict).
         public SdfMesh? JudgedAgainst => OwnProduct;
 
-        // Keeps the floor of the group this one replaces: that group's own product at its coarsest tier, or the floor it
-        // kept, with its shape and its verdict. A group planned at its coarsest tier keeps none, since its product is its
-        // floor. Takes a claim of its own.
+        // Keeps the floor of the group this one replaces: that group's own product at or past its floor tier, or the
+        // floor it kept, with its shape, its tier and its verdict. A group planned at or past its floor tier keeps none,
+        // since its product is its floor. Takes a claim of its own.
         public void KeepFloorOf(Group old) {
-            if (Tier == CoarsestTier) { return; }
+            if (AtFloor) { return; }
 
-            var atFloor = (old.Tier == old.CoarsestTier);
-            var (floor, geometry, shape) = (atFloor ? (old.Mesh, old.Sealed, old.Shape) : (old.m_floor, old.FloorGeometry, old.m_floorShape));
+            var atFloor = old.AtFloor;
+            var (floor, geometry, shape, tier) = (atFloor ? (old.Mesh, old.Sealed, old.Shape, old.Tier) : (old.m_floor, old.FloorGeometry, old.m_floorShape, old.KeptFloorTier));
 
             if ((floor is null) || ReferenceEquals(objA: floor, objB: m_floor)) { return; }
             m_floor?.Release();
             m_floor = floor.Acquire();
             FloorGeometry = geometry;
+            KeptFloorTier = tier;
             m_floorShape = shape;
             FloorVerdict = (atFloor ? new TraceVerdict() : old.FloorVerdict);
             if (Owner is { } owner) {
@@ -3502,6 +3526,8 @@ public sealed partial class SdfMeshPathBake {
 
         // The group's tier's cell (SdfMeshTier), which floors FineCell for the essential cells' split.
         public float TierCell { get; init; }
+        // Whether the group bakes past its floor tier, where the tier coarsened the lattice itself.
+        public bool PastFloor { get; init; }
     }
     private enum FinalStage {
         Refinement,

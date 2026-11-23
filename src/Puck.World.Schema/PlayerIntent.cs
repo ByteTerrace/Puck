@@ -112,16 +112,22 @@ public struct ChannelValues {
 /// at nothing. The server maps it through a <c>Simulation</c> screen's row in fixed point
 /// (<see cref="WorldScreenMappings.Normalized"/>) and never trusts a host-computed hit.</param>
 public readonly record struct PlayerIntent(ChannelValues Channels, SourceRay? SourceRay = null) {
+    // The banks behind a field rather than the positional property, so a read of one lane takes the banks by reference
+    // instead of copying them out of the property on every read.
+    private readonly ChannelValues m_channels = Channels;
+
+    /// <summary>Gets the numeric and button banks.</summary>
+    public ChannelValues Channels { get => m_channels; init => m_channels = value; }
     /// <summary>Reads one channel's raw value by ordinal — zero for an ordinal no declared channel claims.</summary>
     /// <param name="ordinal">The channel ordinal (<c>0..</c><see cref="ChannelLimits.MaxChannels"/><c>-1</c>).</param>
-    public FixedQ4816 this[int ordinal] => Channels[ordinal];
+    public FixedQ4816 this[int ordinal] => m_channels[ordinal];
 
     /// <summary>Determines structural equality with <paramref name="other"/> over the whole vector (every numeric
     /// lane, <see cref="ChannelAxes.Equals(ChannelAxes)"/>, and the button bank) and the pointer ray. Declared
     /// explicitly because the synthesized record-struct equality would compare <see cref="ChannelValues"/> through
     /// the runtime's struct equality, which refuses the inline array it holds.</summary>
     public bool Equals(PlayerIntent other) => (
-        Channels.Axes.Equals(other: other.Channels.Axes) && (Channels.Buttons == other.Channels.Buttons) && (SourceRay == other.SourceRay)
+        m_channels.Axes.Equals(other: other.m_channels.Axes) && (m_channels.Buttons == other.m_channels.Buttons) && (SourceRay == other.SourceRay)
     );
     /// <summary>Returns a hash consistent with <see cref="Equals(PlayerIntent)"/>: folded over every lane, the button
     /// bank and the pointer ray.</summary>
@@ -132,10 +138,10 @@ public readonly record struct PlayerIntent(ChannelValues Channels, SourceRay? So
     /// <param name="hash">The hash to fold into.</param>
     public void AppendStateHash(ref Fnv1aHash hash) {
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxAxes); ordinal++) {
-            hash.Add(value: Channels.Axes[ordinal]);
+            hash.Add(value: m_channels.Axes[ordinal]);
         }
 
-        hash.Add(value: Channels.Buttons);
+        hash.Add(value: m_channels.Buttons);
         hash.Add(value: ((byte)(SourceRay.HasValue ? 1 : 0)));
         if (SourceRay is { } ray) {
             hash.Add(value: ray.Origin.X.Value);

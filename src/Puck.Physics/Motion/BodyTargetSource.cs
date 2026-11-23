@@ -62,9 +62,13 @@ public abstract record BodyTargetSource {
     /// <param name="Domain">The authored navigation-domain name.</param>
     /// <param name="Register">The target register supplying a body or world-space point destination.</param>
     /// <param name="Fallback">What the body does while the register holds no target, or no route reaches it.</param>
+    /// <param name="Profile">The navigation cost profile the body's routes and goal fields price area types by, or
+    /// <see langword="null"/> to pay one for every area.</param>
     public sealed record Navigated(
         [property: DocumentText("a navigation domain")] string Domain,
         [property: DocumentText("a target register name")] string Register,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] BodyTargetFallback Fallback = BodyTargetFallback.Hold
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] BodyTargetFallback Fallback = BodyTargetFallback.Hold,
+        [property: DocumentText("a navigation profile name")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Profile = null
     ) : BodyTargetSource;
 }

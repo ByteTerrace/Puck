@@ -318,6 +318,8 @@ public sealed partial class WorldPopulation {
     private IReadOnlyList<WorldCurveRow> m_curveRows = [];
     private WorldCurveTable m_curves = WorldCurveTable.Empty;
     private WorldNavigationDomainTable m_navigationTable = WorldNavigationDomainTable.Empty;
+    // The area types and cost profiles a navigated target's FixedBodyTargetSource.NavigationProfileIndex selects from.
+    private WorldNavigationAreas? m_navigationAreas;
     private NavigationRuntime m_navigation = null!;
     // The definition's LOOK rows (empty ⇒ the implicit single catalog look), resolved by CompileFixedTables. Each
     // entry's LookIndex points into this list. PRESENTATION-ONLY — the snapshot carries it to the client's renderer.
@@ -511,6 +513,8 @@ public sealed partial class WorldPopulation {
         // The goal field this tick's kit plan resolved for the body's shared navigated producer (PrepareGoalField), the
         // only field its kit partition reads; derived scratch, never state.
         public Puck.Physics.Navigation.NavigationGoalField? PreparedGoalField;
+        // The cell the plan located the body on for that field's read.
+        public (int Domain, int Cell) PreparedGoalFrom;
         public required int Index { get; init; }
         public required WorldActionStateLane Lane { get; init; }
         // The occupant's implicit procedural rig, separate from its authority-local slot. Explicit authored looks can

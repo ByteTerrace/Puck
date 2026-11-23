@@ -1049,7 +1049,7 @@ public sealed partial class WorldDocument {
     // instead of copying it, and the carrier builds its next snapshot into storage the outbox returned or into new arrays.
     private sealed class SnapshotCarrier(bool consumesContinuity) : IWorldSnapshotLender {
         // Storage the outbox returned, reused before any new array is allocated.
-        private readonly Stack<WorldSnapshotStorage> m_returned = new();
+        private readonly Puck.Abstractions.Collections.SharedPool<WorldSnapshotStorage> m_returned = new(create: static () => new WorldSnapshotStorage());
         private WorldSnapshotStorage m_storage = new();
 
         // Whether this carrier's snapshots take each body's one-shot continuity hint (the tick broadcast) or only peek
@@ -1081,11 +1081,11 @@ public sealed partial class WorldDocument {
         public WorldSnapshotStorage Surrender() {
             var surrendered = m_storage;
 
-            lock (m_returned) { m_storage = (m_returned.TryPop(result: out var returned) ? returned : new WorldSnapshotStorage()); }
+            m_storage = m_returned.Rent();
 
             return surrendered;
         }
-        public void Return(WorldSnapshotStorage storage) { lock (m_returned) { m_returned.Push(item: storage); } }
+        public void Return(WorldSnapshotStorage storage) => m_returned.Return(item: storage);
     }
 
     // The owner of the storage the tick's snapshot lends, which the output hub takes the storage over from when it

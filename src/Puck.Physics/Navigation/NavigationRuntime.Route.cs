@@ -39,7 +39,7 @@ public readonly record struct NavigationRouteWork(int Expanded, int Joins);
 public sealed partial class NavigationRuntime {
     private const int MaxRouteSteps = 26;
 
-    private RouteWorkspace? m_route;
+    private SearchWorkspace? m_route;
 
     // The union of every domain's cells as one graph: a node is a domain's cell at its domain's offset, its edges the
     // domain's own baked edges plus a junction to each cell of another domain of its network standing at the same place.
@@ -53,29 +53,42 @@ public sealed partial class NavigationRuntime {
     private readonly bool[] m_joined;
     private readonly Dictionary<int, List<int>> m_junctions = [];
 
-    private sealed class RouteWorkspace {
-        public RouteWorkspace(int cells) {
-            Cost = new int[cells];
-            Heuristic = new int[cells];
+    // One A* search's working arrays over a node space: the cross-domain route search's (one per runtime) and a domain's
+    // own path search's (rented per search, so searches on several threads each hold their own). A search's answer
+    // depends only on the graph, never on what an earlier search left here: Begin opens a fresh stamp.
+    private sealed class SearchWorkspace {
+        public SearchWorkspace(int cells) {
+            Cost = new long[cells];
+            Heuristic = new long[cells];
             Parent = new int[cells];
             OpenStamp = new int[cells];
             ClosedStamp = new int[cells];
             Open = new NodeHeap(cells: cells);
         }
 
-        public readonly int[] Cost;
-        public readonly int[] Heuristic;
+        public readonly long[] Cost;
+        public readonly long[] Heuristic;
         public readonly int[] Parent;
         public readonly int[] OpenStamp;
         public readonly int[] ClosedStamp;
         public readonly NodeHeap Open;
         public int Stamp;
 
-        public long Bytes => checked(((long)Cost.Length) * (7L * sizeof(int)));
+        public long Bytes => checked(((long)Cost.Length) * ((2L * sizeof(long)) + (5L * sizeof(int))));
+
+        // Empties the open set and moves to a fresh stamp, so no node reads as opened or closed by an earlier search.
+        public void Begin() {
+            Open.Clear();
+            if (++Stamp == int.MaxValue) {
+                Array.Clear(array: OpenStamp);
+                Array.Clear(array: ClosedStamp);
+                Stamp = 1;
+            }
+        }
     }
 
     // f = g + h, then the smaller h, then the lower node: a total order, so the heap never breaks a tie itself.
-    private readonly struct RouteOrder(RouteWorkspace workspace) : IComparer<int> {
+    private readonly struct SearchOrder(SearchWorkspace workspace) : IComparer<int> {
         public int Compare(int x, int y) {
             var f = (workspace.Cost[x] + workspace.Heuristic[x]).CompareTo(value: (workspace.Cost[y] + workspace.Heuristic[y]));
 
@@ -142,17 +155,22 @@ public sealed partial class NavigationRuntime {
     /// <param name="maxExpanded">The most nodes the search settles before it answers <see cref="NavigationStatus.SearchLimit"/>.</param>
     /// <param name="maxNodes">The most nodes a returned route holds before the search answers <see cref="NavigationStatus.PathLimit"/>.</param>
     /// <param name="work">The nodes settled and the domain pairs joined.</param>
+    /// <param name="profile">What the route pays for each area type and which it never enters; <see langword="null"/> is
+    /// <see cref="NavigationCostProfile.Neutral"/>. The search's heuristic is scaled by its
+    /// <see cref="NavigationCostProfile.Minimum"/>, so it stays a lower bound.</param>
     /// <returns><see cref="NavigationStatus.Active"/> with a route, <see cref="NavigationStatus.Arrived"/> when the goal
     /// accepts the start, <see cref="NavigationStatus.OutsideDomain"/> when the start is not a walkable cell,
     /// <see cref="NavigationStatus.Unreachable"/>, <see cref="NavigationStatus.SearchLimit"/> or <see cref="NavigationStatus.PathLimit"/>.</returns>
-    public NavigationStatus FindRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, List<NavigationRouteNode> route, int maxExpanded, int maxNodes, out NavigationRouteWork work) {
-        var status = SearchRoute(fromCell: fromCell, fromDomain: fromDomain, goal: goal, maxExpanded: maxExpanded, maxNodes: maxNodes, route: route, work: out work);
+    /// <exception cref="InvalidOperationException">The runtime is read-only (<see cref="EnterReadOnly"/>).</exception>
+    public NavigationStatus FindRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, List<NavigationRouteNode> route, int maxExpanded, int maxNodes, out NavigationRouteWork work, NavigationCostProfile? profile = null) {
+        ThrowIfReadOnly(operation: "a cross-domain route search");
+        var status = SearchRoute(fromCell: fromCell, fromDomain: fromDomain, goal: goal, maxExpanded: maxExpanded, maxNodes: maxNodes, profile: (profile ?? NavigationCostProfile.Neutral), route: route, work: out work);
 
         m_work.Add(amount: 1, kind: NavigationSearchWork.Routes);
         m_work.Add(amount: work.Expanded, kind: NavigationSearchWork.RouteExpansions);
         return status;
     }
-    private NavigationStatus SearchRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, List<NavigationRouteNode> route, int maxExpanded, int maxNodes, out NavigationRouteWork work) {
+    private NavigationStatus SearchRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, NavigationCostProfile profile, List<NavigationRouteNode> route, int maxExpanded, int maxNodes, out NavigationRouteWork work) {
         ArgumentNullException.ThrowIfNull(argument: goal);
         ArgumentNullException.ThrowIfNull(argument: route);
         route.Clear();
@@ -161,23 +179,18 @@ public sealed partial class NavigationRuntime {
             return NavigationStatus.OutsideDomain;
         }
 
-        var workspace = (m_route ??= new RouteWorkspace(cells: checked((int)CellCount)));
+        var workspace = (m_route ??= new SearchWorkspace(cells: checked((int)CellCount)));
         var start = (m_offsets[fromDomain] + fromCell);
         var bounds = goal.Bounds;
-        var order = new RouteOrder(workspace: workspace);
+        var order = new SearchOrder(workspace: workspace);
         var joins = 0;
         var expanded = 0;
         Span<int> next = stackalloc int[MaxRouteSteps];
-        Span<int> cost = stackalloc int[MaxRouteSteps];
+        Span<long> cost = stackalloc long[MaxRouteSteps];
         Span<byte> slots = stackalloc byte[MaxRouteSteps];
 
-        workspace.Open.Clear();
-        if (++workspace.Stamp == int.MaxValue) {
-            Array.Clear(array: workspace.OpenStamp);
-            Array.Clear(array: workspace.ClosedStamp);
-            workspace.Stamp = 1;
-        }
-        OpenRoute(bounds: in bounds, cost: 0, node: start, order: order, parent: -1, workspace: workspace);
+        workspace.Begin();
+        OpenRoute(bounds: in bounds, cost: 0L, node: start, order: order, parent: -1, profile: profile, workspace: workspace);
         while (workspace.Open.Count != 0) {
             var current = workspace.Open.Pop(order: order);
             var domainIndex = DomainOf(node: current);
@@ -200,10 +213,10 @@ public sealed partial class NavigationRuntime {
                 return NavigationStatus.SearchLimit;
             }
 
-            var count = domain.RouteSteps(cost: cost, next: next, node: cell, slot: slots);
+            var count = domain.RouteSteps(cost: cost, next: next, node: cell, profile: profile, slot: slots);
 
             for (var step = 0; (step < count); step++) {
-                RelaxRoute(bounds: in bounds, cost: checked((workspace.Cost[current] + cost[step])), node: (m_offsets[domainIndex] + next[step]), order: order, parent: current, workspace: workspace);
+                RelaxRoute(bounds: in bounds, cost: checked((workspace.Cost[current] + cost[step])), node: (m_offsets[domainIndex] + next[step]), order: order, parent: current, profile: profile, workspace: workspace);
             }
 
             var position = domain.Foot(node: cell);
@@ -215,7 +228,11 @@ public sealed partial class NavigationRuntime {
             }
             if (m_junctions.TryGetValue(key: current, value: out var junctions)) {
                 foreach (var junction in junctions) {
-                    RelaxRoute(bounds: in bounds, cost: workspace.Cost[current], node: junction, order: order, parent: current, workspace: workspace);
+                    var partner = DomainOf(node: junction);
+
+                    if (m_domains[partner].Admits(node: (junction - m_offsets[partner]), profile: profile)) {
+                        RelaxRoute(bounds: in bounds, cost: workspace.Cost[current], node: junction, order: order, parent: current, profile: profile, workspace: workspace);
+                    }
                 }
             }
         }
@@ -242,28 +259,28 @@ public sealed partial class NavigationRuntime {
         val1: Millimetres(value: FixedQ4816.Max(x: FixedQ4816.Zero, y: FixedQ4816.Max(x: (bounds.Minimum.X - position.X), y: (position.X - bounds.Maximum.X)))),
         val2: Millimetres(value: FixedQ4816.Max(x: FixedQ4816.Zero, y: FixedQ4816.Max(x: (bounds.Minimum.Z - position.Z), y: (position.Z - bounds.Maximum.Z))))
     );
-    private void OpenRoute(int node, int cost, int parent, in FixedAabb bounds, RouteOrder order, RouteWorkspace workspace) {
+    private void OpenRoute(int node, long cost, int parent, in FixedAabb bounds, SearchOrder order, NavigationCostProfile profile, SearchWorkspace workspace) {
         var domainIndex = DomainOf(node: node);
 
         workspace.Cost[node] = cost;
         workspace.Parent[node] = parent;
-        workspace.Heuristic[node] = DistanceTo(bounds: in bounds, position: m_domains[domainIndex].Position(node: (node - m_offsets[domainIndex])));
+        workspace.Heuristic[node] = profile.ScaleHeuristic(distance: DistanceTo(bounds: in bounds, position: m_domains[domainIndex].Position(node: (node - m_offsets[domainIndex]))));
         workspace.OpenStamp[node] = workspace.Stamp;
         workspace.Open.Push(node: node, order: order);
     }
-    private void RelaxRoute(int node, int cost, int parent, in FixedAabb bounds, RouteOrder order, RouteWorkspace workspace) {
+    private void RelaxRoute(int node, long cost, int parent, in FixedAabb bounds, SearchOrder order, NavigationCostProfile profile, SearchWorkspace workspace) {
         if (workspace.ClosedStamp[node] == workspace.Stamp) {
             return;
         }
         if (workspace.OpenStamp[node] != workspace.Stamp) {
-            OpenRoute(bounds: in bounds, cost: cost, node: node, order: order, parent: parent, workspace: workspace);
+            OpenRoute(bounds: in bounds, cost: cost, node: node, order: order, parent: parent, profile: profile, workspace: workspace);
         } else if (cost < workspace.Cost[node]) {
             workspace.Cost[node] = cost;
             workspace.Parent[node] = parent;
             workspace.Open.Decrease(node: node, order: order);
         }
     }
-    private NavigationStatus ReconstructRoute(int goal, int maxNodes, List<NavigationRouteNode> route, RouteWorkspace workspace) {
+    private NavigationStatus ReconstructRoute(int goal, int maxNodes, List<NavigationRouteNode> route, SearchWorkspace workspace) {
         for (var node = goal; (node >= 0); node = workspace.Parent[node]) {
             if (route.Count >= maxNodes) {
                 route.Clear();
@@ -386,13 +403,15 @@ public sealed partial class NavigationRuntime {
         // Writes the cells one step from a cell that a route may take, with each step's cost in millimetres: its length,
         // and on a surface one cell's length more for each cell short of RouteClearanceCells that the cell stepped onto
         // stands from the edge of the walkable ground (RouteClearance), so a route keeps off a wall where the ground
-        // allows and passes a doorway through its middle, rather than hugging the corners the shortest line touches. Each
-        // step's neighbour slot (NeighborSlot) goes to slot.
-        internal int RouteSteps(int node, Span<int> next, Span<int> cost, Span<byte> slot) {
+        // allows and passes a doorway through its middle, rather than hugging the corners the shortest line touches;
+        // then times the profile's multiplier for the area of the cell stepped onto, a step onto an area the profile
+        // excludes left out. Each step's neighbour slot (NeighborSlot) goes to slot.
+        internal int RouteSteps(int node, NavigationCostProfile profile, Span<int> next, Span<long> cost, Span<byte> slot) {
             EnsureBaked();
 
             var straight = Millimetres(value: Tuning.CellSize);
             var clearance = RouteClearance();
+            var areas = (profile.IsNeutral ? null : AreaCodes());
             var count = 0;
 
             foreach (var step in Neighbors(node: node)) {
@@ -400,8 +419,13 @@ public sealed partial class NavigationRuntime {
                     continue;
                 }
 
+                var stepCost = RouteStepCost(axes: step.Axes, clearance: clearance, next: step.Node, straight: straight);
+
+                if ((areas is not null) && ((stepCost = profile.Scale(area: areas[step.Node], cost: stepCost)) < 0L)) {
+                    continue;
+                }
                 next[count] = step.Node;
-                cost[count] = RouteStepCost(axes: step.Axes, clearance: clearance, next: step.Node, straight: straight);
+                cost[count] = stepCost;
                 slot[count] = NeighborSlot(dx: step.Dx, dy: step.Dy, dz: step.Dz);
                 count++;
             }
@@ -409,9 +433,16 @@ public sealed partial class NavigationRuntime {
             return count;
         }
         // Writes the cells one route step before a cell, the steps RouteSteps takes from each of them into it, with the
-        // same costs: the reverse of the route graph a goal field searches from its goal.
-        internal int RoutePredecessors(int node, Span<int> from, Span<int> cost) {
+        // same costs: the reverse of the route graph a goal field searches from its goal. A cell whose area the profile
+        // excludes has none.
+        internal int RoutePredecessors(int node, NavigationCostProfile profile, Span<int> from, Span<long> cost) {
             EnsureBaked();
+
+            var area = (profile.IsNeutral ? (byte)0 : AreaCodes()[node]);
+
+            if (profile.Scale(area: area, cost: 0L) < 0L) {
+                return 0;
+            }
 
             var straight = Millimetres(value: Tuning.CellSize);
             var clearance = RouteClearance();
@@ -423,15 +454,73 @@ public sealed partial class NavigationRuntime {
                 }
 
                 from[count] = step.Node;
-                cost[count] = RouteStepCost(axes: step.Axes, clearance: clearance, next: node, straight: straight);
+                cost[count] = profile.Scale(area: area, cost: RouteStepCost(axes: step.Axes, clearance: clearance, next: node, straight: straight));
                 count++;
             }
 
             return count;
         }
+        /// <summary>Returns whether a profile admits standing on a cell: whether a route may step onto it.</summary>
+        /// <param name="node">The cell.</param>
+        /// <param name="profile">The cost profile.</param>
+        internal bool Admits(int node, NavigationCostProfile profile) => (profile.IsNeutral || (profile.Scale(area: AreaCodes()[node], cost: 0L) >= 0L));
         // A step's length in millimetres and, on a surface, the clearance surcharge of the cell it steps onto.
-        private static int RouteStepCost(int axes, byte[] clearance, int next, int straight) =>
-            checked(((straight * StepCost(axes: axes)) / StraightCost) + ((clearance.Length == 0) ? 0 : (straight * (RouteClearanceCells - clearance[next]))));
+        private static long RouteStepCost(int axes, byte[] clearance, int next, int straight) =>
+            checked((((long)straight * StepCost(axes: axes)) / StraightCost) + ((clearance.Length == 0) ? 0L : ((long)straight * (RouteClearanceCells - clearance[next]))));
+
+        private NavigationAreaSet m_areaSet = NavigationAreaSet.None;
+        // The derived codes and what they were derived from, published as one reference so a reader on another thread
+        // sees either a whole table or none.
+        private sealed record AreaCodeTable(NavigationAreaSet Set, bool[] Walkable, byte[] Codes);
+        private AreaCodeTable? m_areaCodes;
+
+        /// <summary>Bakes the domain and derives its cells' area types, so reads from a read-only runtime
+        /// (<see cref="EnterReadOnly"/>) find both ready.</summary>
+        /// <exception cref="InvalidOperationException">The domain's runtime is read-only and either is not ready.</exception>
+        public void EnsureAreas() => _ = AreaCodes();
+
+        // The area set of the runtime that reads the domain.
+        internal NavigationAreaSet Areas { set => m_areaSet = value; }
+
+        /// <summary>Gets the area type of a cell: the type of the last area volume holding its route point, else the
+        /// domain's own type (<see cref="NavigationDomainInput.Area"/>); -1 for a cell no type marks. Bakes the domain.</summary>
+        /// <param name="node">The cell.</param>
+        public int AreaOf(int node) => (AreaCodes()[node] - 1);
+
+        // Each cell's area code (0 for unmarked, the type plus one otherwise), tested at the point a body standing on the
+        // cell stands at (Foot). Derived once per bake and area set, never while the runtime is read-only.
+        private byte[] AreaCodes() {
+            EnsureBaked();
+            if ((m_areaCodes is { } table) && ReferenceEquals(objA: table.Set, objB: m_areaSet) && ReferenceEquals(objA: table.Walkable, objB: m_walkable)) {
+                return table.Codes;
+            }
+            ThrowIfReadOnly();
+
+            var set = m_areaSet;
+            var codes = new byte[CellCount];
+            var region = Region(tuning: Tuning, rotation: m_rotation);
+            var volumes = set.Volumes.Where(predicate: volume => volume.Shape.Bounds.Intersects(other: region)).ToArray();
+
+            Array.Fill(array: codes, value: (byte)(Tuning.Area + 1));
+            if (volumes.Length != 0) {
+                for (var cell = 0; (cell < codes.Length); cell++) {
+                    if (!m_walkable[cell]) {
+                        continue;
+                    }
+
+                    var foot = Foot(node: cell);
+
+                    foreach (var volume in volumes) {
+                        if (volume.Shape.Bounds.Contains(point: foot) && volume.Shape.Contains(point: foot)) {
+                            codes[cell] = (byte)(volume.Type + 1);
+                        }
+                    }
+                }
+            }
+
+            m_areaCodes = new AreaCodeTable(Codes: codes, Set: set, Walkable: m_walkable);
+            return codes;
+        }
         // The cell one step from a cell along a neighbour slot.
         internal int NeighborAt(int node, byte slot) {
             var (dx, dy, dz) = SlotOffset(slot: slot);

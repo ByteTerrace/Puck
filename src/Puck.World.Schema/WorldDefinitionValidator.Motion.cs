@@ -108,7 +108,7 @@ public static partial class WorldDefinitionValidator {
     // instruction state, so the checks over it read the row rather than the compiled program.
     private static Dictionary<string, BodyMotionProgram> BodyMotionProgramRows(IReadOnlyList<BodyMotionProgram> programs) =>
         FirstRowsByName(rows: programs, name: static program => program.Name);
-    private static Dictionary<string, CompiledBodyMotionProgram> ValidateBodyMotionPrograms(IReadOnlyList<BodyMotionProgram> programs, ISet<string> targetRegisterNames, ISet<string> navigationDomainNames, ISet<string> curveNames, List<string> errors) {
+    private static Dictionary<string, CompiledBodyMotionProgram> ValidateBodyMotionPrograms(IReadOnlyList<BodyMotionProgram> programs, ISet<string> targetRegisterNames, ISet<string> navigationDomainNames, ISet<string> navigationProfileNames, ISet<string> curveNames, List<string> errors) {
         var compiled = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < programs.Count); index++) {
@@ -233,6 +233,9 @@ public static partial class WorldDefinitionValidator {
                                 !targetRegisterNames.Contains(item: navigated.Register)
                             ) {
                                 errors.Add(item: $"{path}.target.register '{navigated.Register}' names no target register.");
+                            }
+                            if ((navigated.Profile is { } profile) && !navigationProfileNames.Contains(item: profile)) {
+                                errors.Add(item: $"{path}.target.profile '{profile}' names no navigation.profiles row.");
                             }
                             break;
                     }

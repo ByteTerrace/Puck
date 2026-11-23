@@ -63,7 +63,50 @@ crossing, and a player's car yields at it as the others do. Many players
 inhabiting the city's bodies against a remote authority is the MMO-shaped
 stress stage 5 measures.
 
-## What exists
+### Zoned districts and platform-generated sections
+
+The owner's ruling, as evidence: "Does the city have residential, commercial,
+agricultural, etc districts? Imagine SimCity or Cities Skylines, except with
+players who might take possession of NPCs and whatnot. Also remember that
+Azure integration can/should be used to generate sections of the world (the
+granaries example, expanded)."
+
+The intent, as the rule:
+- **The city is a living simulation of zones.** Residential, commercial,
+  industrial, agricultural (farms and fields beyond the river), civic and
+  port districts are authored zone rows. Homes, jobs, shopping and the
+  market's goods come from the zones, so goods flow from farm to granary to
+  market to home, with demand, growth and building levels in the manner of a
+  city-building game. All of it is Puck rules and programs in
+  `worlds/standard`, a generic city simulation any world imports, never a
+  city-only engine feature. The builder perspective's verbs zone and build
+  through the same rows, and every citizen and vehicle stays possessable
+  throughout.
+- **Sections of a world are generated from the hosting platform.** The
+  [game design](../game/design.md) already holds it: the world is the
+  operational twin of the platform that hosts it, and every reading of the
+  platform enters as observation rows that a module's placements, bodies and
+  rules read, with no cloud noun and no game noun in the engine. A city
+  district is generated that way: storage as warehouse stock, traffic as
+  vehicle flow, queues as lines at the market, compute as factory activity.
+  It changes as the deployment does. Provider independence holds: rows and
+  abstractions only, no provider noun in engine or world vocabulary.
+
+What exists for the generated district (read at the head this was written
+against; recheck before building):
+- An observation reads an approved collection into ordinary state rows and
+  nothing else, a resource listing or a metrics series alike
+  ([extension configuration](../../src/Puck.World.Server/ExtensionConfiguration.md#observe-a-collection));
+  the debug world's [granary board](../../worlds/debug/granaries.md) reads
+  storage accounts that way, and the hosting example feeds a `Fixed` row from
+  a metrics observation.
+- A placement's `deal` mints one child placement per state cell, so a
+  warehouse can stand per observed store; an `inhabit` count can be a state
+  cell, so vehicle flow or a market queue can follow a metric.
+- Host approval lives outside the package (`worlds/hosting`), per world, so
+  the city needs its own approved configuration; the hosted deployment's
+  verification already carries a `storage-inventory` observation.
+
 
 Each row cites the code it was read from; recheck it before building on it.
 
@@ -178,6 +221,31 @@ size and topology.
    - From the builder's view, a verb moves a stall or rezones a lot, and the
      citizens' and vehicles' routes follow on the next anchor change.
    - A perspective the seat has not unlocked is refused by name.
+7. **Zoned districts.** After the vehicles move onto road curves. The city's
+   districts become zone rows (residential, commercial, industrial,
+   agricultural, civic, port) in a standard city-simulation module, with farm
+   fields beyond the river.
+   - Each citizen's home, job and shopping come from the zones' rows, read by
+     state, never from a hand-written list.
+   - Goods flow from farm to granary to market to home: the market's stock
+     rows fill from deliveries the vehicles carry, and empty as citizens buy.
+   - Demand and growth: a zone with unmet demand gains a building level (a
+     placement's response swaps its prototype) over city days.
+   - The builder's verbs zone a lot and place a building through the same
+     rows; a possessed citizen or vehicle keeps its place in the flow.
+8. **A platform-generated district.** The works and its warehouses are
+   generated from the hosting platform's observation rows.
+   - A warehouse stands per observed store (`deal` over the observation's
+     rows), its stock read from the store's size.
+   - Vehicle flow and the market's queue follow metric rows through `inhabit`
+     counts read from state.
+   - Run locally with the fixture provider and against the hosted deployment
+     with its approved configuration: the district changes when the
+     deployment does, with no provider noun in the city's documents.
+   - Gaps to name as found: observation providers for traffic, queues and
+     compute beyond resource listings and metrics; an approved configuration
+     reaching a federated world such as the city; and a composed district
+     regenerating as rows change without a reload.
 
 **The benchmark chapter.** From stage 1, `benchmark-route.puck` gains a
 `citySeam` chapter: the route walks to the city painting, crosses with a

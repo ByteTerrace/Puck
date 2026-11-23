@@ -99,9 +99,9 @@ let cityStyle = celStyle with {
     far: 0.6
     fold: 0.7
     tint [0.13, 0.1, 0.16]
-    hatch: 0.5
-    hatchPitch: 0.55
-    hatchWidth: 0.2
+    hatch: 0.32
+    hatchPitch: 0.4
+    hatchWidth: 0.12
     hatchSoftness: 0.3
   }
 }
@@ -182,47 +182,32 @@ let roadStrips = [
 // The districts' navigation domains, 1 m cells on whole-metre origins so neighbouring grids share cells where they
 // overlap, each reaching a few metres into its neighbours so a route crosses between them. The four are one `pavement`
 // network of shared domains: a citizen heading to an anchor reads its step from that anchor's goal field, which
-// crosses the districts at their shared cells, rather than searching a route of its own.
-let pavement = { shared: true, network: "pavement" }
+// crosses the districts at their shared cells, rather than searching a route of its own. The districts' ground is
+// `pavement` where no road or crossing marks it (the navigation areas below).
+let pavement = { shared: true, network: "pavement", area: "pavement" }
 
 
 
-// The vehicles (../standard/vehicle.puck): carts lapping two loops of four corner stops, the ring road round the square
-// and the works loop (the quay lane, the cross street, the east lane and the works road), at 8 m/s. They drive the
-// `roads` network: a shared domain over each road strip, its 1 m cells sized for a vehicle, each a metre longer at both
-// ends so neighbouring strips share cells at the corners, and never joined to the pavement. Their bodies sit below the
-// citizens', so the citizens keep the top of the capacity.
+// The vehicles (../standard/vehicle.puck): carts lapping two road curves, the ring road round the square and the works
+// loop (the quay lane, the cross street, the east lane and the works road), at 8 m/s, gripping the road across their
+// heading, and yielding at the crossings. Their bodies sit below the citizens', so the citizens keep the top of the
+// capacity.
 let vehicleColors = ["#B5523B", "#2F7F7A", "#C98B2E", "#3E6E8E", "#6B8E4E", "#7A4E7E"]
-let roadDomains = map(
-  filter(roadStrips, strip => (strip.id != "avenue") and (strip.id != "cross-street")),
-  strip => surfaceDomain(
-    $"road-{strip.id}",
-    [(strip.x0 - 1), 0.05, (strip.z0 - 1)],
-    1,
-    (strip.x1 - strip.x0 + 2),
-    (strip.z1 - strip.z0 + 2),
-    2.2,
-    3,
-    256,
-    vehicleWalker
-  ) with { shared: true, network: "roads" }
-)
-// The works loop's stretch of the cross street, from the quay lane to the east lane.
-let worksCrossDomain = surfaceDomain("road-works-cross", [29, 0.05, -136], 1, 122, 12, 2.2, 3, 256, vehicleWalker) with {
-  shared: true
-  network: "roads"
-}
+// The vehicles' loops as road curves (../standard/vehicle.puck's `roadLoop`): the ring round the square and the works
+// loop, each the centreline of its roads with corners of 5 m, driven along z0 toward +X, up x1 toward +Z, along z1
+// toward -X and down x0 toward -Z. Each loop's route program travels its curve, and its vehicles start spread along
+// its four straights; a vehicle joins its curve at the nearest station.
 let vehicleLoops = [
-  { group: "ring", stops [[35, -85], [35, -15], [-35, -15], [-35, -85]], perSide: 10 }
-  { group: "works", stops [[145, -130], [145, -50], [35, -50], [35, -130]], perSide: 15 }
+  { group: "ring", route: "ringRoute", x0: -35, x1: 35, z0: -85, z1: -15, perSide: 10 }
+  { group: "works", route: "worksRoute", x0: 35, x1: 145, z0: -130, z1: -50, perSide: 15 }
 ]
-// Each vehicle starts on a side of its loop, driving to the stop that ends the side.
+let vehicleSides = [[[0, 0], [1, 0]], [[1, 0], [1, 1]], [[1, 1], [0, 1]], [[0, 1], [0, 0]]]
+function loopPoint(loop, corner) = [(corner[0] == 0) ? loop.x0 : loop.x1, (corner[1] == 0) ? loop.z0 : loop.z1]
 let vehicleSpots = flatMap(vehicleLoops, loop => flatMap(range(0, 4), side => map(range(0, loop.perSide), k => {
   group: loop.group
-  stops: loop.stops
-  first: side
-  x: loop.stops[(side + 3) % 4][0] + (loop.stops[side][0] - loop.stops[(side + 3) % 4][0]) * (k + 0.5) / loop.perSide
-  z: loop.stops[(side + 3) % 4][1] + (loop.stops[side][1] - loop.stops[(side + 3) % 4][1]) * (k + 0.5) / loop.perSide
+  route: loop.route
+  x: loopPoint(loop, vehicleSides[side][0])[0] + (loopPoint(loop, vehicleSides[side][1])[0] - loopPoint(loop, vehicleSides[side][0])[0]) * (k + 0.5) / loop.perSide
+  z: loopPoint(loop, vehicleSides[side][0])[1] + (loopPoint(loop, vehicleSides[side][1])[1] - loopPoint(loop, vehicleSides[side][0])[1]) * (k + 0.5) / loop.perSide
 })))
 let vehicleCount = length(vehicleSpots)
 
@@ -238,20 +223,31 @@ let cityCrossings = [
   { group: "works", region: "place-city-crossing-works", cx: 90, cz: -50, hx: 3, hz: 5, x0: 93, x1: 101, z0: -55, z1: -45 }
 ]
 
+// The town's navigation areas (../standard/domains.puck's `townAreaTypes`): every road strip is `road`, and each
+// crossing's region, marked after the roads so it wins where it lies on one, is `crossing`. A citizen pays ten times a
+// road's length to walk it (../standard/citizen.puck's `citizenProfile`), so it keeps to the pavement and crosses the
+// ring and the works road at their crossings. The vehicles follow their road curves and route over no domain.
 navigation {
+  areaTypes: townAreaTypes
+  areas: concat(
+    map(roadStrips, strip => townArea("road", strip.x0, strip.x1, strip.z0, strip.z1)),
+    map(cityCrossings, c => { type: "crossing", placement: c.region })
+  )
+  profiles [citizenProfile]
   domains: concat(
     [
       walkable("city-square", [-46, 0.05, -100], 1, 92, 100, 2.2, 3, 1024) with pavement
       walkable("city-terraces", [-150, 0.05, -205], 1, 114, 245, 2.2, 3, 1024) with pavement
       walkable("city-works", [36, 0.05, -100], 1, 114, 140, 2.2, 3, 1024) with pavement
       walkable("city-quay", [-46, 0.05, -205], 1, 196, 119, 2.2, 3, 1024) with pavement
-    ],
-    roadDomains,
-    [worksCrossDomain]
+    ]
   )
 }
 
-vehicleDesign(domain: "road-ring-north")
+curves: map(vehicleLoops, loop => roadLoop(name: loop.group, x0: loop.x0, x1: loop.x1, z0: loop.z0, z1: loop.z1, radius: 5))
+bodyMotionPrograms: map(vehicleLoops, loop => vehicleRoute(name: loop.route, road: loop.group))
+
+vehicleDesign(domain: "city-square", shaping: vehicleGripShaping, routes: { ringRoute: vehicleRouteSteering, worksRoute: vehicleRouteSteering })
 vehicleLooks(colors: vehicleColors)
 
 // The market (../standard/market.puck): each stall sells to the Moth from a 2 by 2 m spot on the fountain side of its
@@ -265,7 +261,6 @@ marketStalls(
   }),
   clock: cityDay
 )
-vehicleRoutes(vehicles: map(range(0, vehicleCount), v => { key: 7 + vehicleCount - v, stops: vehicleSpots[v].stops, first: vehicleSpots[v].first }))
 vehicleCrossings(
   vehicles: map(range(0, vehicleCount), v => { key: 7 + vehicleCount - v, group: vehicleSpots[v].group }),
   crossings: map(cityCrossings, c => {
@@ -287,7 +282,7 @@ vehicleCrossings(
 // of `cityLampLumens` lumens that the city's clock (city-day.puck) turns on from dusk to dawn: 6 along each side of the
 // ring, 7 down the avenue, 15 along the cross street, 6 by the works road, 10 on the quay's edge and 8 round the
 // fountain. No lamp stands within 6 m of x 0, where the avenue runs and a traveller walks out of the arrival frame.
-let cityLampLumens = 4500
+let cityLampLumens = 1200
 let cityLampSpots = concat(
   map(range(0, 6), k => [(-30 + 12 * k), -8.5]),
   map(range(0, 6), k => [(-30 + 12 * k), -91.5]),
@@ -350,7 +345,7 @@ bodies {
   capacity: 8 + citizenCount + vehicleCount
 }
 
-citizenDesign(domain: "city-square")
+citizenDesign(domain: "city-square", profile: "citizen")
 citizenLooks(coats: citizenCoats, hats: citizenHats)
 citizenSchedule(
   people: citizenPeople,
@@ -538,7 +533,7 @@ placements {
         count: 1
         kit: "vehicle"
         look: $"vehicle-{v % length(vehicleColors)}"
-        source: producer(name: "vehicle")
+        source: producer(name: spot.route)
         distribution {
           region: disc(radius: 0.01)
           fill {

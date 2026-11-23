@@ -393,6 +393,7 @@ public sealed partial class WorldBody {
         m_rigid = rigid;
         m_carry = carry;
         m_tetherFacet = tether;
+        MarkKitLocalStale();
         m_maxSmoothError = maxSmoothError;
 
         LayoutLaneRecency(sources: default);

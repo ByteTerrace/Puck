@@ -218,8 +218,12 @@ public sealed partial class WorldBody {
     // Normalization gives a fixed overlay speed even at partial stick deflection.
     private FixedVector3 ImpulseDirection(in CompiledBodyInstruction instruction, in PlayerIntent intent, FixedQuaternion orientation) {
         if (instruction.UseMoveDirection) {
-            var scratch = new BodyMotionScratch { Intent = intent, Orientation = orientation, Up = m_up };
+            var scratch = default(BodyMotionScratch);
             FixedVector3 direction;
+
+            scratch.Intent = intent;
+            scratch.Orientation = orientation;
+            scratch.Up = m_up;
 
             if (!TryCommandedMoveDirection(direction: out direction, scratch: ref scratch)) {
                 var (forward, strafe) = PlanarIntent(intent: in intent);
@@ -587,24 +591,26 @@ public sealed partial class WorldBody {
                 throw new InvalidOperationException(message: $"Body program reached uncompiled opcode value {((int)instruction.Operation)}.");
         }
     }
-    private void ExecuteProgram(PlayerIntent intent, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, ulong stepTicks, int entityIndex, BodyEffectTargets effectTargets, List<BodyEffectOutput>? effectOutputs, List<WorldDesignation>? designationOutputs, List<WorldGeneratorInvocation>? generatorInvocations) {
+    private void ExecuteProgram(in PlayerIntent intent, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, ulong stepTicks, int entityIndex, BodyEffectTargets effectTargets, List<BodyEffectOutput>? effectOutputs, List<WorldDesignation>? designationOutputs, List<WorldGeneratorInvocation>? generatorInvocations) {
         m_entityIndex = entityIndex;
-        var scratch = new BodyMotionScratch {
-            AttitudeUp = m_up,
-            DesignationOutputs = designationOutputs,
-            EffectOutputs = effectOutputs,
-            EffectTargets = effectTargets,
-            EntityIndex = entityIndex,
-            GeneratorInvocations = generatorInvocations,
-            GoverningShapingRow = -1,
-            Intent = intent,
-            MoveSpeed = moveSpeed,
-            NextPosition = m_position,
-            Orientation = m_orientation,
-            StepTicks = stepTicks,
-            TurnSpeed = turnSpeed,
-            Up = m_up,
-        };
+        // Written field by field into the zeroed local: an object initializer builds a temporary and copies the whole
+        // scratch, references included, into the local through the runtime's bulk write barrier on every step.
+        var scratch = default(BodyMotionScratch);
+
+        scratch.AttitudeUp = m_up;
+        scratch.DesignationOutputs = designationOutputs;
+        scratch.EffectOutputs = effectOutputs;
+        scratch.EffectTargets = effectTargets;
+        scratch.EntityIndex = entityIndex;
+        scratch.GeneratorInvocations = generatorInvocations;
+        scratch.GoverningShapingRow = -1;
+        scratch.Intent = intent;
+        scratch.MoveSpeed = moveSpeed;
+        scratch.NextPosition = m_position;
+        scratch.Orientation = m_orientation;
+        scratch.StepTicks = stepTicks;
+        scratch.TurnSpeed = turnSpeed;
+        scratch.Up = m_up;
 
         // Refresh the shared shaping-table recency clocks (a Recently window refills while its fact holds, decays
         // otherwise) once, before phase 0, so every phase's gate read — a frame op's turnScale, ShapeVelocity's own
@@ -746,7 +752,9 @@ public sealed partial class WorldBody {
         m_overlayRemaining -= ticks;
         if (m_overlayRemaining == 0) { m_overlayVelocity = default; m_overlayAccumulator.Reset(); }
     }
-    private PlayerIntent NextIntent(ulong stepTicks, ulong tick, int body) {
+    // A step outside the kit transaction (StepIsLocal) has no tape, timed press or script controller, so it admits no
+    // script observation (scripts: false) and reaches no input runtime.
+    private PlayerIntent NextIntent(ulong stepTicks, ulong tick, int body, bool scripts) {
         var movement = default(PlayerIntent);
         var tapeActor = default(Principal);
         var resolved = false;
@@ -779,7 +787,8 @@ public sealed partial class WorldBody {
             }
         }
 
-        var acceptedScript = AdmitScriptInput(body: body, tape: movement, tapeActor: tapeActor, tick: tick);
+        if (!scripts) { m_scriptAccepted = default; }
+        var acceptedScript = (scripts ? AdmitScriptInput(body: body, tape: movement, tapeActor: tapeActor, tick: tick) : movement);
 
         if (resolved) { movement = acceptedScript; }
         if (!resolved) {

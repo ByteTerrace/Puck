@@ -51,6 +51,9 @@ public enum NavigationConnectivity : byte {
 /// <param name="Network">The network the domain joins: two domains join at their shared cells only when their
 /// networks are equal, so a road and a pavement that meet at a kerb stay apart. <see langword="null"/> is the one
 /// unnamed network.</param>
+/// <param name="Area">The area type (<see cref="NavigationAreaSet"/>) of the domain's cells no area volume marks, or -1
+/// to leave them unmarked. It decides only what a route pays, never which cells the bake proves, so a domain rebuilt
+/// for a change here alone starts from its predecessor's bake (<see cref="IRegionalContactField.TryDifference"/>).</param>
 public readonly record struct NavigationDomainInput(
     string Name,
     NavigationKind Kind,
@@ -72,7 +75,8 @@ public readonly record struct NavigationDomainInput(
     string? Medium,
     bool Shared,
     FixedQ4816 YawRadians = default,
-    string? Network = null
+    string? Network = null,
+    int Area = -1
 );
 /// <summary>Representation ceilings a host names when constructing a <see cref="NavigationRuntime"/>. The kernel
 /// parses no document, so it cannot own these as its own constants; a host's values here must equal whatever its
