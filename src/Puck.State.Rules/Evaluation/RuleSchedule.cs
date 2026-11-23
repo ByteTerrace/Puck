@@ -26,6 +26,27 @@ public enum RuleVolatility : byte {
     /// <summary>The reads include a row the layout does not carry.</summary>
     UnknownRow = 32,
 }
+/// <summary>How one judgement reaches the cells of a row it reads: which of the row's cells moving can change what
+/// the judgement reads.</summary>
+[Flags]
+public enum RowReach : byte {
+    /// <summary>The row is named for its versions alone.</summary>
+    None = 0,
+
+    /// <summary>The cell under the key bound to <c>$each</c>: a move of one cell reaches the one binding it names.</summary>
+    Each = 1,
+
+    /// <summary>Literal cells, listed in <see cref="RuleSchedule.Cells"/>: a move of another cell reaches nothing.</summary>
+    Cells = 2,
+
+    /// <summary>A cell no compile-time key names (a key read from another cell, a fold, a host fact's row): a move of
+    /// any cell reaches every binding.</summary>
+    Any = 4,
+
+    /// <summary>The row's key set, which a sweep binds: only a change to its members or their order reaches the
+    /// judgement, and no cell's value does.</summary>
+    Members = 8,
+}
 /// <summary>A rule's or a binding's memoized read schedule: every dependency one judgement can have — the arena rows
 /// its locals, live-row selection and gate read, and the host facts they read, each versioned — and, for a sweep, the
 /// dependencies of the set of bindings it sweeps. A schedule names a dependency or is volatile: an elided or reused
@@ -49,6 +70,11 @@ public enum RuleVolatility : byte {
 /// <param name="Deadline">The gate's deadline conjunct, whose tick read is the wake a closed verdict carries rather
 /// than a read that makes the schedule volatile, or <see langword="null"/>.</param>
 public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility Volatility, int[] UnprovenRows, string[] UnversionedFacts, int[] IterationRows, FactRead[] IterationFacts, bool IterationVersioned, RuleDeadline? Deadline = null) {
+    /// <summary>Gets how the judgement reaches each row of <see cref="Rows"/>, aligned with it: what a due list reads
+    /// to wake one binding, rather than every one, when one cell moves.</summary>
+    public RowReach[] Reaches { get; init; } = [];
+    /// <summary>Gets the literal cells the judgement reads, each a row of <see cref="Rows"/> and a key.</summary>
+    public CellAccess[] Cells { get; init; } = [];
     /// <summary>Gets a value indicating whether versions alone cannot prove the reads unchanged.</summary>
     public bool Volatile => (Volatility != RuleVolatility.None);
     /// <summary>Gets how many versions one capture of the schedule holds: one per row, then one per fact.</summary>
@@ -87,6 +113,8 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
         var layout = reader.Arena.Layout;
         var descriptors = reader.Catalog.Descriptors;
         var seen = new SortedSet<int>();
+        var reaches = new Dictionary<int, RowReach>();
+        var cells = new List<CellAccess>();
         var unproven = new SortedSet<int>();
         var factRows = new List<int>();
         var factReads = new List<FactRead>();
@@ -150,11 +178,28 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
             _ = seen.Add(item: ordinal);
         }
 
+        void Reach(int ordinal, RowReach reach) => reaches[ordinal] = (reaches.GetValueOrDefault(key: ordinal) | reach);
+
         foreach (var access in reads) {
             Row(ordinal: access.RowOrdinal);
+            Reach(ordinal: access.RowOrdinal, reach: (access.Reach switch {
+                CellReach.Each => RowReach.Each,
+                CellReach.Members => RowReach.Members,
+                CellReach.Key when access.Key.IsValid => RowReach.Cells,
+                _ => RowReach.Any,
+            }));
+            if ((access.Reach == CellReach.Key) && access.Key.IsValid) {
+                var cell = new CellAccess(Key: access.Key, RowOrdinal: access.RowOrdinal);
+
+                if (!cells.Contains(item: cell)) {
+                    cells.Add(item: cell);
+                }
+            }
         }
+        // A row a host fact answers from is read for whichever cell the fact resolves.
         foreach (var ordinal in factRows) {
             Row(ordinal: ordinal);
+            Reach(ordinal: ordinal, reach: RowReach.Any);
         }
 
         var iterationRows = new List<int>(capacity: 1);
@@ -176,7 +221,10 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
             UnprovenRows: [.. unproven],
             UnversionedFacts: [.. unversioned],
             Volatility: volatility
-        );
+        ) {
+            Cells = [.. cells.Where(predicate: cell => seen.Contains(item: cell.RowOrdinal))],
+            Reaches = [.. seen.Select(selector: ordinal => reaches.GetValueOrDefault(key: ordinal, defaultValue: RowReach.Any))],
+        };
     }
     /// <summary>Spells the schedule for a read-back: the rows and host facts it depends on by name, and every reason it
     /// is volatile.</summary>
@@ -188,7 +236,7 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
         var text = new StringBuilder();
 
         text.Append(value: "rows ");
-        AppendRows(reader: reader, rows: Rows, text: text);
+        AppendRows(reader: reader, reaches: Reaches, rows: Rows, text: text);
         text.Append(value: "; facts ");
         if (Facts.Length == 0) {
             text.Append(value: "none");
@@ -273,7 +321,9 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
             list.RemoveRange(index: count, count: (list.Count - count));
         }
     }
-    private static void AppendRows(IStateReader reader, int[] rows, StringBuilder text, bool none = true) {
+    // A row read only under the key bound to $each is spelled with it, since a move of one of its cells wakes one
+    // binding; every other row wakes every binding.
+    private static void AppendRows(IStateReader reader, int[] rows, StringBuilder text, bool none = true, RowReach[]? reaches = null) {
         if (rows.Length == 0) {
             if (none) {
                 text.Append(value: "none");
@@ -286,6 +336,9 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
                 text.Append(value: ',');
             }
             text.Append(value: RowName(reader: reader, rowOrdinal: rows[index]));
+            if ((reaches is not null) && (index < reaches.Length) && ((reaches[index] & ~RowReach.Members) == RowReach.Each)) {
+                text.Append(value: "[$each]");
+            }
         }
     }
     private static string RowName(IStateReader reader, int rowOrdinal) {

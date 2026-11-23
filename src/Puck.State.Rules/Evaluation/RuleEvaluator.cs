@@ -187,18 +187,12 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
     /// <summary>Gets or sets whether a verdict whose schedule names every dependency, each at the version it was
     /// captured at, may stand without running again: a closed gate or a held Edge keeps its verdict without its
-    /// bindings and gate, a Level firing that changed nothing is not fired again, and an unchanged binding reuses its
-    /// memoized value. Defaults to <see langword="true"/>; a law flips it off to prove the skip changes no observable
-    /// result.</summary>
+    /// bindings and gate, a Level firing that changed nothing is not fired again, an unchanged binding reuses its
+    /// memoized value, and a due list visits only the rules and bindings something reached. Defaults to
+    /// <see langword="true"/>. Off, every rule judges every binding in place every tick, which is the evaluation
+    /// every one of those stands for: a replay or a law runs both and compares the state, so a kept verdict or an
+    /// unvisited binding that would have answered otherwise shows as a difference.</summary>
     public bool SchedulingEnabled { get; set; } = true;
-    /// <summary>Gets or sets whether a Level firing its schedule would answer for is fired anyway and held to
-    /// changing nothing again: the check that the skip is invisible. A firing that then moves a row, queues an arm,
-    /// refuses or closes is recorded in <see cref="StaleQuiescence"/>. Defaults to <see langword="false"/>.</summary>
-    public bool QuiescenceChecked { get; set; }
-    /// <summary>Gets the first Level firing <see cref="QuiescenceChecked"/> found that its schedule answered for and
-    /// that did not settle again, naming the rule, the tick and the schedule; <see langword="null"/> when every one
-    /// did.</summary>
-    public string? StaleQuiescence { get; private set; }
 
     /// <summary>Returns the read schedule this evaluator holds for a rule, deriving it when the rule has not been
     /// scheduled yet: what the measured sheet and <c>--why</c> print beside a rule's counts.</summary>
@@ -267,6 +261,11 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             var rows = new List<int>();
             var facts = new List<FactRead>();
             var tracked = owner.TryScheduleIteration(rule: rule, rows: rows, facts: facts);
+            schedule = schedule with { IterationRows = [.. rows], IterationFacts = [.. facts], IterationVersioned = tracked };
+        } else if (rule.Iteration is { } iteration) {
+            var rows = new List<int>();
+            var facts = new List<FactRead>();
+            var tracked = iteration.TrySchedule(facts: facts, reader: m_host, rows: rows);
             schedule = schedule with { IterationRows = [.. rows], IterationFacts = [.. facts], IterationVersioned = tracked };
         }
         var locals = (rule.Locals ?? []);
@@ -623,6 +622,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             return ownOutcome;
         }
         if ((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.PoolForEach is null) && (rule.Iteration is null)) {
+            // A rule evaluated once snapshots nothing, and its one visit is priced with its check.
             return EvaluateOnce(
                 applied: out applied,
                 binding: LatchKey.None,
@@ -633,6 +633,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             );
         }
 
+        bindings.Spent.Sweeps++;
         if (rule.PoolForEach is { } pool) {
             var snapshot = PoolHandles(pool: pool, bindingSlot: rule.PoolBindingSlot);
 
@@ -875,9 +876,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             schedule: standing
         )
         );
-        var held = (stands && refires && QuiescenceChecked);
-
-        if (stands && !held) {
+        if (stands) {
             // Nothing the verdict stands on has changed since it was captured, it stands on nothing a version cannot
             // see through, and its deadline (if it has one) is still ahead. A closed gate or a held Edge fires
             // nothing, so bindings and gate need not run; a Level firing that changed nothing would read what it read
@@ -909,7 +908,6 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         if (!judged.Decided) {
             // A binding that could not evaluate refused (and was reported) this tick, so the next tick judges it again.
             m_rerun = true;
-            NoteUnsettled(held: held, rule: rule, standing: standing, tick: tick);
 
             return HoldOnFault(faulted: judged.Faulted, latch: latch, scheduling: scheduling, trace: trace);
         }
@@ -948,7 +946,6 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         if (!changed && !fires) {
             EndTrace(entry: trace);
-            NoteUnsettled(held: held, rule: rule, standing: standing, tick: tick);
 
             return RuleOutcome.Idle;
         }
@@ -1000,12 +997,10 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             scheduling.StepTicks = stepTicks;
             scheduling.WakeTick = judged.WakeTick;
             m_minWake = Math.Min(val1: m_minWake, val2: judged.WakeTick);
-            // Under the check every such firing is fired again, so a due list keeps visiting it.
-            m_rerun = QuiescenceChecked;
+            m_rerun = false;
         } else if (fires && level) {
             scheduling.Owner = null;
         }
-        NoteUnsettled(held: (held && !settled), rule: rule, standing: standing, tick: tick);
 
         if (outcome is RuleOutcome.Faulted or RuleOutcome.Refused) {
             // The scope rewound the edge bit, so the verdict the schedule cached against it is stale, and the next tick
@@ -1146,12 +1141,6 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         }
 
         return within;
-    }
-    // Records the first Level firing the check fired in place of a skip that did not settle again.
-    private void NoteUnsettled(bool held, CompiledRule rule, RuleSchedule? standing, ulong tick) {
-        if (held && (StaleQuiescence is null)) {
-            StaleQuiescence = $"rule '{rule.Name}' at tick {tick}: a Level firing its schedule answered for did not settle when fired again ({standing?.Describe(reader: m_host)})";
-        }
     }
     // A rule whose whole effect is rewinding its group restores the world to a turn boundary the undo arena holds, which
     // no scope can enclose, so the edge bit cannot ride a scope: it is written after the restore, and only when the

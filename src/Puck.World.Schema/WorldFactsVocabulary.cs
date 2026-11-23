@@ -47,6 +47,19 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
 
     /// <inheritdoc/>
     public override Puck.State.Rules.RuleIteration? CompileIteration(StateChannelRef reference, string ruleName) {
+        if (reference.Call is { Channel: "region" } region) {
+            var placementId = string.Join(':', region.Texts());
+
+            if (string.IsNullOrEmpty(value: placementId) || !HasRegion(placementId: placementId)) {
+                throw new RuleException(WorldRuleRefusal.RegionUnknown, ruleName, $"'forEach' sweeps '{reference.Spelling}', which names no placement carrying a region facet");
+            }
+            Needs.Add(facet: FacetRef.Of<IWorldRegionOccupants>());
+            return new WorldRegionIteration(
+                BodyCapacity: Definition.Population.Capacity,
+                Occupants: checked((int)WorldRuleWorkBudget.RegionSweepCapacity(definition: Definition, placementId: placementId).Bound),
+                PlacementId: placementId
+            );
+        }
         if (reference.Call is not { Channel: "inputEvents" } call) { return null; }
         if (call.Count < 1) { throw new RuleException(WorldRuleRefusal.ChannelMalformed, ruleName, "inputEvents expects one input owner"); }
         var owner = WorldFactsVocabulary.CompileInputOwner(string.Join(':', call.Texts()), this, ruleName);
@@ -58,6 +71,55 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
     /// <inheritdoc/>
     /// <remarks>The document's entity-table capacity.</remarks>
     public override long BodyCapacity => Definition.Population.Capacity;
+    /// <inheritdoc/>
+    /// <remarks>The world host never judges a hypothetical position.</remarks>
+    public override bool SearchPlyIsFixed => true;
+    /// <inheritdoc/>
+    public override bool LiveBodiesVersioned => true;
+
+    /// <inheritdoc/>
+    public override bool FactRests(ICompiledFact fact, out bool each) => Rests(each: out each, fact: fact);
+    /// <summary>Returns whether a world fact rests (<see cref="Puck.State.Rules.RuleCompileContext.FactRests"/>): the
+    /// facts the world host versions that answer a count, a flag or an event, so that they move when something
+    /// happens rather than with time or motion. A region's occupants, the population and quiescence censuses, a
+    /// musical beat, an input event read for a literal owner, and a body's fact bits and producer stand-down for a
+    /// literal body or the one bound to <c>$each</c> rest; a pose, a distance, a pointer, a channel and every fact the
+    /// host versions no source for do not. The host refuses to leave unversioned a fact this answers for
+    /// (<c>WorldRuleHost.TryScheduleFact</c>), so the work sheet never prices by change a fact judged every tick.</summary>
+    /// <param name="fact">The compiled fact.</param>
+    /// <param name="each">Whether the fact is read for the body bound to <c>$each</c>.</param>
+    /// <returns><see langword="true"/> when the fact rests.</returns>
+    public static bool Rests(ICompiledFact fact, out bool each) {
+        each = false;
+
+        switch (fact) {
+            case WorldRegionOccupancyOperand or WorldPhysicsQuiescentOperand or WorldPopulationOperand:
+                return true;
+            case WorldClockOperand clock:
+                return (clock.Reading != ClockFacet.PhaseError);
+            case WorldBodyFactOperand { Payload: PhysicsQuiescentOperand }:
+                return true;
+            case WorldBodyFactOperand { Payload: ProducerOperand producer }:
+                return BodyRests(body: producer.BodyA, each: out each);
+            case WorldBodyFactOperand { Payload: BodyFactOperand bits }:
+                return BodyRests(body: bits.Body, each: out each);
+            case WorldBodyFactOperand { Payload: WorldInputOperand input }:
+                return InputRests(input: input);
+            case WorldBodyFactOperand { Payload: ClockOperand { Input: { } input } }:
+                return InputRests(input: input);
+            default:
+                return false;
+        }
+
+        // An input read whose owner is a literal identity and that reads an event, never its age or a pattern's match.
+        static bool InputRests(WorldInputOperand input) => ((input.Owner.Body is null) && (input.Pattern < 0) && (input.Facet != WorldInputFacet.Age));
+        // A body a version can follow: a literal index, or the body bound to $each.
+        static bool BodyRests(in CompiledBodyRef body, out bool each) {
+            each = ((body.Kind == CompiledBodyRefKind.Binding) && (((BoundKey)body.Index) == BoundKey.Each));
+
+            return (each || ((body.Kind == CompiledBodyRefKind.Literal) && (body.Index >= 0)));
+        }
+    }
 
     private static TableSource[] TableSources(WorldDefinition definition) {
         var rows = (definition.Tables ?? []);

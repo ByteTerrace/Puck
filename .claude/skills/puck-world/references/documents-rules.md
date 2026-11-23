@@ -72,7 +72,12 @@ transfer ends, expression rows — with an infix key as the index (`game[from]`,
 reads its gate closed (`world.rule.trace` shows `zones [<spelling> -> <zone|none>]`);
 `forEach: "$zones"` iterates the table, and `forEach: "$bodies"` iterates the
 live bodies (refused on a decision, `BodiesUnserved` on a document with no
-bodies). `maxFirings: n` on an iterating rule ends its sweep after `n` firings,
+bodies). `forEach: region(placement)` (document form `$region:<id>`,
+`WorldRegionIteration`) iterates the bodies inside a placement's region,
+ascending, each bound as a body index: a rule about a place costs its
+occupants, priced at the region's `capacity`
+(`WorldRuleWorkBudget.RegionSweepCapacity`), and is visited when the
+occupants change or something its bindings read moves. `maxFirings: n` on an iterating rule ends its sweep after `n` firings,
 leaving later bindings' latches untouched, and the work sheet prices its
 firings at `n`; author it where the gate already admits that few (a batch
 window over a distinct ordinal row, one held piece), since an over-priced

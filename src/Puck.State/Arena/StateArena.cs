@@ -797,7 +797,7 @@ public sealed partial class StateArena {
                 ArenaColumn.Behavior or ArenaColumn.Observation);
 
             if (keyed) {
-                ChangedKeys.Mark(row, KeyAtSlot(layout: m_layout[row], slot: index).Ordinal);
+                NoteChange(row: row, key: KeyAtSlot(layout: m_layout[row], slot: index));
             } else {
                 MarkDisclosureRow(row: row);
             }
@@ -815,7 +815,7 @@ public sealed partial class StateArena {
     // the window's carrier names the whole row, the disclosure index is owed a rebuild, and the row's structure
     // version takes a value no row has held.
     private void MarkDisclosureRow(int row) {
-        ChangedKeys.Mark(row);
+        NoteChange(row: row);
         DisclosureRevision++;
         if (row >= m_rowStructures.Length) { Array.Resize(array: ref m_rowStructures, newSize: Math.Max(val1: (row + 1), val2: m_layout.RowCount)); }
         m_rowStructures[row] = ++m_structureClock;

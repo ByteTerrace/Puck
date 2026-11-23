@@ -121,12 +121,11 @@ public sealed class RuleWorkCountLawTests {
         Assert.Equal(expected: 1L, actual: EvaluatorFixture.Cell(host: host, row: "flag"));
         Assert.Equal(expected: 3L, actual: Read(kind: RuleWorkKinds.Firings, source: source));
 
-        // The check fires every settled firing again and holds it to changing nothing.
-        evaluator.QuiescenceChecked = true;
+        // Judged in place with no schedule, the settled firing fires again and changes nothing.
+        evaluator.SchedulingEnabled = false;
         _ = Tick();
         _ = Tick();
         _ = Tick();
-        Assert.Null(@object: evaluator.StaleQuiescence);
         Assert.Equal(expected: 1L, actual: EvaluatorFixture.Cell(host: host, row: "flag"));
     }
 }

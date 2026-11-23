@@ -21,6 +21,10 @@ public static class WorldTickWork {
     public static WorkKind FactDerives { get; } = new(name: "world.tick.fact-derives", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the population slots whose pose or facts a fact derivation compared.</summary>
     public static WorkKind FactSlots { get; } = new(name: "world.tick.fact-slots", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the occupants a rule's region sweep bound past the number the work sheet priced
+    /// it at (<see cref="WorldPlacementRegion.Capacity"/>): one per body past it, per sweep. A count that keeps
+    /// growing names a region whose capacity is authored too small.</summary>
+    public static WorkKind RegionSweepOverflow { get; } = new(name: "world.tick.region-sweep-overflow", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting continuation folds: one per hash that folded bodies' simulation continuations
     /// (<see cref="WorldPopulation.AppendContinuationHash(ref Puck.Maths.Fnv1aHash, bool)"/>), the whole population's or a replay scope's.</summary>
     public static WorkKind ContinuationFolds { get; } = new(name: "world.tick.continuation-folds", unit: "count", workClass: WorkClass.Deterministic);
@@ -102,7 +106,7 @@ public static class WorldTickWork {
             PumpVisits, HostSteps, PumpWaits, Waves, WaveTicks,
             InterestCandidates, InterestBodies, InterestBytes,
             FederatedBatches, FederatedRetimed, FederatedStale, FederatedRestarts,
-            FactDerives, FactSlots, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids, NearestCells, DealRedeals,
+            FactDerives, FactSlots, RegionSweepOverflow, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids, NearestCells, DealRedeals,
             ContinuationProfiles, ContinuationProfileBytes, ContinuationTailBytes, .. SectionEncodes, .. SectionBytes,
             .. SectionComparedBytes, .. SectionFilteredCompares, .. SectionUnchangedEncodes,
         ],

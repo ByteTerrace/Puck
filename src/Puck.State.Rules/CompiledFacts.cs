@@ -289,6 +289,7 @@ public abstract class RuleEffect : IRuleEffect {
 
         into.Add(item: new CellAccess(
             IsSet: isSet,
+            Reach: ((effect.KeyFrom is { IsEach: true }) ? CellReach.Each : CellReach.Key),
             Key: ((effect.KeyFrom is null)
             ? effect.Key
             : default),
@@ -356,6 +357,12 @@ public readonly record struct CompiledCellRef(int RowOrdinal, CellKey Key, Bound
     /// <summary>Gets the program whose value this address resolves through: its own <see cref="Program"/>, or the
     /// one a zone endpoint's live row selects through. An address holds at most one.</summary>
     public CompiledExpressionToken[]? FeedProgram => (Program ?? ((Custom as ZoneEndKey)?.FeedProgram));
+    /// <summary>Gets a value indicating whether the address is the key the evaluation binds to <c>$each</c> and
+    /// nothing else: no cell, key fact or program stands between the binding and the cell it names.</summary>
+    public bool IsEach => ((Binding == BoundKey.Each) && (RowOrdinal < 0) && (Custom is null) && (Program is null));
+    /// <summary>Gets a value indicating whether the address is the value of the cell the key bound to <c>$each</c>
+    /// names in an index row: each binding reads one index cell and is sent to one cell by it.</summary>
+    public bool IsEachIndex => ((Binding == BoundKey.None) && (RowOrdinal >= 0) && (InnerKeyBinding == BoundKey.Each) && (Custom is null) && (Program is null));
     /// <summary>Gets the facet this indirection's own key fact declares, or <see langword="null"/>.</summary>
     public FacetRef? RequiredFacet => Custom?.RequiredFacet;
 
@@ -389,6 +396,7 @@ public readonly record struct CompiledCellRef(int RowOrdinal, CellKey Key, Bound
             Key: ((cell.Binding == BoundKey.None)
             ? cell.Key
             : default),
+            Reach: (((cell.Binding == BoundKey.None) && (cell.InnerKeyBinding == BoundKey.Each)) ? CellReach.Each : CellReach.Key),
             RowOrdinal: cell.RowOrdinal
         ));
     }

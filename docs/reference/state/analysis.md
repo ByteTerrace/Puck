@@ -2,10 +2,11 @@
 
 Every compiled rule can say which cells it reads, which it writes, and how much
 work one evaluation can cost. Several analyses read those answers: one finds
-pairs of rules whose document order silently decides a result, one prices the
-worst-case work a tick can do and refuses a document that exceeds the ceiling,
-and one lets the evaluator skip a rule whose inputs haven't changed. This
-article explains each analysis, what its numbers mean, and where each stops.
+pairs of rules whose document order silently decides a result, one lets the
+evaluator judge a rule's bindings only when something they read changed, and
+one prices the work a tick's rules do by that same reading and refuses a
+document that exceeds the ceiling. This article explains each analysis, what
+its numbers mean, and where each stops.
 It's for authors reading `world.rule.hazards` and `world.budget.rules`, and for
 host developers whose own facts feed these analyses.
 
@@ -95,9 +96,13 @@ engine always keeps document order.
 
 ## Price a tick's rules
 
-The **work sheet** bounds the worst-case work the document's rules can do in
-one tick, in heuristic work units. `RuleWorkBudget` builds it from each fact's
-own `Cost`.
+The **work sheet** prices the work the document's rules do in one tick, in
+heuristic work units. `RuleWorkBudget` builds it from each fact's own `Cost`
+and from how the host evaluates each line: a rule the evaluator judges by
+change is priced for a tick at rest plus one change
+([Price by change](#price-by-change)), and every other line for every binding
+it can hold. The sheet also reports the **worst tick**, every line with every
+binding judged and firing at once, which it never refuses.
 
 ### What one line costs
 
@@ -118,19 +123,82 @@ over a step's input events, pays a full judgement only for the bindings that
 fire.
 
 `RuleWorkBudget.Contributor` turns that into a **contributor line**. The
-line's **multiplier** is the number of evaluations per tick: 1 for a rule
+line's **multiplier** is how many bindings one sweep can hold: 1 for a rule
 evaluated once, the iterated row's capacity for a `forEach` rule, the zone
 table's entry count for a rule over zones, the pool's capacity for a pool
-sweep, in Puck.World the carrier or pair count for an interaction, and for a
+sweep, in Puck.World the carrier or pair count for an interaction, for a
+`forEach: region(placement)` sweep the occupants the region is priced at
+(`WorldRuleWorkBudget.RegionSweepCapacity`: the region's authored `capacity`,
+or the most bodies that fit it), and for a
 `forEach: $inputEvents:<owner>` sweep the events one step can admit: the
 document's `inputHistory.maximumEventsPerStep` plus the terminal cancellations
 one switch writes (`WorldInputIteration.StepCapacity`), since the sweep binds
-only the current step's events and admission refuses a batch past the bound. Its
-**firings** are the multiplier, or the rule's `maxFirings` when that is
-smaller: the evaluator ends a sweep once that many bindings have fired
-([Bound how many bindings fire](rules.md#bound-how-many-bindings-fire)). Its
+only the current step's events and admission refuses a batch past the bound.
+
+How many of those bindings the line is charged for depends on how the host
+evaluates it. A line judged **in place** is charged for all of them: its
 check units are `Setup + Multiplier × Check`, and its firing units are
-`Firings × Effects`.
+`Firings × Effects`, where its **firings** are the multiplier, or the rule's
+`maxFirings` when that is smaller, since the evaluator ends a sweep once that
+many bindings have fired
+([Bound how many bindings fire](rules.md#bound-how-many-bindings-fire)). A
+search judge's rules, a group's rules, an interaction, a decision, a sweep
+bounded by `maxFirings`, and a sweep over a set no version names (a pool, a
+zone table, input events) are judged in place.
+
+### Price by change
+
+Every other rule is walked through a due list
+([Visit only the rules that are due](#visit-only-the-rules-that-are-due)),
+which judges a binding only when something it reads moved. The sheet reads the
+same judgement the due list's schedule is built from and charges the line
+(`RuleResponse.Of`) for **a tick at rest plus one change**:
+
+- **A tick at rest** is one in which time passes and bodies move, but no state
+  cell and no event-like host fact changes. A binding is judged at rest only
+  when its judgement reads something that moves with time: `$tick` outside a
+  deadline, a row carrying a value-over-time trait, or a host fact that does
+  not rest (`RuleCompileContext.FactRests`). In Puck.World a pose, a distance,
+  a pointer and a channel move; a region's occupants, a body's fact bits and
+  producer stand-down, an input event, a beat, and the population and
+  quiescence counts rest (`WorldFactsCompileContext.Rests`). A line that reads
+  only rows and facts at rest is not visited, and is charged nothing at rest.
+- **What fires at rest** depends on what stops a binding that fired from firing
+  again. A Level gate that holds fires every tick, so a Level line is charged
+  every binding's check and firing. An Edge fires on the crossing, so an Edge
+  line over inputs at rest fires nothing at rest; over a moving input it can
+  cross again, and is charged every binding. A Level rule whose firing closes
+  its own gate fires nothing at rest, whatever moves.
+- **A firing closes its own gate** (`RuleResponse.ClosesItself`) when the gate
+  is a comparison, or a conjunction with a comparison among its terms, of a
+  cell the binding itself names (a literal key, or `row[$each]`); the rule's
+  one write to that row is an unconditional set of that cell; and the value
+  written fails the comparison. `when state[$each] == 0` with
+  `state[$each] = 1` is one, and so is
+  `when at[$each] != goal[group[$each]]` with `at[$each] = goal[group[$each]]`.
+  Such a binding fires once and stays closed until another line writes.
+- **One change** is one move of one thing at rest the line reads. When
+  everything at rest is read under the binding's own key (`row[$each]`, a fact
+  of the body bound to `$each`), one move reaches one binding: one check and
+  one firing. When something is shared (a literal cell, a region's occupancy,
+  a deadline), one move reaches every binding: every check, and every firing.
+  A row read through a per-binding index, `goal[group[$each]]`, is shared too,
+  but one of its cells is read only by the bindings that index it, so the line
+  is charged every check and an even share of the firings: the multiplier
+  divided by the row's capacity, rounded up.
+
+The line's check units are the setup of the bindings judged plus
+`Judged × Check`, and its firing units are `Firings × Effects`.
+`world.budget.rules` prints `judged=` and `firings=` when they are fewer than
+the multiplier, and `worst=` when the line's worst case is more than its price;
+`world.budget.rules --why <rule>` prints which of the cases above the line
+fell under.
+
+One change per line per tick is the sheet's stated expectation, not a bound.
+A tick in which many things move at once (a boot, a schedule that turns every
+group over on one tick) costs more, up to the worst tick the sheet reports
+beside its total. Each binding's work stays bounded by its check and its
+effects, and `world.budget.rules --spent` reads what a run actually spent.
 
 A host whose commit of one firing spends more than the effects themselves
 prices that into the firing's effects: `Contributor` takes the commit's units.
@@ -144,11 +212,20 @@ drive-gate row adds every gate row's capacity and an owner resync per body.
 
 A region interaction's carrier count is bounded by disc packing. Membership is
 by a body's centre, so at most `floor(((R + r)/r)^2)` carriers fit inside a
-region of radius `R`, clamped to the population capacity. The footprint radius
+region of radius `R` (a box's half-diagonal on the ground), clamped to the
+population capacity. The footprint radius
 `r` is the smallest over every kit, because a property tag carries no static
 link to a kit and any body could be the one standing in the region. When the
 region is absent or no solid-only kit footprint resolves, the bound falls back
 to the population capacity (`WorldRuleWorkBudget.RegionCapacityBound`).
+
+A `forEach: region(placement)` sweep is priced at the same bound unless the
+region authors a `capacity` (`WorldPlacementRegion.Capacity`), the occupants
+its author expects it to hold at once. The capacity prices the sweep and
+nothing else: a sweep binds every body inside the region, and
+`world.tick.region-sweep-overflow` in `world.counters world.tick` counts the
+bodies it bound past the priced number, so a capacity authored too small
+shows.
 
 ### Prices read declarations
 
@@ -277,8 +354,8 @@ two can read in one tick.
 `RuleCapacity.MaxWorkUnitsPerTick` is 4,250,000. A world whose sheet is
 unmodeled, overflowed, or above the ceiling is refused, and the refusal names
 the three costliest lines. The value was sized against a 30 Hz tick: it
-reserves roughly a fifth of a 33.3 ms tick for the rule sweep's worst case, at
-about 1.7 ns a unit.
+reserves roughly a fifth of a 33.3 ms tick for the rule sweep, at about
+1.7 ns a unit.
 
 The search jobs run in the same tick, right after the rules, and draw on the
 same ceiling: a job's allowance is what the ceiling leaves after the sheet and
@@ -287,23 +364,31 @@ judge run is priced by the same sheet over the job's judge rules, so an
 over-priced rule costs the search twice, once in the sheet and once in every
 candidate.
 
-A `forEach` line's multiplier is its row's capacity, so the usual fix for a
-refused sheet is to author the capacity the row really needs. A rule that fires
+A `forEach` line's multiplier is its row's capacity, so the first fix for a
+refused sheet is to author the capacity the row really needs. The second is to
+let the line be priced by change: `world.budget.rules --why <rule>` says what
+keeps a line judged every tick (a read of `$tick`, a trait row, a pose) and
+what keeps it firing (a Level gate nothing closes). A rule about a place
+sweeps the place's occupants (`forEach: region(placement)`) instead of testing
+every body's position; a rule that moves a state machine sets the cell its
+gate tests, so its firing closes its gate. A rule that fires
 only a few of its bindings at a time, such as a batch window over an ordinal or
 a match against one held piece, states it with `maxFirings`, and its firings are
 priced at that number. `world.budget.rules` lists every line, costliest first,
-with its multiplier, its firings when `maxFirings` bounds them (`firings=`),
-setup, check, fire, and total, and the pinned ranges it's priced under.
+with its multiplier, the bindings it is charged a check for when they are fewer
+(`judged=`), its firings when they are fewer (`firings=`),
+setup, check, fire, and total, its worst case when that is more (`worst=`), and
+the pinned ranges it's priced under.
 `world.budget.rules --why <rule>` prints one line's derivation: where the
-multiplier comes from and each effect's own cost, then the rule's
-[schedule](#what-a-schedule-names).
+multiplier comes from, each effect's own cost and how the line was priced, then
+the rule's [schedule](#what-a-schedule-names).
 
-The worst case is a ceiling over capacities; `world.budget.rules --spent [top]`
+`world.budget.rules --spent [top]`
 is what the rules actually spent. Per rule and interaction it lists the visits,
 the ticks a due list left it alone (`elided=`), the evaluations, the skips and
 the firings the evaluator counted since the latches began, and the work those
-cost at the sheet's own prices: setup per visit, check per evaluation that ran,
-fire per firing. Every count is deterministic, so two runs of one document and
+cost at the sheet's own prices: setup per sweep that snapshotted its keys,
+check per evaluation that ran, fire per firing. Every count is deterministic, so two runs of one document and
 input print the same sheet. `settled=` counts the skips that stood for a Level
 firing proven to change nothing, and `armed=` the firings that queued an arm
 that leaves the arena (each makes the host derive its fact versions again). The
@@ -483,10 +568,12 @@ sits (`RuleNeeds.FacetFacts`), so a fact an effect walk does not reach makes the
 schedule volatile rather than leaving it out. An Edge rule and a group rewind
 have no firing schedule.
 
-`RuleEvaluator.QuiescenceChecked` fires every such firing anyway and records
-the first that does not settle again (`StaleQuiescence`). `puck test
---reproduce` turns it on for the replay, so each replayed tick's hash compares
-a recording that skipped the firing with a replay that fired it.
+`puck test --reproduce` replays a recording with every schedule off
+(`RuleEvaluator.SchedulingEnabled`): the replay judges every binding of every
+rule in place, every tick, and fires every Level gate that holds. Each replayed
+tick's hash therefore compares what the schedules ran, the kept verdicts, the
+firings not run again and the bindings a due list never visited, with the
+evaluation they stand for.
 
 ### Visit only the rules that are due
 
@@ -500,33 +587,49 @@ due list after the groups. A distance interaction follows its carriers' position
 and a region interaction follows the event feed's occupancy for its placement.
 Both follow carrier membership and pool instance lifetimes. When due, each visits
 pairs in its original order. Decisions, rules with live rows or a `maxFirings`,
-and sweeps over a set no version names are due every tick.
+and sweeps over a set no version names are due every tick. A
+`forEach: region(placement)` sweep is due when the region's occupants change or
+something its bindings read moves, and then sweeps the occupants.
 
-Moves are pushed, not polled. Every row version moves through one door in the
-arena (`BumpRowVersion`), which makes the row the most recently moved in the
-order its versions keep (`IndexVersions`, read through
-`StateArena.TryReadMoves`). Every reader follows that order from its own place
-(the due list here, and each audience's disclosed definition) and is handed
-each row that moved since once, however often it moved; the host records each
+A keyed sweep is due **per binding**. A schedule records how the judgement
+reaches each row it reads (`RowReach`): the cell under the key bound to
+`$each`, a literal cell, or a cell no compile-time key names. A move of the
+cell `row[k]` then marks only binding `k` of a rule that reads the row as
+`row[$each]`, a move of another literal cell marks nothing, and only a move
+of a cell every binding may read, or a change to the row's members or order,
+marks the rule in full. A host fact read for the body bound to `$each` marks
+that body's binding the same way. A rule over a thousand keys of which one
+changed judges one binding. A row sweep judges its due keys in cell order over
+the keys the row held at its last full sweep, which stand while the row's
+structure does (`StateArena.RowStructureVersion`), so the order and the set
+are the ones an in-place sweep would bind.
+
+Moves are pushed, not polled. Every committed change to a row's cells is
+described through one door in the arena, which names the cell whose value
+moved or, for any other change, the row whole
+(`StateArena.TryReadCellMoves`); every row version move passes it. Every
+reader follows the moves from its own place and is handed each one since; the
+host records each
 fact that moved
 (`IStateReader.DrainFactMoves`) when it derives its versions again: the
 evaluator tells it host state may have moved before a walk and after any firing
 that delivered an arm (`IStateReader.RefreshFacts`), and the host derives once,
 before the next version read or drain. After every
-visit, the walk drains both feeds and marks each mover's readers due. A mark on
-a rule later in document order is seen this tick; one on a rule the walk has
+visit, and after every firing inside a keyed sweep, the walk drains both feeds
+and marks each mover's readers due. A mark on
+a rule or binding later in the order is seen this tick; one the walk has
 passed is seen next tick, exactly where an in-place version check would first
-see the move. A body sweep is due per body: it judges only the bodies whose
-facts moved, and all of them when a row it reads or the roster moved.
+see the move.
 
 `state.rules.due` and `state.rules.elided` in `world.counters state` count the
 rules the walk visited and the ones it left alone, beside `evaluations`,
 `skips`, `settled`, `firings` and `armed`. `world.budget.rules --spent` lists the same counts per
 rule (see [Price a tick's rules](#price-a-ticks-rules)).
 
-`RuleEvaluator.SchedulingEnabled` is `true` by default. Tests turn it off to
-prove the skip and the due list change no observable result
-(`LatchAndTriggerLawTests`).
+`RuleEvaluator.SchedulingEnabled` is `true` by default. Off, every rule judges
+every binding in place every tick. Tests turn it off to prove the skip and the
+due list change no observable result (`LatchAndTriggerLawTests`), and so does
+every `puck test --reproduce` replay.
 
 > [!IMPORTANT]
 > Scheduling caches are acceleration. They live in `RuleLatch`, per rule and
@@ -564,8 +667,14 @@ ceiling and how they behave.
 - Hazard analysis works per cell and per literal pin. It can prove two gates
   exclusive only through disjoint ranges on one literal cell, so it can list
   pairs that never fire together in practice.
-- The work sheet is a static worst case. It says nothing about how long a tick
-  takes on a particular machine.
+- The work sheet prices a tick at rest plus one change per line, and says
+  nothing about how long a tick takes on a particular machine. A tick in which
+  many things change at once costs more than the sheet's total, up to the
+  worst tick it reports.
+- The sheet proves a firing closes its own gate only in the two shapes
+  `RuleResponse.ClosesItself` reads. A Level rule that closes its gate another
+  way is priced as firing every tick; write it as one of the two shapes, or as
+  an Edge where a crossing is what it means.
 - In Puck.World every firing is its own grant-checked state transaction, and its
   validation and commit revisit the document's rows and the input runtime's
   owners whatever the firing wrote. The sheet prices a firing's effects, not
@@ -587,8 +696,10 @@ ceiling and how they behave.
 | `RuleDataflow` | `Puck.State.Rules` | Collects read and write sets and scheduling facts. |
 | `RuleHazards`, `RuleHazard` | `Puck.State.Rules` | Order-sensitive rule pairs. |
 | `RuleCost`, `RuleWorkBudget`, `RuleWorkContributor`, `RulePinnedCell` | `Puck.State.Rules` | Line costs, the exclusion trie, writer counts, and the tally. |
-| `RuleSchedule`, `RuleDeadline` | `Puck.State.Rules` | A judgement's rows, host facts, sweep set and deadline, and why it's volatile. |
-| `RuleDueList` | `Puck.State.Rules` | The rules (and bodies) due this tick, and the index that pushes readers onto it. |
+| `RuleSchedule`, `RuleDeadline`, `RowReach` | `Puck.State.Rules` | A judgement's rows, how it reaches their cells, host facts, sweep set and deadline, and why it's volatile. |
+| `RuleDueList` | `Puck.State.Rules` | The rules, and the bindings of a keyed sweep, due this tick, and the index that pushes readers onto it. |
+| `RuleResponse` | `Puck.State.Rules` | How many bindings a line is charged for: a tick at rest plus one change. |
+| `ArenaCellMove` | `Puck.State` | One committed change to a row's cells, as the arena hands it to a reader. |
 | `FactRead` | `Puck.State` | One versioned host fact a schedule names. |
 | `RuleLatch` | `Puck.State.Rules` | Edge memory plus the scheduler's caches. |
 | `WorldRuleWorkBudget` | `Puck.World.Schema` | The world's sheet, including interactions and admission's refusal. |

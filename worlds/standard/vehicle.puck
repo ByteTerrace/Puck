@@ -263,13 +263,18 @@ template vehicleRoutes(vehicles) {
 
 // The crossings vehicles yield at, for a vehicle on any route (a navigated loop of stops or a curve). `vehicles` lists
 // each as `{ key, group }`: `key` its body number, `group` the name of the loop it drives (a row `vehicleGroup-<group>`
-// keys its vehicles). `crossings` lists each as `{ region, group, x0, x1, z0, z1, cx0, cx1, cz0, cz1 }`: the id of a
-// placement whose region covers the crossing, the group of vehicles that pass it, the approach box before it on their
-// side of travel and the crossing's own box (world x and z bounds). A vehicle in a crossing's approach box while any
-// body stands in the crossing's region is held: its producer stands down (`holdProducer`), it coasts to rest, and
-// `vehicleHeld` names the crossing (its number plus one). Once the region is empty, or the vehicle has already rolled
-// into the crossing, it is released (`releaseProducer`) and its producer starts again from where it stands: a curve
-// follower at its curve's nearest station, a navigated vehicle routing again to the stop it was driving to.
+// keys its vehicles). `crossings` lists each as `{ region, approach, group, cx0, cx1, cz0, cz1 }`: the id of a
+// placement whose region covers the crossing, the id of a placement whose region covers the approach before it on the
+// vehicles' side of travel, the group of vehicles that pass it and the crossing's own box (world x and z bounds). A
+// vehicle in a crossing's approach while any body stands in the crossing's region is held: its producer stands down
+// (`holdProducer`), it coasts to rest, and `vehicleHeld` names the crossing (its number plus one). Once the region is
+// empty, or the vehicle has already rolled into the crossing, it is released (`releaseProducer`) and its producer
+// starts again from where it stands: a curve follower at its curve's nearest station, a navigated vehicle routing
+// again to the stop it was driving to.
+//
+// The hold rule sweeps the approach's occupants (`forEach: region(...)`), so a crossing costs the vehicles approaching
+// it, never every vehicle of its loop. An approach region's `capacity` is the vehicles the work sheet prices that
+// sweep at; a world sizes it to the queue it expects there.
 template vehicleCrossings(vehicles, crossings) {
   state {
     world: concat(
@@ -292,11 +297,9 @@ template vehicleCrossings(vehicles, crossings) {
 
   for (crossing, i) in crossings {
     rule $"vehicle-crossing-{crossing.region}" {
-      when (vehicleHeld[$each] == 0 and region(crossing.region) >= 1 and
-        bodyPosition(each, x) > crossing.x0 and bodyPosition(each, x) < crossing.x1 and
-        bodyPosition(each, z) > crossing.z0 and bodyPosition(each, z) < crossing.z1)
+      when vehicleHeld[$each] == 0 and region(crossing.region) >= 1 and $"vehicleGroup-{crossing.group}"[$each] == 1
       mode: Level
-      forEach: $"vehicleGroup-{crossing.group}"
+      forEach: region(crossing.approach)
       holdProducer(key: $each)
       vehicleHeld[$each] = i + 1
     }

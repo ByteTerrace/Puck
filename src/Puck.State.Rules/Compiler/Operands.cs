@@ -48,6 +48,7 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
                 Key: ((KeyFrom is null)
                 ? Key
                 : default),
+                Reach: ((KeyFrom is { IsEach: true }) ? CellReach.Each : ((KeyFrom is { IsEachIndex: true }) ? CellReach.Indexed : CellReach.Key)),
                 RowOrdinal: RowOrdinal
             ));
         }

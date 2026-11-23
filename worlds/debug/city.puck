@@ -213,8 +213,9 @@ let vehicleCount = length(vehicleSpots)
 
 // The crossings: the ring road's four, at the middle of each side (the north one where the arrival ground meets the
 // square), and the works road's, by the middle workshop. Each names its region (cx, cz and half extents hx, hz) and the
-// approach box before it on the vehicles' side of travel (x0 .. x1, z0 .. z1): vehicles drive the ring anticlockwise,
-// north up the east side, west along the north side, south down the west side and east along the south side.
+// approach box before it on the vehicles' side of travel (x0 .. x1, z0 .. z1), a region `<region>-approach` of its
+// own: vehicles drive the ring anticlockwise, north up the east side, west along the north side, south down the west
+// side and east along the south side.
 let cityCrossings = [
   { group: "ring", region: "place-city-crossing-north", cx: 0, cz: -15, hx: 3, hz: 5, x0: 3, x1: 11, z0: -20, z1: -10 }
   { group: "ring", region: "place-city-crossing-west", cx: -35, cz: -50, hx: 5, hz: 3, x0: -40, x1: -30, z0: -47, z1: -39 }
@@ -265,11 +266,8 @@ vehicleCrossings(
   vehicles: map(range(0, vehicleCount), v => { key: 7 + vehicleCount - v, group: vehicleSpots[v].group }),
   crossings: map(cityCrossings, c => {
     region: c.region
+    approach: $"{c.region}-approach"
     group: c.group
-    x0: c.x0
-    x1: c.x1
-    z0: c.z0
-    z1: c.z1
     cx0: c.cx - c.hx
     cx1: c.cx + c.hx
     cz0: c.cz - c.hz
@@ -429,6 +427,16 @@ placements {
       position [crossing.cx, 1.5, crossing.cz]
       region {
         halfExtents [crossing.hx, 2, crossing.hz]
+      }
+    }
+    // The approach before the crossing. Held vehicles pass through one another and collect in this box, so it is
+    // priced for every vehicle of its loop.
+    placement $"{crossing.region}-approach" {
+      prototype: "place"
+      position [(crossing.x0 + crossing.x1) / 2, 1.5, (crossing.z0 + crossing.z1) / 2]
+      region {
+        halfExtents [(crossing.x1 - crossing.x0) / 2, 2, (crossing.z1 - crossing.z0) / 2]
+        capacity: length(filter(vehicleSpots, v => v.group == crossing.group))
       }
     }
   }

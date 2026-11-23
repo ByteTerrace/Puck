@@ -10709,6 +10709,10 @@ export type WorldPlacementRegion = {
    * A box's yaw about +Y in degrees, added to the placement's resolved yaw. Ignored by a sphere.
    */
   yawDegrees?: number;
+  /**
+   * How many occupants the work sheet prices a rule's forEach: region(...) sweep at: the bodies the author expects the place to hold at once. Absent for the most bodies that fit the volume (RegionSweepCapacity). It prices and nothing else: the region senses and counts every body inside it, and a sweep binds every one.
+   */
+  capacity?: number | null;
 };
 
 /**

@@ -125,6 +125,14 @@ A document's `schema:` field selects its vocabulary, never the filename.
   A rule has one gate and one decision, so a `when`, `decision` or nested
   `rule` inside a rule-body `for` is **PUCK114**; write the condition in the
   rule's own `when`, or in an `if` inside the loop.
+- **A sweep source is a row, a reserved word or a call.** `forEach: hand`
+  sweeps a keyed row's keys and `forEach: $bodies` the live bodies. A reserved
+  channel that takes arguments is written as a call, as a gate's fact is:
+  `forEach: region(crossing.approach)` sweeps the bodies inside a placement's
+  region and `forEach: inputEvents(seat)` a step's input events. Each argument
+  is a compile-time value (a literal, a constant, a template parameter's
+  member), and the document holds the colon spelling (`$region:<id>`), which
+  also still parses.
 - **An effect names its row one way.** An assignment, `remove`, `schedule`,
   `push`, `draw`, `deal` and `shuffle` all read their row as a target and lower it
   through `ResolveEffectTarget`: a template parameter or loop variable holding a

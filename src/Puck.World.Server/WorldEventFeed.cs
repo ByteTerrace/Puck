@@ -111,8 +111,31 @@ public sealed class WorldEventFeed {
     // than a derived ordinal, so a document edit that reorders placements does not silently reinterpret stale state
     // under a reused ordinal — a region's identity is its name, exactly as GrantSubject.Region already keys it.
     private ulong m_occupancySequence;
-    private sealed record RegionOccupancy(bool[] Bodies) {
+    // One region's latches by body index, and beside them the occupants in ascending index order, so the count a rule's
+    // region(...) reads and the bodies a region sweep binds cost the occupants, never the population. Set is the one
+    // writer of both.
+    private sealed class RegionOccupancy {
+        private readonly List<int> m_occupants = [];
+
+        internal RegionOccupancy(bool[] bodies) {
+            Bodies = bodies;
+            for (var body = 0; (body < bodies.Length); body++) {
+                if (bodies[body]) { m_occupants.Add(item: body); }
+            }
+        }
+
+        internal bool[] Bodies { get; }
+        internal List<int> Occupants => m_occupants;
         internal ulong Version { get; set; }
+
+        internal void Set(int body, bool inside) {
+            if (Bodies[body] == inside) { return; }
+            Bodies[body] = inside;
+
+            var at = m_occupants.BinarySearch(item: body);
+
+            if (inside) { m_occupants.Insert(index: ~at, item: body); } else { m_occupants.RemoveAt(index: at); }
+        }
     }
     private readonly Dictionary<string, RegionOccupancy> m_regionOccupancy = new(comparer: StringComparer.Ordinal);
     internal ulong OccupancyVersion(string region) => m_regionOccupancy.GetValueOrDefault(region)?.Version ?? 0UL;
@@ -849,8 +872,10 @@ public sealed class WorldEventFeed {
                     inside = (near && shape.Contains(point: m_changedPoints[bodyOrdinal]));
                 }
 
+                var latch = occupancy.Bodies[body];
+
                 if (EmitTransition(
-                    latch: ref occupancy.Bodies[body],
+                    latch: ref latch,
                     now: inside,
                     onClear: new WorldEventEdge(
                         Family: WorldEventFamily.RegionExit,
@@ -867,6 +892,7 @@ public sealed class WorldEventFeed {
                         B: thisOrdinal
                     )
                 )) {
+                    occupancy.Set(body: body, inside: inside);
                     occupancy.Version = ++m_occupancySequence;
                     if (body < m_seatPlaces.Length) { m_seatPlacesStale[body] = true; }
                 }
@@ -1065,9 +1091,7 @@ public sealed class WorldEventFeed {
             return false;
         }
         if (m_regionOccupancy.TryGetValue(key: placementId, value: out var occupancy)) {
-            for (var body = 0; (body < occupancy.Bodies.Length); body++) {
-                if (occupancy.Bodies[body]) { latched.Add(item: body); }
-            }
+            latched.AddRange(collection: occupancy.Occupants);
         }
         for (var body = 0; (frame.HasCenter && (body < population.Capacity)); body++) {
             if (population.IsActive(index: body) && (population.EntryBody(index: body) is { } entry) && frame.Shape.Contains(point: entry.FixedPosition)) {
@@ -1165,23 +1189,26 @@ public sealed class WorldEventFeed {
     /// <see cref="RuleFacts"/>) rather than duplicated.</summary>
     /// <param name="placementId">The region-carrying placement's stable id.</param>
     /// <returns>The occupant count, or zero for a placement this tick has never seen carry a region.</returns>
-    public int OccupantCount(string placementId) {
-        if (!m_regionOccupancy.TryGetValue(
-            key: placementId,
-            value: out var occupancy
-        )) {
-            return 0;
-        }
+    public int OccupantCount(string placementId) => (m_regionOccupancy.TryGetValue(
+        key: placementId,
+        value: out var occupancy
+    )
+        ? occupancy.Occupants.Count
+        : 0
+    );
+    /// <summary>Appends the bodies inside the placement region named <paramref name="placementId"/> as of the most
+    /// recent <see cref="Collect"/>, in ascending index order: the bodies a rule's <c>forEach: region(...)</c> sweep
+    /// binds.</summary>
+    /// <param name="placementId">The region-carrying placement's stable id.</param>
+    /// <param name="into">The list the indices are appended to; nothing is appended for a placement this feed has never
+    /// seen carry a region.</param>
+    /// <returns>How many bodies the region holds.</returns>
+    public int CollectOccupants(string placementId, List<int> into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+        if (!m_regionOccupancy.TryGetValue(key: placementId, value: out var occupancy)) { return 0; }
+        into.AddRange(collection: occupancy.Occupants);
 
-        var count = 0;
-
-        foreach (var occupied in occupancy.Bodies) {
-            if (occupied) {
-                count++;
-            }
-        }
-
-        return count;
+        return occupancy.Occupants.Count;
     }
     /// <summary>Queues a route-disengaged edge after <see cref="WorldGrants"/> reports an effective route change.</summary>
     /// <param name="sourceBody">The routed body's entity index.</param>

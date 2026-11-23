@@ -592,4 +592,61 @@ public sealed class LatchAndTriggerLawTests {
             expected: Run(scheduling: true)
         );
     }
+    [Fact]
+    public void ADueListJudgesOnlyTheBindingAMovedCellNames() {
+        // A sweep whose bindings read and write only the cell under their own key. A write to one cell between ticks
+        // reaches one binding: the due list judges that binding alone, and the state and latch match the sweep that
+        // judges every key every tick.
+        static (List<string> Trace, long Evaluations) Run(bool due) {
+            var (host, evaluator, rules, latch, _) = EvaluatorFixture.Arrange(rules: [
+                new Rule(
+                    Name: RulesFixture.Name(value: "spend"),
+                    Effects: [new ActionEffect.SetState(Key: "$each", State: "hand", Value: 0m)],
+                    ForEach: "hand",
+                    Gate: new ActionPredicate.CompareState(Comparison: ExpressionOp.GreaterOrEqual, Key: "$each", State: "hand", Value: 5m)
+                ),
+            ]);
+            var trace = new List<string>();
+
+            void Write(string key, long value) {
+                var mark = host.Arena.BeginScope();
+
+                Assert.True(condition: host.Arena.TryWrite(
+                    key: host.Arena.Catalog.Keys.Intern(name: RulesFixture.Name(value: key)),
+                    operand: value,
+                    reason: out var reason,
+                    rowOrdinal: EvaluatorFixture.Ordinal(host: host, row: "hand"),
+                    write: StateWriteKind.Set
+                ), userMessage: reason);
+                host.Arena.Commit(mark: mark);
+            }
+
+            evaluator.SchedulingEnabled = due;
+            for (var tick = 0UL; (tick < 8UL); tick++) {
+                if (tick == 3UL) {
+                    Write(key: "b", value: 9L);
+                }
+                if (tick == 5UL) {
+                    Write(key: "a", value: 7L);
+                }
+                host.Advance(engineTick: tick, tick: tick);
+                _ = (due
+                    ? evaluator.EvaluateDue(latch: latch, rules: rules, stepTicks: 1UL)
+                    : evaluator.Evaluate(latch: latch, rules: rules, stepTicks: 1UL));
+                trace.Add(item: $"{tick}: a={EvaluatorFixture.Cell(host: host, key: "a", row: "hand")} b={EvaluatorFixture.Cell(host: host, key: "b", row: "hand")} latch={Hash(latch: latch, rules: rules):x16} held={latch.Count}");
+            }
+            Assert.True(condition: ((Puck.Abstractions.Counting.IWorkCounterSource)evaluator).TryRead(kind: RuleWorkKinds.Evaluations, value: out var evaluations));
+
+            return (trace, evaluations);
+        }
+
+        var inPlace = Run(due: false);
+        var byChange = Run(due: true);
+
+        Assert.Equal(actual: byChange.Trace, expected: inPlace.Trace);
+        // In place: both keys, all eight ticks.
+        Assert.Equal(actual: inPlace.Evaluations, expected: 16L);
+        // By change: both keys once, then each written key twice (the firing, and the closed verdict after it).
+        Assert.Equal(actual: byChange.Evaluations, expected: 6L);
+    }
 }

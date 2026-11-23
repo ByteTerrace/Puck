@@ -120,7 +120,7 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
         }
         // Membership controls whether and how often a rule fires, even when its body never reads a cell value.
         if (ForEachOrdinal >= 0) {
-            into.Add(new CellAccess(Key: default, RowOrdinal: ForEachOrdinal));
+            into.Add(new CellAccess(Key: default, Reach: CellReach.Members, RowOrdinal: ForEachOrdinal));
         }
         if (PoolForEach is { } pool) {
             into.Add(item: new CellAccess(Key: default, RowOrdinal: pool.DomainRowOrdinal));

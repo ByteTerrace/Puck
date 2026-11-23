@@ -123,7 +123,7 @@ public sealed class WorldRegionOccupancyOperand : WorldFactOperand {
         into.AddPlacement(placementId: PlacementId);
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => PopulationCapacity(context: context);
+    public override RuleWork Cost(IRuleCostContext context) => 1L;
     /// <inheritdoc/>
     public override Fact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);

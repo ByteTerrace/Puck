@@ -642,8 +642,13 @@ public sealed partial class WorldPopulation {
         ThrowIfPartitioned();
         if ((((uint)index) >= ((uint)Capacity)) || !m_entries[index].Active) { return false; }
         ref var state = ref m_entries[index].ProducerState.StandDown;
+        var next = (standDown ? (state | reason) : (state & ~reason));
 
-        state = (standDown ? (state | reason) : (state & ~reason));
+        if (next != state) {
+            state = next;
+            // A rule's $producer: read is versioned by what it answers, so the slot is one the next derivation compares.
+            m_factDirtySlots.Add(index: index);
+        }
         return true;
     }
     /// <summary>Makes <paramref name="possessed"/> the bodies that stand down for
@@ -656,7 +661,12 @@ public sealed partial class WorldPopulation {
         // Recomputed whole from the grant table each tick, so a restored or scope-replayed flag can never outlive the
         // application that set it.
         for (var index = 0; (index < Capacity); index++) {
-            m_entries[index].ProducerState.StandDown &= ~BodyProducerStandDown.Possessed;
+            ref var state = ref m_entries[index].ProducerState.StandDown;
+
+            if ((state & BodyProducerStandDown.Possessed) != BodyProducerStandDown.None) {
+                state &= ~BodyProducerStandDown.Possessed;
+                m_factDirtySlots.Add(index: index);
+            }
         }
         foreach (var index in possessed) {
             _ = SetProducerStandDown(index: index, reason: BodyProducerStandDown.Possessed, standDown: true);

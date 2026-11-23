@@ -30,7 +30,7 @@ Every rule has a name and at least one effect. The rest is optional:
 | Locals | Values computed once per evaluation, in declared order. The gate and every effect can read them. The ones the gate reads, directly or through another local, are computed before the gate; the rest only when the evaluation fires. A local is never stored; it lives for one evaluation. | `price` |
 | Gate | The predicate that must hold. A rule with no gate always holds. | `coins >= price` |
 | Mode | Whether a holding gate fires on every evaluation (`Level`, the default) or only when it opens (`Edge`). | `Edge` |
-| Iteration | `forEach: row` evaluates the rule once per key of a keyed row, `forEach: $zones` once per entry of the rule's zone table, `forEach: $bodies` once per live body, and `rule name for each x in pool` once per live pool instance. `maxFirings: n` ends an iterating sweep once `n` bindings have fired. | none |
+| Iteration | `forEach: row` evaluates the rule once per key of a keyed row, `forEach: $zones` once per entry of the rule's zone table, `forEach: $bodies` once per live body, in Puck.World `forEach: region(placement)` once per body inside a placement's region, and `rule name for each x in pool` once per live pool instance. `maxFirings: n` ends an iterating sweep once `n` bindings have fired. | none |
 | Effects | The ordered changes the rule attempts when it fires. | two assignments |
 | Zones | A table of ordered piles the rule can select from at runtime. | none |
 
@@ -770,6 +770,19 @@ participant reference bound to that body. A body-keyed effect takes it as
 that holds no bodies refuses the rule at admission by the facet it lacks
 (`ILiveBodies`). A decision cannot iterate it; a decision's `forEach` names a
 keyed row.
+
+In Puck.World, `forEach: region(placement)` sweeps a place instead of a
+population: the rule evaluates once per body inside the named placement's
+region, in ascending body-index order, with `$each` bound to that body's index
+as a body sweep binds it. The occupants are the ones `region(placement)` counts
+in a gate. A rule about a place then costs the bodies standing in it, where a
+sweep over every body that tests each one's position costs them all: the work
+sheet multiplies the rule by the region's `capacity`, the occupants its author
+expects at once, and the evaluator visits the rule when the region's occupants
+change or something its bindings read moves
+([Price by change](analysis.md#price-by-change)). A row the gate reads as
+`row[$each]` keeps the sweep to the bodies it is about: an occupant with no
+cell in the row reads absent, which closes its gate.
 
 Before the gate, the evaluator resolves each distinct spelling once. If any
 spelling selects an index outside the table or at a gap, the gate reads closed

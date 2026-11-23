@@ -49,7 +49,7 @@ corrected in the same change.
 | Vector rows: nearest, mix, mean, remember | `ArenaVectorTransforms` (Vectors) | [vectors](../../../docs/reference/state/vectors.md) |
 | Legal moves, a computer opponent's best move, chance nodes | `ArenaSearch` over journal scopes, judged by `IArenaSearchJudge.Judge` (`RuleArenaSearchJudge`); world jobs are `search` rows (`WorldSearchSection`) | [search](../../../docs/reference/state/search.md) |
 | Schedule a distance or region interaction | `WorldRuleHost` supplies carrier rows, positions and sampled occupancy to `RuleDueList`. `RuleEvaluator.DrainFactMoves` delivers moves to both rule families. | [analysis](../../../docs/reference/state/analysis.md) |
-| Read and write sets, order-sensitive pairs, price a tick's worst case, skip rules whose inputs did not move | `RuleDataflow`, `RuleHazards`, `RuleWorkBudget`, `RuleSchedule` against `RuleCapacity.MaxWorkUnitsPerTick` | [analysis](../../../docs/reference/state/analysis.md) |
+| Read and write sets, order-sensitive pairs, judge a binding only when something it reads moved, price a tick by that | `RuleDataflow`, `RuleHazards`, `RuleSchedule` and `RuleDueList` (per rule, and per binding of a keyed sweep, fed by `StateArena.TryReadCellMoves` and the host's fact moves), `RuleResponse` and `RuleWorkBudget` against `RuleCapacity.MaxWorkUnitsPerTick` | [analysis](../../../docs/reference/state/analysis.md) |
 | Stop a Level rule firing again when its firing changed nothing | the firing schedule (`RuleDataflow.CollectFiring`), settled by `RuleEvaluator.FireProposal`; an unversioned host fact or host-owned row keeps it firing, so version them in the host (`IStateReader.TryScheduleFact`, `IStateReader.TryScheduleHostOwnedRow`) | [keep a Level firing](../../../docs/reference/state/analysis.md#keep-a-level-firing-that-changed-nothing) |
 | A host fact, effect or row family only your host understands | facets and families registered on the compile context; `ArenaEffectHost` as the base host | [hosting](../../../docs/reference/state/hosting.md) |
 | Decide what a recipient may read or write | `WorldRecipientView` over `WorldStateDisclosure`; mutation/guard admission in `WorldRecipientMutations`; audience enclosure in `StateArena.ReadAudienceEncloses` | [disclosure plan](../../../docs/plans/disclosure.md) |
@@ -177,10 +177,23 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   (`WorldPopulation.CollectFactCandidateSlots`) and lattice field revisions
   (`FieldLattice.ValueRevision`). An effect that reads a row it does not
   declare, or a host source whose value moves without its version moving, is a
-  wrong skip caught when `puck test --reproduce` replays the tick with
-  `RuleEvaluator.QuiescenceChecked` on. A new effect kind declares what it reads
+  wrong skip caught when `puck test --reproduce` replays the tick with every
+  schedule off (`RuleEvaluator.SchedulingEnabled`), judging every binding in
+  place. A new effect kind declares what it reads
   and writes; a new host fact or host-owned row stays unversioned, and so
   volatile, until the host can say when it moved.
+- **An unvisited binding must be invisible too.** A due list visits a rule, or
+  one binding of a keyed sweep, only when something it reads moved
+  (`RuleDueList`). That rests on three things: every committed change to a
+  row's cells is described through one door, as the cell that moved or the row
+  whole (`StateArena.TryReadCellMoves`); a read declares how it reaches its row
+  (`CellAccess.Each` for the cell under the `$each` key, a literal key, or any
+  cell), which a schedule keeps as `RowReach`; and a row sweep's due positions
+  name bindings only while the swept row's structure stands
+  (`StateArena.RowStructureVersion`). A new operand that reads `row[$each]`
+  and does not say so is merely judged more often; one that claims
+  `Each` for a cell another binding's key can reach is a wrong skip, which the
+  same replay catches.
 - **Bounded before it runs.** Every row, pool, pattern and search has a
   ceiling checked at compile or load, and a world whose rules could exceed
   `RuleCapacity.MaxWorkUnitsPerTick` is refused at load. When merged content
@@ -188,7 +201,17 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   (`world.budget.rules --why`); then raise the engine constant rather than
   cutting content
   ([the rule](../../../docs/reference/state/analysis.md#when-merged-content-collides-with-a-capacity)).
-- **The sheet prices what the evaluator runs.** A local the gate does not read
+- **The sheet prices what the evaluator runs.** A rule a due list judges by
+  change is priced for a tick at rest plus one change (`RuleResponse.Of`, read
+  off the judgement walk a schedule is built from); a line judged in place (a
+  group's, a search judge's, an interaction, a decision, a `maxFirings` sweep)
+  for every binding. What rests is one answer: a row by its declarations
+  (`RuleCompileContext.RowRests`, the trait and host-owned test
+  `RuleSchedule.Build` applies), a host fact by `RuleCompileContext.FactRests`,
+  and the world host refuses to leave unversioned a fact
+  `WorldFactsCompileContext.Rests` answers for, so the sheet never prices by
+  change a fact judged every tick. A new host fact that is a count, a flag or
+  an event is added to both. A local the gate does not read
   is computed only when the rule fires, and priced with the firing; both read
   one `CompiledRule.Deferred`, which the compiler derives from the one door
   every `$local:` spelling resolves through. A second split of a rule's work
@@ -259,7 +282,9 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
 | A recipient's write answers alike whether a row it spells is withheld or absent | `WorldRecipientMutations.Admits`, the one door, over a footprint read from the name registry; `WriteDoorFootprintLawTests` probes every registered state position of every submitted model type, every kind's classification (`WorldRecipientMutations.JudgedElsewhere`) and every replaced section; `WriteDoorNoninterferenceLawTests` runs every vocabulary entry end to end and refuses an uncovered mutation member |
 | A recipient's state write is validated only as far as its written rows reach | `WorldServer.TryValidateWrittenBindings` uses `StateReadAccess` to admit each unit `WorldDefinitionValidator.TryValidateBoundUnits` reaches. An identity-bound row and a binding outside the registered units still validate whole. See the [bound-write checkpoint](../../../docs/plans/disclosure.md#bound-write-validation-checkpoint) and `BoundWriteValidationNoninterferenceLawTests`. |
 | A host fact declares what a derived transient discloses | the compiler, through the abstract `CollectDisclosure` on `WorldFactOperand` and `WorldFactEffect`; `WorldRuleDisclosure.Classify` withholds an undeclared facet fact from every recipient but the authority; `CueDisclosureLawTests` |
-| A skipped Level firing changes nothing | the firing's own proof in `RuleEvaluator.FireProposal` (the arena's `MoveSequence`, the journal's written rows against the firing schedule, the arm queue, the refusal serial, the host's answer from `IEffectHost.CommitStateTransaction`) and the one version door `RuleEvaluator.VersionsMatch`; `puck test --reproduce` replays with `RuleEvaluator.QuiescenceChecked` on, which fires each settled Level binding, verifies skipped `DeriveFacts` slots against the full population, and compares hashes. Nothing but that replay catches an effect whose `CollectReads` omits a row it reads |
+| A skipped Level firing changes nothing | the firing's own proof in `RuleEvaluator.FireProposal` (the arena's `MoveSequence`, the journal's written rows against the firing schedule, the arm queue, the refusal serial, the host's answer from `IEffectHost.CommitStateTransaction`) and the one version door `RuleEvaluator.VersionsMatch`; `puck test --reproduce` replays with every schedule off (`WorldRuleHost.JudgesEveryBinding`), which judges every binding of every rule in place and fires every Level gate that holds, and compares hashes. Nothing but that replay catches an effect whose `CollectReads` omits a row it reads |
+| A binding a due list did not visit would have answered the same | the arena's one change door (`StateArena.TryReadCellMoves`, fed where every row version moves), the host's fact moves, and the same replay, which visits every binding |
+| A fact the sheet prices by change is one the host versions | `WorldRuleHost.TryScheduleFact`, which throws for a fact `WorldFactsCompileContext.Rests` answers for and no source names |
 | A row's content number names one content | `StateArena.SettleContent`, called by the one door every version moves through (`BumpRowVersion`): numbers are compared only for a settled commit that changed the row's number cells alone, and every other move empties the row's memory |
 | Same input, same state | row digests in `StateArena.ComputeHash`; `puck test --reproduce` compares two runs and recomputes every tick |
 

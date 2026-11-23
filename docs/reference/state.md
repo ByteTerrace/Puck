@@ -29,7 +29,7 @@ few of the things it's used for, and the part of the system that does the work:
 | Let characters remember events and recall the ones that fit the moment | [Vectors and embedding spaces](state/vectors.md) |
 | Find legal moves or pick a computer opponent's best move | [Search](state/search.md) |
 | Save, restore, and hash the whole state | [The state arena](state/arena.md) |
-| Find rules whose order decides a result, or price a tick's worst-case work | [Rule analysis, scheduling, and work budgets](state/analysis.md) |
+| Find rules whose order decides a result, judge a rule only when something it reads changed, or price a tick's work | [Rule analysis, scheduling, and work budgets](state/analysis.md) |
 
 ## Key concepts
 
@@ -101,8 +101,8 @@ The state system makes a few promises that the rest of Puck builds on.
   all-or-nothing promise.
 - **Bounded.** Every row, pool, pattern, and search declares or inherits a
   ceiling, checked before anything runs. The rule analysis prices each
-  rule's worst-case work, and Puck.World refuses a document whose rules could
-  exceed the per-tick work ceiling when it loads.
+  rule's work, and Puck.World refuses a document whose rules are priced past
+  the per-tick work ceiling when it loads.
 - **Host-neutral.** The libraries know nothing about bodies, cameras, or
   networks. A host teaches the compiler its own concepts through registered
   extensions, and Puck.World is one such host.

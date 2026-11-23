@@ -376,7 +376,9 @@ public sealed partial class WorldServer {
                     ? $" forEach {catalog.Descriptors[rule.ForEachOrdinal].Name}"
                     : (rule.ForEachBodies
                         ? $" forEach {RuleFacts.ForEachBodies}"
-                        : string.Empty)
+                        : ((rule.Iteration is WorldRegionIteration occupants)
+                            ? $" forEach region({occupants.PlacementId})"
+                            : string.Empty))
             ));
 
             lines.Add(item: $"{rule.Name} mode={rule.Mode.ToString().ToLowerInvariant()}{scope}{boundValues} latch={(held

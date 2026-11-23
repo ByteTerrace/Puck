@@ -66,16 +66,24 @@ public readonly record struct RulePinnedCell(int RowOrdinal, CellKey Key, long L
 /// costs, and the literal cells its gate pins.</summary>
 /// <param name="Name">The rule's name.</param>
 /// <param name="IsInteraction">Whether the line is an interaction rather than a rule.</param>
-/// <param name="Multiplier">The evaluations per tick — one, the iterated row's capacity, or the pair count.</param>
+/// <param name="Multiplier">The bindings one sweep can hold: one, the iterated row's capacity, or the pair count.</param>
 /// <param name="Cost">The orthogonal rule cost components: setup, check, effects.</param>
-/// <param name="CheckUnits">The check units: Setup + Multiplier x Check.</param>
+/// <param name="CheckUnits">The check units: the setup of the bindings judged, plus Judged x Check.</param>
 /// <param name="FiringUnits">The firing units: Firings x Effects.</param>
 /// <param name="WorkUnits">The line's isolated total: CheckUnits + FiringUnits.</param>
 /// <param name="Discriminators">The literal cells the gate pins, in cell order.</param>
-/// <param name="Firings">The most evaluations per tick that can fire: the multiplier, or the rule's
-/// <see cref="CompiledRule.MaxFirings"/> when that is smaller.</param>
+/// <param name="Firings">The firings the line is charged: for a line judged in place, the multiplier or the rule's
+/// <see cref="CompiledRule.MaxFirings"/> when that is smaller; for a line a due list judges by change, the bindings
+/// that fire at rest plus the bindings one change opens (<see cref="RuleResponse"/>).</param>
 /// <param name="Order">The line's place in the tick's one evaluation pass, ascending as the pass reaches it, or a
 /// negative value when the line may run anywhere in the tick or more than once (<see cref="RuleCellWriters"/>).</param>
+/// <param name="Judged">The bindings the line is charged a check for: the multiplier for a line judged in place, and
+/// otherwise the bindings judged at rest plus the bindings one change reaches.</param>
+/// <param name="WorstUnits">What the line costs on a tick in which every binding is judged and every admitted one
+/// fires: Setup + Multiplier x Check + the capped firings x Effects. Reported beside the price, never admitted
+/// against the ceiling.</param>
+/// <param name="Response">How <paramref name="Judged"/> and <paramref name="Firings"/> were derived, for the
+/// read-back.</param>
 public readonly record struct RuleWorkContributor(
     string Name,
     bool IsInteraction,
@@ -86,7 +94,10 @@ public readonly record struct RuleWorkContributor(
     RuleWork WorkUnits,
     IReadOnlyList<RulePinnedCell> Discriminators,
     long Firings,
-    long Order = -1L
+    long Order = -1L,
+    long Judged = 0L,
+    RuleWork WorstUnits = default,
+    string Response = ""
 );
 /// <summary>The firings per tick that can write one cell, each at its place in the tick's evaluation pass. A write
 /// changes what the lines after it read and nothing before, so two lines can read different values of the cell only
@@ -227,15 +238,27 @@ public static partial class RuleWorkBudget {
     /// the line's per-firing effects.</param>
     /// <param name="order">The line's place in the tick's evaluation pass, or a negative value when it may run anywhere
     /// or more than once (<see cref="RuleWorkContributor.Order"/>).</param>
+    /// <param name="inPlace">Whether every binding is judged every tick whatever it reads, and may fire: a line no due
+    /// list visits (a search judge's, a group's, one the host evaluates itself). <see langword="false"/> prices the
+    /// line by what a due list runs: the bindings judged at rest plus the bindings one change reaches
+    /// (<see cref="RuleResponse"/>), which needs the rule's own <see cref="RuleCompileContext"/>.</param>
     /// <returns>The line.</returns>
-    public static RuleWorkContributor Contributor(CompiledRule rule, long multiplier, bool isInteraction, IRuleCostContext context, long commit = 0L, long order = -1L) {
+    public static RuleWorkContributor Contributor(CompiledRule rule, long multiplier, bool isInteraction, IRuleCostContext context, long commit = 0L, long order = -1L, bool inPlace = true) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
         var breakdown = rule.CostBreakdown(context: context);
         var cost = breakdown with { Effects = (breakdown.Effects + commit) };
-        var firings = Firings(multiplier: multiplier, rule: rule);
-        var checkUnits = (cost.Setup + (multiplier * cost.Check));
-        var firingUnits = (firings * cost.Effects);
+        var capped = Firings(multiplier: multiplier, rule: rule);
+        var response = (((context is RuleCompileContext compile) && !inPlace && !isInteraction)
+            ? RuleResponse.Of(context: compile, multiplier: multiplier, rule: rule)
+            : new RuleResponse(Fired: capped, Judged: multiplier, Latching: RuleLatching.None, Why: "judged in place every tick"));
+        // A sweep's setup is one unit per key it snapshots, and a sweep that judges some bindings snapshots none
+        // beyond them.
+        var setup = ((cost.Setup.IsKnown && (response.Judged < multiplier))
+            ? RuleWork.Known(units: Math.Min(val1: cost.Setup.Units, val2: response.Judged))
+            : cost.Setup);
+        var checkUnits = (setup + (response.Judged * cost.Check));
+        var firingUnits = (response.Fired * cost.Effects);
 
         return new RuleWorkContributor(
             CheckUnits: checkUnits,
@@ -246,13 +269,16 @@ public static partial class RuleWorkBudget {
                     contradictory: out _,
                     gate: rule.Gate
                 )),
-            Firings: firings,
+            Firings: response.Fired,
             FiringUnits: firingUnits,
             IsInteraction: isInteraction,
+            Judged: response.Judged,
             Multiplier: multiplier,
             Name: rule.Name,
             Order: order,
-            WorkUnits: (checkUnits + firingUnits)
+            Response: response.Why,
+            WorkUnits: (checkUnits + firingUnits),
+            WorstUnits: ((cost.Setup + (multiplier * cost.Check)) + (capped * cost.Effects))
         );
     }
     /// <summary>Returns how many of a rule's evaluations per tick can fire: its multiplier, bounded by the rule's
