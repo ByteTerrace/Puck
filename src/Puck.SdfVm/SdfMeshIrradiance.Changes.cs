@@ -184,9 +184,10 @@ public sealed partial class SdfMeshIrradiance {
     // Whether a probe relit under an earlier geometry keeps the cube its point and spot lights and emission send, and
     // the visibility of those lights from its centre: it traces no new hits, the local lighting it was relit under
     // stands, and no change since it was relit reaches a segment from one of its hits toward a light whose range covers
-    // that hit, nor from its centre toward the light. Every hit lies within the probe's recorded reach of its origin
-    // (ProbeData.Reach), so a light's segments lie in the box about that sphere's part inside the light's range, the
-    // light and the origin. The one rule for the CPU and the GPU relight.
+    // that hit, nor the segment from its centre toward any light, at any distance (its visibility bit is the geometry's,
+    // never the range's). Every hit lies within the probe's recorded reach of its origin (ProbeData.Reach), so a light's
+    // hit segments lie in the box about that sphere's part inside the light's range, the light and the origin, which
+    // holds the centre's segment too. The one rule for the CPU and the GPU relight.
     private static bool ReusesLocal(in ProbeData previous, bool trace, Lighting lighting, Vector3 origin, (int Geometry, ChangeTree? Tree)[] changes, int geometry) {
         if (trace || (previous.Shading is null) || (previous.LocalVersion != lighting.LocalVersion)) { return false; }
         if (previous.Geometry == geometry) { return true; }
@@ -199,13 +200,49 @@ public sealed partial class SdfMeshIrradiance {
             var low = Vector3.Max(value1: (origin - new Vector3(value: reach)), value2: (light.Position - range));
             var high = Vector3.Min(value1: (origin + new Vector3(value: reach)), value2: (light.Position + range));
 
-            // No hit lies within the light's range: it lights none of the probe's hits.
-            if ((low.X > high.X) || (low.Y > high.Y) || (low.Z > high.Z)) { continue; }
-            low = Vector3.Min(value1: Vector3.Min(value1: low, value2: light.Position), value2: origin) - margin;
-            high = Vector3.Max(value1: Vector3.Max(value1: high, value2: light.Position), value2: origin) + margin;
-            if (MeetsChange(changes: changes, high: high, low: low, since: previous.Geometry)) { return false; }
+            if ((light.Range > 0f) && (low.X <= high.X) && (low.Y <= high.Y) && (low.Z <= high.Z)) {
+                low = Vector3.Min(value1: Vector3.Min(value1: low, value2: light.Position), value2: origin) - margin;
+                high = Vector3.Max(value1: Vector3.Max(value1: high, value2: light.Position), value2: origin) + margin;
+                if (MeetsChange(changes: changes, high: high, low: low, since: previous.Geometry)) { return false; }
+            } else if (MeetsSegment(changes: changes, from: origin, margin: SdfMeshIrradianceProbe.BoxMargin, since: previous.Geometry, to: light.Position)) {
+                // No hit lies within the light's range, so only the centre's visibility of it can change.
+                return false;
+            }
         }
         return true;
+    }
+    // Whether any change newer than a geometry comes within a margin of a segment: a change of every probe does, and a
+    // change's hierarchy does where one of its leaves, grown by the margin, meets the segment. True when the geometry is
+    // older than the changes remember, as MeetsChange answers.
+    private static bool MeetsSegment((int Geometry, ChangeTree? Tree)[] changes, int since, Vector3 from, Vector3 to, float margin) {
+        if ((changes.Length == 0) || (since < (changes[0].Geometry - 1))) { return true; }
+
+        var toward = (to - from);
+        var length = toward.Length();
+
+        if (!(length > 0f)) { return MeetsChange(changes: changes, high: (from + new Vector3(value: margin)), low: (from - new Vector3(value: margin)), since: since); }
+
+        var inverse = (Vector3.One / (toward / length));
+        var grow = new Vector3(value: margin);
+
+        foreach (var (geometry, tree) in changes) {
+            if (geometry <= since) { continue; }
+            if (tree is null) { return true; }
+
+            var nodes = tree.Nodes;
+
+            for (var at = 0; (at < nodes.Length);) {
+                ref readonly var node = ref nodes[at];
+
+                if (!SdfMeshIrradianceScene.Slab(entry: out _, high: (node.High + grow), inverse: inverse, low: (node.Low - grow), maximum: length, origin: from)) {
+                    at = node.Escape;
+                    continue;
+                }
+                if (node.Leaf) { return true; }
+                at++;
+            }
+        }
+        return false;
     }
 
     // A selection's rows as sdf-probe-select reads them, exactly sized: the header rows (the volume's geometry; the

@@ -2250,6 +2250,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     m_nextLightCheck = m_listingLightCheck;
                     if (candidates.Count == 0) {
                         m_listed = false;
+                        NoteSeenRelights(cursor: 0, end: 0);
                         if (stale || m_sweepMoved || (snapshot.Lighting.Version != m_lightingVersion)) {
                             // A partial interleaved sweep cannot certify bounce convergence or spend a full-sweep limit.
                             if (m_interleaving || (m_sweepsSince < MaxSweeps)) {
@@ -2280,8 +2281,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 while ((m_listTraces < candidates.Count) && candidates[m_listTraces].Trace) { m_listTraces++; }
                 m_listUrgent = m_listTraces;
                 while ((m_listUrgent < candidates.Count) && (candidates[m_listUrgent].Overdue || candidates[m_listUrgent].Stale)) { m_listUrgent++; }
+                var seen = m_listTraces;
+                while ((seen < candidates.Count) && candidates[seen].Seen) { seen++; }
                 m_listTraceCursor = 0;
                 m_listRelightCursor = m_listTraces;
+                NoteSeenRelights(cursor: m_listRelightCursor, end: seen);
                 m_listTraceTicks = 0L;
                 m_listRelightTicks = 0L;
             }
@@ -2296,6 +2300,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     if (m_disposed || !Stands(snapshot: in snapshot)) { break; }
                     if (m_yield) {
                         m_listed = false;
+                        NoteSeenRelights(cursor: 0, end: 0);
                         return;
                     }
                     lighting = m_lighting!;
@@ -2339,11 +2344,30 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 } else {
                     m_listRelightCursor += take;
                     m_listRelightTicks += (Stopwatch.GetTimestamp() - began);
+                    Volatile.Write(location: ref m_seenRelightCursor, value: m_listRelightCursor);
                 }
             }
             m_listed = false;
+            NoteSeenRelights(cursor: 0, end: 0);
         }
     }
+    // The span of the worker's list that holds the probes the views are owed after a lighting jump (Candidate.Seen, ordered
+    // first among the relights), and the relight cursor within it; written by the worker alone.
+    private int m_seenRelightCursor;
+    private int m_seenRelightEnd;
+    private void NoteSeenRelights(int cursor, int end) {
+        Volatile.Write(location: ref m_seenRelightEnd, value: end);
+        Volatile.Write(location: ref m_seenRelightCursor, value: cursor);
+    }
+    /// <summary>Gets whether the volume owes its views probes they see that a lighting jump left showing the light before
+    /// it: a clock scrubbed or jumped, a lamp a rule switches, a light an author edits. The probe service then takes the
+    /// budget's owed allowance for them, as for a view's first light (<see cref="OwesFirstLight"/>), until the worker has
+    /// relit every such probe, so what the camera sees relights within frames and the rest follows on the age budget.
+    /// Safe to read from any thread.</summary>
+    public bool OwesSeenRelight => (Volatile.Read(location: ref m_seenRelightCursor) < Volatile.Read(location: ref m_seenRelightEnd));
+    /// <summary>Gets whether the volume owes its views light they show wrongly or not at all: their first light
+    /// (<see cref="OwesFirstLight"/>) or the probes a lighting jump left stale (<see cref="OwesSeenRelight"/>).</summary>
+    public bool OwesViews => (OwesFirstLight || OwesSeenRelight);
     // A lighting-converged frame's work: every probe of the windows traced against the current geometry where it is not already,
     // then the whole window relit from no bounce, each later pass relighting every probe from the bounce the one before
     // left, until a whole pass moves no probe past the convergence bound (or MaxSweeps passes), so the light it renders
@@ -2358,6 +2382,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var candidates = m_candidates;
 
         m_listed = false;
+        NoteSeenRelights(cursor: 0, end: 0);
 
         BeginUnit();
         try { _ = List(ages: null, all: true, candidates: candidates, snapshot: snapshot); } finally { EndUnit(); }
@@ -2417,8 +2442,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_reported = true;
         Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] done probes={probes} traced={m_traced} relit={m_relit} rays={m_rays} triangles={snapshot.Scene.TriangleCount} lights={snapshot.Lighting.Points.Length} seconds={m_clock.Elapsed.TotalSeconds:0.000}"));
     }
-    // Lists eligible probes, every one for a drain. The shared order puts trace demand first, then relight age relative
-    // to its bound with view/change weights, level, capture age and Morton bands. Returns whether lighting or a
+    // Lists eligible probes, every one for a drain. The shared order puts trace demand first, then the probes the views
+    // are owed after a lighting jump (Candidate.Seen), then relight age relative to its bound with view/change weights,
+    // level, capture age and Morton bands. Returns whether lighting or a
     // deferred phase still owes work, preventing a partial sweep from declaring convergence.
     private bool List(in Snapshot snapshot, bool all, List<Candidate> candidates, List<float>? ages) {
         // Keep one phase for the entire sweep. An empty listing or a later lighting capture must not fill
@@ -2485,7 +2511,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                         if (!required && !OwesRelight(in probe, change, in snapshot, all, interleave, level, age, bound, ProbePhase(x, y, z), now, ref stale)) { continue; }
                         var visible = InAnyView(center, in snapshot);
                         candidates.Add(item: new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: (present ? probe.LitAt : 0L), Trace: trace,
-                            Overdue: ((bound > 0) && (age >= bound)), Stale: (present && !current), Urgency: AgePriority(age, bound, visible, probe.Moved), Visible: visible));
+                            Overdue: ((bound > 0) && (age >= bound)), Stale: (present && !current), Urgency: AgePriority(age, bound, visible, probe.Moved), Visible: visible,
+                            Seen: (visible && present && (change == InputChange.Due) && (probe.Lighting < lighting.Jump))));
                     }
                 }
             }
@@ -2501,6 +2528,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         candidates.Sort(comparison: static (a, b) => {
             if (a.Trace != b.Trace) { return a.Trace ? -1 : 1; }
             if (!a.Trace) {
+                if (a.Seen != b.Seen) { return a.Seen ? -1 : 1; }
                 if (a.Overdue != b.Overdue) { return a.Overdue ? -1 : 1; }
                 if (a.Stale != b.Stale) { return a.Stale ? -1 : 1; }
                 if (a.Urgency != b.Urgency) { return b.Urgency.CompareTo(a.Urgency); }
@@ -2884,12 +2912,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         if (lights.IsEmpty) { return; }
         if (!reuseLocal) {
             lights.Clear();
-            // A light past its range lights nothing here and stays unseen; one at the probe's origin is seen.
+            // A point light's bit is whether the probe sees its position, at any distance and whatever its power or range,
+            // so a light switched on or brightened shows at once; one at the probe's origin is seen.
             foreach (var point in lighting.Points) {
                 var toward = (point.Position - origin);
                 var length = toward.Length();
 
-                if ((length >= point.Range) || ((length > SdfMeshIrradianceProbe.LightBias) && !scene.Unblocked(direction: (toward / length), maximum: (length - SdfMeshIrradianceProbe.LightBias), origin: origin))) { continue; }
+                if ((length > SdfMeshIrradianceProbe.LightBias) && !scene.ReachesLight(direction: (toward / length), maximum: (length - SdfMeshIrradianceProbe.LightBias), origin: origin)) { continue; }
                 lights[(point.Index >> 5)] |= (1u << (point.Index & 31));
             }
         }
@@ -2949,7 +2978,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     var cone = Math.Clamp(value: (Vector3.Dot(vector1: -direction, vector2: light.SpotAxis) + light.SpotOffset), min: 0f, max: 1f);
 
                     if (cone <= 0f) { continue; }
-                    if ((distance > SdfMeshIrradianceProbe.LightBias) && !scene.Unblocked(direction: direction, maximum: (distance - SdfMeshIrradianceProbe.LightBias), origin: lifted)) { continue; }
+                    if ((distance > SdfMeshIrradianceProbe.LightBias) && !scene.ReachesLight(direction: direction, maximum: (distance - SdfMeshIrradianceProbe.LightBias), origin: lifted)) { continue; }
                     points += (light.Color * ((((light.Weight * SdfPhotometry.Falloff(distance: distance, range: light.Range)) * (cone * cone)) * lambert) * light.Bounce));
                 }
                 fixedLight += ((reflected * points) * lighting.Gains.Lights);
@@ -3391,8 +3420,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private readonly record struct Box(Vector3 Low, Vector3 High);
     // A probe the worker lists: its level and cell, whether it lacks a trace against the current geometry, the capture
     // time of the lighting it was last relit under (zero for none), the relights it holds under the current lighting,
-    // and its radial priority band and Morton cell order within that band.
-    private readonly record struct Candidate(int Level, (int X, int Y, int Z) Cell, bool Trace, long LitAt, int Band, uint Morton, bool Overdue, bool Stale, int Urgency, bool Visible);
+    // and its radial priority band and Morton cell order within that band. Seen: a view sees it and a lighting change past
+    // its bound replaced what it shows (InputChange.Due), which the views are owed (OwesSeenRelight).
+    private readonly record struct Candidate(int Level, (int X, int Y, int Z) Cell, bool Trace, long LitAt, int Band, uint Morton, bool Overdue, bool Stale, int Urgency, bool Visible, bool Seen = false);
     // One probe: its geometry (where it stands relative to its cell's centre, the share of its rays that met back faces,
     // whether it lies inside geometry, the geometry it was traced against, its hit buffer, sky shares and surface map
     // in a trace batch's ProbeBlock, and the farthest its rays travelled, which every hit lies within), and its light (its radiance and sky-light cubes and traced-light visibility in a relight batch's
@@ -3818,6 +3848,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The version of the part of the lighting the point and spot lights and emission make; it advances only when
         // that part changes, so a relight reuses each probe's local cube across a moving sun.
         public required int LocalVersion { get; init; }
+        // The version of the latest capture, this one or an earlier, that replaced the one before it in a jump (Jumps): a
+        // probe relit before it and due shows the views light they are owed (OwesSeenRelight). Zero for none.
+        public int Jump { get; init; }
         public required long CapturedAt { get; init; }
         public bool Direct { get; init; }
         public bool Emission { get; init; }
@@ -3855,6 +3888,25 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
             return true;
         }
+        // A directional's turn between two captures that is a jump: the squared chord of five degrees.
+        private static readonly float JumpChordSquared = MathF.Pow(x: (2f * MathF.Sin(x: float.DegreesToRadians(degrees: 2.5f))), y: 2f);
+        // A directional's relative change of light between two captures that is a jump.
+        private const float JumpShare = 0.25f;
+
+        // Whether a capture replaces the one before it in one step past what steady motion brings between two captures: its
+        // point and spot lights, emission or materials changed (a lamp a rule switches, a dimmer, an edit), a directional
+        // came, went or changed its shadow role, the grid changed, or a directional turned past JumpChordSquared or changed
+        // its light by more than JumpShare (a clock scrubbed or jumped). A sun the clock turns moves a fraction of that
+        // between captures, so its relight stays on the age budget.
+        private static bool Jumps(Lighting previous, LightInputs after, int localVersion) {
+            var before = previous.Inputs;
+
+            if ((localVersion != previous.LocalVersion) || (before.Roles != after.Roles) || (before.Grid != after.Grid)) { return true; }
+
+            var delta = LightDelta.Between(after: after, before: before);
+
+            return ((delta.DirectionSquared > JumpChordSquared) || (delta.EnergyShare > JumpShare));
+        }
         // Captures a frame's lighting; the materials are the previous capture's while the program is the same one.
         // The workspace is the caller's, refilled by every capture; a capture keeps only copies of what it holds.
         public static Lighting Capture(MultisetDigest roles, SdfFrame frame, SdfLights captureLights, Lighting? previous, int version, int localVersion, CaptureScratch scratch, long capturedAt) {
@@ -3873,7 +3925,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 if ((light.Kind == SdfLightKind.Directional) && (light.Weight > 0f)) {
                     lights.Add(item: light with { Direction = SdfLights.UnitDirection(direction: light.Direction) });
                     indices.Add(item: index);
-                } else if (light.IsTraced && (light.Weight > 0f) && (light.Param > 0f)) {
+                } else if (light.IsTraced) {
+                    // Every traced light, a dark one included: its visibility bits are the geometry's (Relight), and its
+                    // range, zero while it is dark, bounds only its bounce.
                     points.Add(item: new TracedLight(Bounce: light.Bounce, Color: light.Color, Index: index, Position: light.Direction, Range: light.Param, SpotAxis: light.SpotAxis, SpotOffset: light.SpotOffset, Weight: light.Weight));
                 }
             }
@@ -3897,16 +3951,19 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 skyPeak = frame.IndirectLightingGrid.SnapScalar(value: skyPeak);
             }
 
+            var inputs = new LightInputs([.. lights], roles, skyTexels, frame.IndirectLightingGrid);
+
             return new Lighting {
                 Version = version,
                 LocalVersion = localVersion,
+                Jump = ((previous is null) ? 0 : (Jumps(after: inputs, localVersion: localVersion, previous: previous) ? version : previous.Jump)),
                 CapturedAt = capturedAt,
                 SkyPeak = skyPeak,
                 Direct = ((sources & SdfIndirectSources.Direct) != 0),
                 Emission = ((sources & SdfIndirectSources.Emission) != 0),
                 Feedback = ((sources & SdfIndirectSources.Feedback) != 0),
                 Gains = frame.IndirectGains,
-                Inputs = new LightInputs([.. lights], roles, skyTexels, frame.IndirectLightingGrid),
+                Inputs = inputs,
                 LightIndices = [.. indices],
                 Program = frame.Program,
                 Materials = (ReferenceEquals(objA: previous?.Program, objB: frame.Program) ? previous!.Materials : [.. frame.Program.Appearance.Materials]),

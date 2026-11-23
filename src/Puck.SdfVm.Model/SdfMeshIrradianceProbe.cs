@@ -44,8 +44,9 @@ public static class SdfMeshIrradianceProbe {
     /// sample's surroundings carry the emitters' and fixtures' bounce before the volume measures it. A pass leaves at most
     /// the brightest reflectance to that power of the light it has yet to add.</summary>
     public const int CameraSampleClosurePasses = 16;
-    /// <summary>The distance in metres a shadow ray toward a point light ends before the light, so a fixture sunk a little
-    /// into its housing is not blocked by it.</summary>
+    /// <summary>The distance in metres a shadow ray toward a point light ends before the light, so a light set on an open
+    /// sheet is not blocked by it; the solid that holds a light never blocks it at any depth
+    /// (<see cref="SdfMeshProbeTrace.SolidWord"/>).</summary>
     public const float LightBias = 0.02f;
     /// <summary>The distance in metres a changed draw's box grows by, and a ray's recorded hit extends by at least, so a
     /// hit on the draw's own face always meets its box.</summary>

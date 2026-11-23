@@ -40,6 +40,16 @@ void sdfProbeSurface(uint hitInstance, uint hitTriangle, out float3 normal, out 
     uint materials = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 2];
     material = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 3] + (materials == 0xffffffffu ? 0 : sdfMeshWord(materials + hitTriangle));
 }
+// Whether a triangle the ray meets blocks a ray toward a point light: any triangle of an open instance, and of one that
+// encloses a solid (SDF_PROBE_SOLID_WORD) only a face the ray leaves through, its outward winding normal along the ray
+// in the instance's frame, so the solid holding a light never hides it. KEEP IN SYNC with SdfMeshIrradianceScene's
+// TriangleLeaves (ReachesLight).
+bool sdfProbeBlocksLight(uint instance, uint primitive, float3 localDirection) {
+    if (sdfProbeScene[instance + SDF_PROBE_SOLID_WORD] == 0) { return true; }
+    float3 v0, e1, e2;
+    sdfProbeTriangle(instance, primitive, v0, e1, e2);
+    return dot(cross(e1, e2), localDirection) > 0;
+}
 
 #ifdef SDF_PROBE_RAY_QUERY
 // The software walk's exclusive near bound: a hit closer than this along the ray is the surface the ray left.
@@ -47,8 +57,10 @@ static const float SdfProbeNearest = 1.0e-4;
 
 // One walk for nearest-hit and boolean visibility, through the top level the scene's draws are instances of. Each
 // instance's index is its scene ordinal, so its record lies at the scene's instance base plus that many records. Every
-// instance is opaque and culls no face, as the software walk accepts both windings; the lane is the software walk's.
-bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, bool anyHit, out float distance, out float3 normal, out uint material, out uint2 identity) {
+// instance is opaque and culls no face, as the software walk accepts both windings; the lane is the software walk's. A
+// visibility ray toward a light (`toward`) runs its candidates through sdfProbeBlocksLight instead, the software walk's
+// test, rather than a hardware facing cull whose winding convention differs between the backends.
+bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, bool anyHit, bool toward, out float distance, out float3 normal, out uint material, out uint2 identity) {
     distance = maximum; normal = 0; material = 0;
     identity = uint2(0xffffffffu, 0xffffffffu);
     // An interval no wider than the near bound holds no hit the software walk accepts, and a ray query needs
@@ -59,6 +71,16 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
     ray.Direction = direction;
     ray.TMin = SdfProbeNearest;
     ray.TMax = maximum;
+    if (toward) {
+        RayQuery<RAY_FLAG_FORCE_NON_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> light;
+        light.TraceRayInline(sdfProbeStructure, RAY_FLAG_NONE, 0xffu, ray);
+        while (light.Proceed()) {
+            if (light.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE) { continue; }
+            uint instance = sdfProbeScene[SDF_PROBE_INSTANCE_BASE_WORD] + light.CandidateInstanceID() * SDF_PROBE_INSTANCE_WORDS;
+            if (sdfProbeBlocksLight(instance, light.CandidatePrimitiveIndex(), light.CandidateObjectRayDirection())) { light.CommitNonOpaqueTriangleHit(); }
+        }
+        return light.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+    }
     if (anyHit) {
         RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> visibility;
         visibility.TraceRayInline(sdfProbeStructure, RAY_FLAG_NONE, 0xffu, ray);
@@ -152,8 +174,9 @@ bool sdfProbeTriangleHit(float3 origin, float3 direction, float3 v0, float3 e1, 
     distance = dot(e2, q) * inverse;
     return distance > 1.0e-4 && distance < maximum;
 }
-// One walk for nearest-hit and boolean visibility. The latter ends at its first accepted two-sided triangle.
-bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, bool anyHit, out float distance, out float3 normal, out uint material, out uint2 identity) {
+// One walk for nearest-hit and boolean visibility. The latter ends at its first accepted two-sided triangle; toward a
+// light (`toward`) it accepts only the triangles sdfProbeBlocksLight keeps.
+bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, bool anyHit, bool toward, out float distance, out float3 normal, out uint material, out uint2 identity) {
     distance = maximum; normal = 0; material = 0;
     identity = uint2(0xffffffffu, 0xffffffffu);
     uint root = sdfProbeScene[0];
@@ -183,6 +206,7 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
         [loop] for (uint i = 0; i < count; i++) {
             uint instance = sdfProbeScene[entry + i * SDF_PROBE_ENTRY_WORDS];
             bool identity = sdfProbeScene[instance + SDF_PROBE_IDENTITY_WORD] != 0;
+            bool leaving = toward && (sdfProbeScene[instance + SDF_PROBE_SOLID_WORD] != 0);
             float3 localOrigin = identity ? origin : sdfProbeTransform(instance, origin, true);
             float3 localDirection = identity ? direction : sdfProbeTransform(instance, direction, false);
             float3 localInverse = identity ? inverse : 1.0 / localDirection;
@@ -212,6 +236,7 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
                     uint primitive = sdfProbeScene[innerFirst + t];
                     float3 v0, e1, e2;
                     sdfProbeTriangle(instance, primitive, v0, e1, e2);
+                    if (leaving && dot(cross(e1, e2), localDirection) <= 0) { continue; }
                     float hit;
                     if (sdfProbeTriangleHit(localOrigin, localDirection, v0, e1, e2, distance, hit)) {
                         if (anyHit) { return true; }
@@ -227,11 +252,12 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
 }
 #endif
 bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane, out float distance, out float3 normal, out uint material, out uint2 identity) {
-    return sdfProbeWalk(origin, direction, maximum, lane, false, distance, normal, material, identity);
+    return sdfProbeWalk(origin, direction, maximum, lane, false, false, distance, normal, material, identity);
 }
-bool sdfProbeOccluded(float3 origin, float3 direction, float maximum, uint lane) {
+// Whether anything blocks a ray; `toward` a point light, only what sdfProbeBlocksLight keeps (ReachesLight on the CPU).
+bool sdfProbeOccluded(float3 origin, float3 direction, float maximum, uint lane, bool toward) {
     float distance; float3 normal; uint material; uint2 identity;
-    return sdfProbeWalk(origin, direction, maximum, lane, true, distance, normal, material, identity);
+    return sdfProbeWalk(origin, direction, maximum, lane, true, toward, distance, normal, material, identity);
 }
 uint2 sdfProbeHit(float3 origin, float3 direction, float maximum, uint lane, out uint2 identity) {
     float distance; float3 normal; uint material;
