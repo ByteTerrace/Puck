@@ -10076,13 +10076,17 @@ export type WorldNavigationDomain = {
    */
   medium?: string | null;
   /**
-   * Optional shared reverse-search policy. Absent uses independent bounded A* searches. Shared searches are queued and advanced on subsequent simulation ticks, independently of any leader.
+   * Whether bodies navigating this domain follow shared goal fields: one field per goal over the domain's network, derived once and read a step at a time by every body heading there, in place of a route search per body. False keeps independent bounded A* searches, each within this domain.
    */
-  shared?: WorldNavigationSharing | null;
+  shared?: boolean;
   /**
    * Optional static placement frame. Origin and grid axes are local to that frame; probes remain vertical. The frame must be undistributed and unit scale.
    */
   parent?: string | null;
+  /**
+   * The network the domain joins. Domains join where they share a cell only when their networks match, so a route or goal field crosses from one district's pavement to the next but never onto a road of another network. Absent joins the one unnamed network.
+   */
+  network?: string | null;
 };
 
 export type WorldNavigationKind = "Surface" | "Volume" | "Medium";
@@ -10092,17 +10096,6 @@ export type WorldNavigationSection = {
    * Finite rectangular domains, each compiled from the world's deterministic solid field.
    */
   domains?: (WorldNavigationDomain | null)[] | null;
-};
-
-export type WorldNavigationSharing = {
-  /**
-   * Resident destination-cell trees. A full cache with pending work refuses another destination as capacity-limited; it never launches an unbudgeted independent search.
-   */
-  goalCapacity: number;
-  /**
-   * Total reverse-Dijkstra expansions per simulation tick, shared fairly between pending resident goals. Each expansion inspects at most 26 edges. A tree can eventually settle every domain cell; the independent A* MaxExpandedNodes bound does not truncate a shared tree.
-   */
-  expandedNodesPerTick: number;
 };
 
 /**

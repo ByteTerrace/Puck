@@ -205,7 +205,13 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Pres
     /// <param name="reading">The reading.</param>
     /// <param name="needGb">The physical memory, in gigabytes, the start and the growth still to come take from free memory.</param>
     /// <returns><see langword="true"/> when the start leaves the pressure floor free or is not judged.</returns>
-    public bool PhysicalCovers(HostSample reading, double needGb) => ((PressureRamGb is not { } floor) || !double.IsFinite(d: reading.FreeRamGb) || ((reading.FreeRamGb - needGb) >= floor));
+    public bool PhysicalCovers(HostSample reading, double needGb) => (needGb <= PhysicalRoomGb(reading: reading));
+    /// <summary>Gets the physical memory, in gigabytes, a start's private working set may take from a reading's free memory
+    /// and still leave the pressure floor (<see cref="PhysicalCovers"/> is <c>need &lt;= room</c>): infinite when no floor is
+    /// judged or the platform reports no free memory.</summary>
+    /// <param name="reading">The reading.</param>
+    /// <returns>The room, never negative.</returns>
+    public double PhysicalRoomGb(HostSample reading) => (((PressureRamGb is { } floor) && double.IsFinite(d: reading.FreeRamGb)) ? Math.Max(val1: 0, val2: (reading.FreeRamGb - floor)) : double.PositiveInfinity);
     /// <summary>Names what keeps a start from ever being admitted on this machine however idle it is: its own expected
     /// private bytes plus the commit reserve exceed the commit limit, or its own expected private working set plus the
     /// pressure floor exceed the installed memory. Waiting cannot help such a start.</summary>

@@ -60,7 +60,7 @@ public sealed class WorldDocumentNavigation : IWorldSeatNavigation {
             field: ((geometry is null) ? null : WorldPortalHoleContactField.Wrap(definition: definition, inner: geometry)),
             runtime: new NavigationRuntime(
                 capacity: new NavigationCapacity(
-                    MaxConcurrentRequesters: 1,
+                    GoalFieldBytes: WorldNavigationCapacity.MaxGoalFieldBytes,
                     MaxMediumSegmentSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions
                 ),
                 domains: WorldPopulation.CompileNavigationDomains(definition: definition),

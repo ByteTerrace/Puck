@@ -23,15 +23,6 @@ public enum NavigationConnectivity : byte {
     /// <summary>All 26 neighbours, including three-axis diagonals.</summary>
     Full,
 }
-/// <summary>Bounds one domain's reusable destination trees and their aggregate expansion work — a plain mirror of
-/// an authored sharing policy the kernel itself never parses.</summary>
-/// <param name="GoalCapacity">Resident destination-cell trees. A full cache with pending work refuses another
-/// destination as capacity-limited; it never launches an unbudgeted independent search.</param>
-/// <param name="ExpandedNodesPerTick">Total reverse-Dijkstra expansions per simulation tick, shared fairly between
-/// pending resident goals. Each expansion inspects at most 26 edges. A tree can eventually settle every domain
-/// cell; the independent A* <see cref="NavigationDomainInput.MaxExpandedNodes"/> bound does not truncate a shared
-/// tree.</param>
-public sealed record NavigationSharing(int GoalCapacity, int ExpandedNodesPerTick);
 /// <summary>One finite navigation grid's fixed-point tuning, compiled once at a host's document boundary and handed
 /// to the kernel as plain data — the kernel parses no document, so every field here is already in the kernel's own
 /// units and vocabulary.</summary>
@@ -54,8 +45,12 @@ public sealed record NavigationSharing(int GoalCapacity, int ExpandedNodesPerTic
 /// <param name="MaxExpandedNodes">The hard A* expansion budget for one independent route search.</param>
 /// <param name="MaxPathNodes">The hard stored-waypoint budget for one route.</param>
 /// <param name="Medium">For a medium domain, the named lattice field cells must remain inside.</param>
-/// <param name="Shared">Optional shared reverse-search policy. Absent uses independent bounded A* searches.</param>
+/// <param name="Shared">Whether bodies navigating this domain follow shared goal fields
+/// (<see cref="NavigationRuntime.GoalField"/>) over its network, rather than each searching a route of its own.</param>
 /// <param name="YawRadians">Rotation of the grid axes about world +Y. Zero preserves axis-aligned grids.</param>
+/// <param name="Network">The network the domain joins: two domains join at their shared cells only when their
+/// networks are equal, so a road and a pavement that meet at a kerb stay apart. <see langword="null"/> is the one
+/// unnamed network.</param>
 public readonly record struct NavigationDomainInput(
     string Name,
     NavigationKind Kind,
@@ -75,22 +70,24 @@ public readonly record struct NavigationDomainInput(
     int MaxExpandedNodes,
     int MaxPathNodes,
     string? Medium,
-    NavigationSharing? Shared,
-    FixedQ4816 YawRadians = default
+    bool Shared,
+    FixedQ4816 YawRadians = default,
+    string? Network = null
 );
 /// <summary>Representation ceilings a host names when constructing a <see cref="NavigationRuntime"/>. The kernel
 /// parses no document, so it cannot own these as its own constants; a host's values here must equal whatever its
 /// own authoring ceiling declares, or a checkpoint round-trip and the host's own validator disagree.</summary>
 /// <param name="MaxMediumSegmentSubdivisions">The greatest number of equal subsegments checked along one live
 /// medium edge.</param>
-/// <param name="MaxConcurrentRequesters">The greatest number of distinct bodies that can hold a pending shared-tree
-/// request at once; bounds a domain's per-tree pending-request list.</param>
-public readonly record struct NavigationCapacity(int MaxMediumSegmentSubdivisions, int MaxConcurrentRequesters);
+/// <param name="GoalFieldBytes">The bytes resident goal fields may hold together; past it the least recently read
+/// field is dropped. A dropped field is derived again when next read and gives the same answer, so the bound decides
+/// work and memory, never a route.</param>
+public readonly record struct NavigationCapacity(int MaxMediumSegmentSubdivisions, long GoalFieldBytes);
 /// <summary>The live-medium field seam a medium navigation domain reads through. A host's own field-lattice
 /// representation implements this narrow view rather than the kernel depending on that representation directly.</summary>
 public interface INavigationMediumField {
-    /// <summary>Gets one field's write-generation counter, so a domain can detect a live medium edit and invalidate
-    /// its shared destination trees.</summary>
+    /// <summary>Gets one field's write-generation counter, so a goal field can tell when the live medium
+    /// it was derived over has changed and derive itself again.</summary>
     /// <param name="field">The field's compiled ordinal.</param>
     ulong ValueRevision(int field);
     /// <summary>Reports whether an axis-aligned clearance cube around a point remains inside a live medium.</summary>

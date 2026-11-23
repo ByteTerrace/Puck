@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using Puck.Confinement;
 using Puck.Abstractions;
 
@@ -64,7 +66,10 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 /// start gone (its commit against the headroom plus the live starts' private bytes, its private working set against free
 /// memory plus theirs) judges the start by the lesser of itself and the kind's fallback instead
 /// (<see cref="HostStartDemand.LoneOwnGb"/>): no wait for an admitted start would admit it, and a refused kind runs nothing
-/// that could lower the estimate, so one outlier session would otherwise lock its kind out for good.
+/// that could lower the estimate, so one outlier session would otherwise lock its kind out for good. A profile with no
+/// observation at all is held to the same rule in private working set: its fallback is a guess, so it is also held to the
+/// free memory the idle machine leaves above the pressure floor (<see cref="HostLoadThresholds.PhysicalRoomGb"/>), and the
+/// first start of the profile on a small machine runs and records what it reached when it stops (<see cref="Finish(Process, WorldReadiness)"/>).
 /// <para>Admitted starts come from the live processes each reading lists (<see cref="HostSample.Starts"/>, classified by
 /// <see cref="HostProcesses.RunningStart"/>) with their current private bytes, so a process that exits stops counting at
 /// once and nothing is read from a record that can go stale. The one thing a reading cannot show is a start admitted a
@@ -140,11 +145,18 @@ public sealed class HostStartTracker {
     // running: the lesser of that expectation and the fallback an unmeasured profile gets. Such an expectation could otherwise
     // refuse every start of its profile however long it waits, and a refused profile runs nothing that could teach the window
     // a lower figure.
-    private HostPeaks Lone(HostStartProfile kind, double? installedRamGb) {
-        var learned = Expected(installedRamGb: installedRamGb, kind: kind);
-        var fallback = Fallback(installedRamGb: installedRamGb, kind: kind);
+    // A profile this machine has never measured is a guess scaled from the account budget, and the idle machine's free memory
+    // is a bound the guess must not exceed: a guess refused for physical memory with nothing else running would never run,
+    // and so never be measured. Its private working set is held to what the idle reading leaves above the pressure floor.
+    // Commit is the hard limit and is judged by the guess itself, so a start that would exhaust commit is still refused. A
+    // measured profile is never clamped: its own record says what it needs.
+    private HostPeaks Lone(HostStartProfile kind, HostLoadThresholds thresholds, HostSample idle) {
+        var learned = Expected(installedRamGb: thresholds.InstalledRamGb, kind: kind);
+        var fallback = Fallback(installedRamGb: thresholds.InstalledRamGb, kind: kind);
+        var measured = (m_windows.TryGetValue(kind.Class, out var window) && (window.Count > 0));
+        var resident = Math.Min(learned.ResidentGb, fallback.ResidentGb);
 
-        return new HostPeaks(PrivateGb: Math.Min(learned.PrivateGb, fallback.PrivateGb), ResidentGb: Math.Min(learned.ResidentGb, fallback.ResidentGb), WorkingSetGb: learned.WorkingSetGb);
+        return new HostPeaks(PrivateGb: Math.Min(learned.PrivateGb, fallback.PrivateGb), ResidentGb: (measured ? resident : Math.Min(resident, thresholds.PhysicalRoomGb(reading: idle))), WorkingSetGb: learned.WorkingSetGb);
     }
     // A live process's peaks as one reading shows them.
     private static HostPeaks Reading(HostRunningStart start) => new(PrivateGb: start.PrivateGb, ResidentGb: start.ResidentGb, WorkingSetGb: start.HeldGb);
@@ -233,6 +245,35 @@ public sealed class HostStartTracker {
             Measurements();
             return Expected(installedRamGb: thresholds?.InstalledRamGb, kind: kind);
         }
+    }
+    /// <summary>Records the peaks a start has reached as it stops, as one settled observation of its profile: the observation
+    /// no later reading of a process that is gone can supply, and the one a session that nothing sampled while it ran would
+    /// otherwise never teach. Peaks this tracker already followed for the process are kept where they are higher.</summary>
+    /// <param name="profile">The profile the start ran as.</param>
+    /// <param name="process">The process's id and UTC start ticks.</param>
+    /// <param name="peaks">What the process reached (<see cref="HostProbe.PeaksOf"/>); an invalid reading records nothing.</param>
+    public void Finish(HostStartProfile profile, (int Id, long StartTicks) process, HostPeaks peaks) {
+        lock (m_gate) {
+            Measurements();
+            if (m_seen.Remove(key: process, value: out var seen) && seen.Peaks.Valid) { peaks = seen.Peaks.Max(other: peaks); }
+            Record(profile, process, peaks, settled: true);
+            Measurements();
+        }
+    }
+    /// <summary>Records what a World that reported ready has reached, as it is about to stop, read from its own process. A
+    /// World that never reported ready has not reached steady state and teaches nothing; a process that has already exited
+    /// cannot be read.</summary>
+    /// <param name="process">The World's process, still running.</param>
+    /// <param name="readiness">The World's readiness, which holds the profile its launch recorded.</param>
+    public void Finish(Process process, WorldReadiness readiness) {
+        if (!readiness.Ready || (readiness.Profile is not { } profile)) { return; }
+
+        try {
+            process.Refresh();
+            if (process.HasExited) { return; }
+
+            Finish(profile: profile, process: (process.Id, process.StartTime.ToUniversalTime().Ticks), peaks: HostProbe.PeaksOf(process: process));
+        } catch (Exception exception) when ((exception is InvalidOperationException or NotSupportedException or Win32Exception or IOException or UnauthorizedAccessException)) { }
     }
     /// <summary>Reads what a start of <paramref name="kind"/> needs of the headroom <paramref name="reading"/> shows,
     /// folding the reading's processes into the tracker first, and, when <paramref name="reserve"/> is set and the start is
@@ -356,11 +397,11 @@ public sealed class HostStartTracker {
             // Each quantity is judged by the learned estimate unless the machine with every admitted start gone could not hold
             // it either: then no wait for an admitted start changes the answer, and the lone figure judges instead.
             var learned = Expected(installedRamGb: thresholds.InstalledRamGb, kind: kind);
-            var lone = Lone(installedRamGb: thresholds.InstalledRamGb, kind: kind);
             var idle = reading with {
                 CommitChargeGb = (reading.CommitChargeGb - live.Sum(selector: static start => start.PrivateGb)),
                 FreeRamGb = (reading.FreeRamGb + live.Sum(selector: static start => start.ResidentGb)),
             };
+            var lone = Lone(idle: idle, kind: kind, thresholds: thresholds);
             var expectedOwn = new HostPeaks(
                 PrivateGb: (thresholds.CommitCovers(reading: idle, needGb: learned.PrivateGb) ? learned.PrivateGb : lone.PrivateGb),
                 ResidentGb: (thresholds.PhysicalCovers(reading: idle, needGb: learned.ResidentGb) ? learned.ResidentGb : lone.ResidentGb),
