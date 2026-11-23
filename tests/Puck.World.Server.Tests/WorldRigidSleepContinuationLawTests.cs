@@ -61,8 +61,8 @@ public sealed class WorldRigidSleepContinuationLawTests {
         var feed = new WorldEventFeed(capacity: population.Capacity);
 
         population.EntryBody(index: 0)!.SetIntentSource(source: IntentSource.Live);
-        feed.Collect(definition: definition, population: population);
-        feed.Collect(definition: definition, population: population);
+        feed.Collect(definition: definition, listeners: WorldEventListeners.Everyone, population: population);
+        feed.Collect(definition: definition, listeners: WorldEventListeners.Everyone, population: population);
         var captured = RoundTrip(definition: definition, feed: feed, population: population);
         var intent = population.EntryBody(index: 0)!.Channels.RoleOrdinals.Intent(moveStrafe: FixedQ4816.One);
         var live = new byte[30][];
@@ -76,7 +76,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         byte[] Continue(int step) {
             population.EntryBody(index: 0)!.SubmitIntent(intent: intent);
             Step(definition: definition, population: population, tick: (1200 + step));
-            feed.Collect(definition: definition, population: population);
+            feed.Collect(definition: definition, listeners: WorldEventListeners.Everyone, population: population);
             if (step == 0) {
                 Assert.Equal(0, population.SleepingRigidBodies);
                 Assert.Equal(1, population.SimulatedBodyVisits);
@@ -141,8 +141,8 @@ public sealed class WorldRigidSleepContinuationLawTests {
         Settle(definition: definition, count: 2, population: population);
         var feed = new WorldEventFeed(capacity: population.Capacity);
 
-        feed.Collect(definition: definition, population: population);
-        feed.Collect(definition: definition, population: population);
+        feed.Collect(definition: definition, listeners: WorldEventListeners.Everyone, population: population);
+        feed.Collect(definition: definition, listeners: WorldEventListeners.Everyone, population: population);
         var captured = RoundTrip(definition: definition, feed: feed, population: population);
         var live = Arrive();
         var delivered = Assert.Single(collection: live);
@@ -156,7 +156,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         WorldEventEdge[] Arrive() {
             Pose(population, 2, .5f, population.EntryBody(index: 0)!.Position.Y, 0);
             Step(definition: definition, population: population, tick: 601);
-            feed.Collect(definition: definition, population: population);
+            feed.Collect(definition: definition, listeners: WorldEventListeners.Everyone, population: population);
             return [.. feed.Edges];
         }
     }

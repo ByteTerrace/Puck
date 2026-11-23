@@ -521,6 +521,7 @@ public sealed partial class WorldTick {
         work.Next(HostFrameWorkPart.TickEvents);
         Host.Events.Collect(
             definition: Host.Document.Definition,
+            listeners: WorldEventListeners.Granted(grants: Host.GrantTable),
             population: Host.Population
         );
         work.Next(HostFrameWorkPart.TickRules);
