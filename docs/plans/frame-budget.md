@@ -294,6 +294,34 @@ The memory plan owns that; this memo's share of it is one step:
   so a window grows without a second graph beside the first. Check: over the
   route the `session` family's `allocated` stays within twice its `peak`.
 
+  The mechanism exists for the main view and does not carry over as it stands.
+  A view's graph allocates at its ceiling and records each frame at a grid
+  inside it (`IShaderPipelineRenderExtent.CeilingAt`, `FrameAt`), but a view
+  whose grid is under its output runs the reconstructing fragment
+  (`SdfViewSnapshot.Reconstructs`, `SdfWorldPackage.Fragment`), which upscales
+  to the whole output. A window allocated at an octave that way would be
+  resampled twice, once up to the octave and once down by its consumer, and
+  its output-sized passes would run at up to four times the pixels its glass
+  spans. Two shapes avoid that, and the step chooses between them by storage
+  held and rebuilds counted over the route:
+
+  1. The native fragment records at the grid into the corner of its
+     allocation, and the consumer maps that part of the image, as it already
+     maps the part of the glass a fitted image spans (`SdfViewSnapshot.ImageWindow`,
+     which `SdfWorldPasses` writes for the sampling view). Every reader of a
+     session image's whole extent takes the same mapping: the screen emission
+     kernel, which sizes its grid by the image's dimensions, picking and the
+     capture path.
+  2. Fewer steps an octave for a window's allocation alone
+     (`RenderGraphExtent.StepsPerOctave` divides every footprint in sixteen),
+     with no grid inside. Two steps cut rebuilds eightfold with no kernel
+     change, but a window then renders and holds nearly half as many pixels
+     again as its glass spans on average, and over twice as many just past a
+     step, which is the cost this memo exists to remove.
+
+  The first is the step. The second is a fallback only if the mapping proves
+  unworkable for one of those readers.
+
 The route's report writes a chapter disturbed when the device's memory rose in
 it to what the system budgets the process
 ([the benchmark](benchmark.md#it-plays-as-a-player-takes-it)), so a stall is not read as a
