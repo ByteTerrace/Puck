@@ -14,9 +14,9 @@ import "kits"
 // A citizen's stroll: the standard walker's motion (kits.puck) at a walking pace of 1.4 m/s, never running.
 let citizenMotion = walkerMotion with { speed { value: 1.4 } }
 
-// The producer, the kit and the target register. `domain` names the surface domain the citizens route over. The kit runs
-// at the full tick rate; an importer may batch a large crowd with `citizen` overridden to carry an `autonomy` row.
-template citizenDesign(domain) {
+// The producer, the kit and the target register. `domain` names the surface domain the citizens route over;
+// `motionSeconds` and `steeringSeconds` set how often each citizen's motion and steering update, batching a crowd.
+template citizenDesign(domain, motionSeconds = 0.1, steeringSeconds = 0.2) {
   targetRegisters [
     { name: "errand", maximumRange: 1000, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
   ]
@@ -38,6 +38,10 @@ template citizenDesign(domain) {
       bodyMotionProgram: "walk"
       // Its 0.3 m spheres span the ground to 1.7 m, as the standard walker's (walker.puck).
       collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
+      autonomy {
+        motionSeconds: motionSeconds
+        steeringSeconds: steeringSeconds
+      }
       motion: citizenMotion
       producers {
         citizenErrand {
