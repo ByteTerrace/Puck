@@ -19,6 +19,8 @@ public sealed partial class RenderGraphRuntime {
 
     // The ordinals of instances the runtime declares unchanged this frame, reused frame to frame.
     private readonly MarkedIndexSet m_unchangedIndices = new();
+    // The scheduled instances of one factory, rebuilt for each factory a frame (PackagesPrepareRenders).
+    private readonly List<string> m_scheduledOf = [];
     // Whether an instance renders its package's graph on a node: an external instance whose package no producer or upload
     // serves and a recorder does.
     private static bool RunsPackage(RenderGraphInstance instance, RenderGraphPackageRecorders packages) => (
@@ -297,6 +299,30 @@ public sealed partial class RenderGraphRuntime {
     // no package pass, and a render a held capture withholds this frame (holdingConvergence) records nothing.
     private void PackagesPrepareRenders(IReadOnlyList<int> renders, bool holdingConvergence, in FrameContext context) {
         var began = System.Diagnostics.Stopwatch.GetTimestamp();
+        var packages = m_packages.Factories;
+
+        // Each factory hears of all its scheduled instances first (IRenderGraphPackageFactory.RendersScheduled), so it
+        // can do their shared work side by side; the per-render preparation below then finds that work done.
+        for (var factoryIndex = 0; (factoryIndex < packages.Count); factoryIndex++) {
+            var factory = packages[factoryIndex];
+
+            m_scheduledOf.Clear();
+            for (var position = 0; (position < renders.Count); position++) {
+                var index = renders[position];
+
+                if (
+                    (m_producers[index] is null) && (m_sources[index] is null) &&
+                    !(holdingConvergence && m_convergenceInstances.Contains(item: index)) &&
+                    (Array.IndexOf(array: m_instanceFactories[index], value: factory) >= 0)
+                ) {
+                    m_scheduledOf.Add(item: m_set.Instances[index].Name);
+                }
+            }
+            if (m_scheduledOf.Count > 0) {
+                factory.RendersScheduled(context: in context, instances: m_scheduledOf, jobs: m_jobs);
+            }
+        }
+        m_scheduledOf.Clear();
 
         for (var position = 0; (position < renders.Count); position++) {
             var index = renders[position];
@@ -321,6 +347,14 @@ public sealed partial class RenderGraphRuntime {
             }
         }
         RenderRecordWork.Process.PreparedPackages(ticks: (System.Diagnostics.Stopwatch.GetTimestamp() - began));
+    }
+    // Tells every package's factory the frame's readers are all prepared (IRenderGraphPackageFactory.ReadsPrepared).
+    private void PackagesReadsPrepared(in FrameContext context) {
+        var factories = m_packages.Factories;
+
+        for (var index = 0; (index < factories.Count); index++) {
+            factories[index].ReadsPrepared(context: in context, jobs: m_jobs);
+        }
     }
     // Starts the frame for every package's factory.
     private void PackagesBeginFrame(in FrameContext context) {

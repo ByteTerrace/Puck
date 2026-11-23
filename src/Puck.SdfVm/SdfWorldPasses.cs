@@ -470,10 +470,14 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <inheritdoc/>
     /// <remarks>Gives back the holds of instances whose residency its host has released, serves every held residency's
     /// upkeep whether or not anything reads it this frame (<see cref="SdfWorldResidency.Upkeep"/>), starts every held
-    /// residency's frame, and prepares the host residency, whose capture places the cameras and windows the frame's roots
-    /// and footprints name, then each residency that owes its minimum (<see cref="SdfWorldResidency.OwesPreparation"/>).
-    /// Every other residency is prepared only for an instance the frame reads (<see cref="PrepareRead"/>), or when a
-    /// recording or a new binding reaches it.</remarks>
+    /// residency's frame, and captures the host residency's frame, whose capture places the cameras and windows the
+    /// frame's roots and footprints name, then the minimum of the residencies that owe one
+    /// (<see cref="SdfWorldResidency.OwesPreparation"/>): on a frame that rates views
+    /// (<see cref="SdfUpdateRates.Views"/>, no locked tick, no converging capture, a host paced to a display) one
+    /// residency, the one that has gone longest past the slowest tier's period without a capture, so the worlds nothing
+    /// shows cost a frame at most one capture; on any other frame every owed residency. Every other residency is
+    /// prepared only for an instance the frame reads (<see cref="PrepareRead"/>), or when a recording or a new binding
+    /// reaches it.</remarks>
     public void BeginFrame(in FrameContext context) {
         m_context = context;
         ShadeReleases.BeginFrame();
@@ -501,20 +505,147 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
         SdfCaptureWork.ProcessWork.Add(kind: SdfCaptureWork.Held, amount: m_residencies.Count);
         if (m_host is { IsReleased: false } host) {
-            _ = host.Prepare(context: in context);
+            CaptureForPack(residency: host, context: in context);
         }
         // A residency's minimum, after the host has placed the cameras its routes read: meshes arriving or lighting
-        // settling is served whatever reads it.
+        // settling is served whatever reads it. A residency a reader of this frame asks for is prepared for that reader
+        // whether or not the minimum reached it.
+        var rate = PresentationRate.Of(context: in context);
+        var rated = (rate.IsPaced && (m_host?.Frame is { TickLocked: false, ConvergesLighting: false } shown) && shown.UpdateRates.HasFlag(flag: SdfUpdateRates.Views));
+        var slowest = SdfUpdateRateTiers.Tiers[^1];
+        SdfWorldResidency? due = null;
+        var waited = 0d;
+        var held = 0;
+
         foreach (var residency in m_residencies.Keys) {
-            if (!residency.IsReleased && residency.OwesPreparation) {
+            if (residency.IsReleased || ReferenceEquals(objA: residency, objB: m_host) || !residency.OwesPreparation) { continue; }
+            if (!rated) {
+                SdfCaptureWork.ProcessWork.Count(kind: SdfCaptureWork.Minimum);
                 _ = residency.Prepare(context: in context);
+                continue;
             }
+            held++;
+
+            var since = residency.SecondsSinceCapture;
+
+            if ((since > waited) && !SdfUpdateRateTiers.Holds(elapsedSeconds: since, frameSeconds: context.FrameDeltaSeconds, hertz: slowest, rate: rate)) {
+                due = residency;
+                waited = since;
+            }
+        }
+        if (due is not null) {
+            held--;
+            SdfCaptureWork.ProcessWork.Count(kind: SdfCaptureWork.Minimum);
+            CaptureForPack(residency: due, context: in context);
+        }
+        SdfCaptureWork.ProcessWork.Add(kind: SdfCaptureWork.MinimumHeld, amount: held);
+    }
+
+    // The residencies a reader or the minimum captured this frame whose frames are not packed yet (CaptureForPack),
+    // packed together once the frame's readers are all known (ReadsPrepared).
+    private readonly List<SdfWorldResidency> m_packsPending = [];
+
+    // Captures a residency's frame for a reader and leaves its packing to ReadsPrepared, so the frame's residencies pack
+    // side by side. A caller that needs the packed frame before then prepares the residency itself
+    // (SdfWorldResidency.Prepare), which ReadsPrepared then finds done.
+    internal void CaptureForPack(SdfWorldResidency residency, in FrameContext context) {
+        _ = residency.HostFrame(context: in context);
+        if (!m_packsPending.Contains(item: residency)) { m_packsPending.Add(item: residency); }
+    }
+    /// <inheritdoc/>
+    /// <remarks>Resolves the instance's view and captures its residency's frame (a routed residency its host's first),
+    /// once a frame whichever reader asks first; the frame is packed with the frame's other residencies'
+    /// (<see cref="ReadsPrepared"/>).</remarks>
+    public void PrepareRead(string instance, in FrameContext context) {
+        if (BegunResidencyOf(instance: instance) is { } residency) { CaptureForPack(residency: residency, context: in context); }
+    }
+    /// <inheritdoc/>
+    /// <remarks>Packs every residency a reader or the minimum captured this frame. Each one's preparation begins and
+    /// ends on the frame thread, in the order the residencies were captured; between the two, the residencies whose
+    /// frames may pack beside others (<see cref="SdfWorldResidency.PacksBeside"/>) pack as the partitions of one fork of
+    /// the pool's frame class, one residency a partition, and the rest pack here in turn. A partition touches only its
+    /// own residency (<see cref="SdfWorldResidency.RunPack"/>), so the residencies' packed state is the same whichever
+    /// thread ran each.</remarks>
+    public void ReadsPrepared(in FrameContext context, JobPool? jobs) {
+        if (m_packsPending.Count == 0) { return; }
+
+        var fork = m_packFork;
+
+        try {
+            foreach (var residency in m_packsPending) {
+                if (residency.IsReleased || !residency.BeginPack(context: in context)) { continue; }
+                if ((jobs is { Serial: false }) && residency.PacksBeside) {
+                    fork.Add(residency: residency);
+                } else {
+                    residency.RunPack();
+                }
+            }
+            fork.Run(jobs: jobs);
+            foreach (var residency in m_packsPending) {
+                if (!residency.IsReleased) { residency.EndPack(); }
+            }
+        } finally {
+            fork.Clear();
+            m_packsPending.Clear();
         }
     }
     /// <inheritdoc/>
-    /// <remarks>Resolves the instance's view and prepares its residency: captures its frame (a routed residency its host's
-    /// first) and packs it, once a frame whichever reader asks first.</remarks>
-    public void PrepareRead(string instance, in FrameContext context) => _ = BegunResidencyOf(instance: instance)?.Prepare(context: in context);
+    /// <remarks>Stages the residencies the scheduled instances render before the runtime prepares each render
+    /// (<see cref="PrepareRender"/>, which then finds them staged). Each one's upload opens and is submitted on the
+    /// frame thread, in the order the schedule names the residencies; between the two, the uploads record as the
+    /// partitions of one fork of the pool's frame class, one residency a partition
+    /// (<see cref="SdfWorldResidency.RecordStage"/>). A residency whose frame keeps its staging to the frame thread
+    /// (<see cref="SdfWorldResidency.BeginStage"/>) is left to <see cref="PrepareRender"/>.</remarks>
+    public void RendersScheduled(IReadOnlyList<string> instances, in FrameContext context, JobPool? jobs) {
+        if ((jobs is not { Serial: false }) || (instances.Count < 2)) { return; }
+
+        var fork = m_stageFork;
+
+        try {
+            for (var index = 0; (index < instances.Count); index++) {
+                if ((BegunResidencyOf(instance: instances[index]) is { } residency) && !fork.Contains(residency: residency) && residency.BeginStage(context: in context)) {
+                    fork.Add(residency: residency);
+                }
+            }
+            fork.Run(jobs: jobs);
+            fork.Each(action: static residency => residency.EndStage());
+        } finally {
+            fork.Clear();
+        }
+    }
+
+    private readonly ResidencyFork m_packFork = new(beside: SdfCaptureWork.PackedBeside, onWorker: SdfCaptureWork.PackedOnWorker, run: static residency => residency.RunPack());
+    private readonly ResidencyFork m_stageFork = new(beside: SdfCaptureWork.UploadedBeside, onWorker: SdfCaptureWork.UploadedOnWorker, run: static residency => residency.RecordStage());
+
+    // One step of a frame run for several residencies side by side: one residency a partition of one fork of the pool's
+    // frame class. The step touches only its own residency, which is what lets the partitions run on any threads.
+    private sealed class ResidencyFork(Action<SdfWorldResidency> run, Puck.Abstractions.Counting.WorkKind beside, Puck.Abstractions.Counting.WorkKind onWorker) : IJobPartitions {
+        private readonly List<SdfWorldResidency> m_residencies = [];
+        // The thread that forks, whose partitions are the frame thread's own share.
+        private int m_forkingThread;
+
+        public bool Contains(SdfWorldResidency residency) => m_residencies.Contains(item: residency);
+        public void Add(SdfWorldResidency residency) => m_residencies.Add(item: residency);
+        public void Clear() => m_residencies.Clear();
+        public void Each(Action<SdfWorldResidency> action) {
+            foreach (var residency in m_residencies) { action(obj: residency); }
+        }
+        // Runs the step for every residency added, on the pool when there is one and here otherwise.
+        public void Run(JobPool? jobs) {
+            if (m_residencies.Count == 0) { return; }
+            m_forkingThread = Environment.CurrentManagedThreadId;
+            if (jobs is null) {
+                for (var partition = 0; (partition < m_residencies.Count); partition++) { Run(partition: partition); }
+            } else {
+                jobs.Fork(body: this, jobClass: JobClass.Frame, partitions: m_residencies.Count);
+            }
+        }
+        public void Run(int partition) {
+            run(obj: m_residencies[partition]);
+            SdfCaptureWork.ProcessWork.Count(kind: beside);
+            if (Environment.CurrentManagedThreadId != m_forkingThread) { SdfCaptureWork.ProcessWork.Count(kind: onWorker); }
+        }
+    }
     /// <inheritdoc/>
     /// <remarks>Stages the residency the instance renders this frame (<see cref="SdfWorldResidency.Stage"/>): its upload
     /// is submitted and its background GPU work pumped here, before any pass records, so no pass's recording pays for
