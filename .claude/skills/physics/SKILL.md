@@ -74,7 +74,10 @@ same change.
   the input runtime or a register from a partition throws
   (`ThrowIfPartitioned`, `WriteStateRaw`); a new shared write a body step can
   reach goes through the body's `WorldBodyStepLog` or makes the body serial.
-  Producers read other bodies only through the frozen perception image.
+  Producers read other bodies only through the frozen perception image. The
+  navigation runtime is read-only during the forks
+  (`NavigationRuntime.EnterReadOnly`): bake every domain a partition reads, and
+  resolve its goal fields, in the serial plan.
 - **One door for every moving sweep.** `WorldBody.SweepContact` is the
   dispatch every sweep that moves a body goes through; an
   `IEntityContactField` (today `WorldAdjacencyContactField`) learns which

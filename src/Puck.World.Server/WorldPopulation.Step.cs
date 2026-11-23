@@ -208,10 +208,6 @@ public sealed partial class WorldPopulation {
         if (domain.Tuning.Shared) {
             return ReadGoalFieldTarget(domainIndex: target.NavigationDomainIndex, entry: entry, goal: in goal, self: in self, targetIndex: targetIndex, work: work);
         }
-        // A route of its own searches the domain's one workspace, so only a serial step plans one (ProducerIsLocal).
-        if (work.Partitioned) {
-            throw new InvalidOperationException(message: "A kit partition reached a route search; only a serial step plans a route.");
-        }
         if (
             !domain.CoversRouteHeight(position: in self) ||
             !domain.CoversRouteHeight(position: in goal) ||

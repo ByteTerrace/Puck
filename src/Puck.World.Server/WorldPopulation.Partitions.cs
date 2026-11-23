@@ -26,8 +26,11 @@ namespace Puck.World.Server;
 //   fails loudly at one worker as at many.
 // - A deterministic join order. Logs, outputs and counts merge in ascending partition order; the forks' partitions are
 //   a function of the document and state, never of the worker count, and one worker runs the same partitions inline.
-// - The goal-field hand-off. The plan resolves every goal field a due steering body will read (PrepareGoalField) and
-//   builds every perception neighbourhood, serially; a partition only reads them and throws on a miss.
+// - The navigation hand-off. The plan resolves every goal field a due steering body will read (PrepareGoalField), bakes
+//   the domain a route search will read, and builds every perception neighbourhood, serially. The navigation runtime is
+//   read-only while a fork runs (NavigationRuntime.EnterReadOnly): a goal field read, a cross-domain route, a network
+//   join or a bake adoption throws there, and a domain's own path search rents a workspace of its own. A sight test
+//   reads the target field, whose queries hold no mutable state.
 // Where it stops: a body whose step can write state, reach another body or emit outputs stays serial; a per-partition
 // kit transaction for those is the open item the engine job system plan names.
 public sealed partial class WorldPopulation {
@@ -136,29 +139,14 @@ public sealed partial class WorldPopulation {
         }
     }
 
-    // Whether a body's producer reads only what a partition may read: the frozen image, its own entry, a curve, and a
-    // shared domain's resident goal field. A route search (one workspace per domain), a sight test (the target field's
-    // query) and a flock affinity (an authority expression) stay serial.
-    private bool ProducerIsLocal(Entry entry, WorldBody body, int index) {
-        if (
-            (body.Source.ProducerName is not { } name) ||
-            (ResolveProducer(entry: entry, name: name, table: m_kits[ResolveKitIndex(index: index)].Producers) is not { } producer)
-        ) {
-            return true;
-        }
-        if (
-            (producer.Flock is { } flock) &&
-            (flock.Source.RequiresLineOfSight || (flock.Source.CohesionAffinity is not null) || (flock.Source.AlignmentAffinity is not null))
-        ) {
-            return false;
-        }
-        return producer.Target switch {
-            { Source: BodyTargetSource.Sensed sensed } => !sensed.RequiresLineOfSight,
-            { Source: BodyTargetSource.Navigated } target => ((((uint)target.NavigationDomainIndex) < ((uint)m_navigation.Count)) &&
-                m_navigation[target.NavigationDomainIndex].Tuning.Shared),
-            _ => true,
-        };
-    }
+    // Whether a body's producer reads only what a partition may read: the frozen image, its own entry, a curve, a sight
+    // test, a shared domain's resident goal field and a domain's own path search. A flock affinity (an authority
+    // expression over the arena) stays serial.
+    private bool ProducerIsLocal(Entry entry, WorldBody body, int index) =>
+        (body.Source.ProducerName is not { } name) ||
+        (ResolveProducer(entry: entry, name: name, table: m_kits[ResolveKitIndex(index: index)].Producers) is not { } producer) ||
+        (producer.Flock is not { } flock) ||
+        ((flock.Source.CohesionAffinity is null) && (flock.Source.AlignmentAffinity is null));
 
     private KitPartition KitPartitionOf(int index) {
         var ordinal = (index / KitPartitionSlots);
@@ -206,6 +194,10 @@ public sealed partial class WorldPopulation {
             if (step.SteeringDue && (entry.ProducerLookup is { } producer) && (player.Source.ProducerName is not null)) {
                 perceives |= ((producer.Flock is not null) || (producer.Target?.Source is BodyTargetSource.Sensed));
                 if (producer.Flock is { MovementDomainIndex: >= 0 } flock) { m_navigation[flock.MovementDomainIndex].EnsureBaked(); }
+                // A route of its own reads one domain: bake it here, where a bake may be adopted.
+                if ((producer.Target is { Source: BodyTargetSource.Navigated } routed) && (((uint)routed.NavigationDomainIndex) < ((uint)m_navigation.Count))) {
+                    m_navigation[routed.NavigationDomainIndex].EnsureBaked();
+                }
                 PrepareGoalField(entry: entry, producer: producer, self: player.FixedPosition);
             }
 
@@ -264,6 +256,7 @@ public sealed partial class WorldPopulation {
     // One fork over the active partitions; with no pool, or a serial one, the same partitions run here in order.
     private void ForkKitPartitions(JobPool? jobs, KitPartitionRun run) {
         m_partitioned = true;
+        using var navigation = m_navigation.EnterReadOnly();
         try {
             if (jobs is null) {
                 for (var partition = 0; (partition < m_activeKitPartitions.Count); partition++) { run.Run(partition: partition); }

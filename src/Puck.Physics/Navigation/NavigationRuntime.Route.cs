@@ -39,7 +39,7 @@ public readonly record struct NavigationRouteWork(int Expanded, int Joins);
 public sealed partial class NavigationRuntime {
     private const int MaxRouteSteps = 26;
 
-    private RouteWorkspace? m_route;
+    private SearchWorkspace? m_route;
 
     // The union of every domain's cells as one graph: a node is a domain's cell at its domain's offset, its edges the
     // domain's own baked edges plus a junction to each cell of another domain of its network standing at the same place.
@@ -53,8 +53,11 @@ public sealed partial class NavigationRuntime {
     private readonly bool[] m_joined;
     private readonly Dictionary<int, List<int>> m_junctions = [];
 
-    private sealed class RouteWorkspace {
-        public RouteWorkspace(int cells) {
+    // One A* search's working arrays over a node space: the cross-domain route search's (one per runtime) and a domain's
+    // own path search's (rented per search, so searches on several threads each hold their own). A search's answer
+    // depends only on the graph, never on what an earlier search left here: Begin opens a fresh stamp.
+    private sealed class SearchWorkspace {
+        public SearchWorkspace(int cells) {
             Cost = new int[cells];
             Heuristic = new int[cells];
             Parent = new int[cells];
@@ -72,10 +75,20 @@ public sealed partial class NavigationRuntime {
         public int Stamp;
 
         public long Bytes => checked(((long)Cost.Length) * (7L * sizeof(int)));
+
+        // Empties the open set and moves to a fresh stamp, so no node reads as opened or closed by an earlier search.
+        public void Begin() {
+            Open.Clear();
+            if (++Stamp == int.MaxValue) {
+                Array.Clear(array: OpenStamp);
+                Array.Clear(array: ClosedStamp);
+                Stamp = 1;
+            }
+        }
     }
 
     // f = g + h, then the smaller h, then the lower node: a total order, so the heap never breaks a tie itself.
-    private readonly struct RouteOrder(RouteWorkspace workspace) : IComparer<int> {
+    private readonly struct SearchOrder(SearchWorkspace workspace) : IComparer<int> {
         public int Compare(int x, int y) {
             var f = (workspace.Cost[x] + workspace.Heuristic[x]).CompareTo(value: (workspace.Cost[y] + workspace.Heuristic[y]));
 
@@ -145,7 +158,9 @@ public sealed partial class NavigationRuntime {
     /// <returns><see cref="NavigationStatus.Active"/> with a route, <see cref="NavigationStatus.Arrived"/> when the goal
     /// accepts the start, <see cref="NavigationStatus.OutsideDomain"/> when the start is not a walkable cell,
     /// <see cref="NavigationStatus.Unreachable"/>, <see cref="NavigationStatus.SearchLimit"/> or <see cref="NavigationStatus.PathLimit"/>.</returns>
+    /// <exception cref="InvalidOperationException">The runtime is read-only (<see cref="EnterReadOnly"/>).</exception>
     public NavigationStatus FindRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, List<NavigationRouteNode> route, int maxExpanded, int maxNodes, out NavigationRouteWork work) {
+        ThrowIfReadOnly(operation: "a cross-domain route search");
         var status = SearchRoute(fromCell: fromCell, fromDomain: fromDomain, goal: goal, maxExpanded: maxExpanded, maxNodes: maxNodes, route: route, work: out work);
 
         m_work.Add(amount: 1, kind: NavigationSearchWork.Routes);
@@ -161,22 +176,17 @@ public sealed partial class NavigationRuntime {
             return NavigationStatus.OutsideDomain;
         }
 
-        var workspace = (m_route ??= new RouteWorkspace(cells: checked((int)CellCount)));
+        var workspace = (m_route ??= new SearchWorkspace(cells: checked((int)CellCount)));
         var start = (m_offsets[fromDomain] + fromCell);
         var bounds = goal.Bounds;
-        var order = new RouteOrder(workspace: workspace);
+        var order = new SearchOrder(workspace: workspace);
         var joins = 0;
         var expanded = 0;
         Span<int> next = stackalloc int[MaxRouteSteps];
         Span<int> cost = stackalloc int[MaxRouteSteps];
         Span<byte> slots = stackalloc byte[MaxRouteSteps];
 
-        workspace.Open.Clear();
-        if (++workspace.Stamp == int.MaxValue) {
-            Array.Clear(array: workspace.OpenStamp);
-            Array.Clear(array: workspace.ClosedStamp);
-            workspace.Stamp = 1;
-        }
+        workspace.Begin();
         OpenRoute(bounds: in bounds, cost: 0, node: start, order: order, parent: -1, workspace: workspace);
         while (workspace.Open.Count != 0) {
             var current = workspace.Open.Pop(order: order);
@@ -242,7 +252,7 @@ public sealed partial class NavigationRuntime {
         val1: Millimetres(value: FixedQ4816.Max(x: FixedQ4816.Zero, y: FixedQ4816.Max(x: (bounds.Minimum.X - position.X), y: (position.X - bounds.Maximum.X)))),
         val2: Millimetres(value: FixedQ4816.Max(x: FixedQ4816.Zero, y: FixedQ4816.Max(x: (bounds.Minimum.Z - position.Z), y: (position.Z - bounds.Maximum.Z))))
     );
-    private void OpenRoute(int node, int cost, int parent, in FixedAabb bounds, RouteOrder order, RouteWorkspace workspace) {
+    private void OpenRoute(int node, int cost, int parent, in FixedAabb bounds, SearchOrder order, SearchWorkspace workspace) {
         var domainIndex = DomainOf(node: node);
 
         workspace.Cost[node] = cost;
@@ -251,7 +261,7 @@ public sealed partial class NavigationRuntime {
         workspace.OpenStamp[node] = workspace.Stamp;
         workspace.Open.Push(node: node, order: order);
     }
-    private void RelaxRoute(int node, int cost, int parent, in FixedAabb bounds, RouteOrder order, RouteWorkspace workspace) {
+    private void RelaxRoute(int node, int cost, int parent, in FixedAabb bounds, SearchOrder order, SearchWorkspace workspace) {
         if (workspace.ClosedStamp[node] == workspace.Stamp) {
             return;
         }
@@ -263,7 +273,7 @@ public sealed partial class NavigationRuntime {
             workspace.Open.Decrease(node: node, order: order);
         }
     }
-    private NavigationStatus ReconstructRoute(int goal, int maxNodes, List<NavigationRouteNode> route, RouteWorkspace workspace) {
+    private NavigationStatus ReconstructRoute(int goal, int maxNodes, List<NavigationRouteNode> route, SearchWorkspace workspace) {
         for (var node = goal; (node >= 0); node = workspace.Parent[node]) {
             if (route.Count >= maxNodes) {
                 route.Clear();
