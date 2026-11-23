@@ -1,10 +1,9 @@
 using Azure.Core;
-using Azure.Identity;
 
 namespace Puck.Storage.Azure;
 
 /// <summary>
-/// Asks the ambient Azure credential — the same <c>DefaultAzureCredential</c> chain
+/// Asks the ambient Azure credential — the same <see cref="AzureAmbientCredential"/> chain
 /// <see cref="AzureBlobObjectBlobStoreBackend"/> authenticates its service-URI targets with — whether it can issue a
 /// blob-storage token right now. No app registration is involved, by design: a player's machine authenticates
 /// ambiently (developer tooling, the OS broker, a shared token cache) and a hosted server runs as a user-assigned
@@ -14,7 +13,7 @@ namespace Puck.Storage.Azure;
 /// This is a presence check, not a sign-in: it never prompts and never mutates anything. It answers the one question
 /// an operator cannot otherwise answer before a push fails — "would the cloud let me in from this machine". A
 /// connection-string target authenticates with the account key instead, so the answer is informational there.
-/// A fresh <c>DefaultAzureCredential</c> is built per probe rather than borrowed from the backend: the chain caches
+/// A fresh ambient credential is built per probe rather than borrowed from the backend: the chain caches
 /// inside one instance, and a probe that could answer from a cache would be reporting the past.
 /// </remarks>
 public static class AzureBlobCredentialProbe {
@@ -46,7 +45,7 @@ public static class AzureBlobCredentialProbe {
     /// <param name="clock">The host clock <paramref name="timeout"/> runs on; <see langword="null"/> is
     /// <see cref="TimeProvider.System"/>.</param>
     /// <param name="credential">The credential to ask; <see langword="null"/> builds a fresh
-    /// <c>DefaultAzureCredential</c> for this probe alone. A supplied credential stays the caller's.</param>
+    /// <see cref="AzureAmbientCredential"/> for this probe alone. A supplied credential stays the caller's.</param>
     /// <returns>The verdict.</returns>
     public static async ValueTask<ObjectStorageAccess> ProbeAsync(TimeSpan timeout, CancellationToken cancellationToken = default, TimeProvider? clock = null,
         TokenCredential? credential = null) {
@@ -59,7 +58,7 @@ public static class AzureBlobCredentialProbe {
             token2: expiry.Token
         );
         var owned = ((credential is null)
-            ? new DefaultAzureCredential()
+            ? AzureAmbientCredential.Create()
             : null
         );
 

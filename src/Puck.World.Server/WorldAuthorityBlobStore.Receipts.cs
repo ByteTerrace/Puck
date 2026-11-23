@@ -41,6 +41,7 @@ public sealed partial class WorldAuthorityBlobStore {
         if (!WorldAuthorityCheckpointCodec.TryDecode(
             bytes: checkpointBytes,
             checkpoint: out var captured,
+            documentDirectory: m_documentDirectory,
             reason: out var reason
         )) {
             return WorldAuthorityStoreOutcome.Failed(detail: $"fixture checkpoint refused — {reason}. Capture a new release fixture with the current authority.");

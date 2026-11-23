@@ -21,8 +21,19 @@ namespace Puck.Cli.Automation;
 /// inspect or start an image.
 /// </para>
 /// </summary>
+/// <param name="fixture">The marked offline fixture directory each leg imports.</param>
+/// <param name="outputDirectory">The directory that retains the isolated legs and their evidence.</param>
+/// <param name="sourceImage">The engine image of the release being left.</param>
+/// <param name="targetImage">The engine image of the release being entered.</param>
+/// <param name="steps">The exact continuation steps per packaged leg.</param>
+/// <param name="archive">The archive that retains both releases' files; required when their definitions differ.</param>
+/// <param name="clock">The clock every deadline runs on; <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
+/// <param name="containers">The container engine that runs the legs; <see langword="null"/> is Docker.</param>
+/// <param name="documentDirectory">The directory the fixture's captured definitions resolve their relative paths beside
+/// when the release's metadata transition decodes them on this machine (<see cref="WorldSiloDefinition.DocumentDirectory"/>
+/// as the hosting silo lays it out); <see langword="null"/> for documents that author none.</param>
 public sealed class WorldReleaseQualificationRunner(string fixture, string outputDirectory, string sourceImage, string targetImage, int steps = 60,
-    WorldReleaseArchive? archive = null, TimeProvider? clock = null, IWorldReleaseQualificationContainers? containers = null)
+    WorldReleaseArchive? archive = null, TimeProvider? clock = null, IWorldReleaseQualificationContainers? containers = null, string? documentDirectory = null)
     : IWorldReleaseQualificationRunner, IWorldReleaseBootstrapQualificationRunner {
     /// <summary>Gets how long one packaged leg may run, on the runner's clock, before it is abandoned.</summary>
     public static TimeSpan LegTimeout { get; } = TimeSpan.FromMinutes(minutes: 5);
@@ -468,7 +479,8 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
         var transition = (changesDefinitions
             ? new WorldReleaseQualificationTransition(
                 provider.GetRequiredService<IObjectBlobStore>(),
-                archive!
+                archive!,
+                documentDirectory
             )
             : null
         );

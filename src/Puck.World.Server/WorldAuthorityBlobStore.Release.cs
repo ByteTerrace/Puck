@@ -158,6 +158,7 @@ public sealed partial class WorldAuthorityBlobStore {
         if (!WorldAuthorityCheckpointCodec.TryDecode(
             bytes: checkpointBytes.Span,
             checkpoint: out var checkpoint,
+            documentDirectory: m_documentDirectory,
             reason: out reason
         )) {
             return WorldAuthorityStoreOutcome.Failed(detail: "protected checkpoint cannot be decoded for release publication");

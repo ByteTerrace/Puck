@@ -323,17 +323,28 @@ public static partial class AzureCommand {
                     roots = retained;
                 } else {
                     if (worker is null) { throw new InvalidOperationException(message: "source disappeared before its complete drain roots were retained"); }
-                    var response = await RequestAsync(
-                        worker,
-                        source,
-                        "POST",
-                        $"/release/drain/{operation.PendingOperationId:D}",
-                        await GuestGuardAsync(
-                            operation: operation,
-                            phases: [WorldReleaseOperationPhase.Drain],
-                            token: cancellationToken
-                        ).ConfigureAwait(continueOnCapturedContext: false)
-                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    JsonNode response;
+
+                    try {
+                        response = await RequestAsync(
+                            worker,
+                            source,
+                            "POST",
+                            $"/release/drain/{operation.PendingOperationId:D}",
+                            await GuestGuardAsync(
+                                operation: operation,
+                                phases: [WorldReleaseOperationPhase.Drain],
+                                token: cancellationToken
+                            ).ConfigureAwait(continueOnCapturedContext: false)
+                        ).ConfigureAwait(continueOnCapturedContext: false);
+                    } catch (Exception error) when (error is not OperationCanceledException) {
+                        // Only the running source host can freeze and capture its state; a replaced worker has none.
+                        if ((await InspectAsync(worker: worker).ConfigureAwait(continueOnCapturedContext: false))["running"]?.GetValue<bool>() == true) { throw; }
+                        throw new InvalidOperationException(
+                            innerException: error,
+                            message: $"the source host is not running on {worker} (Azure replaced the worker or its host stopped) before its drain retained all roots ({retained.Count} of {m_identities.Length}), so its state cannot be drained: {error.Message}"
+                        );
+                    }
 
                     roots = (response.Deserialize<Dictionary<string, string>>(options: Json) ?? throw new InvalidDataException(message: "source drain returned no protected roots"));
                 }
@@ -360,7 +371,7 @@ public static partial class AzureCommand {
                             phases: [WorldReleaseOperationPhase.Drain],
                             token: cancellationToken
                         ).ConfigureAwait(continueOnCapturedContext: false) +
-                        "systemctl stop puck-world.service"),
+                        WorldStopScript),
                         worker: worker
                     ).ConfigureAwait(continueOnCapturedContext: false);
                 }
@@ -584,7 +595,7 @@ public static partial class AzureCommand {
                         phases: [WorldReleaseOperationPhase.Recover],
                         token: cancellationToken
                     ).ConfigureAwait(continueOnCapturedContext: false) +
-                    "systemctl stop puck-world.service || true\nif docker inspect puck-world >/dev/null 2>&1; then docker rm -f puck-world; fi"),
+                    WorldStopScript),
                     worker: worker
                 ).ConfigureAwait(continueOnCapturedContext: false);
             }
@@ -610,6 +621,19 @@ public static partial class AzureCommand {
         }
     }
 
+    // Stops the world host on a worker and proves it stopped; the drain's source stop and recovery's candidate stop share
+    // it. A worker without the unit is already stopped: Azure replaces a worker (a Spot eviction, a repair) with a fresh
+    // VM whose bootstrap the guard refuses while an operation is pending, so the unit never exists there, and the drain's
+    // roots are already retained by then. A unit whose stop fails, as a candidate that cannot checkpoint does, still
+    // counts once systemd reports it inactive; one that stays active fails the script by name. The container is removed
+    // last, so no host keeps running whatever the unit's state was.
+    private const string WorldStopScript = """
+        if [ "$(systemctl show --property=LoadState --value puck-world.service)" != not-found ]; then
+          systemctl stop puck-world.service || true
+          if systemctl is-active --quiet puck-world.service; then echo 'puck-world.service is still active after its stop' >&2; exit 1; fi
+        fi
+        if docker inspect puck-world >/dev/null 2>&1; then docker rm -f puck-world >/dev/null; fi
+        """;
     // The worker's loopback release-control request, bounded by the deployment's shutdown allowance. --fail-with-body keeps
     // the worker's refusal reason, the 409 body WorldSiloReleaseControl writes, in a failed request's output.
     private static string WorldControlRequest(AzureWorldReleaseDeployment deployment, string method, string path) =>

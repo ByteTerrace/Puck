@@ -72,7 +72,8 @@ public static partial class AzureCommand {
                     new(
                         store: blobs,
                         target: target,
-                        timeProvider: clock
+                        timeProvider: clock,
+                        documentDirectory: LocalWorldsDirectory
                     ),
                     blobs,
                     new(

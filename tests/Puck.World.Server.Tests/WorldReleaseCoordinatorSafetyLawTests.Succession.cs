@@ -344,7 +344,7 @@ public sealed partial class WorldReleaseCoordinatorSafetyLawTests {
             (WorldReleaseGroupHistoryEntry.ResetResult + host.ActivatedReset),
             entry.Result
         );
-        Assert.Null(@object: WorldReleaseCoordinator.FindStateReset(checkpoints: ReadableExport()));
+        Assert.Null(@object: WorldReleaseCoordinator.FindStateReset(checkpoints: ReadableExport(), documentDirectory: null));
     }
     // A reset operation that fails before its commit recovers the source exactly as any other: the reset entry stays in
     // history beside the recovery, and the recovered group no longer reports a pending reset.
@@ -460,7 +460,7 @@ public sealed partial class WorldReleaseCoordinatorSafetyLawTests {
                 state = ended;
                 break;
         }
-        var reset = ((exported is null) ? null : WorldReleaseCoordinator.FindStateReset(checkpoints: exported));
+        var reset = ((exported is null) ? null : WorldReleaseCoordinator.FindStateReset(checkpoints: exported, documentDirectory: null));
         var begun = ((state.Record.ActiveRelease is { } active)
             ? ((reset is null)
                 ? await coordinator.BeginDeploymentAsync(

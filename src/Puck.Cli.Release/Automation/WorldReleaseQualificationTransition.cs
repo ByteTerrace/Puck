@@ -6,7 +6,12 @@ namespace Puck.Cli.Automation;
 
 /// <summary>Applies the real release publisher to a disposable qualification copy. Both packaged engines
 /// subsequently import this same copy; reversal uses the candidate's drained continuation, never the seed.</summary>
-public sealed class WorldReleaseQualificationTransition(IObjectBlobStore blobs, WorldReleaseArchive archive) {
+/// <param name="blobs">The blob store the disposable copy lives in.</param>
+/// <param name="archive">The archive that retains both releases' files.</param>
+/// <param name="documentDirectory">The directory the copy's captured definitions resolve their relative paths beside, as
+/// the silo that runs them lays out its documents (<see cref="WorldSiloDefinition.DocumentDirectory"/>); <see langword="null"/>
+/// for documents that author none.</param>
+public sealed class WorldReleaseQualificationTransition(IObjectBlobStore blobs, WorldReleaseArchive archive, string? documentDirectory = null) {
     private static WorldReleaseGroupSnapshot Require(WorldReleaseGroupOutcome outcome) => ((outcome.Ok && (outcome.Snapshot is { } snapshot))
         ? snapshot
         : throw new InvalidDataException(message: ("metadata qualification preparation failed: " + outcome.Detail))
@@ -49,6 +54,7 @@ public sealed class WorldReleaseQualificationTransition(IObjectBlobStore blobs, 
             path2: "store"
         ));
         var authority = new WorldAuthorityBlobStore(
+            documentDirectory: documentDirectory,
             store: blobs,
             target: storage
         );

@@ -374,7 +374,11 @@ first. So every failed release leaves a group the next deploy can follow without
 except a committed release that cannot be admitted. `WorldReleaseCoordinatorSafetyLawTests.ADeploymentFollowsWhateverItsPredecessorLeftPending`
 drives each phase against a host fake that makes the worker's durable writes. A source export this build cannot decode
 resets instead of refusing (hosted data is scratch): `WorldReleaseCoordinator.FindStateReset` is the one decision,
-called by `WorldReleaseFixtureBuilder.BuildAsync` with the deploy's successor; `BeginResetAsync` qualifies the target
+called by `WorldReleaseFixtureBuilder.BuildAsync` with the deploy's successor and the asset layout the silo resolves
+relative paths beside (`LocalWorldsDirectory`), because a checkpoint embeds its definition with those paths unresolved and
+decodes only beside that directory, exactly as `WorldSiloHost` decodes it; every release-path decode of a checkpoint
+(the fixture builder, `WorldAuthorityBlobStore`, `WorldReleaseRestore`, the qualification transition) takes the same
+directory, so a state the silo can restore is never reset or refused here; `BeginResetAsync` qualifies the target
 alone and records a `WorldReleaseGroupHistoryEntry.ResetResult` entry (read back as `PendingStateReset`, in history so
 an older draining source still parses the record); Activate calls `WorldAuthorityBlobStore.PrepareReleaseResetAsync`
 per world instead of the metadata transition. Never add migration code or read tolerance for the old shape.

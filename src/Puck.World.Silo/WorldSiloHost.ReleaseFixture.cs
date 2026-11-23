@@ -119,6 +119,7 @@ public sealed partial class WorldSiloHost {
         });
         var boundary = await capture.Task.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         var receiptStore = new WorldAuthorityBlobStore(
+            documentDirectory: m_documentDirectory,
             store: m_blobStore,
             target: m_storageTarget,
             timeProvider: m_clock
@@ -182,6 +183,7 @@ public sealed partial class WorldSiloHost {
         }
         return (ClosedGroupRewind
             ? await new WorldAuthorityBlobStore(
+                documentDirectory: m_documentDirectory,
                 store: m_blobStore,
                 target: m_storageTarget,
                 timeProvider: m_clock
