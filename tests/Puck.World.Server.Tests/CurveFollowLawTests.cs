@@ -11,8 +11,9 @@ namespace Puck.World.Server.Tests;
 /// <summary>Pins the sim curve-follow target source end to end: a body whose selected producer names
 /// <see cref="BodyTargetSource.CurveFollow"/> travels off spawn while an otherwise-identical body with no producer
 /// selected never moves, the driven run's per-tick state-hash trace is deterministic and diverges from that control,
-/// a recorded run re-drives to an identical replay match, the travelled arc restarts at zero on a producer switch
-/// (and switching back), that restart survives a checkpoint capture/restore under the same producer, and the
+/// a recorded run re-drives to an identical replay match, a producer switch (and switching back) rejoins the new
+/// curve at the station nearest the body rather than resuming the old travel, the travelled arc survives a
+/// checkpoint capture/restore under the same producer, and the
 /// World-frame steering tracks a genuinely curved, closed path with the orbit scalar's effect observable.</summary>
 public sealed class CurveFollowLawTests {
     private const string CurveRowName = "path";
@@ -467,7 +468,7 @@ public sealed class CurveFollowLawTests {
         Assert.NotNull(@object: result.Verdict);
     }
     [Fact]
-    public void CurveFollowProducer_SwitchingProducersRestartsTheArcAtZero_RatherThanResuming() {
+    public void CurveFollowProducer_SwitchingProducersRejoinsAtTheNearestStation_RatherThanResuming() {
         var straight = StraightPath;
         var loop = LoopPath;
         var document = (Fixtures.BuildDocument() with { CurvesRaw = [straight, loop] });
@@ -521,7 +522,8 @@ public sealed class CurveFollowLawTests {
         );
 
         body.SetIntentSource(source: IntentSource.Producer(name: LoopFollowProgramName));
-        fixture.Step(); // the transition tick: resets the shared accumulator to zero, then advances by one step.
+        fixture.Step(); // the transition tick: joins the loop at its station nearest the body (its start, which the body
+                        // has barely left), then advances by one step.
 
         var arcOnLoopFirstTick = CurrentCurveArcRaw(
             bodyIndex: 0,
@@ -530,13 +532,20 @@ public sealed class CurveFollowLawTests {
 
         Assert.True(
             condition: (arcOnLoopFirstTick < (arcOnPathBeforeSwitch / 4)),
-            userMessage: $"selecting a different producer must restart its curve accumulator near zero rather than resume the prior producer's travelled arc; before switching {arcOnPathBeforeSwitch}, one tick after switching {arcOnLoopFirstTick}"
+            userMessage: $"selecting a different producer must join its curve where the body stands rather than resume the prior producer's travelled arc; before switching {arcOnPathBeforeSwitch}, one tick after switching {arcOnLoopFirstTick}"
         );
 
-        for (var tick = 0; (tick < 1); tick++) {
+        for (var tick = 0; (tick < 120); tick++) {
             fixture.Step();
         }
 
+        var arcOnLoopBeforeSwitchBack = CurrentCurveArcRaw(
+            bodyIndex: 0,
+            fixture: fixture
+        );
+
+        // The loop circles x <= 0 from the path's start, so the body now stands behind the path's start: the path's
+        // nearest station is its start, far from both the loop's travel and the path's earlier travel.
         body.SetIntentSource(source: IntentSource.Producer(name: FollowProgramName));
         fixture.Step(); // switching back is itself a transition — the prior "path" travel is never re-matched.
 
@@ -546,8 +555,8 @@ public sealed class CurveFollowLawTests {
         );
 
         Assert.True(
-            condition: (arcOnPathAfterSwitchBack < (arcOnPathBeforeSwitch / 4)),
-            userMessage: $"switching back to the original producer must restart its arc at zero rather than resume where it was left off; before the first switch away {arcOnPathBeforeSwitch}, after switching back {arcOnPathAfterSwitchBack}"
+            condition: ((arcOnPathAfterSwitchBack < (arcOnPathBeforeSwitch / 4)) && (arcOnPathAfterSwitchBack < (arcOnLoopBeforeSwitchBack / 4))),
+            userMessage: $"switching back to the original producer must rejoin it where the body stands rather than resume either travel; before the first switch away {arcOnPathBeforeSwitch}, on the loop before switching back {arcOnLoopBeforeSwitchBack}, after switching back {arcOnPathAfterSwitchBack}"
         );
     }
     [Fact]

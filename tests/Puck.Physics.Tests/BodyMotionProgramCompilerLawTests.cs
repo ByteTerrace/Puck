@@ -64,9 +64,11 @@ public sealed class BodyMotionProgramCompilerLawTests {
                 operations: op
             );
 
+            // ShapeVelocity is admissible but reads the target a compute operation resolves, so alone it refuses
+            // for the missing operation instead.
             Assert.Equal(
                 expected: (MotionSelectable.Contains(value: op)
-                ? null
+                ? ((op == BodyMotionOp.ShapeVelocity) ? BodyMotionProgramRefusal.OpcodeRequired : null)
                 : BodyMotionProgramRefusal.OpcodeInadmissible),
                 actual: motion
             );

@@ -34,8 +34,9 @@ public abstract record BodyTargetSource {
     /// <param name="Register">The authored target-register name.</param>
     public sealed record Designated([property: DocumentText("a target register name")] string Register) : BodyTargetSource;
     /// <summary>Feeds the producer a point that travels along a named <c>curves</c> row at a constant authored arc
-    /// rate — the deterministic, fixed-point curve-follow target the kart-track charter inherits. The travelled arc
-    /// position is per-body simulation state (see <c>Puck.World.Server.BodyProducerSupport.BodyProducerState.
+    /// rate — the deterministic, fixed-point curve-follow target the kart-track charter inherits. The point starts
+    /// at the curve's station nearest the body when the producer is selected, so bodies placed along one curve keep
+    /// their spacing as they follow it. The travelled arc position is per-body simulation state (see <c>Puck.World.Server.BodyProducerSupport.BodyProducerState.
     /// CurveArcRaw</c>), snapshot- and replay-covered exactly like every other producer accumulator.</summary>
     /// <param name="Curve">The named <c>curves</c> row to travel — a dangling name refuses at validation, exactly
     /// like a dangling <see cref="Designated.Register"/>.</param>

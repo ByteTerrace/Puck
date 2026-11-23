@@ -1,0 +1,266 @@
+// Roads and routes. Two standard vehicles (../standard/vehicle.puck) lap a road loop: a curve of four straights, at
+// the headings 0, pi/2, pi and -pi/2, joined by circular corners whose curvature jumps where they meet the straights.
+// Each vehicle drives the `walk` program under a shaping row that grips across its heading, and follows the loop from
+// where it is placed. A walker on a navigated route laps four stops under four Level rules, "at stop s and arrived,
+// designate stop s + 1": moving its goal clears its arrival for the rest of the tick, so it advances one stop per
+// arrival. `puck test worlds/debug/roads-tests.puck --reproduce`.
+schema: "puck.world.definition.v1"
+documentId: "roads-tests"
+
+import "../standard/walker"
+import "../standard/kits"
+import "../standard/domains"
+import "../standard/vehicle"
+
+// Capacity four: the seat at 0, then the inhabitants from the top down in placement order, so the walker is body 3,
+// the vehicle on the south straight body 2 and the one on the north straight body 1.
+bodies {
+  capacity: 4
+  localSeats: 1
+  networkPlayers: 0
+  reconnectGraceSeconds: 0
+  seatSpawns [start]
+  sleepAfterSeconds: 0s
+}
+
+spawnPoints [
+  { id: "start", position [0, 0, 30], yawDegrees: 0 }
+]
+
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  isActive: true
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, -18, 0]
+}
+
+// The loop's centreline: x -12 .. 12, z -8 .. 8, corners of radius 4. It drives along z -8 toward +X and along z 8
+// toward -X.
+curves [roadLoop(name: "loop", x0: -12, x1: 12, z0: -8, z1: 8, radius: 4)]
+
+targetRegisters [
+  { name: "route", maximumRange: 100, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
+]
+
+// The walker's stops, the corners of a 10 m square, and the domain it routes over.
+navigation {
+  domains [surfaceDomain("pad", [16, 0.05, 16], 1, 18, 18, 2.2, 3, 256)]
+}
+
+bodyMotionPrograms [
+  vehicleRoute(name: "loopRoute", road: "loop")
+  {
+    kind: Producer
+    name: "rounds"
+    operations [SenseNearestInCone, ProduceSteeringIntent, FaceSensorTarget]
+    target: navigated(domain: "pad", register: "route")
+    version: "puck.body.program.v1"
+  }
+]
+
+vehicleDesign(producers: { loopRoute: vehicleSteering })
+vehicleLooks(colors: ["#B5523B", "#2F7F7A"])
+
+kits [
+  {
+    name: "walker"
+    bodyContact: Solid
+    bodyMotionProgram: "walk"
+    collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
+    motion: walkerMotion
+    producers {
+      rounds: vehicleSteering with { scalars: vehicleSteering.scalars with { standoffRadius: 0.5 } }
+    }
+  }
+]
+
+state {
+  world {
+    slot stop = 0
+  }
+}
+
+rule "rounds-start" {
+  when $tick >= 2
+  mode: Edge
+  designate(key: 3, kind: Point, register: "route", position: [20, 0, 20])
+}
+rule "rounds-next-1" {
+  when stop == 0 and nav(body, 3, arrived) == 1
+  mode: Level
+  designate(key: 3, kind: Point, register: "route", position: [30, 0, 20])
+  stop = 1
+}
+rule "rounds-next-2" {
+  when stop == 1 and nav(body, 3, arrived) == 1
+  mode: Level
+  designate(key: 3, kind: Point, register: "route", position: [30, 0, 30])
+  stop = 2
+}
+rule "rounds-next-3" {
+  when stop == 2 and nav(body, 3, arrived) == 1
+  mode: Level
+  designate(key: 3, kind: Point, register: "route", position: [20, 0, 30])
+  stop = 3
+}
+rule "rounds-next-0" {
+  when stop == 3 and nav(body, 3, arrived) == 1
+  mode: Level
+  designate(key: 3, kind: Point, register: "route", position: [20, 0, 20])
+  stop = 0
+}
+
+looks [
+  {
+    name: "walker"
+    scale: 1
+    source: creation(prototypeId: walker)
+    motion {
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+    }
+  }
+]
+
+prototypes {
+  prototype "walker" {
+    document {
+      name: "walker"
+      schema: "puck.creation.v1"
+      palette [{ color: "#5B7DB1", roughness: 0.6 }]
+      shape Capsule "body" {
+        material: 0
+        position [0, 0.3, 0]
+        scale [0.3, 2.2, 0.3]
+      }
+    }
+  }
+  prototype "floor" {
+    document {
+      name: "floor"
+      schema: "puck.creation.v1"
+      palette [{ color: "#ADA69F", roughness: 0.85 }]
+      shape Box {
+        material: 0
+        position [0, -0.2, 0]
+        scale [50, 0.2, 50]
+      }
+    }
+  }
+}
+
+placements {
+  placement "floor" {
+    prototype: "floor"
+    position [0, 0, 0]
+    solid
+  }
+  placement "walker" {
+    prototype: "walker"
+    position [20, 0, 20]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "walker"
+      look: "walker"
+      source: producer(name: "rounds")
+    }
+  }
+  // On the south straight, heading +X.
+  placement "vehicle-south" {
+    prototype: "vehicle-0"
+    position [-2, 0, -8]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "vehicle"
+      look: "vehicle-0"
+      source: producer(name: "loopRoute")
+    }
+  }
+  // On the north straight, heading -X: a straight at a heading of pi.
+  placement "vehicle-north" {
+    prototype: "vehicle-1"
+    position [2, 0, 8]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "vehicle"
+      look: "vehicle-1"
+      source: producer(name: "loopRoute")
+    }
+  }
+}
+
+test "each vehicle drives its straight from where it stands" {
+  when {
+    ticks 120
+  }
+  expect {
+    bodyPosition(body, 2, x) > 2
+    bodyPosition(body, 2, z) > -9.5
+    bodyPosition(body, 2, z) < -6.5
+    bodyPosition(body, 1, x) < -2
+    bodyPosition(body, 1, z) > 6.5
+    bodyPosition(body, 1, z) < 9.5
+  }
+}
+
+test "the vehicles keep to the loop as they lap it" {
+  when {
+    ticks 900
+  }
+  expect {
+    absolute(bodyPosition(body, 2, x)) < 14
+    absolute(bodyPosition(body, 2, z)) < 10
+    (absolute(bodyPosition(body, 2, x)) > 9) or (absolute(bodyPosition(body, 2, z)) > 5)
+    absolute(bodyPosition(body, 1, x)) < 14
+    absolute(bodyPosition(body, 1, z)) < 10
+    (absolute(bodyPosition(body, 1, x)) > 9) or (absolute(bodyPosition(body, 1, z)) > 5)
+  }
+}
+
+test "the walker advances one stop per arrival" {
+  when {
+    ticks 120
+  }
+  expect {
+    stop == 1
+    bodyPosition(body, 3, x) > 22
+    bodyPosition(body, 3, z) > 18
+    bodyPosition(body, 3, z) < 22
+  }
+}
+
+test "the walker laps its four stops" {
+  when {
+    ticks 840
+  }
+  expect {
+    stop >= 2
+  }
+}

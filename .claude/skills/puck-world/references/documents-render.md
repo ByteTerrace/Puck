@@ -308,7 +308,12 @@ arc-length solve as a linear grade; `tangentYaw` (radians, unit tangent
 ±`CurvatureSpline.MaxCurvature`, under the `cross2(a, b) = a.X·b.Z − a.Z·b.X`
 convention) complete it — the SAME facing convention the engine's own facing
 path uses, pinned once here so the camera `path` op and the sim curve-follow
-target both read it rather than re-deriving one. An open curve needs at least
+target both read it rather than re-deriving one. An optional
+`incomingCurvature` is the curvature the arriving segment reaches, so an arc
+ends into a straight with a curvature jump; a segment with zero curvature at
+both ends and both tangents along its chord within one yaw raw
+(`CurvatureSpline.StraightHeadingToleranceRaw`) compiles to the exact line,
+whatever its heading. An open curve needs at least
 two knots, a closed one at least three, and at most `WorldCurves.MaxKnots`
 (64); the section holds at most `WorldCurves.MaxRows` (64) rows. The section
 is OPTIONAL and every reference to a row is nullable, so an unauthored world

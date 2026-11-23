@@ -42,7 +42,8 @@ internal struct BodyProducerState {
     // CompiledCurvatureSpline.EvaluateRaw, never narrowed.
     public long CurveArcRaw;
     // The (producer name, compiled curve index) CurveArcRaw was last advanced under. Selecting a producer starts
-    // it: WorldPopulation.StageProducer resets CurveArcRaw to zero whenever either differs from this tick's
+    // it: WorldPopulation.StageProducer sets CurveArcRaw to the curve's station nearest the body
+    // (CompiledCurvatureSpline.NearestStationRaw) whenever either differs from this tick's
     // resolved producer, which covers a plain producer switch, a same-name kit retune onto a different curve row,
     // and switching away and back (the prior selection is never matched again, since re-selecting it is itself a
     // transition). ActiveProducerCurveIndex is -1 while the active producer is not a curve-follow source.

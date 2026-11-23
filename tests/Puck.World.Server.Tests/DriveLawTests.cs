@@ -316,6 +316,7 @@ public sealed class DriveLawTests {
             Operations: [
                 BodyMotionOp.ResolveDriveFrame,
                 BodyMotionOp.ResolveHold,
+                BodyMotionOp.ComputePlanarTargetVelocity,
                 BodyMotionOp.ShapeVelocity,
                 BodyMotionOp.RunActionTriggers,
                 BodyMotionOp.ApplyHold,

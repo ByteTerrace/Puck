@@ -158,28 +158,47 @@ internal static class CurvatureSplineExactMath {
             bz: t1Z
         );
         var kappa0 = ExactQ16(value: start.Curvature);
-        var kappa1 = ExactQ16(value: end.Curvature);
-        var chordLengthSquaredReal = (chordLengthSquared); // real units squared (Cx, Cz already real-valued rationals)
-        var searchHigh = (((Abs(value: chordX) + Abs(value: chordZ)) * new Rational(
-            ((BigInteger)CurvatureSpline.MaxTangentChordRatio),
-            BigInteger.One
-        )) + Rational.One);
+        var kappa1 = ExactQ16(value: end.ArrivingCurvature);
+        Rational tangent0, tangent1, p1X, p1Z, p2X, p2Z;
 
-        var (tangent0, tangent1) = SolveTangentLengths(
-            chordLengthSquared: chordLengthSquaredReal,
-            kappa0: kappa0,
-            kappa1: kappa1,
-            s0: s0,
-            s1: s1,
-            searchHigh: searchHigh,
-            segmentIndex: segmentIndex,
-            w: w
-        );
+        if (
+            RationalIsZero(value: kappa0) &&
+            RationalIsZero(value: kappa1) &&
+            TangentAlongChord(tangentX: t0X, tangentZ: t0Z, cross: s0, chordX: chordX, chordZ: chordZ, chordLengthSquared: chordLengthSquared) &&
+            TangentAlongChord(tangentX: t1X, tangentZ: t1Z, cross: s1, chordX: chordX, chordZ: chordZ, chordLengthSquared: chordLengthSquared)
+        ) {
+            // A straight: the exact line between the knots, its control points a third of the chord in from each end.
+            (tangent0, tangent1) = AdmitOrRefuse(
+                chordLengthSquared: chordLengthSquared,
+                l0: (ExactSqrt(value: chordLengthSquared) * OneThird),
+                l1: (ExactSqrt(value: chordLengthSquared) * OneThird),
+                segmentIndex: segmentIndex
+            );
+            p1X = (p0X + (chordX * OneThird));
+            p1Z = (p0Z + (chordZ * OneThird));
+            p2X = (p3X - (chordX * OneThird));
+            p2Z = (p3Z - (chordZ * OneThird));
+        } else {
+            var searchHigh = (((Abs(value: chordX) + Abs(value: chordZ)) * new Rational(
+                ((BigInteger)CurvatureSpline.MaxTangentChordRatio),
+                BigInteger.One
+            )) + Rational.One);
 
-        var p1X = (p0X + (tangent0 * t0X));
-        var p1Z = (p0Z + (tangent0 * t0Z));
-        var p2X = (p3X - (tangent1 * t1X));
-        var p2Z = (p3Z - (tangent1 * t1Z));
+            (tangent0, tangent1) = SolveTangentLengths(
+                chordLengthSquared: chordLengthSquared,
+                kappa0: kappa0,
+                kappa1: kappa1,
+                s0: s0,
+                s1: s1,
+                searchHigh: searchHigh,
+                segmentIndex: segmentIndex,
+                w: w
+            );
+            p1X = (p0X + (tangent0 * t0X));
+            p1Z = (p0Z + (tangent0 * t0Z));
+            p2X = (p3X - (tangent1 * t1X));
+            p2Z = (p3Z - (tangent1 * t1Z));
+        }
 
         // Derivative control points, from the EXACT (pre-rounding) geometry — one rounding each below, never two.
         var d0X = (RationalThree * (p1X - p0X));
@@ -1263,6 +1282,18 @@ internal static class CurvatureSplineExactMath {
         (value * value);
     // The exact range of x² over x ∈ [lo, hi]: monotonic on either side of zero, so the extrema sit at the
     // endpoints; when the interval straddles zero the minimum is the exact zero itself.
+    // Whether a tangent points along the chord within CurvatureSpline.StraightHeadingToleranceRaw: forward (a positive
+    // dot product) and sin²θ = cross² / (|T|²·|C|²) at most (tolerance · 2^-16)², compared exactly with no root taken.
+    private static bool TangentAlongChord(Rational tangentX, Rational tangentZ, Rational cross, Rational chordX, Rational chordZ, Rational chordLengthSquared) {
+        if (SignOf(value: ((tangentX * chordX) + (tangentZ * chordZ))) <= 0) { return false; }
+
+        var tolerance = new Rational(
+            ((BigInteger)CurvatureSpline.StraightHeadingToleranceRaw),
+            (BigInteger.One << FixedQ4816.FractionBitCount)
+        );
+
+        return (SignOf(value: ((cross * cross) - (((tolerance * tolerance) * ((tangentX * tangentX) + (tangentZ * tangentZ))) * chordLengthSquared))) <= 0);
+    }
     private static (Rational Lo, Rational Hi) SquareRange(Rational lo, Rational hi) {
         if (SignOf(value: lo) >= 0) { return ((lo * lo), (hi * hi)); }
         if (SignOf(value: hi) <= 0) { return ((hi * hi), (lo * lo)); }

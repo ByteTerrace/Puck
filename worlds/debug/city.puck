@@ -158,60 +158,47 @@ let pavement = { shared: true, network: "pavement" }
 
 
 
-// The vehicles (../standard/vehicle.puck): carts lapping two loops of four corner stops, the ring road round the square
-// and the works loop (the quay lane, the cross street, the east lane and the works road), at 8 m/s. They drive the
-// `roads` network: a shared domain over each road strip, its 1 m cells sized for a vehicle, each a metre longer at both
-// ends so neighbouring strips share cells at the corners, and never joined to the pavement. Their bodies sit below the
-// citizens', so the citizens keep the top of the capacity.
+// The vehicles (../standard/vehicle.puck): carts lapping two road loops at 8 m/s, the ring road round the square and
+// the works loop (the quay lane, the cross street, the east lane and the works road). Each loop is a curve on its
+// roads' centreline, straights joined by circular corners of 8 m radius, and each vehicle follows its loop's route
+// from where it is placed. Their bodies sit below the citizens', so the citizens keep the top of the capacity.
 let vehicleColors = ["#B5523B", "#2F7F7A", "#C98B2E", "#3E6E8E", "#6B8E4E", "#7A4E7E"]
-let roadDomains = map(
-  filter(roadStrips, strip => (strip.id != "avenue") and (strip.id != "cross-street")),
-  strip => surfaceDomain(
-    $"road-{strip.id}",
-    [(strip.x0 - 1), 0.05, (strip.z0 - 1)],
-    1,
-    (strip.x1 - strip.x0 + 2),
-    (strip.z1 - strip.z0 + 2),
-    2.2,
-    3,
-    256,
-    vehicleWalker
-  ) with { shared: true, network: "roads" }
-)
-// The works loop's stretch of the cross street, from the quay lane to the east lane.
-let worksCrossDomain = surfaceDomain("road-works-cross", [29, 0.05, -136], 1, 122, 12, 2.2, 3, 256, vehicleWalker) with {
-  shared: true
-  network: "roads"
-}
 let vehicleLoops = [
-  { stops [[35, -85], [35, -15], [-35, -15], [-35, -85]], perSide: 10 }
-  { stops [[145, -130], [145, -50], [35, -50], [35, -130]], perSide: 15 }
+  {
+    road: roadLoop(name: "ring", x0: -35, x1: 35, z0: -85, z1: -15, radius: 8)
+    route: "vehicleRing"
+    corners [[35, -85], [35, -15], [-35, -15], [-35, -85]]
+    perSide: 10
+  }
+  {
+    road: roadLoop(name: "works", x0: 35, x1: 145, z0: -130, z1: -50, radius: 8)
+    route: "vehicleWorks"
+    corners [[145, -130], [145, -50], [35, -50], [35, -130]]
+    perSide: 15
+  }
 ]
-// Each vehicle starts on a side of its loop, driving to the stop that ends the side.
+// Each loop's vehicles stand evenly along its four sides, between the corners of its centreline.
 let vehicleSpots = flatMap(vehicleLoops, loop => flatMap(range(0, 4), side => map(range(0, loop.perSide), k => {
-  stops: loop.stops
-  first: side
-  x: loop.stops[(side + 3) % 4][0] + (loop.stops[side][0] - loop.stops[(side + 3) % 4][0]) * (k + 0.5) / loop.perSide
-  z: loop.stops[(side + 3) % 4][1] + (loop.stops[side][1] - loop.stops[(side + 3) % 4][1]) * (k + 0.5) / loop.perSide
+  route: loop.route
+  x: loop.corners[(side + 3) % 4][0] + (loop.corners[side][0] - loop.corners[(side + 3) % 4][0]) * (k + 0.5) / loop.perSide
+  z: loop.corners[(side + 3) % 4][1] + (loop.corners[side][1] - loop.corners[(side + 3) % 4][1]) * (k + 0.5) / loop.perSide
 })))
 let vehicleCount = length(vehicleSpots)
 
+curves: map(vehicleLoops, loop => loop.road)
+bodyMotionPrograms: map(vehicleLoops, loop => vehicleRoute(name: loop.route, road: loop.road.name))
+
 navigation {
-  domains: concat(
-    [
-      walkable("city-square", [-46, 0.05, -100], 1, 92, 100, 2.2, 3, 1024) with pavement
-      walkable("city-terraces", [-150, 0.05, -205], 1, 114, 245, 2.2, 3, 1024) with pavement
-      walkable("city-works", [36, 0.05, -100], 1, 114, 140, 2.2, 3, 1024) with pavement
-      walkable("city-quay", [-46, 0.05, -205], 1, 196, 119, 2.2, 3, 1024) with pavement
-    ],
-    roadDomains,
-    [worksCrossDomain]
-  )
+  domains [
+    walkable("city-square", [-46, 0.05, -100], 1, 92, 100, 2.2, 3, 1024) with pavement
+    walkable("city-terraces", [-150, 0.05, -205], 1, 114, 245, 2.2, 3, 1024) with pavement
+    walkable("city-works", [36, 0.05, -100], 1, 114, 140, 2.2, 3, 1024) with pavement
+    walkable("city-quay", [-46, 0.05, -205], 1, 196, 119, 2.2, 3, 1024) with pavement
+  ]
 }
 
-vehicleDesign(domain: "road-ring-north")
+vehicleDesign(producers: { vehicleRing: vehicleSteering, vehicleWorks: vehicleSteering })
 vehicleLooks(colors: vehicleColors)
-vehicleRoutes(vehicles: map(range(0, vehicleCount), v => { key: 7 + vehicleCount - v, stops: vehicleSpots[v].stops, first: vehicleSpots[v].first }))
 
 // The citizens (../standard/citizen.puck). `citizenCount` of them, numbered down from the top of the body capacity
 // above the Moth's eight (avatars/moth.puck), in blocks of one look each: look `b` is block `b`, its citizens standing
@@ -423,7 +410,7 @@ placements {
         count: 1
         kit: "vehicle"
         look: $"vehicle-{v % length(vehicleColors)}"
-        source: producer(name: "vehicle")
+        source: producer(name: spot.route)
         distribution {
           region: disc(radius: 0.01)
           fill {

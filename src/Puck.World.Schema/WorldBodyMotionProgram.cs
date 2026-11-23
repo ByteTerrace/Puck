@@ -110,8 +110,7 @@ public static class BodyMotionProgramRoles {
     public static bool RequiresRole(this CompiledBodyMotionProgram program, ChannelRole role) => role switch {
         ChannelRole.MoveAdvance or ChannelRole.MoveStrafe => (program.Contains(operation: BodyMotionOp.ComputePlanarTargetVelocity)
             || program.Contains(operation: BodyMotionOp.SnapYawToPlanarIntent)
-            || program.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)
-            || (program.Contains(operation: BodyMotionOp.ShapeVelocity) && (role == ChannelRole.MoveAdvance))),
+            || program.Contains(operation: BodyMotionOp.ComputeLocalTargetVelocity)),
         ChannelRole.Turn => (program.Contains(operation: BodyMotionOp.ResolveYawAttitudeAndPlanarFrame)
             || program.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
             || program.Contains(operation: BodyMotionOp.ResolveDriveFrame)),

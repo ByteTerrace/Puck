@@ -7195,9 +7195,13 @@ export type WorldCurveKnot = {
    */
   tangentYaw: number;
   /**
-   * The signed planar curvature at this knot, under the cross2(a, b) = a.X·b.Z − a.Z·b.X convention: positive curvature turns from the tangent toward +Z faster than toward −Z. Must fall within ±MaxCurvature.
+   * The signed planar curvature at this knot, under the cross2(a, b) = a.X·b.Z − a.Z·b.X convention: positive curvature turns from the tangent toward +Z faster than toward −Z. Must fall within ±MaxCurvature. The segment leaving the knot reaches it, and so does the segment arriving unless IncomingCurvature is authored.
    */
   curvature: number;
+  /**
+   * The signed curvature the segment arriving at this knot reaches there, when it differs from Curvature; omitted, the curvature is continuous through the knot. An arc ending into a straight authors the arc's curvature here and zero as Curvature: the tangent stays continuous while the curvature jumps. Must fall within ±MaxCurvature.
+   */
+  incomingCurvature?: number | null;
 };
 
 export type WorldCurveRow = {
