@@ -1,3 +1,5 @@
+using Puck.Abstractions.Collections;
+
 namespace Puck.Physics.Navigation;
 
 /// <summary>A goal field: for every cell of a network from which a goal cell can be reached, the step a body standing
@@ -207,33 +209,31 @@ public sealed partial class NavigationRuntime {
 
         var workspace = (m_goalWorkspace ??= new GoalFieldWorkspace(cells: checked((int)CellCount)));
         var memberOf = new int[m_domains.Length];
-        var order = new GoalFieldOrder(cost: workspace.Cost);
         Span<int> from = stackalloc int[MaxRouteSteps];
         Span<int> cost = stackalloc int[MaxRouteSteps];
         Span<byte> slots = stackalloc byte[MaxRouteSteps];
-        var settled = 0;
 
         Array.Fill(array: memberOf, value: -1);
         for (var member = 0; (member < members.Length); member++) {
             memberOf[Array.IndexOf(array: m_domains, value: members[member])] = member;
         }
         workspace.Begin();
-        workspace.Relax(node: (m_offsets[goalDomain] + goalCell), cost: 0L, order: order);
+        workspace.Relax(node: (m_offsets[goalDomain] + goalCell), cost: 0L);
         while (workspace.Open.Count != 0) {
-            var node = workspace.Open.Pop(order: order);
+            var node = workspace.Open.Pop(order: workspace.Order);
             var domainIndex = DomainOf(node: node);
             var domain = m_domains[domainIndex];
             var offset = m_offsets[domainIndex];
             var count = domain.RoutePredecessors(node: (node - offset), from: from, cost: cost);
 
-            workspace.Settle(node: node, ordinal: settled++);
+            workspace.Settle(node: node);
             for (var index = 0; (index < count); index++) {
-                workspace.Relax(node: (offset + from[index]), cost: (workspace.Cost[node] + cost[index]), order: order);
+                workspace.Relax(node: (offset + from[index]), cost: (workspace.Cost[node] + cost[index]));
             }
             if (m_junctions.TryGetValue(key: node, value: out var partners)) {
                 foreach (var partner in partners) {
                     if (memberOf[DomainOf(node: partner)] >= 0) {
-                        workspace.Relax(node: partner, cost: workspace.Cost[node], order: order);
+                        workspace.Relax(node: partner, cost: workspace.Cost[node]);
                     }
                 }
             }
@@ -241,6 +241,7 @@ public sealed partial class NavigationRuntime {
 
         var steps = new byte[members.Length][];
         var goalNode = (m_offsets[goalDomain] + goalCell);
+        var settled = workspace.Settled.Length;
 
         for (var ordinal = 0; (ordinal < settled); ordinal++) {
             var node = workspace.Settled[ordinal];
@@ -320,53 +321,41 @@ public sealed partial class NavigationRuntime {
         }
     }
 
-    // Scratch for one derivation at a time, over every cell of the runtime: settled costs (in millimetres, wide enough
-    // for any route across the largest world), discovery and settle stamps, the open heap and the settle order.
+    // Scratch for one derivation at a time, over every cell of the runtime: costs in millimetres (wide enough for any
+    // route across the largest world), the open heap ordered by cost then node, the cells discovered, the cells settled
+    // in settle order and each settled cell's place in it. Clearing costs what the last derivation reached.
     private sealed class GoalFieldWorkspace(int cells) {
         public readonly long[] Cost = new long[cells];
         public readonly NodeHeap Open = new(cells: cells);
-        public readonly int[] Settled = new int[cells];
-        private readonly int[] m_discovered = new int[cells];
-        private readonly int[] m_closed = new int[cells];
+        private readonly MarkedIndexSet m_discovered = new();
+        private readonly MarkedIndexSet m_settled = new();
         private readonly int[] m_ordinal = new int[cells];
-        private int m_stamp;
+
+        public KeyThenIndexOrder<long> Order => new(keys: Cost);
+        public ReadOnlySpan<int> Settled => m_settled.Members;
 
         public void Begin() {
             Open.Clear();
-            if (++m_stamp == int.MaxValue) {
-                Array.Clear(array: m_discovered);
-                Array.Clear(array: m_closed);
-                m_stamp = 1;
-            }
+            m_discovered.Clear();
+            m_settled.Clear();
         }
-        public bool IsSettled(int node) => (m_closed[node] == m_stamp);
-        public bool SettledBefore(int node, int ordinal) => ((m_closed[node] == m_stamp) && (m_ordinal[node] < ordinal));
-        public void Relax(int node, long cost, GoalFieldOrder order) {
-            if (m_closed[node] == m_stamp) {
+        public bool IsSettled(int node) => m_settled.Contains(index: node);
+        public bool SettledBefore(int node, int ordinal) => (m_settled.Contains(index: node) && (m_ordinal[node] < ordinal));
+        public void Relax(int node, long cost) {
+            if (m_settled.Contains(index: node)) {
                 return;
             }
-            if (m_discovered[node] != m_stamp) {
-                m_discovered[node] = m_stamp;
+            if (m_discovered.Add(index: node)) {
                 Cost[node] = cost;
-                Open.Push(node: node, order: order);
+                Open.Push(node: node, order: Order);
             } else if (cost < Cost[node]) {
                 Cost[node] = cost;
-                Open.Decrease(node: node, order: order);
+                Open.Decrease(node: node, order: Order);
             }
         }
-        public void Settle(int node, int ordinal) {
-            m_closed[node] = m_stamp;
-            m_ordinal[node] = ordinal;
-            Settled[ordinal] = node;
-        }
-    }
-
-    // Settled cost, then the lower node: a total order, so the heap never breaks a tie itself.
-    private readonly struct GoalFieldOrder(long[] cost) : IComparer<int> {
-        public int Compare(int x, int y) {
-            var byCost = cost[x].CompareTo(value: cost[y]);
-
-            return ((byCost != 0) ? byCost : x.CompareTo(value: y));
+        public void Settle(int node) {
+            m_ordinal[node] = m_settled.Count;
+            _ = m_settled.Add(index: node);
         }
     }
 }
