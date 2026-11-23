@@ -192,10 +192,12 @@ public readonly record struct EntryLookSection(
 /// <param name="PreferredAltitude">The altitude the producer holds.</param>
 /// <param name="WeaveFrequency">The weave oscillator's frequency.</param>
 /// <param name="CurveArcRaw">A curve-follow target's travelled arc length, a Q32 raw.</param>
+/// <param name="CurveArcRemainder">The arc rate's integration remainder over the engine tick base.</param>
 /// <param name="ActiveName">The producer the curve progress was last advanced under.</param>
 /// <param name="ActiveCurveIndex">That producer's compiled curve, or -1 when it follows none.</param>
 /// <param name="ActiveNavigationDomainIndex">The navigation domain that producer resolves through, or -1.</param>
 /// <param name="Flock">The cached perception, its cadence and its attention stream.</param>
+/// <param name="StandDown">Why the producer stands down, or <see cref="BodyProducerStandDown.None"/> while it runs.</param>
 public readonly record struct EntryProducerSection(
     int AcquiredTarget,
     FixedQ4816 ActivityPhase,
@@ -206,10 +208,12 @@ public readonly record struct EntryProducerSection(
     FixedQ4816 PreferredAltitude,
     FixedQ4816 WeaveFrequency,
     long CurveArcRaw,
+    long CurveArcRemainder,
     string? ActiveName,
     int ActiveCurveIndex,
     int ActiveNavigationDomainIndex,
-    WorldPopulationFlockCheckpoint Flock
+    WorldPopulationFlockCheckpoint Flock,
+    BodyProducerStandDown StandDown = BodyProducerStandDown.None
 ) : IContinuationSection<EntryProducerSection> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.Producer;
@@ -225,6 +229,7 @@ public readonly record struct EntryProducerSection(
         writer.WriteFixed(value: section.PreferredAltitude);
         writer.WriteFixed(value: section.WeaveFrequency);
         writer.WriteInt64(value: section.CurveArcRaw);
+        writer.WriteInt64(value: section.CurveArcRemainder);
         writer.WriteNullableString(value: section.ActiveName);
         writer.WriteInt32(value: section.ActiveCurveIndex);
         writer.WriteInt32(value: section.ActiveNavigationDomainIndex);
@@ -239,6 +244,7 @@ public readonly record struct EntryProducerSection(
             writer.WriteInt32(value: observed.Generation);
             writer.WriteFixedVector(value: observed.Position);
         }
+        writer.WriteByte(value: ((byte)section.StandDown));
     }
     /// <inheritdoc/>
     public static EntryProducerSection Read(ref WireReader reader) => new(
@@ -251,6 +257,7 @@ public readonly record struct EntryProducerSection(
         PreferredAltitude: reader.ReadFixed(),
         WeaveFrequency: reader.ReadFixed(),
         CurveArcRaw: reader.ReadInt64(),
+        CurveArcRemainder: reader.ReadInt64(),
         ActiveName: reader.ReadNullableString(field: "population entry producer active name"),
         ActiveCurveIndex: reader.ReadInt32(),
         ActiveNavigationDomainIndex: reader.ReadInt32(),
@@ -263,7 +270,8 @@ public readonly record struct EntryProducerSection(
             Target: (reader.ReadBoolean()
                 ? new WorldFlockObservation(Index: reader.ReadInt32(), Generation: reader.ReadInt32(), Position: reader.ReadFixedVector())
                 : null)
-        )
+        ),
+        StandDown: ((BodyProducerStandDown)reader.ReadByte())
     );
 }
 /// <summary>A non-human body's reusable steering image: the producer intent its steering cadence last computed.</summary>

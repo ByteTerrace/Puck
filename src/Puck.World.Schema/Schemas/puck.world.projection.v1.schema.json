@@ -54078,6 +54078,220 @@
                       ],
                       "additionalProperties": false,
                       "title": "WorldEffectSetBodyState"
+                    },
+                    {
+                      "description": "Holds a world-addressed body\u0027s producer: it stands down, its body coasting to rest under its motion program, until a rule releases it with ReleaseProducer. A hold is one reason a producer stands down and possession another; the producer starts again, from where the body stands, once neither holds. A rule reads both through producer(each, held|possessed|down).",
+                      "properties": {
+                        "$type": {
+                          "const": "holdProducer"
+                        },
+                        "key": {
+                          "description": "The body \u2014 an index, a $cell: indirection, or a bound key.",
+                          "title": "StateChannelRef",
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "channel"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "channel": {
+                                  "type": "string"
+                                },
+                                "arguments": {
+                                  "type": "array",
+                                  "items": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "object",
+                                        "required": [
+                                          "zone"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "zone": {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone"
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "type": "object",
+                                        "required": [
+                                          "expression"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "expression": {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "binding",
+                                "field"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "binding": {
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "pool",
+                                "slot",
+                                "field"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "pool": {
+                                  "type": "string"
+                                },
+                                "slot": {
+                                  "type": "integer"
+                                },
+                                "field": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "key"
+                      ],
+                      "additionalProperties": false,
+                      "title": "WorldEffectHoldProducer"
+                    },
+                    {
+                      "description": "Releases a world-addressed body\u0027s producer from a HoldProducer hold; releasing a body that is not held does nothing.",
+                      "properties": {
+                        "$type": {
+                          "const": "releaseProducer"
+                        },
+                        "key": {
+                          "description": "The body \u2014 an index, a $cell: indirection, or a bound key.",
+                          "title": "StateChannelRef",
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "channel"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "channel": {
+                                  "type": "string"
+                                },
+                                "arguments": {
+                                  "type": "array",
+                                  "items": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "object",
+                                        "required": [
+                                          "zone"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "zone": {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone"
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "type": "object",
+                                        "required": [
+                                          "expression"
+                                        ],
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "expression": {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/0/properties/state/anyOf/1/properties/arguments/items/anyOf/2/properties/zone"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "binding",
+                                "field"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "binding": {
+                                  "type": "string"
+                                },
+                                "field": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "required": [
+                                "pool",
+                                "slot",
+                                "field"
+                              ],
+                              "additionalProperties": false,
+                              "properties": {
+                                "pool": {
+                                  "type": "string"
+                                },
+                                "slot": {
+                                  "type": "integer"
+                                },
+                                "field": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "key"
+                      ],
+                      "additionalProperties": false,
+                      "title": "WorldEffectReleaseProducer"
                     }
                   ],
                   "title": "ActionEffect"

@@ -26,6 +26,9 @@ internal readonly record struct BodySensorTarget(int Index, FixedVector3 Positio
 }
 internal readonly record struct BodyProducerSensors(BodySensorTarget Candidate, BodySensorTarget CurrentTarget, FixedVector3 FlockDesired = default);
 internal struct BodyProducerState {
+    // Why the producer stands down, or None while it runs. Set and cleared through WorldPopulation.SetProducerStandDown
+    // and WorldPopulation.SyncPossession; a slot's new occupant starts with None.
+    public BodyProducerStandDown StandDown;
     public int AcquiredTarget;
     public FixedQ4816 ActivityPhase;
     // The FixedRateAccumulator remainders (over the engine tick base) the two oscillators carry between refreshes;
@@ -37,10 +40,13 @@ internal struct BodyProducerState {
     public FixedQ4816 PreferredAltitude;
     public FixedQ4816 WeaveFrequency;
     // Q32 raw — a curve-follow target's travelled arc length, wrapped/clamped to the compiled curve's own
-    // TotalLengthRaw every advance. Held at the compiled solve's own scale (rather than FixedQ4816's Q16) so a
-    // sub-Q16 authored rate still accumulates across ticks instead of rounding to a standstill; read straight into
-    // CompiledCurvatureSpline.EvaluateRaw, never narrowed.
+    // TotalLengthRaw every advance. Held at the compiled solve's own scale, so it is read straight into
+    // CompiledCurvatureSpline.EvaluateRaw and set from NearestStationRaw, never narrowed.
     public long CurveArcRaw;
+    // The FixedRateAccumulator remainder (over the engine tick base) of the curve's arc rate, so a step covering any
+    // number of engine ticks advances the station by exactly the rate's share of them. Cleared whenever CurveArcRaw is
+    // assigned rather than advanced.
+    public long CurveArcRemainder;
     // The (producer name, compiled curve index) CurveArcRaw was last advanced under. Selecting a producer starts
     // it: WorldPopulation.StageProducer sets CurveArcRaw to the curve's station nearest the body
     // (CompiledCurvatureSpline.NearestStationRaw) whenever either differs from this tick's

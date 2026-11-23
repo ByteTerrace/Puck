@@ -22,8 +22,7 @@ public sealed class BodyProducerParameterLawTests {
         channels: WorldChannelTable.Compile(channels: []),
         targets: WorldTargetRegisterTable.Empty,
         curves: WorldCurveTable.Empty,
-        navigation: WorldNavigationDomainTable.Empty,
-        simulationRateHz: 240
+        navigation: WorldNavigationDomainTable.Empty
     );
     private static CompiledBodyProducer CompileRoam(Dictionary<string, float> scalars) => CompiledBodyProducer.Compile(
         program: RoamOnlyProgram(),
@@ -35,8 +34,7 @@ public sealed class BodyProducerParameterLawTests {
         channels: WorldChannelTable.Compile(channels: []),
         targets: WorldTargetRegisterTable.Empty,
         curves: WorldCurveTable.Empty,
-        navigation: WorldNavigationDomainTable.Empty,
-        simulationRateHz: 240
+        navigation: WorldNavigationDomainTable.Empty
     );
     // The additional ordinals ProduceSteeringIntent's approach shape reads — required only alongside
     // SenseNearestInCone, the one way that shape becomes reachable.

@@ -312,6 +312,8 @@ public sealed class RecordingWorldFacts : IStateReader, IWorldFacts {
     /// <inheritdoc/>
     public Fact Read(NavigationOperand operand) => Unserved();
     /// <inheritdoc/>
+    public Fact Read(ProducerOperand operand) => Unserved();
+    /// <inheritdoc/>
     public Fact Read(BoardCellOfOperand operand) => Unserved();
     public Fact Read(BoardSeatOperand operand) => Unserved();
 

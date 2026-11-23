@@ -88,6 +88,10 @@ public interface IWorldFacts : IFacet {
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
     Fact Read(NavigationOperand operand);
+    /// <summary>Returns whether a body's producer stands down for any of the operand's reasons.</summary>
+    /// <param name="operand">The operand.</param>
+    /// <returns>The fact.</returns>
+    Fact Read(ProducerOperand operand);
     /// <summary>Returns the board cell under a body, or -1 off the board.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>

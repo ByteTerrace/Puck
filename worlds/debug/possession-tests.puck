@@ -1,0 +1,263 @@
+// A body's producer stands down and resumes. A standard vehicle (../standard/vehicle.puck) laps a road loop on its
+// curve route and a standard citizen (../standard/citizen.puck) keeps a two-phase day between home and work. A crossing
+// on the loop's south straight holds the vehicle while a body stands in it (`vehicleCrossings`, `holdProducer`), and
+// releases it once the crossing is clear, when it drives on from the curve station where it stopped. The seat
+// possesses the citizen mid-schedule (`body.engage body:4`, with Drive over it): the schedule skips it and its
+// producer stands down while the seat walks it, and once released it walks to where its day has moved on to. The seat
+// possesses the vehicle and drives it off the road; released, the vehicle rejoins the loop at its nearest station.
+// `puck test worlds/debug/possession-tests.puck --reproduce`.
+schema: "puck.world.definition.v1"
+documentId: "possession-tests"
+
+import "place-kit"
+import "../standard/walker"
+import "../standard/kits"
+import "../standard/domains"
+import "../standard/vehicle"
+import "../standard/citizen"
+
+// Capacity five: the seat at 0, then the inhabitants from the top down in placement order, so the citizen is body 4
+// and the vehicle body 3.
+bodies {
+  capacity: 5
+  localSeats: 1
+  networkPlayers: 0
+  reconnectGraceSeconds: 0
+  seatSpawns [start]
+  sleepAfterSeconds: 0s
+}
+
+spawnPoints [
+  { id: "start", position [0, 0, 30], yawDegrees: 0 }
+]
+
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  isActive: true
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, -18, 0]
+}
+
+// The seat may drive both inhabitants, so a route to either possesses it.
+grants [
+  { budget: 64, capability: Drive, grantee: "seat1", subject: "body:3" }
+  { budget: 64, capability: Drive, grantee: "seat1", subject: "body:4" }
+]
+
+// The loop's centreline: x -12 .. 12, z -8 .. 8, corners of radius 4. It drives along z -8 toward +X.
+curves [roadLoop(name: "loop", x0: -12, x1: 12, z0: -8, z1: 8, radius: 4)]
+
+navigation {
+  domains [surfaceDomain("pad", [16, 0.05, 16], 1, 18, 18, 2.2, 3, 256)]
+}
+
+bodyMotionPrograms [vehicleRoute(name: "loopRoute", road: "loop")]
+
+vehicleDesign(domain: "pad", shaping: vehicleGripShaping, routes: { loopRoute: vehicleRouteSteering })
+vehicleLooks(colors: ["#B5523B"])
+citizenDesign(domain: "pad")
+citizenLooks(coats: ["#3E6E8E"], hats: ["#2F2A26"])
+
+// The crossing spans x 4.5 .. 7.5 of the south straight; the vehicle's approach box is the 4.5 m of road before it.
+let possessionVehicles = [{ key: 3, group: "loop" }]
+let possessionCrossings = [{ region: "crossing", group: "loop", x0: 0, x1: 4.5, z0: -10, z1: -6, cx0: 4.5, cx1: 7.5, cz0: -11, cz1: -5 }]
+vehicleCrossings(vehicles: possessionVehicles, crossings: possessionCrossings)
+
+// The day: home until noon, work after it. It starts at 09:36 and runs a fiftieth of a day a second, so noon comes at
+// tick 50.
+state {
+  world [
+    { name: "day", kind: "Fixed", value: "0.4" }
+  ]
+}
+rule "day-runs" {
+  when $tick >= 1
+  mode: Level
+  day = day + 0.002
+}
+let possessionPeople = [
+  {
+    key: 4
+    home [20, 20]
+    work [30, 20]
+    market [25, 30]
+    group: 0
+  }
+]
+let possessionPhases = [{ from: 0, to: 12, anchor: "home" }, { from: 12, to: 24, anchor: "work" }]
+citizenSchedule(people: possessionPeople, clock: day, phases: possessionPhases, groups: 1)
+
+prototypes {
+  prototype "floor" {
+    document {
+      name: "floor"
+      schema: "puck.creation.v1"
+      palette [{ color: "#ADA69F", roughness: 0.85 }]
+      shape Box {
+        material: 0
+        position [0, -0.2, 0]
+        scale [50, 0.2, 50]
+      }
+    }
+  }
+}
+
+placements {
+  placement "floor" {
+    prototype: "floor"
+    position [0, 0, 0]
+    solid
+  }
+  placement "crossing" {
+    prototype: "place"
+    position [6, 1.5, -8]
+    region {
+      halfExtents [1.5, 2, 3]
+    }
+  }
+  placement "citizen" {
+    prototype: "citizen-0-0"
+    position [20, 0, 20]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "citizen"
+      look: "citizen-0-0"
+      source: producer(name: "citizenErrand")
+    }
+  }
+  // On the south straight, heading +X toward the crossing.
+  placement "vehicle" {
+    prototype: "vehicle-0"
+    position [-2, 0, -8]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "vehicle"
+      look: "vehicle-0"
+      source: producer(name: "loopRoute")
+    }
+  }
+}
+
+// The world runs at 30 Hz. The seat stands in the crossing, beside the road, so the vehicle stops in the approach box.
+test "a crossing holds a curve vehicle before it" {
+  when {
+    seat1: body.pose 6 0 -10.5 0 0 0
+    ticks 120
+  }
+  expect {
+    vehicleHeld["3"] == 1
+    producer(body, 3, held) == 1
+    bodyPosition(body, 3, x) > 0
+    bodyPosition(body, 3, x) < 4.5
+  }
+}
+
+// The seat walks off the crossing at tick 120 and the vehicle drives on along the loop from where it stopped.
+test "a released curve vehicle drives on from its station" {
+  when {
+    seat1: body.pose 6 0 -10.5 0 0 0
+    ticks 120
+    seat1: body.pose 0 0 30 0 0 0
+    ticks 90
+  }
+  expect {
+    vehicleHeld["3"] == 0
+    producer(body, 3, down) == 0
+    bodyPosition(body, 3, x) > 8
+    absolute(bodyPosition(body, 3, x)) < 14
+    absolute(bodyPosition(body, 3, z)) < 10
+  }
+}
+
+// Possessed at tick 20, before noon moves its day on, the citizen is walked away from home by the seat; the schedule
+// skips it at noon, so it keeps its morning visit.
+test "a possessed citizen's schedule waits while the seat walks it" {
+  when {
+    ticks 20
+    seat1: body.engage body:4
+    ticks 5
+    seat1: body.fly 1 1 0 0 0 0 3
+    ticks 120
+  }
+  expect {
+    producer(body, 4, possessed) == 1
+    producer(body, 4, held) == 0
+    citizenAt["4"] == 1
+    citizenVisits["4"] == 1
+    ((bodyPosition(body, 4, x) - 20) * (bodyPosition(body, 4, x) - 20) + (bodyPosition(body, 4, z) - 20) * (bodyPosition(body, 4, z) - 20)) > 4
+  }
+}
+
+// Released at tick 145, the citizen takes up its day where it now stands: off to work, which noon made its anchor.
+test "a released citizen resumes its schedule from where it stands" {
+  when {
+    ticks 20
+    seat1: body.engage body:4
+    ticks 5
+    seat1: body.fly 1 1 0 0 0 0 3
+    ticks 120
+    seat1: body.disengage
+    ticks 360
+  }
+  expect {
+    producer(body, 4, down) == 0
+    citizenAt["4"] == 2
+    citizenVisits["4"] == 2
+    ((bodyPosition(body, 4, x) - 30) * (bodyPosition(body, 4, x) - 30) + (bodyPosition(body, 4, z) - 20) * (bodyPosition(body, 4, z) - 20)) < 4
+  }
+}
+
+// Possessed at tick 30, the vehicle drives as a vehicle does: forward along its facing, turning on the yaw channel. The
+// seat turns it off the road for half a second and drives it straight on, so it stands well off its loop.
+test "a possessed curve vehicle leaves its loop under the seat" {
+  when {
+    ticks 30
+    seat1: body.engage body:3
+    ticks 5
+    seat1: body.fly 1 0 0 1 0 0 0.5
+    seat1: body.fly 1 0 0 0 0 0 1.5
+    ticks 70
+  }
+  expect {
+    producer(body, 3, possessed) == 1
+    (absolute(bodyPosition(body, 3, z) + 8) > 2.5) or (absolute(bodyPosition(body, 3, x)) > 15)
+  }
+}
+
+// Released, the vehicle rejoins the loop at the station nearest it and laps on.
+test "a released curve vehicle rejoins its loop at the nearest station" {
+  when {
+    ticks 30
+    seat1: body.engage body:3
+    ticks 5
+    seat1: body.fly 1 0 0 1 0 0 0.5
+    seat1: body.fly 1 0 0 0 0 0 1.5
+    ticks 70
+    seat1: body.disengage
+    ticks 600
+  }
+  expect {
+    producer(body, 3, down) == 0
+    absolute(bodyPosition(body, 3, x)) < 14
+    absolute(bodyPosition(body, 3, z)) < 10
+    (absolute(bodyPosition(body, 3, x)) > 9) or (absolute(bodyPosition(body, 3, z)) > 5)
+  }
+}

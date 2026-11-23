@@ -593,6 +593,34 @@ place, an operand never evaluates an expression, a firing is one journal scope c
 `RuleEvaluator.Commit`, and `OutcomeAnalyzer` holds the rest at build time; the
 [state skill](../state/SKILL.md#faults-firings-and-the-one-door) owns the full contract.
 
+**A body's producer stands down and resumes through one door.** One world, many
+perspectives ([decision](../../../docs/decisions/play.md#the-game)): a world's
+people and vehicles are real bodies a seat can take over. Every producer kind
+(curve, navigated, designated, steering, flock) stands down for a set of reasons,
+`BodyProducerStandDown` (`Held`, `Possessed`), kept in the population entry's
+producer state and changed only through `WorldPopulation.SetProducerStandDown`
+and `SyncPossession`. While any reason holds, `WorldPopulation.StageProducer` runs
+the body as one naming no producer: it stages the inert intent and clears the
+route, curve station and flock seed. When none holds, the next producer step is
+a producer selection, so the producer starts from where the body stands: a curve
+follower at `CompiledCurvatureSpline.NearestStationRaw`, a navigated body routing
+again to its register's goal. A rule holds a body with `holdProducer(key: …)` and
+releases it with `releaseProducer(key: …)` (`WorldProducerHoldEffect`).
+Possession is derived, never stored apart from the grant table:
+`WorldEngagement.FoldTick` marks every body that a participant's control set names
+while that participant holds Drive over it, once a tick after the rules, so a
+`body.engage body:<n>` with `world.grant seatN drive body:<n>` stands the producer
+down from the next tick and `body.disengage` resumes it. A possessed body moves at
+the full rate (no autonomy batching). Rules read the reasons through
+`producer(each, held|possessed|down)` (`$producer:`), so a schedule skips a
+possessed citizen (`worlds/standard/citizen.puck`) and a crossing holds a vehicle
+on any route (`vehicleCrossings` in `worlds/standard/vehicle.puck`).
+`body.control <body>` with no mode echoes the reasons. The reasons ride the
+producer continuation section, so checkpoints, replays and scoped replays carry
+them; `worlds/debug/possession-tests.puck` holds the crossing and possession
+scenarios. A craft a seat flies (a ship) is the same mechanism: a body with a
+producer, possessed.
+
 **Narrate through the hub.** Server never writes to `System.Console`; every line
 is a `WorldOutputHub.Narrate` call, bound to stderr (or stdout for answers) by
 the composition root.
