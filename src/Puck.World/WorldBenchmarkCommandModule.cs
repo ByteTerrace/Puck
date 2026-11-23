@@ -632,7 +632,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
                     done: () => ((run != m_runSerial) || !m_running || (frames.Time.GetTimestamp() > m_deadline)),
                     complete: () => {
                         if ((run == m_runSerial) && m_running) {
-                            Console.Error.WriteLine(value: End(reason: $"the run passed its {timeout} s wall-time limit").Output);
+                            _ = End(reason: $"the run passed its {timeout} s wall-time limit");
                         }
                     }
                 );
@@ -727,7 +727,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         if ((m_finishOwed is { } recording) && !ReadsPending()) {
             m_finishOwed = null;
             script.Answered -= OnAnswered;
-            Console.Error.WriteLine(value: Finish(reason: null, dropped: 0, recording: recording).Output);
+            _ = Finish(reason: null, dropped: 0, recording: recording);
         }
     }
 
