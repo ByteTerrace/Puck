@@ -36,3 +36,42 @@ template paintingFace(destination, counterpart, fallback) {
     }
   ]
 }
+
+// The frame a destination world stands a traveller's way back in: a canvas whose bottom reaches the ground, so a body's
+// feet cross the glass, with posts and a lintel `post` metres thick round it, in one palette row. Face 0, the rim, names
+// the glass, which shows through the opening carved out of it. The garden, the night field, the hearth and the city
+// each wear it in their own colour.
+template arrivalFrame(color, roughness = 0.45, specular = 0.2, post = 0.08) {
+  behavior {
+    faces [{ name: "glass", shapeId: 0 }]
+  }
+  name: "frame"
+  palette [{ color: color, roughness: roughness, specular: specular }]
+  schema: "puck.creation.v1"
+  shape Box "rim" {
+    material: 0
+    position [0, 1.3, 0]
+    scale [1.12, 1.42, 0.04]
+  }
+  shape Box "opening" {
+    blend: Subtraction
+    material: 0
+    position [0, 1.3, 0]
+    scale [1.1, 1.4, 0.3]
+  }
+  shape Box "frame-left" {
+    material: 0
+    position [(0 - (1.12 + post)), (1.3 + post), 0]
+    scale [post, (1.4 + post), 0.08]
+  }
+  shape Box "frame-right" {
+    material: 0
+    position [(1.12 + post), (1.3 + post), 0]
+    scale [post, (1.4 + post), 0.08]
+  }
+  shape Box "frame-top" {
+    material: 0
+    position [0, (2.7 + post), 0]
+    scale [1.1, post, 0.08]
+  }
+}
