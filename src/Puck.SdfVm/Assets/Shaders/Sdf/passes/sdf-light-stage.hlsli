@@ -15,7 +15,6 @@
 #include "../shade/sdf-light.hlsli"
 #include "../isa/sdf-shade.hlsli"
 #include "../shade/sdf-grid.hlsli"
-#include "../shade/sdf-toon-outline.hlsli"
 #ifdef SDF_VIEWS_PASS
 #include "sdf-views-probes.hlsli"
 
@@ -51,9 +50,9 @@ float3 sdfScreenImagePoint(SdfPixel p, int material, float3 surfacePoint, out fl
 }
 
 // The stage shades with what the views stage resolved before it (sdfViewsStage): the hit the mesh hit door resolved,
-// the hit's surface point, whether the view shades finally, the material the pixel shades with, and the masks of the
-// lights its walk visits (sdfViewsTileLights).
-float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 surfacePoint, bool useFinalShading, bool curvatureShading, int material, SdfLightMasks lights, out float coverage, out float reactivity) {
+// the hit's surface point, whether the view shades finally, the material the pixel shades with, the masks of the
+// lights its walk visits (sdfViewsTileLights), and the pixel's edges (sdf-views-filter.hlsli).
+float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 surfacePoint, bool useFinalShading, bool curvatureShading, int material, SdfLightMasks lights, SdfShadeEdges edges, out float coverage, out float reactivity) {
     float3 color = float3(0.0, 0.0, 0.0);
 
     coverage = 0.0;
@@ -153,6 +152,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             SdfShadeStamp shadeStamp = sdfShadeStamp(shadeMaterial, surfacePoint, layerPoint, normal, p.rayDirection,
                 s.curvature, p.pixelFootprint * s.t, lanes, 0.0, 0.0, frameRotation, s.frameSlot, meshHit);
             sdfShadeSet_paint_coverage(shadeStamp, paintCoverage);
+            sdfShadeSetEdges(shadeStamp, edges);
             float revealed;
             // A program's surface phase replaces the material layers; a program that omits it (the standard's `cel`, which
             // only lights and composes) keeps the layers as its surface, so a banded material keeps its wear and flow.
@@ -211,6 +211,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             float3 rim = float3(0.0, 0.0, 0.0);
             float3 specular = float3(0.0, 0.0, 0.0);
             float attenuation = 1.0;
+            // The line the light phases raise, the largest over the walk, which the compose and ink phases read.
+            float linework = 0.0;
 #if !defined(SDF_VIEWS_OMIT_LIGHTS)
             SdfLightWalk walk = sdfLightWalkStart(lights);
             SdfLightSource light;
@@ -224,6 +226,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
                 rim += response.rim;
                 specular += response.specular;
                 attenuation *= response.attenuation;
+                linework = max(linework, response.linework);
             }
 #endif
 
@@ -280,16 +283,14 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
 
             color *= localGain;
             color = sdfShadeComposePhase(shadeBinding, shadeStamp, radiance - ambientTerm, rim, specular, attenuation,
-                indirectTerm + ambientTerm, reflectionTerm, environmentTerm, localGain, color);
+                indirectTerm + ambientTerm, reflectionTerm, environmentTerm, localGain, color, linework);
 
-            // A styled material's ink multiplies its scene light, which the display pass alone tones; a material with
-            // no style takes the stylized curvature terms (cavity darkening, ridge light) at the strength the
+            // The program's ink is drawn over its composed scene light, which the display pass alone tones. A material
+            // with no style takes the stylized curvature terms (cavity darkening, ridge light) at the strength the
             // surface's exposed illumination reaches against a white surface the meter aims for, so a lit room keeps
             // its edge highlights and a dim room's edges stay dim.
-            SdfToonStyle style = sdfToonStyle(shadeMaterial);
-            if (sdfToonEnabled(style)) {
-                color *= lerp(1.0, style.ink, sdfToonOutline(style, p, s, surfacePoint));
-            } else if (curvatureShading) {
+            color = sdfShadeInkPhase(shadeBinding, shadeStamp, color, linework, edges);
+            if (!sdfToonStyled(shadeMaterial) && curvatureShading) {
                 float lit = saturate(((incoming * localGain) * passGroup.exposure) / SDF_REFERENCE_WHITE);
 
                 color = (applyCurvatureShading((color * passGroup.exposure), s.curvature, lit) / max(passGroup.exposure, 1.0e-12));

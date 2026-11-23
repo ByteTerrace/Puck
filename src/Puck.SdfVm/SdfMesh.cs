@@ -404,7 +404,7 @@ public readonly record struct SdfMeshDraw {
         ReferenceEquals(objA: Mesh, objB: other.Mesh) && (Material == other.Material) && Equals(objA: Identity, objB: other.Identity) &&
         Equals(objA: MotionIdentity, objB: other.MotionIdentity) && (IsDynamic == other.IsDynamic) && (Tier == other.Tier) &&
         ReferenceEquals(objA: Trace, objB: other.Trace) && (Piece == other.Piece) && (Glass == other.Glass) && (FrameSlot == other.FrameSlot) &&
-        (UsesRootMaterialFrame == other.UsesRootMaterialFrame) && CarryRotation.Equals(other: other.CarryRotation) &&
+        (UsesRootMaterialFrame == other.UsesRootMaterialFrame) && (ObjectKey == other.ObjectKey) && CarryRotation.Equals(other: other.CarryRotation) &&
         CarryTranslation.Equals(other: other.CarryTranslation) && CarryScale.Equals(obj: other.CarryScale) && ClipPlane.Equals(other: other.ClipPlane) &&
         (Displacement == other.Displacement) && (Band == other.Band) && (PlacedBySlot ? SlotScale.Equals(obj: other.SlotScale) : Matrix.Equals(other: other.Matrix));
     /// <summary>Returns a hash of the fields <see cref="Equals(SdfMeshDraw)"/> compares.</summary>
@@ -467,6 +467,11 @@ public readonly record struct SdfMeshDraw {
     /// <summary>Gets whether materials use the root/member frame. False keeps material coordinates in world space,
     /// independently of the root slot used by skinning and portal membership.</summary>
     public bool UsesRootMaterialFrame { get; init; } = true;
+    /// <summary>Gets the key of the object the draw belongs to, at most <see cref="SdfMeshRecord.ObjectKeyMask"/>: every
+    /// draw of one object carries the same key (each chunk and tier of one bake group, every group of one placed copy),
+    /// and a view's edge search reads where two keys meet as the boundary between two objects. Zero, the default, is
+    /// one object shared by every draw that names none. It is presentation only.</summary>
+    public uint ObjectKey { get; init; }
     /// <summary>Gets the rotation of the carry every world position and normal the draw resolves goes through last,
     /// after its matrix or its members' slots: identity for a draw drawn where it stands, a portal pair's turn for the
     /// copy of a body drawn through the pair.</summary>
@@ -546,6 +551,7 @@ public readonly record struct SdfMeshDraw {
             (this.IsDynamic != other.IsDynamic) ||
             (this.FrameSlot != other.FrameSlot) ||
             (this.UsesRootMaterialFrame != other.UsesRootMaterialFrame) ||
+            (this.ObjectKey != other.ObjectKey) ||
             !Equals(objA: this.MotionIdentity, objB: other.MotionIdentity) ||
             (BitConverter.SingleToInt32Bits(value: this.CarryScale) != BitConverter.SingleToInt32Bits(value: other.CarryScale)) ||
             (this.Displacement != other.Displacement) ||
@@ -981,7 +987,8 @@ public static class SdfMeshRegion {
         writer[SdfMeshRecord.IndexCountWord] = ((uint)placement.IndexCount);
         writer[SdfMeshRecord.VertexWord] = ((uint)placement.VertexWord);
         writer[SdfMeshRecord.FlagsWord] =
-            (mesh.Normals.IsEmpty ? 0u : SdfMeshRecord.NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : SdfMeshRecord.MaterialsFlag) | (mesh.VertexMembers.IsEmpty ? 0u : SdfMeshRecord.SkinFlag) | (draw.UsesRootMaterialFrame ? 0u : SdfMeshRecord.WorldMaterialFlag);
+            (mesh.Normals.IsEmpty ? 0u : SdfMeshRecord.NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : SdfMeshRecord.MaterialsFlag) | (mesh.VertexMembers.IsEmpty ? 0u : SdfMeshRecord.SkinFlag) | (draw.UsesRootMaterialFrame ? 0u : SdfMeshRecord.WorldMaterialFlag) |
+            ((clip == default) ? 0u : SdfMeshRecord.ClipFlag) | ((draw.ObjectKey & SdfMeshRecord.ObjectKeyMask) << SdfMeshRecord.ObjectKeyShift);
         writer[SdfMeshRecord.TriangleMaterialWord] = ((uint)placement.MaterialWord);
         writer[SdfMeshRecord.FrameSlotWord] = unchecked((uint)(draw.FrameSlot ?? SdfProgram.NoDynamicTransformSlot));
         writer[SdfMeshRecord.SkinWord] = ((uint)placement.SkinWord);

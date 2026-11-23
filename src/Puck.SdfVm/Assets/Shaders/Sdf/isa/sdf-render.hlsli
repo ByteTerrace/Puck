@@ -118,7 +118,8 @@
 #define SDF_SHADE_BINS                2u
 #define SDF_SHADE_TILE_HEADER_WORDS   6u
 #define SDF_SHADE_TILE_LIGHT_WORDS    5u
-#define SDF_VIEWS_FILTER_WORDS        2u
+#define SDF_VIEWS_FILTER_WORDS        3u
+#define SDF_EDGE_REACH                4u
 #define SDF_VIEWS_PROBE_RATE          2u
 #define SDF_VIEWS_PROBE_WORDS         43u
 #define SDF_VIEWS_PROBE_RECORD_WORDS  29u
@@ -163,6 +164,8 @@
 #define SDF_MESH_MATERIALS_FLAG         0x00000002u
 #define SDF_MESH_SKIN_FLAG              0x00000004u
 #define SDF_MESH_WORLD_MATERIAL_FLAG    0x00000008u
+#define SDF_MESH_CLIP_FLAG              0x00000010u
+#define SDF_MESH_OBJECT_KEY_SHIFT       8u
 #define SDF_MESH_DISPLACEMENT_WORD      50u
 #define SDF_MESH_BAND_WORD              51u
 

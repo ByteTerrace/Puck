@@ -2292,12 +2292,7 @@ public static partial class WorldModelShape {
             [],
             [
                 M("enabled", typeof(global::System.Nullable<global::System.Boolean>), typeof(global::Puck.World.Authoring.ToonStyleDocument), "Enabled", Read | Write, static value => ((global::Puck.World.Authoring.ToonStyleDocument)value).Enabled),
-                M("outlineWidth", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.ToonStyleDocument), "OutlineWidth", Read | Write, static value => ((global::Puck.World.Authoring.ToonStyleDocument)value).OutlineWidth),
-                M("outlineDistance", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.ToonStyleDocument), "OutlineDistance", Read | Write, static value => ((global::Puck.World.Authoring.ToonStyleDocument)value).OutlineDistance),
-                M("outlineNormal", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.ToonStyleDocument), "OutlineNormal", Read | Write, static value => ((global::Puck.World.Authoring.ToonStyleDocument)value).OutlineNormal),
-                M("outlineTint", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.Authoring.ToonStyleDocument), "OutlineTint", Read | Write, static value => ((global::Puck.World.Authoring.ToonStyleDocument)value).OutlineTint, kind: WorldNameKind.State, role: WorldNameRole.Binding, facet: WorldExportFacet.Binding),
                 M("isOn", typeof(global::System.Boolean), typeof(global::Puck.World.Authoring.ToonStyleDocument), "IsOn", None),
-                M("isComplete", typeof(global::System.Boolean), typeof(global::Puck.World.Authoring.ToonStyleDocument), "IsComplete", None),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.VolumeDensityStopDocument), true, JsonTypeInfoKind.Object, null,

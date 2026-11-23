@@ -253,7 +253,7 @@ internal sealed class WorldShadeLowering {
     private void Phase(StatementNode statement, DocumentScope scope) {
         if (statement is LetNode let) { BindLet(let, scope); return; }
         if ((statement is not BlockNode block) || !Enum.TryParse<SdfShadePhase>(block.Identifier, true, out var phase) || !Enum.IsDefined(value: phase)) {
-            throw new SdfShadeException(code: "PUCK126", message: "A shade template contains surface, light and compose blocks.");
+            throw new SdfShadeException(code: "PUCK126", message: "A shade template contains surface, light, compose and ink blocks.");
         }
         var constants = new Dictionary<string, ExpressionNode>(scope.Constants, StringComparer.Ordinal);
         var local = scope.WithConstants(constants);
