@@ -112,15 +112,19 @@ public sealed record MemoryAdmissionReading(PhysicalMemory Pool, long? Limit, lo
     /// <summary>Gets whether authoring storage is held to the play bar, as in a player's build
     /// (<see cref="MemoryAccount.SetAuthoringOnPlayBar"/>); host memory only.</summary>
     public bool AuthoringOnPlayBar { get; init; }
-    /// <summary>Gets what play and authoring together may hold and promise in host memory: the machine's budget, or its
-    /// free memory with what the pool held when it was read when that is smaller, less the private bytes beyond the
-    /// owners and the headroom; <see langword="null"/> outside host memory.</summary>
+    /// <summary>Gets what play and authoring together may hold and promise in host memory: the machine's free memory with
+    /// what the pool held when it was read, less the headroom, and no more than an operator's cap less the private bytes
+    /// beyond the owners; <see langword="null"/> outside host memory.</summary>
     public long? MachineLimit { get; init; }
-    /// <summary>Gets the room authoring apart from play has left for a new promise, at least zero: the machine's limit
-    /// less what authoring holds and has promised and less play's entitlement (the larger of what play holds and has
-    /// promised and the bar's limit), so a bake draws on the headroom past play's budget; zero in a player's build, whose
-    /// authoring shares play's room, and <see langword="null"/> outside host memory.</summary>
+    /// <summary>Gets the room authoring apart from play has left for a new promise, at least zero: the machine's free
+    /// memory with what the pool held when it was read, less <see cref="MemoryAccount.AuthoringMargin"/> and less what the
+    /// whole pool holds and has promised, and zero while the system signals low memory
+    /// (<see cref="MachineLowMemory"/>); zero in a player's build, whose authoring shares play's room, and
+    /// <see langword="null"/> outside host memory.</summary>
     public long? AuthoringRoom { get; init; }
+    /// <summary>Gets whether the system's low-memory signal stood at the account's last free-memory reading
+    /// (<see cref="HostMemory.LowMemorySignaled"/>); host memory only.</summary>
+    public bool MachineLowMemory { get; init; }
     /// <summary>Returns the room an allowance has left for a new promise: authoring's apart from play
     /// (<see cref="AuthoringRoom"/>), or play's (<see cref="Room"/>), which a player's build's authoring shares.</summary>
     /// <param name="allowance">The allowance.</param>
