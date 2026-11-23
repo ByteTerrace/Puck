@@ -769,7 +769,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_census.Refresh(m_source);
         var stamps = (m_onlyPrototypes is null) ? m_census.Stamps : [];
         m_catalog.ObserveArticulation(stamps);
-        m_pool.Rigid.ReconcileStatic(definition, definition.Placements);
+        m_pool.Rigid.ReconcileStatic(definition, definition.Placements, riding: true);
         m_pool.Reconcile(definition.PlacementFrames, definition.Placements, definition.Creations, definition.Dynamics, stamps, definition.Looks);
         m_pool.Rigid.PresentHoldings(placements: definition.Placements);
         m_avatars.Prepare();

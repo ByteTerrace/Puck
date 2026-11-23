@@ -50,7 +50,8 @@ public sealed partial class WorldRigidAssets {
     /// definition that replaces some rows costs those rows: a row instance met before, showing the same creation
     /// instance under the same seed and scope, keeps its verdict, and keeps its copies while its compiled stamp
     /// stands.</summary>
-    public void ReconcileStatic(WorldDefinition definition, IReadOnlyList<WorldPlacement> placements, string? scope = null) {
+    public void ReconcileStatic(WorldDefinition definition, IReadOnlyList<WorldPlacement> placements, string? scope = null, bool riding = false) {
+        m_staticRiding = riding;
         var seed = (definition.Generation?.WorldSeed ?? 0UL);
         if (ReferenceEquals(m_staticDefinition, definition) && ReferenceEquals(m_staticRows, placements) && ReferenceEquals(m_staticCreations, definition.Creations) && (m_staticSeed == seed) && (m_staticScope == scope)) { return; }
         // Copies carry the scope and the seed places them, so a change of either starts every row again.
@@ -73,7 +74,7 @@ public sealed partial class WorldRigidAssets {
         m_staticUnsupported.Clear();
         foreach (var placement in placements) {
             var creation = WorldDefinitionRows.FindCreation(definition.Creations, placement.ShownPrototypeId);
-            if ((creation is null) || !WorldPlacementStamper.IsStaticStamp(placement, creation)) { continue; }
+            if ((creation is null) || !CopiesRow(placement: placement, creation: creation)) { continue; }
             if (!met.TryGetValue(key: placement, value: out var row) || !ReferenceEquals(objA: row.Creation, objB: creation)) {
                 row = new StaticRow(creation: creation, refusal: Refusal(creation: creation, placement: placement));
             }
@@ -85,6 +86,8 @@ public sealed partial class WorldRigidAssets {
             }
             var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: seed);
             if (stamp.Count == 0) { row.Stamp = stamp; row.Copies = []; continue; }
+            // A riding row is one copy rooted on its body; a pattern of occurrences stays with the stamp pool.
+            if ((placement.Attach is not null) && (stamp.Count != 1)) { next.Remove(key: placement); m_staticUnsupported["riding-pattern"] = (m_staticUnsupported.GetValueOrDefault("riding-pattern") + 1); continue; }
             // A responding row holds a template for every creation it can show, in its authored order, so a sweep that
             // moves its holding swaps the copies' template and leaves the template set, and the program, standing.
             if (placement.Respond is { Count: > 0 } responses) {
@@ -125,9 +128,18 @@ public sealed partial class WorldRigidAssets {
         asset.MaxScale = MathF.Max(asset.MaxScale, scale);
         return asset;
     }
+    // Whether this catalog may copy a row's creation: a static stamp, or a responding row riding a body (an attached row
+    // whose every response is a rigid creation), which the stamp pool otherwise registers and composes again at every
+    // response. A copy this catalog admits the stamp pool leaves alone (WorldCreationInstances.ReconcileSlots).
+    private bool CopiesRow(WorldPlacement placement, WorldPrototype creation) =>
+        (WorldPlacementStamper.IsStaticStamp(placement, creation) || (m_staticRiding && Rides(placement: placement, creation: creation)));
+    // Whether the latest reconcile copies riding rows: only a catalog whose owner packs it (Pack) roots them on a body.
+    private bool m_staticRiding;
+    private static bool Rides(WorldPlacement placement, WorldPrototype creation) =>
+        ((placement.Attach is not null) && (placement.Respond is { Count: > 0 }) && (placement.Inhabit is null) && (placement.Deal is null) && !WorldPlacementStamper.IsAnimated(creation: creation));
     // Admits the template of one creation a responding row can show, when that creation would be a rigid copy there.
     private void AdmitVariant(WorldDefinition definition, WorldPlacement placement, string prototypeId, Dictionary<string, StaticAsset> variants) {
-        if ((WorldDefinitionRows.FindCreation(definition.Creations, prototypeId) is not { } creation) || !WorldPlacementStamper.IsStaticStamp(placement, creation) || (Refusal(creation: creation, placement: placement) is not null)) { return; }
+        if ((WorldDefinitionRows.FindCreation(definition.Creations, prototypeId) is not { } creation) || !CopiesRow(placement: placement, creation: creation) || (Refusal(creation: creation, placement: placement) is not null)) { return; }
         _ = AdmitAsset(creation: creation, scale: placement.Scale, variants: variants);
     }
     /// <summary>Gets whether the static templates the latest reconcile admitted are the ones the latest emission wrote, at
@@ -194,7 +206,8 @@ public sealed partial class WorldRigidAssets {
             ((document.TextRuns is { Count: > 0 }) ? "text" :
             ((creation.Mesh is not null) ? "authored-mesh" :
             (document.HasGlass ? "glass" :
-            ((document.Shapes is not { Count: > 0 }) ? "no-shapes" : null)))))));
+            ((document.Shapes is not { Count: > 0 }) ? "no-shapes" :
+            (((placement.Attach is not null) && (document.Volumes is { Count: > 0 })) ? "riding-volumes" : null))))))));
     }
     private struct StaticCopyVisitor(StaticCopy[] copies, StaticAsset asset, WorldPlacement placement, CompiledPlacementStamp stamp, string? scope) : ICreationStampVisitor {
         private int m_ordinal;
@@ -259,14 +272,23 @@ public sealed partial class WorldRigidAssets {
         var isolation = m_isolation;
 
         m_staticVolumes.Clear();
+        m_ridingCopies.Clear();
         StaticVisibleCopies = 0;
         for (var index = 0; index < m_staticCopies.Count; index++) {
             var occurrence = m_staticCopies[index];
             var asset = occurrence.Asset;
             var copyIndex = (m_bodies.Count + index);
             var previous = m_copies[copyIndex];
-            var transform = new DynamicTransform(occurrence.Position, occurrence.Orientation);
             var scale = (occurrence.Placement.Scale / asset.BakeScale);
+
+            if (occurrence.Placement.Attach is not null) {
+                // A riding copy keeps the pose its body last gave it; the next pack reads the body again (PackRiding).
+                _ = previous.Update(-1, occurrence.Target, occurrence.MotionKey, previous.Transform, scale, true, null, null, 0, [], usesRootMaterialFrame: false, templateRange: asset.Range);
+                m_ridingCopies.Add(item: index);
+                if (asset.Range.InstanceCount > 0) { StaticVisibleCopies++; }
+                continue;
+            }
+            var transform = new DynamicTransform(occurrence.Position, occurrence.Orientation);
             _ = previous.Update(-1, occurrence.Target, occurrence.MotionKey, transform, scale, false, null, null, 0, [], usesRootMaterialFrame: false, templateRange: asset.Range);
             if (asset.Range.InstanceCount > 0) {
                 var hidden = isolation?.HiddenFor(asset.Creation.Id, asset.Creation.EngineDocument);
@@ -277,5 +299,22 @@ public sealed partial class WorldRigidAssets {
         m_volumesDirty = true;
         WorldCreationWork.ProcessWork.Add(WorldCreationWork.StaticCopies, m_staticCopies.Count);
         m_copiesRevision++;
+    }
+    // The static copies that ride a body, by their index in m_staticCopies, as the latest placement found them.
+    private readonly List<int> m_ridingCopies = [];
+
+    // Roots every riding copy on its body's presented pose (WorldAttachedPose), naming each copy whose row moved. A riding
+    // copy is dynamic: its pose reaches its draws through its root row, as a body copy's does.
+    private void PackRiding(IWorldStampSource source) {
+        foreach (var index in m_ridingCopies) {
+            var occurrence = m_staticCopies[index];
+            var copyIndex = (m_bodies.Count + index);
+            var previous = m_copies[copyIndex];
+            var (position, orientation) = WorldAttachedPose.Root(attach: occurrence.Placement.Attach!, source: source);
+
+            if (previous.Update(-1, occurrence.Target, occurrence.MotionKey, new DynamicTransform(Position: position, Orientation: orientation), previous.Scale, true, null, null, 0, [], usesRootMaterialFrame: false, templateRange: occurrence.Asset.Range)) {
+                m_changedCopies.Add(item: copyIndex);
+            }
+        }
     }
 }

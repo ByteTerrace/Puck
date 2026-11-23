@@ -360,6 +360,7 @@ public sealed partial class WorldRigidAssets {
 
             VisitCount = count;
         }
+        PackRiding(source: source);
         if (anyMoved) {
             m_poseRevision++;
         }

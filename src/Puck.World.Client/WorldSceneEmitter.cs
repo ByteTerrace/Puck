@@ -317,7 +317,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             }
         }
         m_catalog.ObserveArticulation(m_presentedStamps);
-        m_animator.Rigid.ReconcileStatic(definition, definition.Placements);
+        m_animator.Rigid.ReconcileStatic(definition, definition.Placements, riding: true);
         m_animator.Reconcile(
             placementFrames: definition.PlacementFrames,
             looks: definition.Looks,

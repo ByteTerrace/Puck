@@ -135,6 +135,14 @@ public static class WorldAnchorPoses {
             return true;
         }
 
+        // A responding row riding a body that the rigid catalog copies, not the pool, rides its body's presented pose.
+        if ((WorldDefinitionRows.FindPlacement(id: placementId, placements: source.Definition.Placements) is { Attach: { } attach } riding) && (riding.Inhabit is null) && (riding.Deal is null)) {
+            var (position, orientation) = WorldAttachedPose.Root(attach: attach, source: source);
+
+            pose = AtShape(definition: source.Definition, orientation: orientation, placement: riding, position: position, shapeId: shapeId);
+            return true;
+        }
+
         return TryRestPlacement(definition: source.Definition, placementId: placementId, pose: out pose, shapeId: shapeId);
     }
     /// <summary>Resolves a placement's rest pose from the document alone: its composed frame, and the named shape's
@@ -161,27 +169,27 @@ public static class WorldAnchorPoses {
         }
 
         var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
-        var rotation = frame.Rotation;
 
+        pose = AtShape(definition: definition, orientation: frame.Rotation, placement: placement, position: frame.Position, shapeId: shapeId);
+        return true;
+    }
+    // A row's pose at its root, or at the named shape's rest position and facing under the root.
+    private static SdfAnchor AtShape(WorldDefinition definition, WorldPlacement placement, Vector3 position, Quaternion orientation, int? shapeId) {
         if (
             (shapeId is { } target) &&
             (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.ShownPrototypeId) is { } creation)
         ) {
             foreach (var shape in (creation.EngineDocument.Shapes ?? [])) {
                 if (shape.Id == target) {
-                    pose = new SdfAnchor(
-                        Orientation: Quaternion.Normalize(value: (rotation * shape.Rotation.Value)),
-                        Position: (frame.Position + Vector3.Transform(value: (shape.Position.Value * placement.Scale), rotation: rotation))
+                    return new SdfAnchor(
+                        Orientation: Quaternion.Normalize(value: (orientation * shape.Rotation.Value)),
+                        Position: (position + Vector3.Transform(value: (shape.Position.Value * placement.Scale), rotation: orientation))
                     );
-
-                    return true;
                 }
             }
         }
 
-        pose = new SdfAnchor(Position: frame.Position, Orientation: rotation);
-
-        return true;
+        return new SdfAnchor(Position: position, Orientation: orientation);
     }
     private static bool TryPart(int body, string partId, in WorldAnchorScope scope, out SdfAnchor pose) {
         if ((((uint)body) < ((uint)WorldClient.EntityCapacity)) && (scope.Source is WorldClient client) && (scope.Stamps is { } stamps)) {
