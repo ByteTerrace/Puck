@@ -382,6 +382,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_VISIBILITY_GROUP_EDGE", value: SdfVisibility.GroupEdgePixels);
         declarations.Count(name: "SDF_SHADE_BINS", value: SdfWorldPackage.ShadeBins);
         declarations.Count(name: "SDF_SHADE_TILE_HEADER_WORDS", value: SdfWorldPackage.ShadeTileHeaderWords);
+        declarations.Count(name: "SDF_SHADE_TILE_LIGHT_WORDS", value: SdfWorldPackage.ShadeTileLightWords);
         declarations.Count(name: "SDF_VIEWS_FILTER_WORDS", value: SdfWorldPackage.ViewsFilterWords);
         declarations.Count(name: "SDF_VIEWS_PROBE_RATE", value: SdfWorldPackage.ViewsProbeRate);
         declarations.Count(name: "SDF_VIEWS_PROBE_WORDS", value: SdfWorldPackage.ViewsProbeWords);

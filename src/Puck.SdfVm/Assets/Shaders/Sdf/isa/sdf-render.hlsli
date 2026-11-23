@@ -117,6 +117,7 @@
 #define SDF_VISIBILITY_GROUP_EDGE     8u
 #define SDF_SHADE_BINS                2u
 #define SDF_SHADE_TILE_HEADER_WORDS   6u
+#define SDF_SHADE_TILE_LIGHT_WORDS    5u
 #define SDF_VIEWS_FILTER_WORDS        2u
 #define SDF_VIEWS_PROBE_RATE          2u
 #define SDF_VIEWS_PROBE_WORDS         74u

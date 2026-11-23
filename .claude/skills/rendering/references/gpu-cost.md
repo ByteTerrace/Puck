@@ -236,6 +236,19 @@ unit and the split, so confirm a kernel against GPU Trace's `# Warp`. A kernel
 at 168 registers allows 12 warps (25 %); GPU Trace's `SM Warp Occupancy` row is
 the achieved occupancy, which falls at or under that limit.
 
+## A wave pays for every lane's path
+
+A pixel kernel's time follows the instructions its waves run, and a wave runs a path when any of its lanes takes it.
+Count the work a change removes by lane and by wave before reading a clock.
+
+- **Measured here.** The views pass visited 15.9 lights a pixel in the hall where 4.7 could add anything; leaving the
+  rest out of each tile's mask cut the pass by a quarter to a third there, and a visit cost the same in every reading
+  (`sdfViewsTileLights`). A coarser shading rate that left three lanes in four of most tiles unshaded did not move the
+  pass at all: each 8×8 group still ran both its waves wherever one cell of it shaded at full rate, and one of two
+  where none did ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
+- **Compact before you skip.** Skipping lanes saves only when the lanes left fill whole waves: a list of the samples
+  to shade, a sample a lane, is the form that turns fewer samples into less time.
+
 ## Registers set occupancy; occupancy is not speed
 
 A kernel's peak live state sets its registers, and its registers cap how many
@@ -382,6 +395,12 @@ A wave intrinsic sums lanes in registers; one lane then does the atomic.
   every thread of the group reaches the call, so a kernel never returns before it. A pass the node records
   with `GpuKernelCounters.DisabledRow` (no reading demands the counts) branches out of every counting function
   before any wave, groupshared or atomic work.
+- **A wave reduction is not free either, and it holds state live.** Each one is work on every lane. Reducing the views
+  light tiles' depths, box corners and kept lights across the wave (`sdfViewsTileLights`) measured a few percent of the
+  filter pass under the per-lane atomics and raised the unsplit plain views kernel from 128 to 168 registers on Vulkan,
+  and five more barriers in that kernel measured nothing: a tile stage's cost is the lanes' own work, wherever the stage
+  runs, so the tiles keep their atomics. The filter kernel holds 54 registers with the tile stage in either form, 40
+  without it.
 - Wave size is the device's (32 on NVIDIA, 32 or 64 on AMD), so never size data
   by it. A float reduction's order differs by wave size; counts are integers,
   and the sky reduction sums in a fixed order so its coefficients repeat on one
@@ -555,9 +574,10 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
 - **Register-limited pixel passes.** On Vulkan (RTX 4070) the plain views
   kernel, the binned specializations and the glass kernels run at 168 registers
   (12 of the SM's 48 warps) and the binned plain views kernel at 128 (16 warps),
-  so a specialized set adds registers only over the binned plain kernel; the interpreter's views, binned views
+  so a specialized set adds registers only over the binned plain kernel, and it is the light walk that adds them: with
+  the walk compiled out (`SDF_VIEWS_OMIT_LIGHTS`) the specialized binned kernel compiles to 128; the interpreter's views, binned views
   and glass run at 255 (8 warps), the probe lookup at 128 and the views filter
-  at 40, and the specialized and plain glass keep 96 and 16 bytes of local
+  at 54 (40 before it decided each tile's lights), and the specialized and plain glass keep 96 and 16 bytes of local
   memory. The interpreter costs tens of times the specialized kernels where a
   large program covers the view ([author shaders](../../../../docs/plans/author-shaders.md#the-decision-matrix)).
   The interpreter's light phase, inlined in the light walk with its sixteen

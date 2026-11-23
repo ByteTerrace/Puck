@@ -10,8 +10,9 @@ public static partial class SdfWorldPackage {
     /// <summary>The views filter's record as the filter pass writes it.</summary>
     public const string ViewsFilterRecordsWritten = "sdfViewsFilterRecordsRW";
     /// <summary>The shade bins as the binned views pass reads them: per view a header of <see cref="ShadeTileHeaderWords"/>
-    /// words (each bin's tile count, its first entry in the tile list and the scatter's cursor), each tile's bin, then
-    /// the tile list sorted by bin (<c>sdf-views-filter.hlsli</c> owns the layout).</summary>
+    /// words (each bin's tile count, its first entry in the tile list and the scatter's cursor), each tile's bin, the
+    /// tile list sorted by bin, then each tile's light masks, <see cref="ShadeTileLightWords"/> words a tile
+    /// (<c>sdf-views-filter.hlsli</c> owns the layout).</summary>
     public const string ShadeTiles = "sdfShadeTiles";
     /// <summary>The shade bins as the filter pass (tile bins and counts) and the bins pass (offsets and the tile list)
     /// write them.</summary>
@@ -31,13 +32,18 @@ public static partial class SdfWorldPackage {
     /// <summary>The words of a view's shade-bins header: each bin's tile count, its offset in the tile list and its
     /// scatter cursor. <c>SdfIsaHlsl</c> generates it as <c>SDF_SHADE_TILE_HEADER_WORDS</c>.</summary>
     public const uint ShadeTileHeaderWords = (3 * ShadeBins);
+    /// <summary>The words of one tile's light masks in the shade bins: a bit for each light of the lights table the tile's
+    /// walks visit (four words, one for every 32 lights of the table's capacity), then a bit for each bound screen. The
+    /// filter pass writes them and the binned views kernels walk by them (<c>sdf-views-lights.hlsli</c>).
+    /// <c>SdfIsaHlsl</c> generates it as <c>SDF_SHADE_TILE_LIGHT_WORDS</c>.</summary>
+    public const uint ShadeTileLightWords = 5;
     /// <summary>The words of one pixel's views filter record. <c>SdfIsaHlsl</c> generates it as
     /// <c>SDF_VIEWS_FILTER_WORDS</c>.</summary>
     public const uint ViewsFilterWords = 2;
 
     /// <summary>Returns a fragment whose views pass shades in bins, for a view whose frame runs authored programs: the
     /// views filter's tile gather moves into <see cref="Parts.ViewsFilter"/>, which writes each pixel's filtered
-    /// occlusion and shadows into a record of its own and each 8 by 8 tile's bin into the shade bins;
+    /// occlusion and shadows into a record of its own and each 8 by 8 tile's bin and light masks into the shade bins;
     /// <see cref="Parts.ViewsBins"/> counts the bins into offsets, the indirect arguments of each bin's jobs and the tile
     /// list sorted by bin; and <see cref="Parts.Views"/> dispatches each bin's jobs indirectly with that bin's kernel, so
     /// a tile with no program never carries the registers of one. A view of a frame with no program runs the fragment as
@@ -68,8 +74,8 @@ public static partial class SdfWorldPackage {
                 _ => basis,
             })],
         })];
-        // Each tile's bin and its entry in the tile list.
-        var tiles = PerTile(elements: 2);
+        // Each tile's bin, its entry in the tile list and its light masks.
+        var tiles = PerTile(elements: (2 + ShadeTileLightWords));
         var passes = new List<RenderGraphFragmentPass>(capacity: (fragment.Passes.Count + 2));
 
         foreach (var pass in fragment.Passes) {
@@ -77,7 +83,8 @@ public static partial class SdfWorldPackage {
                 passes.Add(item: pass);
                 continue;
             }
-            passes.Add(item: Pass(inputs: [Parts.Visibility], name: Parts.ViewsFilter, outputs: [Parts.Filter, Parts.ShadeTiles]));
+            // The filter reads the probe records for the lights each tile's probes see.
+            passes.Add(item: Pass(inputs: [Parts.Visibility, Parts.Probes], name: Parts.ViewsFilter, outputs: [Parts.Filter, Parts.ShadeTiles]));
             passes.Add(item: Pass(name: Parts.ViewsBins, outputs: [Parts.ShadeBinned, Parts.ShadeArguments]));
             passes.Add(item: pass with {
                 Dispatch = ShaderPipelineDispatch.Indirect(arguments: Parts.ShadeArguments),
@@ -112,14 +119,15 @@ public static partial class SdfWorldPackage {
 
     public static partial class Parts {
         /// <summary>The views filter pass of a binned view: the views filter's averages into the filter record and each
-        /// tile's bin and count into the shade bins.</summary>
+        /// tile's bin, count and light masks into the shade bins.</summary>
         public const string ViewsFilter = "views-filter";
         /// <summary>The bins pass of a binned view: each bin's offset, its jobs' indirect arguments and the tile list
         /// sorted by bin.</summary>
         public const string ViewsBins = "views-bins";
         /// <summary>The views filter record the filter pass writes.</summary>
         public const string Filter = "viewsFilter";
-        /// <summary>The shade bins as the filter pass leaves them: each tile's bin and each bin's count.</summary>
+        /// <summary>The shade bins as the filter pass leaves them: each tile's bin and light masks and each bin's
+        /// count.</summary>
         public const string ShadeTiles = "shadeTiles";
         /// <summary>The shade bins as the bins pass leaves them: with each bin's offset and the tile list.</summary>
         public const string ShadeBinned = "shadeBins";

@@ -873,11 +873,26 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   masks (`sdfViewLightMasks`); views walks each 8×8 tile's
   (`sdfViewsTileLights`, `passes/sdf-views-lights.hlsli`): the view's lights
   whose range sphere (and spot cone) meets the boxes about the tile's hit
-  points, and the bound, non-black screens the boxes reach in front of. A mask
+  points, the non-black screens the boxes reach in front of, and of the lights
+  the volume traces (`sdfLightTraces`) only those the probes about some shaded
+  pixel of the tile see (`sdfViewsLightsSeen`). A mask
   may leave out only a light that adds nothing at the points its lanes shade,
   so a new light kind or reach (an authored falloff past `Param`, a screen
   that lights behind its face) widens the tile test in the same change, or
-  tiles cut its light off. `SDF_VIEWS_OMIT_LIGHT_TILES` reads the tiles' saving. Index a vector at
+  tiles cut its light off. The probes' half rests on one rule the light
+  phase's door enforces: a traced light whose probe share is zero adds nothing,
+  whatever the program (`SdfLightInputs.unseen` in the generated
+  `sdfShadeLightPhase`), so a change that lets an unseen traced light add
+  anything (a new response term, a door that skips the test) widens
+  `sdfViewsLightsSeen` in the same change. The unsplit kernels decide a tile in
+  their own group; a binned view's filter pass decides it and writes the masks
+  into the shade bins (`sdfShadeTileLightsWord`), which the binned kernels read,
+  so they hold no barrier and shade a pixel from its records alone. The filter
+  pass tests no screen's binding, since a source binds without moving the
+  lighting it stands on; the walk asks. `SDF_VIEWS_OMIT_LIGHT_TILES` reads the
+  tiles' saving. Light visits are counted by reloading a scratch tree that adds
+  to `sdfWorkGradients` in the walk and reading `shapes.gradients` on
+  `world.counters gpu pass sdf.world$views`. Index a vector at
   run time only through `sdfComponent`.
 - **Cel shading is a style per material, not a whole-image filter, and the
   banding is a program.** The standard's `cel` shade program
