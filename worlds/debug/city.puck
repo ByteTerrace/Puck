@@ -32,6 +32,7 @@ import "../standard/domains"
 import "../standard/citizen"
 import "../standard/vehicle"
 import "../standard/market"
+import "../standard/styles"
 
 // The city draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -84,16 +85,23 @@ views {
   nestingDepth: 3
 }
 
-// The palette every city prototype shares, by slot.
+// The city's cel look (../standard/styles.puck): the standard band with a warmer held shade, a dusky mauve a step
+// below the lit cream and ochre, so the town reads painted rather than lit.
+let cityStyle = celStyle with { shadowTint [0.78, 0.62, 0.74], restore: 0.65 }
+function cityCel(base) = celMaterial(base, cityStyle)
+
+// The palette every city prototype shares, by slot: cel paint on everything but the river, and the warm glow of a lit
+// window.
 let cityPalette = [
-  { color: "#EBDDBF", roughness: 0.85 }
-  { color: "#D9A55B", roughness: 0.85 }
-  { color: "#2F7F7A", roughness: 0.6, specular: 0.15 }
-  { color: "#B9A88E", roughness: 0.9 }
-  { color: "#5C5A58", roughness: 0.95 }
-  { color: "#C9BFAE", roughness: 0.9 }
+  cityCel({ color: "#EBDDBF", roughness: 0.85 })
+  cityCel({ color: "#D9A55B", roughness: 0.85 })
+  cityCel({ color: "#2F7F7A", roughness: 0.6, specular: 0.15 })
+  cityCel({ color: "#B9A88E", roughness: 0.9 })
+  cityCel({ color: "#5C5A58", roughness: 0.95 })
+  cityCel({ color: "#C9BFAE", roughness: 0.9 })
   { color: "#3D7C8C", roughness: 0.15, specular: 0.5 }
-  { color: "#8A5A3C", roughness: 0.8 }
+  cityCel({ color: "#8A5A3C", roughness: 0.8 })
+  { color: "#FFD9A0", emissive: 160, roughness: 0.4 }
 ]
 let cream = 0
 let ochre = 1
@@ -103,6 +111,7 @@ let road = 4
 let paving = 5
 let river = 6
 let timber = 7
+let windowGlow = 8
 
 // A gable's ridge box turned 45 degrees about Z: its upper half stands over the walls as a roof whose ridge runs along Z.
 let gableTurn = [0, 0, 0.382683, 0.92388]
@@ -253,6 +262,41 @@ vehicleRoutes(
     cz1: c.cz + c.hz
   })
 )
+
+
+// The street lamps: a 4.2 m post with a lantern on each road's outer pavement and round the fountain, each a point light
+// of `cityLampLumens` lumens that the city's clock (city-day.puck) turns on from dusk to dawn: 7 along the north and
+// south of the ring and 6 along its east and west, 7 down the avenue, 15 along the cross street, 6 by the works road,
+// 10 on the quay's edge and 8 round the fountain.
+let cityLampLumens = 1800
+let cityLampSpots = concat(
+  map(range(0, 7), k => [(-36 + 12 * k), -8.5]),
+  map(range(0, 7), k => [(-36 + 12 * k), -91.5]),
+  map(range(0, 6), k => [41.5, (-80 + 12 * k)]),
+  map(range(0, 6), k => [-41.5, (-80 + 12 * k)]),
+  map(range(0, 7), k => [6.5, (-100 - 15 * k)]),
+  map(range(0, 15), k => [(-140 + 20 * k), -123.5]),
+  map(range(0, 6), k => [(46 + 20 * k), -43.5]),
+  map(range(0, 10), k => [(-40 + 20 * k), -202.5]),
+  map(range(0, 8), k => [(24 * sine(k * 0.7853981633974483)), (-50 + 24 * cosine(k * 0.7853981633974483))])
+)
+
+// The lamps' power: on (`cityLampLumens`) from half past six in the evening to six in the morning, off by day.
+state {
+  world [
+    { name: "cityLamps", kind: "Fixed", value: "0" }
+  ]
+}
+rule "city-lamps-on" {
+  when cityDay >= (18.5 / 24) or cityDay < (6 / 24)
+  mode: Edge
+  cityLamps = cityLampLumens
+}
+rule "city-lamps-off" {
+  when cityDay >= (6 / 24) and cityDay < (18.5 / 24)
+  mode: Edge
+  cityLamps = 0
+}
 
 // The citizens (../standard/citizen.puck). `citizenCount` of them, numbered down from the top of the body capacity
 // above the Moth's eight (avatars/moth.puck), in blocks of one look each: look `b` is block `b`, its citizens standing
@@ -502,6 +546,14 @@ placements {
     }
   }
 
+  for (spot, i) in cityLampSpots {
+    placement $"lamp-{i}" {
+      prototype: "street-lamp"
+      position [spot[0], 0, spot[1]]
+      solid
+    }
+  }
+
   placement "bridge" {
     prototype: "bridge"
     position [0, 0, -225]
@@ -541,7 +593,8 @@ prototypes {
     }
   }
 
-  // A terrace house of each height and wall colour: a 10 by 8 m block under a teal gable whose ridge runs along Z.
+  // A terrace house of each height and wall colour: a 10 by 8 m block under a teal gable whose ridge runs along Z, with a
+  // pair of lit windows on each upper storey of its door face.
   for height in houseHeights {
     for tone in houseTones {
       prototype $"house-{height}-{tone.name}" {
@@ -558,12 +611,21 @@ prototypes {
             material: teal
             position [0, height, 0]
             rotation: gableTurn
-            scale [3.75, 3.75, 4.3]
+            scale [3.6, 3.6, 4.3]
           }
           shape Box "door" {
             material: timber
             position [0, 1.1, 4]
             scale [0.6, 1.1, 0.06]
+          }
+          for storey in range(1, floor(height / 3.3)) {
+            for side in [-1, 1] {
+              shape Box $"window-{storey}-{side}" {
+                material: windowGlow
+                position [(2.5 * side), (3.3 * storey), 4]
+                scale [0.5, 0.65, 0.05]
+              }
+            }
           }
         }
       }
@@ -634,7 +696,7 @@ prototypes {
         material: teal
         position [0, 12, 0]
         rotation: gableTurn
-        scale [8.8, 8.8, 10.4]
+        scale [8.55, 8.55, 10.4]
       }
       shape Box "tower" {
         material: cream
@@ -721,6 +783,30 @@ prototypes {
     }
   }
 
+  // A street lamp: a timber post with a glowing lantern under a teal cap; its light is the city's, keyed on the clock.
+  prototype "street-lamp" {
+    document {
+      name: "street-lamp"
+      palette: cityPalette
+      schema: "puck.creation.v1"
+      shape Cylinder "post" {
+        material: timber
+        position [0, 2, 0]
+        scale [0.08, 2, 0.08]
+      }
+      shape Box "lantern" {
+        material: windowGlow
+        position [0, 4.2, 0]
+        scale [0.2, 0.25, 0.2]
+      }
+      shape Box "cap" {
+        material: teal
+        position [0, 4.52, 0]
+        scale [0.28, 0.07, 0.28]
+      }
+    }
+  }
+
   // The bridge: a stone deck 12 m wide over the river, flush with both banks, between low parapets.
   prototype "bridge" {
     document {
@@ -758,16 +844,24 @@ spawnPoints [
 render {
   farDistance: 600
   lighting {
-    lights [
-      directional(
-        name: "key",
-        direction: [3, 5, -4],
-        color: "#FFF0DC",
-        illuminance: 100000lx,
-        shadow: always,
-        angularRadius: 0.2
-      )
-    ]
+    lights: concat(
+      [
+        directional(
+          name: "key",
+          direction: [3, 5, -4],
+          color: "#FFF0DC",
+          illuminance: 100000lx,
+          shadow: always,
+          angularRadius: 0.2
+        )
+      ],
+      map(range(0, length(cityLampSpots)), i => point(
+        name: $"lamp-{i}",
+        position: [cityLampSpots[i][0], 4.2, cityLampSpots[i][1]],
+        temperature: 2700K,
+        power: "state.cityLamps"
+      ))
+    )
   }
   exposure {
     mode: Auto
