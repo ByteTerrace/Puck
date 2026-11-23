@@ -18,7 +18,8 @@ namespace Puck.SdfVm;
 /// it. The distant entry is one for the world, centred on its first shadowed view: its reach spans a place of a kilometre
 /// and more from anywhere in it.</para>
 /// <para>Every entry is cached: its layers are drawn whole only when the light turns past the entry's tolerance, its eye
-/// crosses into another cell, its texels change or a static draw changes (<see cref="SdfWorldTables.StaticDrawRevision"/>).
+/// crosses into another cell or its texels change, and the distant map also when a static draw changes
+/// (<see cref="SdfWorldTables.StaticDrawRevision"/>); the other entries redraw a changed static caster by rectangles.
 /// A whole redraw is drawn in shares, each a part of the draw list, and the world schedules every entry's shares together:
 /// each upload draws the shares that fit <see cref="UploadVertices"/>, in order of the redraws already under way, the
 /// entries no view has seen drawn yet, the anchor, and the entry (far, near, secondary, distant), so a world first shown
@@ -870,6 +871,11 @@ internal sealed class SdfWorldShadows : IDisposable {
         private long m_rectVertices;
         private long m_rectDrawings;
         private int m_slicesDrawn;
+        // What ended the standing layers' holds: the light's turn, the eye's cell, a static caster, the fit's extent.
+        private long m_endedByTurn;
+        private long m_endedByCell;
+        private long m_endedByStatic;
+        private long m_endedByFit;
 
         public Entry(int index, SdfWorldShadows owner, int ring, int anchor) {
             Index = index;
@@ -1041,12 +1047,21 @@ internal sealed class SdfWorldShadows : IDisposable {
                 (m_cell == cell) &&
                 // The chord between unit directions is their angle to well under a part in a million at these turns.
                 (Vector3.Distance(value1: m_camera.Forward, value2: fresh.Forward) <= tolerance) &&
-                (m_revision == revision)
+                // An entry that follows motion redraws a changed static caster by the rectangles its change owes; only
+                // the distant map, which follows none, holds for the static revision.
+                (FollowsMotion || (m_revision == revision))
             );
 
             if (held) {
                 EndRedraw();
                 return;
+            }
+            // What ended a standing layer's hold, counted once a redraw for the report.
+            if (m_stands && (m_redraw is null)) {
+                if ((m_camera.HalfHeight != fresh.HalfHeight) || (m_camera.Far != fresh.Far)) { m_endedByFit++; }
+                else if (m_cell != cell) { m_endedByCell++; }
+                else if (!FollowsMotion && (m_revision != revision)) { m_endedByStatic++; }
+                else if (holds) { m_endedByTurn++; }
             }
             // A redraw not yet under way follows the fit, keeping a pair already lent to it.
             m_redraw = new Redraw(Camera: fresh, Cell: cell, Revision: revision, Slices: SlicesOf(frame: frame, rates: rates), Next: 0, Texels: texels,
@@ -1578,7 +1593,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             m_rectDrawings++;
         }
         public string Describe() => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
-            handler: $"shadow.{EntryNames[Index]}=half{m_camera.HalfHeight:0.#}m/texels{m_texels}/stands{(m_stands ? 1 : 0)}/held{m_heldUploads}/redraw{(m_redraw is { } r ? $"{r.Next}of{r.Slices}{((r.Target is null) ? string.Empty : "lent")}" : "-")}/owed{(m_owed.All ? "all" : $"{m_owed.Count}:{m_owed.Area}texels")}/tri{m_lastWholeVertices / 3}in{m_slicesDrawn}/rect-tri{((m_rectDrawings > 0) ? ((m_rectVertices / m_rectDrawings) / 3) : 0)}x{m_rectDrawings}{((Optical is not null) ? "/optical" : string.Empty)}");
+            handler: $"shadow.{EntryNames[Index]}=half{m_camera.HalfHeight:0.#}m/texels{m_texels}/stands{(m_stands ? 1 : 0)}/held{m_heldUploads}/redraw{(m_redraw is { } r ? $"{r.Next}of{r.Slices}{((r.Target is null) ? string.Empty : "lent")}" : "-")}/owed{(m_owed.All ? "all" : $"{m_owed.Count}:{m_owed.Area}texels")}/tri{m_lastWholeVertices / 3}in{m_slicesDrawn}/rect-tri{((m_rectDrawings > 0) ? ((m_rectVertices / m_rectDrawings) / 3) : 0)}x{m_rectDrawings}/ended-turn{m_endedByTurn}-cell{m_endedByCell}-static{m_endedByStatic}-fit{m_endedByFit}{((Optical is not null) ? "/optical" : string.Empty)}");
 
         public void Dispose() {
             ReleaseLayers();

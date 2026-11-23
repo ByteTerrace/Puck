@@ -407,7 +407,15 @@ public sealed partial class SdfWorldTables {
             _ = job.Claimed.Add(item: mesh);
             job.PackedSlices[index] = true;
         }
-        job.Buffer = TakeLandingBuffer(bytes: (((ulong)job.Words) * sizeof(uint)));
+        try {
+            job.Buffer = TakeLandingBuffer(bytes: (((ulong)job.Words) * sizeof(uint)));
+        } catch (GpuMemoryRefusedException) {
+            // A host pool with no room for the packed words lands nothing now: the words stay owed, taken again once a
+            // later frame finds room, as a faulted packer's are.
+            ReleasePackClaims(job: job);
+            AbandonLanding(job: job);
+            return;
+        }
         job.Packer = m_landingPacker;
         job.Wake = m_gpuWork;
         m_landingPacking = job;
