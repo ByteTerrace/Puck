@@ -202,10 +202,9 @@ public sealed partial class NavigationRuntime {
 
         private static readonly FixedQ4816 SquareRootTwo = FixedQ4816.FromDouble(value: 1.4142135623730951);
 
-        // The path searches' workspaces not in use, behind their gate: a search rents one and returns it, so searches on
-        // several threads at once each hold their own, and a domain no search reaches allocates none.
-        private readonly List<SearchWorkspace> m_spareSearches = [];
-        private readonly Lock m_searchGate = new();
+        // The path searches' workspaces: a search rents one and returns it, so searches on several threads at once each
+        // hold their own, and a domain no search reaches allocates none.
+        private readonly Puck.Abstractions.Collections.SharedPool<SearchWorkspace> m_searches;
         private long m_searchBytes;
         // The reader's gate: while it is read-only, a read that would adopt a bake throws instead.
         private NavigationReadGate m_gate = NavigationReadGate.Open;
@@ -262,6 +261,7 @@ public sealed partial class NavigationRuntime {
             );
             CellCount = checked(((Tuning.Width * Tuning.Depth) * Tuning.Layers));
             m_mediumRevision = MediumValueRevision;
+            m_searches = new(create: NewSearch);
         }
 
         // The live medium's revision when the domain was compiled; a domain whose medium has moved on is not retained.
@@ -569,7 +569,7 @@ public sealed partial class NavigationRuntime {
                 return NavigationStatus.Arrived;
             }
 
-            var workspace = RentSearch();
+            var workspace = m_searches.Rent();
 
             try {
                 var order = new SearchOrder(workspace: workspace);
@@ -618,25 +618,15 @@ public sealed partial class NavigationRuntime {
                 }
                 return NavigationStatus.Unreachable;
             } finally {
-                ReturnSearch(workspace: workspace);
+                m_searches.Return(item: workspace);
             }
         }
-        private SearchWorkspace RentSearch() {
-            lock (m_searchGate) {
-                if (m_spareSearches.Count != 0) {
-                    var spare = m_spareSearches[^1];
-
-                    m_spareSearches.RemoveAt(index: (m_spareSearches.Count - 1));
-                    return spare;
-                }
-            }
+        // Builds a workspace for a search that found none idle, counting its bytes into WorkspaceBytes.
+        private SearchWorkspace NewSearch() {
             var created = new SearchWorkspace(cells: CellCount);
 
             _ = Interlocked.Add(location1: ref m_searchBytes, value: created.Bytes);
             return created;
-        }
-        private void ReturnSearch(SearchWorkspace workspace) {
-            lock (m_searchGate) { m_spareSearches.Add(item: workspace); }
         }
         private bool AdmitsAxes(int axes) => ((Tuning.Kind == NavigationKind.Surface) || Tuning.Connectivity switch {
             NavigationConnectivity.Axis => (axes == 1),
