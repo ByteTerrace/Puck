@@ -186,17 +186,30 @@ let worksCrossDomain = surfaceDomain("road-works-cross", [29, 0.05, -136], 1, 12
   network: "roads"
 }
 let vehicleLoops = [
-  { stops [[35, -85], [35, -15], [-35, -15], [-35, -85]], perSide: 10 }
-  { stops [[145, -130], [145, -50], [35, -50], [35, -130]], perSide: 15 }
+  { group: "ring", stops [[35, -85], [35, -15], [-35, -15], [-35, -85]], perSide: 10 }
+  { group: "works", stops [[145, -130], [145, -50], [35, -50], [35, -130]], perSide: 15 }
 ]
 // Each vehicle starts on a side of its loop, driving to the stop that ends the side.
 let vehicleSpots = flatMap(vehicleLoops, loop => flatMap(range(0, 4), side => map(range(0, loop.perSide), k => {
+  group: loop.group
   stops: loop.stops
   first: side
   x: loop.stops[(side + 3) % 4][0] + (loop.stops[side][0] - loop.stops[(side + 3) % 4][0]) * (k + 0.5) / loop.perSide
   z: loop.stops[(side + 3) % 4][1] + (loop.stops[side][1] - loop.stops[(side + 3) % 4][1]) * (k + 0.5) / loop.perSide
 })))
 let vehicleCount = length(vehicleSpots)
+
+// The crossings: the ring road's four, at the middle of each side (the north one where the arrival ground meets the
+// square), and the works road's, by the middle workshop. Each names its region (cx, cz and half extents hx, hz) and the
+// approach box before it on the vehicles' side of travel (x0 .. x1, z0 .. z1): vehicles drive the ring anticlockwise,
+// north up the east side, west along the north side, south down the west side and east along the south side.
+let cityCrossings = [
+  { group: "ring", region: "place-city-crossing-north", cx: 0, cz: -15, hx: 3, hz: 5, x0: 3, x1: 11, z0: -20, z1: -10 }
+  { group: "ring", region: "place-city-crossing-west", cx: -35, cz: -50, hx: 5, hz: 3, x0: -40, x1: -30, z0: -47, z1: -39 }
+  { group: "ring", region: "place-city-crossing-south", cx: 0, cz: -85, hx: 3, hz: 5, x0: -11, x1: -3, z0: -90, z1: -80 }
+  { group: "ring", region: "place-city-crossing-east", cx: 35, cz: -50, hx: 5, hz: 3, x0: 30, x1: 40, z0: -61, z1: -53 }
+  { group: "works", region: "place-city-crossing-works", cx: 90, cz: -50, hx: 3, hz: 5, x0: 93, x1: 101, z0: -55, z1: -45 }
+]
 
 navigation {
   domains: concat(
@@ -225,7 +238,21 @@ marketStalls(
   }),
   clock: cityDay
 )
-vehicleRoutes(vehicles: map(range(0, vehicleCount), v => { key: 7 + vehicleCount - v, stops: vehicleSpots[v].stops, first: vehicleSpots[v].first }))
+vehicleRoutes(
+  vehicles: map(range(0, vehicleCount), v => { key: 7 + vehicleCount - v, stops: vehicleSpots[v].stops, first: vehicleSpots[v].first, group: vehicleSpots[v].group }),
+  crossings: map(cityCrossings, c => {
+    region: c.region
+    group: c.group
+    x0: c.x0
+    x1: c.x1
+    z0: c.z0
+    z1: c.z1
+    cx0: c.cx - c.hx
+    cx1: c.cx + c.hx
+    cz0: c.cz - c.hz
+    cz1: c.cz + c.hz
+  })
+)
 
 // The citizens (../standard/citizen.puck). `citizenCount` of them, numbered down from the top of the body capacity
 // above the Moth's eight (avatars/moth.puck), in blocks of one look each: look `b` is block `b`, its citizens standing
@@ -334,6 +361,17 @@ placements {
     position [0, 1.5, -8]
     region {
       halfExtents [2, 2, 2]
+    }
+  }
+  // The crossings (../standard/vehicle.puck): a region over each place where the pavement meets a vehicle loop, which
+  // holds an approaching vehicle while any body stands in it.
+  for crossing in cityCrossings {
+    placement $"{crossing.region}" {
+      prototype: "place"
+      position [crossing.cx, 1.5, crossing.cz]
+      region {
+        halfExtents [crossing.hx, 2, crossing.hz]
+      }
     }
   }
   placement "place-city-bridge" {

@@ -133,12 +133,16 @@ template vehicleLooks(colors, trim = "#2F2A26", canopy = "#EBDDBF") {
   })
 }
 
-// Every vehicle's loop. `vehicles` lists each as `{ key, stops, first }`: `key` its body number, `stops` the four
-// `[x, z]` points of its loop in driving order, `first` the stop it drives to first. From the second tick each vehicle
+// Every vehicle's loop. `vehicles` lists each as `{ key, stops, first, group }`: `key` its body number, `stops` the four
+// `[x, z]` points of its loop in driving order, `first` the stop it drives to first, `group` the name of the loop it
+// drives (a row `vehicleGroup-<group>` keys its vehicles). `crossings` lists each as
+// `{ region, group, x0, x1, z0, z1, cx0, cx1, cz0, cz1 }`: the id of a placement whose region covers the crossing, the
+// group of vehicles that pass it, the approach box before it on their side of travel and the crossing's own box (world
+// x and z bounds). From the second tick each vehicle
 // is sent to its first stop; once it arrives, the next stop round the loop becomes its route, so
 // it laps forever. A vehicle has arrived once it stands within 3 m of its stop, read from its own position, so a
 // stop it has just left can never advance it twice in one tick. `vehicleStop` holds the stop each vehicle drives to.
-template vehicleRoutes(vehicles) {
+template vehicleRoutes(vehicles, crossings = []) {
   state {
     world: concat(
       flatMap(range(0, 4), s => [
@@ -152,7 +156,19 @@ template vehicleRoutes(vehicles) {
           capacity: length(vehicles)
           cells: map(vehicles, v => { key: $"{v.key}", value: v.first })
         }
-      ]
+        {
+          name: "vehicleHeld"
+          kind: "Int"
+          capacity: length(vehicles)
+          cells: map(vehicles, v => { key: $"{v.key}", value: 0 })
+        }
+      ],
+      map(distinct(map(vehicles, v => v.group)), g => {
+        name: $"vehicleGroup-{g}"
+        kind: "Int"
+        capacity: length(filter(vehicles, v => v.group == g))
+        cells: map(filter(vehicles, v => v.group == g), v => { key: $"{v.key}", value: 1 })
+      })
     )
   }
 
@@ -207,6 +223,59 @@ template vehicleRoutes(vehicles) {
     forEach: vehicleStop
     designate(key: $each, kind: Point, register: "route", pointX: vehicleStop0X[$each], pointY: 0, pointZ: vehicleStop0Z[$each])
     vehicleStop[$each] = 0
+  }
+
+  // Crossings: a vehicle in a crossing's approach box while any body stands in the crossing's region stops (its route
+  // set to where it stands, `vehicleHeld` 1; a cleared route would let its producer steer at the nearest body); once the region is empty it is released (2) and resumes the stop it was driving to.
+  for crossing in crossings {
+    rule $"vehicle-crossing-{crossing.region}" {
+      when (bodyPosition(each, x) > crossing.x0 and bodyPosition(each, x) < crossing.x1 and
+        bodyPosition(each, z) > crossing.z0 and bodyPosition(each, z) < crossing.z1)
+      mode: Level
+      forEach: $"vehicleGroup-{crossing.group}"
+      if vehicleHeld[$each] == 0 and region(crossing.region) >= 1 {
+        designate(key: $each, kind: Point, register: "route", pointX: bodyPosition(each, x), pointY: 0, pointZ: bodyPosition(each, z))
+        vehicleHeld[$each] = 1
+      } else if vehicleHeld[$each] == 1 and region(crossing.region) == 0 {
+        vehicleHeld[$each] = 2
+      }
+    }
+    rule $"vehicle-crossing-inside-{crossing.region}" {
+      when (vehicleHeld[$each] == 1 and
+        bodyPosition(each, x) > crossing.cx0 and bodyPosition(each, x) < crossing.cx1 and
+        bodyPosition(each, z) > crossing.cz0 and bodyPosition(each, z) < crossing.cz1)
+      mode: Level
+      forEach: $"vehicleGroup-{crossing.group}"
+      vehicleHeld[$each] = 2
+    }
+  }
+  rule "vehicle-resume-0" {
+    when vehicleHeld[$each] == 2 and vehicleStop[$each] == 0
+    mode: Level
+    forEach: vehicleStop
+    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop0X[$each], pointY: 0, pointZ: vehicleStop0Z[$each])
+    vehicleHeld[$each] = 0
+  }
+  rule "vehicle-resume-1" {
+    when vehicleHeld[$each] == 2 and vehicleStop[$each] == 1
+    mode: Level
+    forEach: vehicleStop
+    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop1X[$each], pointY: 0, pointZ: vehicleStop1Z[$each])
+    vehicleHeld[$each] = 0
+  }
+  rule "vehicle-resume-2" {
+    when vehicleHeld[$each] == 2 and vehicleStop[$each] == 2
+    mode: Level
+    forEach: vehicleStop
+    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop2X[$each], pointY: 0, pointZ: vehicleStop2Z[$each])
+    vehicleHeld[$each] = 0
+  }
+  rule "vehicle-resume-3" {
+    when vehicleHeld[$each] == 2 and vehicleStop[$each] == 3
+    mode: Level
+    forEach: vehicleStop
+    designate(key: $each, kind: Point, register: "route", pointX: vehicleStop3X[$each], pointY: 0, pointZ: vehicleStop3Z[$each])
+    vehicleHeld[$each] = 0
   }
 }
 
