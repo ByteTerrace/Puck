@@ -1400,6 +1400,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 _ = m_portalExtents.Remove(key: portal);
             }
         }
+        foreach (var portal in m_shrinking.Keys) {
+            if (!m_portals.Contains(item: portal)) {
+                _ = m_shrinking.Remove(key: portal);
+            }
+        }
 
         m_viewRoots.Clear();
         m_filmedViews.Clear();
@@ -1622,6 +1627,92 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // Whether a window its consumer does not render for its own sake (out of sight, too small or occluded) renders
     // at the least share this frame so a world's meshes arrive (ReserveArrivals).
     private bool RendersForArrival(string view) => m_arrivalKept.Contains(item: view);
+    // Whether such a window renders at the least share this frame: for an arrival, or to give back the storage of the
+    // extent it was last seen at (ReserveShrinks).
+    private bool RendersAtLeastShare(string view) => (m_arrivalKept.Contains(item: view) || m_shrinkKept.Contains(item: view));
+
+    /// <summary>The consecutive frames a session view stays unread before the host shrinks the storage it holds to its
+    /// least share.</summary>
+    public const int ParkedShrinkFrames = 120;
+    /// <summary>The pixels a session view's image holds at or above which shrinking its storage is worth the rebuild.</summary>
+    public const long ParkedShrinkPixels = (512L * 512L);
+    /// <summary>The frames a session view may render at its least share for a shrink before the host stops asking, until
+    /// the view is seen again.</summary>
+    public const int ParkedShrinkLimit = 240;
+
+    // The session views shrinking their storage, each with the frames it has rendered at its least share for it, or
+    // ShrinkAbandoned once the limit passed; and the views this frame renders at their least share for one (each
+    // shrinking view and every window on the way to it).
+    private readonly Dictionary<string, int> m_shrinking = new(comparer: StringComparer.Ordinal);
+    private readonly HashSet<string> m_shrinkKept = new(comparer: StringComparer.Ordinal);
+
+    private const int ShrinkAbandoned = -1;
+
+    // Chooses the session views that render at their least share this frame so their storage follows what is shown. A
+    // view's per-pixel storage is allocated at the extent its glass was last seen at, and a view no schedule reaches
+    // renders nothing, so it would keep that extent for good: a window the player walked up to, or through, holds a
+    // display's worth of storage from then on. A view unread for ParkedShrinkFrames whose installed image holds
+    // ParkedShrinkPixels or more renders at its least share (WorldPortalVisibility.ArrivalShare) until its node installs
+    // that extent, which retires the larger graph as any resize does and leaves a small image for the light its face
+    // emits and for the frame it is next seen in. The node's installed extent decides, never the schedule's, which names
+    // the extent last asked for. A view on the way to a shrinking one renders with it, since a nested view renders only
+    // when its consumer does.
+    private void ReserveShrinks() {
+        m_shrinkKept.Clear();
+        if (
+            (m_runtime is not { } runtime) ||
+            !ReferenceEquals(objA: m_portalIndexSet, objB: runtime.Instances) ||
+            (m_portalIndexVersion != m_portalsVersion)
+        ) {
+            return;
+        }
+
+        var nodes = runtime.Nodes;
+        var leastWidth = RenderGraphExtent.Pixels(display: m_displayWidth, fraction: WorldPortalVisibility.ArrivalShare);
+        var leastHeight = RenderGraphExtent.Pixels(display: m_displayHeight, fraction: WorldPortalVisibility.ArrivalShare);
+
+        for (var position = 0; (position < m_portalIndices.Length); position++) {
+            var (portal, index) = m_portalIndices[position];
+
+            if ((index < 0) || (index >= nodes.Length) || (nodes[index] is not { } node)) {
+                continue;
+            }
+
+            var (width, height) = node.Extent;
+            var large = ((((long)width * height) >= ParkedShrinkPixels) && ((width > leastWidth) || (height > leastHeight)));
+
+            if (m_shrinking.TryGetValue(key: portal, value: out var frames)) {
+                if (!large) {
+                    _ = m_shrinking.Remove(key: portal);
+                    continue;
+                }
+                if (frames == ShrinkAbandoned) {
+                    continue;
+                }
+                if (frames >= ParkedShrinkLimit) {
+                    m_shrinking[portal] = ShrinkAbandoned;
+                    continue;
+                }
+                m_shrinking[portal] = (frames + 1);
+            } else if (large && (m_portalParked[position] >= ParkedShrinkFrames)) {
+                m_shrinking.Add(key: portal, value: 0);
+            } else {
+                continue;
+            }
+
+            for (var kept = portal; (kept is not null) && m_shrinkKept.Add(item: kept); kept = ConsumingPortalOf(view: kept)) { }
+        }
+    }
+    // The session view whose image shows another session view's glass, or null when a view that is not one shows it.
+    private string? ConsumingPortalOf(string view) {
+        foreach (var footprint in m_screenFootprints) {
+            if (string.Equals(a: footprint.Producer, b: view, comparisonType: StringComparison.Ordinal) && m_portals.Contains(item: footprint.Consumer)) {
+                return footprint.Consumer;
+            }
+        }
+
+        return null;
+    }
 
     // Chooses the windows that render at the least share this frame so the worlds behind them become resident. A
     // world's meshes arrive only in frames that render one of its views: its bake's sampling is dispatched there, and
@@ -1680,6 +1771,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private void CompleteFootprints() {
         var frame = new FootprintFrame(this);
         ReserveArrivals(frame: in frame);
+        ReserveShrinks();
         RootFilmedViews(frame: in frame);
         var firstScreen = m_footprints.Count;
 
@@ -1715,8 +1807,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     break;
                 // A window out of its consumer's sight, or too small in it, renders at the least share while a world's
                 // meshes arrive through it (RendersForArrival): its world, or one behind it, then becomes resident
-                // before the glass comes into view.
-                case PortalSight.Unseen or PortalSight.Small when RendersForArrival(view: footprint.Producer):
+                // before the glass comes into view. It renders there too while its storage shrinks (ReserveShrinks).
+                case PortalSight.Unseen or PortalSight.Small when RendersAtLeastShare(view: footprint.Producer):
                     m_footprints.Add(item: (footprint with {
                         Height = WorldPortalVisibility.ArrivalShare,
                         Width = WorldPortalVisibility.ArrivalShare,
@@ -1816,7 +1908,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             : (Width: double.PositiveInfinity, Height: double.PositiveInfinity));
 
         switch (PortalSightOf(consumer: footprint.Consumer, producer: footprint.Producer, pixels: pixels, coverage: out var coverage, glass: out var glass, frame: in frame)) {
-            case PortalSight.Small or PortalSight.Hidden when RendersForArrival(view: footprint.Producer):
+            case PortalSight.Small or PortalSight.Hidden when RendersAtLeastShare(view: footprint.Producer):
                 footprint = footprint with { Width = WorldPortalVisibility.ArrivalShare, Height = WorldPortalVisibility.ArrivalShare };
 
                 return true;
@@ -1824,6 +1916,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             case PortalSight.Hidden:
                 return false;
             case PortalSight.Seen:
+                // A view seen again renders at what its glass spans, which ends a shrink and one the host gave up.
+                if (m_shrinking.Count != 0) {
+                    _ = m_shrinking.Remove(key: footprint.Producer);
+                }
                 footprint = footprint with { Refresh = ViewRefresh(consumer: footprint.Consumer, coverage: coverage.Height, producer: footprint.Producer, glass: glass, rates: frame.Rates) };
 
                 return true;
