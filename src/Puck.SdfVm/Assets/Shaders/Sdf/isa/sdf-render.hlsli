@@ -120,7 +120,9 @@
 #define SDF_SHADE_TILE_LIGHT_WORDS    5u
 #define SDF_VIEWS_FILTER_WORDS        2u
 #define SDF_VIEWS_PROBE_RATE          2u
-#define SDF_VIEWS_PROBE_WORDS         74u
+#define SDF_VIEWS_PROBE_WORDS         43u
+#define SDF_VIEWS_PROBE_RECORD_WORDS  29u
+#define SDF_VIEWS_PROBE_SLOT_WORDS    28u
 #define SDF_VIEWS_PROBE_HISTORY_WORDS 17u
 #define SDF_SHADOW_BITS               8u
 #define SDF_SHADOW_MASK               0x000000FFu
@@ -218,9 +220,9 @@
 
 // The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the stationary window's (SdfWorldPackage.HistoryWindowWords) and its first sample word after the phase mask, the jitter period in samples (SdfWorldPackage.TemporalPeriod), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).
 #define SDF_HISTORY_SURFACE_WORDS      6u
-#define SDF_HISTORY_WINDOW_WORDS       41u
+#define SDF_HISTORY_WINDOW_WORDS       33u
 #define SDF_HISTORY_WINDOW_OFFSET      1u
-#define SDF_HISTORY_SAMPLE_WORDS       5u
+#define SDF_HISTORY_SAMPLE_WORDS       4u
 #define SDF_TEMPORAL_PERIOD            8u
 #define SDF_HISTORY_WEIGHT_CAP         8.0
 #define SDF_HISTORY_FEATURE_WEIGHT_CAP 32.0

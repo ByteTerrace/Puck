@@ -6,9 +6,9 @@ public static partial class SdfWorldPackage {
     /// <summary>The shading sample spacing, classification tile edge and history output dimensions in pixels.</summary>
     public const string ViewsRate = "viewsRate";
     /// <summary>The probe lookup's records as views reads them: <see cref="ViewsProbeWords"/> words a cell of
-    /// <see cref="ViewsProbeRate"/> by <see cref="ViewsProbeRate"/> render-extent pixels, the irradiance volume's gather at
-    /// one representative pixel of the cell (<c>sdf-views-probes.hlsli</c> owns the packing), addressed by cell like the
-    /// visibility record by pixel.</summary>
+    /// <see cref="ViewsProbeRate"/> by <see cref="ViewsProbeRate"/> render-extent pixels. Each cell holds a record of
+    /// <see cref="ViewsProbeRecordWords"/> words, addressed by cell like the visibility record by pixel, and the rest is
+    /// the pool of extra slots (<c>sdf-views-probes.hlsli</c> owns the layout).</summary>
     public const string ViewsProbeRecords = "sdfViewsProbeRecords";
     /// <summary>The probe lookup's records as the probe lookup pass writes them.</summary>
     public const string ViewsProbeRecordsWritten = "sdfViewsProbeRecordsRW";
@@ -18,21 +18,25 @@ public static partial class SdfWorldPackage {
     /// the tile the records are counted per, so a tile holds whole cells.
     /// <c>SdfIsaHlsl</c> generates it as <c>SDF_VIEWS_PROBE_RATE</c>.</summary>
     public const uint ViewsProbeRate = 2;
-    /// <summary>The words of one cell's probe record: the representative's gather (two cages, sixteen UNORM16 weights, a
-    /// state word and its blended six-axis cubes in fourteen words: the light a surface receives and the radiance a
-    /// reflection adds, a shared-exponent colour a face, and the sky shares), then an extra slot of
-    /// <see cref="ViewsProbeExtraWords"/> words for each other pixel of the cell, which holds that pixel's own gather where
-    /// its receiver is not compatible with the representative's, then the representative's traced-light agreement
-    /// (<see cref="ViewsProbeLightWords"/>). <c>SdfIsaHlsl</c> generates it as <c>SDF_VIEWS_PROBE_WORDS</c>.</summary>
-    public const uint ViewsProbeWords = (ViewsProbeGatherWords + (((ViewsProbeRate * ViewsProbeRate) - 1) * ViewsProbeExtraWords) + ViewsProbeLightWords);
-    /// <summary>The words of a record's traced-light agreement: the light bits every measured corner of the
-    /// representative's gather holds and those any holds, a word each for every 32 lights the irradiance volume traces
-    /// (four), and those corners' summed weight.</summary>
-    public const uint ViewsProbeLightWords = 9;
-    /// <summary>The words of a cell's record before its extra slots: the representative's gather and blended cube.</summary>
-    public const uint ViewsProbeGatherWords = 25;
-    /// <summary>The words of one extra slot: two cages, sixteen UNORM16 weights and the share and measured flags.</summary>
-    public const uint ViewsProbeExtraWords = 11;
+    /// <summary>The words of one slot: everything a shading sample reads of one gather of the irradiance volume, which
+    /// the probe lookup resolves so that no shading kernel holds a gather. Its share and flags, its blended six-axis
+    /// cubes in fourteen words (the light a surface receives and the radiance a reflection adds, a shared-exponent
+    /// colour a face, and the sky shares), its traced lights' agreement in nine (the light bits every measured corner
+    /// holds, those any holds and those corners' summed weight) and four words listing the lights its corners disagree
+    /// on with each one's share. <c>SdfIsaHlsl</c> generates it as <c>SDF_VIEWS_PROBE_SLOT_WORDS</c>.</summary>
+    public const uint ViewsProbeSlotWords = 28;
+    /// <summary>The words of one cell's record: its representative's slot, then the pool slot of the first of the cell's
+    /// extras. <c>SdfIsaHlsl</c> generates it as <c>SDF_VIEWS_PROBE_RECORD_WORDS</c>.</summary>
+    public const uint ViewsProbeRecordWords = (ViewsProbeSlotWords + 1);
+    /// <summary>The words a cell adds to the pool of extra slots, which follows the records in the same buffer: a count of
+    /// the slots taken, which <c>SdfWorldPassRecorder</c> zeroes before each lookup, then the slots. A pixel whose
+    /// receiver is not compatible with its cell's representative's takes one; half a slot a cell holds an extra for one
+    /// pixel in eight, and a group of cells the pool has no room for keeps none, its pixels reading their
+    /// representatives'.</summary>
+    public const uint ViewsProbePoolWords = (ViewsProbeSlotWords / 2);
+    /// <summary>The words the records' buffer holds for each cell: its record and its share of the pool.
+    /// <c>SdfIsaHlsl</c> generates it as <c>SDF_VIEWS_PROBE_WORDS</c>.</summary>
+    public const uint ViewsProbeWords = (ViewsProbeRecordWords + ViewsProbePoolWords);
 
     /// <summary>The preceding render's probe gathers a view's probe lookup reuses: <see cref="ViewsProbeHistoryWords"/>
     /// words a cell, the gather the cell's representative read and the receiver and volume state it was taken at
