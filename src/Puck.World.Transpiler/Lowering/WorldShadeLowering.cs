@@ -242,7 +242,13 @@ internal sealed class WorldShadeLowering {
     }
     private ExpressionNode BindParameter(TemplateParameterNode parameter, ExpressionNode value, DocumentScope caller) {
         value = RequireStructural(expression: value, scope: caller);
-        if (parameter.IsStructural) { return value; }
+        if (parameter.IsStructural) {
+            // A structural argument read out of a record or a list (`pen.uneven`, `rows[2]`) enters as its value: inside
+            // a phase a member access names a stamp member, never the caller's data.
+            return ((value is MemberAccessExpressionNode or IndexExpressionNode || ((value is IdentifierExpressionNode named) && named.Name.Contains(value: '.')))
+                ? Structural.Syntax(value: DocumentLowering.EvaluateValue(value, caller))
+                : value);
+        }
         var data = DocumentLowering.EvaluateValue(value, caller);
         var name = $"p{m_nextParameter++}";
         _ = Literal(data);
@@ -435,7 +441,7 @@ internal sealed class WorldShadeLowering {
             return base.RewriteExpression(expression: expression);
         }
 
-        private static ExpressionNode Syntax(JsonNode? value) => value switch {
+        internal static ExpressionNode Syntax(JsonNode? value) => value switch {
             JsonArray array => new ArrayExpressionNode(array.Select(selector: Syntax).ToArray()),
             JsonObject record => new ObjectExpressionNode(record.Select(selector: p => new PropertyNode(p.Key, Syntax(value: p.Value))).ToArray()),
             JsonValue scalar when scalar.TryGetValue<string>(value: out var text) => new LiteralExpressionNode(text),

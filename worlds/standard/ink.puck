@@ -1,0 +1,158 @@
+// The standard's ink, a library: lines drawn over a row's shaded colour by its shade program's ink phase. The engine
+// finds edges (the `edge.*` distances, in display pixels, each side of an edge measuring to it on its own surface) and
+// runs the phase only where a line can be; everything a line looks like is here. `inked` lays an ink over a row:
+//
+//   import "../standard/ink"
+//   palette [inked({ color: "#C9A27E" }, standardInk)]
+//
+// and `celMaterial` (styles.puck) lays a style's `ink` over its cel band. An ink is a record of the `ink` template's
+// values, so a world restyles one with `standardInk with { weight: 0.05 }`, and a row with no ink names none.
+//
+// A line has a weight in the world (`weight`, metres), so a near form is drawn bolder than a far one, held between
+// `thin` and `bold` display pixels; below `thin` it fades rather than vanishing at once, and a silhouette keeps `far`
+// of itself at any distance so a skyline stays drawn. `silhouette`, `crease`, `objects` and `materials` weigh each class
+// of edge (0 leaves the class undrawn): an occlusion is drawn whole on the nearer surface, and the other three half on
+// each side of the edge. `fold` is the cosine a crease's faces must turn past to be drawn at full weight, tapering to
+// none a little above it. An `uneven` ink (1, or 0 for a drafted line, which runs no noise) varies its width along the
+// line by `wobble` (0 to 1) of a noise `wobbleScale` to the metre that rides the surface, a hand's unevenness that
+// holds still as the camera moves. The line multiplies what is under it by
+// `tint`, so a dark ink keeps the hue of its surface.
+//
+// A hatched ink adds strokes in the shade: where the key light does not reach (past the band at `hatchThreshold` over
+// `hatchSoftness`, or in a cast shadow) the surface takes parallel strokes `hatchPitch` metres apart, widening to
+// `hatchWidth` in the deepest shade, at `hatch` of the ink's strength. The strokes ride the surface too, and blend to
+// their even tone where they are finer than a pixel.
+
+import "shading"
+
+// A line's coverage at `distance` display pixels from its edge, for a line `width` pixels wide that starts at the edge:
+// full inside it, a pixel's ramp at its far side, and fainter rather than thinner under one pixel.
+function inkLine(distance, width) = saturate(width - distance + 0.5)
+// The line's width in display pixels: its world weight at the surface, held between `thin` and `bold`.
+function inkWidth(weight, thin, bold) = min(max(weight / max(surface.pixel, 0.000001), thin), bold)
+// How much of itself a line keeps at the surface's distance: all of it down to `thin` pixels, then its share of `thin`.
+function inkPresence(weight, thin) = saturate(weight / (max(surface.pixel, 0.000001) * max(thin, 0.000001)))
+// The coverage of the four classes of edge at this pixel.
+function inkEdges(width, presence, silhouette, crease, objects, materials, fold, far) = max(
+  max(
+    inkLine(edge.depth, width * silhouette) * max(presence, far),
+    inkLine(edge.crease, width * 0.5 * crease * (1 - shadeStep(edge.creaseCosine, fold + 0.1, 0.2))) * presence
+  ),
+  max(inkLine(edge.object, width * 0.5 * objects), inkLine(edge.material, width * 0.5 * materials)) * presence
+)
+// One family of parallel strokes over a surface coordinate `u`, in metres: strokes `width` wide every `pitch`, filtered
+// over the pixel's `footprint`, and their even tone where a pixel spans more than a stroke.
+function inkStroke(u, pitch, width, footprint) = mix(
+  saturate((width * 0.5 - abs(shadeFrac(u / pitch) - 0.5) * pitch) / max(footprint, 0.000001) + 0.5),
+  saturate(width / pitch),
+  1 - shadeFade(footprint / pitch)
+)
+// The share of each of the layer's three planes a surface with this normal faces.
+function inkPlanes(normal) = pow(abs(normal), 8) / max(dot(pow(abs(normal), 8), [1, 1, 1]), 0.000001)
+// A pixel's size on the surface along its slope: its footprint over the cosine it is seen at.
+function inkFootprint() = surface.footprint / max(abs(dot(surface.geometricNormal, surface.rayDirection)), 0.15)
+// Diagonal strokes on whichever of the layer's three planes the surface faces, so they ride the surface and hold still.
+function inkStrokes(pitch, width) = dot(
+  inkPlanes(toLayer(surface.geometricNormal)),
+  [
+    inkStroke(surface.layerPosition.y + surface.layerPosition.z, pitch, width, inkFootprint()),
+    inkStroke(surface.layerPosition.x + surface.layerPosition.z, pitch, width, inkFootprint()),
+    inkStroke(surface.layerPosition.x + surface.layerPosition.y, pitch, width, inkFootprint())
+  ]
+)
+// The width's unevenness along a line: a noise over the surface, about one.
+function inkWobble(amount, scale) = 1 + amount * 0.6 * lattice(surface.layerPosition * scale, uint(40503))
+
+shade template ink(weight, thin, bold, tint, silhouette = 1, crease = 1, objects = 1, materials = 0, fold = 0.5, far = 0, wobble = 0, wobbleScale = 1, structural uneven = 0) {
+  ink {
+    let width = inkWidth(weight, thin, bold) * (uneven ? inkWobble(wobble, wobbleScale) : 1)
+    color: ink.under * tint
+    coverage: inkEdges(width, inkPresence(weight, thin), silhouette, crease, objects, materials, fold, far)
+  }
+}
+shade template inkHatched(weight, thin, bold, tint, hatch, hatchPitch, hatchWidth, hatchThreshold, hatchSoftness, silhouette = 1, crease = 1, objects = 1, materials = 0, fold = 0.5, far = 0, wobble = 0, wobbleScale = 1, structural uneven = 0) {
+  light {
+    let cosine = max((light.cosine + surface.wrap) / (1 + surface.wrap), 0)
+    // The shade the key light leaves, as far as the light reaches the surface's surroundings: a closed room hatches
+    // nothing for a sun outside it.
+    line: (light.kind == uint(0)) ? (1 - celBand(cosine, light.visibility, hatchThreshold, hatchSoftness, 0)) *
+      light.probeShare : 0
+  }
+  ink {
+    let width = inkWidth(weight, thin, bold) * (uneven ? inkWobble(wobble, wobbleScale) : 1)
+    color: ink.under * tint
+    coverage: max(
+      inkEdges(width, inkPresence(weight, thin), silhouette, crease, objects, materials, fold, far),
+      hatch * inkStrokes(hatchPitch, hatchWidth * ink.line)
+    )
+  }
+}
+
+// Lays an ink over a row's program: the row shades as it did and the ink is drawn over it.
+function inked(base, pen) = base with {
+  shade [base.shade, ink(
+      pen.weight,
+      pen.thin,
+      pen.bold,
+      pen.tint,
+      silhouette: pen.silhouette,
+      crease: pen.crease,
+      objects: pen.objects,
+      materials: pen.materials,
+      fold: pen.fold,
+      far: pen.far,
+      wobble: pen.wobble,
+      wobbleScale: pen.wobbleScale,
+      uneven: pen.uneven
+    )
+  ]
+}
+// Lays a hatched ink over a row's program.
+function hatched(base, pen) = base with {
+  shade [base.shade, inkHatched(
+      pen.weight,
+      pen.thin,
+      pen.bold,
+      pen.tint,
+      pen.hatch,
+      pen.hatchPitch,
+      pen.hatchWidth,
+      pen.hatchThreshold,
+      pen.hatchSoftness,
+      silhouette: pen.silhouette,
+      crease: pen.crease,
+      objects: pen.objects,
+      materials: pen.materials,
+      fold: pen.fold,
+      far: pen.far,
+      wobble: pen.wobble,
+      wobbleScale: pen.wobbleScale,
+      uneven: pen.uneven
+    )
+  ]
+}
+
+// The standard line: a cool dark ink that keeps its surface's hue, bold on a near silhouette and half that on a fold,
+// a little uneven along its length.
+let standardInk = {
+  weight: 0.035
+  thin: 0.8
+  bold: 2.6
+  tint [0.1, 0.11, 0.17]
+  silhouette: 1
+  crease: 0.7
+  objects: 0.8
+  materials: 0
+  fold: 0.5
+  far: 0.45
+  uneven: 1
+  wobble: 0.35
+  wobbleScale: 1.7
+  hatch: 0.55
+  hatchPitch: 0.22
+  hatchWidth: 0.07
+  hatchThreshold: 0.2
+  hatchSoftness: 0.25
+}
+// A heavier line for a harder look.
+let boldInk = standardInk with { weight: 0.05, bold: 3.2, tint [0.06, 0.07, 0.12], crease: 0.8 }

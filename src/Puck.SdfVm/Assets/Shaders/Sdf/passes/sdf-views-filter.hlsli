@@ -34,10 +34,12 @@ bool sdfViewsSearchesEdges(int viewMode) {
 // The filter and the search are a shading kernel's: one that declares the shade programs' stamp (isa/sdf-shade.hlsli)
 // before this module. The bins pass, which only sorts tiles, declares neither.
 #ifdef SDF_SHADE_HLSLI
-// A pixel's edges (SdfShadeEdges) as one record word: each distance in render pixels over the reach in six bits, all
-// ones for far, then the crease cosine in eight.
+// A pixel's edges (SdfShadeEdges) as one record word: each distance in render pixels in six bits, SdfViewsEdgeSteps to
+// a pixel so the half pixel a seed lies from its nearest pixel is exact, all ones for far, then the crease cosine in
+// eight.
+static const float SdfViewsEdgeSteps = 14.0;
 uint sdfViewsEdgesPack(float4 renderDistance, float creaseCosine) {
-    uint4 d = (uint4)round(saturate(renderDistance / float(SDF_EDGE_REACH)) * 62.0);
+    uint4 d = (uint4)round(min(renderDistance, float(SDF_EDGE_REACH)) * SdfViewsEdgeSteps);
 
     d = uint4(((renderDistance.x > float(SDF_EDGE_REACH)) ? 63u : d.x), ((renderDistance.y > float(SDF_EDGE_REACH)) ? 63u : d.y),
         ((renderDistance.z > float(SDF_EDGE_REACH)) ? 63u : d.z), ((renderDistance.w > float(SDF_EDGE_REACH)) ? 63u : d.w));
@@ -48,7 +50,7 @@ uint sdfViewsEdgesPack(float4 renderDistance, float creaseCosine) {
 static const uint SdfViewsEdgesNone = 0xFFFFFFFFu;
 SdfShadeEdges sdfViewsEdgesUnpack(uint word) {
     uint4 d = (uint4(word, (word >> 6u), (word >> 12u), (word >> 18u)) & 63u);
-    float scale = ((float(SDF_EDGE_REACH) / 62.0) * passGroup.displayPixels.x);
+    float scale = (passGroup.displayPixels.x / SdfViewsEdgeSteps);
     SdfShadeEdges edges;
 
     edges.distance = float4(((d.x == 63u) ? SDF_SHADE_EDGE_FAR : (float(d.x) * scale)), ((d.y == 63u) ? SDF_SHADE_EDGE_FAR : (float(d.y) * scale)),

@@ -209,7 +209,7 @@ let exhibitMaterial = 0
 let accentMaterial = 3
 // The gallery's cel look, its walls, plinths, labels and signs (galleryCel): the shade a near-neutral step, so a lit room
 // still reflects untinted light onto its exhibits and an albedo reads as itself, and a thin cool ink on the building's
-// silhouettes and creases. An exhibit's subject (slot 0 of an exhibit's palette, and the slots it adds) keeps its own
+// silhouettes and folds, even along its length as a drafted line is. An exhibit's subject (slot 0 of an exhibit's palette, and the slots it adds) keeps its own
 // shading: the gallery is the engine's self-test, and its plaques say what each subject shows.
 let galleryStyle = celStyle with {
   threshold: 0.08
@@ -219,12 +219,7 @@ let galleryStyle = celStyle with {
   restore: 0.65
   bleed: 0.2
   form: 0.25
-  ink {
-    outlineWidth: 1
-    outlineDistance: 10
-    outlineNormal: 0.6
-    outlineTint [0.42, 0.42, 0.48]
-  }
+  ink: standardInk with { weight: 0.022, bold: 1.8, tint [0.42, 0.42, 0.48], crease: 0.6, fold: 0.45, uneven: 0 }
 }
 function galleryCel(base) = celMaterial(base, galleryStyle)
 let galleryPalette = [

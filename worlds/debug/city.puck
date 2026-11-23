@@ -86,21 +86,38 @@ views {
 }
 
 // The city's cel look (../standard/styles.puck): the standard band with a warmer held shade, a dusky mauve a step
-// below the lit cream and ochre, so the town reads painted rather than lit.
-let cityStyle = celStyle with { shadowTint [0.78, 0.62, 0.74], restore: 0.65 }
+// below the lit cream and ochre, so the town reads painted rather than lit. Its ink is the standard line at a town's
+// scale: a heavier weight, so a house across the square keeps a drawn outline, and a skyline that stays lined. The
+// walls and the timber take the ink's strokes in their shade (cityWall); the ground, the awnings and the roofs are
+// lined and left clean (cityCel), so the hatching marks the masses and the streets stay open.
+let cityStyle = celStyle with {
+  shadowTint [0.78, 0.62, 0.74]
+  restore: 0.65
+  ink: standardInk with {
+    weight: 0.07
+    bold: 3
+    far: 0.6
+    tint [0.13, 0.1, 0.16]
+    hatch: 0.5
+    hatchPitch: 0.55
+    hatchWidth: 0.2
+    hatchSoftness: 0.3
+  }
+}
 function cityCel(base) = celMaterial(base, cityStyle)
+function cityWall(base) = celHatched(base, cityStyle)
 
 // The palette every city prototype shares, by slot: cel paint on everything but the river, and the warm glow of a lit
 // window.
 let cityPalette = [
-  cityCel({ color: "#EBDDBF", roughness: 0.85 })
-  cityCel({ color: "#D9A55B", roughness: 0.85 })
+  cityWall({ color: "#EBDDBF", roughness: 0.85 })
+  cityWall({ color: "#D9A55B", roughness: 0.85 })
   cityCel({ color: "#2F7F7A", roughness: 0.6, specular: 0.15 })
-  cityCel({ color: "#B9A88E", roughness: 0.9 })
+  cityWall({ color: "#B9A88E", roughness: 0.9 })
   cityCel({ color: "#5C5A58", roughness: 0.95 })
   cityCel({ color: "#C9BFAE", roughness: 0.9 })
   { color: "#3D7C8C", roughness: 0.15, specular: 0.5 }
-  cityCel({ color: "#8A5A3C", roughness: 0.8 })
+  cityWall({ color: "#8A5A3C", roughness: 0.8 })
   { color: "#FFD9A0", emissive: 160, roughness: 0.4 }
 ]
 let cream = 0
