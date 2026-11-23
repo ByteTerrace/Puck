@@ -472,9 +472,10 @@ records the options weighed.
   drops the change. `Moved` skips a change whose box lies within the finest judged texel of the box the entries last
   judged the row by (`m_judged`); a passed change goes to each entry, which judges the row against its `Footprint` from
   where it last drew it (`MoveTexels`) and owes at most `MaxRectangles` merged rectangles (`OwedRects`); a redraw under
-  way also owes its own layers (`m_pending`), handed over when it lands. Rectangles whose share of the layer would draw
-  more than `UploadVertices` by the measured whole are owed whole, and a layer owed whole is redrawn by the schedule,
-  never by one rectangle in one upload. A decision takes the owed rectangles into its
+  way also owes its own layers (`m_pending`), handed over when it lands. An upload takes the owed rectangles whose
+  expected vertices (the entry's measured vertices a rectangle texel) fit `RectangleVertices`, at least one, and the
+  rest wait; a layer owed whole (past half its area, or `MovedEverywhere`) is redrawn by the schedule, never by one
+  rectangle in one upload. A decision takes the owed rectangles into its
   work and an unsubmitted decision gives them back (`Restore`). A change no box bounds (`MovedEverywhere`, a seeded
   history) owes the whole layer, and a moved glass caster owes the extinction. A rectangle draws through a viewport of its own from the camera of that rectangle of the plane (aspect in
   `SdfFrameBlock.WriteShadowCamera`), keeping the casters in that box (`SdfMeshCull.OfLightBox`).

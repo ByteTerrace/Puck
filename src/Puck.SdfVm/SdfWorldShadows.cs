@@ -57,7 +57,11 @@ internal sealed class SdfWorldShadows : IDisposable {
     public const float MoveTexels = 1f;
     /// <summary>The vertices one upload's whole redraws rasterize together, by the shares' measured vertices: a share
     /// past it waits for a later upload, though every upload draws at least one share.</summary>
-    public const long UploadVertices = 6_000_000L;
+    public const long UploadVertices = 4_000_000L;
+    /// <summary>The vertices one entry's rectangles are expected to rasterize in one upload, by the vertices its
+    /// rectangles have measured a texel: rectangles past it wait for a later upload, though an entry owing any draws at
+    /// least one.</summary>
+    public const long RectangleVertices = (UploadVertices / 2L);
     /// <summary>The share of the softest penumbra the surface pass draws (<see cref="SdfKernelInterfaces.MeshShadowFilterTexels"/>
     /// texels of radius, narrower where the light is small or the caster near) that a held layer's shadows may lag the
     /// light's turn by, with one texel besides, before an entry with no authored tolerance is drawn again.</summary>
@@ -708,6 +712,15 @@ internal sealed class SdfWorldShadows : IDisposable {
             Count = 0;
             All = false;
         }
+        // Takes the rectangle at an index out of the owed ones.
+        public TexelRect TakeAt(int index) {
+            var rect = m_rects[index];
+
+            m_rects[index] = m_rects[--Count];
+            return rect;
+        }
+        // Owes one rectangle of a layer of `texels` a side.
+        public void Add(TexelRect rect, int texels) => Owe(rect: rect, texels: texels);
         public void OweAll() {
             Count = 0;
             All = true;
@@ -883,6 +896,7 @@ internal sealed class SdfWorldShadows : IDisposable {
         private int m_measuringShares;
         private long m_lastWholeVertices;
         private long m_rectVertices;
+        private long m_rectArea;
         private long m_rectDrawings;
         private int m_slicesDrawn;
         // What ended the standing layers' holds: the light's turn, the eye's cell, a static caster, the fit's extent.
@@ -1020,6 +1034,11 @@ internal sealed class SdfWorldShadows : IDisposable {
         public long ShareVertices => ((m_redraw is { } redraw) && (Estimate is var whole and > 0L)) ? ((whole + redraw.Slices - 1L) / redraw.Slices) : UploadVertices;
         // The vertices a whole redraw of the entry is expected to draw: its own last measurement, else its index's.
         private long Estimate => ((m_wholeVertices > 0L) ? m_wholeVertices : m_owner.m_indexVertices[Index]);
+        // The vertices a rectangle of the entry is expected to draw a texel: what its rectangles measured, else its whole
+        // spread over the layer, else nothing known.
+        private double RectangleDensity => ((m_rectArea > 0L)
+            ? (m_rectVertices / (double)m_rectArea)
+            : ((m_texels > 0) ? (Estimate / ((double)m_texels * m_texels)) : 0d));
 
         private static int OcclusionSetOf(int kind, int slot, int phase) => ((((kind * SdfWorldTables.FrameRingSize) + slot) * OcclusionSets) + phase);
 
@@ -1124,15 +1143,23 @@ internal sealed class SdfWorldShadows : IDisposable {
                 var paced = (((rates & SdfUpdateRates.ShadowFar) == 0) || (Index != SdfMeshShadowCascades.FarEntry) || ((upload % (ulong)FarPeriodOf(frame: frame)) == 0UL));
 
                 // A layer drawn anew answers every move its redraw saw; what moved while it drew is owed when it lands.
-                // Rectangles whose share of the layer would draw more than one upload's budget, by the entry's measured
-                // whole, are owed whole instead; a layer owed whole waits for the scheduled redraw that owing it wants.
-                if (!m_owed.All && (Estimate is var whole and > 0L) && (((whole * (double)m_owed.Area) / ((double)m_texels * m_texels)) > UploadVertices)) {
-                    m_owed.OweAll();
-                }
+                // This upload takes the owed rectangles whose expected vertices fit RectangleVertices, at least one, and
+                // the rest wait; a layer owed whole waits for the scheduled redraw that owing it wants.
                 if ((ReaderCamera.HalfHeight > 0f) && paced && !completes && !m_owed.All) {
-                    m_taken.Merge(other: m_owed, texels: m_texels);
+                    var density = RectangleDensity;
+                    var spent = 0d;
+
+                    for (var at = 0; (at < m_owed.Count);) {
+                        var cost = (density * m_owed[at].Area);
+
+                        if ((m_taken.Count > 0) && ((spent + cost) > RectangleVertices)) {
+                            at++;
+                            continue;
+                        }
+                        m_taken.Add(rect: m_owed.TakeAt(index: at), texels: m_texels);
+                        spent += cost;
+                    }
                     m_work.Rectangles = m_taken.Count;
-                    m_owed.Clear();
                     m_takenOptical = m_owedOptical;
                     m_owedOptical = false;
                 }
@@ -1314,9 +1341,10 @@ internal sealed class SdfWorldShadows : IDisposable {
             m_owedOptical = false;
             m_takenOptical = false;
         }
-        // Draws nothing this upload: no view reads the entry's anchor.
+        // Draws nothing this upload: no view reads the entry's anchor, so a redraw under way ends and returns its pair.
         public void Idle() {
             Restore();
+            EndRedraw();
             m_work = new Work { Share = -1 };
             m_admitted = false;
             m_recorded = false;
@@ -1359,7 +1387,7 @@ internal sealed class SdfWorldShadows : IDisposable {
                 var area = new GpuPixelRect(Height: (uint)(rect.Y1 - rect.Y0), Width: (uint)(rect.X1 - rect.X0), X: rect.X0, Y: rect.Y0);
 
                 Draw(commandBuffer: commandBuffer, frame: frame, slot: slot, kind: (FirstRectangleKind + at), camera: in camera, motion: motion,
-                    share: 0, slices: 1, pair: read, area: area, clear: true, tag: 0L);
+                    share: 0, slices: 1, pair: read, area: area, clear: true, tag: rect.Area);
             }
             if (m_work.Optical) {
                 Extinction(commandBuffer: commandBuffer, frame: frame, slot: slot, camera: in camera, area: whole, pair: read, optical: Optical!);
@@ -1604,8 +1632,10 @@ internal sealed class SdfWorldShadows : IDisposable {
             m_measuringVertices += (long)vertices;
             if (++m_measuringShares == slices) { m_lastWholeVertices = m_measuringVertices; }
         }
+        // A rectangle drawing's measured vertices, its tag the texels it covered.
         private void MeasuredRectangle(long tag, ulong vertices) {
             m_rectVertices += (long)vertices;
+            m_rectArea += Math.Max(val1: tag, val2: 1L);
             m_rectDrawings++;
         }
         public string Describe() => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
