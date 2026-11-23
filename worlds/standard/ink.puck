@@ -149,7 +149,7 @@ let standardInk = {
   crease: 0.7
   objects: 0.8
   materials: 0
-  fold: 0.5
+  fold: 0.6
   far: 0.45
   uneven: 1
   wobble: 0.35

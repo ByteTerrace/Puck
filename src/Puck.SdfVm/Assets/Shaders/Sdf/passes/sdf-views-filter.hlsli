@@ -100,9 +100,14 @@ groupshared uint sdfViewsEdgeMasks[SDF_VIEWS_EDGE_MASKS];
 // Whether the tile holds any seed: a tile with none searches nothing.
 groupshared uint sdfViewsEdgeSeeded;
 
-// The pixel footprints a neighbour's point lies off the nearer surface's tangent plane past which the pair is an
-// occlusion: a tangent-plane comparison, so a sloping plane has none.
+// The pixel footprints one point of a pair lies off the other's tangent plane past which the pair is an occlusion: a
+// tangent-plane comparison, so a sloping plane has none. The footprint is the one the point's own pixel covers on its
+// own surface, its size across the ray over the cosine the surface is seen at, since a point a pixel from a fold lies
+// that far along its face: a fold one of whose faces is seen at a grazing angle is then a fold on every pair along
+// it, never an occlusion on some and a crease on others.
 static const float SdfViewsEdgeDepth = 2.25;
+// The least cosine a surface's footprint is stretched by.
+static const float SdfViewsEdgeGrazing = 0.1;
 // The cosine between two neighbours' normals at one depth below which the pair is a crease: thirty degrees, the least
 // turn the bake makes a crease of. A program reads the turn itself (edge.creaseCosine) and draws the creases it wants.
 static const float SdfViewsEdgeCreaseCosine = 0.866;
@@ -112,10 +117,10 @@ static const float SdfViewsEdgeCreaseCosine = 0.866;
 static const float SdfViewsShadowNormalLow = 0.5;
 static const float SdfViewsShadowNormalHigh = 0.9;
 
-// The classes a pair of neighbouring tile entries jumps by, a bit a class. A surface against the sky and a point off the
-// nearer surface's tangent plane are occlusions, owned by the surface and by the nearer one; two hits at one depth are
-// a crease where their normals turn, an object boundary where their object keys differ and a material boundary where
-// their materials do.
+// The classes a pair of neighbouring tile entries jumps by, a bit a class. A surface against the sky, and two points
+// either of which lies off the other's tangent plane, are occlusions, owned by the surface and by the nearer one; two
+// hits at one depth are a crease where their normals turn, an object boundary where their object keys differ and a
+// material boundary where their materials do.
 uint sdfViewsEdgePair(uint first, uint second, float3 origin, float footprint) {
     float4 a = sdfViewsFilterTile[first];
     float4 b = sdfViewsFilterTile[second];
@@ -131,14 +136,20 @@ uint sdfViewsEdgePair(uint first, uint second, float3 origin, float footprint) {
         return (1u << (hitA ? SdfEdgeDepthFirst : SdfEdgeDepthSecond));
     }
 
-    float distanceA = distance(a.xyz, origin);
-    float distanceB = distance(b.xyz, origin);
-    bool firstNear = (distanceA <= distanceB);
+    float3 rayA = (a.xyz - origin);
+    float3 rayB = (b.xyz - origin);
+    float distanceA = length(rayA);
+    float distanceB = length(rayB);
     float3 normalA = sdfVisibilityUnpackNormal(sdfViewsFilterNormals[first]);
     float3 normalB = sdfVisibilityUnpackNormal(sdfViewsFilterNormals[second]);
+    float3 delta = (b.xyz - a.xyz);
+    // Each point's reach along its own face, in the units of the plane distances below.
+    float size = ((SdfViewsEdgeDepth * footprint) * min(distanceA, distanceB));
+    float reachA = (size / max((abs(dot(normalA, rayA)) / max(distanceA, 1.0e-6)), SdfViewsEdgeGrazing));
+    float reachB = (size / max((abs(dot(normalB, rayB)) / max(distanceB, 1.0e-6)), SdfViewsEdgeGrazing));
 
-    if (abs(dot((b.xyz - a.xyz), (firstNear ? normalA : normalB))) > ((SdfViewsEdgeDepth * footprint) * min(distanceA, distanceB))) {
-        return (1u << (firstNear ? SdfEdgeDepthFirst : SdfEdgeDepthSecond));
+    if ((abs(dot(delta, normalA)) > reachB) || (abs(dot(delta, normalB)) > reachA)) {
+        return (1u << ((distanceA <= distanceB) ? SdfEdgeDepthFirst : SdfEdgeDepthSecond));
     }
 
     return (((dot(normalA, normalB) < SdfViewsEdgeCreaseCosine) ? (1u << SdfEdgeCrease) : 0u)
