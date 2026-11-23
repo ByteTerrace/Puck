@@ -2664,7 +2664,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         if (graphs is not null) {
             settings.DisplayShare = name => graphs.DisplayShareOf(instance: name);
             settings.DisplayArea = name => graphs.DisplayAreaOf(instance: name);
-            settings.DisplayPixels = name => graphs.DisplayPixelsOf(instance: name);
         }
 
         // Resolve the primer snapshot's render poses once so the capacity probe and the camera anchors are live before

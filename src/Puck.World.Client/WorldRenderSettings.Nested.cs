@@ -23,10 +23,6 @@ public sealed partial class WorldRenderSettings {
     /// one no view showed, or <see langword="null"/> while unmeasured; the presenter answers it from its graph host
     /// (<c>WorldViewGraphHost.DisplayAreaOf</c>).</summary>
     public Func<string, double?>? DisplayArea { get; set; }
-    /// <summary>Gets or sets the height, in display pixels, a named view reached on the latest measured frame, zero for
-    /// one no view showed, or <see langword="null"/> while unmeasured; the presenter answers it from its graph host
-    /// (<c>WorldViewGraphHost.DisplayPixelsOf</c>).</summary>
-    public Func<string, double?>? DisplayPixels { get; set; }
     /// <summary>Gets or sets the name of the quality table whose nested-view table the presentation runs: a device
     /// profile's name (its own table's <see cref="WorldQualityPreset.Nested"/>) or a tier's (that preset's), the world's
     /// <c>render.nested</c> where the table authors none, and <see langword="null"/> for the world's always. A quality
@@ -74,23 +70,6 @@ public sealed partial class WorldRenderSettings {
     /// unmeasured counts as filling the display.</param>
     /// <returns>The levels, zero for every level.</returns>
     public int NestedIndirectLevels(string? view) => (HeldRowOf(view: view)?.IndirectLevels ?? 0);
-    /// <summary>Returns the height, in display pixels, a nested view's mesh demand measures projected sizes in
-    /// (<see cref="SdfViewSnapshot.DemandHeight"/>): the height its fit measured, held to the display pixels the view is
-    /// presented over (<see cref="DisplayPixels"/>) and never under the least share of its own image
-    /// (<see cref="Client.WorldPortalVisibility.ArrivalShare"/>). A view no fit measures would otherwise demand its world's
-    /// meshes at its whole image from wherever its camera stands, shown or not, so a world seen through no window keeps
-    /// only its coarse tiers resident and takes the finer ones as a glass comes into view.</summary>
-    /// <param name="view">The view's instance name, or <see langword="null"/> for one with none.</param>
-    /// <param name="fitted">The height its fit measured, in display pixels, or zero for a view no fit measures.</param>
-    /// <param name="imageHeight">The height of the view's own image, in pixels.</param>
-    /// <returns>The height; <paramref name="fitted"/> for an unnamed view or one whose presented size is unmeasured.</returns>
-    public float NestedDemandHeight(string? view, float fitted, float imageHeight) {
-        if ((view is null) || (DisplayPixels?.Invoke(arg: view) is not { } presented)) { return fitted; }
-
-        var shown = MathF.Max(x: MathF.Max(x: 1f, y: (float)(Client.WorldPortalVisibility.ArrivalShare * imageHeight)), y: (float)presented);
-
-        return (((fitted > 0f) && (fitted <= shown)) ? fitted : shown);
-    }
     /// <summary>Returns the share of the display's pixels a nested view is presented over
     /// (<see cref="SdfFrame.DisplayShare"/>), which weighs its world's draw on the presentation's background budget.</summary>
     /// <param name="view">The view's instance name, or <see langword="null"/> for one with none; a view whose share is

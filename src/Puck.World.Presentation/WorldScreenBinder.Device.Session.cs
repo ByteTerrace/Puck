@@ -158,14 +158,11 @@ public sealed partial class WorldScreenBinder {
             width: ((uint)(feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth))
         );
 
-        // A view no fit measures takes its presented height, and a fitted one no more than it
-        // (WorldRenderSettings.NestedDemandHeight).
-        var fitted = ((fit is null) ? 0f : WindowDemandOf(fitted: in camera));
-        var demand = (Settings?.NestedDemandHeight(fitted: fitted, imageHeight: (feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight), view: feed.RegistrationName) ?? fitted);
+        if (fit is not { Window: var window }) { return view; }
 
-        return ((fit is { Window: var window })
-            ? (view with { DemandHeight = demand, DemandWithinView = true, ImageWindow = window })
-            : (view with { DemandHeight = demand }));
+        return ((WindowDemandOf(fitted: in camera) is > 0f and var shown)
+            ? (view with { DemandHeight = shown, DemandWithinView = true, ImageWindow = window })
+            : (view with { DemandWithinView = true, ImageWindow = window }));
     }
     // The display pixels a fitted window's glass spans from the presentation's viewer, which its mesh demand measures
     // projected sizes in; zero before a dress has published a viewer, when the view measures in its own image. A window
