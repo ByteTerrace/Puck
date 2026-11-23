@@ -148,7 +148,7 @@ public sealed partial class SdfMeshPathBake {
             sampled: m_sampled,
             stale: static _ => true,
             tier: _ => tier,
-            transforms: m_demandTransforms
+            transforms: m_slotPoses
         );
 
         return (ReferenceEquals(objA: plans[0], objB: group) ? null : plans[0]);

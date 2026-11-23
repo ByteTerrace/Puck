@@ -444,20 +444,28 @@ public sealed partial class SdfMeshPathBake {
     /// <summary>Gets whether a group still owes a lattice the frame can dispatch, a contour still runs, a field slice
     /// (<see cref="Probe"/>) still samples, a newer plan of a resampled group waits to start, or a landed mesh has not
     /// reached the dressed frame yet: one the dresser has not listed, or one still landing in the mesh region ahead
-    /// of the draws that will name it (<see cref="ObserveResidency"/>).</summary>
-    public bool Pending {
-        get {
-            using (EnterGate(site: BakeGate.Read)) { return ((m_ahead.Count > 0) || Owes()); }
-        }
-    }
+    /// of the draws that will name it (<see cref="ObserveResidency"/>). Never waits: it reads what the latest release of
+    /// the bake's lock left, and whether the dressed frame has taken the latest product.</summary>
+    public bool Pending => ((Volatile.Read(location: ref m_owing) != 0) || DressOwed());
     /// <summary>Gets whether the frame's draws still follow the bake: <see cref="Pending"/> less the products landing
     /// in the mesh region ahead of the draws, which move no draw until they take them. A view whose latest render
-    /// stands need not render again while only those wait.</summary>
-    public bool DrawsPending {
-        get {
-            using (EnterGate(site: BakeGate.Read)) { return Owes(); }
-        }
-    }
+    /// stands need not render again while only those wait. Never waits, as <see cref="Pending"/>.</summary>
+    public bool DrawsPending => (((Volatile.Read(location: ref m_owing) & OwingWork) != 0) || DressOwed());
+
+    // What the bake owed as the latest holder of its lock left it, for the frame's reads that must not wait on the
+    // workers holding it (Pending, DrawsPending): products landing ahead of the draws, and work (Owes, less the dressed
+    // frame's revision, which the dresser moves outside the lock and DressOwed reads live). Invariant: every change of
+    // what it sums happens under the lock, and every release of the lock publishes the sum (GateScope.Dispose), so a
+    // read answers as a read under the lock at the latest release would have.
+    private int m_owing;
+
+    private const int OwingAhead = 1;
+    private const int OwingWork = 2;
+
+    // Publishes what the bake owes, at a release of its lock. Under the gate.
+    private void PublishOwing() => Volatile.Write(location: ref m_owing, value: (((m_ahead.Count > 0) ? OwingAhead : 0) | (OwesWork() ? OwingWork : 0)));
+    // Whether a landed product has not reached the dressed frame: the dresser acknowledges outside the lock.
+    private bool DressOwed() => ((Volatile.Read(location: ref m_program) is not null) && (Volatile.Read(location: ref m_dressedRevision) != Volatile.Read(location: ref m_productRevision)));
 
     /// <summary>Gets whether every group of the bake's program draws a mesh of its own geometry at some tier, or has
     /// finished with none: no group draws nothing while it bakes, and none still draws the mesh it took from the group it
@@ -507,8 +515,9 @@ public sealed partial class SdfMeshPathBake {
 
     // Whether the bake still owes the dressed frame a mesh, a slice, a successor or the demanded tier of a floor planned
     // on arrival. Under the gate.
-    private bool Owes() {
-        if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { return true; }
+    private bool Owes() => (DressOwed() || OwesWork());
+    // Owes, less a landed product the dressed frame has not taken. Under the gate.
+    private bool OwesWork() {
         if ((m_slice is not null) || (m_successors > 0) || (m_firstDetailsOwed > 0)) { return true; }
         return (DoneThrough() < m_groups.Count);
     }
@@ -566,7 +575,6 @@ public sealed partial class SdfMeshPathBake {
     private readonly HashSet<int> m_fixedAssetSlots = [];
     private readonly Dictionary<int, List<int>> m_slotCopies = [];
     private readonly Dictionary<int, List<int>> m_instanceCopies = [];
-    private IReadOnlyList<SdfMeshInstance> m_demandCopies = [];
     private CopyLayout[] m_copyLayout = [];
     private int[] m_copyAssetSlots = [];
     // The same slots as a set, which CopiesOf asks of every dynamic group.
@@ -624,16 +632,24 @@ public sealed partial class SdfMeshPathBake {
     // workers cannot replace/release a landed mesh before the dresser has claimed it. No bake entry calls presentation.
     internal FrameAccess PrepareFrame(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(frame);
-        using (EnterFrameGate(site: BakeGate.Frame)) {
+        // The measure the frame before posted reads what this frame changes: the group list, the copy index and inputs.
+        JoinMeasure();
+
+        var scope = EnterFrameGate(site: BakeGate.Frame);
+
+        try {
             m_preparedFrames++;
             SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.Prepared);
-            // The copies are indexed before anything plans: a plan measures a shared geometry where they stand (Tiers).
-            m_demandTransforms = frame.DynamicTransforms;
-            m_demandCopies = frame.MeshInstances;
+            // The copies are indexed and the frame's inputs copied in before anything plans: a plan measures a shared
+            // geometry where they stand (Tiers).
             m_farDistance = frame.FarDistance;
             ResumeReloads();
-            if (!SameCopyLayout(frame: frame)) { IndexCopies(frame: frame); }
+
+            var reindexed = !SameCopyLayout(frame: frame);
+
+            if (reindexed) { IndexCopies(frame: frame); }
             m_copyCursor.Commit();
+            CopyFrameInputs(frame: frame, reindexed: reindexed);
             // The bake reads only the baked handles: a frame whose height fields' heights alone moved changes nothing here.
             // A lost mesh (SdfMeshLibrary.Lose) restarts the bake on the same program, which bakes again only the groups
             // whose meshes were lost (Keeps). An operand moves with the frame's transforms, so its readers are visited every
@@ -649,19 +665,17 @@ public sealed partial class SdfMeshPathBake {
                 Revisit(frame: frame);
             }
             if (m_successors > 0) { Promote(frame: frame); }
-        }
-        // Measured with the gate open, so the workers keep publishing meanwhile (Prioritize).
-        Prioritize();
-        var scope = EnterFrameGate(site: BakeGate.Retier);
-
-        try {
+            scope.Continue(site: BakeGate.Retier);
             FinishReplacements();
             if (m_evictions.Count > 0) {
                 scope.Continue(site: BakeGate.Evict);
                 Evict(frame: frame);
                 scope.Continue(site: BakeGate.Retier);
             }
+            // The tiers are decided from the demand the frame before measured; this frame's measure and the groups' share
+            // of priorities (Prioritize) run on the measure's lane while the frame is dressed and recorded.
             Retier(frame: frame);
+            PostMeasure();
             scope.Continue(site: BakeGate.Judge);
             JudgeFloors();
             return new FrameAccess(owner: this, scope: scope);
@@ -788,7 +802,7 @@ public sealed partial class SdfMeshPathBake {
         return true;
     }
     // The one membership index serves both pending-bake demand and landed draw dressing. It contains no poses:
-    // a moving occurrence keeps its membership and supplies its current matrix through m_demandCopies.
+    // a moving occurrence keeps its membership and supplies its current matrix through m_copyPoses.
     private void IndexCopies(SdfFrame frame) {
         m_slotCopies.Clear();
         m_instanceCopies.Clear();
@@ -1488,7 +1502,6 @@ public sealed partial class SdfMeshPathBake {
         var plan = (((m_prepared is { } prepared) && ReferenceEquals(objA: prepared.Program, objB: program) && (prepared.FarDistance == frame.FarDistance)) ? prepared.Groups : null);
 
         m_allResident = false;
-        m_demandTransforms = frame.DynamicTransforms;
         Adopt(program: program);
         m_sampled = sampled;
         m_groups.Clear();
@@ -3302,14 +3315,27 @@ public sealed partial class SdfMeshPathBake {
 
         // The metres one display pixel covers at its demand box, as the bake last measured it (MeasureDemands); not a
         // number before the first measure.
-        public float DemandPixel { get; set; } = float.NaN;
+        public float DemandPixel {
+            get {
+                Owner?.ThrowIfMeasuring();
+                return m_demandPixel;
+            }
+            set {
+                Owner?.ThrowIfMeasuring();
+                m_demandPixel = value;
+            }
+        }
+
+        private float m_demandPixel = float.NaN;
         // What the demand watch's latest measure stood on and when each of its clocks next makes it due (DemandWatch).
         public DemandWatch Watch;
         // Its record among the frustum watches (FrustumWatches), while a frustum bounded to its view could move its tier;
         // -1 for none.
         public int FrustumWatch = -1;
-        // The marked lists the group stands in (MarkedGroups): each list's own bit, set while the group is in it.
+        // The marked lists the group stands in (MarkedGroups): each list's own bit, set while the group is in it; the demand
+        // watch's lists apart (GroupMarks.Demand), since its measure writes them off the frame's thread.
         public GroupMarks Marks;
+        public GroupMarks DemandMarks;
 
         public int OwedFrames { get; set; }
         // The frames in a row the demand has asked a coarser tier than it draws, and, for a tier's replacement, the

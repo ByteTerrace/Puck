@@ -2,6 +2,9 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
+using Puck.Abstractions.Waiting;
+using Puck.Hosting.Jobs;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -195,9 +198,176 @@ public sealed partial class SdfMeshPathBake {
     private int m_demandSweepLeft;
     private GroupSweep m_demandSweep;
     private long m_demandResetAt;
-    // The moved transforms the watch last read, and the slots they named.
+    // The moved transforms the frame last copied in (CopyFrameInputs), the slots they named, and whether those are every
+    // slot because the journal could not prove the window.
     private readonly GpuRowCursor m_demandSlotCursor = new();
     private readonly GpuUploadRuns m_demandSlots = new(GpuRegion.MaxCopyRuns);
+    private bool m_demandSlotsWhole;
+    // What the measure and the bake's other demand reads take of the frame, in storage of the bake's own, since the
+    // source rewrites the frame's at its next capture while the measure may still run: every dynamic slot's transform,
+    // each copy's root matrix and frame slot (beside its layout, m_copyLayout), and the first copy's root slot.
+    private DynamicTransform[] m_slotPoses = [];
+    private CopyPose[] m_copyPoses = [];
+    private int m_firstCopyRoot = int.MaxValue;
+
+    private readonly record struct CopyPose(Matrix4x4 Matrix, int FrameSlot);
+
+    // The measure's lane, which runs one measure a frame beside the rest of the frame (PostMeasure), whether a measure is
+    // posted and not yet joined, and the gate both of those move under, which any thread may take to join.
+    //
+    // Invariant: while a measure is posted, nothing but the measure reads or writes the demand watch's state (the groups'
+    // DemandPixel, Watch, FrustumWatch and demand marks, the attention list, the queues and frustum watches, and the
+    // priority share's sweep and hole counts, Prioritize) or changes what it reads (the group list, the copy index, the
+    // frame inputs copied above, the demand points). Enforced by the
+    // joins at the doors that change them: PrepareFrame, the demand points' own doors (SdfMeshDemand.BeforeChange), the
+    // reports that read the watch, and Retire; the group list throws on a change while frozen (GroupList.Frozen), and
+    // DemandPixel throws when read or written off the measure while one is posted (ThrowIfMeasuring). The measure takes
+    // no gate, so the frame's later entries (Pending, the take, ServeAhead, the dress) never wait on it. Workers write
+    // none of the watch's state; the one group flag they move that the measure reads, Retired, only ever turns on, and a
+    // measure that reads it late measures a retired group, which the next decision drops.
+    private readonly Lock m_measureGate = new();
+    private JobLane? m_measureLane;
+    private DemandMeasure? m_measure;
+    private bool m_measurePosted;
+    private bool m_measureRetired;
+    [ThreadStatic] private static bool ThreadMeasuring;
+
+    private static readonly WaitReason MeasureWait = new(Subsystem: "sdf.bake", WaitsFor: "the demand measure");
+
+    // One frame's demand measure and the groups' share of priorities (Prioritize), run on the bake's measure lane.
+    private sealed class DemandMeasure(SdfMeshPathBake owner) : IJobLaneUnit {
+        public void Run() {
+            ThreadMeasuring = true;
+            try {
+                owner.MeasureDemands();
+                owner.Prioritize();
+            } finally { ThreadMeasuring = false; }
+        }
+    }
+
+    // Hands the frame's demand measure to the measure lane once the frame's tier decision has read the one before; it
+    // runs while the frame is dressed, packed and recorded, and the next PrepareFrame joins it. A retired bake measures
+    // on the caller's thread. Under the gate, on the frame's thread.
+    private void PostMeasure() {
+        lock (m_measureGate) {
+            if (m_measurePosted) { throw new InvalidOperationException(message: "A demand measure is posted already; PrepareFrame joins it before posting the next."); }
+            if (Demand.BeforeChange is null) {
+                Demand.BeforeChange = JoinMeasure;
+            } else if (!ReferenceEquals(objA: Demand.BeforeChange.Target, objB: this)) {
+                throw new InvalidOperationException(message: "Another bake measures by these demand points.");
+            }
+            if (m_measureRetired) {
+                MeasureDemands();
+                Prioritize();
+                return;
+            }
+            m_measureLane ??= new JobLane(name: ("Puck demand measure: " + Residency), priority: JobPool.WorkerPriority);
+            m_measureLane.Post(unit: (m_measure ??= new DemandMeasure(owner: this)));
+            m_measurePosted = true;
+            m_groups.Frozen = true;
+        }
+    }
+    // Waits for the posted demand measure, if any, and takes it: what it read may change and what it wrote may be read
+    // once this returns. Rethrows what the measure threw. Any thread.
+    private void JoinMeasure() {
+        lock (m_measureGate) {
+            if (!m_measurePosted) { return; }
+
+            var lane = m_measureLane!;
+            var outcome = WaitOutcome.DeadlinePassed;
+
+            if (!lane.Ready) { SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.DemandJoinWaits); }
+            try {
+                outcome = lane.Collect(deadline: WaitDeadline.Synchronous(), reason: in MeasureWait);
+            } finally {
+                // A measure that threw is collected too: the lane is free, and the throw reaches the caller.
+                if ((outcome == WaitOutcome.Completed) || !lane.InFlight) {
+                    m_measurePosted = false;
+                    m_groups.Frozen = false;
+                }
+            }
+            if (outcome == WaitOutcome.DeadlinePassed) { HostWaits.ThrowIfPending(pending: MeasureWait); }
+        }
+    }
+    // Joins the measure and stops its lane for a bake retired: a frame prepared after measures on its own thread.
+    private void RetireMeasure() {
+        JoinMeasure();
+        lock (m_measureGate) {
+            m_measureRetired = true;
+            m_measureLane?.Dispose();
+            m_measureLane = null;
+        }
+    }
+    // Throws when the demand watch's state is touched off the measure while a measure is posted (the invariant above).
+    private void ThrowIfMeasuring() {
+        if (m_groups.Frozen && !ThreadMeasuring) { throw new InvalidOperationException(message: "The demand watch is read and written only by the posted measure until PrepareFrame joins it."); }
+    }
+
+    // Copies what the demand reads of the frame into the bake's own (m_slotPoses, m_copyPoses), in proportion to what
+    // moved: the slots the moved-transform journal names since the last prepared frame, and the copies the copy journal
+    // names or whose root slot moved; every slot or copy when a journal cannot prove its window or the layout is new.
+    // Under the gate, on the frame's thread, after the copy layout is compared (SameCopyLayout) and indexed.
+    private void CopyFrameInputs(SdfFrame frame, bool reindexed) {
+        var transforms = frame.DynamicTransforms;
+        var slots = transforms.Count;
+        var slotsWhole = m_demandSlotCursor.Collect(frame.MovedTransforms?.Changes, frame.MovedTransformsSerial, transforms, slots, 0, m_demandSlots);
+
+        m_demandSlotCursor.Commit();
+        m_demandSlotsWhole = slotsWhole;
+        if (m_slotPoses.Length != slots) {
+            m_slotPoses = ((slots == 0) ? [] : new DynamicTransform[slots]);
+            slotsWhole = true;
+        }
+        if (slotsWhole) {
+            CopySlots(start: 0, end: slots);
+        } else {
+            for (var run = 0; (run < m_demandSlots.Count); run++) {
+                CopySlots(start: m_demandSlots.Start(index: run), end: Math.Min(val1: slots, val2: (m_demandSlots.Start(index: run) + m_demandSlots.Length(index: run))));
+            }
+        }
+
+        var copies = frame.MeshInstances;
+        var count = copies.Count;
+        var copiesWhole = (reindexed || m_copiesWhole || (m_copyPoses.Length != count));
+
+        if (m_copyPoses.Length != count) { m_copyPoses = ((count == 0) ? [] : new CopyPose[count]); }
+        m_firstCopyRoot = ((count > 0) ? copies[0].FrameSlot : int.MaxValue);
+        if (count == 0) { return; }
+        if (copiesWhole) {
+            CopyCopies(start: 0, end: count);
+            return;
+        }
+        for (var run = 0; (run < m_copyRuns.Count); run++) {
+            CopyCopies(start: m_copyRuns.Start(index: run), end: Math.Min(val1: count, val2: (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run))));
+        }
+        // A moving copy's pose moves its root slot and no revision, so the copy journal never names it.
+        if (slotsWhole) {
+            CopyCopies(start: 0, end: count);
+            return;
+        }
+        for (var run = 0; (run < m_demandSlots.Count); run++) {
+            var first = Math.Max(val1: m_demandSlots.Start(index: run), val2: m_firstCopyRoot);
+            var end = Math.Min(val1: (m_demandSlots.Start(index: run) + m_demandSlots.Length(index: run)), val2: (m_firstCopyRoot + count));
+
+            CopyCopies(start: (first - m_firstCopyRoot), end: (end - m_firstCopyRoot));
+        }
+
+        void CopySlots(int start, int end) {
+            if (end <= start) { return; }
+            if (transforms is DynamicTransform[] array) {
+                array.AsSpan(start: start, length: (end - start)).CopyTo(destination: m_slotPoses.AsSpan(start: start));
+                return;
+            }
+            for (var slot = start; (slot < end); slot++) { m_slotPoses[slot] = transforms[slot]; }
+        }
+        void CopyCopies(int start, int end) {
+            for (var copy = start; (copy < end); copy++) {
+                var instance = copies[copy];
+
+                m_copyPoses[copy] = new CopyPose(FrameSlot: instance.FrameSlot, Matrix: instance.Matrix);
+            }
+        }
+    }
     // One more each time a measure moves a group's tier one half rung finer than the bias asks, which the bytes that
     // tier would name (Retier's finer figure) are cached against.
     private long m_finerDemandRevision;
@@ -236,16 +406,14 @@ public sealed partial class SdfMeshPathBake {
         public SdfMeshDemand.Bounds Bounds;
     }
 
-    // Measures again the groups whose demand may have moved since the last frame, as the header says. Under the gate,
-    // on the frame's thread.
-    private void MeasureDemands(SdfFrame frame) {
+    // Measures again the groups whose demand may have moved since the frame before, as the header says, from the inputs
+    // the frame copied into the bake's own (CopyFrameInputs). On the measure's lane, outside the gate (PostMeasure).
+    private void MeasureDemands() {
         var clocks = Clocks();
         var bias = Volatile.Read(location: ref m_bias);
         var changes = Demand.TakeChanges(overflowed: out var overflowed);
-        var slotsWhole = m_demandSlotCursor.Collect(frame.MovedTransforms?.Changes, frame.MovedTransformsSerial, frame.DynamicTransforms,
-            frame.DynamicTransforms.Count, 0, m_demandSlots);
+        var slotsWhole = m_demandSlotsWhole;
 
-        m_demandSlotCursor.Commit();
         m_framedDue.Clear();
         m_watches.Follow(demand: Demand, lost: m_framedDue);
         if (overflowed) {
@@ -278,7 +446,8 @@ public sealed partial class SdfMeshPathBake {
         foreach (var group in m_framedDue) { _ = Measure(group: group); }
         // The copies' root slots follow the program's in copy order (SdfCompositionFrameSource seats each at its place), so
         // a moved slot past the first copy's root names that copy.
-        var firstRoot = ((m_demandCopies.Count > 0) ? m_demandCopies[0].FrameSlot : int.MaxValue);
+        var firstRoot = m_firstCopyRoot;
+        var copyCount = m_copyPoses.Length;
 
         if (slotsWhole) {
             // The window was lost: every dynamic group reads its own drift, as a moved slot's would.
@@ -301,8 +470,8 @@ public sealed partial class SdfMeshPathBake {
                     }
                     // A moving copy's pose moves its root slot and no revision, so the copy journal never names it: the
                     // shared geometry it carries is measured where it now stands.
-                    if ((slot >= firstRoot) && ((slot - firstRoot) < m_demandCopies.Count) && (m_demandCopies[slot - firstRoot] is { IsDynamic: true } moving) && (moving.FrameSlot == slot)) {
-                        MeasureCopy(copy: moving);
+                    if ((slot >= firstRoot) && ((slot - firstRoot) < copyCount) && m_copyLayout[slot - firstRoot].IsDynamic && (m_copyPoses[slot - firstRoot].FrameSlot == slot)) {
+                        MeasureCopy(copy: (slot - firstRoot));
                     }
                 }
             }
@@ -318,9 +487,9 @@ public sealed partial class SdfMeshPathBake {
             }
         } else {
             for (var run = 0; (run < m_copyRuns.Count); run++) {
-                var end = Math.Min(val1: (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run)), val2: m_demandCopies.Count);
+                var end = Math.Min(val1: (m_copyRuns.Start(index: run) + m_copyRuns.Length(index: run)), val2: copyCount);
 
-                for (var index = m_copyRuns.Start(index: run); (index < end); index++) { MeasureCopy(copy: m_demandCopies[index]); }
+                for (var index = m_copyRuns.Start(index: run); (index < end); index++) { MeasureCopy(copy: index); }
             }
         }
         if (!overflowed && (changes.Count > 0)) {
@@ -428,13 +597,15 @@ public sealed partial class SdfMeshPathBake {
         SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.DemandChanged, amount: changed);
 
         // Measures the groups that carry a copy's geometry: its template range's, or its asset slots'.
-        void MeasureCopy(SdfMeshInstance copy) {
-            if (copy.TemplateRange is { } range) {
+        void MeasureCopy(int copy) {
+            var layout = m_copyLayout[copy];
+
+            if (layout.TemplateRange is { } range) {
                 for (var instance = 0; (instance < range.InstanceCount); instance++) { MeasureOwners(dynamic: false, key: (range.FirstInstance + instance)); }
                 return;
             }
-            MeasureOwners(dynamic: true, key: copy.AssetSlot);
-            foreach (var slot in copy.OtherAssetSlots) { MeasureOwners(dynamic: true, key: slot); }
+            MeasureOwners(dynamic: true, key: layout.AssetSlot);
+            foreach (var slot in layout.OtherAssetSlots) { MeasureOwners(dynamic: true, key: slot); }
         }
         void MeasureOwners(bool dynamic, int key) {
             for (var index = m_groups.FirstOf(dynamic: dynamic, key: key); (index >= 0); index = m_groups.NextOf(index: index)) {
@@ -710,7 +881,7 @@ public sealed partial class SdfMeshPathBake {
     // A shared geometry's box, given in its own frame, where one of the frame's copies carries it: the world-axis box about
     // the carried one, and the copy's scale, the units its pixels are read in.
     private (Vector3 Center, Vector3 Half, float Units) CopyBox(Vector3 center, Vector3 half, int copy) {
-        var matrix = m_demandCopies[copy].Matrix;
+        var matrix = m_copyPoses[copy].Matrix;
         var (boxCenter, boxHalf) = TransformBox(center: center, half: half, matrix: matrix);
 
         return (boxCenter, boxHalf, MathF.Max(x: 1.0e-6f, y: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length()));

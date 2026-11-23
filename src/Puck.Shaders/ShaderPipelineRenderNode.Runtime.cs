@@ -142,14 +142,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public uint Height = extent.Height;
         public readonly ShaderPipelineDimensions? Dimensions = planned.Extent;
         public readonly ShaderPipelineParameterLayout ParametersLayout = planned.Parameters;
-        public ShaderPipelineParameterValues Parameters = (planned.Parameters.TryBind(
-            config: null,
-            reason: out _,
-            values: out var values
-        )
-            ? values
-            : throw new InvalidDataException(message: $"Invalid parameters for pass {planned.Name}.")
-        );
+        public ShaderPipelineParameterValues Parameters = planned.Parameters.Defaults;
 
         // A document pass's frame set per slot, null for a package pass, whose recorder binds its own sets; every pass's pass
         // block region; and where each of a document pass's ports binds in its pass group.

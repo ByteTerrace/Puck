@@ -175,6 +175,10 @@ public sealed class SdfMeshDemand {
     }
 
     private readonly List<Change> m_taken = [];
+    // What every change of the points waits for first: the one bake that measures by them, whose measure reads them off
+    // the frame's thread until it is joined (SdfMeshPathBake.JoinMeasure). Observe and Place are the only doors that
+    // change the points, so a measure never reads them mid-change.
+    internal Action? BeforeChange { get; set; }
     // The points in lanes (Lanes), and one more each time they change, which a kept read (BoxRead) is keyed by.
     private PointLanes m_lanes = new(capacity: 0);
     private long m_version;
@@ -194,6 +198,7 @@ public sealed class SdfMeshDemand {
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     public void Observe(SdfFrame frame, uint height) {
         ArgumentNullException.ThrowIfNull(argument: frame);
+        BeforeChange?.Invoke();
 
         var views = frame.Views;
         var count = 0;
@@ -390,6 +395,7 @@ public sealed class SdfMeshDemand {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tanHalfFieldOfView"/> is not positive.</exception>
     public void Place(Vector3 eye, uint height, float tanHalfFieldOfView) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: tanHalfFieldOfView);
+        BeforeChange?.Invoke();
 
         EnsureCapacity(Count + 1);
         m_points[Count] = eye;

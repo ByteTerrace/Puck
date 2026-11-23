@@ -1342,11 +1342,14 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         );
 
         foreach (var current in next) {
+            if (!oldByName.TryGetValue(key: current.Name, value: out var old)) { continue; }
+            // The values are immutable (a write replaces the record, TrySetConfig), so the new pass shares the old
+            // pass's. A plan that kept the pass's layout keeps them whole; only a replaced layout is compared.
+            if (ReferenceEquals(objA: old.ParametersLayout, objB: current.ParametersLayout)) {
+                current.Parameters = old.Parameters;
+                continue;
+            }
             if (
-                !oldByName.TryGetValue(
-                key: current.Name,
-                value: out var old
-            ) ||
                 (old.ParametersLayout.SizeBytes != current.ParametersLayout.SizeBytes) ||
                 (old.ParametersLayout.Slots.Count != current.ParametersLayout.Slots.Count)
             ) {
@@ -1374,10 +1377,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 node2: current.ParametersLayout.JsonSchema()
             )
             ) {
-                current.Parameters = new ShaderPipelineParameterValues(
-                    old.Parameters.Config,
-                    old.Parameters.Bytes.ToArray()
-                );
+                current.Parameters = old.Parameters;
             }
         }
     }
