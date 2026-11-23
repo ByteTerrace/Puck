@@ -347,9 +347,14 @@ public sealed partial class SdfWorldTables : IDisposable {
             byteCount: ((DecalBufferCells * DecalWordsPerCell) * sizeof(uint)),
             region: DecalRegionIndex
         ));
-        // Reserved before it is created, so the ledger admits the region's first buffer against the grant.
+        // Reserved before it is created, so the ledger admits the region's first buffer against the grant: the draw
+        // record, which a mapped region backs a whole chunk for. The floor is what the residency cannot draw without, so
+        // a full pool admits it past its limit and the selector coarsens the residencies already drawing, rather than
+        // refusing this one its existence.
         m_meshGrant = scope.Own(created: (options.Selector ?? SdfResidencySelector.Of(device: device)).Register(name: ObjectOwner));
-        m_meshGrant.Created(capacityBytes: SdfMeshRegion.DrawBytes);
+        m_meshGrant.Created(capacityBytes: ((gpu.BufferFactory.MappedChunkBytes is var chunk and > 0UL)
+            ? ((long)MeshRegionGrownBytes(mappedChunkBytes: ((long)chunk), needBytes: SdfMeshRegion.DrawBytes))
+            : SdfMeshRegion.DrawBytes));
         m_meshRegion = scope.Own(created: CreateRegion(
             byteCount: SdfMeshRegion.DrawBytes,
             region: MeshRegionIndex

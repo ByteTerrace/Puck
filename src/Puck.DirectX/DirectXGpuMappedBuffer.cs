@@ -82,7 +82,27 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     /// <inheritdoc/>
     public GpuBufferPages Pages { get; }
     /// <inheritdoc/>
-    public ulong ChunkBytes => (ChunkTiles * TileBytes);
+    public ulong ChunkBytes => MappingBytes;
+
+    // The bytes one mapping covers, every reserved buffer's alike.
+    private const ulong MappingBytes = (ChunkTiles * TileBytes);
+
+    /// <summary>Returns whether a device creates reserved buffers (<see cref="TryCreate"/>): reserved resources at tier
+    /// 2 or above, since tier 1 leaves an unmapped tile's reads undefined.</summary>
+    /// <param name="context">The device context.</param>
+    /// <returns><see langword="true"/> when <see cref="TryCreate"/> creates a buffer on the device.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+    public static bool IsSupported(DirectXDeviceContext context) {
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        return ((context.Capabilities?.ReservedResourcesTier ?? 0U) >= 2U);
+    }
+    /// <summary>Returns the bytes one mapping of a reserved buffer on a device covers (<see cref="ChunkBytes"/>), or
+    /// zero where the device creates none (<see cref="IsSupported"/>).</summary>
+    /// <param name="context">The device context.</param>
+    /// <returns>The bytes, or zero.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+    public static ulong ChunkBytesOn(DirectXDeviceContext context) => (IsSupported(context: context) ? MappingBytes : 0UL);
     /// <inheritdoc/>
     public ulong MappedBytes => m_mapped;
     /// <inheritdoc/>
@@ -104,7 +124,7 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
 
         var device = ((ID3D12Device*)context.Device.Handle);
 
-        if ((context.Capabilities?.ReservedResourcesTier ?? 0U) < 2U) {
+        if (!IsSupported(context: context)) {
             return null;
         }
 

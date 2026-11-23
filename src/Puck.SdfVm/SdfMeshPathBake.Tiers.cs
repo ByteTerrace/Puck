@@ -669,7 +669,7 @@ public sealed partial class SdfMeshPathBake {
         group.InheritLive(from: old);
         if ((Library.Policy == SdfMeshCachePolicy.Stored) && !group.Live && !Stores(group: group, identity: Identity.Value)) {
             Library.Cache.Count(kind: SdfMeshCache.RungsMissed);
-            SdfMeshBakeReport.RungMissed(asked: group.Tier, drawn: old.Tier, dynamic: group.Dynamic, residency: Residency, selector: group.Selector, shape: group.Shape);
+            SdfMeshBakeReport.RungMissed(drawn: old.Tier, first: group.FirstDetail, group: group, residency: Residency);
             old.RetierRefused = true;
             group.Retired = true;
             return TierStart.None;

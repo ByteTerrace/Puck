@@ -632,6 +632,7 @@ file sealed class CountingBufferFactory(IGpuBufferFactory inner, GpuWorkLedger l
         ((inner.TryCreateMapped(name: name, reservedBytes: reservedBytes, usage: usage) is { } mapped)
             ? Created(created: mapped, lifetimeIndex: GpuWork.BuffersCreatedIndex)
             : null);
+    public ulong MappedChunkBytes => inner.MappedChunkBytes;
     public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) =>
         WrapHostVisible(buffer: inner.CreateHostVisible(
             name: name,

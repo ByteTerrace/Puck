@@ -421,13 +421,24 @@ internal static class SdfMeshBakeReport {
     /// <summary>Writes the line for a tier a bake that draws stored tiers alone asked and the store lacked
     /// (<see cref="SdfMeshCache.RungsMissed"/>), naming the group so the cache's producer can be asked why.</summary>
     /// <param name="residency">The residency's name.</param>
-    /// <param name="selector">The group's selector.</param>
-    /// <param name="dynamic">Whether the group bakes in its slot's frame.</param>
-    /// <param name="asked">The tier asked.</param>
+    /// <param name="group">The group as planned at the tier asked: its selector, shape (which every tier of it shares),
+    /// geometry, the frame inputs that geometry reads, and whether the tier is the first detail of a floor planned on
+    /// arrival or a plan's own tier.</param>
     /// <param name="drawn">The tier drawn in its place.</param>
-    /// <param name="shape">The group's shape, which every tier of it shares.</param>
-    public static void RungMissed(string residency, int selector, bool dynamic, int asked, int drawn, UInt128 shape) =>
-        Say(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] rung-missed residency={residency} group={selector} {(dynamic ? "dynamic" : "static")} shape={shape:x32} asked={asked} drawn={drawn}"));
+    /// <param name="first">Whether the tier asked is a floor's first detail.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="group"/> is <see langword="null"/>.</exception>
+    public static void RungMissed(string residency, SdfMeshBakeGroup group, int drawn, bool first) {
+        ArgumentNullException.ThrowIfNull(argument: group);
+
+        var geometry = group.Geometry;
+        var reads = string.Join(separator: ",", values: new[] {
+            ((!group.Dynamic && geometry.ReadsSlots) ? "poses" : null),
+            (geometry.ReadsOperands ? "operands" : null),
+            (geometry.ReadsSampled ? "sampled" : null),
+        }.Where(predicate: static read => (read is not null)));
+
+        Say(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] rung-missed residency={residency} group={group.Selector} {(group.Dynamic ? "dynamic" : "static")} shape={group.Shape:x32} geometry={group.Sealed.Hash:x32} reads={((reads.Length == 0) ? "none" : reads)} {(first ? "first-detail" : "plan")} asked={group.Tier} drawn={drawn} tiers={group.FinestTier}-{group.CoarsestTier}"));
+    }
     /// <summary>Writes the line for a group whose store entry the store refused.</summary>
     /// <param name="selector">The group's selector.</param>
     /// <param name="refusal">Why.</param>
