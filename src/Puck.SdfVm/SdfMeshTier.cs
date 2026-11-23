@@ -56,8 +56,9 @@ public static class SdfMeshTier {
     public const int MaxBias = 16;
     /// <summary>The frames the meshes a residency's demand would name half a rung finer must have fit its mesh region's
     /// budget before its bake takes one half rung of bias back; the wait doubles each time the budget presses again
-    /// soon after.</summary>
-    public const int BiasQuietFrames = 600;
+    /// soon after. A bias coarsens every group it reaches, down to a few cells of each, so it is given back within
+    /// seconds of the room returning, and the doubling is what holds a budget that stays short.</summary>
+    public const int BiasQuietFrames = 120;
     /// <summary>The eighths of the mesh region's limit a residency's bake budgets its meshes to; the rest is the room a
     /// replacement lands in beside the mesh it replaces.</summary>
     public const int BudgetEighths = 7;
@@ -90,20 +91,52 @@ public static class SdfMeshTier {
     /// <param name="pixel">The metres one display pixel covers at the group's box from the finest demand point; infinity
     /// with no demand point, which demands <see cref="Last"/>.</param>
     /// <returns>The tier.</returns>
-    public static int Of(float pixel) => (float.IsFinite(f: pixel) ? Floor(spacing: (PixelShare * pixel)) : Last);
+    public static int Of(float pixel) => (float.IsFinite(f: pixel) ? SpacingFloor(spacing: (PixelShare * pixel)) : Last);
     /// <summary>Returns the finest tier that changes a group's mesh: the rung at or under the finest spacing any of its
     /// members asks, since a finer rung floors nothing.</summary>
     /// <param name="spacing">The finest spacing the group's refinement aims for, in metres.</param>
     /// <returns>The tier.</returns>
-    public static int Finest(float spacing) => Floor(spacing: spacing);
-    /// <summary>Returns the coarsest tier that changes a group's mesh: the first rung at or past the final lattice's own
-    /// cell, where every refinement factor is one.</summary>
+    public static int Finest(float spacing) => SpacingFloor(spacing: spacing);
+    /// <summary>The fewest cells a group's coarsest rung spans along its longest extent: with fewer no lattice edge lies
+    /// inside the box, and the contour closes no surface about the group. The ladder's rungs double, so the coarsest
+    /// rung's cell fits from this many to twice as many times.</summary>
+    public const int CoarsestCells = 2;
+    /// <summary>The fewest samples a lattice past a group's floor takes along its longest axis: the corners of
+    /// <see cref="CoarsestCells"/> cells.</summary>
+    public const int CoarsestSamples = (CoarsestCells + 1);
+
+    /// <summary>Returns a group's floor tier: the first rung at or past its unrefined final lattice's own cell, where
+    /// every refinement factor is one. A group arriving with nothing to draw plans it first and keeps it beside a finer
+    /// one (<see cref="SdfMeshPathBake"/>'s floor). It is the last rung the group's refinement decides: past it a tier
+    /// coarsens the lattice itself (<see cref="LatticeSamples"/>), down to <see cref="Coarsest"/>.</summary>
     /// <param name="longestExtent">The longest extent of the group's planned box, in metres.</param>
     /// <returns>The tier.</returns>
-    public static int Coarsest(float longestExtent) {
+    public static int Floor(float longestExtent) {
         var cell = MathF.Max(x: SdfMeshPathBake.MinimumCell, y: (longestExtent / (SdfWorldPackage.MeshBakeMaxSamplesPerAxis - 1)));
 
         return Math.Clamp(value: ((int)MathF.Ceiling(x: MathF.Log2(x: (cell / BaseCell)))), min: 0, max: Last);
+    }
+    /// <summary>Returns the coarsest tier that changes a group's mesh: the last rung whose cell fits
+    /// <see cref="CoarsestCells"/> times along the group's longest extent, never finer than its floor
+    /// (<see cref="Floor"/>). Each rung between the two halves the lattice's samples along every axis, so a group a view
+    /// resolves at a few pixels holds a few cells, and the one bias has a rung to coarsen to at any distance.</summary>
+    /// <param name="longestExtent">The longest extent of the group's planned box, in metres.</param>
+    /// <returns>The tier.</returns>
+    public static int Coarsest(float longestExtent) =>
+        Math.Max(val1: Floor(longestExtent: longestExtent), val2: SpacingFloor(spacing: (longestExtent / CoarsestCells)));
+    /// <summary>Returns the samples a group's final lattice takes along its longest axis at a tier: the unrefined
+    /// lattice's own (<paramref name="most"/>) at or under the group's floor, and past it the corners of the cells the
+    /// tier's cell fits along the extent, never fewer than <see cref="CoarsestSamples"/>.</summary>
+    /// <param name="longestExtent">The longest extent of the box the lattice spans, in metres: the group's box as its
+    /// bake has narrowed it.</param>
+    /// <param name="tier">The tier the group bakes at.</param>
+    /// <param name="floor">The group's floor tier (<see cref="Floor"/> of its planned box).</param>
+    /// <param name="most">The samples of the unrefined lattice along its longest axis.</param>
+    /// <returns>The samples, at most <paramref name="most"/>.</returns>
+    public static int LatticeSamples(float longestExtent, int tier, int floor, int most) {
+        if (tier <= floor) { return most; }
+
+        return Math.Clamp(value: (((int)MathF.Ceiling(x: (longestExtent / Cell(tier: tier)))) + 1), min: Math.Min(val1: CoarsestSamples, val2: most), max: most);
     }
     /// <summary>Returns how far a demand pixel may move before the tier it demands under a bias, held to a group's rungs,
     /// changes: its distance to the nearer edge of the band of pixels that demand the same held tier
@@ -146,7 +179,7 @@ public static class SdfMeshTier {
 
     // The coarsest tier whose cell is at most a spacing (the exponent of its ratio to the base cell, exact where a
     // rounded logarithm can land on the rung above); zero for a spacing under the base cell or none.
-    private static int Floor(float spacing) =>
+    private static int SpacingFloor(float spacing) =>
         (((spacing > 0f) && float.IsFinite(f: spacing)) ? Math.Clamp(value: MathF.ILogB(x: (spacing / BaseCell)), min: 0, max: Last) : 0);
     // The square root of two to a bias, from zero to MaxBias half rungs: what a bias scales a pixel by (Biased).
     private static readonly float[] BiasScales = [.. Enumerable.Range(start: 0, count: (MaxBias + 1)).Select(selector: static halfRungs => MathF.Pow(x: 2f, y: (0.5f * halfRungs)))];

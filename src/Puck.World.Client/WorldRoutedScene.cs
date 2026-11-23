@@ -243,9 +243,27 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
             });
         }
         // The scene's one frame, written again for each capture from the emitter's, which the emitter writes again too.
-        _ = m_frameWriter.Write(content: in content, settings: frame.Settings);
+        _ = m_frameWriter.Write(content: in content, settings: Interest(settings: frame.Settings));
 
         return m_emitter.TakeLevers(frame: m_frameWriter, height: height, host: host, views: m_frameViews, width: width);
+    }
+
+    // Puts the frame under the interest its views show: a scene a seat is presented in fills the display, and one shown
+    // through windows alone is weighed by the largest window and measures the irradiance levels the window reading the
+    // most reads, so a world behind a small or unseen glass draws on the presentation's background work and lights
+    // itself by that glass, never as though it filled the display.
+    private SdfFrameSettings Interest(SdfFrameSettings settings) {
+        if ((m_latchedSeatCount != 0) || (m_latchedWindows.Count == 0)) { return settings; }
+
+        var share = 0f;
+        var levels = -1;
+
+        foreach (var window in m_latchedWindows) {
+            share = MathF.Max(x: share, y: window.DisplayShare);
+            levels = (((window.IndirectLevels <= 0) || (levels == 0)) ? 0 : Math.Max(val1: levels, val2: window.IndirectLevels));
+        }
+
+        return (settings with { DisplayShare = share, IndirectLevels = levels });
     }
 
     private readonly SdfFrame.Writer m_frameWriter = new();
@@ -368,6 +386,13 @@ public sealed class WorldRoutedWindow : IDisposable {
     /// <summary>Gets or sets how the window dresses the world's default projection it renders while <see cref="View"/> is
     /// <see langword="null"/>, or <see langword="null"/> to render it as the emitter framed it.</summary>
     public Func<SdfViewSnapshot, SdfViewSnapshot>? FallbackResolution { get; set; }
+    /// <summary>Gets or sets the share of the display's pixels the window is presented over, in [0, 1]: zero for one no
+    /// view shows, and one, the default, while unmeasured. Its holder sets it with <see cref="View"/>; a scene shown
+    /// through windows alone is weighed by the largest (<see cref="SdfFrame.DisplayShare"/>).</summary>
+    public float DisplayShare { get; set; } = 1f;
+    /// <summary>Gets or sets how many of the world's irradiance-volume levels the window's view reads, counted from the
+    /// coarsest (<see cref="SdfFrame.IndirectLevels"/>); zero, the default, reads every level.</summary>
+    public int IndirectLevels { get; set; }
 
     /// <summary>Detaches the window from its scene; the scene's later windows move down at the next presenter latch.</summary>
     public void Dispose() {

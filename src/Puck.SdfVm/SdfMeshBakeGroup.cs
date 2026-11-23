@@ -165,9 +165,15 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// <summary>Gets the finest tier that changes the group's mesh: the rung at or under the finest spacing any member
     /// asks (<see cref="SdfMeshTier.Finest"/>).</summary>
     public int FinestTier { get; private set; }
-    /// <summary>Gets the coarsest tier that changes the group's mesh: the first rung at or past its planned final
-    /// lattice's cell (<see cref="SdfMeshTier.Coarsest"/>).</summary>
+    /// <summary>Gets the coarsest tier that changes the group's mesh: the last rung whose cell still fits a few times
+    /// along its planned box (<see cref="SdfMeshTier.Coarsest"/>), at or past <see cref="FloorTier"/>.</summary>
     public int CoarsestTier { get; private set; }
+    /// <summary>Gets the group's floor tier: the first rung at or past its unrefined final lattice's cell
+    /// (<see cref="SdfMeshTier.Floor"/>). A tier past it coarsens the lattice itself.</summary>
+    public int FloorTier { get; private set; }
+    /// <summary>Gets whether the group bakes at or past its floor tier, so its own product is its floor and it holds no
+    /// finer detail than one.</summary>
+    public bool AtFloor => (Tier >= FloorTier);
     /// <summary>Gets the cell the bake's lettering stroke rule thickens the group's glyphs to (<c>sdfGlyph</c>): its
     /// tier's cell (<see cref="SdfMeshTier.Cell"/>) for a group holding a glyph, which every lattice of the group carries
     /// (<see cref="SdfMeshBakeRequest.Glyphs"/>), so its coarse and fine samples read one field; zero for any other
@@ -544,9 +550,11 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         if (Glyphs is { Detail: > 0f } glyphs) { finest = MathF.Min(x: finest, y: glyphs.Detail); }
 
         var extent = (High - Low);
+        var longest = MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z));
 
         FinestTier = SdfMeshTier.Finest(spacing: finest);
-        CoarsestTier = SdfMeshTier.Coarsest(longestExtent: MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z)));
+        FloorTier = SdfMeshTier.Floor(longestExtent: longest);
+        CoarsestTier = SdfMeshTier.Coarsest(longestExtent: longest);
         // Read before the tier is asked: the planner decides a group's first tier by whether its shape is new.
         Shape = Geometry.Form;
         Tier = SdfMeshTier.Clamp(coarsest: CoarsestTier, finest: FinestTier, tier: (tier?.Invoke(arg: this) ?? 0));

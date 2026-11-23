@@ -4,10 +4,12 @@ using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
 
 namespace Puck.SdfVm;
 
-// The floor: each group's mesh at its coarsest tier (SdfMeshTier.Coarsest), which a group arriving with nothing to draw
+// The floor: each group's mesh at its floor tier (SdfMeshTier.Floor), which a group arriving with nothing to draw
 // plans first (Tiers, Arrives) and keeps with its own claim while a finer tier draws (Group.KeptFloor), named ahead of
 // the draws so its words stay in the mesh region (ServeAhead). A finer tier the region refuses under its limit is
-// evicted to that floor at once (Evict), which then takes its detail back only through the budget.
+// evicted to that floor at once (Evict), which then takes its detail back only through the budget. A group whose
+// demand asks a tier past its floor (SdfMeshBakeGroup.AtFloor) draws that coarser lattice and keeps no floor beside
+// it: its own product is the coarsest thing it shows.
 //
 // The invariant: a group in reach either draws a mesh whose words stand, or is counted as a hole (ObserveResidency, with Prioritize's count of those still bringing a first mesh). The one
 // door every drawn mesh passes is Group.Shown, read by the dresser through FrameAccess.MeshOf; the floor reaches it as
@@ -92,7 +94,7 @@ public sealed partial class SdfMeshPathBake {
                 program: frame.Program,
                 sampled: m_sampled,
                 stale: static _ => true,
-                tier: static _ => SdfMeshTier.Last,
+                tier: static planned => planned.FloorTier,
                 transforms: frame.DynamicTransforms
             );
 
@@ -244,10 +246,10 @@ public sealed partial class SdfMeshPathBake {
             foreach (var group in m_groups) {
                 if (group.Retired) { continue; }
 
-                var atFloor = (group.Tier == group.CoarsestTier);
+                var atFloor = group.AtFloor;
 
                 if (group.Shown is not null) {
-                    if ((group.Replaces ?? group).Tier == group.CoarsestTier) { shown++; } else if (group.KeptFloor is not null) { kept++; } else { none++; }
+                    if ((group.Replaces ?? group).AtFloor) { shown++; } else if (group.KeptFloor is not null) { kept++; } else { none++; }
                 } else if (atFloor) {
                     if (!group.Done) { pending++; } else if (group.Failed) { failed++; } else if (group.Mesh is null) { empty++; }
                 }
