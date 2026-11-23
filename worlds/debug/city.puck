@@ -265,20 +265,20 @@ vehicleRoutes(
 
 
 // The street lamps: a 4.2 m post with a lantern on each road's outer pavement and round the fountain, each a point light
-// of `cityLampLumens` lumens that the city's clock (city-day.puck) turns on from dusk to dawn: 7 along the north and
-// south of the ring and 6 along its east and west, 7 down the avenue, 15 along the cross street, 6 by the works road,
-// 10 on the quay's edge and 8 round the fountain.
+// of `cityLampLumens` lumens that the city's clock (city-day.puck) turns on from dusk to dawn: 6 along each side of the
+// ring, 7 down the avenue, 15 along the cross street, 6 by the works road, 10 on the quay's edge and 8 round the
+// fountain. No lamp stands within 6 m of x 0, where the avenue runs and a traveller walks out of the arrival frame.
 let cityLampLumens = 4500
 let cityLampSpots = concat(
-  map(range(0, 7), k => [(-36 + 12 * k), -8.5]),
-  map(range(0, 7), k => [(-36 + 12 * k), -91.5]),
+  map(range(0, 6), k => [(-30 + 12 * k), -8.5]),
+  map(range(0, 6), k => [(-30 + 12 * k), -91.5]),
   map(range(0, 6), k => [41.5, (-80 + 12 * k)]),
   map(range(0, 6), k => [-41.5, (-80 + 12 * k)]),
   map(range(0, 7), k => [6.5, (-100 - 15 * k)]),
-  map(range(0, 15), k => [(-140 + 20 * k), -123.5]),
+  map(range(0, 15), k => [(-150 + 20 * k), -123.5]),
   map(range(0, 6), k => [(46 + 20 * k), -43.5]),
-  map(range(0, 10), k => [(-40 + 20 * k), -202.5]),
-  map(range(0, 8), k => [(24 * sine(k * 0.7853981633974483)), (-50 + 24 * cosine(k * 0.7853981633974483))])
+  map(range(0, 10), k => [(-50 + 20 * k), -202.5]),
+  map(range(0, 8), k => [(24 * sine((k + 0.5) * 0.7853981633974483)), (-50 + 24 * cosine((k + 0.5) * 0.7853981633974483))])
 )
 
 // The lamps' power: on (`cityLampLumens`) from half past six in the evening to six in the morning, off by day.
