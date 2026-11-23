@@ -15,17 +15,18 @@
 // each side of the edge. `fold` is the cosine a crease's faces must turn past to be drawn at full weight, tapering to
 // none a little above it. An `uneven` ink (1, or 0 for a drafted line, which runs no noise) varies its width along the
 // line by `wobble` (0 to 1) of a noise `wobbleScale` to the metre that rides the surface, a hand's unevenness that
-// holds still as the camera moves. The line multiplies what is under it by
-// `tint`, so a dark ink keeps the hue of its surface.
+// holds still as the camera moves. The line multiplies what is under it by `tint`, so a dark ink keeps the hue of its
+// surface.
 //
 // A hatched ink adds strokes in the shade: where a directional light does not reach (past the band at `hatchThreshold`
 // over `hatchSoftness`, or in a cast shadow) the surface takes parallel strokes `hatchPitch` metres apart, widening to
-// `hatchWidth` in the deepest shade, at `hatch` of the ink's strength. Seen from afar the strokes thin out rather than
-// crowd: every other one fades as they would come closer than `hatchSpacing` display pixels, and the rest widen to
-// match, so a far wall and a near one are hatched about alike. Only a light strong enough leaves a shade worth
-// hatching: `hatchLevel` is the weight (its illuminance over pi) at which a light's shade hatches whole, so a sun
-// hatches, a moon does not, and the strokes thin out as the sun goes down. The strokes ride the surface too. Two strong directional lights from opposite sides each shade
-// what the other lights, and both shades hatch.
+// `hatchWidth` in the deepest shade, at `hatch` of the ink's strength. The strokes ride the surface, so they hold still
+// as the camera moves. Seen from afar they thin out rather than crowd: every other one fades as they would come closer
+// than `hatchSpacing` display pixels, and the rest widen to match, so a far wall and a near one are hatched about
+// alike. Only a light strong enough leaves a shade worth hatching: `hatchLevel` is the weight (its illuminance over
+// pi) at which a light's shade hatches whole, so a sun hatches, a moon does not, and the strokes thin out as the sun
+// goes down. Two strong directional lights from opposite sides each shade what the other lights, and both shades
+// hatch.
 
 import "shading"
 
