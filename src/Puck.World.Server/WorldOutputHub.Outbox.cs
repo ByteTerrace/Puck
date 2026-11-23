@@ -51,7 +51,10 @@ public sealed partial class WorldOutputHub {
     // The arrays a recorded delivery's lent memory was copied into, rented from the shared workspace arrays and returned
     // once the record is replayed. A lender (the server's snapshot arrays, a session sink's disclosure scratch, the fan-out's
     // projection) overwrites its memory when it composes its next delivery, which may come before the collect, so a
-    // record never holds a loan.
+    // record never holds a loan. Within one fan-out, every record whose entries are the same lent span shares one entries
+    // loan (its parent): the entries and their register file are held once a fan-out, and not copied at all when the
+    // lender surrenders its storage (IWorldSnapshotLender) to that loan, which every record whose entries or cells live in
+    // that storage then shares, and which returns it when its last holder is replayed.
     private sealed class Loan {
         private EntitySnapshot[] m_entries = [];
         private int m_entriesLength;
@@ -64,29 +67,77 @@ public sealed partial class WorldOutputHub {
         private int m_cuesLength;
         private WorldInputAnswer[] m_answers = [];
         private int[] m_moved = [];
+        // An entries loan: the span it holds, and the lender storage it adopted or null when it copied.
+        private ReadOnlyMemory<EntitySnapshot> m_heldEntries;
+        private WorldSnapshotStorage? m_adopted;
+        private IWorldSnapshotLender? m_lender;
+        // A record's loan that takes its entries from a shared entries loan.
+        private Loan? m_parent;
+        // The holders of this loan not yet released; it is released when the last is. Under the outbox lock.
+        private int m_holders;
 
         public long Bytes { get; private set; }
 
-        public WorldSnapshot Hold(in WorldSnapshot snapshot) {
+        // Holds a snapshot for one record. With a parent, a shared entries loan the caller has already counted this loan
+        // in (Share), the record takes its entries from the parent, and keeps as they are the entries and cells that live
+        // in the parent's adopted storage; everything else the snapshot lends is copied here.
+        public WorldSnapshot Hold(in WorldSnapshot snapshot, Loan? parent = null) {
             Bytes = 0L;
+            m_holders = 1;
+            m_parent = parent;
             return snapshot with {
-                Entries = HoldEntries(snapshot.Entries),
-                FieldCells = Hold(snapshot.FieldCells, ref m_cells),
+                Entries = ((parent is null) ? HoldEntries(snapshot.Entries) : (parent.Covers(snapshot.Entries) ? snapshot.Entries : parent.m_heldEntries)),
+                FieldCells = (((parent is not null) && parent.Covers(snapshot.FieldCells)) ? snapshot.FieldCells : Hold(snapshot.FieldCells, ref m_cells)),
                 Inputs = HoldReferences(snapshot.Inputs, ref m_inputs, out m_inputsLength),
                 SolidScales = Hold(snapshot.SolidScales, ref m_scales),
                 Cues = HoldReferences(snapshot.Cues, ref m_cues, out m_cuesLength),
                 InputAnswers = Hold(snapshot.InputAnswers, ref m_answers),
             };
         }
+        // Another record's loan holds this entries loan as its parent. Under the outbox lock.
+        public void Share() => m_holders++;
+        // Holds one entries span for a fan-out, adopting the lender's storage when the span lives there and copying it
+        // otherwise. The fan-out is its first holder.
+        public void HoldEntriesOf(in WorldSnapshot snapshot, IWorldSnapshotLender? lender) {
+            Bytes = 0L;
+            m_holders = 1;
+            if ((lender is not null) && lender.Lends(entries: snapshot.Entries)) {
+                m_adopted = lender.Surrender();
+                m_lender = lender;
+                m_heldEntries = snapshot.Entries;
+                return;
+            }
+            m_heldEntries = HoldEntries(snapshot.Entries);
+        }
+        // Whether a record's span lives in the storage this loan adopted, which no one writes until the loan returns it,
+        // so the record keeps the span as it is: the whole table, a projection sliced from it, or its cells.
+        public bool Covers<T>(ReadOnlyMemory<T> span) =>
+            (m_adopted is { } adopted) && !span.IsEmpty && MemoryMarshal.TryGetArray(memory: span, segment: out var segment) &&
+            (ReferenceEquals(objA: segment.Array, objB: adopted.Entries) || ReferenceEquals(objA: segment.Array, objB: adopted.Cells));
         public WorldStateStamp Hold(in WorldStateStamp stamp) {
             Bytes = 0L;
+            m_holders = 1;
             return stamp with { MovedRows = Hold(stamp.MovedRows, ref m_moved) };
         }
-        public void Release() {
+        // Drops one holder and, when it was the last, releases the loan and returns it, with the parent it released in
+        // turn, to the free stack. Under the outbox lock.
+        public void Unhold(Stack<Loan> free) {
+            if (--m_holders != 0) { return; }
             if (m_entriesLength > 0) { m_entries.AsSpan(0, m_entriesLength).Clear(); m_entriesLength = 0; }
             if (m_inputsLength > 0) { m_inputs.AsSpan(0, m_inputsLength).Clear(); m_inputsLength = 0; }
             if (m_cuesLength > 0) { m_cues.AsSpan(0, m_cuesLength).Clear(); m_cuesLength = 0; }
+            if (m_adopted is { } adopted) {
+                m_lender!.Return(storage: adopted);
+                m_adopted = null;
+                m_lender = null;
+            }
+            m_heldEntries = default;
             Bytes = 0L;
+            free.Push(this);
+            if (m_parent is { } parent) {
+                m_parent = null;
+                parent.Unhold(free: free);
+            }
         }
 
         // An entry lends its action-state registers as well: each entry's slice moves into one copied register array.
@@ -201,10 +252,7 @@ public sealed partial class WorldOutputHub {
                 } finally {
                     lock (m_outboxLock) {
                         foreach (var record in batch) {
-                            if (record.Loan is { } loan) {
-                                loan.Release();
-                                m_loans.Push(loan);
-                            }
+                            record.Loan?.Unhold(free: m_loans);
                         }
                         batch.Clear();
                         m_replay = batch;
@@ -255,10 +303,61 @@ public sealed partial class WorldOutputHub {
     /// <returns>The route.</returns>
     public WorldSinkRoute RouteTo(IClientSink sink, Action<Exception> fault) => new(hub: this, sink: sink, fault: fault);
 
+    // The fan-out of one snapshot on this hub: the thread delivering it, the lender whose storage the snapshot lends, and
+    // the entries loans its recorded hand-offs took, one for each distinct entries span (the whole table, a projection),
+    // which every later record of the same span in the same fan-out shares. Set and read only on the fanning-out thread
+    // (m_fanOutThread); each entries loan holds itself for the fan-out until it ends, so no collect can release one a
+    // later route still shares, and no later snapshot meets one. Sharing by span rests on the premise the interest
+    // frame's own caches rest on (WorldInterestFrame keys its images and continuity variants by span within a tick):
+    // within one fan-out, two equal spans hold equal rows. Every producer today hands a fresh array or one fixed for
+    // the tick (the tick table, the frame's projections); a producer that rewrote one scratch span for two routes in one
+    // fan-out would break it, and nothing but this note guards that.
+    private int m_fanOutThread;
+    private IWorldSnapshotLender? m_fanOutLender;
+    private readonly List<(ReadOnlyMemory<EntitySnapshot> Entries, Loan Loan)> m_fanOutEntries = [];
+
     internal void RecordSnapshot(WorldSinkRoute route, in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         var loan = RentLoan();
-        var held = loan.Hold(in snapshot);
-        Add(new Record { Kind = RecordKind.Snapshot, Route = route, Snapshot = held, Stream = stream, ArrivedAt = WorldDeliveryClock.Arrival, Loan = loan }, loan.Bytes);
+        WorldSnapshot held;
+        var bytes = 0L;
+
+        if ((m_fanOutThread == Environment.CurrentManagedThreadId) && !snapshot.Entries.IsEmpty) {
+            Loan? parent = null;
+
+            foreach (var (entries, shared) in m_fanOutEntries) {
+                if (entries.Equals(snapshot.Entries) || shared.Covers(snapshot.Entries)) { parent = shared; break; }
+            }
+            if (parent is null) {
+                parent = RentLoan();
+                parent.HoldEntriesOf(in snapshot, m_fanOutLender);
+                bytes += parent.Bytes;
+                m_fanOutEntries.Add((snapshot.Entries, parent));
+            }
+            lock (m_outboxLock) { parent.Share(); }
+            held = loan.Hold(in snapshot, parent);
+        } else {
+            held = loan.Hold(in snapshot);
+        }
+        Add(new Record { Kind = RecordKind.Snapshot, Route = route, Snapshot = held, Stream = stream, ArrivedAt = WorldDeliveryClock.Arrival, Loan = loan }, bytes + loan.Bytes);
+    }
+    // Opens a fan-out of one snapshot on the calling thread and returns what EndFanOut restores for the fan-out it nests
+    // in: the thread, the lender and how many entries loans the outer fan-out holds.
+    private (int Thread, IWorldSnapshotLender? Lender, int Held) BeginFanOut(IWorldSnapshotLender? lender) {
+        var outer = (m_fanOutThread, m_fanOutLender, m_fanOutEntries.Count);
+
+        m_fanOutThread = Environment.CurrentManagedThreadId;
+        m_fanOutLender = lender;
+
+        return outer;
+    }
+    private void EndFanOut((int Thread, IWorldSnapshotLender? Lender, int Held) outer) {
+        lock (m_outboxLock) {
+            for (var index = (m_fanOutEntries.Count - 1); (index >= outer.Held); index--) {
+                m_fanOutEntries[index].Loan.Unhold(free: m_loans);
+            }
+        }
+        m_fanOutEntries.RemoveRange(index: outer.Held, count: (m_fanOutEntries.Count - outer.Held));
+        (m_fanOutThread, m_fanOutLender) = (outer.Thread, outer.Lender);
     }
     internal void RecordState(WorldSinkRoute route, WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         Loan? loan = null;
