@@ -33,6 +33,9 @@
 // 32 onward: SDF_VIEWS_PROBE_RATE^2 - 1 extra slots of SdfViewsProbeExtraWords words, one for each pixel of the cell but the
 //     representative: words 0 to 9 as words 0 to 9 above, and word 10 the share and measured flags as in the state word. A
 //     pixel with its own gather reads its indirect light and reflection from its corners' cubes.
+// SdfViewsProbeLightsWord onward: the representative's traced-light agreement (sdfViewsLightVisibility): four words of
+//     the light bits every measured answering corner holds, four of the bits any holds, and the sum of those corners'
+//     weights as a float, summed in corner order from the weights as the record holds them.
 #ifndef PASSES_SDF_VIEWS_PROBES_HLSLI
 #define PASSES_SDF_VIEWS_PROBES_HLSLI
 #include "../shade/sdf-mesh-irradiance.hlsli"
@@ -66,6 +69,12 @@ static const uint SdfViewsProbePresent = (1u << 26u);
 static const uint SdfViewsProbeExtraShift = 29u;
 static const uint SdfViewsProbeExtraWord = 32u;
 static const uint SdfViewsProbeExtraWords = 11u;
+#if SDF_MESH_IRRADIANCE_LIGHT_WORDS != 4
+#error The record's light agreement holds a uint4 of light bits.
+#endif
+static const uint SdfViewsProbeLightsWord = (SdfViewsProbeExtraWord + (((SDF_VIEWS_PROBE_RATE * SDF_VIEWS_PROBE_RATE) - 1u) * SdfViewsProbeExtraWords));
+static const uint SdfViewsProbeLightsAnyWord = (SdfViewsProbeLightsWord + SDF_MESH_IRRADIANCE_LIGHT_WORDS);
+static const uint SdfViewsProbeLightsWeightWord = (SdfViewsProbeLightsAnyWord + SDF_MESH_IRRADIANCE_LIGHT_WORDS);
 
 // The tolerances a reused gather is held to at a receiver whose pixel spans `footprint` metres across its ray, met at
 // `cosine` (the absolute cosine between the ray and the receiver's geometric normal). In `x`, the reach it may lie from
@@ -187,68 +196,124 @@ void sdfViewsProbesStore(uint record, SdfMeshProbes probes, uint lane, bool pres
         sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, (SdfViewsProbeSkyLightWord + word))] =
             (f32tof16(skyLight[low / 3u][low % 3u]) | (f32tof16(skyLight[high / 3u][high % 3u]) << 16u));
     }
+
+    // The traced lights every measured answering corner sees and any sees, and those corners' weights summed in the order
+    // and from the values sdfMeshLightVisibility sums them in, so its answer where all agree is this sum to the bit.
+    SdfMeshProbeStages stages = sdfMeshProbeStagesOf(held);
+    uint4 all = uint4(0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
+    uint4 any = uint4(0u, 0u, 0u, 0u);
+    float weight = 0.0;
+    bool measured = false;
+
+    [loop] for (uint corner = 0u; (corner < 16u); corner++) {
+        uint address;
+        if (!sdfMeshProbeAt(held, stages, corner, address) || !((corner < 8u) ? held.measured : held.remainderMeasured)) {
+            continue;
+        }
+
+        uint4 bits = uint4(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_LIGHTS_WORD], sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_LIGHTS_WORD + 1u],
+            sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_LIGHTS_WORD + 2u], sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_LIGHTS_WORD + 3u]);
+
+        all &= bits;
+        any |= bits;
+        weight += sdfMeshProbeWeight(held, corner);
+        measured = true;
+    }
+    all = (measured ? all : uint4(0u, 0u, 0u, 0u));
+    [unroll] for (uint lightWord = 0u; (lightWord < SDF_MESH_IRRADIANCE_LIGHT_WORDS); lightWord++) {
+        sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, (SdfViewsProbeLightsWord + lightWord))] = sdfComponent(all, lightWord);
+        sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, (SdfViewsProbeLightsAnyWord + lightWord))] = sdfComponent(any, lightWord);
+    }
+    sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, SdfViewsProbeLightsWeightWord)] = asuint(weight);
 }
 #else
-// Reads the gather of `record` whose cages and weights start at its word `at` (zero, or an extra slot's first), with the
-// share and measured flags of `flags`.
-SdfMeshProbes sdfViewsProbesLoadGather(uint record, uint at, uint flags) {
-    SdfMeshProbes probes = sdfMeshProbesNone();
-
-    probes.cage = sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, at)];
-    probes.remainderCage = sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, (at + 1u))];
-    [unroll] for (uint pair = 0u; (pair < 8u); pair++) {
-        uint word = sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, (at + 2u + pair))];
-
-        probes.weight[2u * pair] = (float(word & 0xFFFFu) / 65535.0);
-        probes.weight[(2u * pair) + 1u] = (float(word >> 16u) / 65535.0);
-    }
-    probes.share = (float(flags & 0xFFFFu) / 65535.0);
-    probes.measured = ((flags & SdfViewsProbeMeasured) != 0u);
-    probes.remainderMeasured = ((flags & SdfViewsProbeRemainderMeasured) != 0u);
-    return probes;
-}
-
 // The probes a views pixel shades with, as its cell's record names them: the representative's gather, with its blended
 // cube, for the representative and every pixel compatible with it, and a pixel's own gather (the probe lookup ran it for
 // the pixel, sdfViewsProbesCompatible) for every other; none for a cell with no representative, which no pixel of the cell
-// wants (sdfViewsProbesWanted).
+// wants (sdfViewsProbesWanted). The struct carries the gather's share and measured flags and names the record words that
+// hold its cages and weights (SdfMeshProbes.record), which a reader loads where it needs them (sdfViewsProbesWhole), so
+// the views kernel keeps no corner weight live across its light walk.
 SdfMeshProbes sdfViewsProbesAt(SdfPixel p) {
-#if defined(SDF_VIEWS_OMIT_PROBES)
-    return sdfMeshProbesNone();
-#else
+    SdfMeshProbes probes = sdfMeshProbesNone();
+
+#if !defined(SDF_VIEWS_OMIT_PROBES)
     uint record = sdfViewsProbeRecord((p.pixel / SDF_VIEWS_PROBE_RATE), p.viewIndex);
     uint state = sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, SdfViewsProbeStateWord)];
 
     if ((state & SdfViewsProbePresent) == 0u) {
-        return sdfMeshProbesNone();
+        return probes;
     }
 
     uint2 corner = (p.pixel % SDF_VIEWS_PROBE_RATE);
     uint lane = ((state >> SdfViewsProbeLaneShift) & 0xFFu);
     uint place = (corner.x + (SDF_VIEWS_PROBE_RATE * corner.y));
+    uint at = 0u;
+    uint flags = state;
 
     if (place != lane) {
         uint slot = sdfViewsProbeExtraSlot(place, lane);
 
         if (((state >> (SdfViewsProbeExtraShift + slot)) & 1u) != 0u) {
-            uint at = (SdfViewsProbeExtraWord + (slot * SdfViewsProbeExtraWords));
-
-            return sdfViewsProbesLoadGather(record, at, sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, (at + SdfViewsProbeStateWord))]);
+            at = (SdfViewsProbeExtraWord + (slot * SdfViewsProbeExtraWords));
+            flags = sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, (at + SdfViewsProbeStateWord))];
         }
     }
-
-    SdfMeshProbes probes = sdfViewsProbesLoadGather(record, 0u, state);
-
-    probes.cube = (record + 1u);
-    return probes;
+    probes.share = (float(flags & 0xFFFFu) / 65535.0);
+    probes.measured = ((flags & SdfViewsProbeMeasured) != 0u);
+    probes.remainderMeasured = ((flags & SdfViewsProbeRemainderMeasured) != 0u);
+    probes.record = (record + 1u);
+    probes.recordAt = at;
+    probes.cube = ((at == 0u) ? (record + 1u) : 0u);
 #endif
+    return probes;
+}
+// The probes sdfViewsProbesAt named with their cages and weights loaded from the record words that hold them, the weights
+// as the record quantized them.
+SdfMeshProbes sdfViewsProbesWhole(SdfMeshProbes probes) {
+    if (probes.record == 0u) {
+        return probes;
+    }
+
+    uint record = (probes.record - 1u);
+    uint at = probes.recordAt;
+    SdfMeshProbes whole = probes;
+
+    whole.cage = sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, at)];
+    whole.remainderCage = sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, (at + 1u))];
+    [unroll] for (uint pair = 0u; (pair < 8u); pair++) {
+        uint word = sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, (at + 2u + pair))];
+
+        whole.weight[2u * pair] = (float(word & 0xFFFFu) / 65535.0);
+        whole.weight[(2u * pair) + 1u] = (float(word >> 16u) / 65535.0);
+    }
+    whole.record = 0u;
+    return whole;
+}
+
+// The share of the probes about a views pixel that see a traced light (sdfMeshLightVisibility, through
+// sdfLightProbeVisibility): where the probes are a record's representative gather, the record's light agreement answers
+// every light all measured corners see (their summed weight) or none sees (zero) without visiting a corner, and only a
+// light the corners disagree on, or a pixel with a gather of its own, loads the gather and visits them.
+float sdfViewsLightVisibility(SdfMeshProbes probes, uint lightIndex) {
+    if ((probes.cube != 0u) && (lightIndex < (32u * SDF_MESH_IRRADIANCE_LIGHT_WORDS))) {
+        uint record = (probes.cube - 1u);
+        uint word = (lightIndex >> 5u);
+        uint bit = (1u << (lightIndex & 31u));
+
+        if ((sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, (SdfViewsProbeLightsWord + word))] & bit) != 0u) {
+            return asfloat(sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, SdfViewsProbeLightsWeightWord)]);
+        }
+        if ((sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, (SdfViewsProbeLightsAnyWord + word))] & bit) == 0u) {
+            return 0.0;
+        }
+    }
+    return sdfMeshLightVisibility(sdfViewsProbesWhole(probes), lightIndex);
 }
 
 // The views pass's indirect light and reflection under the irradiance volume (sdfMeshIndirectSeen, sdfMeshReflectionSeen):
 // from the record's blended cube where the probes are a record's (SdfMeshProbes.cube), otherwise from their corners.
 void sdfViewsCubeAt(SdfMeshProbes probes, float3 direction, out float sky, out float3 radiance, out float3 skyLight) {
     uint record = (probes.cube - 1u);
-
     uint first = sdfViewsProbeWord(record, 0u);
     uint plane = (sdfViewsProbeWord(record, 1u) - first);
 
@@ -264,7 +329,7 @@ float3 sdfViewsIndirectSeen(SdfMeshProbes probes, float3 normal) {
         sdfViewsCubeAt(probes, normal, sky, radiance, skyLight);
         return (skyLight + radiance);
     }
-    return sdfMeshIndirectSeen(probes, normal);
+    return sdfMeshIndirectSeen(sdfViewsProbesWhole(probes), normal);
 }
 float3 sdfViewsReflectionSeen(SdfMeshProbes probes, float3 direction, float3 environment) {
     if ((probes.cube != 0u) && sdfMeshAnswers(probes)) {
@@ -275,7 +340,7 @@ float3 sdfViewsReflectionSeen(SdfMeshProbes probes, float3 direction, float3 env
         sdfViewsCubeAt(probes, direction, sky, radiance, skyLight);
         return ((environment * sky) + radiance);
     }
-    return sdfMeshReflectionSeen(probes, direction, environment);
+    return sdfMeshReflectionSeen(sdfViewsProbesWhole(probes), direction, environment);
 }
 #endif
 

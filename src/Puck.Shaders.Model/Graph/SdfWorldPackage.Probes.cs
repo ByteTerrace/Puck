@@ -21,9 +21,13 @@ public static partial class SdfWorldPackage {
     /// <summary>The words of one cell's probe record: the representative's gather (two cages, sixteen UNORM16 weights, a
     /// state word and its blended six-axis cube in twenty-one words of half floats), then an extra slot of
     /// <see cref="ViewsProbeExtraWords"/> words for each other pixel of the cell, which holds that pixel's own gather where
-    /// its receiver is not compatible with the representative's. <c>SdfIsaHlsl</c> generates it as
-    /// <c>SDF_VIEWS_PROBE_WORDS</c>.</summary>
-    public const uint ViewsProbeWords = (ViewsProbeGatherWords + (((ViewsProbeRate * ViewsProbeRate) - 1) * ViewsProbeExtraWords));
+    /// its receiver is not compatible with the representative's, then the representative's traced-light agreement
+    /// (<see cref="ViewsProbeLightWords"/>). <c>SdfIsaHlsl</c> generates it as <c>SDF_VIEWS_PROBE_WORDS</c>.</summary>
+    public const uint ViewsProbeWords = (ViewsProbeGatherWords + (((ViewsProbeRate * ViewsProbeRate) - 1) * ViewsProbeExtraWords) + ViewsProbeLightWords);
+    /// <summary>The words of a record's traced-light agreement: the light bits every measured corner of the
+    /// representative's gather holds and those any holds, a word each for every 32 lights the irradiance volume traces
+    /// (four), and those corners' summed weight.</summary>
+    public const uint ViewsProbeLightWords = 9;
     /// <summary>The words of a cell's record before its extra slots: the representative's gather and blended cube.</summary>
     public const uint ViewsProbeGatherWords = 32;
     /// <summary>The words of one extra slot: two cages, sixteen UNORM16 weights and the share and measured flags.</summary>

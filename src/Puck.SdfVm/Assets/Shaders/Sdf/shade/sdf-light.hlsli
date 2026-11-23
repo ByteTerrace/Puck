@@ -11,6 +11,16 @@
 #include "sdf-mesh-irradiance.hlsli"
 #include "sdf-toon.hlsli"
 
+// The share of the probes about a surface that see a traced light (sdfMeshLightVisibility). The views pass reads it
+// through its probe record first (sdfViewsLightVisibility, sdf-views-probes.hlsli), which answers the same value without
+// visiting the corners wherever every measured corner agrees on the light.
+#if defined(SDF_VIEWS_PASS) && !defined(SDF_VIEWS_PROBES_PASS) && !defined(SDF_VIEWS_FILTER_PASS)
+float sdfViewsLightVisibility(SdfMeshProbes probes, uint lightIndex);
+#define sdfLightProbeVisibility sdfViewsLightVisibility
+#else
+#define sdfLightProbeVisibility sdfMeshLightVisibility
+#endif
+
 // The local adaptation's gain on a lit surface (SdfExposure.Local): the surface's exposure moves that share of the way
 // from the view's toward the one its own illumination would meter, `incoming` (the luminance a white surface lit by the
 // light arriving here would show) against the luminance the view's image meter reads (meterLuminance,
@@ -134,7 +144,7 @@ struct SdfShadeSurface {
 // for the contact-scale shadowing the probes' spacing cannot resolve. A probe not yet measured answers lit, never dark.
 // `known` is that share where the caller has already read it, negative where not, so a light reads the probes once.
 float sdfLightProbeAnswer(SdfShadeSurface surface, int lightIndex, bool traced, float known) {
-    return ((traced ? ((known >= 0.0) ? known : sdfMeshLightVisibility(surface.probes, (uint)lightIndex)) : 1.0) * surface.ambientOcclusion);
+    return ((traced ? ((known >= 0.0) ? known : sdfLightProbeVisibility(surface.probes, (uint)lightIndex)) : 1.0) * surface.ambientOcclusion);
 }
 // One shadow role's answer at a surface: its cascades' visibility where they hold the point, the probes' answer where they
 // do not, and across the band at the cascades' edge the two blended by the cascades' coverage (the K row's lanes,
@@ -371,7 +381,7 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
     // The probes' share read here, or negative where it was not, so a directional's visibility reads the probes once.
     float known = -1.0;
     if (traced && (probeShare || ((light.kind == SDF_LIGHT_POINT) && (lit || authored)))) {
-        inputs.probeShare = sdfMeshLightVisibility(surface.probes, (uint)light.index);
+        inputs.probeShare = sdfLightProbeVisibility(surface.probes, (uint)light.index);
         known = inputs.probeShare;
     }
     if (light.kind == SDF_LIGHT_POINT) {
