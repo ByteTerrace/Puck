@@ -111,14 +111,16 @@ public sealed partial class WorldBody {
         scratch.ObstructionWitnessPosition = m_obstructionWitnessPosition;
     }
 
-    internal void RestoreMotion(StepScratch scratch) {
+    // A step outside the kit transaction (StepIsLocal) wrote no register, so its restore leaves the arena's lanes alone:
+    // they still hold what the capture read.
+    internal void RestoreMotion(StepScratch scratch, bool registers = true) {
         if (m_scale != scratch.Sections.Pose.Scale) {
             SetScale(value: scratch.Sections.Pose.Scale);
         }
         RestoreSections(
             contactFieldObservationCurrent: true,
             contactFieldVersion: scratch.LastContactFieldVersion,
-            registers: scratch.Registers.AsSpan(length: scratch.RegisterCount, start: 0),
+            registers: (registers ? scratch.Registers.AsSpan(length: scratch.RegisterCount, start: 0) : []),
             sections: in scratch.Sections
         );
         m_lastContactCount = scratch.LastContactCount;

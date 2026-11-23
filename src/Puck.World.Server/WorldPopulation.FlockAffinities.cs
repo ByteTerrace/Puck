@@ -41,7 +41,7 @@ public sealed partial class WorldPopulation {
         m_flockAffinityCeiling = (definition.Population.Capacity * maximum);
     }
 
-    private FixedQ4816 ReadFlockAffinity(CompiledExpressionToken[]? expression, int observer, int neighbor) {
+    private FixedQ4816 ReadFlockAffinity(CompiledExpressionToken[]? expression, int observer, int neighbor, ProducerWork work) {
         if (expression is null) { return FixedQ4816.One; }
         var success = m_flockAffinityReader!(
             expression,
@@ -50,9 +50,9 @@ public sealed partial class WorldPopulation {
             out var value
         );
 
-        FlockStatistics = FlockStatistics with {
-            AffinityEvaluations = (FlockStatistics.AffinityEvaluations + 1),
-            AffinityFailures = (FlockStatistics.AffinityFailures + (success
+        work.Flock = work.Flock with {
+            AffinityEvaluations = (work.Flock.AffinityEvaluations + 1),
+            AffinityFailures = (work.Flock.AffinityFailures + (success
             ? 0
             : 1)),
         };

@@ -72,7 +72,9 @@ public sealed partial class NavigationRuntime {
     /// <summary>Gets the cells goal-field derivations settled since the last <see cref="BeginStep"/>.</summary>
     public long GoalFieldCellsLast { get; private set; }
     /// <summary>Gets the goal-field steps read since the last <see cref="BeginStep"/>.</summary>
-    public long GoalFieldStepsLast { get; private set; }
+    public long GoalFieldStepsLast => Interlocked.Read(location: ref m_goalFieldStepsLast);
+    // Counted with an interlock: GoalStep reads a resident field and may run on several threads at once.
+    private long m_goalFieldStepsLast;
     /// <summary>Gets the goal fields dropped from a full cache over the runtime's life.</summary>
     public long GoalFieldEvictions { get; private set; }
 
@@ -80,7 +82,7 @@ public sealed partial class NavigationRuntime {
     public void BeginStep() {
         GoalFieldBuildsLast = 0;
         GoalFieldCellsLast = 0;
-        GoalFieldStepsLast = 0;
+        m_goalFieldStepsLast = 0;
     }
 
     /// <summary>Returns the goal field toward a walkable cell, deriving it when it is not resident or a live medium it
@@ -144,7 +146,7 @@ public sealed partial class NavigationRuntime {
     /// <see cref="NavigationStatus.Unreachable"/> when no route leads from the cell to the goal.</returns>
     public NavigationStatus GoalStep(NavigationGoalField field, int domain, int cell, out int nextDomain, out int nextCell) {
         ArgumentNullException.ThrowIfNull(argument: field);
-        GoalFieldStepsLast++;
+        _ = Interlocked.Increment(location: ref m_goalFieldStepsLast);
         m_work.Add(amount: 1, kind: NavigationSearchWork.FieldSteps);
         nextDomain = domain;
         nextCell = cell;
