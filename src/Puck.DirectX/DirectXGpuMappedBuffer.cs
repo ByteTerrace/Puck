@@ -215,7 +215,9 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
         // device runs nothing further, so its tiles go back with it, and a loss's teardown disposes the buffer through here.
         try {
             if ((m_returning.Count > 0) && (DirectXSharedFence.ReadCompletedValue(fence: ((ID3D12Fence*)m_fence)) < m_fenceValue)) {
-                ((ID3D12Fence*)m_fence)->SetEventOnCompletion(Value: m_fenceValue, hEvent: default);
+                // A null event has the call return once the fence reaches the value; the handle is typed so the call takes it, never the
+                // safe-handle overload, which refuses null.
+                ((ID3D12Fence*)m_fence)->SetEventOnCompletion(Value: m_fenceValue, hEvent: default(Windows.Win32.Foundation.HANDLE));
             }
         } catch (Exception exception) when (exception is DeviceLostException or System.Runtime.InteropServices.COMException) {
         }
