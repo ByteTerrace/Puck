@@ -70,8 +70,8 @@ render {
       hostMemoryMiB: 6144
       table {
         viewsRate { maxRate: 2, tileSize: 4 }
-        distantShadows { reach: 1200, texels: 1024, turnDegrees: 0.2, frames: 4 }
-        farShadows { hertz: 15, turnDegrees: 0.1 }
+        distantShadows { reach: 1200, texels: 1024, frames: 4 }
+        farShadows { hertz: 15 }
         indirectBudget { relightPerFrame: 1024, tracePerFrame: 1024, age: 8 }
         bloom: Low
         indirect: Medium
@@ -131,25 +131,22 @@ render {
     rayQueries: true
   }
   // The distant shadow map each tier draws past the far cascade: static casters only, within `reach` metres of the eye,
-  // at `texels` a side, held until the sun turns `turnDegrees` (or the eye crosses an eighth of the reach, or a static
+  // at `texels` a side, held until the sun turns past its tolerance (or the eye crosses an eighth of the reach, or a static
   // draw changes). 1200 m reaches across a caldera of the debug valley's size from its rim; 2048 texels make a texel
-  // about 1.3 m there, and a tenth of a degree moves a shadow cast from a kilometre about a texel, so under the standard's
-  // quarter-degree-a-second day the map is drawn a few times a second and each step is a texel. Low draws no shadows.
-  // The far shadow entry (`farShadows`) draws the casters that moved `hertz` times a second, which a moving caster's
-  // shadow lags it by, and spreads a whole redraw over the frames of one such period; it is drawn whole again when the
-  // sun turns `turnDegrees`, so the tolerance is how long the cached layer lives under a turning sun: a tenth of a degree
-  // is 0.4 s of the standard's quarter-degree-a-second day and moves the shadow of a 20 m caster about 3.5 cm, under a
-  // texel of a 2048-texel entry reaching 120 m. High draws moved casters 30 times a second and holds through a twentieth
-  // of a degree; medium 15 times a second through a tenth. The distant map's `frames` spread its redraws the same way.
+  // about 1.3 m there. Low draws no shadows. The far shadow entry (`farShadows`) draws the casters that moved `hertz` times
+  // a second, which a moving caster's shadow lags it by. Every entry takes the engine's turn tolerance, which moves the
+  // shadow of a caster as tall as the entry's reach by a quarter of the penumbra the sun's size draws and a texel: under the
+  // standard's soft sun a few tenths of a degree, a second or so of its quarter-degree-a-second day, and a step no wider
+  // than an eighth of the softest edge. A row's `turnDegrees` would hold an entry through a turn of its own instead. A
+  // whole redraw is spread over at least the frames of one far period and the distant map's `frames`, and over more where
+  // its measured work asks. High draws moved casters 30 times a second; medium 15.
   medium {
     distantShadows {
       reach: 1200
       texels: 1024
-      turnDegrees: 0.2
     }
     farShadows {
       hertz: 15
-      turnDegrees: 0.1
     }
     indirectBudget { relightPerFrame: 1536, tracePerFrame: 1536, age: 8 }
     bloom: Low
@@ -176,12 +173,10 @@ render {
     distantShadows {
       reach: 1200
       texels: 2048
-      turnDegrees: 0.1
       frames: 4
     }
     farShadows {
       hertz: 30
-      turnDegrees: 0.05
     }
     indirectBudget { relightPerFrame: 2048, tracePerFrame: 2048, age: 8 }
     bloom: High

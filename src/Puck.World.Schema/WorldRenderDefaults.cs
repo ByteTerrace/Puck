@@ -420,12 +420,13 @@ public sealed record WorldRenderShadowCoverage(
 /// <param name="Texels">The texels along each side of the map at full shadow quality: a power of two from 256 through
 /// 4096. Its texel is about twice the reach over this.</param>
 /// <param name="TurnDegrees">The light turn, in degrees, a held map tolerates before it is drawn again: the most its
-/// shadows lag a moving sun by, in (0, 10].</param>
-/// <param name="Frames">The frames one redraw is spread over, from 1 through <see cref="MaxFrames"/>: each draws a share
-/// of the casters into a back map, and the map the receivers read changes only once the last share lands, so a redraw
-/// costs any one frame about this share of a whole one and lands this many frames later. One draws a redraw whole.</param>
+/// shadows lag a moving sun by, within [0, 10]. Zero, the default, takes the engine's: the turn that moves the shadow of
+/// a caster as tall as the reach by a quarter of the penumbra the surface pass draws for it and a texel besides.</param>
+/// <param name="Frames">The fewest frames one redraw is spread over, from 1 through <see cref="MaxFrames"/>: each draws a
+/// share of the casters, and the map the receivers read changes only once the last share lands. The world's shadows
+/// spread a redraw over more frames where its measured work asks.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldDistantShadows(float Reach, int Texels, float TurnDegrees, int Frames = 1) {
+public sealed record WorldDistantShadows(float Reach, int Texels, float TurnDegrees = 0f, int Frames = 1) {
     /// <summary>The fewest texels a side a map may ask for: the render graph's least distant map
     /// (<c>SdfWorldPackage.MeshDistantShadowMinResolution</c>, which this project cannot reference).</summary>
     public const int MinTexels = 256;
@@ -447,8 +448,8 @@ public sealed record WorldDistantShadows(float Reach, int Texels, float TurnDegr
         if ((Texels < MinTexels) || (Texels > MaxTexels) || !System.Numerics.BitOperations.IsPow2(value: Texels)) {
             return $"{path}.texels is {Texels}; it is a power of two from {MinTexels} through {MaxTexels}.";
         }
-        if (!float.IsFinite(f: TurnDegrees) || (TurnDegrees <= 0f) || (TurnDegrees > MaxTurnDegrees)) {
-            return $"{path}.turnDegrees is {TurnDegrees}; it lies within (0, {MaxTurnDegrees}] degrees.";
+        if (!float.IsFinite(f: TurnDegrees) || (TurnDegrees < 0f) || (TurnDegrees > MaxTurnDegrees)) {
+            return $"{path}.turnDegrees is {TurnDegrees}; it lies within [0, {MaxTurnDegrees}] degrees.";
         }
         if ((Frames < 1) || (Frames > MaxFrames)) {
             return $"{path}.frames is {Frames}; it is a whole number from 1 through {MaxFrames}.";
@@ -457,18 +458,19 @@ public sealed record WorldDistantShadows(float Reach, int Texels, float TurnDegr
         return null;
     }
 }
-/// <summary>How the key light's far shadow cascade keeps up with what moves: it is drawn again at least
-/// <paramref name="Hertz"/> times a second of presentation time and held between, and a held cascade is drawn again at
-/// once when the light turns past <paramref name="TurnDegrees"/>, the camera moves or turns past the cascade's receiver
-/// margin, or its fit changes. A dynamic caster's shadow lags it by up to one period, and every shadow lags a turning light
-/// by up to the turn. A device's quality row chooses it (<see cref="WorldQualityPreset.FarShadows"/>).</summary>
+/// <summary>How the key light's far shadow cascade keeps up with what moves: the casters that moved are drawn again
+/// <paramref name="Hertz"/> times a second of presentation time, and the cascade is drawn whole again when the light turns
+/// past <paramref name="TurnDegrees"/>, the eye crosses an eighth of its reach or a static caster changes, that redraw
+/// spread over at least the frames of one period. A dynamic caster's shadow lags it by up to one period, and every shadow
+/// lags a turning light by up to the turn. A device's quality row chooses it
+/// (<see cref="WorldQualityPreset.FarShadows"/>).</summary>
 /// <param name="Hertz">The refreshes a second, a whole number from 1 through <see cref="MaxHertz"/>, where
-/// <see cref="MaxHertz"/> draws it every frame. A refresh draws the cascade's two layers on consecutive frames.</param>
-/// <param name="TurnDegrees">The light turn, in degrees, a held cascade tolerates, in (0, <see cref="MaxTurnDegrees"/>]:
-/// past it the cascade is drawn again at once, so a light that turns faster than this a period refreshes the cascade on
-/// its turn rather than its rate.</param>
+/// <see cref="MaxHertz"/> draws moved casters every frame.</param>
+/// <param name="TurnDegrees">The light turn, in degrees, a held cascade tolerates, within [0, <see cref="MaxTurnDegrees"/>]:
+/// past it the cascade is drawn again. Zero, the default, takes the engine's: the turn that moves the shadow of a caster
+/// as tall as the reach by a quarter of the penumbra the surface pass draws for it and a texel besides.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldFarShadows(int Hertz, float TurnDegrees) {
+public sealed record WorldFarShadows(int Hertz, float TurnDegrees = 0f) {
     /// <summary>The rate that draws the cascade every frame.</summary>
     public const int MaxHertz = 60;
     /// <summary>The widest light turn, in degrees, a held cascade may tolerate.</summary>
@@ -481,8 +483,8 @@ public sealed record WorldFarShadows(int Hertz, float TurnDegrees) {
         if ((Hertz < 1) || (Hertz > MaxHertz)) {
             return $"{path}.hertz is {Hertz}; it is a whole number from 1 through {MaxHertz}.";
         }
-        if (!float.IsFinite(f: TurnDegrees) || (TurnDegrees <= 0f) || (TurnDegrees > MaxTurnDegrees)) {
-            return $"{path}.turnDegrees is {TurnDegrees}; it lies within (0, {MaxTurnDegrees}] degrees.";
+        if (!float.IsFinite(f: TurnDegrees) || (TurnDegrees < 0f) || (TurnDegrees > MaxTurnDegrees)) {
+            return $"{path}.turnDegrees is {TurnDegrees}; it lies within [0, {MaxTurnDegrees}] degrees.";
         }
 
         return null;

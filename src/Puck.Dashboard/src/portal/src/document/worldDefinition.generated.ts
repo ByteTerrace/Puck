@@ -7375,11 +7375,11 @@ export type WorldDistantShadows = {
    */
   texels: number;
   /**
-   * The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, in (0, 10].
+   * The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, within [0, 10]. Zero, the default, takes the engine's: the turn that moves the shadow of a caster as tall as the reach by a quarter of the penumbra the surface pass draws for it and a texel besides.
    */
-  turnDegrees: number;
+  turnDegrees?: number;
   /**
-   * The frames one redraw is spread over, from 1 through MaxFrames: each draws a share of the casters into a back map, and the map the receivers read changes only once the last share lands, so a redraw costs any one frame about this share of a whole one and lands this many frames later. One draws a redraw whole.
+   * The fewest frames one redraw is spread over, from 1 through MaxFrames: each draws a share of the casters, and the map the receivers read changes only once the last share lands. The world's shadows spread a redraw over more frames where its measured work asks.
    */
   frames?: number;
 };
@@ -8002,17 +8002,17 @@ export type WorldExports = {
 };
 
 /**
- * How the key light's far shadow cascade keeps up with what moves: it is drawn again at least Hertz times a second of presentation time and held between, and a held cascade is drawn again at once when the light turns past TurnDegrees, the camera moves or turns past the cascade's receiver margin, or its fit changes. A dynamic caster's shadow lags it by up to one period, and every shadow lags a turning light by up to the turn. A device's quality row chooses it (FarShadows).
+ * How the key light's far shadow cascade keeps up with what moves: the casters that moved are drawn again Hertz times a second of presentation time, and the cascade is drawn whole again when the light turns past TurnDegrees, the eye crosses an eighth of its reach or a static caster changes, that redraw spread over at least the frames of one period. A dynamic caster's shadow lags it by up to one period, and every shadow lags a turning light by up to the turn. A device's quality row chooses it (FarShadows).
  */
 export type WorldFarShadows = {
   /**
-   * The refreshes a second, a whole number from 1 through MaxHertz, where MaxHertz draws it every frame. A refresh draws the cascade's two layers on consecutive frames.
+   * The refreshes a second, a whole number from 1 through MaxHertz, where MaxHertz draws moved casters every frame.
    */
   hertz: number;
   /**
-   * The light turn, in degrees, a held cascade tolerates, in (0, MaxTurnDegrees]: past it the cascade is drawn again at once, so a light that turns faster than this a period refreshes the cascade on its turn rather than its rate.
+   * The light turn, in degrees, a held cascade tolerates, within [0, MaxTurnDegrees]: past it the cascade is drawn again. Zero, the default, takes the engine's: the turn that moves the shadow of a caster as tall as the reach by a quarter of the penumbra the surface pass draws for it and a texel besides.
    */
-  turnDegrees: number;
+  turnDegrees?: number;
 };
 
 export type WorldFieldCondition = {
