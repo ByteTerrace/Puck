@@ -346,16 +346,7 @@ public static class CompileInputs {
                 return Answered(query: query, kind: CompileInputKind.Declaration, hash: held);
             }
 
-            var wasRead = read;
-            var hash = DeclaredHash(declare: declarer.Declare, declarer: declarer.Name, digest: fileDigest, read: () => {
-                wasRead = true;
-
-                return (bytes ??= ReadRemembering(hash: out _, path: query.Path));
-            });
-
-            read = wasRead;
-
-            return Answered(query: query, kind: CompileInputKind.Declaration, hash: hash);
+            return Answered(query: query, kind: CompileInputKind.Declaration, hash: DeclareAgain(bytes: bytes, declarer: declarer, digest: fileDigest, path: query.Path, read: ref read));
         }
 
         var digested = (query.Kind == CompileInputKind.Content);
@@ -366,6 +357,20 @@ public static class CompileInputs {
             : (digested
                 ? Answered(query: query, kind: query.Kind, hash: digest)
                 : Answered(query: query, kind: CompileInputKind.Present, hash: string.Empty)));
+    }
+    // A declaration whose digest no held answer covers, read through the file's bytes. Apart from Current, whose every
+    // poll would otherwise allocate this read's closure even when a held answer serves it.
+    private static string DeclareAgain(Declarer declarer, string digest, string path, byte[]? bytes, ref bool read) {
+        var reader = ContentReader.Take(content: bytes, path: path);
+
+        try {
+            var hash = DeclaredHash(declare: declarer.Declare, declarer: declarer.Name, digest: digest, read: reader.Read);
+
+            read |= reader.Consumed;
+            return hash;
+        } finally {
+            reader.Release();
+        }
     }
     // The fact a question answers: the question itself when it already holds that answer, so proving an unchanged input
     // creates nothing, else a new fact for the same path.
@@ -585,7 +590,8 @@ public static class CompileInputs {
     /// <param name="path">The file.</param>
     /// <param name="declarer">The registered declarer's name (<see cref="RegisterDeclarer"/>).</param>
     /// <param name="learn">From the file's digest and a reader of its bytes, what the caller learns; the fact recorded
-    /// is what the registered declarer answers for the same bytes.</param>
+    /// is what the registered declarer answers for the same bytes. The reader is valid only until
+    /// <paramref name="learn"/> returns.</param>
     /// <param name="digest">The digest of the file's bytes, or <see langword="null"/> when no file is there.</param>
     /// <returns>What <paramref name="learn"/> returned, or the default when no file is there.</returns>
     /// <exception cref="ArgumentException"><paramref name="declarer"/> is not registered.</exception>
@@ -606,12 +612,54 @@ public static class CompileInputs {
             return default;
         }
 
-        byte[] Read() => (content ??= ReadRemembering(hash: out _, path: path));
-        var value = learn(arg1: digest, arg2: Read);
+        var reader = ContentReader.Take(content: content, path: path);
 
-        Add(input: new CompileInput(ContentHash: DeclaredHash(declare: declare.Declare, declarer: declarer, digest: digest, read: Read), Kind: CompileInputKind.Declaration, Path: path));
+        try {
+            var value = learn(arg1: digest, arg2: reader.Read);
 
-        return value;
+            // Only a recording keeps the fact: a source-watch poll proves the declaration again with nothing to record.
+            if (Recording.Value is not null) {
+                Add(input: new CompileInput(ContentHash: DeclaredHash(declare: declare.Declare, declarer: declarer, digest: digest, read: reader.Read), Kind: CompileInputKind.Declaration, Path: path));
+            }
+
+            return value;
+        } finally {
+            reader.Release();
+        }
+    }
+    // One file's bytes, read at most once for a declaration and its learner. Each thread keeps one with its delegate, so a
+    // declaration the stamp vouches for allocates nothing; a learner that declares again while it holds the thread's
+    // reader takes a fresh one.
+    private sealed class ContentReader {
+        [ThreadStatic] private static ContentReader? Spare;
+
+        private string m_path = string.Empty;
+        private byte[]? m_content;
+
+        private ContentReader() => Read = ReadContent;
+
+        public Func<byte[]> Read { get; }
+        // Whether anything asked for the bytes since Take.
+        public bool Consumed { get; private set; }
+
+        public static ContentReader Take(string path, byte[]? content) {
+            var reader = (Spare ?? new ContentReader());
+
+            Spare = null;
+            reader.m_path = path;
+            reader.m_content = content;
+            reader.Consumed = false;
+            return reader;
+        }
+        public void Release() {
+            m_path = string.Empty;
+            m_content = null;
+            Spare = this;
+        }
+        private byte[] ReadContent() {
+            Consumed = true;
+            return (m_content ??= ReadRemembering(hash: out _, path: m_path));
+        }
     }
     /// <summary>Lists the files directly in <paramref name="directory"/>, hidden ones included, recording the listing
     /// (<see cref="CompileInputKind.Listing"/>), so a compile that chose among a directory's files rests on which files
