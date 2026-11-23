@@ -53,7 +53,7 @@ public sealed partial class WorldBody {
         m_scale = scale;
         InvalidateRigidRest();
         RescaleColliderVolumes();
-        m_population?.NoteBodyFactChanged(index: m_populationIndex);
+        NotifyPopulationFactChanged();
     }
 
     /// <summary>Returns the collider's volumes scaled uniformly about the body root for this body's live
