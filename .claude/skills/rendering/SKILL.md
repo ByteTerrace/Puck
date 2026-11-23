@@ -448,32 +448,48 @@ records the options weighed.
 
 - **Anchors.** The near, far and secondary entries belong to anchors, each eye-centred on one view and snapped to cells
   of an eighth of each entry's reach (`SdfMeshShadowCascades.Fit`, `CellOf`, `HalfExtentOf`). Views whose eyes share a
-  near cell share an anchor; one elsewhere takes its own up to `SdfWorldShadows.MaxAnchors`, then reads the nearest
-  (`SdfWorldShadows.Assign`). The distant entry is one for the world, centred on its first shadowed view. A view's pass
+  near cell share an anchor; one elsewhere takes its own up to `SdfWorldShadows.MaxAnchors` while the shadows' fixed
+  reservation has room for its layers (anchor 0 always), then reads the nearest (`SdfWorldShadows.Assign`). The distant entry is one for the world, centred on its first shadowed view. A view's pass
   set binds its anchor's layers and rebinds when `BindingRevisionOf` moves.
 - **The one door.** `SdfWorldShadows.Decide` decides once for the upload about to be submitted (frozen by `Submitted`
   until the residency's next frame start, `BeginShadowFrame`), `Record` draws exactly that, and `Submitted` commits the
   cameras. Readers read `ReaderCamera`: the camera a redraw completing this upload drew from, else the committed one,
-  else none (an entry no submitted upload drew is empty, `Holds` false). Never read an entry's camera from a fresh
-  `Fit`.
+  else none (an entry no submitted upload drew is empty, `Holds` false), and bind `ViewOf`, which names the pair that
+  camera drew (a lent pair only from the upload completing its redraw). Never read an entry's camera from a fresh
+  `Fit`, or a layer from anywhere but `ViewOf`.
 - **Whole redraws.** An entry redraws whole when the light turns past its tolerance (`farShadows.turnDegrees`,
-  `distantShadows.turnDegrees`, else one texel for a caster as tall as the reach), its eye's cell changes, its texels
-  change or `StaticDrawRevision` moves; a recording that draws a layer whole calls `CastersRead`. The far entry spreads a
-  redraw over one period of `farShadows.hertz`, the distant entry over `distantShadows.frames`, into back layers copied
-  forward on the last share.
+  `distantShadows.turnDegrees`, else `PenumbraShare` of the drawn penumbra and a texel for a caster as tall as the
+  reach), its eye's cell changes or its texels change; the distant entry also when `StaticDrawRevision` moves. A
+  recording that draws a layer whole calls `CastersRead`.
+- **The schedule.** `Want` names each entry's redraw, `Schedule` admits shares under `UploadVertices` in `Priority`
+  order (under way, unseen, anchor, far/near/second/distant), `Finish` fixes the work. A share's cost is the entry's
+  measured whole (`SdfMeshOcclusion.Measured`, the vertex words at `SdfKernelInterfaces.MeshVertexCountBase`) over its
+  shares; the authored far period and distant `frames` are minimums. A standing entry's redraw borrows a pair from the
+  spares (`Lend`, at most two pairs) and swaps it in on its last share (`Submitted`); an unseen entry draws into its own.
+  A redraw that loses its texels or allocation ends and returns its pair (`EndRedraw`).
 - **Moved rectangles.** `SdfWorldTables.NoteMotion` hands every non-shading change's before and after boxes to
   `SdfWorldShadows.Moved` before the scopes' early return; keep that call first, or a staging whose scopes are all met
-  drops the change. Each entry judges the row against its `Footprint` from where it last drew it (`MoveTexels`) and owes
-  at most `MaxRectangles` merged rectangles; a change no box bounds (`MovedEverywhere`, a seeded history) owes the whole
-  layer. A rectangle draws through a viewport of its own from the camera of that rectangle of the plane (aspect in
+  drops the change. `Moved` skips a change whose box lies within the finest judged texel of the box the entries last
+  judged the row by (`m_judged`); a passed change goes to each entry, which judges the row against its `Footprint` from
+  where it last drew it (`MoveTexels`) and owes at most `MaxRectangles` merged rectangles (`OwedRects`); a redraw under
+  way also owes its own layers (`m_pending`), handed over when it lands. An upload takes the owed rectangles whose
+  expected vertices (the entry's measured vertices a rectangle texel) fit `RectangleVertices`, at least one, and the
+  rest wait; a layer owed whole (past half its area, or `MovedEverywhere`) is redrawn by the schedule, never by one
+  rectangle in one upload. A decision takes the owed rectangles into its
+  work and an unsubmitted decision gives them back (`Restore`). A change no box bounds (`MovedEverywhere`, a seeded
+  history) owes the whole layer, and a moved glass caster owes the extinction. A rectangle draws through a viewport of its own from the camera of that rectangle of the plane (aspect in
   `SdfFrameBlock.WriteShadowCamera`), keeping the casters in that box (`SdfMeshCull.OfLightBox`).
 - **Layouts.** Every layer rests shader-readable between uploads; the recorder moves it to the attachment layout and
   back (`Entry.Move`). A new layer is cleared before anything binds it.
 - **Glass.** An entry's glass extinction (`Optical`) is drawn with each whole redraw, against the front depth, from a
   selection of every draw (`OpticalKind`).
+- **Memory.** Every layer and extinction buffer is held under one fixed `MemoryAccount` reservation (`Hold`,
+  `TryHold`), counted in `SdfWorldTables.TableBytes`; a trim request gives back the anchors no view reads.
 - **Evidence.** `world.residency`'s `shadows` line prints the uploads, the measured GPU time of the shadow pass
-  (timestamps around it, read when the slot completes), moved changes, anchors, each view's anchor and each entry's
-  state; `world.rates` counts `shadow-<entry>.static|share|live|held` per world upload; the selection marks name each
+  (timestamps around it, read when the slot completes), moved changes and how many reached the entries, the bytes held
+  and the spares, anchors, each view's anchor and each entry's state: its redraw (`2of5lent`), its last whole redraw's
+  measured triangles and shares (`tri…in…`), its rectangles' average triangles and count, and what ended its holds
+  (`ended-turn…-cell…-static…-fit…`); `world.rates` counts `shadow-<entry>.static|share|live|held` per world upload; the selection marks name each
   drawing (`drawn.shadow-far.a0 rect0.*`). Timings belong to the lead's quiet window.
 
 ### The distant shadow map
@@ -1587,9 +1603,10 @@ counts in `sdf.transforms`, never in `records.posed`.
   residency's upload (`SdfWorldShadows`), so `world.gpu-timing` shows no shadow pass; `world.residency`'s `shadows`
   line prints their measured GPU time, the moved changes, the anchors and each entry's state, and `world.rates`
   counts each entry's whole redraws, shares, rectangle redraws and holds. A whole redraw draws every caster in a
-  light box at each mesh's coarsest level whose error fits a texel; `.static` on most uploads means the light's turn
-  tolerance or the eye's cell ends the hold every frame, and `owedall` on an entry means a change no box bounds
-  (`MovedEverywhere`) redraws it whole. The selection marks (`world.residency`'s selection line) name each drawing.
+  light box at each mesh's coarsest level whose error fits a texel, or a group's floor where its cell does
+  (`sdfSelectionBandKeeps`); the entry's `ended-` counts say whether the turn or the cell ends its holds, and `owedall`
+  means a change no box bounds (`MovedEverywhere`) redraws it whole. The measured `tri` counts each phase a caster draws
+  in (entry and exit layers), about twice the selection marks' triangles. The selection marks (`world.residency`'s selection line) name each drawing.
 - **A window whose extent swings rebuilds on a backoff.** A window a moving
   camera crosses (the endless fall's floor and ceiling paintings) requests a new
   extent every few frames; a resize build the request outran is discarded, and

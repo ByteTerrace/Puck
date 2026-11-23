@@ -302,19 +302,19 @@
                   "type": "integer"
                 },
                 "turnDegrees": {
-                  "description": "The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, in (0, 10].",
-                  "type": "number"
+                  "description": "The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, within [0, 10]. Zero, the default, takes the engine\u0027s: the turn that moves the shadow of a caster as tall as the reach by a quarter of the penumbra the surface pass draws for it and a texel besides.",
+                  "type": "number",
+                  "default": 0
                 },
                 "frames": {
-                  "description": "The frames one redraw is spread over, from 1 through MaxFrames: each draws a share of the casters into a back map, and the map the receivers read changes only once the last share lands, so a redraw costs any one frame about this share of a whole one and lands this many frames later. One draws a redraw whole.",
+                  "description": "The fewest frames one redraw is spread over, from 1 through MaxFrames: each draws a share of the casters, and the map the receivers read changes only once the last share lands. The world\u0027s shadows spread a redraw over more frames where its measured work asks.",
                   "type": "integer",
                   "default": 1
                 }
               },
               "required": [
                 "reach",
-                "texels",
-                "turnDegrees"
+                "texels"
               ],
               "additionalProperties": false,
               "default": null,
@@ -328,17 +328,17 @@
               ],
               "properties": {
                 "hertz": {
-                  "description": "The refreshes a second, a whole number from 1 through MaxHertz, where MaxHertz draws it every frame. A refresh draws the cascade\u0027s two layers on consecutive frames.",
+                  "description": "The refreshes a second, a whole number from 1 through MaxHertz, where MaxHertz draws moved casters every frame.",
                   "type": "integer"
                 },
                 "turnDegrees": {
-                  "description": "The light turn, in degrees, a held cascade tolerates, in (0, MaxTurnDegrees]: past it the cascade is drawn again at once, so a light that turns faster than this a period refreshes the cascade on its turn rather than its rate.",
-                  "type": "number"
+                  "description": "The light turn, in degrees, a held cascade tolerates, within [0, MaxTurnDegrees]: past it the cascade is drawn again. Zero, the default, takes the engine\u0027s: the turn that moves the shadow of a caster as tall as the reach by a quarter of the penumbra the surface pass draws for it and a texel besides.",
+                  "type": "number",
+                  "default": 0
                 }
               },
               "required": [
-                "hertz",
-                "turnDegrees"
+                "hertz"
               ],
               "additionalProperties": false,
               "default": null,
@@ -12348,19 +12348,19 @@
               "type": "integer"
             },
             "turnDegrees": {
-              "description": "The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, in (0, 10].",
-              "type": "number"
+              "description": "The light turn, in degrees, a held map tolerates before it is drawn again: the most its shadows lag a moving sun by, within [0, 10]. Zero, the default, takes the engine\u0027s: the turn that moves the shadow of a caster as tall as the reach by a quarter of the penumbra the surface pass draws for it and a texel besides.",
+              "type": "number",
+              "default": 0
             },
             "frames": {
-              "description": "The frames one redraw is spread over, from 1 through MaxFrames: each draws a share of the casters into a back map, and the map the receivers read changes only once the last share lands, so a redraw costs any one frame about this share of a whole one and lands this many frames later. One draws a redraw whole.",
+              "description": "The fewest frames one redraw is spread over, from 1 through MaxFrames: each draws a share of the casters, and the map the receivers read changes only once the last share lands. The world\u0027s shadows spread a redraw over more frames where its measured work asks.",
               "type": "integer",
               "default": 1
             }
           },
           "required": [
             "reach",
-            "texels",
-            "turnDegrees"
+            "texels"
           ],
           "additionalProperties": false,
           "default": null,
@@ -12374,17 +12374,17 @@
           ],
           "properties": {
             "hertz": {
-              "description": "The refreshes a second, a whole number from 1 through MaxHertz, where MaxHertz draws it every frame. A refresh draws the cascade\u0027s two layers on consecutive frames.",
+              "description": "The refreshes a second, a whole number from 1 through MaxHertz, where MaxHertz draws moved casters every frame.",
               "type": "integer"
             },
             "turnDegrees": {
-              "description": "The light turn, in degrees, a held cascade tolerates, in (0, MaxTurnDegrees]: past it the cascade is drawn again at once, so a light that turns faster than this a period refreshes the cascade on its turn rather than its rate.",
-              "type": "number"
+              "description": "The light turn, in degrees, a held cascade tolerates, within [0, MaxTurnDegrees]: past it the cascade is drawn again. Zero, the default, takes the engine\u0027s: the turn that moves the shadow of a caster as tall as the reach by a quarter of the penumbra the surface pass draws for it and a texel besides.",
+              "type": "number",
+              "default": 0
             }
           },
           "required": [
-            "hertz",
-            "turnDegrees"
+            "hertz"
           ],
           "additionalProperties": false,
           "default": null,

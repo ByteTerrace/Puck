@@ -16,6 +16,8 @@ public sealed partial class SdfWorldTables {
             return m_shadows;
         }
     }
+    // The pool the shadows' layers lie in, which their reservation promises in: the mesh regions' (SdfResidencySelector.Pool).
+    internal Puck.Abstractions.Memory.PhysicalMemory ShadowPool => m_meshGrant.Selector.Pool;
     /// <summary>Describes the world's shadow entries for <c>world.residency</c>.</summary>
     /// <returns>The description, empty before the shadows exist.</returns>
     public string DescribeShadows() => (m_shadows?.Describe() ?? string.Empty);

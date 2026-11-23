@@ -330,7 +330,7 @@ public sealed partial class SdfWorldTables {
     private void NoteMotion(SdfMotionCause cause, int row, bool wasLive, in SdfMeshBox? before, bool wasGlass, bool isLive, in SdfMeshBox? after, bool isGlass, bool shading = false) {
         // The world's shadows redraw where a caster was and where it is, whatever scope the change meets.
         if (!shading && (wasLive || isLive)) {
-            m_shadows?.Moved(row: row, wasLive: wasLive, before: in before, isLive: isLive, after: in after);
+            m_shadows?.Moved(row: row, wasLive: wasLive, before: in before, isLive: isLive, after: in after, glass: ((wasLive && wasGlass) || (isLive && isGlass)));
         }
         if ((m_motionOpen == 0) || !(wasLive || isLive)) { return; }
         m_pendingMotion[m_pendingMotionCount++] = new(After: after, Before: before, Cause: cause, IsGlass: isGlass, IsLive: isLive, Row: row, Shading: shading, WasGlass: wasGlass, WasLive: wasLive);

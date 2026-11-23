@@ -3454,7 +3454,7 @@ public static partial class WorldModelShape {
             [
                 M("reach", typeof(global::System.Single), typeof(global::Puck.World.WorldDistantShadows), "Reach", Read | Write | Required, static value => ((global::Puck.World.WorldDistantShadows)value).Reach),
                 M("texels", typeof(global::System.Int32), typeof(global::Puck.World.WorldDistantShadows), "Texels", Read | Write | Required, static value => ((global::Puck.World.WorldDistantShadows)value).Texels),
-                M("turnDegrees", typeof(global::System.Single), typeof(global::Puck.World.WorldDistantShadows), "TurnDegrees", Read | Write | Required, static value => ((global::Puck.World.WorldDistantShadows)value).TurnDegrees),
+                M("turnDegrees", typeof(global::System.Single), typeof(global::Puck.World.WorldDistantShadows), "TurnDegrees", Read | Write, static value => ((global::Puck.World.WorldDistantShadows)value).TurnDegrees),
                 M("frames", typeof(global::System.Int32), typeof(global::Puck.World.WorldDistantShadows), "Frames", Read | Write, static value => ((global::Puck.World.WorldDistantShadows)value).Frames),
             ],
             []),
@@ -3739,7 +3739,7 @@ public static partial class WorldModelShape {
             [],
             [
                 M("hertz", typeof(global::System.Int32), typeof(global::Puck.World.WorldFarShadows), "Hertz", Read | Write | Required, static value => ((global::Puck.World.WorldFarShadows)value).Hertz),
-                M("turnDegrees", typeof(global::System.Single), typeof(global::Puck.World.WorldFarShadows), "TurnDegrees", Read | Write | Required, static value => ((global::Puck.World.WorldFarShadows)value).TurnDegrees),
+                M("turnDegrees", typeof(global::System.Single), typeof(global::Puck.World.WorldFarShadows), "TurnDegrees", Read | Write, static value => ((global::Puck.World.WorldFarShadows)value).TurnDegrees),
             ],
             []),
         T(typeof(global::Puck.World.WorldFieldCondition), true, JsonTypeInfoKind.Object, null,

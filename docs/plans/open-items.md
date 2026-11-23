@@ -1484,45 +1484,35 @@ The frame's GPU side:
   reading `sdfViewsFilterShadows` and `sdfViewsFilterNormals` puts rows 0 and
   3 on the same banks (read GPU Trace's bank conflicts, then try a row stride
   that clears it).
-- [high] A shadow entry's whole redraw draws nearly every caster in its light box
-  at the coarsest level whose error fits its texel (one of the distant map's four
-  shares 4.3M triangles over 1694 draws, the far entry's whole layer 5.9M over
-  5604, in the selection marks), and runs at every light-turn tolerance, cell crossing and
-  static change (`SdfWorldShadows`), so these limits bite there. Two geometry
-  limits remain: a level chain stops at two contour cells of error, so a finely
-  contoured mesh (the card backs, the console bricks) never coarsens toward a far
-  texel (`SdfMeshCollapse.CellShares`), and draws with members (the falls' slots)
-  have no host box, draw level zero in every pass and owe every entry its whole
-  layer when they move (`SdfWorldShadows.MovedEverywhere`). Measure each against
-  the entries' drawn triangles before changing the bake identity
+- [high] A shadow entry's whole redraw still draws every caster in its light box:
+  on the seams route the far entry's measured whole is about 30M triangles over
+  its entry and exit phases (`world.residency`'s `shadow.far ... tri`), the
+  distant map's about 30M, the near's about 1.3M. The scheduler spreads them
+  under `SdfWorldShadows.UploadVertices` and the penumbra tolerance makes them
+  rare, but the far texel (13 cm) takes no level coarser than two contour cells
+  of a 64 mm tier, and most of the far's casters are small meshes with no coarser
+  level (`SdfMeshCollapse.Levels` stops where a level saves too little). Leads:
+  draw the entry and exit layers in one raster pass so each caster's vertices run
+  once; a level chain for small meshes; and draws with members (the falls'
+  slots) still have no host box, draw level zero and owe every entry its whole
+  layer when they move (`SdfWorldShadows.MovedEverywhere`)
   ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#pucks-open-cases)).
-- [high] A world's shadows draw every entry whole in one upload when its residency
-  first shows a shadowed view: the layers are new, so nothing spreads the first
-  redraw over frames (`SdfWorldShadows.Entry.Decide`), and the shadow pass's
-  most expensive upload reads 14 to 46 ms (`world.residency`'s `shadows ... most`)
-  as the route enters the session world. Spread the first draw as a later one is,
-  keeping the views' filler until the last share lands.
-- [medium] The near entry redraws whole on about one upload in eight on the
-  debug route (`world.rates shadow-near.static`): its one-texel default turn
-  tolerance is 0.06 degrees at a 16 m reach, a quarter of a second of the
-  standard's day. The far and distant entries take authored tolerances; give the
-  near entry the same authored lever, or judge the turn by the shadow length
-  the entry's casters actually have, before changing the default.
-- [medium] Every staging change reaches every entry that follows motion
-  (`SdfWorldShadows.Moved`): about 19 thousand changes an upload in the session
-  world with 51 views, each judged per entry on the frame thread. Most are
-  grass blades that move less than a texel; a per-row skip for draws whose box
-  cannot move a texel at the coarsest entry would cut the work before the
-  per-entry loop.
+- [medium] A shadow rectangle clears its texels and draws every caster in its
+  column again, static ones included: the far entry's rectangles average about
+  1.5M triangles on the seams route for moving casters a few metres across,
+  about one a frame. A static layer the rectangle copies back before drawing the
+  moving casters would cost a pair of layers per entry; weigh it against
+  narrower columns (the caster's own depth span) first.
+- [medium] Under a turning light every entry of every anchor ends its hold at
+  nearly the same upload (the penumbra tolerance is the same angle for every
+  entry), so their redraws queue behind the two spare pairs together. Stagger
+  the anchors' tolerances, or let an entry lag its turn by a share of a period,
+  if the queue shows in `ended-turn` against `held`.
 - [low] A shadow entry's glass extinction selection marks every draw it keeps,
   opaque ones included (`sdf-mesh-occlusion.comp.hlsl`, `marking && emit`), so
   the selection marks' `shadow-<entry> glass` rows read like a second opaque
   draw of the layer although only phase 4's glass draws execute. Mark only the
   glass emission there.
-- [low] A held anchor keeps its layers (about 100 MB at 2048 texels with glass)
-  for `SdfWorldShadows.AnchorKeptUploads` after its last reader leaves. Count
-  the anchors' bytes in the residency's memory account so the selector sees
-  them.
 - [low] A frustum that meets a glass box a wall hides still runs the glass
   trio (`SdfWorldPasses.GlassSeen`); the glass pass's occlusion lies on the
   GPU, past the host test.
@@ -1553,24 +1543,12 @@ The frame's GPU side:
 - [medium] On Direct3D 12 only, a session's mesh pass records every frame:
   its signature moves each frame there and stands on Vulkan. Find the input
   that differs (`world.residency`'s motion line names what met the scope).
-- [medium] The far cascade's hold ends on camera and sun tolerances given in
-  metres and degrees (`SdfUpdateRates`), so a walk or the turning day redraws
-  it nearly every frame. Express both in shadow texels over a padded,
-  texel-snapped fit. The receiver pyramid is also built twice a recording
-  (`SdfMeshOcclusion`).
+- [low] The receiver pyramid is built twice a recording (`SdfMeshOcclusion`).
 - [low] Portal sight has no counter, so `world.counters` cannot show how
   often a completed verdict hides a portal while the camera moves
   (`SdfPortalSight`). Smaller GPU leads: the views filter decodes each tap's
   normal again; and every pixel pass pays a value-returning atomic a wave for
   its work count.
-- [high] Every secondary view runs its own shadow cascades and its own distant
-  map, and nearly every session screen and portal of the debug world is a view
-  of one residency (the shared session scene, `WorldViewNames.Shared`, about
-  fifty views), so one world's identical distant map is drawn again by each
-  view that shows it. Shadows are most of what secondary views cost on the
-  route's portal chapters. One shadow solution per residency, read by every
-  view of it, is the fix; it must cover the union of its views' eyes, since a
-  session world's views look at places no player stands in.
 - [medium] A small view is still vertex-bound by draw count. A view takes a
   group's floor where its own pixels allow (`SdfMeshBand`) and the collapse's
   coarsest levels below it (`SdfMeshCollapse.CellShares`), yet a session view
