@@ -319,7 +319,7 @@ A rule the scheduler always evaluates, because its answer can change without any
 The whole sequence of values a pattern reads. [Learn more](patterns.md#where-a-patterns-values-come-from).
 
 **work sheet**<br/>
-The static worst-case price of the rule work a document can do in one tick, checked against the per-tick ceiling. [Learn more](analysis.md#price-a-ticks-rules).
+The static price of the rule work a document does in one tick, checked against the per-tick ceiling: a tick at rest plus one change for each rule judged by change, and every binding for each other line. [Learn more](analysis.md#price-a-ticks-rules).
 
 **work unit**<br/>
 The heuristic price the compiler assigns to rule work, used to bound each tick. [Learn more](analysis.md#what-a-work-unit-means).

@@ -10695,7 +10695,7 @@ export type WorldPlacementRegion = {
    */
   yawDegrees?: number;
   /**
-   * The most occupants a rule's forEach: region(...) sweep binds in one tick, lowest body index first, and the multiplier the work sheet prices that sweep by; absent for the most bodies that fit the volume (RegionSweepCapacity). It bounds sweeps only: the region still senses and counts every body inside it.
+   * How many occupants the work sheet prices a rule's forEach: region(...) sweep at: the bodies the author expects the place to hold at once. Absent for the most bodies that fit the volume (RegionSweepCapacity). It prices and nothing else: the region senses and counts every body inside it, and a sweep binds every one.
    */
   capacity?: number | null;
 };

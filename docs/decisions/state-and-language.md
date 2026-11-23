@@ -920,8 +920,9 @@ the bindings one change reaches (`RuleResponse.Of`,
 [analysis](../reference/state/analysis.md#price-by-change)). The worst tick,
 every binding of every line judged and firing, is reported beside it and
 never refused. The city's sheet, 1,920 citizens and 100 vehicles, fell from
-3.25 million units to 0.39 million under it, against a ceiling of 4.25
-million.
+3.25 million units to 0.50 million under it, against a ceiling of 4.25
+million, and a 1,800-tick run of it spent 3,200 units a tick where it had
+spent 909,000.
 
 The options weighed:
 

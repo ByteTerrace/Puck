@@ -102,7 +102,6 @@ public sealed partial class RuleEvaluator {
     // whole roster it reads moved, or its list was just built), otherwise only the bodies due. Each binding still
     // passes the version door, so a due body whose own facts did not move keeps its verdict.
     private bool SweepBodies(int index, RuleDueList list, ulong stepTicks, out bool whole) {
-        var rule = list.Rules[index];
         var state = list.States[index];
         var latch = list.Latch;
         var keys = m_host.Arena.Keys;
@@ -123,38 +122,12 @@ public sealed partial class RuleEvaluator {
                 continue;
             }
 
-            list.ClearBinding(binding: body, index: index);
-
             if (!keys.TryResolveIndex(index: body, key: out var key)) {
+                list.ClearBinding(binding: body, index: index);
+
                 continue;
             }
-
-            var binding = new LatchKey(Left: key.Ordinal, Right: -1);
-
-            m_host.BoundEachKey = key;
-
-            var firingsRun = m_firingsRun;
-
-            var outcome = EvaluateOnce(
-                applied: out var moved,
-                binding: binding,
-                latch: latch,
-                rule: rule,
-                state: state,
-                stepTicks: stepTicks
-            );
-
-            applied |= moved;
-            if (m_rerun) {
-                list.MarkBindingNext(binding: body, index: index);
-            }
-            if (!full && !latch.TouchedInSweep(binding: binding, state: state)) {
-                // A binding that could not evaluate is closed exactly as a full sweep's end closes it.
-                latch.Forget(binding: binding, journal: m_host.Arena.Journal, state: state);
-            }
-            if ((outcome == RuleOutcome.Fired) && (m_firingsRun != firingsRun)) {
-                list.Drain();
-            }
+            applied |= SweepBinding(binding: body, full: full, index: index, key: key, list: list, stepTicks: stepTicks);
         }
 
         m_host.BoundEachKey = default;
@@ -164,6 +137,40 @@ public sealed partial class RuleEvaluator {
         list.ForgetUnswept(index: index, journal: m_host.Arena.Journal, keys: keys, latch: latch, state: state, swept: full);
 
         return applied;
+    }
+    // One binding of a keyed sweep the list holds per binding (a body's index, or a row sweep's snapshot position),
+    // judged under its key. A verdict that must be judged again keeps the binding due; a binding a partial sweep
+    // could not evaluate is closed exactly as a full sweep's end closes it; and a firing's moves are drained at once,
+    // so a binding later in the order that the firing reaches is judged this tick.
+    private bool SweepBinding(RuleDueList list, int index, int binding, CellKey key, bool full, ulong stepTicks) {
+        var state = list.States[index];
+        var latch = list.Latch;
+        var bound = new LatchKey(Left: key.Ordinal, Right: -1);
+        var firingsRun = m_firingsRun;
+
+        list.ClearBinding(binding: binding, index: index);
+        m_host.BoundEachKey = key;
+
+        var outcome = EvaluateOnce(
+            applied: out var moved,
+            binding: bound,
+            latch: latch,
+            rule: list.Rules[index],
+            state: state,
+            stepTicks: stepTicks
+        );
+
+        if (m_rerun) {
+            list.MarkBindingNext(binding: binding, index: index);
+        }
+        if (!full && !latch.TouchedInSweep(binding: bound, state: state)) {
+            latch.Forget(binding: bound, journal: m_host.Arena.Journal, state: state);
+        }
+        if ((outcome == RuleOutcome.Fired) && (m_firingsRun != firingsRun)) {
+            list.Drain();
+        }
+
+        return moved;
     }
     // One visit of a keyed row's sweep the list holds per key. Due in full (a cell every binding reads, the swept
     // row's structure or a deadline moved, or its list was just built), it snapshots the row's keys and judges each
@@ -206,34 +213,7 @@ public sealed partial class RuleEvaluator {
                     break;
                 }
             }
-            list.ClearBinding(binding: position, index: index);
-
-            var key = snapshot.Keys[position];
-            var binding = new LatchKey(Left: key.Ordinal, Right: -1);
-
-            m_host.BoundEachKey = key;
-
-            var firingsRun = m_firingsRun;
-            var outcome = EvaluateOnce(
-                applied: out var moved,
-                binding: binding,
-                latch: latch,
-                rule: rule,
-                state: state,
-                stepTicks: stepTicks
-            );
-
-            applied |= moved;
-            if (m_rerun) {
-                list.MarkBindingNext(binding: position, index: index);
-            }
-            if (!full && !latch.TouchedInSweep(binding: binding, state: state)) {
-                // A binding that could not evaluate is closed exactly as a full sweep's end closes it.
-                latch.Forget(binding: binding, journal: m_host.Arena.Journal, state: state);
-            }
-            if ((outcome == RuleOutcome.Fired) && (m_firingsRun != firingsRun)) {
-                list.Drain();
-            }
+            applied |= SweepBinding(binding: position, full: full, index: index, key: snapshot.Keys[position], list: list, stepTicks: stepTicks);
         }
 
         m_host.BoundEachKey = default;

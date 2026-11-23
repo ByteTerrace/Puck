@@ -288,8 +288,8 @@ public abstract class RuleEffect : IRuleEffect {
         ArgumentNullException.ThrowIfNull(argument: into);
 
         into.Add(item: new CellAccess(
-            Each: (effect.KeyFrom is { IsEach: true }),
             IsSet: isSet,
+            Reach: ((effect.KeyFrom is { IsEach: true }) ? CellReach.Each : CellReach.Key),
             Key: ((effect.KeyFrom is null)
             ? effect.Key
             : default),
@@ -393,10 +393,10 @@ public readonly record struct CompiledCellRef(int RowOrdinal, CellKey Key, Bound
         }
 
         into.Add(item: new CellAccess(
-            Each: ((cell.Binding == BoundKey.None) && (cell.InnerKeyBinding == BoundKey.Each)),
             Key: ((cell.Binding == BoundKey.None)
             ? cell.Key
             : default),
+            Reach: (((cell.Binding == BoundKey.None) && (cell.InnerKeyBinding == BoundKey.Each)) ? CellReach.Each : CellReach.Key),
             RowOrdinal: cell.RowOrdinal
         ));
     }

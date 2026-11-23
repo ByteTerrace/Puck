@@ -106,7 +106,7 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
 
                 continue;
             }
-            if (access.Each) {
+            if (access.Each || access.Members) {
                 opened = Math.Max(val1: opened, val2: 1L);
 
                 continue;
@@ -230,7 +230,9 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
                 continue;
             }
             if (other.IsLiteral && set.Source.IsLiteral) {
-                return !Holds(comparison: comparison, left: set.Source.RawValue, right: other.RawValue);
+                // Raw values of one cell kind order as the fixed-point values of those bits do. An operation that is
+                // no ordering proves nothing.
+                return (comparison is (ExpressionOp.Equal or ExpressionOp.NotEqual or ExpressionOp.Less or ExpressionOp.LessOrEqual or ExpressionOp.Greater or ExpressionOp.GreaterOrEqual)) && !comparison.Holds(expected: FixedQ4816.FromRawBits(value: other.RawValue), value: FixedQ4816.FromRawBits(value: set.Source.RawValue));
             }
             if ((comparison != ExpressionOp.NotEqual) || (Cell(source: other) is not { RowFrom: null } mirrored) || (Cell(source: set.Source) is not { RowFrom: null } source)) {
                 return false;
@@ -257,14 +259,4 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
     private static bool Fixed(CompiledCellRef? key) => ((key is null) || key.Value.IsEach);
     // A key no program or key fact computes, so two equal references name the same cell.
     private static bool Plain(CompiledCellRef? key) => ((key is null) || ((key.Value.Program is null) && (key.Value.Custom is null)));
-    private static bool Holds(ExpressionOp comparison, long left, long right) => comparison switch {
-        ExpressionOp.Equal => (left == right),
-        ExpressionOp.NotEqual => (left != right),
-        ExpressionOp.Less => (left < right),
-        ExpressionOp.LessOrEqual => (left <= right),
-        ExpressionOp.Greater => (left > right),
-        ExpressionOp.GreaterOrEqual => (left >= right),
-        // An ordering the proof does not read proves nothing.
-        _ => true,
-    };
 }

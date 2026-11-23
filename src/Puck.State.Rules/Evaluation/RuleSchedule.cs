@@ -42,6 +42,10 @@ public enum RowReach : byte {
     /// <summary>A cell no compile-time key names (a key read from another cell, a fold, a host fact's row): a move of
     /// any cell reaches every binding.</summary>
     Any = 4,
+
+    /// <summary>The row's key set, which a sweep binds: only a change to its members or their order reaches the
+    /// judgement, and no cell's value does.</summary>
+    Members = 8,
 }
 /// <summary>A rule's or a binding's memoized read schedule: every dependency one judgement can have — the arena rows
 /// its locals, live-row selection and gate read, and the host facts they read, each versioned — and, for a sweep, the
@@ -178,8 +182,13 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
 
         foreach (var access in reads) {
             Row(ordinal: access.RowOrdinal);
-            Reach(ordinal: access.RowOrdinal, reach: (access.Each ? RowReach.Each : (access.Key.IsValid ? RowReach.Cells : RowReach.Any)));
-            if (!access.Each && access.Key.IsValid) {
+            Reach(ordinal: access.RowOrdinal, reach: (access.Reach switch {
+                CellReach.Each => RowReach.Each,
+                CellReach.Members => RowReach.Members,
+                CellReach.Key when access.Key.IsValid => RowReach.Cells,
+                _ => RowReach.Any,
+            }));
+            if ((access.Reach == CellReach.Key) && access.Key.IsValid) {
                 var cell = new CellAccess(Key: access.Key, RowOrdinal: access.RowOrdinal);
 
                 if (!cells.Contains(item: cell)) {
@@ -327,7 +336,7 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
                 text.Append(value: ',');
             }
             text.Append(value: RowName(reader: reader, rowOrdinal: rows[index]));
-            if ((reaches is not null) && (index < reaches.Length) && (reaches[index] == RowReach.Each)) {
+            if ((reaches is not null) && (index < reaches.Length) && ((reaches[index] & ~RowReach.Members) == RowReach.Each)) {
                 text.Append(value: "[$each]");
             }
         }

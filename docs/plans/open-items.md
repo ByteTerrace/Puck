@@ -3681,6 +3681,33 @@ Owner: language lane (transpiler) · medium · Next: the cost corpus, then the
   reduction would replace; a write whose key is not literal counts against
   every pinned cell of its row in `CountWriters`; a transfer between piles a
   live zone table picks prices its disclosure term by the square of the piles.
+- [medium] Rule evaluation by change has four known places where a binding is
+  still judged, or priced, more than its reads warrant
+  ([price by change](../reference/state/analysis.md#price-by-change)):
+  - A binding closed at an early term of its gate still wakes for the later
+    terms' reads. A crossing's release rule, `held[$each] == n and (… pose …)`,
+    judges every moving vehicle every tick although the pose is read only for
+    a held one. Recording how far the gate's short circuit got per binding
+    (the prefix of terms it read) and waking the binding only for those terms'
+    reads makes a state machine's sleeping states free whatever else the gate
+    reads.
+  - A Level rule's firing schedule is registered for the whole rule, so a
+    firing that writes a shared cell marks every binding due on the next tick,
+    though only a settled binding stands on that schedule. Counting a rule's
+    settled bindings and consulting the firing schedule only while some stand
+    removes the sweep.
+  - A row read through a per-binding index (`goal[group[$each]]`) wakes every
+    binding when one of its cells moves; the sheet prices the firings at an
+    even share, and the evaluator could wake only the bindings that index the
+    moved cell by keeping, per index row, the bindings under each value.
+  - A rule over a trait row is volatile and judged every tick. A rule that
+    compares a clock row with thresholds (the city's `citizen-phase-*`) could
+    carry the tick its comparison next changes, as a `$tick` deadline does.
+  The sheet also proves a firing closes its own gate in two shapes only
+  (`RuleResponse.ClosesItself`); a transition written another way is priced as
+  firing every tick.
+- [low] `puck registry --check` reports two unclassified document members,
+  `navigation.areaTypes` and `navigation.profiles[].exclude`.
 - [medium] The syntax tree's walks are generated from one description of a
   node's children, and some walkers still stand outside it, as the lane that
   built it reported: the reference lint walks the lowered document twice (a

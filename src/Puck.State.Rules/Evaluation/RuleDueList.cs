@@ -55,7 +55,8 @@ internal sealed class RuleDueList {
             Structure = structure;
             m_indexed = false;
         }
-        // A key's position in the snapshot, indexed on the first lookup after a snapshot.
+        // A key's position in the snapshot, indexed on the first lookup after a snapshot. Keys are matched by
+        // ordinal, which names one key of the row while its structure stands whichever table handed the key out.
         public bool TryPositionOf(CellKey key, out int position) {
             if (!m_indexed) {
                 m_positions.Clear();
@@ -65,7 +66,7 @@ internal sealed class RuleDueList {
                 m_indexed = true;
             }
 
-            return (m_positions.TryGetValue(key: key.Ordinal, value: out position) && (Keys[position] == key));
+            return m_positions.TryGetValue(key: key.Ordinal, value: out position);
         }
     }
 
@@ -174,6 +175,7 @@ internal sealed class RuleDueList {
                     Add(index: wholeRow, key: row, rule: index);
                     // Only a keyed sweep has a binding a moved key can name; any other rule that reads under $each is
                     // evaluated whole.
+                    // A row named for its key set alone is reached only by a move that names it whole.
                     if (
                         ((reach & RowReach.Any) != RowReach.None) ||
                         (reach == RowReach.None) ||

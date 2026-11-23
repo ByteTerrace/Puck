@@ -429,13 +429,14 @@ placements {
         halfExtents [crossing.hx, 2, crossing.hz]
       }
     }
-    // The approach before the crossing, priced for the few vehicles that queue in this box.
+    // The approach before the crossing. Held vehicles pass through one another and collect in this box, so it is
+    // priced for every vehicle of its loop.
     placement $"{crossing.region}-approach" {
       prototype: "place"
       position [(crossing.x0 + crossing.x1) / 2, 1.5, (crossing.z0 + crossing.z1) / 2]
       region {
         halfExtents [(crossing.x1 - crossing.x0) / 2, 2, (crossing.z1 - crossing.z0) / 2]
-        capacity: 4
+        capacity: length(filter(vehicleSpots, v => v.group == crossing.group))
       }
     }
   }

@@ -25,10 +25,13 @@ A few rules apply to every limit on this page:
   document, raise the ceiling that was hit and keep the content as it is.
 
 > [!NOTE]
-> Work units are heuristic prices that aren't calibrated against CPU time. A
-> document that stays under `RuleCapacity.MaxWorkUnitsPerTick` has a bounded
-> amount of rule work per tick, but that bound doesn't guarantee how long a tick
-> takes. The search jobs share the same ceiling: what the rules' sheet leaves is
+> Work units are heuristic prices that aren't calibrated against CPU time. The
+> sheet a document is held to under `RuleCapacity.MaxWorkUnitsPerTick` prices
+> a tick at rest plus one change for each rule the evaluator judges by change,
+> and every binding for each other line; it doesn't guarantee how long a tick
+> takes, and a tick in which many things change at once costs more, up to the
+> worst tick the sheet reports. The search jobs share the same ceiling: what
+> the rules' sheet leaves is
 > their allowance, so an over-priced rule shrinks every search. A rule that fires
 > only a few of its bindings is priced by its enforced `maxFirings`. See
 > [Rule analysis, scheduling, and work budgets](analysis.md).

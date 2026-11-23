@@ -117,6 +117,11 @@ public static class WorldRuleDisclosure {
             RuleDataflow.CollectExpressionSchedulingFacts(into: facts, tokens: local.Expression);
         }
         RuleDataflow.CollectEffectFacts(effects: rule.Effects, includeSources: true, into: facts);
+        if (rule.Iteration is WorldRegionIteration occupants) {
+            // A sweep over a region's occupants fires for whoever stands in it, as a read of its occupancy does.
+            into.Add(reach: WorldDisclosureReach.Bodies);
+            into.AddPlacement(placementId: occupants.PlacementId);
+        }
         if (rule is CompiledWorldFactsRule world) {
             if (world.Interaction is not null) {
                 // A sweep pairs carriers across the whole population, so whether it fires depends on every body.

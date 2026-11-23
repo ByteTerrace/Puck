@@ -336,7 +336,7 @@ rule "name" { [local …]* [when Gate] [mode: …] [forEach: …] [maxFirings: N
 |---|---|---|---|---|---|---|
 | `name` (required) | header | name | — | `name` | — | The rule's name, which a group claims it by and a trace reports. |
 | `mode:` | property | enumeration (`Edge`, `Level`) | — | `mode` | — | Whether the rule fires on the gate becoming true or on every tick it is true. |
-| `forEach:` | property | reference | — | `forEach` | — | What the rule iterates, one evaluation per binding of `$each`: a keyed row's live keys, `$zones` for its zone table's entries, or `$bodies` for every live body in ascending index order. |
+| `forEach:` | property | reference | — | `forEach` | — | What the rule iterates, one evaluation per binding of `$each`: a keyed row's live keys, `$zones` for its zone table's entries, `$bodies` for every live body in ascending index order, `region(placement)` for the bodies inside a placement's region, or `inputEvents(owner)` for the input events a step admitted. A sweep written as a call names its reserved channel by its arguments, as a gate's fact does. |
 | `maxFirings:` | property | number | — | `maxFirings` | — | The most bindings of one iterating sweep that may fire in a tick; the sweep stops there, the rest wait for a later tick, and the work sheet prices the rule's firings at this number instead of the iterated row's capacity. |
 | `effects` (required) | body | statements | — | `effects` | — | The effect statements the rule fires, in written order; a rule with none is refused. |
 
