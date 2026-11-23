@@ -243,8 +243,9 @@ What the memory side holds today:
 - **The host bar is a play budget.** Each host owner draws on one allowance
   (`MemoryAllowance`), fixed when it is created: play, held to the authored
   host bar with the private bytes beyond every owner, or authoring, held to
-  the machine's room alone (its free memory and commit room, under three
-  quarters of what it has installed). A player's build counts authoring as
+  the machine's measured room alone (its free memory and commit room less
+  `MemoryAccount.AuthoringMargin`, and none while the system signals low
+  memory). A player's build counts authoring as
   play (`MemoryAccount.SetAuthoringOnPlayBar`). The owners and their
   allowances are in [the large host owners](#the-large-host-owners).
 - **Progress is forced once in the process.** A bake with nothing admitted
@@ -548,9 +549,17 @@ held, promised and room.
 | Driver memory and swapchain images | Beyond the owners | Named, as the API's usage less the ledger | 1 |
 | Capture and media buffers, and a pagefile-backed section no Puck code creates | Beyond the owners | Named by step 2's page walk before anything is cut | 2 |
 
-Authoring draws only on the machine's room past play's entitlement: the larger
-of what play holds and has promised and the bar's limit, so a bake never
-crowds play out of its budget, and on a busy machine the bake is what waits.
+Authoring draws on the machine's measured room: the free physical memory and
+commit headroom the account last read, less what the whole pool holds and has
+promised since and a margin (`MemoryAccount.AuthoringMargin`, an eighth of the
+installed memory) that keeps the machine under the load at which the .NET
+collector turns to full compacting collections. It never waits on the part of
+play's bar play does not hold, nor on a share of the installed memory, so a
+bake on a 16 GB machine under a 6 GiB play bar has the machine's free memory to
+work in. It gives that room back as the machine fills: other programs' memory
+leaves the free reading, the system's low-memory signal
+(`HostMemory.LowMemorySignaled`) leaves authoring no room and asks the caches
+to trim, and on a busy machine the bake is what waits.
 
 The private bytes beyond the owners have no owner to say whose they are. In a
 process that has never run authoring work, which every player's process is,
