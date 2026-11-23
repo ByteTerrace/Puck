@@ -363,7 +363,13 @@ Workers follow the same evidence: a bootstrap that finds a worker replaces it (d
 fresh compute at Activate) only when `WorldReleaseGroupRecord.HasRecoveredBootstrap` holds, that is, the group never
 committed and its history records a bootstrap that captured roots and recovered; otherwise it refuses. A bootstrap's
 recovery deletes its compute (`StopCandidateAsync` with no source), since nothing restarts on it and Azure's
-automatic repairs would keep rerunning the refused extension. A deploy decides what to do with the group's pending
+automatic repairs would keep rerunning the refused extension. Every start of a retained deployment
+(`AzureWorldReleaseRuntime.EnsureWorkerAsync`: the candidate at Activate, Verify or Commit, the restored source at
+RecoverActivate) only checks a worker already running its exact image and replaces any other with fresh compute. Azure
+re-runs a VM extension only when its configuration changes, so re-applying the model a worker already carries (a
+source its drain stopped, a VM an automatic repair booted while the guest guard refused it) runs nothing and reports
+that worker's last result, a stopped host or a stale refusal; a fresh worker's bootstrap meets the guard under the
+phase as it is then. Never reconfigure an idle worker in place. A deploy decides what to do with the group's pending
 operation through `WorldReleaseCoordinator.Succession`, shared by the Azure host and the succession laws: its own
 release resumes, no unfinished operation begins (the store's `BeginAsync` moves an admitted operation into history and
 closes its rollback window in the claiming write, so the pipeline never finalizes), and another release's unfinished

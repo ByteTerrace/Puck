@@ -32,8 +32,10 @@ public readonly record struct SdfMeshIrradianceWindow(Vector3 Spacing, (int X, i
 /// <param name="Far">The coarsest level's window.</param>
 /// <param name="Geometry">The serial of the published geometry: it moves with each publication that resizes, respaces or
 /// withdraws a window, or that copies a retrace of a probe its slot already held or a republication of every slot; never
-/// with a relight, a window's move, or a probe traced into a cell no slot held. A gather the probe lookup keeps between
-/// frames stands only under the serial it was taken at (<c>sdf-views-probe-history.hlsli</c>).</param>
+/// with a relight, a window's move, or a probe traced into a cell no slot held. Each step takes a serial no other
+/// publication of any volume in the process holds, never zero (zero is the parameters' default, a volume that published
+/// nothing), so a gather a history keeps stands only under the serial it was taken at, in the volume it was taken in
+/// (<c>sdf-probe-history.hlsli</c>).</param>
 /// <param name="Windows">The serial of the published windows' places: it moves with each publication that moves a window.
 /// A kept gather outlives such a move only where the windows still hold its receiver the way they did.</param>
 public readonly record struct SdfMeshIrradianceParameters(bool Enabled, SdfMeshIrradianceWindow Finest, SdfMeshIrradianceWindow Middle = default, SdfMeshIrradianceWindow Far = default, uint Geometry = 0, uint Windows = 0) {
@@ -658,8 +660,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // The published geometry's serial (SdfMeshIrradianceParameters.Geometry), and whether a landed retrace or a
     // republication owes it a step at the next publication that copies slots. It steps there and nowhere else, so a
     // gather kept under a serial never saw the slots a later step published.
-    private uint m_geometrySerial;
+    private uint m_geometrySerial = NextGeometrySerial();
     private bool m_geometryOwed;
+    // The geometry serials taken across the process, so no two publications of any volumes share one.
+    private static uint GeometrySerials;
     // The published windows' serial (SdfMeshIrradianceParameters.Windows): it steps with each publication that moves a
     // window without laying its slots out again.
     private uint m_windowSerial;
@@ -1201,10 +1205,19 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         relaid |= (published.Enabled != m_published.Enabled);
         if (relaid || (copied && m_geometryOwed)) {
             m_geometryOwed = (m_geometryOwed && !copied);
-            m_geometrySerial++;
+            m_geometrySerial = NextGeometrySerial();
         }
         if (moved) { m_windowSerial++; }
         m_published = published with { Geometry = m_geometrySerial, Windows = m_windowSerial };
+    }
+    // A geometry serial no publication of any volume has held, never zero.
+    private static uint NextGeometrySerial() {
+        uint serial;
+
+        do {
+            serial = Interlocked.Increment(location: ref GeometrySerials);
+        } while (serial == 0u);
+        return serial;
     }
     // Where a level's window centres for the first view. The finest level's anchor is its camera moved ahead along its
     // horizontal forward by a quarter of the window's horizontal extent, so the finest probes cover what the view looks

@@ -82,15 +82,10 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     private readonly string[] m_outputs;
     // Whether the part reads the preceding resolve's history surface (SdfWorldPackage.RateFragment's probe lookup).
     private readonly bool m_readsRateHistory;
-    // Each history buffer the part reads or writes through a member: its port, whether it is an input, and the member.
-    // A history's two allocations alternate across submissions independently of the descriptor set's slot, so each is
-    // bound from the buffer its recording hands the port (BindHistory), never by the slot's cached ports (BindPorts).
-    private readonly (int Port, bool Input, string Member)[] m_historyPorts;
-    private readonly IGpuBuffer?[][] m_boundHistory;
+    // The history buffers the part reads or writes through members (SdfHistoryPorts).
+    private readonly SdfHistoryPorts m_history;
     private readonly SdfWorldPasses m_owner;
     private readonly string m_part;
-    // Whether the pass belongs to the temporal fragment (SdfWorldPackage.TemporalFragment).
-    private readonly bool m_temporal;
     private readonly bool m_resolved;
     // Whether the views pass's graph shades in bins (SdfWorldPasses.ShadesInBins); it records unsplit on a frame whose
     // plan does not bin.
@@ -202,23 +197,11 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         m_part = (context.Part ?? throw new ArgumentException(message: $"Pass '{context.Pass}' runs no part of '{RenderGraphPackageCatalog.SdfWorld}'.", paramName: nameof(context)));
         // Port declarations are captured by graph planning, before the asynchronous build. The live frame may already
         // request another fade capacity when this recorder installs or follows a view.
-        var prefix = context.Pass[..^m_part.Length];
-
-        string LocalName(ShaderPipelineResource resource) => (resource.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: prefix)
-            ? resource.Name[prefix.Length..] : resource.Name);
-
-        m_inputs = [.. context.Inputs.Select(selector: LocalName)];
-        m_outputs = [.. context.Outputs.Select(selector: LocalName)];
+        m_inputs = LocalNames(pass: context.Pass, part: m_part, ports: context.Inputs);
+        m_outputs = LocalNames(pass: context.Pass, part: m_part, ports: context.Outputs);
         m_readsRateHistory = m_inputs.Contains(value: SdfWorldPackage.Parts.HistorySurface);
-        m_historyPorts = [
-            .. m_inputs.Select(selector: static (name, port) => (Port: port, Input: true, Name: name)).Where(predicate: static entry => IsHistory(version: entry.Name))
-                .Select(selector: static entry => (entry.Port, entry.Input, ReadMemberOf(version: entry.Name)!)),
-            .. m_outputs.Select(selector: static (name, port) => (Port: port, Input: false, Name: name)).Where(predicate: static entry => IsHistory(version: entry.Name))
-                .Select(selector: static entry => (entry.Port, entry.Input, WrittenMemberOf(version: entry.Name)!)),
-        ];
-        var fragment = owner.FragmentOf(instance: context.Instance)!;
+        m_history = new SdfHistoryPorts(inputs: m_inputs, outputs: m_outputs, slots: context.InFlightFrames);
 
-        m_temporal = fragment.Resources.Any(predicate: static resource => resource.History);
         m_resolved = m_outputs.Contains(value: SdfWorldPackage.CurrentColor);
         m_binned = SdfWorldPasses.ShadesInBins(context: context);
 
@@ -230,10 +213,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         m_portTables = new SdfWorldTables?[slots];
         m_portShadows = new long[slots];
         m_boundCounters = new IGpuBuffer?[slots];
-        m_boundHistory = new IGpuBuffer?[slots][];
-        for (var slot = 0; (slot < slots); slot++) {
-            m_boundHistory[slot] = new IGpuBuffer?[m_historyPorts.Length];
-        }
         m_screens = new nint[slots][];
 
         for (var slot = 0; (slot < slots); slot++) {
@@ -750,7 +729,9 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             set: set,
             tables: tables
         );
-        BindHistory(
+        m_history.Bind(
+            layout: PassLayout,
+            pass: m_context.Pass,
             recording: in recording,
             set: set,
             tables: tables
@@ -1045,7 +1026,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             var bound = recording.Inputs[port];
 
             if (bound.Buffer is { } buffer) {
-                if (!IsHistory(version: name) && (ReadMemberOf(version: name) is { } member)) {
+                if (!SdfHistoryPorts.IsHistory(version: name) && (ReadMemberOf(version: name) is { } member)) {
                     tables.WriteInterfaceBuffer(buffer: buffer, layout: layout, member: member, set: set);
                 }
             } else if (string.Equals(
@@ -1061,7 +1042,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             var bound = recording.Outputs[port];
 
             if (bound.Buffer is { } buffer) {
-                if (!IsHistory(version: name) && (WrittenMemberOf(version: name) is { } member)) {
+                if (!SdfHistoryPorts.IsHistory(version: name) && (WrittenMemberOf(version: name) is { } member)) {
                     tables.WriteInterfaceBuffer(buffer: buffer, layout: layout, member: member, set: set);
                 }
             } else if (bound.Kind == ShaderPipelineResourceKind.Image) {
@@ -1075,7 +1056,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         }
 
         m_boundCounters[slot] = null;
-        Array.Clear(array: m_boundHistory[slot]);
+        m_history.Forget(slot: slot);
         m_portTables[slot] = tables;
         m_portShadows[slot] = shadowRevision;
 
@@ -1105,23 +1086,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     // (RenderGraphFragmentPass.CountsKernelWork), so its node always hands it a row.
     private GpuKernelCounterRow WorkCountersOf(in RenderGraphPackageRecording recording) =>
         (recording.WorkCounters ?? throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' counts its kernels' work, but its recording carries no work counters."));
-    // Binds each history port's buffer as its recording hands it, writing the slot's set only where the buffer moved.
-    private void BindHistory(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
-        var bound = m_boundHistory[recording.Slot];
-
-        for (var index = 0; (index < m_historyPorts.Length); index++) {
-            var (port, input, member) = m_historyPorts[index];
-            var buffer = ((input ? recording.Inputs[port].Buffer : recording.Outputs[port].Buffer)
-                ?? throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' binds no buffer at its history port '{member}'."));
-
-            if (!ReferenceEquals(objA: buffer, objB: bound[index])) {
-                tables.WriteInterfaceBuffer(buffer: buffer, layout: PassLayout, member: member, set: set);
-                bound[index] = buffer;
-            }
-        }
-    }
-    // Whether a fragment buffer is history, whose allocations alternate across submissions (BindHistory).
-    private static bool IsHistory(string version) => version is SdfWorldPackage.Parts.HistorySurface or SdfWorldPackage.Parts.ProbeHistory;
     // The member a pass reads a fragment buffer through, or null for one it reads through no member.
     private static string? ReadMemberOf(string version) => version switch {
         SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecords,
@@ -1129,8 +1093,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecords,
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecords,
         SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTiles,
-        SdfWorldPackage.Parts.HistorySurface => SdfWorldPackage.HistorySurface,
-        SdfWorldPackage.Parts.ProbeHistory => SdfWorldPackage.ViewsProbeHistory,
         _ => null,
     };
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
@@ -1142,7 +1104,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecordsWritten,
         SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTilesWritten,
         SdfWorldPackage.Parts.ShadeArguments => SdfWorldPackage.ShadeArgumentsWritten,
-        SdfWorldPackage.Parts.ProbeHistory => SdfWorldPackage.ViewsProbeHistoryWritten,
         _ => null,
     };
 }

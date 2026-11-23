@@ -168,6 +168,7 @@ public sealed partial class ShaderPipelineRenderNode {
             ports: runtime.Outputs
         );
         runtime.PackageAliasRefusal = m_pipeline!.Plan.Derived.AliasRefusal(planned: planned);
+        runtime.PackageKeptHistory = [.. runtime.Outputs.Select(selector: output => KeepsHistory(plan: m_pipeline!.Plan, planned: planned, name: output.Name))];
         runtime.PackageArguments = ((planned.Package.Dispatch is { Kind: ShaderPipelineDispatchKind.Indirect, Arguments: { } arguments })
             ? arguments
             : null);
@@ -203,7 +204,8 @@ public sealed partial class ShaderPipelineRenderNode {
     }
 
     // Why a pass that draws nothing cannot leave its outputs standing for its inputs, or null when it can: output i
-    // stands for input i (a buffer output that forwards its predecessor's storage stands for nothing and is skipped), so each output must be an owned image a surface carries, bound beside an input image of its format, that
+    // stands for input i (a buffer output that forwards its predecessor's storage, and a history the pass alone writes,
+    // stand for nothing and are skipped), so each output must be an owned image a surface carries, bound beside an input image of its format, that
     // no pass of the graph touches except later package passes reading this frame's instance, since a package pass
     // resolves each input through what it stands for (RecordPackage): publishing the input in its place changes nothing
     // any pass reads, and a chain of passes that draw nothing resolves to the first input it stands for. Every read of
@@ -218,7 +220,7 @@ public sealed partial class ShaderPipelineRenderNode {
         for (var index = 0; (index < pass.Outputs.Count); index++) {
             // A buffer the pass forwards from its predecessor holds the predecessor's contents whether or not the pass
             // writes it, so it stands for nothing.
-            if (ForwardsBuffer(plan: plan, name: pass.Outputs[index].Name)) {
+            if (ForwardsBuffer(plan: plan, name: pass.Outputs[index].Name) || KeepsHistory(plan: plan, planned: planned, name: pass.Outputs[index].Name)) {
                 continue;
             }
 
@@ -266,6 +268,18 @@ public sealed partial class ShaderPipelineRenderNode {
     private static bool ForwardsBuffer(ShaderPipelinePlan plan, string name) => (
         plan.FindResource(name: name) is { Declaration: { Kind: ShaderPipelineResourceKind.Buffer, PreservesPredecessor: true } }
     );
+    // Whether a version is a history buffer no pass but the planned one writes: a recording of that pass that draws
+    // nothing leaves the history as its last write left it, as a pass that stands does (SkipAccess), so the output stands
+    // for nothing and the next frame reads that write.
+    private static bool KeepsHistory(ShaderPipelinePlan plan, ShaderPipelinePlannedPass planned, string name) {
+        if ((plan.FindResource(name: name) is not { } resource) || !plan.Storages[resource.Storage].History ||
+            (plan.Storages[resource.Storage].Declaration.Kind != ShaderPipelineResourceKind.Buffer)) {
+            return false;
+        }
+
+        return !plan.Passes.Any(predicate: other => ((other.Index != planned.Index) && other.Accesses.Any(predicate: access => (
+            (access.Storage == resource.Storage) && access.Use.Writes && !access.PreviousFrame))));
+    }
     // Whether an access to a stand-in's output reads whatever the output stands for: a later package pass reading this
     // frame's instance, which it resolves through the stand-in when it records.
     private static bool ResolvesThroughStandIn(ShaderPipelineAccess access, ShaderPipelinePlannedPass reader, ShaderPipelinePlannedPass standIn) => (
@@ -410,6 +424,14 @@ public sealed partial class ShaderPipelineRenderNode {
             }
             if (ForwardsBuffer(plan: m_pipeline!.Plan, name: pass.Outputs[index].Name)) {
                 output.Alias = default;
+
+                continue;
+            }
+            // A history the pass alone writes keeps the instance its last write left: the reservation PrepareHistoryWrites
+            // made for this recording is withdrawn, so the next frame reads that write as its previous frame.
+            if (pass.PackageKeptHistory[index]) {
+                output.Alias = default;
+                output.HistoryWriting = false;
 
                 continue;
             }

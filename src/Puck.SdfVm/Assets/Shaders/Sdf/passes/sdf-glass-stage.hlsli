@@ -15,6 +15,9 @@
 //   (sdfGlassReceived), and what lies behind over the rest;
 // - a contact (sdfGlassContact) adds coverage to the flow's where the opaque hit lies within its reach of the surface,
 //   and the coverage the flow reveals covers the interface as its revealed surface, lit diffusely by the same light;
+// - the near interface's irradiance gather comes from the glass probe history where a preceding render kept one for a
+//   receiver its own passes the reuse test against (sdfGlassNearProbes, sdf-probe-history.hlsli), and is gathered and
+//   kept for the next render otherwise; the far interface and a medium the ray starts in gather every time;
 // - its surroundings reflect in it by Fresnel (Schlick over the index's normal reflectance): the sky the lighting sees,
 //   blurred by the roughness (worldEnvironmentReflection), occluded by the irradiance volume and replaced by the light its
 //   probes measured where they do not see the sky (sdfMeshReflection), as an opaque surface reflects them; where no probe
@@ -57,6 +60,7 @@
 #include "../shade/shade-layers.hlsli"
 #include "../isa/sdf-shade.hlsli"
 #include "../shade/sdf-transport.hlsli"
+#include "sdf-probe-history.hlsli"
 
 // The frost's taps and the most render pixels their disc spans.
 static const uint GlassFrostTaps = 8u;
@@ -193,6 +197,38 @@ bool sdfGlassSecondInterface(uint word, uint nearDraw, uint nearTriangle, float3
     return found;
 }
 
+// The probes the near interface's receiver at `surfacePoint` shades with, at the normal `normal` its shading tilted it
+// to, met by the ray at `cosine` in a pixel that spans `footprint` metres there: the preceding render's gather from the
+// glass probe history where one stands for the receiver (sdfProbeHistoryFind), else a gather of its own. The pixel at
+// its cell's first place writes the cell's entry for the next render (`writes`, set false here once it has): the gather
+// it reused, carried, or the one it took, kept where it is complete. Every view's glass shades one view, so its cells are
+// view zero's.
+SdfMeshProbes sdfGlassNearProbes(uint2 pixel, float3 surfacePoint, float3 normal, float cosine, float footprint, bool reads, inout bool writes) {
+    float2 tolerance = sdfViewsProbeTolerance(footprint, cosine);
+    uint entry = sdfProbeHistoryEntry((pixel / SDF_VIEWS_PROBE_RATE), 0u);
+    uint previous;
+
+    if (reads && sdfProbeHistoryFind(sdfGlassProbeHistory, 0u, surfacePoint, normal, tolerance, previous)) {
+        if (writes) {
+            sdfProbeHistoryCarry(sdfGlassProbeHistory, sdfGlassProbeHistoryRW, entry, previous);
+            writes = false;
+        }
+        return sdfProbeHistoryLoad(sdfGlassProbeHistory, previous);
+    }
+
+    bool complete;
+    bool windowBound;
+    SdfMeshProbes probes = sdfMeshProbesAtComplete(surfacePoint, normal, complete, windowBound);
+
+    if (writes) {
+        uint hold = sdfProbeHistoryHoldOf((surfacePoint + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS)), windowBound);
+
+        sdfProbeHistoryStore(sdfGlassProbeHistoryRW, entry, (complete && (probes.share > 0.0)), surfacePoint, sdfVisibilityPackNormal(normal), hold, probes);
+        writes = false;
+    }
+    return probes;
+}
+
 // The same homogeneous transport applies between the camera and an exit and behind an entrance.
 float3 sdfGlassTransmission(SdfMaterialData material, float3 opticalDepth, float distance, out float3 scattered) {
     float unscattered = exp(-max(material.scattering, 0.0) * distance);
@@ -223,6 +259,11 @@ void sdfGlassPixel(uint2 pixel) {
         color = float4(sdfShadeDiagnostic(sdfMeshMaterial(nearHit), passGroup.debugMode), 1.0);
     }
     float reactive = 0.0;
+    // The glass probe history: whether this render keeps it, reads the preceding render's, and whether this pixel, its
+    // cell's first, still owes the cell's entry.
+    bool keepsProbes = sdfProbeHistoryKeeps(sdfGlassProbeHistoryRW, 0u);
+    bool readsProbes = sdfProbeHistoryReads(sdfGlassProbeHistory, keepsProbes, extent, 0u);
+    bool writesProbes = (keepsProbes && all((pixel % SDF_VIEWS_PROBE_RATE) == 0u));
     float3 origin = view.position.xyz;
     float3 rayDirection = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(extent)));
     float insideDistance = 0.0;
@@ -359,7 +400,13 @@ void sdfGlassPixel(uint2 pixel) {
                 material.roughness = roughness;
             }
 
-            SdfMeshProbes probes = sdfMeshProbesAt(surfacePoint, normal);
+            SdfMeshProbes probes;
+
+            if (isNear) {
+                probes = sdfGlassNearProbes(pixel, surfacePoint, normal, abs(dot(rayDirection, normal)), (footprint * t), readsProbes, writesProbes);
+            } else {
+                probes = sdfMeshProbesAt(surfacePoint, normal);
+            }
             float3 highlights;
             float incoming;
             float3 radiance;
@@ -476,6 +523,10 @@ void sdfGlassPixel(uint2 pixel) {
         sdfWorkSteps++;
     }
 
+    // A cell whose first pixel shows no glass face keeps no gather.
+    if (writesProbes) {
+        sdfProbeHistoryStore(sdfGlassProbeHistoryRW, sdfProbeHistoryEntry((pixel / SDF_VIEWS_PROBE_RATE), 0u), false, float3(0.0, 0.0, 0.0), 0u, 0u, sdfMeshProbesNone());
+    }
     output[pixel] = float4(min(color.rgb, SDF_LUMINANCE_CEILING), color.a);
     if ((passGroup.temporal != 0u) && (glass || insideDistance > 0.0)) {
         uint index = sdfReactivityIndex(pixel, 0u, extent);

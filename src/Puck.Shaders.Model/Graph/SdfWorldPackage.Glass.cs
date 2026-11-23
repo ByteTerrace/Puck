@@ -33,7 +33,8 @@ public static partial class SdfWorldPackage {
 
     /// <summary>The glass shading pass's interface: the common frame values, the lit image views wrote (sampled), the
     /// glass visibility target (sampled), the visibility records and the glass sums it reads, the reactivity it raises
-    /// at a glass pixel in a temporal view (a filler elsewhere), the image it writes, the work counters and the World
+    /// at a glass pixel in a temporal view (a filler elsewhere), the image it writes, the preceding render's glass probe
+    /// gathers it reuses and this render's it keeps (<see cref="GlassProbeHistory"/>), the work counters and the World
     /// group's tables.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> GlassMembers => GlassDeclaration.Members;
 
@@ -46,6 +47,8 @@ public static partial class SdfWorldPackage {
             Read(element: ShaderValueType.Uint, name: GlassSums),
             Written(element: ShaderValueType.Float, name: ReactivityWritten),
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: Output, type: ShaderValueType.Float4),
+            Read(element: ShaderValueType.Uint, name: GlassProbeHistory),
+            Written(element: ShaderValueType.Uint, name: GlassProbeHistoryWritten),
             ShaderWorkCounters.BufferMember,
             .. Tables,
         ];
@@ -86,6 +89,8 @@ public static partial class SdfWorldPackage {
         var meshDepth = fragment.Resources.Single(predicate: static resource => (resource.Name == Parts.MeshDepth));
         var visibility = fragment.Resources.Single(predicate: static resource => (resource.Name == Parts.Visibility));
         var sumCount = visibility.Count!.Select(selector: static term => term with { Elements = GlassSumWords }).ToArray();
+        // The glass pass runs on the render grid, the probe history's basis in every fragment.
+        var probeHistory = fragment.Resources.Single(predicate: static resource => (resource.Name == Parts.ProbeHistory));
         var passes = new List<RenderGraphFragmentPass>(capacity: (fragment.Passes.Count + 3));
         var after = false;
 
@@ -109,11 +114,20 @@ public static partial class SdfWorldPackage {
                     OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.FragmentWrite],
                     Outputs: [new ResourceReference(Name: Parts.GlassTarget), new ResourceReference(Name: Parts.GlassDepth), new ResourceReference(Name: Parts.GlassSums)]
                 ));
-                passes.Add(item: Pass(
+                var shade = Pass(
                     inputs: [lit, Parts.Visibility, Parts.GlassTarget, Parts.GlassSums],
                     name: Parts.GlassShade,
                     outputs: (temporal ? [Parts.GlassLit, Parts.GlassReactivity] : [Parts.GlassLit])
-                ) with { Members = GlassMembers });
+                );
+
+                // The glass pass reuses the preceding render's gathers at its nearest faces and keeps this render's.
+                passes.Add(item: shade with {
+                    InputAccesses = [.. shade.InputAccesses, RenderGraphPortAccess.ComputeRead],
+                    Inputs = [.. shade.Inputs, new ResourceReference(Name: Parts.GlassProbeHistory, PreviousFrame: true)],
+                    Members = GlassMembers,
+                    OutputAccesses = [.. shade.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
+                    Outputs = [.. shade.Outputs, new ResourceReference(Name: Parts.GlassProbeHistory)],
+                });
                 continue;
             }
             passes.Add(item: (!after
@@ -130,6 +144,7 @@ public static partial class SdfWorldPackage {
             Resources = [
                 .. fragment.Resources,
                 litResource with { Name = Parts.GlassLit },
+                probeHistory with { Name = Parts.GlassProbeHistory },
                 meshTarget with { Name = Parts.GlassTarget },
                 meshDepth with { Name = Parts.GlassDepth },
                 visibility with { Name = Parts.GlassSumsCleared, StrideBytes = sizeof(uint), Count = sumCount },
@@ -182,5 +197,7 @@ public static partial class SdfWorldPackage {
         /// <summary>The reactivity with each glass pixel's raised where its refracted sample comes from elsewhere on
         /// screen, which a temporal view's resolve reads in the reactivity's place.</summary>
         public const string GlassReactivity = "glassReactivity";
+        /// <summary>The glass pass's history of probe gathers at its nearest faces (<see cref="GlassProbeHistory"/>).</summary>
+        public const string GlassProbeHistory = "glassProbeHistory";
     }
 }

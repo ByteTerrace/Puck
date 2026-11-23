@@ -76,9 +76,9 @@ resource balancer 'Microsoft.Network/loadBalancers@2025-01-01' = {
       // The MCP rule judges only that Caddy listens, never /healthz. Caddy's certificate is restored from the owner's
       // store or, when none is stored, comes from ACME TLS-ALPN-01, whose validation reaches Caddy through this rule
       // (and the platform's WorldMcp security rule) before any certificate exists. The release's worker is already in
-      // the pool: a release replaces the one worker in place and a fresh worker's NIC joins the pool when it is
-      // created, so the VM extension can wait for that TLS front before the release commits, while /healthz answers
-      // 503 until the commit opens admission. The silo registers no MCP world session before admission opens, so the
+      // the pool: a release boots its one worker on fresh compute, whose NIC joins the pool when it is created, so the
+      // VM extension can wait for that TLS front before the release commits, while /healthz answers 503 until the
+      // commit opens admission. The silo registers no MCP world session before admission opens, so the
       // rule exposes nothing early.
       ...(mcpEnabled
         ? [

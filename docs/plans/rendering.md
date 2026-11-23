@@ -862,11 +862,13 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
   a lane.
 - The probe lookup reuses gathers across cells and frames
   ([decision](../decisions/rendering.md#global-illumination)). What remains of it:
-  a window's move still drops the gathers whose level's cage it changes, and an
-  extra pixel's gather reuses only a preceding representative's; the glass
-  passes still gather at every pane pixel (`passes/sdf-glass-stage.hlsli`), which
-  the same history could serve. Check: `world.counters gpu pass
-  sdf.world$views-probes counter texels` (gathers run) over the route.
+  a window's move still drops the gathers whose level's cage it changes, an
+  extra pixel's gather reuses only a preceding representative's, and the glass
+  pass keeps only the near face's gathers (the far face and a medium the ray
+  starts in gather at every pixel). Check: `world.counters gpu pass
+  sdf.world$views-probes counter texels` (gathers run) over the route, nested
+  views' nodes (`session$…`, `routed$…`) included, since every view keeps the
+  history.
 - Bring the main view under its share of the frame at 2560 by 1440 on the RTX
   4070, at native resolution under the `high` table's `renderScale: 1`. The
   views pass walks only the lights that reach a tile and that its probes see

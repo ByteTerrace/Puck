@@ -175,6 +175,9 @@ public sealed partial class ShaderPipelineRenderNode {
 
         // Why a package pass's outputs cannot stand for its inputs when it draws nothing, or null when they can.
         public string? PackageAliasRefusal;
+        // Per output of a package pass, whether it is a history the pass alone writes (KeepsHistory), which a recording
+        // that draws nothing leaves as its last write left it.
+        public bool[] PackageKeptHistory = [];
         // The pass's pipeline, leased from the node's pass-pipeline cache and released last, and the pipeline and render
         // pass it holds; a package pass leases through its own recorder instead.
         public GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? Pipeline;

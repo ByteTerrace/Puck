@@ -4,8 +4,8 @@
 # PUCK_FEDERATION_KEYS, from that protected command.
 set -euo pipefail
 umask 077
-# A timed-out pass reports only journal lines from this pass: a worker a release reuses in place also holds its earlier
-# releases' lines, whose errors would read as this pass's cause.
+# A timed-out pass reports only journal lines from this pass: a worker whose extension Azure runs again also holds its
+# earlier passes' lines, whose errors would read as this pass's cause.
 pass_started="$(date +%s)"
 federation_keys="${PUCK_FEDERATION_KEYS:?the launcher passes the federation signing keys}"
 unset PUCK_FEDERATION_KEYS

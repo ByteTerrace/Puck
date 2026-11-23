@@ -19,8 +19,9 @@ namespace Puck.DirectX;
 /// <c>ID3D12CommandQueue::Wait</c> issued immediately before the next submission's execute, so that submission and every
 /// later one on the queue wait for the shared fence on the GPU. While a batch is open a submission joins the shared
 /// <see cref="GpuSubmissionBatch{TEntry}"/>, whose lists reach the queue in one <c>ExecuteCommandLists</c> a hand-over,
-/// each followed by its owner fence's signal; a background job deferred ahead of a frame's work takes a hand-over of its
-/// own, so its signal sits between the two.
+/// each followed by its owner fence's signal; a fenced submission whose category answers from its own signal
+/// (<see cref="GpuQueueWork.OwnsSignal"/>: a background job's, an upload's), deferred ahead of other work, takes a
+/// hand-over of its own, so its signal sits between the two.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {

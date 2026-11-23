@@ -97,6 +97,18 @@ public static partial class SdfWorldPackage {
     /// image, the surface transport, the history color and the history surface. The sky never enters the history: it is
     /// evaluated and composited after the resolve.</summary>
     public static RenderGraphPackageFragment TemporalFragment => TemporalDeclaration.Value;
+    /// <summary>Returns whether a fragment reconstructs over time: it is <see cref="TemporalFragment"/> or one derived
+    /// from it (<see cref="RateFragment"/>, or either with glass, bins or a display stage added), the fragments that
+    /// keep the resolve's history color. Every view keeps the probe lookup's history (<see cref="ViewsProbeHistory"/>),
+    /// so a history resource alone does not make a fragment temporal.</summary>
+    /// <param name="fragment">The fragment.</param>
+    /// <returns><see langword="true"/> when the fragment resolves its samples over its history.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="fragment"/> is <see langword="null"/>.</exception>
+    public static bool IsTemporal(RenderGraphPackageFragment fragment) {
+        ArgumentNullException.ThrowIfNull(argument: fragment);
+
+        return fragment.Resources.Any(predicate: static resource => (resource.History && (resource.Name == Parts.HistoryColor)));
+    }
 
     /// <summary>The temporal graph whose probe cells classify shading from the preceding resolve.</summary>
     public static RenderGraphPackageFragment RateFragment => RateDeclaration.Value;
@@ -188,17 +200,9 @@ public static partial class SdfWorldPackage {
                 Buffer(count: [Term(HistoryWindowWords, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)], name: Parts.HistoryWindow, sizeBytes: null, strideBytes: sizeof(uint)) with {
                     Initialization = ShaderPipelineInitialization.Zero,
                 },
-                ProbeHistory,
             ],
             Passes: [
                 .. ResolveFragment.Value.Passes.Select(selector: static pass => pass.Name switch {
-                    // The probe lookup reuses the preceding frame's gathers and writes this frame's for the next.
-                    Parts.ViewsProbes => pass with {
-                        InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
-                        Inputs = [.. pass.Inputs, new ResourceReference(Name: Parts.ProbeHistory, PreviousFrame: true)],
-                        OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
-                        Outputs = [.. pass.Outputs, new ResourceReference(Name: Parts.ProbeHistory)],
-                    },
                     Parts.Views => pass with {
                         OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
                         Outputs = [.. pass.Outputs, new ResourceReference(Name: Parts.Reactivity)],

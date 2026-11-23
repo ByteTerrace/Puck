@@ -951,15 +951,21 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   plane, facing alike; `sdfViewsProbesCompatible`), each into its cell's record; views reads the
   gather the record names for its pixel (`sdfViewsProbesAt`) and never gathers, so
   the reuse never steps across a visibility edge the record shows and the shading
-  kernels carry none of the gather's code. A temporal view first reuses the
-  preceding frame's gather for a receiver that passes the same tolerance against
-  the receiver it was taken at (`passes/sdf-views-probe-history.hlsli`, the
-  fragment's `viewsProbeHistory` history buffer, bound per recording by
-  `SdfWorldPassRecorder.BindHistory`); only a complete gather is kept, and an
+  kernels carry none of the gather's code. Every view, a nested one included, first
+  reuses its preceding render's gather for a receiver that passes the same tolerance
+  against the receiver it was taken at (`passes/sdf-probe-history.hlsli`, the
+  native fragment's `viewsProbeHistory` history buffer at the view's own extent,
+  bound per recording by `SdfHistoryPorts`): reuse needs only the
+  preceding render's camera and grid (`previousView`), never jitter, so a history
+  resource does not make a fragment temporal (`SdfWorldPackage.IsTemporal` is the
+  one test, by the resolve's history color). Only a complete gather is kept, and an
   entry stands under the volume's geometry serial and, past a window's move, only
-  where `sdfViewsProbeHistoryHolds` still holds its receiver
+  where `sdfProbeHistoryHolds` still holds its receiver
   (`SdfMeshIrradianceParameters.Geometry` and `Windows`, stepped in
   `SdfMeshIrradiance.Publish`; a new input a gather reads must step one of them).
+  The geometry serial is unique to one publication of one volume in the process and
+  never zero, so an entry validates itself whatever render wrote it: a pass that
+  skips cells or draws nothing leaves entries still safe to read.
   `world.counters gpu pass sdf.world$views-probes counter texels` counts the gathers
   that ran. The lookup runs a group's gathers no history serves as one list, a
   gather a lane: in foliage many pixels gather, and inside the views kernel each warp
@@ -971,9 +977,14 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   visibility from the record's light agreement (`sdfViewsLightVisibility`), loading
   the gather (`sdfViewsProbesWhole`) only for a light the corners disagree on or a
   pixel with a gather of its own. The gather
-  supplies indirect light, reflections and traced static-light visibility; glass
+  supplies indirect light, reflections and traced static-light visibility. Glass
   gathers at its own pane (`passes/sdf-glass-stage.hlsli`), since a pane is lit
-  apart from the surface behind it. `passes/sdf-views-split.hlsli` holds the
+  apart from the surface behind it, and keeps the near face's gathers in a history
+  of its own (`glassProbeHistory`, `sdfGlassNearProbes`) on the same functions and
+  reuse test (`passes/sdf-probe-reuse.hlsli`); the cell's first pixel writes its
+  entry. The glass pass draws nothing in a frame with no glass in view, which a
+  history output allows only because the runtime keeps a history its one writer
+  skipped (`ShaderPipelineRenderNode.KeepsHistory`). `passes/sdf-views-split.hlsli` holds the
   views pass's compile-out switches for reading each part's share of
   `sdf.world$views` with a reload; a reload re-specializes the authored shading
   sets, which takes minutes, so read `world.shaders.status` for `specialized=` equal

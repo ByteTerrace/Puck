@@ -762,7 +762,11 @@ publishes that input's image with no copy, in its own layout
 later package pass that reads such an output is handed the input it stands for,
 so a chain of passes that draw nothing resolves to the first input it stands
 for: a root whose place passes all show nothing publishes the world's image
-itself. An output another kind of pass reads, that is history, that would stand
+itself. A history buffer no other pass writes stands for nothing: its pass's
+reservation of a new instance is withdrawn, so the history keeps its last write,
+as it does through a frame its pass stands
+(`ShaderPipelineRenderNode.KeepsHistory`). An output another kind of pass reads,
+that is any other history, that would stand
 for a previous frame's input or for an input a later pass overwrites, or that
 is not an RGBA8 image beside an input image of its format is refused by name
 when its pass draws nothing: a previous frame's instance rests in the layout

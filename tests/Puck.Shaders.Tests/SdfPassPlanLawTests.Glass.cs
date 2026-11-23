@@ -41,8 +41,8 @@ public sealed partial class SdfPassPlanLawTests {
             Assert.Equal(expected: [RenderGraphPortAccess.FragmentSampled], actual: raster.InputAccesses);
             Assert.Equal(expected: [SdfWorldPackage.Parts.GlassTarget, SdfWorldPackage.Parts.GlassDepth, SdfWorldPackage.Parts.GlassSums], actual: raster.Outputs.Select(selector: static output => output.Name));
             Assert.Equal(expected: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.FragmentWrite], actual: raster.OutputAccesses);
-            Assert.Equal(expected: [lit, SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.GlassTarget, SdfWorldPackage.Parts.GlassSums], actual: shade.Inputs.Select(selector: static input => input.Name));
-            Assert.Equal(expected: (temporal ? [SdfWorldPackage.Parts.GlassLit, SdfWorldPackage.Parts.GlassReactivity] : [SdfWorldPackage.Parts.GlassLit]), actual: shade.Outputs.Select(selector: static output => output.Name));
+            Assert.Equal(expected: [lit, SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.GlassTarget, SdfWorldPackage.Parts.GlassSums, SdfWorldPackage.Parts.GlassProbeHistory], actual: shade.Inputs.Select(selector: static input => input.Name));
+            Assert.Equal(expected: (temporal ? [SdfWorldPackage.Parts.GlassLit, SdfWorldPackage.Parts.GlassReactivity, SdfWorldPackage.Parts.GlassProbeHistory] : [SdfWorldPackage.Parts.GlassLit, SdfWorldPackage.Parts.GlassProbeHistory]), actual: shade.Outputs.Select(selector: static output => output.Name));
             Assert.Same(expected: SdfWorldPackage.GlassMembers, actual: shade.Members);
 
             // No pass after the glass shading pass reads the lit image views wrote, or the reactivity views wrote.
