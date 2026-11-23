@@ -923,6 +923,59 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onPress.effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].placement` | Placement | Names | Read | `WorldEffect.Designate.Placement` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].position` | State | Binding | Binding | `WorldEffect.Designate.Position` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX` | State | Expression | Read | `WorldEffect.Designate.PointX` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY` | State | Expression | Read | `WorldEffect.Designate.PointY` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ` | State | Expression | Read | `WorldEffect.Designate.PointZ` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -1273,6 +1326,59 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onRelease.effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].placement` | Placement | Names | Read | `WorldEffect.Designate.Placement` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].position` | State | Binding | Binding | `WorldEffect.Designate.Position` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX` | State | Expression | Read | `WorldEffect.Designate.PointX` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY` | State | Expression | Read | `WorldEffect.Designate.PointY` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ` | State | Expression | Read | `WorldEffect.Designate.PointZ` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -1623,6 +1729,59 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onFact[].effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].placement` | Placement | Names | Read | `WorldEffect.Designate.Placement` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].position` | State | Binding | Binding | `WorldEffect.Designate.Position` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX` | State | Expression | Read | `WorldEffect.Designate.PointX` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY` | State | Expression | Read | `WorldEffect.Designate.PointY` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ` | State | Expression | Read | `WorldEffect.Designate.PointZ` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2437,6 +2596,59 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `rules[].effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
+| `rules[].effects[][designate].placement` | Placement | Names | Read | `WorldEffect.Designate.Placement` |
+| `rules[].effects[][designate].position` | State | Binding | Binding | `WorldEffect.Designate.Position` |
+| `rules[].effects[][designate].pointX` | State | Expression | Read | `WorldEffect.Designate.PointX` |
+| `rules[].effects[][designate].pointX{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][designate].pointX{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][designate].pointX{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][designate].pointX{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][designate].pointX{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][designate].pointX{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][designate].pointX{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][designate].pointX{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][designate].pointY` | State | Expression | Read | `WorldEffect.Designate.PointY` |
+| `rules[].effects[][designate].pointY{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][designate].pointY{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][designate].pointY{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][designate].pointY{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][designate].pointY{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][designate].pointY{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][designate].pointY{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][designate].pointY{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][designate].pointZ` | State | Expression | Read | `WorldEffect.Designate.PointZ` |
+| `rules[].effects[][designate].pointZ{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][designate].pointZ{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][designate].pointZ{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][designate].pointZ{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][designate].pointZ{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][designate].pointZ{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][designate].pointZ{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][designate].pointZ{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `rules[].effects[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
 | `rules[].effects[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2805,6 +3017,59 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].decision.options[].effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `rules[].decision.options[].effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
+| `rules[].decision.options[].effects[][designate].placement` | Placement | Names | Read | `WorldEffect.Designate.Placement` |
+| `rules[].decision.options[].effects[][designate].position` | State | Binding | Binding | `WorldEffect.Designate.Position` |
+| `rules[].decision.options[].effects[][designate].pointX` | State | Expression | Read | `WorldEffect.Designate.PointX` |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][designate].pointY` | State | Expression | Read | `WorldEffect.Designate.PointY` |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][designate].pointZ` | State | Expression | Read | `WorldEffect.Designate.PointZ` |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `rules[].decision.options[].effects[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
 | `rules[].decision.options[].effects[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -3196,6 +3461,59 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].decision.onNoChoice[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `rules[].decision.onNoChoice[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
+| `rules[].decision.onNoChoice[][designate].placement` | Placement | Names | Read | `WorldEffect.Designate.Placement` |
+| `rules[].decision.onNoChoice[][designate].position` | State | Binding | Binding | `WorldEffect.Designate.Position` |
+| `rules[].decision.onNoChoice[][designate].pointX` | State | Expression | Read | `WorldEffect.Designate.PointX` |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][designate].pointY` | State | Expression | Read | `WorldEffect.Designate.PointY` |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][designate].pointZ` | State | Expression | Read | `WorldEffect.Designate.PointZ` |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `rules[].decision.onNoChoice[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
 | `rules[].decision.onNoChoice[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -3529,6 +3847,59 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `interactions.interactions[].effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `interactions.interactions[].effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
+| `interactions.interactions[].effects[][designate].placement` | Placement | Names | Read | `WorldEffect.Designate.Placement` |
+| `interactions.interactions[].effects[][designate].position` | State | Binding | Binding | `WorldEffect.Designate.Position` |
+| `interactions.interactions[].effects[][designate].pointX` | State | Expression | Read | `WorldEffect.Designate.PointX` |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][designate].pointY` | State | Expression | Read | `WorldEffect.Designate.PointY` |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][designate].pointZ` | State | Expression | Read | `WorldEffect.Designate.PointZ` |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][emitCue].key` | State | Key | Read | `WorldEffect.EmitCue.Key` |
 | `interactions.interactions[].effects[][emitCue].argument` | State | Expression | Read | `WorldEffect.EmitCue.Argument` |
 | `interactions.interactions[].effects[][emitCue].argument{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -4143,6 +4514,54 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `kits.rows[].actions{*}.onPress.effects[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `kits.rows[].actions{*}.onPress.effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointX{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointY{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onPress.effects[][designate].pointZ{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].payload` | `WorldEffect.EmitCue.Payload` | literal text |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].argument{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
@@ -4385,6 +4804,54 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `kits.rows[].actions{*}.onRelease.effects[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `kits.rows[].actions{*}.onRelease.effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointX{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointY{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onRelease.effects[][designate].pointZ{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].payload` | `WorldEffect.EmitCue.Payload` | literal text |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].argument{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
@@ -4627,6 +5094,54 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `kits.rows[].actions{*}.onFact[].effects[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `kits.rows[].actions{*}.onFact[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointX{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointY{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].actions{*}.onFact[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].payload` | `WorldEffect.EmitCue.Payload` | literal text |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].argument{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
@@ -5152,6 +5667,54 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `rules[].effects[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `rules[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
+| `rules[].effects[][designate].pointX{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][designate].pointX{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][designate].pointX{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][designate].pointX{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][designate].pointX{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][designate].pointX{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][designate].pointX{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][designate].pointX{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][designate].pointX{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][designate].pointY{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][designate].pointY{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][designate].pointY{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][designate].pointY{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][designate].pointY{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][designate].pointY{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][designate].pointY{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][designate].pointY{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][designate].pointY{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][designate].pointZ{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][designate].pointZ{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][designate].pointZ{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][designate].pointZ{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][designate].pointZ{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][designate].pointZ{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][designate].pointZ{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][designate].pointZ{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `rules[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].effects[][emitCue].payload` | `WorldEffect.EmitCue.Payload` | literal text |
 | `rules[].effects[][emitCue].argument{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
@@ -5411,6 +5974,54 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `rules[].decision.options[].effects[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `rules[].decision.options[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][designate].pointX{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][designate].pointX{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][designate].pointY{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][designate].pointY{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][designate].pointZ{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.options[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `rules[].decision.options[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].decision.options[].effects[][emitCue].payload` | `WorldEffect.EmitCue.Payload` | literal text |
 | `rules[].decision.options[].effects[][emitCue].argument{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
@@ -5688,6 +6299,54 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `rules[].decision.onNoChoice[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `rules[].decision.onNoChoice[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][designate].pointX{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][designate].pointX{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][designate].pointY{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][designate].pointY{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][designate].pointZ{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `rules[].decision.onNoChoice[][designate].pointZ{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `rules[].decision.onNoChoice[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].decision.onNoChoice[][emitCue].payload` | `WorldEffect.EmitCue.Payload` | literal text |
 | `rules[].decision.onNoChoice[][emitCue].argument{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
@@ -5936,6 +6595,54 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
 | `interactions.interactions[].effects[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `interactions.interactions[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][designate].pointX{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][designate].pointX{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][designate].pointY{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][designate].pointY{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][designate].pointZ{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `interactions.interactions[].effects[][designate].pointZ{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
 | `interactions.interactions[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `interactions.interactions[].effects[][emitCue].payload` | `WorldEffect.EmitCue.Payload` | literal text |
 | `interactions.interactions[].effects[][emitCue].argument{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |

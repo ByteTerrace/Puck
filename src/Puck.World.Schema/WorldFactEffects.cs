@@ -37,7 +37,21 @@ public enum WorldDocumentWrite : byte {
 /// <param name="Designation">What a designation writes.</param>
 /// <param name="UseMoveDirection">Whether a planar impulse prefers the normalized current movement command.</param>
 /// <param name="Curve">The timed move's progress curve.</param>
-public readonly record struct WorldBodyAction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, string? Register = null, CellKey TargetKey = default, CompiledCellRef? TargetKeyFrom = null, WorldBodyDesignationKind Designation = WorldBodyDesignationKind.Body, bool UseMoveDirection = false, BodyMotionCurve Curve = BodyMotionCurve.Linear);
+/// <param name="Point">The point a <see cref="WorldBodyDesignationKind.Point"/> designation writes, or
+/// <see langword="null"/> for any other operation.</param>
+public readonly record struct WorldBodyAction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, string? Register = null, CellKey TargetKey = default, CompiledCellRef? TargetKeyFrom = null, WorldBodyDesignationKind Designation = WorldBodyDesignationKind.Body, bool UseMoveDirection = false, BodyMotionCurve Curve = BodyMotionCurve.Linear, WorldPointTarget? Point = null);
+/// <summary>The world point a rule's point designation writes: a base (the origin, or a placement's document position,
+/// read when the effect fires) plus an offset that is either a literal or three fixed-point expressions evaluated when
+/// it fires.</summary>
+/// <param name="Placement">The placement whose position is the base, or <see langword="null"/> for the origin.</param>
+/// <param name="Offset">The literal offset from the base; zero when the offset is computed.</param>
+/// <param name="X">The program of the offset's x axis, or <see langword="null"/> when the offset is the literal.</param>
+/// <param name="Y">The program of the offset's y axis, present exactly when <paramref name="X"/> is.</param>
+/// <param name="Z">The program of the offset's z axis, present exactly when <paramref name="X"/> is.</param>
+public sealed record WorldPointTarget(string? Placement, FixedVector3 Offset, CompiledExpressionToken[]? X = null, CompiledExpressionToken[]? Y = null, CompiledExpressionToken[]? Z = null) {
+    /// <summary>Gets a value indicating whether the offset is three programs evaluated at firing.</summary>
+    public bool IsComputed => (X is not null);
+}
 /// <summary>The effect facts only a world fires. The facet is the type argument, so firing receives
 /// <see cref="IWorldFacts"/> as an argument.</summary>
 /// <remarks>Every world effect but the identity-fact write lands outside the arena, so it declares
@@ -254,7 +268,14 @@ public sealed class WorldBodyMotionEffect : WorldFactEffect {
         KeyFrom = keyFrom;
         m_sources = (DesignatesBody(action: action)
             ? [EffectSource.Key(keyFrom: keyFrom, literal: key), EffectSource.Key(keyFrom: action.TargetKeyFrom, literal: action.TargetKey)]
-            : [EffectSource.Key(keyFrom: keyFrom, literal: key)]);
+            : (action.Point is { IsComputed: true } point)
+                ? [
+                    EffectSource.Key(keyFrom: keyFrom, literal: key),
+                    EffectSource.Expression(kind: CellKind.Fixed, program: point.X!),
+                    EffectSource.Expression(kind: CellKind.Fixed, program: point.Y!),
+                    EffectSource.Expression(kind: CellKind.Fixed, program: point.Z!),
+                ]
+                : [EffectSource.Key(keyFrom: keyFrom, literal: key)]);
     }
 
     private readonly EffectSource[] m_sources;
@@ -264,11 +285,14 @@ public sealed class WorldBodyMotionEffect : WorldFactEffect {
     /// <summary>The position of the designated body's index among the sources, present only for a designation of a
     /// body.</summary>
     public const int TargetSource = 1;
+    /// <summary>The position of the computed point's x axis among the sources, present only for a point designation
+    /// whose offset is computed; its y and z axes follow.</summary>
+    public const int PointSource = 1;
 
     /// <inheritdoc/>
     public override EffectSource[] Sources => m_sources;
 
-    private static bool DesignatesBody(WorldBodyAction action) => ((action.Operation == BodyMotionOp.Designate) && (action.Designation != WorldBodyDesignationKind.Clear));
+    private static bool DesignatesBody(WorldBodyAction action) => ((action.Operation == BodyMotionOp.Designate) && (action.Designation == WorldBodyDesignationKind.Body));
 
     /// <summary>Gets the compiled action.</summary>
     public WorldBodyAction Action { get; }
@@ -289,9 +313,19 @@ public sealed class WorldBodyMotionEffect : WorldFactEffect {
             into: into,
             reference: Action.TargetKeyFrom
         );
+        if (Action.Point is { IsComputed: true } point) {
+            RuleDataflow.CollectExpression(into: into, tokens: point.X);
+            RuleDataflow.CollectExpression(into: into, tokens: point.Y);
+            RuleDataflow.CollectExpression(into: into, tokens: point.Z);
+        }
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => 1L;
+    public override RuleWork Cost(IRuleCostContext context) => ((Action.Point is { IsComputed: true } point)
+        ? (1L
+            + RuleWorkBudget.ExpressionCost(point.X!, context)
+            + RuleWorkBudget.ExpressionCost(point.Y!, context)
+            + RuleWorkBudget.ExpressionCost(point.Z!, context))
+        : 1L);
 }
 /// <summary>Applies a rigid-body impulse to a live-resolved struck body, along a second live-resolved heading body's
 /// own forward facing, scaled by a live state cell.</summary>

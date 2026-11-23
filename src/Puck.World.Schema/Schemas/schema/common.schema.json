@@ -7810,16 +7810,18 @@
       "description": "How a rule-triggered body designation chooses its target.",
       "enum": [
         "Body",
-        "Clear"
+        "Clear",
+        "Point"
       ],
       "title": "WorldBodyDesignationKind",
       "x-enumDescriptions": {
         "Body": "Designate another active body.",
-        "Clear": "Clear the register."
+        "Clear": "Clear the register.",
+        "Point": "Designate a world point."
       }
     },
     "WorldEffectDesignate": {
-      "description": "Designates a subject into a body\u0027s named target register, or clears the register. A kit\u0027s action designates into its own body the participant that last affected it; a world rule names the body with Key and the subject with TargetKey.",
+      "description": "Designates a subject into a body\u0027s named target register, or clears the register. A kit\u0027s action designates into its own body the participant that last affected it; a world rule names the body with Key and the subject with TargetKey, or a world point with Placement, Position and the pointX/pointY/pointZ expressions: the same point designation body.designate \u003Cregister\u003E at:x,y,z makes, which a body program\u0027s designated or navigated target walks to.",
       "properties": {
         "$type": {
           "const": "designate"
@@ -7830,7 +7832,7 @@
         },
         "kind": {
           "$ref": "#/$defs/WorldBodyDesignationKind",
-          "description": "Whether the register is filled or cleared; only a world rule clears.",
+          "description": "Whether the register is filled with a body or a point, or cleared; only a world rule clears or designates a point.",
           "default": "Body"
         },
         "key": {
@@ -7840,7 +7842,35 @@
         },
         "targetKey": {
           "$ref": "#/$defs/StateChannelRefNonNullable",
-          "description": "The body a world rule designates, required when Kind is Body and refused when it is Clear. A kit\u0027s action names none.",
+          "description": "The body a world rule designates, required when Kind is Body and refused otherwise. A kit\u0027s action names none.",
+          "default": null
+        },
+        "placement": {
+          "description": "For Point, the placement whose document position is the point\u0027s base (its frame composed over its parent, as every consumer reads it), read when the effect fires, so a moved placement is followed; the point is the origin when none is named.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "position": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "For Point, the literal point, or its offset from Placement when one is named. Exclusive with the point expressions.",
+          "default": null
+        },
+        "pointX": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "For Point, a fixed-point expression for the point\u0027s x axis, evaluated when the effect fires; PointY and PointZ accompany it, and together they are the point, or its offset from Placement.",
+          "default": null
+        },
+        "pointY": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The y axis of the computed point.",
+          "default": null
+        },
+        "pointZ": {
+          "$ref": "#/$defs/ExpressionProgramNonNullable2",
+          "description": "The z axis of the computed point.",
           "default": null
         }
       },

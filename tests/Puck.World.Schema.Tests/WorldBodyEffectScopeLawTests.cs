@@ -103,6 +103,37 @@ public sealed class WorldBodyEffectScopeLawTests {
             Mentions: "names no body",
             Scope: WorldBodyEffectScope.Rule
         ),
+        ["a rule's point designation names no point"] = new(
+            Control: new WorldEffect.Designate(
+                Key: "0",
+                Kind: WorldBodyDesignationKind.Point,
+                Position: new Vector3(x: 1f, y: 0f, z: 2f),
+                Register: Register
+            ),
+            Denied: new WorldEffect.Designate(
+                Key: "0",
+                Kind: WorldBodyDesignationKind.Point,
+                Register: Register
+            ),
+            Mentions: "kind=point requires a point",
+            Scope: WorldBodyEffectScope.Rule
+        ),
+        ["a rule's point designation computes only some of its axes"] = new(
+            Control: new WorldEffect.Designate(
+                Key: "0",
+                Kind: WorldBodyDesignationKind.Point,
+                Position: new Vector3(x: 1f, y: 0f, z: 2f),
+                Register: Register
+            ),
+            Denied: new WorldEffect.Designate(
+                Key: "0",
+                Kind: WorldBodyDesignationKind.Point,
+                PointX: Puck.State.ExpressionProgram.Parse(text: "1"),
+                Register: Register
+            ),
+            Mentions: "pointX, pointY and pointZ together",
+            Scope: WorldBodyEffectScope.Rule
+        ),
     };
     // A kit's own designation cannot clear its register or name its subject: it designates the participant that last
     // affected its body. Read through the one check itself, since a kit's program profile decides separately whether
@@ -115,6 +146,16 @@ public sealed class WorldBodyEffectScopeLawTests {
                 Register: Register
             ),
             Mentions: "kind=clear is a world rule's",
+            Scope: WorldBodyEffectScope.Kit
+        ),
+        ["a kit's designation names a point"] = new(
+            Control: new WorldEffect.Designate(Register: Register),
+            Denied: new WorldEffect.Designate(
+                Kind: WorldBodyDesignationKind.Point,
+                Position: new Vector3(x: 1f, y: 0f, z: 2f),
+                Register: Register
+            ),
+            Mentions: "kind=point is a world rule's",
             Scope: WorldBodyEffectScope.Kit
         ),
         ["a kit's designation names its subject"] = new(

@@ -2,6 +2,7 @@ using System.Globalization;
 using Puck.Maths;
 using Puck.Physics.Motion;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
+using CompiledExpressionToken = Puck.State.Rules.CompiledExpressionToken;
 using CompiledRule = Puck.State.Rules.CompiledRule;
 using CompiledRuleGroup = Puck.State.Rules.CompiledRuleGroup;
 using CompiledValueSource = Puck.State.Rules.CompiledValueSource;
@@ -227,6 +228,20 @@ public static partial class WorldFactsCompiler {
             targetKeyFrom = target.KeyFrom;
         }
 
+        WorldPointTarget? point = null;
+
+        if (form.Designation == WorldBodyDesignationKind.Point) {
+            var designate = ((WorldEffect.Designate)effect);
+
+            point = new WorldPointTarget(
+                Offset: form.Offset,
+                Placement: form.Placement,
+                X: CompilePointAxis(axis: designate.PointX, context: context, ruleName: ruleName, verb: form.Verb),
+                Y: CompilePointAxis(axis: designate.PointY, context: context, ruleName: ruleName, verb: form.Verb),
+                Z: CompilePointAxis(axis: designate.PointZ, context: context, ruleName: ruleName, verb: form.Verb)
+            );
+        }
+
         return new WorldBodyMotionEffect(
             action: new WorldBodyAction(
                 Curve: form.Curve,
@@ -235,6 +250,7 @@ public static partial class WorldFactsCompiler {
                 UseMoveDirection: form.UseMoveDirection,
                 DurationTicks: form.DurationTicks,
                 Operation: form.Operation,
+                Point: point,
                 Register: form.Register,
                 TargetKey: targetKey,
                 TargetKeyFrom: targetKeyFrom,
@@ -250,6 +266,17 @@ public static partial class WorldFactsCompiler {
             keyFrom: address.KeyFrom
         );
     }
+    // One axis of a computed point; a literal point carries no programs.
+    private static CompiledExpressionToken[]? CompilePointAxis(ExpressionProgram? axis, WorldFactsCompileContext context, string ruleName, string verb) => ((axis is null)
+        ? null
+        : RuleCompiler.CompileExpression(
+            context: context,
+            expression: axis,
+            kind: CellKind.Fixed,
+            ruleName: ruleName,
+            verb: verb
+        )
+    );
     internal static IRuleEffect ResolveCue(WorldEffect.EmitCue effect, string ruleName, WorldFactsCompileContext context) {
         if (!WorldGameplayCue.IsValidName(candidate: effect.Name)) {
             throw new RuleException(
