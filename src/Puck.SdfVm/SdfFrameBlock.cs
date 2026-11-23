@@ -263,7 +263,10 @@ public static partial class SdfFrameBlock {
             : ((float)(1d / snapshot.RenderGrid))));
         WriteSingle(block: block, offset: (DisplayPixels + sizeof(float)), value: snapshot.DemandHeight);
         WriteFlag(block: block, offset: InkEdges, value: ((frame.Program.Appearance.ResolveShadeReads(frame.ShadePrograms, frame.ShadeDefault) & SdfShadeReads.Edges) != 0));
-        WriteSingle(block: block, offset: ExposeShare, value: (snapshot.Unexposed ? SdfPhotometry.WindowAdaptation : 1f));
+        // How much of its own exposure the view applies to the light it shaded: all of it for a view shown as it is, the
+        // window share for one a window shows, and none for a sky layer's geometry, which its consumer's sky composes
+        // in nits beside its own layers and exposes with them (SdfWorldPasses' Converts).
+        WriteSingle(block: block, offset: ExposeShare, value: (snapshot.Quality.GeometryOnly ? 0f : (snapshot.Unexposed ? SdfPhotometry.WindowAdaptation : 1f)));
         WriteSingle(block: block, offset: AirLight, value: (tables.Exposures?.AirLightOf(view: view) ?? 1f));
         WriteSingle(block: block, offset: MeterLuminance, value: (tables.Exposures?.MeteredOf(view: view) ?? 0f));
         Span<Vector4> meterLight = stackalloc Vector4[6];
