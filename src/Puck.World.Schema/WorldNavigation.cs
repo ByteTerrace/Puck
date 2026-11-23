@@ -5,16 +5,65 @@ using Puck.Maths;
 
 namespace Puck.World;
 
-/// <summary>The authored bounded surface, free-volume, and live-medium navigation domains available to body producers.</summary>
+/// <summary>The authored bounded surface, free-volume, and live-medium navigation domains available to body producers,
+/// the area types their cells carry, and the cost profiles that price those areas per kind of agent.</summary>
 /// <param name="Domains">Finite rectangular domains, each compiled from the world's deterministic solid field.</param>
+/// <param name="AreaTypes">The area type names the world's areas, domains and profiles use, in a stable order. The
+/// engine gives no type a meaning: a type costs what each profile says.</param>
+/// <param name="Areas">Marked volumes in precedence order: a cell takes the type of the last area holding the point a
+/// body standing on it stands at, else its domain's own <see cref="WorldNavigationDomain.Area"/>.</param>
+/// <param name="Profiles">Named cost profiles a navigated producer target selects
+/// (<see cref="Puck.Physics.Motion.BodyTargetSource.Navigated.Profile"/>). A target with no profile pays one for every
+/// area.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldNavigationSection(IReadOnlyList<WorldNavigationDomain>? Domains = null) {
+public sealed record WorldNavigationSection(
+    IReadOnlyList<WorldNavigationDomain>? Domains = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? AreaTypes = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNavigationArea>? Areas = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNavigationProfile>? Profiles = null
+) {
     /// <summary>Gets a section containing no navigation domains.</summary>
     public static WorldNavigationSection Absent { get; } = new();
     /// <summary>Gets the declared domain rows.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldNavigationDomain> Rows => (Domains ?? []);
+    /// <summary>Gets the declared area type names.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<string> AreaTypeRows => (AreaTypes ?? []);
+    /// <summary>Gets the declared area rows.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldNavigationArea> AreaRows => (Areas ?? []);
+    /// <summary>Gets the declared profile rows.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldNavigationProfile> ProfileRows => (Profiles ?? []);
 }
+/// <summary>One marked navigation area: a volume whose cells take an area type. Exactly one of
+/// <paramref name="Placement"/> and <paramref name="Region"/> is authored.</summary>
+/// <param name="Type">The area type, one of <see cref="WorldNavigationSection.AreaTypes"/>.</param>
+/// <param name="Placement">A static placement whose <see cref="WorldPlacement.Region"/> is the area's volume, so one
+/// authored region both senses bodies and marks the ground under it.</param>
+/// <param name="Region">The area's own volume in world space: a sphere of <see cref="WorldPlacementRegion.Radius"/> or a
+/// box of <see cref="WorldPlacementRegion.HalfExtents"/> about <see cref="WorldPlacementRegion.Center"/>, turned by
+/// <see cref="WorldPlacementRegion.YawDegrees"/>.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldNavigationArea(
+    [property: DocumentText("a navigation area type")] string Type,
+    [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Placement = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementRegion? Region = null
+);
+/// <summary>A named navigation cost profile: what one kind of agent pays to cross each area type. A step costs its length
+/// (and the route search's clearance surcharge) times the multiplier of the area it steps onto.</summary>
+/// <param name="Name">The name a navigated target's <c>profile</c> selects.</param>
+/// <param name="Costs">Each priced area type's multiplier, positive and at most
+/// <see cref="WorldNavigationCapacity.MaxAreaCost"/>; a type left out, and an unmarked cell, cost one.</param>
+/// <param name="Exclude">The area types the agent never steps onto. A body already standing on one may step off it.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldNavigationProfile(
+    [property: DocumentText("a navigation profile name")] string Name,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, float>? Costs = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Exclude = null
+);
 /// <summary>The topology and occupancy constraint of an authored navigation domain.</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldNavigationKind>))]
 public enum WorldNavigationKind : byte {
@@ -63,6 +112,8 @@ public enum WorldNavigationConnectivity : byte {
 /// <param name="Network">The network the domain joins. Domains join where they share a cell only when their networks
 /// match, so a route or goal field crosses from one district's pavement to the next but never onto a road of another
 /// network. Absent joins the one unnamed network.</param>
+/// <param name="Area">The area type of the domain's cells no area marks, one of
+/// <see cref="WorldNavigationSection.AreaTypes"/>; absent leaves them unmarked, costing one under every profile.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldNavigationDomain(
     [property: DocumentText("a navigation domain name")] string Name,
@@ -88,7 +139,9 @@ public sealed record WorldNavigationDomain(
     [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null,
     [property: DocumentText("a navigation network name")]
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Network = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Network = null,
+    [property: DocumentText("a navigation area type")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Area = null
 );
 /// <summary>Hard representation ceilings for authored navigation work and memory.</summary>
 public static class WorldNavigationCapacity {
@@ -106,31 +159,47 @@ public static class WorldNavigationCapacity {
     /// field holds one byte per cell of its network, so this keeps a few hundred goals over the largest world resident.
     /// A dropped field is derived again with the same steps, so the bound sets memory and work, never a route.</summary>
     public const long MaxGoalFieldBytes = 64L * 1024L * 1024L;
+    /// <summary>The greatest area cost multiplier a profile names: a step's cost times it stays far inside a route's
+    /// fixed-point budget.</summary>
+    public const float MaxAreaCost = 1000f;
 }
 /// <summary>The stable authored-name to navigation-domain ordinal table.</summary>
 public sealed class WorldNavigationDomainTable {
     private readonly WorldNavigationKind[] m_kinds;
     private readonly OrdinalTable m_table;
+    private readonly OrdinalTable m_profiles;
 
-    private WorldNavigationDomainTable(OrdinalTable table, WorldNavigationKind[] kinds) {
+    private WorldNavigationDomainTable(OrdinalTable table, WorldNavigationKind[] kinds, OrdinalTable profiles) {
         m_table = table;
         m_kinds = kinds;
+        m_profiles = profiles;
     }
 
     /// <summary>Gets an empty domain table.</summary>
     public static WorldNavigationDomainTable Empty { get; } = new(
         table: OrdinalTable.Empty,
-        kinds: []
+        kinds: [],
+        profiles: OrdinalTable.Empty
     );
 
-    /// <summary>Compiles authored order into stable ordinals.</summary>
-    public static WorldNavigationDomainTable Compile(IReadOnlyList<WorldNavigationDomain> domains) => new(
+    /// <summary>Compiles authored order into stable ordinals: the domains, and the cost profiles a navigated target
+    /// selects.</summary>
+    /// <param name="section">The navigation section.</param>
+    public static WorldNavigationDomainTable Compile(WorldNavigationSection section) => new(
         table: OrdinalTable.Build(
-            names: domains.Select(selector: static domain => domain.Name).ToArray(),
+            names: section.Rows.Select(selector: static domain => domain.Name).ToArray(),
             comparer: StringComparer.Ordinal
         ),
-        kinds: domains.Select(selector: static domain => domain.Kind).ToArray()
+        kinds: section.Rows.Select(selector: static domain => domain.Kind).ToArray(),
+        profiles: OrdinalTable.Build(
+            names: section.ProfileRows.Select(selector: static profile => profile.Name).Distinct(comparer: StringComparer.Ordinal).ToArray(),
+            comparer: StringComparer.Ordinal
+        )
     );
+    /// <summary>Resolves a cost profile name to its ordinal.</summary>
+    /// <param name="name">The profile name, or <see langword="null"/>.</param>
+    /// <returns>The ordinal, or -1 for <see langword="null"/> or an undeclared name.</returns>
+    public int ProfileOf(string? name) => (((name is not null) && m_profiles.TryGetOrdinal(name: name, ordinal: out var ordinal)) ? ordinal : -1);
     /// <summary>Gets an ordinal's navigation topology.</summary>
     public WorldNavigationKind Kind(int index) => m_kinds[index];
     /// <summary>Gets an ordinal's authored name.</summary>

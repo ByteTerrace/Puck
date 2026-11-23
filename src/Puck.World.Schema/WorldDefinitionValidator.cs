@@ -1206,7 +1206,7 @@ public static partial class WorldDefinitionValidator {
             registers: definition.TargetRegisters,
             errors: errors
         );
-        var navigationDomainNames = ValidateNavigation(
+        var (navigationDomainNames, navigationProfileNames) = ValidateNavigation(
             definition: definition,
             errors: errors
         );
@@ -1214,6 +1214,7 @@ public static partial class WorldDefinitionValidator {
             programs: definition.BodyMotionPrograms,
             targetRegisterNames: targetRegisterNames,
             navigationDomainNames: navigationDomainNames,
+            navigationProfileNames: navigationProfileNames,
             curveNames: curveNames,
             simulationRateHz: definition.SimulationRateHz,
             errors: errors

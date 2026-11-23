@@ -4660,6 +4660,16 @@ proves itself with `puck compile` lowering to the same document.
 [Code size](code-size.md) holds the measured map, the generator families and
 their lane order; this packet keeps the single duplicates and leads.
 
+- Two A* searches over a navigation domain's baked edges: `NavigationRuntime.Domain.FindPath`
+  (`SearchPath`, per-domain workspace arrays, step costs in thousandths of a cell, no clearance
+  surcharge) for a non-shared domain's followers, and `NavigationRuntime.FindRoute` (`SearchRoute`,
+  one runtime workspace, millimetre costs with the clearance surcharge, junctions) for everything
+  else. Both now price areas through `NavigationCostProfile`. `FindPath` becomes `FindRoute`
+  confined to one domain with the domain's own expansion and path budgets, which deletes the
+  per-domain search arrays; non-shared routes then keep off walls as shared ones do. Check the
+  volume-domain budgets (`worlds/debug/navigation.puck` and the World Games navigation laws) against
+  `FindRoute`'s horizontal heuristic before landing it.
+
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`
   (`WorldAuthorityEndpoint`); and three per-sink redaction scratch buffers

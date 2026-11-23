@@ -318,6 +318,8 @@ public sealed partial class WorldPopulation {
     private IReadOnlyList<WorldCurveRow> m_curveRows = [];
     private WorldCurveTable m_curves = WorldCurveTable.Empty;
     private WorldNavigationDomainTable m_navigationTable = WorldNavigationDomainTable.Empty;
+    // The area types and cost profiles a navigated target's FixedBodyTargetSource.NavigationProfileIndex selects from.
+    private WorldNavigationAreas? m_navigationAreas;
     private NavigationRuntime m_navigation = null!;
     // The definition's LOOK rows (empty ⇒ the implicit single catalog look), resolved by CompileFixedTables. Each
     // entry's LookIndex points into this list. PRESENTATION-ONLY — the snapshot carries it to the client's renderer.

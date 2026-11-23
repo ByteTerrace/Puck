@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics;
 using Puck.Physics.Navigation;
 
 namespace Puck.World;

@@ -206,7 +206,7 @@ public sealed partial class WorldPopulation {
         var domain = m_navigation[target.NavigationDomainIndex];
 
         if (domain.Tuning.Shared) {
-            return ReadGoalFieldTarget(domainIndex: target.NavigationDomainIndex, entry: entry, goal: in goal, self: in self, targetIndex: targetIndex, work: work);
+            return ReadGoalFieldTarget(domainIndex: target.NavigationDomainIndex, entry: entry, goal: in goal, profile: NavigationProfile(index: target.NavigationProfileIndex), self: in self, targetIndex: targetIndex, work: work);
         }
         // A route of its own searches the domain's one workspace, so only a serial step plans one (ProducerIsLocal).
         if (work.Partitioned) {
@@ -257,7 +257,8 @@ public sealed partial class WorldPopulation {
                 goalCell,
                 state.WritablePath(),
                 out state.PathLength,
-                out state.ExpandedLast
+                out state.ExpandedLast,
+                NavigationProfile(index: target.NavigationProfileIndex)
             );
             if (state.PathLength == 0) {
                 state.Waypoint = 0;
@@ -321,7 +322,7 @@ public sealed partial class WorldPopulation {
     // stands, and a tick costs a step read per follower; a field is derived only for a goal no follower read before. A
     // kit partition reads the field its pre-pass resolved (PrepareGoalField) and derives none: the cache is one
     // thread's.
-    private BodySensorTarget ReadGoalFieldTarget(Entry entry, int domainIndex, in FixedVector3 self, in FixedVector3 goal, int targetIndex, ProducerWork work) {
+    private BodySensorTarget ReadGoalFieldTarget(Entry entry, int domainIndex, in FixedVector3 self, in FixedVector3 goal, NavigationCostProfile profile, int targetIndex, ProducerWork work) {
         var state = entry.NavigationState;
 
         if (!TryLocateGoalRead(cell: out var cell, domain: out var domain, domainIndex: domainIndex, goal: in goal, goalCell: out var goalCell, goalDomain: out var goalDomain, self: in self)) {
@@ -332,11 +333,11 @@ public sealed partial class WorldPopulation {
         NavigationGoalField field;
 
         if (work.Partitioned) {
-            field = ((entry.PreparedGoalField is { } prepared) && (prepared.GoalDomain == goalDomain) && (prepared.GoalCell == goalCell))
+            field = ((entry.PreparedGoalField is { } prepared) && (prepared.GoalDomain == goalDomain) && (prepared.GoalCell == goalCell) && prepared.Profile.Equals(other: profile))
                 ? prepared
                 : throw new InvalidOperationException(message: $"Body {entry.Index}'s goal field was not resolved before its kit partition ran.");
         } else {
-            field = m_navigation.GoalField(goalCell: goalCell, goalDomain: goalDomain);
+            field = m_navigation.GoalField(goalCell: goalCell, goalDomain: goalDomain, profile: profile);
         }
         var arrivalSquared = (m_navigation[domainIndex].Tuning.ArrivalDistance * m_navigation[domainIndex].Tuning.ArrivalDistance);
 
@@ -383,7 +384,7 @@ public sealed partial class WorldPopulation {
         ) {
             return;
         }
-        entry.PreparedGoalField = m_navigation.GoalField(goalCell: goalCell, goalDomain: goalDomain);
+        entry.PreparedGoalField = m_navigation.GoalField(goalCell: goalCell, goalDomain: goalDomain, profile: NavigationProfile(index: target.NavigationProfileIndex));
     }
     // The walkable cell a position stands on in a domain's network: the domain's own cell first, else the nearest of its
     // network's.

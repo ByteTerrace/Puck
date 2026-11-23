@@ -14,9 +14,16 @@ import "kits"
 // A citizen's stroll: the standard walker's motion (kits.puck) at a walking pace of 1.4 m/s, never running.
 let citizenMotion = walkerMotion with { speed { value: 1.4 } }
 
-// The producer, the kit and the target register. `domain` names the surface domain the citizens route over;
-// `motionSeconds` and `steeringSeconds` set how often each citizen's motion and steering update, batching a crowd.
-template citizenDesign(domain, motionSeconds = 0.1, steeringSeconds = 0.2) {
+// A citizen's navigation profile over a town's area types (domains.puck's `townAreaTypes`): a road costs ten times
+// its length to walk and a crossing no more than the pavement, so a citizen keeps to the pavement, walks along a road's
+// edge rather than down it, and crosses at a crossing unless the detour to one is longer than ten road widths.
+let citizenProfile = { name: "citizen", costs { road: 10, crossing: 1, pavement: 1 } }
+
+// The producer, the kit and the target register. `domain` names the surface domain the citizens route over and
+// `profile` the navigation profile they price its areas by (a world lists `citizenProfile` to name "citizen"), or
+// none to pay one everywhere; `motionSeconds` and `steeringSeconds` set how often each citizen's motion and steering
+// update, batching a crowd.
+template citizenDesign(domain, motionSeconds = 0.1, steeringSeconds = 0.2, profile = null) {
   targetRegisters [
     { name: "errand", maximumRange: 1000, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
   ]
@@ -26,7 +33,7 @@ template citizenDesign(domain, motionSeconds = 0.1, steeringSeconds = 0.2) {
       kind: Producer
       name: "citizenErrand"
       operations [SenseNearestInCone, ProduceSteeringIntent, FaceSensorTarget]
-      target: navigated(domain: domain, register: "errand")
+      target: navigated(domain: domain, register: "errand", profile: profile)
       version: "puck.body.program.v1"
     }
   ]

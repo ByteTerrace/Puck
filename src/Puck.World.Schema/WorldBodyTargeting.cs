@@ -76,7 +76,9 @@ public sealed class WorldTargetRegisterTable {
 /// runtime step is a single addition, never a division. Zero for a sensed/designated source.</param>
 /// <param name="NavigationDomainIndex">The bounded navigation-domain index, or <c>-1</c> for a non-navigated source.</param>
 /// <param name="NavigationKind">The navigated domain's topology; surface for non-navigated sources.</param>
-public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, FixedQ4816 Range, FixedQ4816 MinimumDot, int RegisterIndex, int CurveIndex = -1, long ArcStepRaw = 0L, int NavigationDomainIndex = -1, WorldNavigationKind NavigationKind = WorldNavigationKind.Surface) {
+/// <param name="NavigationProfileIndex">The navigated target's cost profile ordinal in
+/// <see cref="WorldNavigationSection.Profiles"/>, or <c>-1</c> for none (every area costs one).</param>
+public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, FixedQ4816 Range, FixedQ4816 MinimumDot, int RegisterIndex, int CurveIndex = -1, long ArcStepRaw = 0L, int NavigationDomainIndex = -1, WorldNavigationKind NavigationKind = WorldNavigationKind.Surface, int NavigationProfileIndex = -1) {
     // rate/simulationRateHz rounded once to Q32: rate parses to Q16 at the authoring boundary (the same one rounding
     // every authored float takes), then the division to Q32 is the ONE further rounding — never repeated per tick.
     // simulationRateHz <= 0 (an unvalidated caller) rounds to zero rather than dividing by zero.
@@ -119,7 +121,8 @@ public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, Fix
             : -1),
             NavigationKind: (hasDomain
             ? navigation.Kind(index: domainIndex)
-            : WorldNavigationKind.Surface)
+            : WorldNavigationKind.Surface),
+            NavigationProfileIndex: navigation.ProfileOf(name: navigated.Profile)
         );
     }
 

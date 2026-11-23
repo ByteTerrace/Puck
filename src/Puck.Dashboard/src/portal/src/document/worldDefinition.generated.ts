@@ -1139,6 +1139,7 @@ export type BodyTargetSourceNavigated = {
   domain: string;
   register: string;
   fallback?: BodyTargetFallback;
+  profile?: string | null;
 };
 
 export type BodyTargetSourceSensed = {
@@ -10008,6 +10009,21 @@ export type WorldMusicRow = {
   hash: string;
 };
 
+export type WorldNavigationArea = {
+  /**
+   * The area type, one of AreaTypes.
+   */
+  type: string;
+  /**
+   * A static placement whose Region is the area's volume, so one authored region both senses bodies and marks the ground under it.
+   */
+  placement?: string | null;
+  /**
+   * The area's own volume in world space: a sphere of Radius or a box of HalfExtents about Center, turned by YawDegrees.
+   */
+  region?: WorldPlacementRegion | null;
+};
+
 export type WorldNavigationConnectivity = "Axis" | "FacesAndEdges" | "Full";
 
 export type WorldNavigationDomain = {
@@ -10095,15 +10111,48 @@ export type WorldNavigationDomain = {
    * The network the domain joins. Domains join where they share a cell only when their networks match, so a route or goal field crosses from one district's pavement to the next but never onto a road of another network. Absent joins the one unnamed network.
    */
   network?: string | null;
+  /**
+   * The area type of the domain's cells no area marks, one of AreaTypes; absent leaves them unmarked, costing one under every profile.
+   */
+  area?: string | null;
 };
 
 export type WorldNavigationKind = "Surface" | "Volume" | "Medium";
+
+export type WorldNavigationProfile = {
+  /**
+   * The name a navigated target's profile selects.
+   */
+  name: string;
+  /**
+   * Each priced area type's multiplier, positive and at most MaxAreaCost; a type left out, and an unmarked cell, cost one.
+   */
+  costs?: {
+    [k: string]: number;
+  } | null;
+  /**
+   * The area types the agent never steps onto. A body already standing on one may step off it.
+   */
+  exclude?: (string | null)[] | null;
+};
 
 export type WorldNavigationSection = {
   /**
    * Finite rectangular domains, each compiled from the world's deterministic solid field.
    */
   domains?: (WorldNavigationDomain | null)[] | null;
+  /**
+   * The area type names the world's areas, domains and profiles use, in a stable order. The engine gives no type a meaning: a type costs what each profile says.
+   */
+  areaTypes?: (string | null)[] | null;
+  /**
+   * Marked volumes in precedence order: a cell takes the type of the last area holding the point a body standing on it stands at, else its domain's own Area.
+   */
+  areas?: (WorldNavigationArea | null)[] | null;
+  /**
+   * Named cost profiles a navigated producer target selects (Profile). A target with no profile pays one for every area.
+   */
+  profiles?: (WorldNavigationProfile | null)[] | null;
 };
 
 /**
