@@ -9,7 +9,13 @@ namespace Puck.Cli.Automation;
 /// <summary>Materializes a disposable, credential-free qualification store from a complete retained capture.
 /// Bootstrap publishes each world's exact release definition through an unowned authority root and creates no
 /// gameplay state; the marker is published last.</summary>
-public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldReleaseArchive releases, WorldReleaseFixtureArchive fixtures) {
+/// <param name="blobs">The blob store the retained release and capture live in.</param>
+/// <param name="releases">The archive that retains the release's files.</param>
+/// <param name="fixtures">The archive that retains the source's capture.</param>
+/// <param name="documentDirectory">The directory the captured definitions' relative paths resolve beside under this
+/// build (<see cref="WorldSiloDefinition.DocumentDirectory"/>): the asset layout the silo that restores the state runs in.
+/// <see langword="null"/> for documents that author none.</param>
+public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldReleaseArchive releases, WorldReleaseFixtureArchive fixtures, string? documentDirectory = null) {
     /// <summary>Builds the qualification fixture for <paramref name="release"/> from <paramref name="snapshot"/>, or a
     /// bootstrap fixture without gameplay when <paramref name="snapshot"/> is <see langword="null"/>. A snapshot whose
     /// state this build cannot decode (<see cref="WorldReleaseCoordinator.FindStateReset"/>) builds
@@ -50,7 +56,10 @@ public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRele
                     ).ConfigureAwait(continueOnCapturedContext: false)
                 );
             }
-            reset = WorldReleaseCoordinator.FindStateReset(checkpoints: checkpoints);
+            reset = WorldReleaseCoordinator.FindStateReset(
+                checkpoints: checkpoints,
+                documentDirectory: documentDirectory
+            );
             if (reset is not null) {
                 if (successor is null) {
                     throw new InvalidDataException(message: $"qualification snapshot checkpoint refused — {reset}. Capture a new release fixture with the current authority.");
@@ -91,6 +100,7 @@ public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRele
             path2: "store"
         ));
         var authority = new WorldAuthorityBlobStore(
+            documentDirectory: documentDirectory,
             store: blobs,
             target: target
         );
@@ -139,6 +149,7 @@ public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRele
                 if (!WorldAuthorityCheckpointCodec.TryDecode(
                     bytes: checkpointBytes.Span,
                     checkpoint: out var captured,
+                    documentDirectory: documentDirectory,
                     reason: out var reason
                 )) {
                     throw new InvalidDataException(message: $"qualification snapshot checkpoint refused — {reason}");

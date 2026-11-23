@@ -71,7 +71,8 @@ public static partial class AzureCommand {
                         "worldSiloStorageEndpoint"
                     ))),
                     context.Owner,
-                    context.Clock
+                    context.Clock,
+                    LocalWorldsDirectory
                 );
                 var preview = await restores.InspectAsync(
                     group: context.Group,

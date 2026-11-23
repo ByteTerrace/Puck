@@ -1062,7 +1062,8 @@ Hosted data is scratch until its owner says otherwise (AGENTS.md rule 5), so a
 deploy whose source state predates a format change resets it rather than
 refusing or migrating it. The decision has one home,
 `WorldReleaseCoordinator.FindStateReset`, which the fixture builder calls on the
-source's export: a checkpoint this build cannot decode makes the deploy build the
+source's export, decoding beside the asset layout the silo resolves relative paths
+against, as the silo does: a checkpoint this build cannot decode there makes the deploy build the
 new release's fresh fixture, qualify it alone as a first deployment, and claim
 the group with `BeginResetAsync`, which records a `reset:` entry and its reason
 in the operation's history. The source still drains and its protected roots

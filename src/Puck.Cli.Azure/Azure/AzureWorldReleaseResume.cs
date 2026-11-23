@@ -114,7 +114,8 @@ public static partial class AzureCommand {
                 context.Blobs,
                 Puck.Storage.Azure.AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: endpoint),
                 context.Owner,
-                context.Clock
+                context.Clock,
+                LocalWorldsDirectory
             ),
             source,
             candidate,

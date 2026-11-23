@@ -165,7 +165,8 @@ public static partial class AzureCommand {
                     (((source is null) || (reset is not null)) ? candidate.Image : source.Image),
                     candidate.Image,
                     archive: context.Archive,
-                    clock: context.Clock
+                    clock: context.Clock,
+                    documentDirectory: LocalWorldsDirectory
                 );
                 var coordinator = new WorldReleaseCoordinator(groups: context.Groups);
                 var begun = ((source is null)

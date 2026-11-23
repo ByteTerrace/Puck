@@ -266,8 +266,12 @@ public sealed class WorldReleaseCoordinator {
     /// owner says otherwise, so the deployment starts its target fresh (<see cref="BeginResetAsync"/>) instead of
     /// refusing. State that decodes is carried, and any later qualification failure still refuses.</summary>
     /// <param name="checkpoints">The source's captured checkpoint bytes, by world name.</param>
+    /// <param name="documentDirectory">The directory the hosted documents' relative paths resolve beside under this build
+    /// (<see cref="WorldSiloDefinition.DocumentDirectory"/>), exactly as the silo that would restore the state decodes
+    /// it; <see langword="null"/> for documents that author none. A checkpoint embeds its definition with relative asset
+    /// paths unresolved, so decoding without it refuses every world that has any.</param>
     /// <returns>The reset's reason, naming the first world that does not decode and why, or <see langword="null"/>.</returns>
-    public static string? FindStateReset(IEnumerable<KeyValuePair<string, ReadOnlyMemory<byte>>> checkpoints) {
+    public static string? FindStateReset(IEnumerable<KeyValuePair<string, ReadOnlyMemory<byte>>> checkpoints, string? documentDirectory) {
         ArgumentNullException.ThrowIfNull(checkpoints);
         foreach (var row in checkpoints.OrderBy(
             keySelector: static row => row.Key,
@@ -276,6 +280,7 @@ public sealed class WorldReleaseCoordinator {
             if (!WorldAuthorityCheckpointCodec.TryDecode(
                 bytes: row.Value.Span,
                 checkpoint: out _,
+                documentDirectory: documentDirectory,
                 reason: out var reason
             )) {
                 return $"the source's '{row.Key}' state does not decode under this build: {reason}";

@@ -63,7 +63,8 @@ public static partial class AzureCommand {
                     active.Image,
                     previous.Image,
                     archive: context.Archive,
-                    clock: context.Clock
+                    clock: context.Clock,
+                    documentDirectory: LocalWorldsDirectory
                 );
                 var begun = await new WorldReleaseCoordinator(groups: context.Groups).BeginRollbackAsync(
                     current,

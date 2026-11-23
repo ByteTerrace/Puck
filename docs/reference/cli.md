@@ -318,7 +318,7 @@ puck world release rollback [--operation <id>] [--host <installed-host>]
 puck world release checkpoint [--request <guid>] [--host <installed-host>]
 puck world release restore <recovery-point> [--operation <guid>] [--discard-progress] [--host <installed-host>]
 puck azure prepare-world-release [--output <package-directory>]
-puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-image <image> --target-image <image> --output <evidence-directory> [--steps <count>]
+puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-image <image> --target-image <image> --output <evidence-directory> [--steps <count>] [--document-directory <asset-layout>]
 puck world probe <host> <port> <public-key-file>
 puck wasm build
 ```
@@ -574,7 +574,10 @@ For metadata changes, both manifests must sit at their package roots with their
 declared files present. The command retains and verifies those exact package
 bytes, applies the deployment publisher to a disposable forward copy, and makes
 both images import it. It then reverses the authored delta over B's saved
-continuation before both reverse imports. Evidence retains the original seed,
+continuation before both reverse imports. The transition decodes the fixture's
+saved definitions beside `--document-directory`, the local copy of the asset
+layout the hosting silo resolves its documents' relative paths against; omit it
+for documents that author none. Evidence retains the original seed,
 both transformed copies and their hashes; the source fixture stays intact.
 The runner resolves each image against its manifest digest, uses that immutable
 image identity, disables container networking, and mounts only a fresh fixture

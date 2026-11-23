@@ -66,7 +66,8 @@ public static partial class AzureCommand {
         var reset = await new WorldReleaseFixtureBuilder(
             context.Blobs,
             context.Archive,
-            context.Fixtures
+            context.Fixtures,
+            LocalWorldsDirectory
         )
             .BuildAsync(
             (source?.Manifest ?? bootstrap),

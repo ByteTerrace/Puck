@@ -36,7 +36,8 @@ public sealed partial class WorldSiloHost {
             m_blobStore,
             m_storageTarget,
             m_releaseManagement.Owner,
-            m_clock
+            m_clock,
+            m_documentDirectory
         ).ApplyAsync(
             operation: operation,
             token: token

@@ -366,11 +366,12 @@ public static class WorldReleaseCommand {
             required: true
         );
         var qualificationSteps = CliOptions.Count(defaultValue: 60, description: "Exact continuation steps per packaged leg (1–1024).", maximum: 1024, minimum: 1, name: "--steps");
+        var assetLayout = new Option<string?>("--document-directory") { Description = "The local copy of the asset layout the hosting silo resolves its documents' relative paths beside (its documentDirectory); the metadata transition decodes the fixture's saved definitions against it. Omit for documents that author no relative paths." };
         var qualify = new Command(
             description: "Exercise exact packaged releases in both directions against an offline fixture.",
             name: "qualify"
         ) {
-            sourceManifest, targetManifest, fixture, sourceImage, targetImage, evidenceDirectory, qualificationSteps,
+            sourceManifest, targetManifest, fixture, sourceImage, targetImage, evidenceDirectory, qualificationSteps, assetLayout,
         };
 
         qualify.Detail(detail: """
@@ -434,7 +435,11 @@ public static class WorldReleaseCommand {
                 parse.GetValue(option: qualificationSteps),
                 archive,
                 clock,
-                containers
+                containers,
+                ((parse.GetValue(option: assetLayout) is { } layout)
+                    ? Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: layout))
+                    : null
+                )
             );
             var result = await runner.RunAsync(
                 cancellationToken: token,

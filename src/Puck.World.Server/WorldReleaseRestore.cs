@@ -13,11 +13,15 @@ public sealed record WorldReleaseRestorePreview(WorldReleaseFixtureManifest Poin
 /// <param name="owner">The owner of the group's worlds.</param>
 /// <param name="timeProvider">The host clock the authority store's <see cref="WorldAuthorityBlobStore.OperationTimeout"/>
 /// runs on; <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
-public sealed class WorldReleaseRestore(IObjectBlobStore blobs, ObjectStorageTarget target, Guid owner, TimeProvider? timeProvider = null) {
+/// <param name="documentDirectory">The directory the retained checkpoints' definitions resolve their relative paths
+/// beside, as the host that runs the group lays out its documents (<see cref="WorldSiloDefinition.DocumentDirectory"/>);
+/// <see langword="null"/> for documents that author none.</param>
+public sealed class WorldReleaseRestore(IObjectBlobStore blobs, ObjectStorageTarget target, Guid owner, TimeProvider? timeProvider = null, string? documentDirectory = null) {
     private readonly WorldAuthorityBlobStore m_authority = new(
         store: blobs,
         target: target,
-        timeProvider: timeProvider
+        timeProvider: timeProvider,
+        documentDirectory: documentDirectory
     );
     private readonly WorldReleaseArchive m_releases = new(
         blobs,
@@ -194,6 +198,7 @@ public sealed class WorldReleaseRestore(IObjectBlobStore blobs, ObjectStorageTar
                 !WorldAuthorityCheckpointCodec.TryDecode(
                 bytes: bytes.Span,
                 checkpoint: out var checkpoint,
+                documentDirectory: documentDirectory,
                 reason: out var reason
             )
             ) {
