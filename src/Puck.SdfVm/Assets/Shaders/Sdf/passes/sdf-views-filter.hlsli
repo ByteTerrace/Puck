@@ -68,14 +68,18 @@ SdfShadeEdges sdfViewsEdgesUnpack(uint word) {
 #if defined(SDF_SHADE_HLSLI) && !defined(SDF_VIEWS_BINNED)
 // The group's tile: its pixels with the edge search's reach of apron on every side (SDF_EDGE_REACH; the pattern
 // filter reads two pixels before the group and one after), each as its surface point and the surface pass's occlusion,
-// a negative occlusion where it holds no hit, beside its K word, its packed normal and its keys.
+// a negative occlusion where it holds no hit, beside its K word, its face, its distance and its keys.
 #define SDF_VIEWS_FILTER_TILE_EDGE (SDF_VISIBILITY_GROUP_EDGE + (2u * SDF_EDGE_REACH))
 #define SDF_VIEWS_FILTER_TILE_ENTRIES (SDF_VIEWS_FILTER_TILE_EDGE * SDF_VIEWS_FILTER_TILE_EDGE)
 // The pattern filter's window starts two pixels before the pixel.
 #define SDF_VIEWS_FILTER_WINDOW (SDF_EDGE_REACH - 2u)
 groupshared float4 sdfViewsFilterTile[SDF_VIEWS_FILTER_TILE_ENTRIES];
 groupshared uint sdfViewsFilterShadows[SDF_VIEWS_FILTER_TILE_ENTRIES];
-groupshared uint sdfViewsFilterNormals[SDF_VIEWS_FILTER_TILE_ENTRIES];
+// An entry's face: its unit normal, decoded once for every reader, and for the edge search the reach of its pixel
+// along its own surface, in metres (SdfViewsEdgeDepth). A miss holds zeros.
+groupshared float4 sdfViewsFilterFaces[SDF_VIEWS_FILTER_TILE_ENTRIES];
+// An entry's distance along its ray, which says which of two surfaces is the nearer.
+groupshared float sdfViewsFilterDepths[SDF_VIEWS_FILTER_TILE_ENTRIES];
 // An entry's keys, which the edge search compares and nothing else reads: its material, then its draw's object key
 // (SDF_MESH_OBJECT_KEY_SHIFT), with SdfViewsEdgeCut set where the entry seeds no edge. Neither names a draw, so two
 // chunks of one mesh have nothing to differ by.
@@ -101,10 +105,10 @@ groupshared uint sdfViewsEdgeMasks[SDF_VIEWS_EDGE_MASKS];
 groupshared uint sdfViewsEdgeSeeded;
 
 // The pixel footprints one point of a pair lies off the other's tangent plane past which the pair is an occlusion: a
-// tangent-plane comparison, so a sloping plane has none. The footprint is the one the point's own pixel covers on its
-// own surface, its size across the ray over the cosine the surface is seen at, since a point a pixel from a fold lies
-// that far along its face: a fold one of whose faces is seen at a grazing angle is then a fold on every pair along
-// it, never an occlusion on some and a crease on others.
+// tangent-plane comparison, so a sloping plane has none. The footprint is the one the other point's pixel covers on
+// its own surface, its size across the ray over the cosine the surface is seen at (an entry's reach), since a point a
+// pixel from a fold lies that far along its face: a fold one of whose faces is seen at a grazing angle is then a fold
+// on every pair along it, never an occlusion on some and a crease on others.
 static const float SdfViewsEdgeDepth = 2.25;
 // The least cosine a surface's footprint is stretched by.
 static const float SdfViewsEdgeGrazing = 0.1;
@@ -121,7 +125,7 @@ static const float SdfViewsShadowNormalHigh = 0.9;
 // either of which lies off the other's tangent plane, are occlusions, owned by the surface and by the nearer one; two
 // hits at one depth are a crease where their normals turn, an object boundary where their object keys differ and a
 // material boundary where their materials do.
-uint sdfViewsEdgePair(uint first, uint second, float3 origin, float footprint) {
+uint sdfViewsEdgePair(uint first, uint second) {
     float4 a = sdfViewsFilterTile[first];
     float4 b = sdfViewsFilterTile[second];
     uint2 keyA = sdfViewsFilterKeys[first];
@@ -136,23 +140,16 @@ uint sdfViewsEdgePair(uint first, uint second, float3 origin, float footprint) {
         return (1u << (hitA ? SdfEdgeDepthFirst : SdfEdgeDepthSecond));
     }
 
-    float3 rayA = (a.xyz - origin);
-    float3 rayB = (b.xyz - origin);
-    float distanceA = length(rayA);
-    float distanceB = length(rayB);
-    float3 normalA = sdfVisibilityUnpackNormal(sdfViewsFilterNormals[first]);
-    float3 normalB = sdfVisibilityUnpackNormal(sdfViewsFilterNormals[second]);
+    float4 faceA = sdfViewsFilterFaces[first];
+    float4 faceB = sdfViewsFilterFaces[second];
     float3 delta = (b.xyz - a.xyz);
-    // Each point's reach along its own face, in the units of the plane distances below.
-    float size = ((SdfViewsEdgeDepth * footprint) * min(distanceA, distanceB));
-    float reachA = (size / max((abs(dot(normalA, rayA)) / max(distanceA, 1.0e-6)), SdfViewsEdgeGrazing));
-    float reachB = (size / max((abs(dot(normalB, rayB)) / max(distanceB, 1.0e-6)), SdfViewsEdgeGrazing));
 
-    if ((abs(dot(delta, normalA)) > reachB) || (abs(dot(delta, normalB)) > reachA)) {
-        return (1u << ((distanceA <= distanceB) ? SdfEdgeDepthFirst : SdfEdgeDepthSecond));
+    // Each point against the other's plane, within the other point's reach along its own face.
+    if ((abs(dot(delta, faceA.xyz)) > faceB.w) || (abs(dot(delta, faceB.xyz)) > faceA.w)) {
+        return (1u << ((sdfViewsFilterDepths[first] <= sdfViewsFilterDepths[second]) ? SdfEdgeDepthFirst : SdfEdgeDepthSecond));
     }
 
-    return (((dot(normalA, normalB) < SdfViewsEdgeCreaseCosine) ? (1u << SdfEdgeCrease) : 0u)
+    return (((dot(faceA.xyz, faceB.xyz) < SdfViewsEdgeCreaseCosine) ? (1u << SdfEdgeCrease) : 0u)
         | ((keyA.y != keyB.y) ? (1u << SdfEdgeObject) : 0u)
         | ((keyA.x != keyB.x) ? (1u << SdfEdgeMaterial) : 0u));
 }
@@ -191,7 +188,8 @@ void sdfViewsGatherFilter(SdfPixel p, bool shadows, bool edges) {
         int2 pixel = (origin + int2(at));
         float4 entry = float4(0.0, 0.0, 0.0, -1.0);
         uint word = 0u;
-        uint normal = SDF_VISIBILITY_ZERO_NORMAL;
+        float4 face = float4(0.0, 0.0, 0.0, 0.0);
+        float depth = 0.0;
         uint2 keys = uint2(0u, SdfViewsEdgeCut);
         bool windowed = (all(at >= SDF_VIEWS_FILTER_WINDOW) && all(at < ((SDF_VIEWS_FILTER_WINDOW + SDF_VISIBILITY_GROUP_EDGE) + 3u)));
 
@@ -205,8 +203,13 @@ void sdfViewsGatherFilter(SdfPixel p, bool shadows, bool edges) {
                 float3 direction = cameraRayDirection(p.view, ((float2(pixel) + 0.5) / float2(dims)));
                 entry = float4((p.rayOrigin + (direction * t)), f16tof32(sdfVisibilityRecordBuffer[record + SdfVisibilityShadingWord] >> 16u));
                 word = (shadows ? sdfVisibilityRecordBuffer[record + SdfVisibilityShadowWord] : 0u);
-                normal = ((shadows || edges) ? sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord] : SDF_VISIBILITY_ZERO_NORMAL);
+                depth = t;
+                if (shadows || edges) {
+                    face.xyz = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord]);
+                }
                 if (edges) {
+                    face.w = (((SdfViewsEdgeDepth * p.pixelFootprint) * t) / max(abs(dot(face.xyz, direction)), SdfViewsEdgeGrazing));
+
                     uint draw = sdfVisibilitySource(sdfVisibilityRecordBuffer[record + SdfVisibilityIdentityWord]);
 
                     keys.x = sdfVisibilityRecordBuffer[record + SdfVisibilityMaterialWord];
@@ -225,7 +228,8 @@ void sdfViewsGatherFilter(SdfPixel p, bool shadows, bool edges) {
 
         sdfViewsFilterTile[index] = entry;
         sdfViewsFilterShadows[index] = word;
-        sdfViewsFilterNormals[index] = normal;
+        sdfViewsFilterFaces[index] = face;
+        sdfViewsFilterDepths[index] = depth;
         sdfViewsFilterKeys[index] = keys;
     }
     if (edges) {
@@ -244,10 +248,10 @@ void sdfViewsGatherFilter(SdfPixel p, bool shadows, bool edges) {
             uint2 at = uint2((index % SDF_VIEWS_FILTER_TILE_EDGE), (index / SDF_VIEWS_FILTER_TILE_EDGE));
 
             if (at.x < (SDF_VIEWS_FILTER_TILE_EDGE - 1u)) {
-                sdfViewsEdgeMark(at.y, at.x, sdfViewsEdgePair(index, (index + 1u), p.rayOrigin, p.pixelFootprint));
+                sdfViewsEdgeMark(at.y, at.x, sdfViewsEdgePair(index, (index + 1u)));
             }
             if (at.y < (SDF_VIEWS_FILTER_TILE_EDGE - 1u)) {
-                sdfViewsEdgeMark((SDF_VIEWS_FILTER_TILE_EDGE + at.x), at.y, sdfViewsEdgePair(index, (index + SDF_VIEWS_FILTER_TILE_EDGE), p.rayOrigin, p.pixelFootprint));
+                sdfViewsEdgeMark((SDF_VIEWS_FILTER_TILE_EDGE + at.x), at.y, sdfViewsEdgePair(index, (index + SDF_VIEWS_FILTER_TILE_EDGE)));
             }
         }
 
@@ -351,7 +355,7 @@ uint sdfViewsEdgesWord(SdfPixel p) {
     }
 
     return sdfViewsEdgesPack(sqrt(nearest), ((nearest.y <= reach)
-        ? dot(sdfVisibilityUnpackNormal(sdfViewsFilterNormals[creased.x]), sdfVisibilityUnpackNormal(sdfViewsFilterNormals[creased.y]))
+        ? dot(sdfViewsFilterFaces[creased.x].xyz, sdfViewsFilterFaces[creased.y].xyz)
         : 1.0));
 }
 // The pixel's occlusion and shadow visibilities averaged over the 4x4 window at offsets -2 to 1 around it, which holds
@@ -379,7 +383,7 @@ void sdfViewsFilter(SdfPixel p, float3 surfacePoint, float3 normal, float t, out
             float4 entry = sdfViewsFilterTile[index];
             float w = ((entry.w < 0.0) ? 0.0 : saturate(1.0 - (abs(dot((entry.xyz - surfacePoint), normal)) / tolerance)));
 
-            float turn = dot(sdfVisibilityUnpackNormal(sdfViewsFilterNormals[index]), normal);
+            float turn = dot(sdfViewsFilterFaces[index].xyz, normal);
             uint word = sdfViewsFilterShadows[index];
             float4 ws = ((w * saturate((turn - SdfViewsShadowNormalLow) / (SdfViewsShadowNormalHigh - SdfViewsShadowNormalLow))) * sdfShadowQueried(word));
 

@@ -20,10 +20,11 @@
 //
 // A hatched ink adds strokes in the shade: where a directional light does not reach (past the band at `hatchThreshold`
 // over `hatchSoftness`, or in a cast shadow) the surface takes parallel strokes `hatchPitch` metres apart, widening to
-// `hatchWidth` in the deepest shade, at `hatch` of the ink's strength. Only a light strong enough leaves a shade worth
+// `hatchWidth` in the deepest shade, at `hatch` of the ink's strength. Seen from afar the strokes thin out rather than
+// crowd: every other one fades as they would come closer than `hatchSpacing` display pixels, and the rest widen to
+// match, so a far wall and a near one are hatched about alike. Only a light strong enough leaves a shade worth
 // hatching: `hatchLevel` is the weight (its illuminance over pi) at which a light's shade hatches whole, so a sun
-// hatches, a moon does not, and the strokes thin out as the sun goes down. The strokes ride the surface too, and blend
-// to their even tone where they are finer than a pixel. Two strong directional lights from opposite sides each shade
+// hatches, a moon does not, and the strokes thin out as the sun goes down. The strokes ride the surface too. Two strong directional lights from opposite sides each shade
 // what the other lights, and both shades hatch.
 
 import "shading"
@@ -43,24 +44,33 @@ function inkEdges(width, presence, silhouette, crease, objects, materials, fold,
   ),
   max(inkLine(edge.object, width * 0.5 * objects), inkLine(edge.material, width * 0.5 * materials)) * presence
 )
-// One family of parallel strokes over a surface coordinate `u`, in metres: strokes `width` wide every `pitch`, filtered
-// over the pixel's `footprint`, and their even tone where a pixel spans more than a stroke.
-function inkStroke(u, pitch, width, footprint) = mix(
-  saturate((width * 0.5 - abs(shadeFrac(u / pitch) - 0.5) * pitch) / max(footprint, 0.000001) + 0.5),
-  saturate(width / pitch),
-  1 - shadeFade(footprint / pitch)
-)
 // The share of each of the layer's three planes a surface with this normal faces.
 function inkPlanes(normal) = pow(abs(normal), 8) / max(dot(pow(abs(normal), 8), [1, 1, 1]), 0.000001)
 // A pixel's size on the surface along its slope: its footprint over the cosine it is seen at.
 function inkFootprint() = surface.footprint / max(abs(dot(surface.geometricNormal, surface.rayDirection)), 0.15)
+// One family of parallel strokes over a surface coordinate `u`, in metres: strokes `width` wide centred on every
+// multiple of `pitch`, filtered over the pixel's `footprint`.
+function inkStroke(u, pitch, width, footprint) = saturate(
+  (width * 0.5 - (0.5 - abs(shadeFrac(u / pitch) - 0.5)) * pitch) / max(footprint, 0.000001) + 0.5
+)
+// The strokes at the scale the surface is seen at. The strokes ride the surface, so they hold still, but a stroke
+// every `pitch` metres would crowd into a grey as the surface recedes. So the pitch doubles, and the width with it,
+// each time the strokes would come closer than `spacing` display pixels: every other stroke fades out as the surface
+// recedes and back in as it nears, and the strokes keep about one density on the screen. `level` is how many
+// doublings the surface's distance asks for, never less than none.
+function inkStrokeLevels(u, pitch, width, footprint, level) = mix(
+  inkStroke(u, pitch * exp2(floor(level)), width * exp2(floor(level)), footprint),
+  inkStroke(u, pitch * exp2(floor(level) + 1), width * exp2(floor(level) + 1), footprint),
+  smoothstep(0.5, 1, level - floor(level))
+)
+function inkStrokeLevel(pitch, spacing) = max(log2(max(spacing * inkFootprint() / pitch, 0.000001)), 0)
 // Diagonal strokes on whichever of the layer's three planes the surface faces, so they ride the surface and hold still.
-function inkStrokes(pitch, width) = dot(
+function inkStrokes(pitch, width, spacing) = dot(
   inkPlanes(toLayer(surface.geometricNormal)),
   [
-    inkStroke(surface.layerPosition.y + surface.layerPosition.z, pitch, width, inkFootprint()),
-    inkStroke(surface.layerPosition.x + surface.layerPosition.z, pitch, width, inkFootprint()),
-    inkStroke(surface.layerPosition.x + surface.layerPosition.y, pitch, width, inkFootprint())
+    inkStrokeLevels(surface.layerPosition.y + surface.layerPosition.z, pitch, width, inkFootprint(), inkStrokeLevel(pitch, spacing)),
+    inkStrokeLevels(surface.layerPosition.x + surface.layerPosition.z, pitch, width, inkFootprint(), inkStrokeLevel(pitch, spacing)),
+    inkStrokeLevels(surface.layerPosition.x + surface.layerPosition.y, pitch, width, inkFootprint(), inkStrokeLevel(pitch, spacing))
   ]
 )
 // The width's unevenness along a line: a noise over the surface, about one.
@@ -73,7 +83,7 @@ shade template ink(weight, thin, bold, tint, silhouette = 1, crease = 1, objects
     coverage: inkEdges(width, inkPresence(weight, thin), silhouette, crease, objects, materials, fold, far)
   }
 }
-shade template inkHatched(weight, thin, bold, tint, hatch, hatchPitch, hatchWidth, hatchThreshold, hatchSoftness, hatchLevel, silhouette = 1, crease = 1, objects = 1, materials = 0, fold = 0.5, far = 0, wobble = 0, wobbleScale = 1, structural uneven = 0) {
+shade template inkHatched(weight, thin, bold, tint, hatch, hatchPitch, hatchWidth, hatchSpacing, hatchThreshold, hatchSoftness, hatchLevel, silhouette = 1, crease = 1, objects = 1, materials = 0, fold = 0.5, far = 0, wobble = 0, wobbleScale = 1, structural uneven = 0) {
   light {
     let cosine = max((light.cosine + surface.wrap) / (1 + surface.wrap), 0)
     // The shade a strong directional light leaves, as far as the light reaches the surface's surroundings: a closed
@@ -88,7 +98,7 @@ shade template inkHatched(weight, thin, bold, tint, hatch, hatchPitch, hatchWidt
     color: ink.under * tint
     coverage: max(
       inkEdges(width, inkPresence(weight, thin), silhouette, crease, objects, materials, fold, far),
-      hatch * inkStrokes(hatchPitch, hatchWidth * ink.line)
+      hatch * inkStrokes(hatchPitch, hatchWidth * ink.line, hatchSpacing)
     )
   }
 }
@@ -122,6 +132,7 @@ function hatched(base, pen) = base with {
       pen.hatch,
       pen.hatchPitch,
       pen.hatchWidth,
+      pen.hatchSpacing,
       pen.hatchThreshold,
       pen.hatchSoftness,
       pen.hatchLevel,
@@ -157,6 +168,7 @@ let standardInk = {
   hatch: 0.55
   hatchPitch: 0.22
   hatchWidth: 0.07
+  hatchSpacing: 9
   hatchThreshold: 0.2
   hatchSoftness: 0.25
   hatchLevel: 1500
