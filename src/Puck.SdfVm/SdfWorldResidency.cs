@@ -44,6 +44,8 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 public sealed partial class SdfWorldResidency : IDisposable {
     private readonly int m_dynamicTransformCapacity;
     private readonly ISdfFrameSource m_frameSource;
+    /// <summary>Gets the frame source the residency films: the composition of the world or scene it renders.</summary>
+    public ISdfFrameSource FrameSource => m_frameSource;
     private readonly int m_instanceCapacity;
     private readonly int m_programWordCapacity;
     private readonly Func<FrameContext, bool>? m_film;
@@ -68,6 +70,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private readonly SdfSkyDetails m_skyDetails;
 
     private SdfKernelSet m_kernels;
+    /// <summary>Gets the kernels the residency records with: those it was created with, or the last set a kernel reload
+    /// installed. Read on the frame thread.</summary>
+    public SdfKernelSet Kernels => m_kernels;
     private IGpuDeviceContext? m_deviceContext;
     private SdfWorldTables? m_tables;
     // The latest captured frame, which every view of the residency renders, and whether this frame captured or packed

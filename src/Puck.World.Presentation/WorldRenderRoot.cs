@@ -372,7 +372,11 @@ public static class WorldRenderRoot {
         probe.Settings = sp.GetService<WorldRenderSettings>();
         var iterations = sp.GetRequiredService<WorldIterationClock>();
 
-        iterations.Attach(bakes: binder, probe: probe);
+        var viewports = sp.GetService<WorldSeatViewports>();
+
+        iterations.Attach(bakes: binder, probe: probe, presented: () => ((viewports is null)
+            ? null
+            : probe.Views?.FindPicker(instance: (viewports.Seat(slot: 0).RenderInstance ?? WorldViewGraphs.WorldInstance))?.View?.Residency));
         // Dynamic resolution reads the views' GPU frame time, the presenter's present timing, resolved on the first frame
         // it reads it, and the views' counted march steps.
         frameSource.FrameLoad = new WorldFrameLoadSource(

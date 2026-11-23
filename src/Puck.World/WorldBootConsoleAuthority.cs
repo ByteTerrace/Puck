@@ -4,10 +4,9 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The desktop's <see cref="IWorldConsoleAuthority"/>: every moved console module addresses the boot row. None of
-/// the moved verbs carry a trailing <c>instance:&lt;name&gt;</c> token the way the <c>player.*</c> and <c>world.instance.start</c> family
-/// do (see <see cref="PlayerCommandModule"/>), so resolving unconditionally to <see cref="WorldInstanceHost.Boot"/>
-/// is exact, not a placeholder — a desktop process runs exactly one console, bound to exactly one row.
+/// The desktop's <see cref="IWorldConsoleAuthority"/>: a console line addresses the boot row, or, through a trailing
+/// <c>instance:&lt;name&gt;</c> token a verb honours (<see cref="WorldConsoleAuthorityExtensions.TryResolveAddressed"/>),
+/// any other row running in this process, read under that row's own grants.
 /// </summary>
 internal sealed class WorldBootConsoleAuthority(WorldInstanceHost instances) : IWorldConsoleAuthority {
     /// <inheritdoc/>
@@ -21,6 +20,20 @@ internal sealed class WorldBootConsoleAuthority(WorldInstanceHost instances) : I
 
         instance = null!;
         refusal = "no boot instance";
+
+        return false;
+    }
+    /// <inheritdoc/>
+    public bool TryResolveNamed(CommandContext context, ReadOnlySpan<char> token, string verb, out WorldInstance instance, out CommandResult error) {
+        if (WorldInstanceArgs.TryResolveInstance(error: out var refusal, instance: out var named, instances: instances, token: token, verb: verb)) {
+            instance = named!;
+            error = default;
+
+            return true;
+        }
+
+        instance = null!;
+        error = refusal!.Value;
 
         return false;
     }

@@ -823,11 +823,13 @@ public static class WorldBootComposition {
         });
         services.AddSingleton<ICommandModule, WorldTickScriptCommandModule>();
         services.AddSingleton(implementationFactory: static sp => {
-            var source = sp.GetRequiredService<WorldDefinitionSource>();
             var catalog = sp.GetRequiredService<WorldMachineCatalog>();
+            // Resolved at the first poll, after the host is composed: the watch is wanted by presentation services the
+            // instance host's own seats reach.
+            WorldInstanceHost? instances = null;
 
             return new WorldSourceWatch(
-                sourcePath: () => source.SourcePath,
+                sourcePaths: () => (instances ??= sp.GetRequiredService<WorldInstanceHost>()).SourcePaths,
                 catalogFingerprint: MachineCatalogFingerprint(machineCatalog: catalog),
                 catalog: catalog);
         });
@@ -961,7 +963,9 @@ public static class WorldBootComposition {
                 jobs: sp.GetRequiredService<Puck.Hosting.Jobs.JobPool>(),
                 scenario: scenario,
                 linkBoundary: sp.GetRequiredService<WorldLinkBoundary>()
-            );
+            ) {
+                ConsoleRows = sp.GetRequiredService<WorldDeferredVerbEchoes>().ForRow,
+            };
             var bootOrigin = sp.GetRequiredService<WorldDefinitionSource>();
             var bootServer = sp.GetRequiredService<WorldServer>();
             var bootRow = new WorldInstance(

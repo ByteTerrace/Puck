@@ -132,6 +132,21 @@ public readonly ref struct WireArgs {
         return new string(value: destination[..length]);
     }
 
+    /// <summary>Returns the view of the first <paramref name="count"/> tokens, for a handler that has read an option
+    /// token off the end (an <c>instance:&lt;name&gt;</c> address) and parses the rest as if it were never there. A
+    /// span-mode view slices without copying; an array-mode view copies the kept tokens.</summary>
+    /// <param name="count">The number of leading tokens kept, in <c>[0, <see cref="Count"/>]</c>.</param>
+    /// <returns>The shortened view, carrying the same <see cref="Echo"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative or above <see cref="Count"/>.</exception>
+    public WireArgs Head(int count) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: count);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: count, other: Count);
+
+        return ((m_array is { } array)
+            ? new WireArgs(array: array[..count], echo: Echo)
+            : new WireArgs(echo: Echo, line: m_line, ranges: m_ranges[..count]));
+    }
+
     private delegate bool TryParseSpan<T>(ReadOnlySpan<char> text, out T value);
 
     private bool TryParseToken<T>(int index, TryParseSpan<T> parser, out T value) {

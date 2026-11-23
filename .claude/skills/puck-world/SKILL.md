@@ -230,7 +230,10 @@ To run your own edits, start a World with `puck_world_start` (`checkout`: your
 worktree's absolute path; `windowed: true` only for a granted GPU leg). The
 call returns `pending` and a `startId` promptly. Inspect the connected tool's
 schema before using optional arguments: the checkout's current implementation can
-accept capabilities absent from an older connected adapter. Where advertised,
+accept capabilities absent from an older connected adapter. A windowed start's
+`width` and `height` set the window's client size (`--width`, `--height`), such as
+a device's frame-bar size (2560x1440 on the RTX 4070), without touching the
+document's `host` block. Where advertised,
 `captureTool: "pix"` forwards `--capture-tool pix` before device creation (windowed
 Direct3D 12); `"renderdoc"` selects RenderDoc. Both enable existing GPU object names.
 Otherwise use `puck sweep --tour --backend directx --capture-tool pix` with a plan
@@ -556,9 +559,17 @@ adds the accepted edit to the journal. `world.undo` restores the prior live
 value and leaves the source file as saved
 ([the live edit path](../../../docs/plans/iteration.md#the-live-edit-path-step-3)).
 
-**A saved file reaches the World as a reload.** A local operator's `.puck`
-source boot enables `world.watch` from the loader's file facts. The watch
-queues an ordinary `world.reload` after a quiet moment. `world.counters world.boot`
+**A saved file reaches the World as a reload, in whichever world it belongs to.**
+`world.reload` reloads every world running in the process, the boot world and each
+instance a portal, painting or console started beside it, each from its own source
+through its own `WorldReloadDoor` and console link (`WorldReload`); `world.reload
+instance:<name>` reloads one. A world still at the revision its authority holds
+answers unchanged. A local operator's `.puck` source boot enables `world.watch`
+from the loader's file facts; the watch follows the compiler inputs of every running
+world's source (`WorldInstanceHost.SourcePaths`) and queues an ordinary
+`world.reload` after a quiet moment. `world.shaders.reload` reaches every residency
+the binder renders through (the world's own, each view's, each routed and infinity
+scene's), and a scene shown later starts from the reloaded kernels. `world.counters world.boot`
 reports watch pump calls, stamp queries, content reads, and presentation
 deliveries (one per recipient) with the rows and bytes they carried. A value you only want to
 try goes through `world.row.set`, which installs by kind (`WorldDocument.InstallKindOf`)
@@ -844,7 +855,10 @@ check the flag: the owner may be holding the pad.
   without a BOM (`[System.Text.UTF8Encoding]::new($false)`): a BOM written into
   piped stdin corrupts the first command.
 - **Indexing.** `body.*` verbs and `world.grant body:<n>` take the 0-based
-  entity index; `player.*` verbs take 1-based seat numbers.
+  entity index, their `instance:<name>` form included (any body of that
+  instance, not only its seats); `player.*` verbs take 1-based seat numbers.
+  `world.state [<row> [<key>]] instance:<name>` reads another instance's state
+  under that instance's grants (`IWorldConsoleAuthority.TryResolveNamed`).
 - **Screenshots arm, they do not capture.** `world.screenshot <path.png>`
   echoes `pending` on stdout; the file is announced on stderr
   (`[capture] … -> <path>`). Fence a frame with `world.wait` before reading it.

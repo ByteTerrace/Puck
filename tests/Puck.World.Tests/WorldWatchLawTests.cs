@@ -31,7 +31,7 @@ public sealed class WorldWatchLawTests {
 
         Assert.True(condition: WorldCompileSession.Shared.TryCompose(root, bytes, out _, out var reason), userMessage: reason);
         var count = 0;
-        var watch = new WorldSourceWatch(() => root);
+        var watch = new WorldSourceWatch(() => [root]);
 
         watch.Start(submitReload: () => count++);
         Poll(watch, now: At(milliseconds: 1000));
@@ -48,7 +48,7 @@ public sealed class WorldWatchLawTests {
         var module = files.WriteText(name: "counter.puck", text: Module);
         var root = files.WriteText(name: "root.puck", text: "import \"counter\"\nuse counter as root()");
         var count = 0;
-        var watch = new WorldSourceWatch(() => root);
+        var watch = new WorldSourceWatch(() => [root]);
 
         watch.Start(submitReload: () => count++);
         unrelated.WriteText(name: "other.puck", text: Module);
@@ -93,7 +93,7 @@ public sealed class WorldWatchLawTests {
         File.SetLastWriteTimeUtc(lastWriteTimeUtc: old, path: module);
         File.SetLastWriteTimeUtc(lastWriteTimeUtc: old, path: root);
         var count = 0;
-        var watch = new WorldSourceWatch(() => root);
+        var watch = new WorldSourceWatch(() => [root]);
 
         watch.Start(submitReload: () => count++);
         Directory.SetLastWriteTimeUtc(lastWriteTimeUtc: old, path: files.RootPath);
@@ -130,7 +130,7 @@ public sealed class WorldWatchLawTests {
         var first = files.WriteText(name: "first.puck", text: "state { world { slot value = 1 } }");
         var current = first;
         var count = 0;
-        var watch = new WorldSourceWatch(() => current);
+        var watch = new WorldSourceWatch(() => [current]);
 
         watch.Start(submitReload: () => count++);
         File.WriteAllText(contents: "import \"counter\"\nuse counter as root()", path: first);

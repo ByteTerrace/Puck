@@ -5,21 +5,10 @@ namespace Puck.World;
 /// <summary>
 /// Shared player-index parsing for the world verbs: the trailing (or positional) integer index the drive-a-player and
 /// roster-management verbs constrain to <c>[min, max]</c>. A local index-in-range convenience over
-/// <see cref="WireArgs"/>. Also owns the trailing
-/// <c>instance:&lt;name&gt;</c> token grammar — see <see cref="InstanceTokenPrefix"/>. The bracket-splice echo
-/// surgery every instance-addressed verb shares lives in
-/// <see cref="Puck.Commands.CommandEcho.SpliceTag(string, string, string)"/>.
+/// <see cref="WireArgs"/>. The trailing <c>instance:&lt;name&gt;</c> token grammar is
+/// <see cref="Protocol.WorldInstanceToken"/>.
 /// </summary>
 public static class WorldArgs {
-    /// <summary>Whether <paramref name="token"/> opens with <see cref="InstanceTokenPrefix"/> — the test every
-    /// instance-addressed verb uses to decide whether a positional slot IS the trailing instance token before
-    /// parsing it further.</summary>
-    /// <param name="token">The candidate token.</param>
-    /// <returns>Whether the token carries the reserved prefix.</returns>
-    public static bool IsInstanceToken(ReadOnlySpan<char> token) => token.StartsWith(
-        comparisonType: StringComparison.OrdinalIgnoreCase,
-        value: InstanceTokenPrefix
-    );
     /// <summary>Parses an integer index token at <paramref name="at"/> constrained to <c>[min, max]</c>, straight from
     /// its span. When <paramref name="fallback"/> is non-<see langword="null"/> the token is optional: an absent token
     /// yields the fallback (and <see langword="true"/>); when it is <see langword="null"/> an absent token fails. A
@@ -49,49 +38,4 @@ public static class WorldArgs {
             (value <= max)
         );
     }
-    /// <summary>Parses the name out of a token already confirmed by <see cref="IsInstanceToken"/>: decodes the echo's
-    /// escapes (see the remarks), refuses an empty name, and refuses the literal boot-instance name as redundant
-    /// addressing (the boot world is already the default — omit the token to address it). Does not check whether a
-    /// running instance answers to the resolved name; a caller that needs the resolved <c>WorldInstance</c>
-    /// follows up with
-    /// <c>WorldInstanceArgs.TryResolveInstance</c>,
-    /// and a caller that defers existence to its own downstream refusal (e.g. <c>world.rate</c>'s <c>TryPause</c>/
-    /// <c>TryResume</c>/<c>TryDescribeRate</c>) stops here.</summary>
-    /// <param name="token">The token, prefix included.</param>
-    /// <param name="verb">The verb name the refusal text is scoped to.</param>
-    /// <param name="name">The parsed instance name on success.</param>
-    /// <param name="error">The refusal, on failure.</param>
-    /// <returns>Whether a candidate name was parsed.</returns>
-    /// <remarks>This is the READ side of the tag every instance-addressed echo writes with
-    /// <see cref="Puck.Commands.CommandEcho.SpliceTag(string, string, string)"/>, and the tag exists to be copied off
-    /// an echo and handed straight back. By the time the token arrives, System.CommandLine's splitter has removed the
-    /// value's surrounding quotes and left its escapes alone — that splitter knows nothing else — so the name is
-    /// finished here with <see cref="Puck.Commands.CommandEcho.Unescape(string)"/>. Without it a world named
-    /// <c>C:\my games</c> came back with its backslash doubled and one named <c>say "hi"</c> came back with both quotes
-    /// replaced by backslashes, which is to say the round trip the tag promises did not hold for either.</remarks>
-    public static bool TryParseInstanceName(ReadOnlySpan<char> token, string verb, out string name, out CommandResult? error) {
-        var candidate = CommandEcho.Unescape(value: token[InstanceTokenPrefix.Length..].ToString());
-
-        if (string.IsNullOrWhiteSpace(value: candidate)) {
-            name = string.Empty;
-            error = CommandResult.Error(output: $"[{verb}: instance: must name a running instance — see world.instance.status]");
-
-            return false;
-        }
-
-        if (WorldDefinitionLoader.IsBootInstance(name: candidate)) {
-            name = string.Empty;
-            error = CommandResult.Error(output: $"[{verb}: '{WorldDefinitionLoader.BootInstanceName}' is the world this process booted with — omit instance: to address it]");
-
-            return false;
-        }
-
-        name = candidate;
-        error = null;
-
-        return true;
-    }
-
-    /// <summary>The reserved trailing-token prefix every instance-addressed verb shares (case-insensitive match).</summary>
-    public const string InstanceTokenPrefix = "instance:";
 }

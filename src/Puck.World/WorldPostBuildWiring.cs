@@ -291,6 +291,19 @@ public static class WorldPostBuildWiring {
         );
         var scheduleRunner = services.GetRequiredService<WorldTestRun>();
 
+        // Every other row answers the console lines registered on it (its console link names the row,
+        // WorldInstanceHost.ConsoleRows), as the boot row's echo tap below answers the boot row's: the rows the host
+        // composed before this wiring ran (the destinations the boot world's frames show), and each it admits later.
+        var instances = services.GetRequiredService<WorldInstanceHost>();
+
+        void TapRow(WorldInstance row) {
+            if (!WorldDefinitionLoader.IsBootInstance(name: row.Name)) { row.Server.EchoTap += echo => deferredVerbAnswers.Answer(echo: in echo, row: row.Name); }
+        }
+        foreach (var name in instances.Names) {
+            if (instances.TryGet(instance: out var row, name: name) && (row is not null)) { TapRow(row: row); }
+        }
+        instances.Admitted += TapRow;
+
         // The boot row is admitted by the time this runs, so a sibling world the armed document declares can start
         // beside it before the first step.
         if (armSchedule) {

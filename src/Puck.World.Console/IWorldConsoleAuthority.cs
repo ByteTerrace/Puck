@@ -17,6 +17,20 @@ public interface IWorldConsoleAuthority : ICommandAuthority {
     /// <param name="refusal">The refusal reason, on failure.</param>
     /// <returns><see langword="true"/> when a row was resolved.</returns>
     bool TryResolve(CommandContext context, out WorldInstance instance, out string refusal);
+    /// <summary>Resolves the row a trailing <c>instance:&lt;name&gt;</c> token (<see cref="WorldInstanceToken"/>) names,
+    /// for a host whose console reaches more than one running row. A host whose console reaches one row refuses.</summary>
+    /// <param name="context">The invocation's context.</param>
+    /// <param name="token">The token, prefix included.</param>
+    /// <param name="verb">The calling verb's name, for the refusal echo.</param>
+    /// <param name="instance">The named row, on success.</param>
+    /// <param name="error">The inline refusal echo, on failure.</param>
+    /// <returns><see langword="true"/> when a running row answers to the name.</returns>
+    bool TryResolveNamed(CommandContext context, ReadOnlySpan<char> token, string verb, out WorldInstance instance, out CommandResult error) {
+        instance = null!;
+        error = CommandResult.Error(output: $"[{verb}: this console addresses its own row only; instance: names no other here]");
+
+        return false;
+    }
     /// <summary>Returns the view this invocation reads the resolved row's state through: the document as its acting
     /// principal may read it. Every console read-back of state values reaches the row through this one member.</summary>
     /// <param name="context">The invocation's context — carries the acting session's identity.</param>
@@ -104,6 +118,49 @@ public static class WorldConsoleAuthorityExtensions {
         link = (resolved ? instance.SubmissionLink : null!);
 
         return resolved;
+    }
+    /// <summary>Resolves the row an invocation addresses when its last token may be an <c>instance:&lt;name&gt;</c>
+    /// address: the named row (<see cref="IWorldConsoleAuthority.TryResolveNamed"/>), with the token read off
+    /// <paramref name="args"/>, or the invocation's own row when no such token ends the line.</summary>
+    /// <param name="authority">The authority to resolve against.</param>
+    /// <param name="context">The invocation's context.</param>
+    /// <param name="args">The invocation's wire arguments; on success, the arguments before the address.</param>
+    /// <param name="verb">The calling verb's name, for the refusal echo.</param>
+    /// <param name="instance">The addressed row, on success.</param>
+    /// <param name="error">The inline refusal echo, on failure.</param>
+    /// <returns><see langword="true"/> when a row was resolved.</returns>
+    public static bool TryResolveAddressed(this IWorldConsoleAuthority authority, CommandContext context, ref WireArgs args, string verb, out WorldInstance instance, out CommandResult error) {
+        var count = args.Count;
+
+        if ((count == 0) || !WorldInstanceToken.Is(token: args[(count - 1)])) {
+            return authority.TryResolveInstance(context: context, error: out error, instance: out instance, verb: verb);
+        }
+        if (!authority.TryResolveNamed(context: context, error: out error, instance: out instance, token: args[(count - 1)], verb: verb)) {
+            return false;
+        }
+        args = args.Head(count: (count - 1));
+
+        return true;
+    }
+    /// <summary>Resolves the row an invocation addresses, honouring a trailing <c>instance:&lt;name&gt;</c> address
+    /// (<see cref="TryResolveAddressed"/>), and hands back the view its acting principal reads that row's state through,
+    /// under that row's own grants.</summary>
+    /// <param name="authority">The authority to resolve against.</param>
+    /// <param name="context">The invocation's context.</param>
+    /// <param name="args">The invocation's wire arguments; on success, the arguments before any address.</param>
+    /// <param name="verb">The calling verb's name, for the refusal echo.</param>
+    /// <param name="view">The acting principal's view, on success.</param>
+    /// <param name="error">The inline refusal echo, on failure.</param>
+    /// <returns><see langword="true"/> when a row was resolved.</returns>
+    public static bool TryResolveReadView(this IWorldConsoleAuthority authority, CommandContext context, ref WireArgs args, string verb, out WorldStateReadView view, out CommandResult error) {
+        if (!authority.TryResolveAddressed(args: ref args, context: context, error: out error, instance: out var instance, verb: verb)) {
+            view = null!;
+
+            return false;
+        }
+        view = authority.ReadView(context: context, instance: instance);
+
+        return true;
     }
     /// <summary>Resolves this invocation's row and hands back the view its acting principal reads that row's state
     /// through — the shape every read-back of state values opens with, in place of the server itself.</summary>

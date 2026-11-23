@@ -3,7 +3,6 @@ using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
-using Puck.World.Server;
 
 namespace Puck.World;
 
@@ -43,14 +42,15 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.Instance is { } instance) {
-            if (instanceTarget.EffectiveCount != 8) {
-                return CommandResult.Error(output: $"[body.fly: instance-targeted form expects 7 values — <forward> <strafe> <up> <yaw> <pitch> <roll> <seconds> — plus the REQUIRED instance seat, before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
+            if (instanceTarget.EffectiveCount is not (7 or 8)) {
+                return BodyFlyForms.Refuse();
             }
 
-            var (instancePlayer, instanceSlot, slotError) = ResolveInstanceSlot(
+            var (instancePlayer, instanceSlot, slotError) = ResolveInstanceBody(
                 args: in args,
+                count: instanceTarget.EffectiveCount,
                 instance: instance,
-                slotTokenIndex: 7,
+                tokenIndex: 7,
                 verb: "body.fly"
             );
 
@@ -79,7 +79,7 @@ internal sealed partial class PlayerCommandModule {
 
             instance.Server.ApplyCommand(command: new WorldCommand.EnqueueSegment(
                 Principal: context.Principal,
-                EntityIndex: WorldPopulation.EntityFromDisplay(number: instanceSlot),
+                EntityIndex: instanceSlot,
                 Intent: instanceChannels.RoleOrdinals.Intent(
                     moveAdvance: FixedQ4816.FromDouble(value: iForward),
                     moveStrafe: FixedQ4816.FromDouble(value: iStrafe),
@@ -91,7 +91,7 @@ internal sealed partial class PlayerCommandModule {
                 Seconds: iSeconds
             ));
 
-            return new CommandResult(Output: $"[body.fly: '{instance.Name}' seat {instanceSlot} fwd={iForward:0.##} strafe={iStrafe:0.##} up={iUp:0.##} yaw={iYaw:0.##} pitch={iPitch:0.##} roll={iRoll:0.##} for {iSeconds:0.##}s]");
+            return new CommandResult(Output: $"[body.fly: '{instance.Name}' body:{instanceSlot} fwd={iForward:0.##} strafe={iStrafe:0.##} up={iUp:0.##} yaw={iYaw:0.##} pitch={iPitch:0.##} roll={iRoll:0.##} for {iSeconds:0.##}s]");
         }
 
         if (instanceTarget.EffectiveCount is not (7 or 8)) {
@@ -271,14 +271,15 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.Instance is { } instance) {
-            if (instanceTarget.EffectiveCount != 7) {
-                return CommandResult.Error(output: $"[body.pose: instance-targeted form expects 6 values — <x> <y> <z> <yawDeg> <pitchDeg> <rollDeg>, any of which may be - to hold its current value — plus the REQUIRED instance seat, before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
+            if (instanceTarget.EffectiveCount is not (6 or 7)) {
+                return CommandResult.Error(output: "[body.pose: instance-targeted form expects 6 values — <x> <y> <z> <yawDeg> <pitchDeg> <rollDeg>, any of which may be - to hold its current value — then an optional body index, before instance:<name>]");
             }
 
-            var (instancePlayer, instanceSlot, slotError) = ResolveInstanceSlot(
+            var (instancePlayer, instanceSlot, slotError) = ResolveInstanceBody(
                 args: in args,
+                count: instanceTarget.EffectiveCount,
                 instance: instance,
-                slotTokenIndex: 6,
+                tokenIndex: 6,
                 verb: "body.pose"
             );
 
@@ -304,7 +305,7 @@ internal sealed partial class PlayerCommandModule {
 
             instance.Server.ApplyCommand(command: new WorldCommand.SnapPose(
                 Principal: context.Principal,
-                EntityIndex: WorldPopulation.EntityFromDisplay(number: instanceSlot),
+                EntityIndex: instanceSlot,
                 Position: new Vector3(
                     x: ix,
                     y: iy,
@@ -316,7 +317,7 @@ internal sealed partial class PlayerCommandModule {
                 Mode: SnapPoseMode.Pose
             ));
 
-            return new CommandResult(Output: $"[body.pose: '{instance.Name}' seat {instanceSlot} ({ix:0.00}, {iy:0.00}, {iz:0.00}) yaw={iyaw:0}° pitch={ipitch:0}° roll={iroll:0}°]");
+            return new CommandResult(Output: $"[body.pose: '{instance.Name}' body:{instanceSlot} ({ix:0.00}, {iy:0.00}, {iz:0.00}) yaw={iyaw:0}° pitch={ipitch:0}° roll={iroll:0}°]");
         }
 
         // The spawn-point form — body.pose spawn:<id> [body] — is the console mirror of the rule-side pose effect's
@@ -762,14 +763,15 @@ internal sealed partial class PlayerCommandModule {
         // a bare "tape cleared" echo, never the boot form's richer refusal/outcome detail (no client mirrors a
         // spawned instance's seat, so there is no held-key/toggle-latch state to reconcile here either).
         if (instanceTarget.Instance is { } instance) {
-            if (instanceTarget.EffectiveCount != 1) {
-                return CommandResult.Error(output: $"[body.stop: instance-targeted form expects <slot>, before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
+            if (instanceTarget.EffectiveCount > 1) {
+                return BodyStopForms.Refuse();
             }
 
-            var (instancePlayer, instanceSlot, slotError) = ResolveInstanceSlot(
+            var (instancePlayer, instanceSlot, slotError) = ResolveInstanceBody(
                 args: in args,
+                count: instanceTarget.EffectiveCount,
                 instance: instance,
-                slotTokenIndex: 0,
+                tokenIndex: 0,
                 verb: "body.stop"
             );
 
@@ -779,10 +781,10 @@ internal sealed partial class PlayerCommandModule {
 
             instance.Server.ApplyCommand(command: new WorldCommand.Stop(
                 Principal: context.Principal,
-                EntityIndex: WorldPopulation.EntityFromDisplay(number: instanceSlot)
+                EntityIndex: instanceSlot
             ));
 
-            return new CommandResult(Output: $"[body.stop: '{instance.Name}' seat {instanceSlot} — tape cleared]");
+            return new CommandResult(Output: $"[body.stop: '{instance.Name}' body:{instanceSlot} — tape cleared]");
         }
 
         if (instanceTarget.EffectiveCount > 1) {
@@ -1042,24 +1044,16 @@ internal sealed partial class PlayerCommandModule {
         // instance's query door, as the caller — never the boot world's — and carries no perception anchor (that is
         // client presentation state a spawned instance's seat has no client mirroring).
         if (instanceTarget.Instance is { } instance) {
-            if (instanceTarget.EffectiveCount != 1) {
-                return CommandResult.Error(output: $"[body.where: instance-targeted form expects <slot>, before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
+            if (instanceTarget.EffectiveCount > 1) {
+                return BodyWhereForms.Refuse();
             }
-
-            if (
-                !args.TryInt(
-                index: 0,
-                value: out var instanceSlot
-            ) ||
-                (instanceSlot < 1) ||
-                (instanceSlot > WorldBodiesLimits.LocalSeatCount)
-            ) {
-                return CommandResult.Error(output: $"[body.where: instance-targeted <slot> must be an integer 1..{WorldBodiesLimits.LocalSeatCount}]");
+            if (!TryParseInstanceBody(args: in args, count: instanceTarget.EffectiveCount, error: out var indexError, index: out var instanceBody, instance: instance, tokenIndex: 0, verb: "body.where")) {
+                return CommandResult.Error(output: indexError!);
             }
 
             var instanceAnswer = instance.Server.AnswerSubmittedQuery(
                 principal: context.Principal,
-                query: new WorldQuery.PlayerWhere(Index: WorldPopulation.EntityFromDisplay(number: instanceSlot))
+                query: new WorldQuery.PlayerWhere(Index: instanceBody)
             );
 
             return new CommandResult(Output: WithInstanceTag(
@@ -1159,18 +1153,16 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.Instance is { } instance) {
-            if (
-                (instanceTarget.EffectiveCount != 1) ||
-                !args.TryInt(index: 0, value: out var instanceSlot) ||
-                (instanceSlot < 1) ||
-                (instanceSlot > WorldBodiesLimits.LocalSeatCount)
-            ) {
-                return CommandResult.Error(output: $"[body.place: instance-targeted form expects <slot> 1..{WorldBodiesLimits.LocalSeatCount} before instance:<name>]");
+            if (instanceTarget.EffectiveCount > 1) {
+                return BodyPlaceForms.Refuse();
+            }
+            if (!TryParseInstanceBody(args: in args, count: instanceTarget.EffectiveCount, error: out var indexError, index: out var instanceBody, instance: instance, tokenIndex: 0, verb: "body.place")) {
+                return CommandResult.Error(output: indexError!);
             }
 
             var instanceAnswer = instance.Server.AnswerSubmittedQuery(
                 principal: context.Principal,
-                query: new WorldQuery.PlayerPlace(Index: WorldPopulation.EntityFromDisplay(number: instanceSlot))
+                query: new WorldQuery.PlayerPlace(Index: instanceBody)
             );
 
             return new CommandResult(Output: WithInstanceTag(text: instanceAnswer.Text, instanceName: instance.Name)) { IsError = instanceAnswer.Refused };

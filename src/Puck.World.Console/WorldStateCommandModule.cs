@@ -34,7 +34,7 @@ namespace Puck.World;
 /// writes while denying the whole-row pair — the difference between bumping a row and redefining it. Revoking either
 /// grant, or narrowing its mask, refuses that principal's writes here, whichever verb produced them.</remarks>
 public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority authority, WorldDeferredVerbEchoes echoes) : ICommandModule {
-    private static readonly CommandForms WorldStateForms = CommandForms.Of(verb: "world.state", "[<row> [<key>]]");
+    private static readonly CommandForms WorldStateForms = CommandForms.Of(verb: "world.state", "[<row> [<key>]] [instance:<name>]");
     private static readonly CommandForms WorldStateCellSetForms = CommandForms.Of(verb: "world.state.cell.set", "<row> <key> <value> [add]", "<row> <key> <text...>", "<row> <key> <base64url-vector>");
     private static readonly CommandForms WorldRuleTraceForms = CommandForms.Of(verb: "world.rule.trace", $"<rule> [evaluations 1..{RuleEvaluator.MaxTraceEvaluations}]", "off");
     private static readonly CommandForms WorldBudgetRulesForms = CommandForms.Of(verb: "world.budget.rules", "[top]", "--why <rule>", "--spent [top]");
@@ -1002,10 +1002,11 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "world.state",
-            description: $"Reads back the live state section at all three grains (Immediate): with no argument, every row's name/kind/shape (a one-value row shows its value, a keyed row its cell count against its capacity), plus each row's declared range and non-negative floor when it carries them; with a row name, that row's line followed by every cell it holds; with a row name and a cell key, that one cell alone; a row naming an enum spells each value by its member name — or a refusal naming why there is none: {WorldStateForms.Spelling}.",
+            description: $"Reads back the live state section at all three grains (Immediate): with no argument, every row's name/kind/shape (a one-value row shows its value, a keyed row its cell count against its capacity), plus each row's declared range and non-negative floor when it carries them; with a row name, that row's line followed by every cell it holds; with a row name and a cell key, that one cell alone; a row naming an enum spells each value by its member name; a trailing instance:<name> reads that running instance's state under its own grants — or a refusal naming why there is none: {WorldStateForms.Spelling}.",
             forms: WorldStateForms,
             handler: (context, args) => {
                 if (!authority.TryResolveReadView(
+                    args: ref args,
                     context: context,
                     error: out var error,
                     verb: "world.state",

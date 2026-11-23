@@ -48,9 +48,9 @@ moon's from there, with its pilot. Both crossings narrate:
 
 Inside the moon's reach (`moonReach` metres from its centre) the ship rolls to
 stand against the moon's pull. Brought down within its flare of the ground and
-let go, it settles and stands. `body.where <slot> instance:<name>` reads a
-body of the moon's instance by its one-based slot, the seat as 1 and the ship
-as the slot the transfer line names plus one.
+let go, it settles and stands. `body.where <body> instance:<name>` reads a
+body of the moon's instance by its zero-based index, as the boot form does:
+the seat as 0 and the ship as the body the transfer line names.
 
 Headless, a seat's forward is world -Z whatever the ship's heading, so a
 scripted flight steers with `body.fly`'s forward and strafe as world axes and

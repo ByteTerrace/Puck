@@ -7,7 +7,8 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>
-/// Times every edit loop from the edit to the presented frames that show it: the boot (from process start), each
+/// Times every edit loop from the edit to the presented frames that show it, in the world the first seat's view shows (the
+/// boot world, or the world a portal or painting carried the seat into): the boot (from process start), each
 /// <c>world.reload</c> (by hand or from the source watch), each <c>world.shaders.reload</c>, and each loop a script
 /// begins by name before its own edit (<c>world.iteration begin</c>), such as a row set. A loop passes six stages,
 /// each timed in seconds from the edit to the first produced frame that finds it true. <c>first</c>: a frame is
@@ -56,6 +57,7 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
     private long m_count;
     private WorldRenderProbe? m_probe;
     private IWorldBakeReadiness? m_bakes;
+    private Func<SdfWorldResidency?>? m_presented;
 
     /// <inheritdoc/>
     public long Loops => m_count;
@@ -107,13 +109,17 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
     /// <param name="probe">The render probe holding the world residency, the composition and the render graph's
     /// root.</param>
     /// <param name="bakes">The presentation's mesh-path bake readiness.</param>
+    /// <param name="presented">Returns the residency the first seat's view renders through now, the world's own or a
+    /// routed scene's, or <see langword="null"/> for the world's own; <see langword="null"/> to time against the world's
+    /// own residency alone.</param>
     /// <exception cref="ArgumentNullException"><paramref name="probe"/> or <paramref name="bakes"/> is
     /// <see langword="null"/>.</exception>
-    public void Attach(WorldRenderProbe probe, IWorldBakeReadiness bakes) {
+    public void Attach(WorldRenderProbe probe, IWorldBakeReadiness bakes, Func<SdfWorldResidency?>? presented = null) {
         ArgumentNullException.ThrowIfNull(argument: probe);
         ArgumentNullException.ThrowIfNull(argument: bakes);
         m_probe = probe;
         m_bakes = bakes;
+        m_presented = presented;
         if (m_boot is null) {
             using var process = Process.GetCurrentProcess();
             var age = (DateTime.Now - process.StartTime);
@@ -142,12 +148,15 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
             superseded.Ended = $"superseded by #{m_count + 1} {name}";
         }
 
+        var presented = Presented();
         var loop = new Loop(
-            after: feed.Tick.DocumentVersion,
+            // The document the presented frame carries: a seat standing in another world shows that world's authority's
+            // documents, whose versions the boot authority's never cover.
+            after: ((presented?.Frame?.DiagnosticSource is WorldDocumentVersion shown) ? shown : feed.Tick.DocumentVersion),
             name: name,
             named: named,
             number: ++m_count,
-            shaderInstalls: (m_probe?.Residency?.ShaderBatchesInstalled ?? 0L),
+            shaderInstalls: (presented?.ShaderBatchesInstalled ?? 0L),
             started: Stopwatch.GetTimestamp()
         ) { LiveTick = (live ? feed.Tick.Tick : null), ShaderRequest = shaderRequest, PresentedAtStart = (m_probe?.Root?.FramesProduced ?? -1L), BuildsAtStart = (m_probe?.Composition?.ProgramBuilds ?? -1L), AppearancesAtStart = (m_probe?.Composition?.AppearanceBuilds ?? -1L), WorkAtStart = ReadWork() };
 
@@ -173,6 +182,11 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
     }
 
     private Loop? Latest => ((m_loops.Count > 0) ? m_loops[^1] : null);
+    // The residency the first seat's view renders through, the world's own when no other answers.
+    private SdfWorldResidency? Presented() => (m_presented?.Invoke() ?? m_probe?.Residency);
+    // The composition a residency films: a routed scene's own, or the world's for the world's residency.
+    private static SdfCompositionFrameSource? CompositionOf(SdfWorldResidency residency, WorldRenderProbe probe) =>
+        ((residency.FrameSource as SdfCompositionFrameSource) ?? (ReferenceEquals(objA: residency, objB: probe.Residency) ? probe.Composition : null));
 
     /// <summary>Advances every open loop over the frame just produced. Call on the host pump after the render graph's
     /// root produces a frame; allocates nothing while no stage changes.</summary>
@@ -194,7 +208,7 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
         // With no frame before this one, the wait is the first stage's (the boot's, from process start), never a held
         // frame.
         if ((loop.Shaded is null) && (previous != 0L)) { loop.WorstFrame = Math.Max(val1: loop.WorstFrame, val2: (now - Math.Max(val1: previous, val2: loop.Started))); }
-        if ((probe.Residency is not { } residency) || (probe.Composition is not { } composition)) { return; }
+        if ((Presented() is not { } residency) || (CompositionOf(probe: probe, residency: residency) is not { } composition)) { return; }
         if (loop.PresentedAtStart < 0) { loop.PresentedAtStart = (probe.Root?.FramesProduced ?? 0L); }
         if (loop.BuildsAtStart < 0) { loop.BuildsAtStart = composition.ProgramBuilds; }
         if (loop.AppearancesAtStart < 0) { loop.AppearancesAtStart = composition.AppearanceBuilds; }
