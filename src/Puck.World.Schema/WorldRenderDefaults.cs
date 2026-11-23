@@ -1105,16 +1105,20 @@ public abstract record WorldRenderSkyLayer {
         /// <inheritdoc/>
         public override string? LayerName => Name;
     }
-    /// <summary>Another world, seen at infinity: a second <c>sdf.world</c> instance (<c>sky$&lt;name&gt;</c>) rendering the
-    /// destination's session from a fixed anchor in it, turned with the viewer's camera and never translated by it. It
-    /// renders only while the viewer's previous frame showed it, and only the rectangle its mask covers (a cone, or the
-    /// whole frustum without a mask). The camera alone sees it, since the environment map binds no screen. At most
+    /// <summary>Another world in the sky: a second <c>sdf.world</c> instance (<c>sky$&lt;name&gt;</c>) rendering the
+    /// destination's session from an anchor in it, turned with the viewer's camera. Without <paramref name="Follow"/> the
+    /// camera stays at the anchor, so the destination is a backdrop at infinity; with it the camera moves as the viewer
+    /// does, so the destination is a place at a distance that grows as the viewer nears it, and the two worlds share
+    /// one frame. It renders only while the viewer's previous frame showed it, and only the rectangle its mask covers (a
+    /// cone, the cone its <paramref name="Bound"/> subtends, or the whole frustum with neither). The camera alone sees
+    /// it, since the environment map binds no screen. At most
     /// <c>SdfSky.MaxInfinityViews</c> view and far layers a world, nested worlds included; a view that cannot render
     /// draws its <paramref name="Fallback"/> colour.</summary>
     /// <param name="Name">The layer's name, required: the instance is <c>sky$name</c> and its counted rows carry the name, so
     /// it is one part free of <c>$</c> and <c>~</c>, unique among the layers.</param>
     /// <param name="Destination">The destination world, by the name a session screen's destination takes. Required.</param>
-    /// <param name="Anchor">The point in the destination the camera sits at, whatever the viewer does. Absent is its
+    /// <param name="Anchor">The point in the destination the camera sits at, whatever the viewer does; with
+    /// <paramref name="Follow"/>, the point of the destination this world's origin stands at. Absent is its
     /// origin.</param>
     /// <param name="Turn">The rotation about up that carries the viewer's frame into the destination's, in degrees. Absent
     /// is none: the destination's axes are the viewer's.</param>
@@ -1126,6 +1130,10 @@ public abstract record WorldRenderSkyLayer {
     /// <param name="AmbientOcclusion">Whether the instance is dressed with ambient occlusion. Absent is off.</param>
     /// <param name="Fallback"><see cref="BindableColor"/>'s grammar: the colour drawn where the view cannot render, before
     /// its first image and past the nesting depth or the cap. Absent is black.</param>
+    /// <param name="Follow">Whether the camera moves with the viewer's. Absent is not.</param>
+    /// <param name="Bound">The sphere that bounds what the view shows, in the destination's coordinates. Absent is none.</param>
+    /// <param name="Coverage">Whether the view draws only the destination's geometry, so this world's sky shows around
+    /// it. Absent is not: the destination's own sky fills the view.</param>
     public sealed record View(
         [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
@@ -1138,11 +1146,18 @@ public abstract record WorldRenderSkyLayer {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FarDistance = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Shadows = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? AmbientOcclusion = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Fallback = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Fallback = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Follow = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSkyViewBound? Bound = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Coverage = null
     ) : WorldRenderSkyLayer {
         /// <inheritdoc/>
         public override string? LayerName => Name;
     }
+    /// <summary>The sphere that bounds what a <see cref="View"/> shows.</summary>
+    /// <param name="Center">The sphere's centre, in the destination's coordinates.</param>
+    /// <param name="Radius">The sphere's radius, in world units, positive.</param>
+    public sealed record WorldSkyViewBound(DocumentVector3 Center, float Radius);
     /// <summary>Far geometry: the same mechanism as <see cref="View"/> over a residency that holds only the named
     /// prototypes of this world, a planet or a ring of monoliths or a city on the horizon, rendered by the one
     /// <c>sdf.world</c> engine sized to its angular bound, so its cost scales with the pixels it covers and is counted under

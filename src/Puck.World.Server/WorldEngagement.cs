@@ -251,11 +251,21 @@ public sealed partial class WorldEngagement {
         }
 
         if (apply) {
+            // Read before the set clears: the body the participant rode, which its own body is set down beside in the
+            // same step that ends the ride, so no tick holds a rider that rides nothing.
+            var mount = MountOf(index: targetPrincipal.Index);
+
             _ = m_grants.ClearApplications(principal: targetPrincipal);
             SyncLatch(
                 applications: m_grants.Applications(principal: targetPrincipal),
                 principal: targetPrincipal
             );
+            if (mount >= 0) {
+                m_population.LeaveMount(
+                    mount: mount,
+                    rider: targetPrincipal.Index
+                );
+            }
         }
 
         return ControlOutcome.Dissolved;

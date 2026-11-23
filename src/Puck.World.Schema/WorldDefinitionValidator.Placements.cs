@@ -1201,6 +1201,9 @@ public static partial class WorldDefinitionValidator {
                 path: $"{path}.carry",
                 errors: errors
             );
+            if ((kit.Mount is { } mount) && !(VectorFunctions.IsFinite(vector: mount.Seat) && VectorFunctions.IsFinite(vector: mount.Exit))) {
+                errors.Add(item: $"{path}.mount seat and exit must be finite.");
+            }
             ValidateTether(
                 channelNames: compositionChannelNames,
                 errors: errors,
