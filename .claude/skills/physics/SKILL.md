@@ -208,6 +208,16 @@ A field row’s `simulationOnly` flag keeps the height scale in `FieldLattice.St
 
 ## Look-alikes
 
+- A solid creation that holds bodies only up to a straight line, with the cut
+  moving when the creation's shapes move, is usually not a contact defect: a
+  creation's shapes are in its author frame, so a shape authored at `[x, y, z]`
+  lies at world `(−x, y, −z)` about the placement
+  ([the author frame](../sdf-authoring/SKILL.md#the-author-frame)). Collider,
+  drawn mesh and navigation all agree on the mirrored footprint, which is why
+  the colliders report stays clean. Ground written in world coordinates uses
+  `boundsBox` (`worlds/standard/bounds.puck`), which negates for the author;
+  `worlds/debug/large-floor-tests.puck` stands a body at a 300 m floor's far
+  corner and drops one past its mirrored edge.
 - The chase camera's clearance sweeps and an effector's surface probe query
   the rendered field for presentation (`WorldFieldAnswer`, `puck-world`), not
   the contact seam.
