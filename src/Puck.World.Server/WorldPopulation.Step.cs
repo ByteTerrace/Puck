@@ -16,6 +16,8 @@ public sealed partial class WorldPopulation {
     private FixedQ4816[] m_regionResistance = [];
     private ulong m_fieldInputPass;
     private ulong[] m_fieldInputPasses = [];
+    // The producer fault last narrated for each body slot, so each transition is narrated once. Diagnostic only.
+    private readonly Puck.Abstractions.ReasonLatch<int> m_producerFaults = new();
 
     private static void ApplyVariation(Entry entry, CompiledBodyProducer producer, FixedQ4816 phase, FixedQ4816 weaveUnit, FixedQ4816 activityUnit, bool resetPhase) {
         entry.ProducerState.WeaveFrequency = (producer.Scalar(parameter: BodyProducerParameter.WeaveFrequencyBase) + (producer.Scalar(parameter: BodyProducerParameter.WeaveFrequencyRange) * weaveUnit));
@@ -25,7 +27,9 @@ public sealed partial class WorldPopulation {
             entry.ProducerState.CurveArcRaw = 0L;
             entry.NavigationState.Clear();
             entry.ProducerState.Phase = phase;
+            entry.ProducerState.PhaseRemainder = 0L;
             entry.ProducerState.ActivityPhase = (phase + (FixedQ4816.Tau * activityUnit));
+            entry.ProducerState.ActivityPhaseRemainder = 0L;
             entry.ProducerState.ActivityRate = (producer.Scalar(parameter: BodyProducerParameter.ActivityRateBase) + (producer.Scalar(parameter: BodyProducerParameter.ActivityRateRange) * activityUnit));
         }
     }
@@ -841,18 +845,20 @@ public sealed partial class WorldPopulation {
         }
 
         elapsed = checked((elapsed + stepTicks));
-        remaining = ((remaining > stepTicks)
-            ? (remaining - stepTicks)
-            : 0UL
-        );
-        if (remaining > 0UL) {
+        if (remaining > stepTicks) {
+            remaining -= stepTicks;
             elapsedTicks = 0UL;
             return false;
         }
 
+        // Due on the first authority tick at or past this slot of the body's cadence grid. The next slot stays on that
+        // grid rather than restarting from this tick, so a cadence that is no whole number of authority ticks refreshes
+        // at its authored rate on average, each refresh covering the whole ticks it actually batched.
+        var overshoot = (stepTicks - remaining);
+
         elapsedTicks = elapsed;
         elapsed = 0UL;
-        remaining = period;
+        remaining = (period - (overshoot % period));
         return true;
     }
 
@@ -1197,6 +1203,24 @@ public sealed partial class WorldPopulation {
             }
 
             m_entries[index].Body?.EndSweepTick();
+
+            if (m_entries[index].Body?.ProducerFault is { } fault) {
+                if (m_producerFaults.Set(key: index, reason: fault) && (NarrationHub is { HasNarrationSink: true })) {
+                    NarrationHub.Narrate(
+                        channel: "body.producer",
+                        text: $"[body.producer: body {index} faulted at tick {tick}: {fault}; the run was refused and the body holds still until its producer runs clean]"
+                    );
+                }
+            } else if (
+                m_producerFaults.Clear(key: index) &&
+                (m_entries[index].Body is not null) &&
+                (NarrationHub is { HasNarrationSink: true })
+            ) {
+                NarrationHub.Narrate(
+                    channel: "body.producer",
+                    text: $"[body.producer: body {index} recovered at tick {tick}]"
+                );
+            }
         }
     }
     /// <summary>Returns a value indicating whether solid world geometry leaves the sight-offset segment between two live bodies unobstructed —

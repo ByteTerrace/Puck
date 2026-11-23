@@ -586,10 +586,6 @@
       },
       {
         "Type": "Puck.Maths.FixedTickConversion",
-        "Name": "RateOfStep"
-      },
-      {
-        "Type": "Puck.Maths.FixedTickConversion",
         "Name": "StepsCovering"
       },
       {
@@ -610,7 +606,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "PerRate answers the exact period at 240, 60, 24, 7, 50400 and 1 Hz, refuses zero by ArgumentOutOfRangeException and a non-divisor (11 Hz) by ArgumentException, both naming ratePerSecond; TryPerRate and IsRate answer the same divisors and refuse zero and 11 Hz by value; RateOfStep inverts PerRate and refuses zero and a non-divisor naming stepTicks; StepsCovering rounds a span up to whole steps (0, 1, 840, 841 ticks at 840) and refuses a zero step; ToSeconds is exactly one at 50400 ticks, a half at 25200, zero at zero, and the double quotient 7/50400 at seven",
+        "Subject": "PerRate answers the exact period at 240, 60, 24, 7, 50400 and 1 Hz, refuses zero by ArgumentOutOfRangeException and a non-divisor (11 Hz) by ArgumentException, both naming ratePerSecond; TryPerRate and IsRate answer the same divisors and refuse zero and 11 Hz by value; StepsCovering rounds a span up to whole steps (0, 1, 840, 841 ticks at 840) and refuses a zero step; ToSeconds is exactly one at 50400 ticks, a half at 25200, zero at zero, and the double quotient 7/50400 at seven",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -662,6 +658,27 @@
         "Flavor": "None",
         "Subject": "FixedTickConversion.SecondsOf at the swept tick count and rate, both read unsigned, with a zero rate the refusal probe",
         "Against": "Oracles.RoundRationalTiesToEven of ticks\u00b72^16 over the rate, compared as 2r against d in arbitrary width where the subject compares r against d \u2212 r in UInt128; a quotient past the raw throws OverflowException and a zero rate ArgumentOutOfRangeException naming ratePerSecond; a whole and a half second at 50400 are exactly one and a half",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.share-of-step-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "ShareOfStep"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedTickConversion.ShareOfStep at the swept raw against the swept step read unsigned, that step folded under one second, the non-divisor steps 6720, 11760 and 35280 (four, seven and twenty-one ticks at 30 Hz), the divisor 1680, one tick and a zero step",
+        "Against": "Oracles.RoundRationalTiesToEven of raw·step over 50400 in BigInteger, wrapped to the low 64 bits as the carrier wraps; the subject divides a UInt128 sign-magnitude product once through FusedArithmetic. A whole second's share is the quantity, and one per second over four ticks at 30 Hz is 8738 raw (65536·2/15 = 8738.13)",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

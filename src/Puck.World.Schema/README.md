@@ -2727,7 +2727,10 @@ The engine admits at most 4096 bodies. A kit's optional `autonomy` row gives
 locally simulated non-human bodies independent `motionSeconds` and
 `steeringSeconds` cadences (0..1 seconds; zero means every authority tick).
 Bodies are deterministically phased and integrate the complete elapsed
-engine-tick duration when due. Human bodies, live sources, tapes, and pending
+engine-tick duration when due. A cadence need not be a whole number of
+authority ticks: a body refreshes on the first tick at or past each slot of its
+own cadence grid, so it refreshes at the authored rate on average, and each
+refresh advances by the exact share of a second it covered. Human bodies, live sources, tapes, and pending
 external input remain full-rate. `bodyContact: solid` requires full-rate motion;
 large crowds that batch motion use the default `overlap` contact mode.
 

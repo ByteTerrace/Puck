@@ -852,27 +852,12 @@ internal static class SharedKernelClaims {
 
         foreach (var (rate, period) in (ReadOnlySpan<(uint Rate, ulong Period)>)[(240U, 210UL), (60U, 840UL), (1U, 50400UL)]) {
             if (!FixedTickConversion.TryPerRate(period: out var tried, ratePerSecond: rate) || (tried != period)) { return $"TryPerRate({rate}) is not {period}"; }
-            if (FixedTickConversion.RateOfStep(stepTicks: period) != rate) { return $"RateOfStep({period}) is not {rate}"; }
             if (!FixedTickConversion.IsRate(ratePerSecond: rate)) { return $"IsRate({rate}) refused a divisor"; }
         }
 
         if (FixedTickConversion.TryPerRate(period: out var refusedPeriod, ratePerSecond: 11U) || (refusedPeriod != 0UL)) { return "TryPerRate(11) admitted a non-divisor"; }
         if (FixedTickConversion.TryPerRate(period: out refusedPeriod, ratePerSecond: 0U) || (refusedPeriod != 0UL)) { return "TryPerRate(0) admitted zero"; }
         if (FixedTickConversion.IsRate(ratePerSecond: 0UL) || FixedTickConversion.IsRate(ratePerSecond: 11UL) || FixedTickConversion.IsRate(ratePerSecond: 50401UL)) { return "IsRate admitted a non-divisor"; }
-
-        try {
-            _ = FixedTickConversion.RateOfStep(stepTicks: 11UL);
-
-            return "RateOfStep(11) did not refuse a non-divisor";
-        } catch (ArgumentException exception) when (exception.ParamName == "stepTicks") {
-        }
-
-        try {
-            _ = FixedTickConversion.RateOfStep(stepTicks: 0UL);
-
-            return "RateOfStep(0) did not refuse";
-        } catch (ArgumentOutOfRangeException exception) when (exception.ParamName == "stepTicks") {
-        }
 
         foreach (var (span, step, steps) in (ReadOnlySpan<(ulong Span, ulong Step, ulong Steps)>)[(0UL, 840UL, 0UL), (1UL, 840UL, 1UL), (840UL, 840UL, 1UL), (841UL, 840UL, 2UL), (5000UL, 1UL, 5000UL)]) {
             if (FixedTickConversion.StepsCovering(engineTicks: span, stepTicks: step) != steps) { return $"StepsCovering({span}, {step}) is not {steps}"; }
@@ -891,6 +876,29 @@ internal static class SharedKernelClaims {
         if (FixedTickConversion.ToSeconds(ticks: 25200UL) != 0.5d) { return "ToSeconds(25200) is not a half"; }
         if (FixedTickConversion.ToSeconds(ticks: 0UL) != 0d) { return "ToSeconds(0) is not zero"; }
         if (BitConverter.DoubleToInt64Bits(value: FixedTickConversion.ToSeconds(ticks: 7UL)) != BitConverter.DoubleToInt64Bits(value: (7d / 50400d))) { return "ToSeconds(7) is not the double quotient"; }
+
+        return null;
+    }
+    /// <summary>ShareOfStep is the one ties-to-even rounding of raw·stepTicks/50400 at every step width, a divisor of a
+    /// second or not, wrapping past the carrier; a whole second's share is the quantity itself.</summary>
+    /// <param name="left">The per-second quantity's raw in its first lane.</param>
+    /// <param name="right">The step width (read unsigned) in its first lane.</param>
+    public static string? ShareOfStepVsOracle(long[] left, long[] right) {
+        var perSecond = Raw(value: left[0]);
+
+        foreach (var step in (ReadOnlySpan<ulong>)[unchecked((ulong)right[0]), (unchecked((ulong)right[0]) % 50401UL), 6720UL, 11760UL, 35280UL, 1680UL, 1UL, 0UL]) {
+            var expected = Oracles.RoundRationalTiesToEven(
+                denominator: 50400,
+                numerator: (((BigInteger)perSecond.Value) * step)
+            );
+            var wrapped = unchecked((long)((ulong)(expected & ulong.MaxValue)));
+            var actual = FixedTickConversion.ShareOfStep(perSecond: perSecond, stepTicks: step).Value;
+
+            if (actual != wrapped) { return $"ShareOfStep({perSecond.Value}, {step}) = {actual}, expected {wrapped}"; }
+        }
+
+        if (FixedTickConversion.ShareOfStep(perSecond: perSecond, stepTicks: 50400UL) != perSecond) { return "a whole second's share is not the quantity"; }
+        if (FixedTickConversion.ShareOfStep(perSecond: FixedQ4816.One, stepTicks: 6720UL) != Raw(value: 8738L)) { return "four ticks at 30 Hz of one per second is not 8738 raw"; }
 
         return null;
     }
