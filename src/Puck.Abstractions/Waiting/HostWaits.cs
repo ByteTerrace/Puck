@@ -439,14 +439,10 @@ public static class HostWaits {
 
         slot = new ThreadSlot(owner: Thread.CurrentThread);
         lock (RegistryGate) {
-            var live = 0;
+            // One liveness read per entry, so the published array never holds a null: every reader of Slots
+            // dereferences its entries.
             var current = Slots;
-
-            foreach (var entry in current) {
-                live += (entry.Owner.IsAlive ? 1 : 0);
-            }
-
-            var next = new ThreadSlot[live + 1];
+            var next = new ThreadSlot[current.Length + 1];
             var index = 0;
 
             foreach (var entry in current) {
@@ -454,7 +450,11 @@ public static class HostWaits {
                     next[index++] = entry;
                 }
             }
-            next[index] = slot;
+            next[index++] = slot;
+
+            if (index < next.Length) {
+                Array.Resize(array: ref next, newSize: index);
+            }
             Volatile.Write(location: ref Slots, value: next);
         }
 
