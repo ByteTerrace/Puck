@@ -2824,7 +2824,11 @@ selects field contact.
 contact. `candidateBudget` limits inspected box-overlapping broadphase candidates per body,
 `maxPairsPerBody` limits retained degree, and `beginBudget` limits new pairs per
 tick. Established relationships are considered first. Setting
-`maxPairsPerBody` to zero disables body-pair begin/end events.
+`maxPairsPerBody` to zero disables body-pair begin/end events. A pair is sensed
+only when one of its bodies is listened: named by an observe grant that carries
+an event budget, or every body under such a grant over the wildcard
+(`WorldEventListeners`). A crowd no grant observes costs collision sensing
+nothing.
 
 `collision.bodyContacts` independently bounds body-to-body contact between
 two `solid` kits and tunes the rigid solver. Its `candidateBudget` caps inspected
