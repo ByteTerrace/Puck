@@ -13051,6 +13051,10 @@ export type WorldRouteStepGo = {
    * Places the body may also stand in on the way.
    */
   corridor?: (string | null)[] | null;
+  /**
+   * The documentId of the world the step is played in, whose places Place and Corridor name, or null for the route's own document. The step fails when the seat stands in another world.
+   */
+  world?: string | null;
 };
 
 export type WorldRouteStepLine = {
@@ -13091,6 +13095,10 @@ export type WorldRouteStepPressAction = {
    * The time stood after the press with no Until, or the time past which the wait for it fails.
    */
   seconds?: number;
+  /**
+   * The documentId of the world whose place Until names, or null for the route's own document.
+   */
+  world?: string | null;
 };
 
 export type WorldRouteStepRest = {

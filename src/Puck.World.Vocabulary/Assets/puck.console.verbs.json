@@ -307,6 +307,7 @@
     { "name": "world.reflow.preview", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.reflow.status", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.refusals", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "world.region", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "world.reload", "bindable": false, "audience": "host", "valueKind": "digital", "wireArgs": true },
     { "name": "world.render-scale", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.reset", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },

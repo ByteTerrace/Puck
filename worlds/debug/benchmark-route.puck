@@ -75,10 +75,12 @@ function gardenSeam(name, pace) = {
     stand(1)
   ]
 }
-// The city painting (city.puck): through the canvas on the wing's south wall onto the city's arrival ground, west along
-// the lane between the terraces' second and third rows (z -24), south down the lane at x -106 between two columns of
-// houses, and back the same way to the arrival frame and through it into the wing. The steps walk straight lines through
-// open lanes, since a route's plan is read from the boot world's navigation even after the seat crosses into the city.
+// The city painting (city.puck): through the canvas on the wing's south wall onto the city's arrival ground, into the
+// market, down the terrace lane at x -106 between two columns of houses, onto the quay, up into the works, and back to
+// the arrival frame and through it into the wing. Its steps in the city name the city's places and plan over the city's
+// navigation (`world: "city"`, the city's documentId).
+function cityGo(place, pace) = { $type: "go", world: "city", place: place, pace: pace }
+function cityGoTo(point, pace, within = 0.5) = { $type: "go", world: "city", point: point, pace: pace, within: within }
 function citySeam(name, pace) = {
   name: name
   steps [
@@ -86,12 +88,11 @@ function citySeam(name, pace) = {
     stand(1)
     { $type: "cross", headingDegrees: 0, pace: pace, metres: 11 }
     stand(1)
-    step([-24, 0, -24], 0.5)
-    step([-106, 0, -24], 0.5)
-    step([-106, 0, -80], 0.5)
-    step([-106, 0, -24], 0.5)
-    step([-24, 0, -24], 0.5)
-    step([0, 0, -10], 0.15)
+    cityGo("place-city-market", pace)
+    cityGoTo([-106, 0, -80], pace)
+    cityGo("place-city-quay", pace)
+    cityGo("place-city-works", pace)
+    cityGoTo([0, 0, -9], pace, 0.15)
     face(180, 0.5)
     { $type: "cross", headingDegrees: 180, until: "place-city-painting", pace: pace, metres: 8 }
     stand(1)
