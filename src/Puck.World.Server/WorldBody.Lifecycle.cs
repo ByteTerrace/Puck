@@ -13,6 +13,7 @@ public sealed partial class WorldBody {
     // Copies a compiled kit's per-ordinal actions/thresholds/shapes into this body's own arrays (never aliasing the
     // kit's shared arrays, which RecompileKit would otherwise mutate out from under every body sharing the old kit row).
     private void CopyChannelBindings(CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask) {
+        MarkKitLocalStale();
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
             m_laneBindings[ordinal] = (((actions is { } bound) && (ordinal < bound.Length))
                 ? bound[ordinal]
@@ -157,6 +158,7 @@ public sealed partial class WorldBody {
     // selects. WorldDefinitionValidator has already refused an incoherent pairing (a program whose operations need a
     // facet the declared row doesn't supply) before this ever runs.
     private void SetTuning(FixedMotionTuning tuning, FixedBodyHold[]? holds = null) {
+        MarkKitLocalStale();
         m_holds = (holds ?? []);
 
         if (m_holdIndex >= m_holds.Length) {
@@ -584,6 +586,7 @@ public sealed partial class WorldBody {
         var previousTetherFacet = m_tetherFacet;
 
         m_tetherFacet = tether;
+        MarkKitLocalStale();
 
         // Facet IDENTITY minus ModeState, not presence: a kit swap between two kits that both author a tether facet
         // still changes which ordinals/params a live attach is judged against, so it must reset here too — presence

@@ -562,12 +562,13 @@ invariant; in short:
 - **The phases.** A serial plan (sleep, field inputs, cadence, the goal fields
   and perception neighbourhoods the partitions will read), a steer fork (each
   due producer), a serial input pass, and a move fork (motion program, contacts,
-  settlement), then the join. The step is split in three
-  (`WorldBody.TryBeginStep`, `MoveStep`, `EndStep`) because every
-  producer-driven body admits its observation through the one input runtime
-  (`WorldInputRuntime.AdmitProgramSnapshot`) before it resolves its intent; that
-  admission runs in the input pass, in index order, and a local step opens no
-  kit scope.
+  settlement), then the join. The step is split
+  (`WorldBody.AdmitProducerObservation`, `BeginStepCore`, `MoveStep`, `EndStep`)
+  because every producer-driven body admits its observation through the one
+  input runtime (`WorldInputRuntime.AdmitProgramSnapshot`) before it resolves its
+  intent; that admission alone runs in the input pass, in index order, and the
+  rest runs in the move fork with no kit scope. A fork hands out a few jobs of
+  consecutive partitions, and a phase with few bodies runs on the forking thread.
 - **A partition** is a run of `WorldPopulation.KitPartitionSlots` slots, the
   slot-notes partition, so a body's section writes land in its own partition's
   notes and need no merge.

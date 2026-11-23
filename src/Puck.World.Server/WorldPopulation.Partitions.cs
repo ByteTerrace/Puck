@@ -11,9 +11,9 @@ namespace Puck.World.Server;
 // other body advances afterwards, serially, in index order, inside the kit transaction (AdvanceSerialBody).
 //
 // A tick runs four phases for the local bodies: a serial plan (sleep, cadence, goal fields, the perception grids), a
-// steer fork (each due producer), a serial input pass (each moving body's admission and merged intent, which go
-// through the one input runtime), and a move fork (each moving body's motion program, contacts and settlement). The
-// join then applies each partition's log, outputs and counts in ascending partition order.
+// steer fork (each due producer), a serial input pass (each moving body's producer observation, admitted through the
+// one input runtime), and a move fork (each moving body's capture, merged intent, motion program, contacts and
+// settlement). The join then applies each partition's log, outputs and counts in ascending partition order.
 //
 // The invariant: the arena's committed rows, the journal and every state hash after a tick are the same at any worker
 // count. What enforces it:
@@ -46,6 +46,9 @@ public sealed partial class WorldPopulation {
     // The partitions holding at least one local body this tick, in ascending order: the forks' partition list.
     private readonly List<KitPartition> m_activeKitPartitions = [];
     private KitPartitionRun? m_kitRun;
+    // How many local bodies this tick's plan has steer and move: what decides whether a phase forks.
+    private int m_kitSteers;
+    private int m_kitMoves;
     // Whether a kit partition is running: the shared population state a partition must not write refuses while it holds.
     private bool m_partitioned;
 
@@ -111,31 +114,58 @@ public sealed partial class WorldPopulation {
     private sealed class KitPartition {
         public readonly int[] Bodies = new int[KitPartitionSlots];
         public readonly AutonomyStep[] Steps = new AutonomyStep[KitPartitionSlots];
-        // Whether the body moves this tick: its cadence's answer, cleared when its step does not begin.
+        // Whether the body moves this tick: its cadence's answer.
         public readonly bool[] Moves = new bool[KitPartitionSlots];
-        public readonly BodyEffectTargets[] Targets = new BodyEffectTargets[KitPartitionSlots];
-        public readonly WorldBody.StepStart[] Starts = new WorldBody.StepStart[KitPartitionSlots];
-        public readonly WorldBody.StepScratch[] Scratches = new WorldBody.StepScratch[KitPartitionSlots];
+        // The one step scratch the partition's bodies capture into, each step in turn: a step begins and ends within the
+        // move fork, so no two of the partition's steps are open at once.
+        public readonly WorldBody.StepScratch Scratch = new();
         public readonly ProducerWork Work = new(partitioned: true);
         public readonly WorldBody.StepOutputs Outputs = new();
         public readonly WorldBodyStepLog Log = new();
         public int Count;
         public int Steered;
         public int Moved;
-
-        public WorldBody.StepScratch Scratch(int ordinal) => (Scratches[ordinal] ??= new WorldBody.StepScratch());
     }
 
-    // The partitions' work for one fork: which phase runs, and what every partition of it reads.
+    // The work of one fork: which phase runs, what every partition of it reads, and the jobs the fork hands out. A job is
+    // a run of consecutive active partitions holding about an equal share of the bodies, so a fork costs a few wakes,
+    // not one per partition. Which job runs a partition changes nothing a partition writes: every partition owns its
+    // outputs, and the join reads them in partition order.
     private sealed class KitPartitionRun(WorldPopulation owner) : IJobPartitions {
         public bool Moving;
         public ulong Tick;
         public ulong ContactFieldVersion;
+        // Job j runs active partitions [JobStarts[j], JobStarts[j + 1]).
+        public int[] JobStarts = new int[1];
+        public int Jobs;
 
         public void Run(int partition) {
-            var kit = owner.m_activeKitPartitions[partition];
+            for (var at = JobStarts[partition]; (at < JobStarts[(partition + 1)]); at++) {
+                var kit = owner.m_activeKitPartitions[at];
 
-            if (Moving) { owner.MoveKitPartition(contactFieldVersion: ContactFieldVersion, partition: kit, tick: Tick); } else { owner.SteerKitPartition(partition: kit); }
+                if (Moving) { owner.MoveKitPartition(contactFieldVersion: ContactFieldVersion, partition: kit, tick: Tick); } else { owner.SteerKitPartition(partition: kit); }
+            }
+        }
+        // Cuts the active partitions into at most jobs runs of about equal body counts.
+        public void Plan(List<KitPartition> active, int jobs) {
+            var bodies = 0;
+
+            foreach (var partition in active) { bodies += partition.Count; }
+            jobs = Math.Clamp(value: jobs, min: 1, max: Math.Max(1, active.Count));
+            if (JobStarts.Length < (jobs + 1)) { JobStarts = new int[(jobs + 1)]; }
+            var job = 0;
+            var seen = 0;
+
+            JobStarts[0] = 0;
+            for (var at = 0; (at < active.Count); at++) {
+                seen += active[at].Count;
+                // Close the job once it holds its share, leaving at least one partition for every later job.
+                if ((job < (jobs - 1)) && (((long)seen * jobs) >= ((long)bodies * (job + 1))) && ((active.Count - (at + 1)) >= (jobs - (job + 1)))) {
+                    JobStarts[++job] = (at + 1);
+                }
+            }
+            Jobs = (job + 1);
+            JobStarts[Jobs] = active.Count;
         }
     }
 
@@ -168,6 +198,8 @@ public sealed partial class WorldPopulation {
             partition.Moved = 0;
         }
         m_activeKitPartitions.Clear();
+        m_kitSteers = 0;
+        m_kitMoves = 0;
         var perceives = false;
 
         foreach (var index in stepBodies) {
@@ -209,6 +241,8 @@ public sealed partial class WorldPopulation {
             partition.Bodies[at] = index;
             partition.Steps[at] = step;
             partition.Moves[at] = step.Moves;
+            m_kitSteers += (step.SteeringDue ? 1 : 0);
+            m_kitMoves += (step.Moves ? 1 : 0);
         }
         if (perceives) { m_perception?.BuildDeclared(); }
     }
@@ -224,16 +258,18 @@ public sealed partial class WorldPopulation {
         run.ContactFieldVersion = contactFieldVersion;
         foreach (var partition in m_activeKitPartitions) { partition.Work.Size(population: this); }
         run.Moving = false;
-        ForkKitPartitions(jobs: jobs, run: run);
+        using (Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickProducers)) { ForkKitPartitions(bodies: m_kitSteers, jobs: jobs, run: run); }
 
-        // The input pass: admission and the merged intent go through the one input runtime, in index order.
-        foreach (var partition in m_activeKitPartitions) {
-            for (var at = 0; (at < partition.Count); at++) {
-                if (partition.Moves[at]) { BeginLocalStep(at: at, partition: partition, tick: tick); }
+        // The input pass: each moving body's producer observation goes through the one input runtime, in index order.
+        using (Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickAdmission)) {
+            foreach (var partition in m_activeKitPartitions) {
+                for (var at = 0; (at < partition.Count); at++) {
+                    if (partition.Moves[at]) { AdmitLocalObservation(at: at, partition: partition, tick: tick); }
+                }
             }
         }
         run.Moving = true;
-        ForkKitPartitions(jobs: jobs, run: run);
+        ForkKitPartitions(bodies: m_kitMoves, jobs: jobs, run: run);
 
         var steered = 0;
         var moved = 0;
@@ -253,15 +289,24 @@ public sealed partial class WorldPopulation {
         WorldBodyWork.Process.Add(amount: steered, kind: WorldBodyWork.LocalSteers);
         WorldBodyWork.Process.Add(amount: m_activeKitPartitions.Count, kind: WorldBodyWork.KitPartitions);
     }
-    // One fork over the active partitions; with no pool, or a serial one, the same partitions run here in order.
-    private void ForkKitPartitions(JobPool? jobs, KitPartitionRun run) {
+    // The bodies below which a phase runs its partitions on this thread: fewer than that, waking a worker and joining it
+    // costs as much as the steps it would take away.
+    private const int KitForkBodies = 64;
+    // How many jobs a fork hands out per worker, so a slow job leaves others to balance against.
+    private const int KitJobsPerWorker = 2;
+
+    // One fork over the active partitions, cut into a few jobs; with no pool, a serial one or too few bodies, every
+    // partition runs here in order. Either way each partition runs once, writing only what it owns.
+    private void ForkKitPartitions(JobPool? jobs, KitPartitionRun run, int bodies) {
         m_partitioned = true;
         using var navigation = m_navigation.EnterReadOnly();
         try {
-            if (jobs is null) {
-                for (var partition = 0; (partition < m_activeKitPartitions.Count); partition++) { run.Run(partition: partition); }
+            if ((jobs is null) || jobs.Serial || (bodies < KitForkBodies)) {
+                run.Plan(active: m_activeKitPartitions, jobs: 1);
+                run.Run(partition: 0);
             } else {
-                jobs.Fork(body: run, jobClass: JobClass.Tick, partitions: m_activeKitPartitions.Count);
+                run.Plan(active: m_activeKitPartitions, jobs: (jobs.Workers.Count * KitJobsPerWorker));
+                jobs.Fork(body: run, jobClass: JobClass.Tick, partitions: run.Jobs);
             }
         } finally {
             m_partitioned = false;
@@ -279,7 +324,9 @@ public sealed partial class WorldPopulation {
             partition.Steered++;
         }
     }
-    private void BeginLocalStep(KitPartition partition, int at, ulong tick) {
+    // A moving body's part of the input pass: the staged steering a batched body keeps between refreshes, then the
+    // admission of its producer observation through the one input runtime.
+    private void AdmitLocalObservation(KitPartition partition, int at, ulong tick) {
         var index = partition.Bodies[at];
         var entry = m_entries[index];
         var body = entry.Body!;
@@ -288,29 +335,23 @@ public sealed partial class WorldPopulation {
         if (!partition.Steps[at].SteeringDue && autonomy.SteeringSeeded) {
             body.StageProducerIntent(intent: in autonomy.SteeringIntent);
         }
-        partition.Targets[at] = ReadEffectTargets(entry: entry, selfIndex: index, self: body.FixedPosition);
-        partition.Moves[at] = body.TryBeginStep(
-            engageProbeOrdinal: null,
-            entityIndex: index,
-            outputs: partition.Outputs,
-            scratch: partition.Scratch(ordinal: at),
-            start: out partition.Starts[at],
-            stepTicks: partition.Steps[at].MotionTicks,
-            tick: tick,
-            transactional: false
-        );
+        body.AdmitProducerObservation(entityIndex: index, tick: tick);
     }
     private void MoveKitPartition(KitPartition partition, ulong tick, ulong contactFieldVersion) {
         for (var at = 0; (at < partition.Count); at++) {
             if (!partition.Moves[at]) { continue; }
             var index = partition.Bodies[at];
-            var body = m_entries[index].Body!;
+            var entry = m_entries[index];
+            var body = entry.Body!;
+            var stepTicks = partition.Steps[at].MotionTicks;
+            var targets = ReadEffectTargets(entry: entry, selfIndex: index, self: body.FixedPosition);
 
             body.BindStepLog(log: partition.Log);
             try {
-                body.MoveStep(effectTargets: partition.Targets[at], entityIndex: index, outputs: partition.Outputs, start: ref partition.Starts[at], stepTicks: partition.Steps[at].MotionTicks);
-                _ = body.EndStep(contactFieldVersion: contactFieldVersion, outputs: partition.Outputs, scratch: partition.Scratches[at], sleepAfterTicks: m_sleepAfterTicks,
-                    start: in partition.Starts[at], stepTicks: partition.Steps[at].MotionTicks, tick: tick);
+                body.BeginStepCore(engageProbeOrdinal: null, entityIndex: index, outputs: partition.Outputs, scratch: partition.Scratch, start: out var start, stepTicks: stepTicks, tick: tick, transactional: false);
+                body.MoveStep(effectTargets: targets, entityIndex: index, outputs: partition.Outputs, start: ref start, stepTicks: stepTicks);
+                _ = body.EndStep(contactFieldVersion: contactFieldVersion, outputs: partition.Outputs, scratch: partition.Scratch, sleepAfterTicks: m_sleepAfterTicks,
+                    start: in start, stepTicks: stepTicks, tick: tick);
             } finally {
                 body.BindStepLog(log: null);
             }
