@@ -556,18 +556,19 @@ invariant; in short:
   value (`RegistersRestThisStep`), no hold that spends a register, no rigid,
   carry or tether facet, not carried or parked, no tape, press, staged durable
   input, capture, pending continuum or script controller, no entity-aware
-  contact field; and a producer with no route search of its own (a shared
-  domain's goal field is fine), no sight test and no flock affinity. The
+  contact field; and a producer with no flock affinity (an authority expression
+  over the arena). Route searches, goal fields and sight tests partition. The
   standard walker kit's registers and its ground and fall holds pass.
 - **The phases.** A serial plan (sleep, field inputs, cadence, the goal fields
   and perception neighbourhoods the partitions will read), a steer fork (each
   due producer), a serial input pass, and a move fork (motion program, contacts,
-  settlement), then the join. The step is split in three
-  (`WorldBody.TryBeginStep`, `MoveStep`, `EndStep`) because every
-  producer-driven body admits its observation through the one input runtime
-  (`WorldInputRuntime.AdmitProgramSnapshot`) before it resolves its intent; that
-  admission runs in the input pass, in index order, and a local step opens no
-  kit scope.
+  settlement), then the join. The step is split
+  (`WorldBody.AdmitProducerObservation`, `BeginStepCore`, `MoveStep`, `EndStep`)
+  because every producer-driven body admits its observation through the one
+  input runtime (`WorldInputRuntime.AdmitProgramSnapshot`) before it resolves its
+  intent; that admission alone runs in the input pass, in index order, and the
+  rest runs in the move fork with no kit scope. A fork hands out a few jobs of
+  consecutive partitions, and a phase with few bodies runs on the forking thread.
 - **A partition** is a run of `WorldPopulation.KitPartitionSlots` slots, the
   slot-notes partition, so a body's section writes land in its own partition's
   notes and need no merge.
@@ -581,7 +582,11 @@ invariant; in short:
   counts merge in ascending partition order, and one worker runs the same
   partitions inline. A partition reads only the goal field the plan resolved
   (`PrepareGoalField`) and only neighbourhoods the plan built
-  (`WorldPerceptionImage.BuildDeclared`), and throws on a miss.
+  (`WorldPerceptionImage.BuildDeclared`), and throws on a miss. The navigation
+  runtime is read-only while a fork runs (`NavigationRuntime.EnterReadOnly`): a
+  goal field read, a cross-domain route search or a bake adoption throws, and a
+  domain's own path search (`NavigationRuntime.Domain.FindPath`) rents a
+  workspace of its own.
 - **Where it stops.** A body whose step writes state stays serial; the
   per-partition transaction above is the step for it. The input pass is serial
   work proportional to the moving local bodies.
@@ -589,6 +594,28 @@ invariant; in short:
 Open: the city's per-tick kit advance read in the lead's quiet window on the
 2060 against the 30 Hz authority target (`physics.bodies.local-advances` against
 `physics.bodies.advances` shows the share that runs in partitions).
+
+Open: the serial input pass, one `WorldInputRuntime.AdmitProgramSnapshot` per
+moving local body (`physics.bodies.local-advances` counts them). Its steady case
+already short-circuits inside the producer (`WorldInputProducer.ObserveSnapshotAt`)
+and the owner (`WorldInputOwner.TryAdmit`); what remains is the checks whose
+answer can change between ticks: the drive gate and grants
+(`WorldGrants.Allows`), the session's liveness, the body's generation, and the
+input-mode selection (`WorldInputRuntime.TrySynchronize`, which reads the selected kit through
+`WorldPopulation.CandidateKitName`, engagement and body-state selectors). Neither
+a skip nor a partitioned admission is exact without one of two changes:
+- **A skip** needs a version key covering every input of those checks (the
+  grant table's revision, its drive gates, the session table, the body's
+  generation, the selector cells and engagement), so an unchanged key with an
+  unchanged image and no events provably admits nothing new. Its admission still
+  advances the owner's `ObservationTick`, which is hashed and checkpointed; a
+  skip would make that tick the last one that changed, a deliberate state
+  change.
+- **A partitioned admission** needs every read on that path to build no cache
+  on a worker: `WorldBodyStateReads.PlanFor` (behind `CandidateKitName`) and the
+  grant expansions are the first to audit, then the owner-local writes are
+  partition-owned as the step's are.
+The quiet-window reading decides whether the pass is worth either.
 
 **E3's occupancy.** `WorldPortalOccupancy` keeps every seat in one
 `Dictionary`, which `Observe` writes and `Forget` removes from; distinct keys

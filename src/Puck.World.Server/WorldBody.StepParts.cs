@@ -56,10 +56,11 @@ public sealed partial class WorldBody {
 
     /// <summary>Advances the body by one exact host-owned simulation step from its single merged intent: a live tape
     /// segment if one is queued, otherwise the tick's submitted intent. The selected program chooses fixed domain
-    /// operations while the host retains phase order and the contact point. The three parts (<see cref="TryBeginStep"/>,
+    /// operations while the host retains phase order and the contact point. The parts (<see cref="TryBeginStep"/>,
     /// <see cref="MoveStep"/>, <see cref="EndStep"/>) run back to back here, inside the input runtime's kit
-    /// transaction; a kit partition runs the same parts with the first on the forking thread and the other two in its
-    /// partition (<see cref="WorldPopulation"/>'s kit advance split).</summary>
+    /// transaction; a kit partition admits the observation on the forking thread
+    /// (<see cref="AdmitProducerObservation"/>) and runs the rest in its partition, outside the transaction
+    /// (<see cref="BeginStepCore"/>), as <see cref="WorldPopulation"/>'s kit advance split does.</summary>
     /// <param name="tick">The explicit simulation tick whose staged durable inputs may enter.</param>
     /// <param name="stepTicks">The exact engine ticks this call advances.</param>
     /// <param name="scratch">The step scratch the caller owns, which this step captures the body into before it begins
@@ -77,19 +78,18 @@ public sealed partial class WorldBody {
     /// <returns><see langword="true"/> when <paramref name="engageProbeOrdinal"/>'s rising edge fired this tick.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
     internal bool Advance(ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, ulong sleepAfterTicks = 0UL, ulong contactFieldVersion = 0UL) {
-        if (!TryBeginStep(engageProbeOrdinal: engageProbeOrdinal, entityIndex: entityIndex, outputs: outputs, scratch: scratch, start: out var start, stepTicks: stepTicks, tick: tick, transactional: true)) {
+        if (!TryBeginStep(engageProbeOrdinal: engageProbeOrdinal, entityIndex: entityIndex, outputs: outputs, scratch: scratch, start: out var start, stepTicks: stepTicks, tick: tick)) {
             return false;
         }
         MoveStep(effectTargets: effectTargets, entityIndex: entityIndex, outputs: outputs, start: ref start, stepTicks: stepTicks);
         return EndStep(contactFieldVersion: contactFieldVersion, outputs: outputs, scratch: scratch, sleepAfterTicks: sleepAfterTicks, start: in start, stepTicks: stepTicks, tick: tick);
     }
 
-    /// <summary>The step's first part: admits the producer's observation, captures the body for a refusal, opens the
-    /// kit transaction when <paramref name="transactional"/>, and resolves the merged intent. Returns
-    /// <see langword="false"/> for a body that takes no ordinary step this tick (parked, carried, or rigid, whose step
-    /// is prepared here for the population's solve). Only a body whose step cannot write state
-    /// (<see cref="StepIsLocal"/>) runs without the transaction.</summary>
-    internal bool TryBeginStep(ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, int? engageProbeOrdinal, int entityIndex, bool transactional, out StepStart start) {
+    /// <summary>The step's first part for a step inside the kit transaction: admits the producer's observation
+    /// (<see cref="AdmitProducerObservation"/>), then captures the body, opens the transaction and resolves the merged
+    /// intent (<see cref="BeginStepCore"/>). Returns <see langword="false"/> for a body that takes no ordinary step this
+    /// tick (parked, carried, or rigid, whose step is prepared here for the population's solve).</summary>
+    internal bool TryBeginStep(ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, int? engageProbeOrdinal, int entityIndex, out StepStart start) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
         start = default;
         if (PopulationSleeping) { return false; }
@@ -118,20 +118,42 @@ public sealed partial class WorldBody {
             return false;
         }
 
-        // Producer observations enter history before motion, just like external input. A refused sweep does not
-        // erase an accepted observation or turn the same held sample into another press on the following tick.
-        var inputRuntime = m_stateLane?.Input;
-
-        if (InputImages.HasProducer && SourceNamesProducer(source: InputImages.Source) && (inputRuntime is not null)) {
+        if (AdmitsProducerObservation) {
             using var admission = Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickAdmission);
 
-            InputImagesEdit.Producer = inputRuntime.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
+            AdmitProducerObservation(entityIndex: entityIndex, tick: tick);
         }
+        BeginStepCore(engageProbeOrdinal: engageProbeOrdinal, entityIndex: entityIndex, outputs: outputs, scratch: scratch, start: out start, stepTicks: stepTicks, tick: tick, transactional: true);
+        return true;
+    }
+
+    // Whether the step has a producer observation for the input runtime to admit.
+    private bool AdmitsProducerObservation => (InputImages.HasProducer && SourceNamesProducer(source: InputImages.Source) && (m_stateLane?.Input is not null));
+
+    /// <summary>Admits the producer's staged observation through the input runtime: producer observations enter
+    /// history before motion, just like external input, and a refused sweep does not erase an accepted observation or
+    /// turn the same held sample into another press on the following tick. The one part of a step that touches the
+    /// input runtime when the step is local, so a kit partition's bodies admit on the forking thread, in index order.</summary>
+    /// <param name="entityIndex">The body's population index.</param>
+    /// <param name="tick">The explicit simulation tick.</param>
+    internal void AdmitProducerObservation(int entityIndex, ulong tick) {
+        if (AdmitsProducerObservation) {
+            InputImagesEdit.Producer = m_stateLane!.Input!.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
+        }
+    }
+
+    /// <summary>The first part's remainder, after admission: captures the body for a refusal, opens the kit transaction
+    /// when <paramref name="transactional"/>, and resolves the merged intent. A step outside the transaction
+    /// (<see cref="StepIsLocal"/>) reaches nothing beyond the body, so a kit partition runs it.</summary>
+    internal void BeginStepCore(ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, int? engageProbeOrdinal, int entityIndex, bool transactional, out StepStart start) {
+        start = default;
+        m_previousPosition = m_position;
+        start.PreviousOrientation = m_orientation;
 
         // A refused sweep is a full block: everything this step writes from here on is undone when its contact phase
         // meets a refusal, and the outputs it emitted are withdrawn (WorldBody.SweepRefusal.cs).
         CaptureMotion(scratch: scratch);
-        if (transactional) { inputRuntime?.BeginKitStep(); }
+        if (transactional) { m_stateLane?.Input?.BeginKitStep(); }
         start.Transactional = transactional;
         start.InputEpoch = InputEpoch;
         start.EffectOutputCount = outputs.Effects.Count;
@@ -146,7 +168,7 @@ public sealed partial class WorldBody {
         // stages an intent for every body every tick, including a kit with no producer at all (it stages the inert
         // default) — so "had incoming intent" for the sleep floor reads the resolved vector after this call, not the
         // raw pre-resolve flags, which would read true for a body nothing is actually driving.
-        var intent = NextIntent(body: entityIndex, stepTicks: stepTicks, tick: tick);
+        var intent = NextIntent(body: entityIndex, scripts: transactional, stepTicks: stepTicks, tick: tick);
 
         start.HadIncomingIntent = (intent != default);
         // Captured EVERY step, regardless of the latch — a mirrored application set needs this body's resolved intent
@@ -159,7 +181,6 @@ public sealed partial class WorldBody {
             && (intent[probeOrdinal] >= m_channelThresholds[probeOrdinal])
             && !Action.PreviousBit[probeOrdinal]);
         start.Intent = intent;
-        return true;
     }
 
     /// <summary>The step's second part: runs the motion program and its contact phase on the intent the first part
@@ -196,7 +217,7 @@ public sealed partial class WorldBody {
             effectTargets: effectTargets,
             entityIndex: entityIndex,
             generatorInvocations: outputs.Generators,
-            intent: start.Intent,
+            intent: in start.Intent,
             moveSpeed: moveSpeed,
             stepTicks: stepTicks,
             turnSpeed: turnSpeed
@@ -263,34 +284,44 @@ public sealed partial class WorldBody {
 
     /// <summary>Gets whether this body's step is local: it writes only the body's own motion, sections and
     /// producer-side state, emits nothing for other bodies or the document, and needs no input-runtime transaction.
-    /// That holds for a locomotion kit with no action bindings, no action-state registers, no holds, carry or tether
-    /// facet, not carried, not tethered and not parked, with no tape, timed or pending press, staged durable input,
-    /// capture, pending continuum or script controller, whose contact field takes no entity-aware sweep. The kit
-    /// partitions run only such bodies; everything else steps serially inside the kit transaction.</summary>
+    /// That holds for a locomotion kit (<see cref="KitIsLocal"/>) whose registers rest this step, not carried,
+    /// tethered or parked, with no tape, timed or pending press, staged durable input, capture, pending continuum or
+    /// script controller, whose contact field takes no entity-aware sweep. The kit partitions run only such bodies;
+    /// everything else steps serially inside the kit transaction.</summary>
     /// <remarks>Every condition reads the body as compiled now, so a kit that gains a state op or a binding is serial
     /// from the tick it changes; the population adds the producer side (<see cref="WorldPopulation"/>'s
     /// <c>ProducerIsLocal</c>).</remarks>
     internal bool StepIsLocal {
         get {
             if (
-                (m_rigid is not null) || (m_carry is not null) || (m_tetherFacet is not null) || (m_tether is not null) ||
-                (m_carriedByIndex >= 0) || PopulationSleeping || (m_tapeCount != 0) || (m_pendingContinuum is not null) ||
-                InputImages.Engaged || (DurableInput.Tick != 0) || (m_contactField is IEntityContactField) ||
-                RequiresFullRateAutonomy
+                !KitIsLocal || (m_tether is not null) || (m_carriedByIndex >= 0) || PopulationSleeping || (m_tapeCount != 0) ||
+                (m_pendingContinuum is not null) || InputImages.Engaged || (DurableInput.Tick != 0) ||
+                (m_contactField is IEntityContactField) || RequiresFullRateAutonomy || !RegistersRestThisStep()
             ) {
                 return false;
             }
-            foreach (var binding in m_laneBindings) {
-                if (binding is not null) { return false; }
-            }
-            // A hold that spends a register writes it while held.
-            foreach (var hold in m_holds) {
-                if (hold.SpendState is not null) { return false; }
-            }
-            if (!RegistersRestThisStep()) {
-                return false;
-            }
             return ((m_stateLane?.Input is not { } input) || !input.HasBodyScripts(body: m_populationIndex));
+        }
+    }
+    // The part of StepIsLocal the compiled kit decides, kept until a write of what it reads marks it stale: SetTuning
+    // (holds), CopyChannelBindings, CompileActionState, and the facet assignments in the constructor and RecompileKit.
+    private bool m_kitLocal;
+    private bool m_kitLocalStale = true;
+
+    private void MarkKitLocalStale() => m_kitLocalStale = true;
+    // No rigid, carry or tether facet, no action binding, no hold that spends a register (it writes while held), and
+    // no timer that resets on a fact (the reset writes whatever the timer holds).
+    private bool KitIsLocal {
+        get {
+            if (!m_kitLocalStale) { return m_kitLocal; }
+            var local = ((m_rigid is null) && (m_carry is null) && (m_tetherFacet is null));
+
+            foreach (var binding in m_laneBindings) { local &= (binding is null); }
+            foreach (var hold in m_holds) { local &= (hold.SpendState is null); }
+            foreach (var definition in m_actionStateDefinitions) { local &= !((definition.Kind == ActionStateKind.Timer) && (definition.ResetFact is not null)); }
+            m_kitLocal = local;
+            m_kitLocalStale = false;
+            return local;
         }
     }
     // Whether the step's action-state pass (AdvanceActionState) writes no register: no timer is running, none resets on

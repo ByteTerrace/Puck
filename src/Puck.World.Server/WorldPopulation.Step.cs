@@ -211,10 +211,6 @@ public sealed partial class WorldPopulation {
         if (domain.Tuning.Shared) {
             return ReadGoalFieldTarget(domainIndex: target.NavigationDomainIndex, entry: entry, goal: in goal, profile: NavigationProfile(index: target.NavigationProfileIndex), self: in self, targetIndex: targetIndex, work: work);
         }
-        // A route of its own searches the domain's one workspace, so only a serial step plans one (ProducerIsLocal).
-        if (work.Partitioned) {
-            throw new InvalidOperationException(message: "A kit partition reached a route search; only a serial step plans a route.");
-        }
         if (
             !domain.CoversRouteHeight(position: in self) ||
             !domain.CoversRouteHeight(position: in goal) ||
@@ -323,23 +319,30 @@ public sealed partial class WorldPopulation {
     // A shared domain's follower holds no route. Each read locates the body and its goal in the target domain's network
     // and follows the goal's field from the body's cell, so a body pushed off its line reads the step from where it now
     // stands, and a tick costs a step read per follower; a field is derived only for a goal no follower read before. A
-    // kit partition reads the field its pre-pass resolved (PrepareGoalField) and derives none: the cache is one
-    // thread's.
+    // kit partition reads what its plan located and resolved (PrepareGoalField) from the same pose, goal and profile, and
+    // derives nothing: the cache is one thread's.
     private BodySensorTarget ReadGoalFieldTarget(Entry entry, int domainIndex, in FixedVector3 self, in FixedVector3 goal, NavigationCostProfile profile, int targetIndex, ProducerWork work) {
         var state = entry.NavigationState;
-
-        if (!TryLocateGoalRead(cell: out var cell, domain: out var domain, domainIndex: domainIndex, goal: in goal, goalCell: out var goalCell, goalDomain: out var goalDomain, self: in self)) {
-            state.Clear(status: NavigationStatus.OutsideDomain);
-            return BodySensorTarget.None;
-        }
-
         NavigationGoalField field;
+        int cell;
+        int domain;
 
         if (work.Partitioned) {
-            field = ((entry.PreparedGoalField is { } prepared) && (prepared.GoalDomain == goalDomain) && (prepared.GoalCell == goalCell) && prepared.Profile.Equals(other: profile))
+            if (entry.PreparedGoalField is not { } prepared) {
+                state.Clear(status: NavigationStatus.OutsideDomain);
+                return BodySensorTarget.None;
+            }
+            // The plan resolved the field under the producer's profile; one under another would price another route.
+            field = (prepared.Profile.Equals(other: profile)
                 ? prepared
-                : throw new InvalidOperationException(message: $"Body {entry.Index}'s goal field was not resolved before its kit partition ran.");
+                : throw new InvalidOperationException(message: $"Body {entry.Index}'s goal field was resolved under another cost profile than its kit partition reads."));
+            cell = entry.PreparedGoalFrom.Cell;
+            domain = entry.PreparedGoalFrom.Domain;
         } else {
+            if (!TryLocateGoalRead(cell: out cell, domain: out domain, domainIndex: domainIndex, goal: in goal, goalCell: out var goalCell, goalDomain: out var goalDomain, self: in self)) {
+                state.Clear(status: NavigationStatus.OutsideDomain);
+                return BodySensorTarget.None;
+            }
             field = m_navigation.GoalField(goalCell: goalCell, goalDomain: goalDomain, profile: profile);
         }
         var arrivalSquared = (m_navigation[domainIndex].Tuning.ArrivalDistance * m_navigation[domainIndex].Tuning.ArrivalDistance);
@@ -373,9 +376,10 @@ public sealed partial class WorldPopulation {
         state.Status = ((distanceSquared <= arrivalSquared) ? NavigationStatus.Arrived : NavigationStatus.Active);
         return new BodySensorTarget(DistanceSquared: distanceSquared, Index: targetIndex, Position: goal);
     }
-    // Resolves, serially and before a kit partition steers the body, the goal field its shared navigated producer will
-    // read from where it stands, so the partition only reads a resident field. Locating the body and its goal reads
-    // and bakes the same network domains the partition's read will.
+    // Locates, serially and before a kit partition steers the body, its shared navigated producer's cell and goal
+    // from the pose and goal the partition will read, and resolves the goal field, so the partition reads a resident
+    // field and locates nothing. No field means the body or its goal stands outside the network. Locating reads and
+    // bakes the network domains the partition's steps will read.
     private void PrepareGoalField(Entry entry, CompiledBodyProducer producer, in FixedVector3 self) {
         entry.PreparedGoalField = null;
         if (
@@ -383,11 +387,12 @@ public sealed partial class WorldPopulation {
             (((uint)target.NavigationDomainIndex) >= ((uint)m_navigation.Count)) ||
             !m_navigation[target.NavigationDomainIndex].Tuning.Shared ||
             !TryNavigationGoal(entry: entry, goal: out var goal, target: in target, targetIndex: out _) ||
-            !TryLocateGoalRead(cell: out _, domain: out _, domainIndex: target.NavigationDomainIndex, goal: in goal, goalCell: out var goalCell, goalDomain: out var goalDomain, self: in self)
+            !TryLocateGoalRead(cell: out var cell, domain: out var domain, domainIndex: target.NavigationDomainIndex, goal: in goal, goalCell: out var goalCell, goalDomain: out var goalDomain, self: in self)
         ) {
             return;
         }
         entry.PreparedGoalField = m_navigation.GoalField(goalCell: goalCell, goalDomain: goalDomain, profile: NavigationProfile(index: target.NavigationProfileIndex));
+        entry.PreparedGoalFrom = (domain, cell);
     }
     // The walkable cell a position stands on in a domain's network: the domain's own cell first, else the nearest of its
     // network's.
@@ -660,7 +665,8 @@ public sealed partial class WorldPopulation {
     // Run the named producer before motion. Live and Idle name no producer, and a producer that stands down runs as
     // none does. It writes only this body's own entry, so a partition may stage it.
     private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks, ProducerWork work) {
-        using var measure = Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickProducers);
+        // A kit partition's steer fork is measured whole (RunKitPartitions), not body by body.
+        using var measure = (work.Partitioned ? default : Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickProducers));
 
         body.SetFlockMovementDomain(domain: null);
         var kitIndex = ResolveKitIndex(index: index);

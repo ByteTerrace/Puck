@@ -461,6 +461,7 @@ public sealed partial class WorldBody {
     // read-back register (what was requested, who wrote it, why) is rebuilt, and a slot declared again under the same
     // name, kind and lifetime keeps its read-back so it still describes the value the lane holds.
     private void CompileActionState(CompiledActionStateSlot[]? state) {
+        MarkKitLocalStale();
         var previousDefinitions = m_actionStateDefinitions;
         var previousRequested = m_actionStateRequested;
         var previousWriters = m_actionStateLastWriter;
