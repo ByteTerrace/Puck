@@ -171,7 +171,7 @@ public sealed partial class SdfMeshPathBake {
                     continue;
                 }
                 Library.Cache.Count(kind: SdfMeshCache.RungsMissed);
-                SdfMeshBakeReport.RungMissed(asked: planned.Tier, drawn: rung.Tier, dynamic: planned.Dynamic, residency: Residency, selector: planned.Selector, shape: planned.Shape);
+                SdfMeshBakeReport.RungMissed(drawn: rung.Tier, first: false, group: planned, residency: Residency);
                 rung.FirstDetailOwed = planned.FirstDetailOwed;
                 rung.DemandPixel = planned.DemandPixel;
                 if (!planned.FirstDetailOwed) {
