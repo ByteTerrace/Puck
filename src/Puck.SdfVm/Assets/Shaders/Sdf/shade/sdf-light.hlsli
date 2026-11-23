@@ -361,7 +361,17 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 // lights, and the probe share of every traced light only for a program that reads `light.probeShare` (`probeShare`,
 // SdfShadeReads.ProbeShare), since a directional's visibility otherwise reads the probes only where no cascade holds the
 // point. Ordinary shading requests only the terms its light kind uses, preserving the no-program path's work.
-struct SdfLightInputs { float3 direction; float reach; float probeShare; float visibility; };
+// `unseen` says the light is a traced point or spot light whose share of the probes about the surface is exactly zero:
+// such a light adds nothing there, under the default response and an authored light phase alike (the light phase's door
+// answers no light before it runs a program), which is what lets a views tile leave out a traced light none of its
+// pixels' probes see (sdfViewsTileLights). A fixture meant to light through what the volume measured is authored
+// untraced.
+struct SdfLightInputs { float3 direction; float reach; float probeShare; float visibility; bool unseen; };
+// Whether the irradiance volume traces a light of the lights table at `index` for its occlusion (SdfLight.IsTraced): a
+// point or spot light whose record asks for shadows, among the lights a probe's light bits hold.
+bool sdfLightTraces(SdfLight record, uint index) {
+    return ((record.Kind == SDF_LIGHT_POINT) && (record.Shadows != 0u) && (index < (32u * SDF_MESH_IRRADIANCE_LIGHT_WORDS)));
+}
 SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, bool authored, bool probeShare) {
     SdfLightInputs inputs;
     inputs.direction = light.position;
@@ -384,6 +394,7 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
         inputs.probeShare = sdfLightProbeVisibility(surface.probes, (uint)light.index);
         known = inputs.probeShare;
     }
+    inputs.unseen = ((light.kind == SDF_LIGHT_POINT) && (known == 0.0));
     if (light.kind == SDF_LIGHT_POINT) {
         inputs.visibility = inputs.probeShare * surface.ambientOcclusion;
     } else if (light.kind == SDF_LIGHT_DIRECTIONAL) {
@@ -441,9 +452,6 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
     }
 
     return response;
-}
-SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface) {
-    return sdfLightResponse(light, surface, sdfLightInputs(light, surface, false, false), 0u);
 }
 
 #endif

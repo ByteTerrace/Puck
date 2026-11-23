@@ -13,6 +13,12 @@
 // point of the tile exactly, the same point the light stage shades (the views stage passes the one it forms), so the only
 // difference from walking the view's whole masks is the rounding of a response within SdfViewsLightReachMargin of where
 // it falls to zero.
+//
+// A tile also leaves out a light the irradiance volume traced (sdfLightTraces) that the probes about none of its shaded
+// pixels see: such a light's share of the probes is zero at every one of them (sdfViewsLightsSeen holds every light whose
+// share can be above zero at a pixel), and a traced point or spot light adds nothing where its share is zero
+// (sdfLightUnseen, which the light phase's door answers by before any response). So in a room the walk visits the
+// fixtures that light it, never those whose range crosses its walls and floors from the rooms beside it.
 #ifndef PASSES_SDF_VIEWS_LIGHTS_HLSLI
 #define PASSES_SDF_VIEWS_LIGHTS_HLSLI
 #include "Shared/ordered-float.hlsli"
@@ -25,6 +31,10 @@ groupshared uint sdfViewsLightDepths[2];
 groupshared uint sdfViewsLightBoxes[12];
 // The tile's light mask words, then its screen mask.
 groupshared uint sdfViewsLightTile[5];
+// The lights of the tile's mask the volume traced, and the traced lights the probes about some shaded pixel of the tile
+// see.
+groupshared uint sdfViewsLightTraced[SDF_MESH_IRRADIANCE_LIGHT_WORDS];
+groupshared uint sdfViewsLightSeen[SDF_MESH_IRRADIANCE_LIGHT_WORDS];
 
 // The share a reach is widened by before a box is tested against it, past the rounding between this test and the
 // response's own: a light is left out only where its response is zero by a margin.
@@ -79,7 +89,7 @@ bool sdfViewsScreenFacesBox(float3 origin, float3 facing, float range, float3 lo
 
 // The masks of the lights and screens the tile's walks visit: the view's that can reach a hit point of the tile.
 // `shades` says whether the view walks lights at all (its mode shades finally), uniform over the group; a view that does
-// not keeps the view's masks unread. `lit` says whether this lane's pixel is a hit the light stage may shade, at
+// not keeps the view's masks unread. `lit` says whether this lane's pixel is a hit whose shading walks lights, at
 // `surfacePoint`, `t` along its ray. Every lane of the group calls it, a lane past the render extent included, since it
 // holds the group's barriers.
 SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfacePoint, float t) {
@@ -100,6 +110,10 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
     }
     if (lane < 5u) {
         sdfViewsLightTile[lane] = 0u;
+    }
+    if (lane < SDF_MESH_IRRADIANCE_LIGHT_WORDS) {
+        sdfViewsLightTraced[lane] = 0u;
+        sdfViewsLightSeen[lane] = 0u;
     }
     if (lane < 2u) {
         sdfViewsLightDepths[lane] = ((lane == 0u) ? 0xFFFFFFFFu : 0u);
@@ -158,6 +172,9 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
             }
             if (keep) {
                 InterlockedOr(sdfViewsLightTile[word], bit);
+                if (sdfLightTraces(light, index)) {
+                    InterlockedOr(sdfViewsLightTraced[word], bit);
+                }
             }
         }
 
@@ -177,9 +194,26 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
     }
     GroupMemoryBarrierWithGroupSync();
 
+    // The traced lights the tile kept, the same on every lane, so a tile that kept none (the open valley) reads no probe
+    // record here.
+    uint4 traced = uint4(sdfViewsLightTraced[0], sdfViewsLightTraced[1], sdfViewsLightTraced[2], sdfViewsLightTraced[3]);
+
+    if (lit && any(traced != 0u)) {
+        uint4 seen = (sdfViewsLightsSeen(p) & traced);
+
+        [unroll]
+        for (uint word = 0u; (word < SDF_MESH_IRRADIANCE_LIGHT_WORDS); word++) {
+            if (seen[word] != 0u) {
+                InterlockedOr(sdfViewsLightSeen[word], seen[word]);
+            }
+        }
+    }
+    GroupMemoryBarrierWithGroupSync();
+
     SdfLightMasks masks;
 
-    masks.lights = uint4(sdfViewsLightTile[0], sdfViewsLightTile[1], sdfViewsLightTile[2], sdfViewsLightTile[3]);
+    masks.lights = (uint4(sdfViewsLightTile[0], sdfViewsLightTile[1], sdfViewsLightTile[2], sdfViewsLightTile[3])
+        & ~(traced & ~uint4(sdfViewsLightSeen[0], sdfViewsLightSeen[1], sdfViewsLightSeen[2], sdfViewsLightSeen[3])));
     masks.screens = sdfViewsLightTile[4];
 
     return masks;

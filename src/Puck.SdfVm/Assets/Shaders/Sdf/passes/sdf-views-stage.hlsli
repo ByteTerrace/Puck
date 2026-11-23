@@ -45,8 +45,9 @@ float3 sdfViewsStage(SdfPixel p, bool shadesPixel, out float coverage, out float
     bool curvatureShading = worldCurvatureShadingEnabled();
     float3 surfacePoint = sdfPixelSurfacePoint(p, s.t);
     int material = s.material;
-    // The view's mode is uniform across the group, so every lane reaches the tile's barriers or none does.
-    SdfLightMasks lights = sdfViewsTileLights(p, useFinalShading, s.hit, surfacePoint, s.t);
+    // The view's mode is uniform across the group, so every lane reaches the tile's barriers or none does. A screen's
+    // face walks no light (sdfLightStage), so it joins neither the tile's boxes nor its seen lights.
+    SdfLightMasks lights = sdfViewsTileLights(p, useFinalShading, (s.hit && (material < SDF_SCREEN_MATERIAL)), surfacePoint, s.t);
 
     if (!p.active || !shadesPixel) {
         return float3(0.0, 0.0, 0.0);

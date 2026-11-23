@@ -709,6 +709,33 @@ float sdfMeshLightVisibility(SdfMeshProbes probes, uint lightIndex) {
 
     return visible;
 }
+// The traced lights the corners sdfMeshLightVisibility sums hold, over every light at once: in `all` the light bits
+// every measured answering corner holds (none where no such corner answers), in `any` those some such corner holds, and
+// in `weight` those corners' weights summed in corner order. sdfMeshLightVisibility of a light is `weight` where its bit
+// is in `all` and zero where it is not in `any`, to the bit.
+void sdfMeshLightAgreement(SdfMeshProbes probes, out uint4 all, out uint4 any, out float weight) {
+    SdfMeshProbeStages stages = sdfMeshProbeStagesOf(probes);
+    bool measured = false;
+
+    all = uint4(0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
+    any = uint4(0u, 0u, 0u, 0u);
+    weight = 0.0;
+    [loop] for (uint corner = 0u; (corner < 16u); corner++) {
+        uint address;
+        if (!sdfMeshProbeAt(probes, stages, corner, address) || !((corner < 8u) ? probes.measured : probes.remainderMeasured)) {
+            continue;
+        }
+
+        uint4 bits = uint4(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_LIGHTS_WORD], sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_LIGHTS_WORD + 1u],
+            sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_LIGHTS_WORD + 2u], sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_LIGHTS_WORD + 3u]);
+
+        all &= bits;
+        any |= bits;
+        weight += sdfMeshProbeWeight(probes, corner);
+        measured = true;
+    }
+    all = (measured ? all : uint4(0u, 0u, 0u, 0u));
+}
 // The mesh path's indirect light at a surface point, in the views pass's units (the cosine-weighted mean radiance about
 // the normal): the sky light the probes' open rays carry and the surfaces' reflected radiance, whose sources and gains
 // the relight already applied.
