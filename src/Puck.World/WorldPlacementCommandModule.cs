@@ -7,8 +7,8 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>
-/// The inhabitation and creation-facet read-back surface — seven Immediate censuses:
-/// <c>world.placements</c>, <c>world.inhabitants</c>, <c>world.faces</c>, <c>world.attachments</c>, <c>world.portals</c>,
+/// The inhabitation and creation-facet read-back surface — eight Immediate censuses:
+/// <c>world.placements</c>, <c>world.inhabitants</c>, <c>world.faces</c>, <c>world.attachments</c>, <c>world.region</c>, <c>world.portals</c>,
 /// <c>world.adjacencies</c>, <c>world.destinations</c>. A placement's <c>inhabit</c> and <c>faceSources</c> facets ride its whole row through
 /// the general <see cref="WorldRowCommandModule"/> (<c>world.row.set placements &lt;json&gt;</c>), and
 /// <c>world.placement.get</c> (<see cref="WorldMutationCommandModule"/>) is the round-trip twin that harvests its
@@ -25,6 +25,9 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
     private static readonly CommandForms WorldPlacementsForms = CommandForms.Of(verb: "world.placements", "[instance:<name>]");
     private static readonly CommandForms WorldInhabitantsForms = CommandForms.Of(verb: "world.inhabitants", "[instance:<name>]");
     private static readonly CommandForms WorldAttachmentsForms = CommandForms.Of(verb: "world.attachments", "[instance:<name>]");
+    private static readonly CommandForms WorldRegionForms = CommandForms.Of(verb: "world.region", "<placement> [instance:<name>]");
+    // The most occupants world.region lists by index and position; its counts are always whole.
+    private const int MaxRegionOccupantsListed = 64;
     private static readonly CommandForms WorldPortalsForms = CommandForms.Of(verb: "world.portals", "[instance:<name>]");
     private static readonly CommandForms WorldDestinationsForms = CommandForms.Of(verb: "world.destinations", "[instance:<name>]");
     private static readonly CommandForms WorldAdjacenciesForms = CommandForms.Of(verb: "world.adjacencies", "[instance:<name>]");
@@ -217,6 +220,35 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
         return builder.Append(value: (any
             ? ""
             : " none")).Append(value: ']').ToString();
+    }
+    // One region's latched occupants against the bodies its volume holds now (WorldEventFeed.AuditRegion).
+    private static (string Text, bool Refused) DescribeRegion(string placementId, WorldServer server) {
+        var latched = new List<int>();
+        var inside = new List<int>();
+
+        if (!server.Events.AuditRegion(inside: inside, latched: latched, placementId: placementId, population: server.Population)) {
+            return ($"[world.region: '{placementId}' is no region the region pass has sensed — see world.placements]", true);
+        }
+
+        var population = server.Population;
+        var builder = new StringBuilder(value: $"[world.region: {placementId} count={latched.Count} occupants=");
+
+        if (latched.Count == 0) {
+            _ = builder.Append(value: "none");
+        }
+        for (var index = 0; (index < Math.Min(val1: latched.Count, val2: MaxRegionOccupantsListed)); index++) {
+            var body = latched[index];
+            var position = (population.EntryBody(index: body)?.FixedPosition.ToVector3());
+
+            _ = builder.Append(value: ((index > 0) ? "," : string.Empty)).Append(provider: CultureInfo.InvariantCulture, handler: $"body:{body}@{((position is { } at) ? $"({at.X:0.00}, {at.Y:0.00}, {at.Z:0.00})" : "inactive")}");
+        }
+        if (latched.Count > MaxRegionOccupantsListed) {
+            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $",+{(latched.Count - MaxRegionOccupantsListed)}");
+        }
+
+        static string Bodies(IEnumerable<int> bodies) => (bodies.Any() ? string.Join(separator: ",", values: bodies.Select(selector: static body => $"body:{body}")) : "none");
+
+        return (builder.Append(provider: CultureInfo.InvariantCulture, handler: $" measured={inside.Count} stale={Bodies(bodies: latched.Except(second: inside))} missed={Bodies(bodies: inside.Except(second: latched))}]").ToString(), false);
     }
     // Every placement/face PORTAL facet naming a given destination, joined for one world.destinations line.
     private static string DescribeDestinationConsumers(WorldDefinition definition, string name) {
@@ -633,6 +665,34 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                     text: DescribeAttachments(instance: instance, context: context),
                     instance: instance
                 ));
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
+            bindability: CommandBindability.Unbindable,
+            name: "world.region",
+            forms: WorldRegionForms,
+            description: WorldRegionForms.Spelling + $" — Reports one placement region's live occupancy (Immediate): count= is the number of bodies the region pass holds latched inside it, the count a rule's region(...) reads and body.place lists from; occupants= lists them (at most {MaxRegionOccupantsListed}, each body:<index>@(x, y, z)); measured= is the number of active bodies whose position the region's volume holds in the frame the pass last sensed it in, read now; stale= names bodies latched but not inside, and missed= bodies inside but not latched, either of which means the latches drifted from the bodies. A trailing instance:<name> token reads a named running instance's population instead of the boot world's.",
+            handler: (context, args) => {
+                if ((args.Count is < 1 or > 2) || WorldArgs.IsInstanceToken(token: args[0])) {
+                    return WorldRegionForms.Refuse();
+                }
+
+                WorldInstance? instance = null;
+
+                if ((args.Count == 2) && !WorldInstanceArgs.TryResolveInstance(
+                    token: args[1],
+                    verb: WorldRegionForms.Verb,
+                    instances: instances,
+                    instance: out instance,
+                    error: out var tokenError
+                )) {
+                    return tokenError!.Value;
+                }
+
+                var text = DescribeRegion(placementId: args[0].ToString(), server: (instance?.Server ?? server));
+
+                return new CommandResult(Output: WithInstanceTag(text: text.Text, instance: instance)) { IsError = text.Refused };
             }
         );
         yield return CommandDefinition.WithWireArgs(
