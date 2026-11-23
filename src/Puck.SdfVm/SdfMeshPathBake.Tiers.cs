@@ -67,8 +67,6 @@ public sealed partial class SdfMeshPathBake {
     // observes.
     private long m_regionBudgetBytes = long.MaxValue;
 
-    // The tier a pixel demands under the bias the budget holds.
-    private int TierOf(float pixel) => SdfMeshTier.Of(pixel: SdfMeshTier.Biased(halfRungs: Volatile.Read(location: ref m_bias), pixel: pixel));
     /// <summary>Returns the tier a plan bakes each group at: the coarsest whose cell stays under half a display pixel at
     /// the group's planned box from the nearest demand point (<see cref="SdfMeshTier.Of"/>, <see cref="SdfMeshDemand.PixelAt(SdfMeshBakeGroup, IReadOnlyList{DynamicTransform})"/>),
     /// a dynamic group's box carried into world space by its slot's transform among <paramref name="transforms"/> and
@@ -90,8 +88,8 @@ public sealed partial class SdfMeshPathBake {
         // A plan made before any view has been observed knows no demand: it asks each group's floor, never the rung past
         // it a missing demand point would read as, which the first observed frame would bake again finer.
         Func<SdfMeshBakeGroup, int> demanded = (copies
-            ? (group => ((Demand.Count == 0) ? group.FloorTier : TierOf(pixel: PlannedPixel(group: group, transforms: transforms))))
-            : (group => ((Demand.Count == 0) ? group.FloorTier : TierOf(pixel: Demand.PixelAt(group: group, transforms: transforms)))));
+            ? (group => ((Demand.Count == 0) ? group.FloorTier : DemandedTierOf(group: group, pixel: PlannedPixel(group: group, transforms: transforms))))
+            : (group => ((Demand.Count == 0) ? group.FloorTier : DemandedTierOf(group: group, pixel: Demand.PixelAt(group: group, transforms: transforms)))));
         if (arrives is null) { return demanded; }
         // A group arriving with nothing of its own to draw plans its floor: its floor tier, or the tier its demand asks
         // where that is coarser still, which is then all it owes. It owes its demanded tier otherwise, which Retier
@@ -342,6 +340,8 @@ public sealed partial class SdfMeshPathBake {
         var frames = 0;
         var spares = 0;
         var sparesWaiting = 0;
+        // The bytes every spare tier would give back at its demanded tier, those still waiting their hold included.
+        var spareSaving = 0L;
         // The groups that owe a finer tier and wait their hold, and whether the budget presses on something it can
         // still coarsen: with a replacement started or in flight, what keeps the detail from settled.
         var owedWaiting = 0;
@@ -371,7 +371,7 @@ public sealed partial class SdfMeshPathBake {
 
             var index = group.Index;
             var pixel = group.DemandPixel;
-            var demanded = SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: TierOf(pixel: pixel));
+            var demanded = DemandedTierOf(group: group, pixel: pixel);
             // The tier a frame draws is the replaced group's while a replacement is still to land.
             var resident = (group.Replaces ?? group).Tier;
 
@@ -416,14 +416,17 @@ public sealed partial class SdfMeshPathBake {
                 spares++;
                 group.SpareFrames += elapsed;
                 if (!group.Done || (group.Replaces is not null) || group.RetierRefused || group.Ahead) { return; }
+
+                var bytes = group.PlacedBytes;
+                var saving = (bytes - SdfMeshTier.BytesAt(bytes: bytes, from: resident, to: demanded));
+
+                // Counted whether or not the group has waited its hold: what every spare tier would give back.
+                spareSaving = spareSaving.AddSaturating(right: saving);
                 if (group.SpareFrames < SdfMeshTier.HoldFrames) {
                     sparesWaiting++;
                     return;
                 }
-
-                var bytes = group.PlacedBytes;
-
-                spare.Add(item: ((bytes - SdfMeshTier.BytesAt(bytes: bytes, from: resident, to: demanded)), index, demanded));
+                spare.Add(item: (saving, index, demanded));
                 return;
             }
             group.SpareFrames = 0;
@@ -500,8 +503,29 @@ public sealed partial class SdfMeshPathBake {
                 expected -= saving;
                 replaced = true;
             }
-            anySpare = ((spare.Count > 0) || (sparesWaiting > 0) || (coarsening > 0));
-            pressing = (anySpare || (bias < SdfMeshTier.MaxBias));
+            // Spare tiers hold the bias only while giving them all back could bring the draws under the budget. A backlog
+            // that could not is more than spare detail explains: the demand itself is past the budget, and waiting for
+            // the last spare to bake coarser would leave the pool over its limit for as long as that takes.
+            anySpare = (((spare.Count > 0) || (sparesWaiting > 0) || (coarsening > 0)) && (((named - freed) - spareSaving) <= budget));
+            pressing = (anySpare || (spare.Count > 0) || (coarsening > 0) || (bias < SdfMeshTier.MaxBias));
+        } else {
+            // A tier no demand has asked for SdfMeshTier.SpareKeptFrames is given back though the budget has room: a
+            // viewer who comes back within that time finds it, and past it the detail is unobserved storage, which the
+            // library or the store brings again.
+            foreach (var (saving, index, tier) in spare) {
+                if (inFlight >= SdfMeshTier.MaxInFlight) { break; }
+
+                var old = m_groups[index];
+
+                if (old.SpareFrames < SdfMeshTier.SpareKeptFrames) { continue; }
+
+                var started = Retier(delta: -saving, frame: frame, index: index, old: old, tier: tier);
+
+                if (started == TierStart.None) { continue; }
+                if (started == TierStart.Baking) { inFlight++; }
+                coarsening++;
+                replaced = true;
+            }
         }
         // The selector moves the one bias on every residency's report; this bake coarsens its demand by what it answers.
         if (m_detail is { } detail) {
@@ -580,7 +604,7 @@ public sealed partial class SdfMeshPathBake {
 
             var pixel = group.DemandPixel;
 
-            if (group.FirstDetailOwed && (SdfMeshTier.Clamp(coarsest: group.CoarsestTier, finest: group.FinestTier, tier: TierOf(pixel: pixel)) < group.Tier)) { continue; }
+            if (group.FirstDetailOwed && (DemandedTierOf(group: group, pixel: pixel) < group.Tier)) { continue; }
 
             var shown = (group.Replaces ?? group);
 

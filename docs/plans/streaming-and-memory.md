@@ -224,7 +224,7 @@ a research report disagrees with the code, the code wins.
 | A selector across residencies | Built for bytes and background GPU time (`SdfResidencySelector`): one detail bias, a budget for each residency's bake, a reservation for each mesh region and one budget of background GPU work. Each residency still owns its `SdfWorldResidency.MeshDemand` and its mesh region. Background GPU work is weighed across residencies by display share (`SdfGpuWorkBudget.Weigh`); memory and bake admission are not yet ordered across them. |
 | Lighting on the same demand points | Partly built. Each level of the probe window already centres on the box of every view's camera when it fits (`SdfMeshIrradiance.WindowLow`), and probe urgency reads every view. What remains: the window is anchored on the first view (`SdfMeshIrradiance.WindowCamera`), the lighting derives its own view list (`SdfMeshIrradiance.CaptureViewCameras`), the trace scene is built from every static draw of the frame (`SdfMeshIrradiance.StaticKey`), and `SdfMeshIrradiance.ProbeCache` is bounded by window cells, not bytes. |
 | Demand mapped through portal faces | The mapping is built; its use is not. A fitted window's view is the viewer's eye taken through the glass, measured in the display pixels the glass spans and held to its frustum (`SdfViewSnapshot.DemandHeight`, `SdfViewSnapshot.DemandWithinView`), and every attached window's view is a demand point whether or not it renders (`SdfMeshDemand.Observe` leaves out only a view that is elsewhere, has no region or no valid camera). What is missing is arrival without a render: a residency's upload is submitted only for a scheduled render (`SdfWorldPasses.PrepareRender`), so an unseen window still renders at the least share (`WorldViewGraphHost.ReserveArrivals`, `WorldPortalVisibility.ArrivalShare`). |
-| Eviction under a byte budget | Not built. Under pressure a group is planned again at a coarser tier or every demand is coarsened half a rung (`SdfMeshTier.Biased`); no group ever leaves. The coarsening now has somewhere to go: the ladder runs past each group's floor to a rung of a few cells (`SdfMeshTier.Coarsest`), so the bias lowers what the draws name at any distance, and it is given back within seconds of the room returning (`SdfMeshTier.BiasQuietFrames`). A mesh the arena cannot place is refused and its draws leave the frame (`SdfMeshRegionArena.Refused`), which shows as a hole unless its group keeps a floor; only a group that arrived in view keeps one ([step 5](#step-5-the-floor-and-eviction)). A growth the account or the device refuses leaves the region as it is, and the placements it could not hold are refused the same way (`SdfMeshRegionArena.Clip`). |
+| Eviction under a byte budget | Not built. Under pressure a group is planned again at a coarser tier or every demand is coarsened half a rung (`SdfMeshTier.Biased`); no group ever leaves. The ladder runs past each group's floor to a rung of a few cells (`SdfMeshTier.Coarsest`) for a group no view resolves finer; the bias itself stops at the floor (`SdfMeshTier.Demanded`), since past it the pressure cost the world a player stands in its lettering and thin parts, and it is given back within seconds of the room returning (`SdfMeshTier.BiasQuietFrames`). A mesh the arena cannot place is refused and its draws leave the frame (`SdfMeshRegionArena.Refused`), which shows as a hole unless its group keeps a floor; only a group that arrived in view keeps one ([step 5](#step-5-the-floor-and-eviction)). A growth the account or the device refuses leaves the region as it is, and the placements it could not hold are refused the same way (`SdfMeshRegionArena.Clip`). |
 | Authored areas | Not built. |
 | Terrain tiles, then the moons | Not built: a bake group is an instance, a slot or a union, so one large instance has one tier and one demand box. |
 
@@ -3105,8 +3105,12 @@ class, in logical words.
 The ladder now runs past the floor
 ([decision 5](#decision-5-the-unit-is-a-tier-and-the-coarsest-tier-is-the-floor)):
 a group whose demand asks a rung past its floor bakes a lattice of that rung's
-cell and keeps no floor beside it, a rung there that meshes nothing steps down
-toward the floor, and the bias coarsens such groups like any other. Two
+cell and keeps no floor beside it, and a rung there that meshes nothing steps
+down toward the floor. The bias does not reach those rungs: at a fresh boot at
+the lead machine's full size the fixed classes left detail so little that the
+bias stood at its ceiling, and a bias past the floor then drew the painting
+room's plaques as bars, so `SdfMeshTier.Demanded` holds it to the floor and
+the room has to come from the fixed classes. Two
 smaller pieces went with it. A scene shown through windows alone is weighed
 and lit by its largest window (`WorldRoutedScene`'s frame takes its windows'
 `WorldRoutedWindow.DisplayShare` and `WorldRoutedWindow.IndirectLevels`),
@@ -3116,20 +3120,22 @@ every layer back once no upload decides them and no pass binds them for
 world no view shows stops holding them; before, only an upload answered a
 trim, and an unseen world submits none. A trim also keeps an anchor a rated
 view read within the last few uploads, which it used to give back and take
-again a frame later, past the pool's limit. Still to build, in order:
+again a frame later, past the pool's limit.
 
-- detail given back by time and planned by demand. A group keeps a tier finer
-  than its demand asks until the budget presses, and a residency planned
-  before its views are observed plans every floor: a second scene of the boot
-  world behind a window a few hundred pixels across then names several
-  hundred megabytes that nothing coarsens while the pool has room. Under a
-  budget lowered to a smaller device's bar the spare tiers are coarsened a
-  few dozen at a time, each a bake where the store lacks the rung, and the
-  bias waits for the last of them, so the pool stands over the bar for
-  minutes. What is to build: a spare tier leaves once no demand has asked it
-  for a stated time, a windowed residency plans at its windows' demand once
-  they are observed, and the bias rises while a backlog of spares could not
-  fit the budget even coarsened;
+Detail is also given back by time and by a backlog, where it used to wait for
+pressure and then for its last spare tier. A group keeps a tier finer than its
+demand asks for `SdfMeshTier.SpareKeptFrames` while the budget has room and is
+then planned at the tier its demand asks, so what a viewer walked away from
+stops standing in the region. Under pressure the spare tiers hold the bias
+only while giving them all back could bring the draws under the budget
+(`SdfMeshPathBake`'s tier decision): a backlog that could not no longer keeps
+the pool over a lowered limit for as long as its bakes take. Still to build,
+in order:
+
+- a windowed residency planned at its windows' demand. A residency planned
+  before its views are observed plans every floor, and a second scene of the
+  boot world behind a window a few hundred pixels across then names several
+  hundred megabytes until the kept time passes;
 - the outward offset for a lattice past the floor, so a part thinner than its
   cell inside a group that still meshes is kept
   ([decision 5](#decision-5-the-unit-is-a-tier-and-the-coarsest-tier-is-the-floor));

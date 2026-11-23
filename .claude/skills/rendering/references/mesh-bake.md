@@ -713,7 +713,11 @@ laws exercise that boundary.
   (`MeshedNothingPastFloor`), and a part thinner than a cell inside a group
   that still meshes is lost at that rung. Every floor role (arrival, the kept
   floor, eviction, the trace mesh, the band a small view draws) reads
-  `AtFloor` and `FloorTier`, never `CoarsestTier`. With no demand point a
+  `AtFloor` and `FloorTier`, never `CoarsestTier`. The budget's bias coarsens
+  a demand as far as the floor and no further (`SdfMeshTier.Demanded`, the one
+  rule `DemandedTierOf` asks, with `DemandedSlack` and `DemandedCoarsestEdge`
+  as its watch's bounds); a tier past the floor comes only from the unbiased
+  pixel. With no demand point a
   group plans at its coarsest, and a plan made before any view was observed
   asks the floor (`Tiers`); an offline bake
   (`MeshCpuBake`, `puck mesh audit --cpu`) sets `SdfMeshPathBake.PlannedTier`

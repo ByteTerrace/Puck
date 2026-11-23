@@ -169,10 +169,16 @@ demand and priority rather than creating executors.
 - **The ladder does not end at the floor.** Past its floor a tier coarsens the
   lattice itself, down to a rung whose cell fits only a few times along the
   group (`SdfMeshTier.Coarsest`), so a group a view resolves at a few pixels
-  holds a few cells and the one bias always has a rung left to coarsen to. A
-  ladder that ends at the floor does neither: the debug world's floors alone
-  are most of its mesh region and most of its groups draw theirs, so a bias
-  has nothing there to coarsen.
+  holds a few cells. A ladder that ends at the floor prices every far group,
+  and every world behind a small glass, at its floor: the debug world's
+  floors alone are most of its mesh region and most of its groups draw
+  theirs.
+- **The bias stops at the floor.** A budget's pressure coarsens a demand as
+  far as the group's floor and no further (`SdfMeshTier.Demanded`); only what
+  a view cannot resolve finer holds a coarser lattice. A bias that reached
+  past the floor took the world a player stands in down to a few cells a
+  group, lettering and thin parts first, to pay for storage detail does not
+  own. Memory the floors cannot give back is the fixed classes' to give.
 - **Prediction decides arrival, and observation decides retention.** What a
   view would resolve is computed ahead from planned boxes, so a turn or a
   first sight finds its meshes. What a pass actually used is read back, and

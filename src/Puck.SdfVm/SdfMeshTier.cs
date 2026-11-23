@@ -22,6 +22,11 @@ public static class SdfMeshTier {
     /// <summary>The frames a finer tier must stay demanded before a group is planned again at it, so a view standing at a
     /// rung's boundary does not bake the group at both.</summary>
     public const int HoldFrames = 8;
+    /// <summary>The frames a group keeps a tier finer than its demand asks while the budget has room
+    /// (<see cref="SdfMeshPathBake"/>'s tier decision): half a minute of frames at a 60 Hz display. Within it a viewer
+    /// who turns or walks back finds the detail standing; past it the group is planned again at the tier its demand
+    /// asks, and a later demand brings the finer tier back from the library or the store.</summary>
+    public const int SpareKeptFrames = 1800;
     /// <summary>The frames a residency's bake spreads one measure of every group's demand over: each frame measures
     /// that share of the boxes its groups stand at, so the measure's cost a frame is that share of the resident
     /// world's, and a group's demanded tier is at most this many frames behind its demand points. A group is
@@ -56,8 +61,8 @@ public static class SdfMeshTier {
     public const int MaxBias = 16;
     /// <summary>The frames the meshes a residency's demand would name half a rung finer must have fit its mesh region's
     /// budget before its bake takes one half rung of bias back; the wait doubles each time the budget presses again
-    /// soon after. A bias coarsens every group it reaches, down to a few cells of each, so it is given back within
-    /// seconds of the room returning, and the doubling is what holds a budget that stays short.</summary>
+    /// soon after. A bias coarsens every group it reaches as far as its floor, so it is given back within seconds of
+    /// the room returning, and the doubling is what holds a budget that stays short.</summary>
     public const int BiasQuietFrames = 120;
     /// <summary>The eighths of the mesh region's limit a residency's bake budgets its meshes to; the rest is the room a
     /// replacement lands in beside the mesh it replaces.</summary>
@@ -170,6 +175,44 @@ public static class SdfMeshTier {
     /// <returns>The pixel, in the group's units.</returns>
     public static float CoarsestEdge(int halfRungs, int finest, int coarsest) =>
         ((coarsest <= finest) ? float.PositiveInfinity : (Cell(tier: coarsest) / (PixelShare * BiasScale(halfRungs: halfRungs))));
+    /// <summary>Returns the tier a group demands at a pixel under a bias, held to its rungs. The bias coarsens a demand
+    /// as far as the group's floor and no further: a budget's pressure never takes a group a view resolves below its
+    /// unrefined lattice, where lettering and thin parts are lost. Past the floor the tier is what the pixel asks with
+    /// no bias, so only a group a view cannot resolve finer holds a coarser lattice.</summary>
+    /// <param name="pixel">The metres one display pixel covers at the group's box, in the group's units.</param>
+    /// <param name="halfRungs">The bias, from zero to <see cref="MaxBias"/>.</param>
+    /// <param name="finest">The group's finest tier (<see cref="Finest"/>).</param>
+    /// <param name="floor">The group's floor tier (<see cref="Floor"/>).</param>
+    /// <param name="coarsest">The group's coarsest tier (<see cref="Coarsest"/>).</param>
+    /// <returns>The tier.</returns>
+    public static int Demanded(float pixel, int halfRungs, int finest, int floor, int coarsest) {
+        var biased = Clamp(coarsest: coarsest, finest: finest, tier: Of(pixel: Biased(halfRungs: halfRungs, pixel: pixel)));
+
+        return ((biased <= floor) ? biased : Math.Max(val1: floor, val2: Clamp(coarsest: coarsest, finest: finest, tier: Of(pixel: pixel))));
+    }
+    /// <summary>Returns how far a demand pixel may move before the tier <see cref="Demanded"/> answers changes, never
+    /// more than it can: the nearer of the biased ladder's edges up to the floor and the unbiased ladder's past it
+    /// (<see cref="Slack"/> of each).</summary>
+    /// <param name="pixel">The metres one display pixel covers at the group's box, in the group's units.</param>
+    /// <param name="halfRungs">The bias, from zero to <see cref="MaxBias"/>.</param>
+    /// <param name="finest">The group's finest tier.</param>
+    /// <param name="floor">The group's floor tier.</param>
+    /// <param name="coarsest">The group's coarsest tier.</param>
+    /// <returns>The distance, in the pixel's units; never negative.</returns>
+    public static float DemandedSlack(float pixel, int halfRungs, int finest, int floor, int coarsest) => MathF.Min(
+        x: Slack(coarsest: floor, finest: finest, halfRungs: halfRungs, pixel: pixel),
+        y: Slack(coarsest: coarsest, finest: Math.Max(val1: finest, val2: floor), halfRungs: 0, pixel: pixel));
+    /// <summary>Returns the least pixel that still demands a group's coarsest tier by <see cref="Demanded"/>: the
+    /// unbiased ladder's edge where the coarsest rung lies past the floor, else the biased one's
+    /// (<see cref="CoarsestEdge"/>).</summary>
+    /// <param name="halfRungs">The bias, from zero to <see cref="MaxBias"/>.</param>
+    /// <param name="finest">The group's finest tier.</param>
+    /// <param name="floor">The group's floor tier.</param>
+    /// <param name="coarsest">The group's coarsest tier.</param>
+    /// <returns>The pixel, in the group's units.</returns>
+    public static float DemandedCoarsestEdge(int halfRungs, int finest, int floor, int coarsest) => ((coarsest > Math.Max(val1: finest, val2: floor))
+        ? CoarsestEdge(coarsest: coarsest, finest: Math.Max(val1: finest, val2: floor), halfRungs: 0)
+        : CoarsestEdge(coarsest: coarsest, finest: finest, halfRungs: halfRungs));
     /// <summary>Returns a demanded tier held to the rungs that change a group's mesh.</summary>
     /// <param name="tier">The demanded tier.</param>
     /// <param name="finest">The group's finest tier (<see cref="Finest"/>).</param>
