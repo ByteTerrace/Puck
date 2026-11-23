@@ -182,8 +182,9 @@ let roadStrips = [
 // The districts' navigation domains, 1 m cells on whole-metre origins so neighbouring grids share cells where they
 // overlap, each reaching a few metres into its neighbours so a route crosses between them. The four are one `pavement`
 // network of shared domains: a citizen heading to an anchor reads its step from that anchor's goal field, which
-// crosses the districts at their shared cells, rather than searching a route of its own.
-let pavement = { shared: true, network: "pavement" }
+// crosses the districts at their shared cells, rather than searching a route of its own. The districts' ground is
+// `pavement` where no road or crossing marks it (the navigation areas below).
+let pavement = { shared: true, network: "pavement", area: "pavement" }
 
 
 
@@ -222,7 +223,17 @@ let cityCrossings = [
   { group: "works", region: "place-city-crossing-works", cx: 90, cz: -50, hx: 3, hz: 5, x0: 93, x1: 101, z0: -55, z1: -45 }
 ]
 
+// The town's navigation areas (../standard/domains.puck's `townAreaTypes`): every road strip is `road`, and each
+// crossing's region, marked after the roads so it wins where it lies on one, is `crossing`. A citizen pays ten times a
+// road's length to walk it (../standard/citizen.puck's `citizenProfile`), so it keeps to the pavement and crosses the
+// ring and the works road at their crossings; a vehicle never drives onto the pavement (`vehicleProfile`).
 navigation {
+  areaTypes: townAreaTypes
+  areas: concat(
+    map(roadStrips, strip => townArea("road", strip.x0, strip.x1, strip.z0, strip.z1)),
+    map(cityCrossings, c => { type: "crossing", placement: c.region })
+  )
+  profiles [citizenProfile, vehicleProfile]
   domains: concat(
     [
       walkable("city-square", [-46, 0.05, -100], 1, 92, 100, 2.2, 3, 1024) with pavement
@@ -334,7 +345,7 @@ bodies {
   capacity: 8 + citizenCount + vehicleCount
 }
 
-citizenDesign(domain: "city-square")
+citizenDesign(domain: "city-square", profile: "citizen")
 citizenLooks(coats: citizenCoats, hats: citizenHats)
 citizenSchedule(
   people: citizenPeople,

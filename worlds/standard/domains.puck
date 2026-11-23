@@ -11,6 +11,23 @@
 // slopes, under the standard's 60 so a route never leans on the limit.
 let standardWalker = { height: 1.7, radius: 0.3, step: 0.3, slope: 50 }
 
+// The area types a town's navigation marks (`navigation.areaTypes`): `road` where vehicles drive, `crossing` where a
+// road is crossed on foot, `pavement` for the walkable ground beside them. A town lists them, marks its road strips and
+// crossings as `navigation.areas` (a crossing after the road it crosses, since the last area holding a cell decides
+// it), gives its pavement domains `area: "pavement"` and its road domains `area: "road"`, and lists the profiles of the
+// bodies that walk or drive them (citizen.puck's `citizenProfile`, vehicle.puck's `vehicleProfile`). The engine gives
+// no type a meaning: each costs what a profile says.
+let townAreaTypes = ["road", "crossing", "pavement"]
+
+// A town's area volume over the world-space box x0..x1, z0..z1, 2 m above and below its ground.
+function townArea(type, x0, x1, z0, z1) = {
+  type: type
+  region {
+    center [((x0 + x1) / 2), 0, ((z0 + z1) / 2)]
+    halfExtents [((x1 - x0) / 2), 2, ((z1 - z0) / 2)]
+  }
+}
+
 function surfaceDomain(name, origin, cellSize, width, depth, probeUp, probeDown, maxPathNodes, walker = standardWalker) = {
   name: name
   kind: Surface

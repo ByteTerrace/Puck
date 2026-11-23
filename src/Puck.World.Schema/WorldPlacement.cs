@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.World.Authoring;
 using Puck.Maths;
+using Puck.Physics;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Gpu;
 

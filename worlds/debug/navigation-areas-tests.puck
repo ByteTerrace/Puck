@@ -1,0 +1,252 @@
+// Navigation areas and cost profiles. Two pads each hold a strip of mud, a navigation area of type `mud` marked by the
+// placement whose region senses it, straight across the line from two walkers to their goals 30 m north. The `careful`
+// profile pays ten times a step's length on mud, so going round the strip's end (about 37 m) is cheaper than wading its
+// 10 m (20 m of ground and 100 of mud); a walker with no profile pays one everywhere and walks straight through. The west
+// pad routes each body by its own search (`Domain.FindPath`), the east pad is shared, so its two walkers read goal fields
+// toward one goal cell, one field per profile. `puck test worlds/debug/navigation-areas-tests.puck --reproduce`.
+schema: "puck.world.definition.v1"
+documentId: "navigation-areas-tests"
+
+import "../standard/walker"
+import "../standard/kits"
+import "../standard/domains"
+import "../standard/vehicle"
+
+// The seat at 0, then the inhabitants from the top down in placement order: the west pad's careful walker is body 4,
+// its plain walker body 3, the east pad's careful walker body 2 and its plain walker body 1.
+bodies {
+  capacity: 5
+  localSeats: 1
+  networkPlayers: 0
+  reconnectGraceSeconds: 0
+  seatSpawns [start]
+  sleepAfterSeconds: 0s
+}
+
+spawnPoints [
+  { id: "start", position [45, 0, -20], yawDegrees: 0 }
+]
+
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  isActive: true
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, -18, 0]
+}
+
+targetRegisters [
+  { name: "goal", maximumRange: 1000, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
+]
+
+// The west pad's cells span x 0 .. 39, the east pad's x 50 .. 89, both z 0 .. 39.
+navigation {
+  areaTypes ["mud"]
+  areas [
+    { type: "mud", placement: `mud-west` }
+    { type: "mud", placement: `mud-east` }
+  ]
+  profiles [
+    { name: "careful", costs { mud: 10 } }
+  ]
+  domains [
+    surfaceDomain("pad", [0, 0.05, 0], 1, 40, 40, 2.2, 3, 256)
+    surfaceDomain("field", [50, 0.05, 0], 1, 40, 40, 2.2, 3, 256) with { shared: true }
+  ]
+}
+
+function walkTo(name, domain, profile = null) = {
+  kind: Producer
+  name: name
+  operations [SenseNearestInCone, ProduceSteeringIntent, FaceSensorTarget]
+  target: navigated(domain: domain, register: "goal", profile: profile)
+  version: "puck.body.program.v1"
+}
+
+bodyMotionPrograms [
+  walkTo("padCareful", "pad", "careful")
+  walkTo("padPlain", "pad")
+  walkTo("fieldCareful", "field", "careful")
+  walkTo("fieldPlain", "field")
+]
+
+let walkerSteering = vehicleSteering with { scalars: vehicleSteering.scalars with { standoffRadius: 0.5 } }
+
+kits [
+  {
+    name: "walker"
+    bodyContact: Overlap
+    bodyMotionProgram: "walk"
+    collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
+    motion: walkerMotion
+    producers {
+      padCareful: walkerSteering
+      padPlain: walkerSteering
+      fieldCareful: walkerSteering
+      fieldPlain: walkerSteering
+    }
+  }
+]
+
+state {
+  world {
+    slot westCarefulMud = 0
+    slot westPlainMud = 0
+    slot eastCarefulMud = 0
+    slot eastPlainMud = 0
+  }
+}
+
+// Each walker heads 30 m north of where it starts; the east pad's two share one goal cell.
+rule "goals" {
+  when $tick >= 2
+  mode: Edge
+  designate(key: 4, kind: Point, register: "goal", position: [10, 0, 35])
+  designate(key: 3, kind: Point, register: "goal", position: [30, 0, 35])
+  designate(key: 2, kind: Point, register: "goal", position: [70, 0, 35])
+  designate(key: 1, kind: Point, register: "goal", position: [70, 0, 35])
+}
+// A walker standing on its pad's mud latches its flag: the careful walkers' must stay clear.
+rule "west-careful-mud" {
+  when bodyPosition(body, 4, x) >= 4 and bodyPosition(body, 4, x) <= 36 and bodyPosition(body, 4, z) >= 15 and bodyPosition(body, 4, z) <= 25
+  mode: Edge
+  westCarefulMud = 1
+}
+rule "west-plain-mud" {
+  when bodyPosition(body, 3, x) >= 4 and bodyPosition(body, 3, x) <= 36 and bodyPosition(body, 3, z) >= 15 and bodyPosition(body, 3, z) <= 25
+  mode: Edge
+  westPlainMud = 1
+}
+rule "east-careful-mud" {
+  when bodyPosition(body, 2, x) >= 64 and bodyPosition(body, 2, x) <= 76 and bodyPosition(body, 2, z) >= 15 and bodyPosition(body, 2, z) <= 25
+  mode: Edge
+  eastCarefulMud = 1
+}
+rule "east-plain-mud" {
+  when bodyPosition(body, 1, x) >= 64 and bodyPosition(body, 1, x) <= 76 and bodyPosition(body, 1, z) >= 15 and bodyPosition(body, 1, z) <= 25
+  mode: Edge
+  eastPlainMud = 1
+}
+
+looks [
+  {
+    name: "walker"
+    scale: 1
+    source: creation(prototypeId: walker)
+    motion {
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+    }
+  }
+]
+
+prototypes {
+  prototype "walker" {
+    document {
+      name: "walker"
+      schema: "puck.creation.v1"
+      palette [{ color: "#5B7DB1", roughness: 0.6 }]
+      shape Capsule "body" {
+        material: 0
+        position [0, 0.3, 0]
+        scale [0.3, 2.2, 0.3]
+      }
+    }
+  }
+  prototype "floor" {
+    document {
+      name: "floor"
+      schema: "puck.creation.v1"
+      palette [{ color: "#ADA69F", roughness: 0.85 }]
+      shape Box {
+        material: 0
+        position [0, -0.2, 0]
+        scale [100, 0.2, 50]
+      }
+    }
+  }
+  prototype "mud" {
+    document {
+      name: "mud"
+      schema: "puck.creation.v1"
+      palette [{ color: "#5A4632", roughness: 0.95 }]
+      shape Box {
+        material: 0
+        position [0, 0.01, 0]
+        scale [12, 0.02, 10]
+      }
+    }
+  }
+}
+
+placements {
+  placement "floor" {
+    prototype: "floor"
+    position [45, 0, 20]
+    solid
+  }
+  // Each mud strip spans its pad's walkers' lines, z 15 .. 25: x 4 .. 36 on the west pad, x 64 .. 76 on the east.
+  placement "mud-west" {
+    prototype: "mud"
+    position [20, 0, 20]
+    region {
+      halfExtents [16, 2, 5]
+    }
+  }
+  placement "mud-east" {
+    prototype: "mud"
+    position [70, 0, 20]
+    region {
+      halfExtents [6, 2, 5]
+    }
+  }
+  for walker in [
+    { id: "west-careful", x: 10, producer: "padCareful" }
+    { id: "west-plain", x: 30, producer: "padPlain" }
+    { id: "east-careful", x: 68, producer: "fieldCareful" }
+    { id: "east-plain", x: 72, producer: "fieldPlain" }
+  ] {
+    placement $"{walker.id}" {
+      prototype: "walker"
+      position [walker.x, 0, 5]
+      inhabit {
+        count: 1
+        distribution {
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+          region: disc(radius: 0.01)
+        }
+        kit: "walker"
+        look: "walker"
+        source: producer(name: walker.producer)
+      }
+    }
+  }
+}
+
+// The world runs at 30 Hz and the walkers walk 4 m/s: the plain walkers arrive in about eight seconds, the careful ones
+// in about ten.
+test "a careful walker goes round the mud and a plain one through it" {
+  when {
+    ticks 600
+  }
+  expect {
+    westCarefulMud == 0
+    westPlainMud == 1
+    eastCarefulMud == 0
+    eastPlainMud == 1
+    absolute(bodyPosition(body, 4, x) - 10) < 1.5
+    absolute(bodyPosition(body, 4, z) - 35) < 1.5
+    absolute(bodyPosition(body, 3, x) - 30) < 1.5
+    absolute(bodyPosition(body, 3, z) - 35) < 1.5
+    absolute(bodyPosition(body, 2, x) - 70) < 1.5
+    absolute(bodyPosition(body, 2, z) - 35) < 1.5
+    absolute(bodyPosition(body, 1, x) - 70) < 1.5
+    absolute(bodyPosition(body, 1, z) - 35) < 1.5
+  }
+}

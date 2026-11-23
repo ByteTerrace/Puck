@@ -812,6 +812,27 @@ medium users must fit the domain's root-centered clearance sphere. Local
 avoidance at crowd density is not provided; see the server README's Navigation
 section for the current limits.
 
+Area types and cost profiles price where an agent walks within a domain.
+`navigation.areaTypes` names the types (the engine gives none a meaning; the
+standard's `townAreaTypes` in `worlds/standard/domains.puck` is `road`,
+`crossing` and `pavement`), `navigation.areas` marks volumes in precedence
+order, each either a static placement's `region` (`placement: \`crossing-north\``,
+so one region both senses bodies and marks the ground) or a world-space
+`region` of its own (the standard's `townArea`), and a domain's `area` types the
+cells no area marks. A cell takes the type of the last area holding the point a
+body standing on it stands at. `navigation.profiles` rows name a multiplier per
+type (`costs { road: 10 }`) and the types never entered (`exclude [...]`); an
+unmarked cell and an unnamed type cost one. A navigated target selects one with
+`navigated(domain: ..., register: ..., profile: "citizen")`, and with none every
+area costs one. Routes and goal fields both honour it, and a goal field is shared
+only by bodies whose profiles price areas alike. The standard's `citizenProfile`
+and `vehicleProfile` (`citizenDesign` and `vehicleDesign` take `profile:`) keep
+citizens off the roads but at crossings and vehicles off the pavement; the city
+(`worlds/debug/city.puck`) is the worked example and
+`worlds/debug/navigation-areas-tests.puck` the scenario.
+`world.navigation route <from> <to> profile:<name> [instance:<name>]` prices a
+checked route by a profile and lists the area types it passes (`areas=`).
+
 ## Records, pools, and retained turns
 
 Use the current [records and pools](../../../../docs/reference/state/records-and-pools.md)

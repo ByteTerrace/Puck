@@ -718,6 +718,16 @@ route` prints; `TryRouteEndpoint` picks a route's start. When the live contact
 check blocks a graph route, the command reports `status=obstructed` and keeps
 the path and first blocked sample for inspection.
 
+`WorldNavigationAreas` (Schema) compiles `navigation.areaTypes`, `areas` and
+`profiles` once into the kernel's `NavigationAreaSet` and one
+`NavigationCostProfile` per profile; `CompileNavigationDomains` maps each
+domain's `area` to its type ordinal. A navigated producer's compiled
+`FixedBodyTargetSource.NavigationProfileIndex` selects the profile its route
+search (`Domain.FindPath`) or goal field (`PrepareGoalField`,
+`ReadGoalFieldTarget`, which key the field by goal and profile) prices areas by.
+`WorldDocumentNavigation` compiles the same areas from a delivered document, and
+`world.navigation route … profile:<name>` prices a checked route by one.
+
 Navigation plans against the static part of the contact provider the bodies
 collide with (`NavigationGeometry` in `WorldPopulation.Resolve.cs`): the analytic
 set's `WorldColliderSet.StaticField`, or the field provider's
