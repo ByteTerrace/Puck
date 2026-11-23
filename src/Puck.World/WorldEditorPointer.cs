@@ -1,7 +1,6 @@
 using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
-using Puck.SignedDistance.Queries;
 using Puck.World.Client;
 using Puck.World.Server;
 
@@ -201,7 +200,7 @@ public sealed class WorldEditorPointer(WorldSeatViewports viewports, WorldClient
     /// <param name="direction">The ray's direction.</param>
     /// <param name="maxDistance">The farthest the ray reaches, in world units.</param>
     /// <returns>The hit, its normal the field's gradient there, or zero where the field gives none.</returns>
-    public static WorldEditorPointerHit? Cast(SdfFieldEvaluator field, Vector3 origin, Vector3 direction, float maxDistance) {
+    public static WorldEditorPointerHit? Cast(WorldQueryField field, Vector3 origin, Vector3 direction, float maxDistance) {
         ArgumentNullException.ThrowIfNull(argument: field);
 
         if (!field.Raycast(

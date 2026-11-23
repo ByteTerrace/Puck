@@ -62,6 +62,12 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
     // view screen shows, by screen index, as last reconciled.
     private readonly Dictionary<string, string> m_cameraNames = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<int, string> m_cameraViews = [];
+    // Whether the level films the cameras its world's probes read: every world but the boot world, whose own probe host
+    // exports the boot world's camera registrations. The cameras' names as last reconciled, and their views by camera
+    // name.
+    private readonly bool m_filmsProbeCameras;
+    private List<string> m_probeCameraNames = [];
+    private readonly Dictionary<string, WorldNestedCamera> m_probeCameras = new(comparer: StringComparer.Ordinal);
 
     private WorldDefinition? m_reconciled;
 
@@ -95,7 +101,24 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
         m_shares = shares;
         World = world;
         Mappings = new WorldScreenMappingSet(world: world);
+        m_filmsProbeCameras = !WorldDefinitionLoader.IsBootInstance(name: world);
     }
+
+    /// <summary>Gets the presented world's definition as the level last reconciled it, or <see langword="null"/> before
+    /// the first reconcile or while the world has none.</summary>
+    public WorldDefinition? Definition => m_reconciled;
+
+    /// <summary>Finds the view this level films a camera of the presented world through for its probes: a camera a view
+    /// socket of one of its probes reads, which the level films beside those its screens show (<see cref="Cameras"/>)
+    /// though no screen reads it. The boot world's level films none, since the boot world's probe host exports its own
+    /// camera views.</summary>
+    /// <param name="cameraName">The <c>cameras[]</c> row name.</param>
+    /// <param name="camera">The camera view when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the level films the camera for the world's probes.</returns>
+    public bool TryProbeCamera(string cameraName, out WorldNestedCamera camera) => m_probeCameras.TryGetValue(
+        key: cameraName,
+        value: out camera
+    );
 
     /// <summary>Gets the session views the screens show one level deeper, by screen index.</summary>
     public IReadOnlyDictionary<int, TChild> Children => m_children;
@@ -114,7 +137,8 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
     public WorldScreenMappingSet Mappings { get; }
 
     /// <summary>Gets the cameras of the presented world its screens show, each a view of the world named under this level,
-    /// in the order of the first screen showing each.</summary>
+    /// in the order of the first screen showing each, then the cameras its probes read that no screen shows
+    /// (<see cref="TryProbeCamera"/>).</summary>
     public IReadOnlyList<WorldNestedCamera> Cameras { get; private set; } = [];
     /// <summary>Gets the instances the level's view of the presented world reads within the frame so its screens show
     /// them: the session views one level deeper, the camera views, then the source instances, a list kept until any
@@ -143,8 +167,23 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
         ReferenceEquals(objA: definition.Creations, objB: previous.Creations) &&
         ReferenceEquals(objA: definition.Authoring, objB: previous.Authoring) &&
         ReferenceEquals(objA: definition.Cameras, objB: previous.Cameras) &&
-        ReferenceEquals(objA: definition.Machines, objB: previous.Machines)
+        ReferenceEquals(objA: definition.Machines, objB: previous.Machines) &&
+        ReferenceEquals(objA: definition.Probes, objB: previous.Probes)
     );
+    // The cameras a definition's probes read through their view sockets, in declaration order, each once.
+    private static List<string> ProbeCameraNames(WorldDefinition? definition) {
+        var names = new List<string>();
+
+        foreach (var probe in (definition?.Probes ?? [])) {
+            foreach (var source in (probe.Inputs?.Values ?? [])) {
+                if ((source is WorldScreenSource.View view) && !names.Contains(item: view.CameraName)) {
+                    names.Add(item: view.CameraName);
+                }
+            }
+        }
+
+        return names;
+    }
     // What a screen shows: its disclosed source, except local-device content and a machine the delivery never declares.
     private WorldScreen Shown(WorldScreen row) => ((((row.Source is WorldScreenSource.Producer producer) && !m_shares(arg: producer.Id)) ||
         ((row.Source is WorldScreenSource.Machine machine) && !(m_reconciled?.Machines.Any(predicate: declaration => string.Equals(
@@ -246,7 +285,10 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
             m_reconciled = definition;
         } else if (!ReferenceEquals(objA: definition, objB: m_reconciled)) {
             var previousCameras = m_reconciled?.Cameras;
+            var probeCameras = (m_filmsProbeCameras ? ProbeCameraNames(definition: definition) : []);
 
+            rowsMoved |= !probeCameras.SequenceEqual(second: m_probeCameraNames);
+            m_probeCameraNames = probeCameras;
             m_reconciled = definition;
             IReadOnlyList<WorldScreen> rows = ((definition is null)
                 ? []
@@ -398,6 +440,35 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
             CameraReads = [.. filmed.Select(selector: static camera => camera.Name)];
         }
 
+        // The cameras the world's probes read film beside those its screens show, read by no screen: the probe host of
+        // the world reads them through its view exports.
+        m_probeCameras.Clear();
+
+        foreach (var cameraName in m_probeCameraNames) {
+            if (cameras.FirstOrDefault(predicate: camera => string.Equals(
+                a: camera.Name,
+                b: cameraName,
+                comparisonType: StringComparison.Ordinal
+            )) is not { } camera) {
+                continue;
+            }
+
+            var probed = new WorldNestedCamera(
+                Camera: camera,
+                Name: CameraView(camera: camera)
+            );
+
+            m_probeCameras[cameraName] = probed;
+
+            if (!filmed.Exists(match: other => string.Equals(
+                a: other.Name,
+                b: probed.Name,
+                comparisonType: StringComparison.Ordinal
+            ))) {
+                filmed.Add(item: probed);
+            }
+        }
+
         Cameras = filmed;
         FilmReads = [
             .. m_viewScreens.Select(selector: screen => m_names[screen]),
@@ -405,7 +476,7 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
         ];
         Reads = [
             .. m_viewScreens.Select(selector: screen => m_names[screen]),
-            .. filmed.Select(selector: static camera => camera.Name),
+            .. CameraReads,
             .. Mappings.Sources.Instances.Select(selector: static source => source.Name),
         ];
 

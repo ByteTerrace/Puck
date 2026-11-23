@@ -27,6 +27,11 @@ public interface IWorldImageFeed : IDisposable {
 public interface IWorldImportFeed : IWorldImageFeed {
     /// <summary>Gets the current image's answer without capturing, converting or submitting work.</summary>
     FrameRender Answer { get; }
+    /// <summary>Gets whether the feed stands its capture fill in for an image it cannot make until what it was opened
+    /// over changes, whatever its content class (a probe no host can run, or whose run cannot start), so it never holds
+    /// the frames that show it; its <see cref="IWorldImageFeed.Fault"/> names why. <see langword="false"/> by
+    /// default.</summary>
+    bool ShowsFill => false;
 
     /// <summary>Acquires the image for one submitted frame. A feed whose image another thread keeps writing returns a
     /// lease the sampling node retires once that submission completes. When the import exposes a complete native

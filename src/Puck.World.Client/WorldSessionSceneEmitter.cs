@@ -135,7 +135,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private CameraSnapshot? m_dressedCamera;
     // The last dressed program's fixed-point field, built when a pick first asks for it, and the far distance a pick
     // marches it to.
-    private SdfFieldEvaluator? m_dressedField;
+    private WorldQueryField? m_dressedField;
     private SdfProgram? m_dressedFieldProgram;
     private float m_dressedFarDistance;
 
@@ -728,7 +728,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             m_dressedFieldProgram = program;
 
             try {
-                m_dressedField = new SdfFieldEvaluator(program: builder.Build(), reading: SdfFieldReading.Contact, regional: true);
+                m_dressedField = new WorldQueryField(fixedPart: new SdfFieldEvaluator(program: builder.Build(), reading: SdfFieldReading.Contact, regional: true));
             } catch (ArgumentException) {
                 // A static placement the fixed-point evaluator does not interpret (a path, a non-uniform scale).
                 m_dressedField = null;
@@ -746,6 +746,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     }
 
     private int m_preparedDefinition = int.MinValue;
+    private int m_preparedComposing = int.MinValue;
     private int m_preparedSnapshot = int.MinValue;
 
     public void PrepareFrame() {
@@ -761,10 +762,16 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         set => m_source.Guess = value;
     }
     private void PrepareRegistrations() {
-        if ((m_preparedDefinition == m_mirror.DefinitionRevision) && (m_preparedSnapshot == m_mirror.SnapshotRevision) && !m_census.TryTakeMove()) { return; }
+        var standing = ((m_preparedSnapshot == m_mirror.SnapshotRevision) && (m_preparedComposing == m_mirror.ComposingRevision) && !m_census.TryTakeMove());
+
+        if (standing && (m_preparedDefinition == m_mirror.DefinitionRevision)) { return; }
         m_preparedDefinition = m_mirror.DefinitionRevision;
         m_preparedSnapshot = m_mirror.SnapshotRevision;
+        m_preparedComposing = m_mirror.ComposingRevision;
         var definition = Scoped(m_mirror.Definition);
+
+        // A delivery that moved holdings alone, on rows the rigid catalog copies, moves those copies and nothing else.
+        if (standing && m_pool.Rigid.TryPresentHoldingsAlone(definition: definition)) { return; }
 
         m_census.Refresh(m_source);
         var stamps = (m_onlyPrototypes is null) ? m_census.Stamps : [];

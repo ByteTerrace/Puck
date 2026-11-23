@@ -491,11 +491,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScre
         if (
             !m_roster.IsJoined(slot: slot) ||
             (seatRouter.TryRoute(slot: slot) is not { } route) ||
-            string.Equals(
-            a: route.Endpoint.Identity,
-            b: WorldInstanceHost.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )
+            WorldDefinitionLoader.IsBootInstance(name: route.Endpoint.Identity)
         ) {
             return false;
         }

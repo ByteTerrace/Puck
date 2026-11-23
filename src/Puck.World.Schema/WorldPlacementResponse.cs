@@ -1,5 +1,6 @@
 using Puck.Abstractions.Documents;
 using System.Numerics;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Maths;
 
@@ -182,7 +183,7 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
                 previous = earlier.GetValueOrDefault(key: row.Id);
             }
             if (ReferenceEquals(objA: previous, objB: row)) { continue; }
-            holdsOnly &= ((previous is not null) && (previous.Holding != row.Holding) && (previous with { Holding = row.Holding }).Equals(obj: row));
+            holdsOnly &= ((previous is not null) && (previous.Holding != row.Holding) && SameBesidesHolding(previous: previous, next: row));
             change = Moved(change: change, definitions: (before, after), next: row, previous: previous, solid: ref solid);
         }
         // A row the delivery took away moved as much as one it added.
@@ -199,6 +200,17 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
         holdings = (holdsOnly && (change == WorldPlacementChange.Appearance));
 
         return change;
+    }
+    // Whether two rows differ in nothing but their holding. A row the response sweep installed keeps every other member
+    // as the same object, which the record's own equality proves at once; a row a remote reader decoded holds equal
+    // members as other objects, so it is judged by the document form both serialize to.
+    private static bool SameBesidesHolding(WorldPlacement previous, WorldPlacement next) {
+        var held = (previous with { Holding = next.Holding });
+
+        if (held.Equals(obj: next)) { return true; }
+        var info = WorldJsonContext.Default.For<WorldPlacement>();
+
+        return JsonSerializer.SerializeToUtf8Bytes(value: held, jsonTypeInfo: info).AsSpan().SequenceEqual(other: JsonSerializer.SerializeToUtf8Bytes(value: next, jsonTypeInfo: info));
     }
     // Folds one moved row into the change so far: a facet anywhere outranks an appearance.
     private static WorldPlacementChange Moved(WorldPlacementChange change, (WorldDefinition Before, WorldDefinition After) definitions, WorldPlacement? previous, WorldPlacement? next, ref bool solid) {

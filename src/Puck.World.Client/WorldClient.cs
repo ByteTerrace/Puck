@@ -3,7 +3,6 @@ using Puck.Commands;
 using System.Numerics;
 using Puck.Maths;
 using Puck.SdfVm;
-using Puck.SignedDistance.Queries;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
 
@@ -188,6 +187,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     // The definition the latest state delivery handed over, before live state values were bound into it.
     private WorldDefinition? m_lastDelivered;
     private int m_solidResponseRevision;
+    private int m_solidHoldingRevision;
     private WorldDocumentVersion m_documentVersion;
 
     // The field and document rows a snapshot's cell writes moved, handed to the state mirror.
@@ -202,7 +202,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     // here so every presentation consumer reads ONE evaluator: the chase camera's clearance sweep and the stamp
     // pool's limb probes ask the same geometry the same way. Unsupported placements are excluded individually;
     // null means no program has been composed yet, or the remaining combined field could not be built.
-    private SdfFieldEvaluator? m_staticField;
+    private WorldQueryField? m_staticField;
     private WorldTargetRegisterTable m_targets;
     private ulong m_tick;
     private ulong m_engineTick;
@@ -234,12 +234,16 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// when a delivery moved only placement holdings, so the scene reconciles its rows and composes again only for a row
     /// whose shown response it does not keep at hand.</summary>
     public int HoldingRevision => m_holdingRevision;
+    /// <summary>Gets the monotonic counter bumped instead of <see cref="SolidResponseRevision"/> when a delivery moved
+    /// only holdings and a solid row is among the rows it moved: the presentation query field rebuilds its responding part
+    /// alone (<see cref="WorldQueryField"/>).</summary>
+    public int SolidHoldingRevision => m_solidHoldingRevision;
     /// <summary>The version of the latest delivered definition, or <see langword="default"/> before the first delivery.</summary>
     public WorldDocumentVersion DocumentVersion => m_documentVersion;
     /// <summary>The client seat table.</summary>
     public PlayerRoster Roster => m_roster;
     /// <summary>Gets the static-scene query field, or <see langword="null"/> when none is resolved.</summary>
-    public SdfFieldEvaluator? StaticField => m_staticField;
+    public WorldQueryField? StaticField => m_staticField;
     /// <summary>The latest snapshot's tick.</summary>
     public ulong Tick => m_tick;
     /// <summary>The latest snapshot's engine tick — what a <c>StateAdvance</c> row's live value is computed at;
@@ -1270,7 +1274,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 var holdings = ((WorldPlacementResponse.ComparePlacements(after: definition, before: previousDelivered, holdings: out var held, solid: out _) == WorldPlacementChange.Appearance) && held);
 
                 if (holdings) { m_holdingRevision++; } else { m_responseRevision++; }
-                if (solid) { m_solidResponseRevision++; }
+                if (solid && holdings) { m_solidHoldingRevision++; } else if (solid) { m_solidResponseRevision++; }
 
                 break;
             case WorldPlacementChange.Facets:
@@ -1348,7 +1352,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <summary>Publishes the static-scene query field every presentation consumer shares.</summary>
     /// <param name="field">The evaluator built over the composed program's static layers, or <see langword="null"/>
     /// when the program admits no fixed-point query.</param>
-    public void PublishStaticField(SdfFieldEvaluator? field) => m_staticField = field;
+    public void PublishStaticField(WorldQueryField? field) => m_staticField = field;
     /// <summary>Submits each joined, active seat's device intent (and live-held lane image) for this tick — the
     /// client's per-tick outbound half, run immediately before the server step. A pending seat submits nothing (its
     /// inputs drive the profile picker, not locomotion), and a seat submits only under

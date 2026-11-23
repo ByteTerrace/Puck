@@ -1136,8 +1136,12 @@ what it would show in the boot world, from that world's own sources, never the b
   font cache, keyed by font content.
   An unresolved delivery clears the drawn text and atlas, including a catalog that previously drew,
   and reports its text fault until a valid delivery arrives.
-- A probe shows nothing: only the boot world runs a probe host, so a probe of another world opens
-  with a fault naming that world.
+- A probe runs on that world's own probe host, which the presentation builds from the definition
+  its screens show (`WorldProbeHosts`): it reads that world's cameras through views the level films
+  for it, and writes a ring keyed by its world (`WorldScreenBinder.ProbeKey`). A camera socket never
+  opens the local device, and an axis, control or post binding writes nothing, since no local seat
+  plays in that world. A probe whose host cannot be built or whose run cannot start stands its
+  capture fill in and names why, so it never holds a frame or a capture that shows it.
 - A producer of the local device's content (a camera, a desktop capture) shows nothing, so being
   shown through a portal never opens the local user's camera or desktop.
 
