@@ -136,12 +136,5 @@ public sealed class NavigationCostProfile : IEquatable<NavigationCostProfile> {
     /// <inheritdoc/>
     public override bool Equals(object? obj) => Equals(other: (obj as NavigationCostProfile));
     /// <inheritdoc/>
-    public override int GetHashCode() {
-        var hash = new HashCode();
-
-        foreach (var scale in m_scales) {
-            hash.Add(value: scale);
-        }
-        return hash.ToHashCode();
-    }
+    public override int GetHashCode() => SequenceHash.Of(elements: (ReadOnlySpan<long>)m_scales);
 }
