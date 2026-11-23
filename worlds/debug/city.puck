@@ -247,8 +247,9 @@ marketStalls(
   }),
   clock: cityDay
 )
-vehicleRoutes(
-  vehicles: map(range(0, vehicleCount), v => { key: 7 + vehicleCount - v, stops: vehicleSpots[v].stops, first: vehicleSpots[v].first, group: vehicleSpots[v].group }),
+vehicleRoutes(vehicles: map(range(0, vehicleCount), v => { key: 7 + vehicleCount - v, stops: vehicleSpots[v].stops, first: vehicleSpots[v].first }))
+vehicleCrossings(
+  vehicles: map(range(0, vehicleCount), v => { key: 7 + vehicleCount - v, group: vehicleSpots[v].group }),
   crossings: map(cityCrossings, c => {
     region: c.region
     group: c.group

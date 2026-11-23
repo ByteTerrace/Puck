@@ -350,6 +350,9 @@ public static partial class WorldDefinitionValidator {
             case WorldEffect.SetBodyState:
                 errors.Add(item: $"{path} has no body-scope meaning — 'setBodyState' writes a body the world names; a kit's action writes its own register with 'setState'.");
                 break;
+            case WorldEffect.HoldProducer or WorldEffect.ReleaseProducer:
+                errors.Add(item: $"{path} has no body-scope meaning — a producer hold stands down a body the world names, and is admissible only inside a world rule's own effects.");
+                break;
             default:
                 errors.Add(item: $"{path} is an unknown effect kind.");
                 break;

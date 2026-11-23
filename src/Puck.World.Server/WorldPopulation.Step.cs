@@ -578,7 +578,45 @@ public sealed partial class WorldPopulation {
         }
         return entry.ProducerLookup;
     }
-    // Run the named producer before motion. Live and Idle name no producer.
+    /// <summary>Returns why body <paramref name="index"/>'s producer stands down, the read a rule's
+    /// <c>$producer:</c> channel answers.</summary>
+    /// <param name="index">The 0-based body index.</param>
+    /// <returns>The reasons, or <see cref="BodyProducerStandDown.None"/> for a running producer or an index that holds
+    /// no active body.</returns>
+    public BodyProducerStandDown ProducerStandDown(int index) => (((((uint)index) < ((uint)Capacity)) && m_entries[index].Active)
+        ? m_entries[index].ProducerState.StandDown
+        : BodyProducerStandDown.None);
+    /// <summary>Sets or clears one reason body <paramref name="index"/>'s producer stands down. The producer stops on
+    /// the body's next producer step while any reason holds, and starts again from where the body stands once none
+    /// does (see <see cref="BodyProducerStandDown"/>).</summary>
+    /// <param name="index">The 0-based body index.</param>
+    /// <param name="reason">The reason to set or clear.</param>
+    /// <param name="standDown">Whether the reason holds.</param>
+    /// <returns><see langword="false"/> when the index holds no active body.</returns>
+    public bool SetProducerStandDown(int index, BodyProducerStandDown reason, bool standDown) {
+        if ((((uint)index) >= ((uint)Capacity)) || !m_entries[index].Active) { return false; }
+        ref var state = ref m_entries[index].ProducerState.StandDown;
+
+        state = (standDown ? (state | reason) : (state & ~reason));
+        return true;
+    }
+    /// <summary>Makes <paramref name="possessed"/> the bodies that stand down for
+    /// <see cref="BodyProducerStandDown.Possessed"/>: each gains the reason, and every body that held it and is not
+    /// listed loses it. Called once a tick by <see cref="WorldEngagement.FoldTick"/>, which derives the list from the
+    /// grant table.</summary>
+    /// <param name="possessed">The possessed body indices; duplicates are allowed.</param>
+    internal void SyncPossession(List<int> possessed) {
+        // Recomputed whole from the grant table each tick, so a restored or scope-replayed flag can never outlive the
+        // application that set it.
+        for (var index = 0; (index < Capacity); index++) {
+            m_entries[index].ProducerState.StandDown &= ~BodyProducerStandDown.Possessed;
+        }
+        foreach (var index in possessed) {
+            _ = SetProducerStandDown(index: index, reason: BodyProducerStandDown.Possessed, standDown: true);
+        }
+    }
+    // Run the named producer before motion. Live and Idle name no producer, and a producer that stands down runs as
+    // none does.
     private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks) {
         using var work = Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickProducers);
 
@@ -586,12 +624,14 @@ public sealed partial class WorldPopulation {
         var kitIndex = ResolveKitIndex(index: index);
 
         if (
+            (entry.ProducerState.StandDown != BodyProducerStandDown.None) ||
             (body.Source.ProducerName is not { } name) ||
             (ResolveProducer(entry: entry, name: name, table: m_kits[kitIndex].Producers) is not { } producer)
         ) {
-            // Leaving the producer lane is itself a producer transition. Do not let a prior route (or curve
-            // station) remain observable through rule facts while the body is idle, live-driven, or names a
-            // producer that the current kit does not carry.
+            // Leaving the producer lane is itself a producer transition, so returning to it starts the producer again
+            // from where the body stands (below). Do not let a prior route (or curve station) remain observable
+            // through rule facts while the body is idle, live-driven, stood down, or names a producer that the
+            // current kit does not carry.
             if (entry.ProducerState.ActiveProducerName is not null) {
                 entry.ProducerState.ActiveProducerName = null;
                 entry.ProducerState.ActiveProducerCurveIndex = -1;
@@ -933,17 +973,22 @@ public sealed partial class WorldPopulation {
             EnsureFieldInputs(body: player, index: index);
 
             var kit = m_kits[KitIndex(index: index)];
+            // A possessed body is driven by a participant, so it moves at the full rate; a producer that stands down
+            // has no steering to batch.
+            var standDown = entry.ProducerState.StandDown;
+            var producing = (player.Source.IsProducer && (standDown == BodyProducerStandDown.None));
             var locallyAutonomous = (
                 !entry.IsRemoteHuman &&
                 !player.Source.IsLive &&
                 !player.HasMotionTape &&
-                !player.RequiresFullRateAutonomy
+                !player.RequiresFullRateAutonomy &&
+                ((standDown & BodyProducerStandDown.Possessed) == 0)
             );
             var motionPeriod = (locallyAutonomous
                 ? kit.AutonomousMotionTicks
                 : 0UL
             );
-            var steeringPeriod = ((!entry.IsRemoteHuman && player.Source.IsProducer)
+            var steeringPeriod = ((!entry.IsRemoteHuman && producing)
                 ? kit.AutonomousSteeringTicks
                 : 0UL
             );
@@ -983,7 +1028,7 @@ public sealed partial class WorldPopulation {
                     stepTicks: steeringTicks
                 );
                 if (
-                    player.Source.IsProducer &&
+                    producing &&
                     ((steeringPeriod != 0UL) || (motionPeriod != 0UL))
                 ) {
                     autonomy.SteeringIntent = player.StagedProducerIntent;

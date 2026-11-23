@@ -59,6 +59,7 @@ public sealed partial class WorldPopulation {
         entry.ProducerState.PreferredAltitude = altitude;
         entry.ProducerState.AcquiredTarget = -1;
         entry.ProducerState.CurveArcRaw = 0L;
+        entry.ProducerState.StandDown = BodyProducerStandDown.None;
         entry.AutonomyState.Clear();
         entry.NavigationState.Clear();
         ClearDesignations(entry: entry);
@@ -182,6 +183,7 @@ public sealed partial class WorldPopulation {
         entry.Active = false;
         entry.ProducerState.AcquiredTarget = -1;
         entry.ProducerState.CurveArcRaw = 0L;
+        entry.ProducerState.StandDown = BodyProducerStandDown.None;
         entry.AutonomyState.Clear();
         entry.NavigationState.Clear();
         ClearDesignations(entry: entry);

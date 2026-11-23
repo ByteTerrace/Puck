@@ -44,14 +44,19 @@ take over must already run what a player would run.
 | Perspective | Built on | To build |
 |---|---|---|
 | City builder | The city's state rows and rules: anchors, schedules, stock, routes and crossings are cells a rule reads | A top-down camera layout and authored verbs (zoning a lot, placing a stall, routing a loop) that write those rows through the ordinary grant-checked mutations |
-| Driver | Vehicles are bodies with a kit, a `route` register and the road network | Possession of a vehicle's body, a driving camera and bindings; the producer stands down while a seat drives |
-| A citizen | Citizens are bodies on a schedule | Possession of a citizen's body; the schedule's rules skip a possessed citizen and resume it from where it stands once released |
+| Driver | Vehicles are bodies with a kit, a `route` register and the road network; possessing one stands its producer down and its route rules skip it | A driving camera and bindings |
+| A citizen | Citizens are bodies on a schedule; possessing one stands its producer down, the schedule skips it, and released it routes from where it stands | A walking camera and verbs for a possessed citizen |
 | Shifting | Rules gated on state | The account's progression rows decide which perspectives a seat may enter |
 
 Possession exists in the engine: a seat's control set names another body
 (`{ body:<n> }`), a Drive grant over that body authorizes it, and the seat's
 camera, listener and HUD move to the possessed body
 ([engagement](../../.claude/skills/puck-world/references/engagement.md#possession-swaps-the-perceived-world-not-just-the-driven-body)).
+The body's producer stands down while it is possessed or a rule holds it
+(`holdProducer`), and rules read both through `producer(each, …)`
+([the schema reference](../../src/Puck.World.Schema/README.md#a-producer-stands-down-holds-and-possession)).
+A player's car yielding at a crossing is still open: the crossing rule holds a
+vehicle's producer, which a possessed vehicle has already stood down.
 The perspectives interact through one simulation: a builder's edit changes
 where citizens go and vehicles drive, a possessed citizen still holds a
 crossing, and a player's car yields at it as the others do. Many players

@@ -26,6 +26,9 @@ internal readonly record struct BodySensorTarget(int Index, FixedVector3 Positio
 }
 internal readonly record struct BodyProducerSensors(BodySensorTarget Candidate, BodySensorTarget CurrentTarget, FixedVector3 FlockDesired = default);
 internal struct BodyProducerState {
+    // Why the producer stands down, or None while it runs. Set and cleared through WorldPopulation.SetProducerStandDown
+    // and WorldPopulation.SyncPossession; a slot's new occupant starts with None.
+    public BodyProducerStandDown StandDown;
     public int AcquiredTarget;
     public FixedQ4816 ActivityPhase;
     // The FixedRateAccumulator remainders (over the engine tick base) the two oscillators carry between refreshes;

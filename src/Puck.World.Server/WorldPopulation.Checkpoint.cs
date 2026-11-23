@@ -250,7 +250,8 @@ public sealed partial class WorldPopulation {
             Phase: entry.ProducerState.Phase,
             PhaseRemainder: entry.ProducerState.PhaseRemainder,
             PreferredAltitude: entry.ProducerState.PreferredAltitude,
-            WeaveFrequency: entry.ProducerState.WeaveFrequency
+            WeaveFrequency: entry.ProducerState.WeaveFrequency,
+            StandDown: entry.ProducerState.StandDown
         );
         image.Steering = new(
             Intent: entry.AutonomyState.SteeringIntent,
@@ -434,6 +435,7 @@ public sealed partial class WorldPopulation {
                 Phase = producer.Phase,
                 PhaseRemainder = producer.PhaseRemainder,
                 PreferredAltitude = producer.PreferredAltitude,
+                StandDown = producer.StandDown,
                 WeaveFrequency = producer.WeaveFrequency,
             };
             entry.AutonomyState = new BodyAutonomyState {

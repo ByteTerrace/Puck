@@ -134,6 +134,7 @@ public sealed class WorldFactEffectFiringLawTests {
         public Fact Read(PointerOperand operand) => throw Unserved();
         public Fact Read(NearestOperand operand) => throw Unserved();
         public Fact Read(NavigationOperand operand) => throw Unserved();
+        public Fact Read(ProducerOperand operand) => throw Unserved();
         public Fact Read(BoardCellOfOperand operand) => throw Unserved();
         public Fact Read(BoardSeatOperand operand) => throw Unserved();
         public int ResolveBody(in CompiledBodyRef bodyRef) => bodyRef.Index;
