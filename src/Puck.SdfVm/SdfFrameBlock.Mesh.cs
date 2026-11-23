@@ -86,7 +86,10 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (row + (2 * sizeof(uint))), value: unchecked((uint)window.Low.Z));
             WriteUInt32(block: block, offset: (row + (3 * sizeof(uint))), value: dims);
         }
-        WriteUInt32(block: block, offset: Offset(member: SdfWorldPackage.MeshIrradianceGeometry), value: volume.Geometry);
+        var serials = Offset(member: SdfWorldPackage.MeshIrradianceGeometry);
+
+        WriteUInt32(block: block, offset: serials, value: volume.Geometry);
+        WriteUInt32(block: block, offset: (serials + sizeof(uint)), value: volume.Windows);
     }
 
     private static void WriteRow(Span<byte> block, int offset, Vector3 value, float w) {

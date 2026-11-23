@@ -39,7 +39,7 @@ public static partial class SdfWorldPackage {
     /// <summary>The words of one cell's entry in <see cref="ViewsProbeHistory"/>: the receiver's point and normal, the
     /// gather's cages, weights and flags as a record holds them, the corners that answered and the volume's state.
     /// <c>SdfIsaHlsl</c> generates it as <c>SDF_VIEWS_PROBE_HISTORY_WORDS</c>.</summary>
-    public const uint ViewsProbeHistoryWords = 17;
+    public const uint ViewsProbeHistoryWords = 19;
 
     // The cells of one tile of the extent, the basis the records are counted on.
     private const uint ViewsProbeCellsPerTile = ((ShaderPipelineStorageCounts.TileEdge / ViewsProbeRate) * (ShaderPipelineStorageCounts.TileEdge / ViewsProbeRate));

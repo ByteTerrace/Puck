@@ -30,11 +30,13 @@ public readonly record struct SdfMeshIrradianceWindow(Vector3 Spacing, (int X, i
 /// <param name="Finest">The finest level's window.</param>
 /// <param name="Middle">The second level's window.</param>
 /// <param name="Far">The coarsest level's window.</param>
-/// <param name="Geometry">The serial of the published geometry: it moves with each publication that moves, resizes or
+/// <param name="Geometry">The serial of the published geometry: it moves with each publication that resizes, respaces or
 /// withdraws a window, or that copies a retrace of a probe its slot already held or a republication of every slot; never
-/// with a relight or with a probe traced into a cell no slot held. A gather the probe lookup keeps between frames stands
-/// only under the serial it was taken at (<c>sdf-views-probe-history.hlsli</c>).</param>
-public readonly record struct SdfMeshIrradianceParameters(bool Enabled, SdfMeshIrradianceWindow Finest, SdfMeshIrradianceWindow Middle = default, SdfMeshIrradianceWindow Far = default, uint Geometry = 0) {
+/// with a relight, a window's move, or a probe traced into a cell no slot held. A gather the probe lookup keeps between
+/// frames stands only under the serial it was taken at (<c>sdf-views-probe-history.hlsli</c>).</param>
+/// <param name="Windows">The serial of the published windows' places: it moves with each publication that moves a window.
+/// A kept gather outlives such a move only where the windows still hold its receiver the way they did.</param>
+public readonly record struct SdfMeshIrradianceParameters(bool Enabled, SdfMeshIrradianceWindow Finest, SdfMeshIrradianceWindow Middle = default, SdfMeshIrradianceWindow Far = default, uint Geometry = 0, uint Windows = 0) {
     /// <summary>Returns a level's window, finest first.</summary>
     /// <param name="level">The level, from zero to <see cref="SdfMeshIrradianceProbe.Levels"/> less one.</param>
     /// <returns>The window; a default window for a level out of range.</returns>
@@ -658,6 +660,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // gather kept under a serial never saw the slots a later step published.
     private uint m_geometrySerial;
     private bool m_geometryOwed;
+    // The published windows' serial (SdfMeshIrradianceParameters.Windows): it steps with each publication that moves a
+    // window without laying its slots out again.
+    private uint m_windowSerial;
     private bool m_reported;
     private long m_traced;
     private long m_relit;
@@ -1178,16 +1183,28 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         foreach (var level in m_levels) { enabled |= level.Published.Present; }
 
         var published = new SdfMeshIrradianceParameters(Enabled: enabled, Far: PublishedOf(layout: layout, level: 2), Finest: PublishedOf(layout: layout, level: 0),
-            Middle: PublishedOf(layout: layout, level: 1), Geometry: m_geometrySerial);
+            Middle: PublishedOf(layout: layout, level: 1), Geometry: m_geometrySerial, Windows: m_windowSerial);
 
-        // A moved, resized or withdrawn window reassigns slots and changes which level holds a receiver; a copied retrace
-        // changes a held probe. Either steps the serial with the publication that shows it.
-        if ((published with { Geometry = 0 }) != (m_published with { Geometry = 0 }) || (copied && m_geometryOwed)) {
+        // A resized, respaced or withdrawn window lays every slot out again, and a copied retrace changes a held probe:
+        // either steps the geometry serial with the publication that shows it. A window that only moved steps the window
+        // serial alone: the slots of the cells it kept still hold them.
+        var relaid = false;
+        var moved = false;
+
+        for (var level = 0; (level < SdfMeshIrradianceProbe.Levels); level++) {
+            var now = published.Window(level: level);
+            var before = m_published.Window(level: level);
+
+            relaid |= ((now.Spacing != before.Spacing) || (now.Dims != before.Dims) || (now.Present != before.Present));
+            moved |= (now.Low != before.Low);
+        }
+        relaid |= (published.Enabled != m_published.Enabled);
+        if (relaid || (copied && m_geometryOwed)) {
             m_geometryOwed = (m_geometryOwed && !copied);
             m_geometrySerial++;
-            published = published with { Geometry = m_geometrySerial };
         }
-        m_published = published;
+        if (moved) { m_windowSerial++; }
+        m_published = published with { Geometry = m_geometrySerial, Windows = m_windowSerial };
     }
     // Where a level's window centres for the first view. The finest level's anchor is its camera moved ahead along its
     // horizontal forward by a quarter of the window's horizontal extent, so the finest probes cover what the view looks

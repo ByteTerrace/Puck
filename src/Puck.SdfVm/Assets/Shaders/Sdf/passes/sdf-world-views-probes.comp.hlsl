@@ -140,7 +140,7 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
         if (!present) {
             sdfViewsProbesStore(sdfViewsProbeRecord(id.xy, viewIndex), sdfMeshProbesNone(), 0u, false, rate, 0u);
             if (keeps) {
-                sdfViewsProbeHistoryStore(sdfViewsProbeHistoryEntry(id.xy, viewIndex), false, float3(0.0, 0.0, 0.0), 0u, sdfMeshProbesNone());
+                sdfViewsProbeHistoryStore(sdfViewsProbeHistoryEntry(id.xy, viewIndex), false, float3(0.0, 0.0, 0.0), 0u, 0u, sdfMeshProbesNone());
             }
         } else {
             uint first;
@@ -197,15 +197,18 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
         uint packedNormal;
         float2 tolerance;
         bool complete;
+        bool windowBound;
 
         sdfProbeReceiver(view, decoded.pixel, viewIndex, surfacePoint, normal, packedNormal, tolerance);
 
-        SdfMeshProbes probes = sdfMeshProbesAtComplete(surfacePoint, normal, complete);
+        SdfMeshProbes probes = sdfMeshProbesAtComplete(surfacePoint, normal, complete, windowBound);
 
         sdfProbeStoreJob(decoded, probes);
         if (keeps && (decoded.extra == 0u)) {
             // A gather no probe answers names no cage to keep; an incomplete one would stand past the probe that lands.
-            sdfViewsProbeHistoryStore(sdfViewsProbeHistoryEntry(decoded.cell, viewIndex), (complete && (probes.share > 0.0)), surfacePoint, packedNormal, probes);
+            uint hold = sdfViewsProbeHistoryHoldOf((surfacePoint + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS)), windowBound);
+
+            sdfViewsProbeHistoryStore(sdfViewsProbeHistoryEntry(decoded.cell, viewIndex), (complete && (probes.share > 0.0)), surfacePoint, packedNormal, hold, probes);
         }
         sdfWorkTexels += 1u;
     }

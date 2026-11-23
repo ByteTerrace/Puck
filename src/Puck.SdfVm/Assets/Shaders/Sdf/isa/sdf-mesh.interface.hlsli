@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/5a20d6f1aced1d16cf9a4daec7c8098db3978e8e951a4c273bbe7de4e992120d). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/d88115e0602e449a05e8b837e628282ca87d8180a8038e159586d4c223df9349). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -57,8 +57,7 @@ struct SdfMeshPass {
     [[vk::offset(304)]] uint4 lightMask;
     [[vk::offset(320)]] float localAdaptation;
     [[vk::offset(324)]] uint meshDraws;
-    [[vk::offset(328)]] uint meshIrradianceGeometry;
-    [[vk::offset(332)]] uint _pad332;
+    [[vk::offset(328)]] uint2 meshIrradianceGeometry;
     [[vk::offset(336)]] int4 meshIrradianceLevels[3];
     [[vk::offset(384)]] float4 meshIrradianceSpacings[3];
     [[vk::offset(432)]] float4 meshShadowCascades[16];

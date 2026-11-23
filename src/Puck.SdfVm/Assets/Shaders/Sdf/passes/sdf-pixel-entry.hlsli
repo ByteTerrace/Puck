@@ -40,7 +40,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint phase = subpixel ^ (passGroup.historyFrames % 4u);
         id.xy = id.xy - local + 2u * cell + uint2(phase % 2u, phase / 2u);
         if (all(id.xy < passGroup.imageExtent)) {
-            uint word = sdfViewsProbeRecord(id.xy / SDF_VIEWS_PROBE_RATE, viewIndex) + SdfViewsProbeStateWord;
+            uint word = sdfViewsProbeWord(sdfViewsProbeRecord(id.xy / SDF_VIEWS_PROBE_RATE, viewIndex), SdfViewsProbeStateWord);
             rate = (sdfViewsProbeRecords[word] >> SdfViewsRateShift) & 3u;
             shadesPixel = (subpixel & rate) == 0u;
         }

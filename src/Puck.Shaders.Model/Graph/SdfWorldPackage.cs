@@ -382,7 +382,7 @@ public static partial class SdfWorldPackage {
         Value(name: MeshShadowTexels, type: ShaderValueType.Uint4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: MeshIrradianceLevelCount, name: MeshIrradianceLevels, type: ShaderValueType.Int4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: MeshIrradianceLevelCount, name: MeshIrradianceSpacings, type: ShaderValueType.Float4),
-        Value(name: MeshIrradianceGeometry, type: ShaderValueType.Uint),
+        Value(name: MeshIrradianceGeometry, type: ShaderValueType.Uint2),
         ShaderWorkCounters.RowMember,
         ShaderWorkCounters.DetailRowMember,
     ];
