@@ -55,8 +55,12 @@ internal static class GpuFenceWatch {
     /// <param name="fence">The fence about to be reset or released.</param>
     internal static void Withdraw(GpuBatchedSubmissionFence fence) {
         lock (Gate) {
+            // A watch no watcher has taken is ended here, its events set as a watcher sets them; a watcher skips it.
             foreach (var watch in Pending) {
-                if (ReferenceEquals(objA: watch.Fence, objB: fence)) { watch.Withdrawn = true; }
+                if (ReferenceEquals(objA: watch.Fence, objB: fence) && !watch.Withdrawn) {
+                    watch.Withdrawn = true;
+                    SetSignals(watch: watch);
+                }
             }
             while (Waited(fence: fence) is { } waited) {
                 waited.Withdrawn = true;
@@ -83,6 +87,17 @@ internal static class GpuFenceWatch {
 
         return null;
     }
+    // Sets every event asked of a watch, on completion, on a reported loss and on withdrawal alike: whoever wakes reads
+    // the fence. Under Gate, so no signal joins the watch after it was set.
+    private static void SetSignals(Watch watch) {
+        foreach (var signal in watch.Signals) {
+            try {
+                _ = signal.Set();
+            } catch (ObjectDisposedException) {
+                // Its waiter closed it and waits no more; the watcher thread outlives every waiter.
+            }
+        }
+    }
     private static void Work() {
         var consumer = HostWaits.ClaimConsumer(reason: IdleReason);
         Watch? done = null;
@@ -93,15 +108,7 @@ internal static class GpuFenceWatch {
             lock (Gate) {
                 if (done is not null) {
                     _ = Waiting.Remove(item: done);
-                    // Set on completion, on a reported loss and on withdrawal alike: whoever wakes reads the fence.
-                    // Under Gate, so no signal joins the watch after it was set.
-                    foreach (var signal in done.Signals) {
-                        try {
-                            _ = signal.Set();
-                        } catch (ObjectDisposedException) {
-                            // Its waiter closed it and waits no more; the watcher thread outlives every waiter.
-                        }
-                    }
+                    SetSignals(watch: done);
                     done = null;
                     Monitor.PulseAll(obj: Gate);
                 }
