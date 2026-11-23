@@ -1628,7 +1628,6 @@ public sealed partial class WorldTransferEscrow {
                 // A traveler that rode a body across takes that body's seat once it lands (ResumeDrive): its own
                 // segment describes nothing it will keep.
                 continuum: ((member.Drives is null) ? member.Continuum : null),
-                definition: m_server.Definition,
                 destinationCompletedEngineTick: m_server.CompletedEngineTicks,
                 motionProgramName: member.BodyMotionProgramName,
                 planarVelocity: member.PlanarVelocity,
