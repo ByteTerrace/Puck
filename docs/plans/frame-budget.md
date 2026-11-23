@@ -278,13 +278,11 @@ whichever pass touches moved memory ([where the memory goes](#where-the-memory-g
   the route the `session` and `routed` families' `allocated` stay within twice
   their `peak`, the room in device blocks no family names stays under half a
   gibibyte, and `pool device` reads `over-limit=0` at every chapter's end.
-- **The benchmark names a frame over the device's budget.** A chapter whose
-  device ledger peaked past the segment's budget is written disturbed with that
-  reason (`WorldBenchmarkCommandModule`'s disturbances), so a stall is never
-  read as a pass's cost. Check: the route's report at a display the budget
-  cannot hold says so in the chapter that crossed it.
 
-Then the time:
+The route's report writes a chapter disturbed when the device's memory rose in
+it to what the system budgets the process
+([the benchmark](benchmark.md#it-plays-as-a-player-takes-it)), so a stall is not read as a
+pass's cost. Then the time:
 
 1. **A coarser lookup with interpolation.** A cell of four pixels a side; views
    blends the four cells about a pixel, weighing each by the reuse test, and a

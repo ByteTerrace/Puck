@@ -500,9 +500,12 @@ lockstep presentation off, records that it did, and restores it at the end.
 Every recorded iteration carries a flag for lockstep as it closed, and the
 statistics carry the longest time the simulation stepped no tick. A chapter
 is written **disturbed**, with the reason, when any iteration was locked,
-when the simulation stepped nothing for `StallMilliseconds`, or when a step
-did not answer as authored. Its statistics stay in the report beside the
-reason and are never compared.
+when the simulation stepped nothing for `StallMilliseconds`, when a step
+did not answer as authored, or when the device's memory rose in the chapter
+to what the system budgets the process: a pass that touches memory the system
+has moved waits for it, so a pass's reading there is not its cost
+([where the memory goes](frame-budget.md#where-the-memory-goes)). Its
+statistics stay in the report beside the reason and are never compared.
 
 Two paces exist, and a report says which it ran:
 
