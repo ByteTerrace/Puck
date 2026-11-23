@@ -42,10 +42,17 @@ public static partial class SdfWorldPackage {
     public const string ViewsProbeHistory = "sdfViewsProbeHistory";
     /// <summary>The probe gathers the probe lookup writes for the next frame.</summary>
     public const string ViewsProbeHistoryWritten = "sdfViewsProbeHistoryRW";
-    /// <summary>The words of one cell's entry in <see cref="ViewsProbeHistory"/>: the receiver's point and normal, the
-    /// gather's cages, weights and flags as a record holds them, the corners that answered and the volume's state.
-    /// <c>SdfIsaHlsl</c> generates it as <c>SDF_VIEWS_PROBE_HISTORY_WORDS</c>.</summary>
-    public const uint ViewsProbeHistoryWords = 19;
+    /// <summary>The preceding render's probe gathers the glass shading pass reuses at each cell's nearest glass face, laid
+    /// out as <see cref="ViewsProbeHistory"/> and kept beside it in every fragment with the glass passes
+    /// (<see cref="WithGlass"/>): a pane is lit apart from the surface behind it, so its gathers are its own.</summary>
+    public const string GlassProbeHistory = "sdfGlassProbeHistory";
+    /// <summary>The glass probe gathers the glass shading pass writes for the next render.</summary>
+    public const string GlassProbeHistoryWritten = "sdfGlassProbeHistoryRW";
+    /// <summary>The words of one cell's entry in <see cref="ViewsProbeHistory"/> and <see cref="GlassProbeHistory"/>: the
+    /// receiver's point and normal, the gather's cages, weights and flags as a record holds them with the level it chose,
+    /// and the volume's two serials (<c>sdf-probe-history.hlsli</c>). <c>SdfIsaHlsl</c> generates it as
+    /// <c>SDF_VIEWS_PROBE_HISTORY_WORDS</c>.</summary>
+    public const uint ViewsProbeHistoryWords = 17;
 
     // The cells of one tile of the extent, the basis the records are counted on.
     private const uint ViewsProbeCellsPerTile = ((ShaderPipelineStorageCounts.TileEdge / ViewsProbeRate) * (ShaderPipelineStorageCounts.TileEdge / ViewsProbeRate));

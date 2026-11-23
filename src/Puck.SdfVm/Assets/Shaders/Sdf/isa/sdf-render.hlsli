@@ -120,7 +120,7 @@
 #define SDF_VIEWS_FILTER_WORDS        2u
 #define SDF_VIEWS_PROBE_RATE          2u
 #define SDF_VIEWS_PROBE_WORDS         74u
-#define SDF_VIEWS_PROBE_HISTORY_WORDS 19u
+#define SDF_VIEWS_PROBE_HISTORY_WORDS 17u
 #define SDF_SHADOW_BITS               8u
 #define SDF_SHADOW_MASK               0x000000FFu
 #define SDF_SHADOW_SLOTS              4u

@@ -1695,7 +1695,7 @@ and normals within about eleven degrees (`sdfViewsProbeTolerance`,
 `sdfViewsProbesCompatible`). A tolerance in metres alone would have every pixel
 of grazing or distant ground gather for itself, although a cell there shows
 light that varies over metres. Every view also keeps each representative's
-gather for its next render (`sdf-views-probe-history.hlsli`), a nested view
+gather for its next render (`sdf-probe-history.hlsli`), a nested view
 (a portal, a window, a painting) at the extent it is shown at, so a secondary
 view's lookup costs what moved in it rather than its whole image each frame. A
 kept gather validates itself against the receiver it was taken at, so reuse
@@ -1707,7 +1707,9 @@ projected into the preceding view reuses a kept gather it passes the same
 tolerance against, measured from the receiver the gather was taken at, so reuse
 never drifts. A kept gather stands while the published geometry's serial is
 the one it was taken under (`SdfMeshIrradianceParameters.Geometry`, which a
-retrace of a held probe or a window laid out again moves), and past a window's
+retrace of a held probe or a window laid out again moves, and which no other
+publication of any volume in the process shares, so an entry validates itself
+whichever render wrote it), and past a window's
 move only where it read no stage another window's place decides and its level
 still holds the receiver inside one cage; a gather that met a missing probe is
 never kept, since the probe landing moves no serial. The blended light is read
@@ -1715,7 +1717,11 @@ again every frame, so a relight shows at once. Views reads a traced light's
 probe visibility from the representative's record, which holds the light bits
 every measured corner sees and any sees with those corners' summed weight
 (`sdfViewsLightVisibility`), and visits the corners only for a light they
-disagree on. A gather costs each corner's angular surface test, so a lookup that
+disagree on. A glass pane is lit apart from the surface behind it, so the glass
+pass keeps its nearest faces' gathers in a history of its own on the same
+functions and test, one entry a cell written by the cell's first pixel; the
+glass pass draws nothing in a frame with no glass in view, and the render graph
+keeps a history its one writer skipped as its last write left it. A gather costs each corner's angular surface test, so a lookup that
 gathers only what changed costs a pass in proportion to motion rather than to
 the view's pixels, the headroom heavier worlds' views need.
 

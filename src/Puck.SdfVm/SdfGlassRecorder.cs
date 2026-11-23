@@ -9,8 +9,9 @@ namespace Puck.SdfVm;
 // again with each glass pixel shaded over the opaque image behind it. It binds the residency's World set, whose tables
 // hold the material table, the lights and the sky's environment map, and a pass group binding the lit image and the glass
 // target as sampled images, the visibility records and the glass sums as buffers, the reactivity a temporal view's
-// resolve reads (the tables' dummy in any other view) and the image it writes. Its block holds the frame's common
-// values, copied by name from the world layout, the temporal ones every part of a frame writes alike among them.
+// resolve reads (the tables' dummy in any other view), the image it writes, and the glass probe history it reads and
+// writes (SdfHistoryPorts). Its block holds the frame's common values, copied by name from the world layout, the
+// temporal ones every part of a frame writes alike among them.
 internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     private static readonly SdfFrameBlock.Copy[] FrameCopies = SdfFrameBlock.CopiesInto(layout: SdfWorldInterfaces.GlassParameters);
     // The pass's inputs by position: the lit image, the visibility records, the glass target and the glass sums, then
@@ -26,6 +27,8 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
     private readonly RenderGraphPackageWorkCounters m_work;
     // Per frame slot, the tables the slot's pass set was written against.
     private readonly SdfWorldTables?[] m_portTables;
+    // The glass probe history's ports (SdfWorldPackage.GlassProbeHistory).
+    private readonly SdfHistoryPorts m_history;
 
     private bool m_disposed;
     private SdfShadeDispatch? m_shadePlan;
@@ -36,6 +39,11 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
         m_shade = new SdfShadeSlots(slots: context.InFlightFrames);
         m_owner = owner;
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
+        m_history = new SdfHistoryPorts(
+            inputs: LocalNames(pass: context.Pass, part: SdfWorldPackage.Parts.GlassShade, ports: context.Inputs),
+            outputs: LocalNames(pass: context.Pass, part: SdfWorldPackage.Parts.GlassShade, ports: context.Outputs),
+            slots: context.InFlightFrames
+        );
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: SdfKernel.Glass).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
     }
@@ -75,6 +83,7 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
 
         m_work.Write(passSet: set, recording: recording);
         BindPorts(recording: in recording, set: set, tables: tables);
+        m_history.Bind(layout: SdfWorldInterfaces.GlassParameters.Layout, pass: m_context.Pass, recording: in recording, set: set, tables: tables);
         m_shadePlan = SdfShadeDispatch.For(previous: m_shadePlan, frame: frame, width: recording.Width, height: recording.Height,
             screens: tables.PassValues.ScreenCount, glass: true, tier: residency.ShadeTier);
         var pipeline = m_shade.RecordPipeline(recording.Slot, residency, m_shadePlan, SdfKernel.Glass);
@@ -116,6 +125,7 @@ internal sealed class SdfGlassRecorder : SdfViewRecorder, IRenderGraphPackageRec
         tables.WriteInterfaceBuffer(buffer: recording.Inputs[GlassSumsInput].Buffer!, layout: layout, member: SdfWorldPackage.GlassSums, set: set);
         bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.Output), descriptorSetHandle: set, imageViewHandle: recording.Outputs[0].ReadImage(latch: recording.Latch).ImageViewHandle);
         tables.WriteInterfaceBuffer(buffer: ((m_temporal ? recording.Outputs[1].Buffer : null) ?? tables.DummyBuffer), layout: layout, member: SdfWorldPackage.ReactivityWritten, set: set);
+        m_history.Forget(slot: slot);
         m_portTables[slot] = tables;
     }
 }

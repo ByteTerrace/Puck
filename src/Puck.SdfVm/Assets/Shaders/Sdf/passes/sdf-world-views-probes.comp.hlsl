@@ -3,14 +3,14 @@
 // cell's first pixel in raster order whose hit shades with the volume (sdfViewsProbesWanted), and every other such pixel
 // whose receiver is not compatible with the representative's (sdfViewsProbesCompatible) takes a gather of its own.
 // The group then runs every gather its cells asked for as one list, a gather a lane: the view first reuses its
-// preceding render's gather where one stands for the receiver (sdf-views-probe-history.hlsli), and the gathers no entry
+// preceding render's gather where one stands for the receiver (sdf-probe-history.hlsli), and the gathers no entry
 // serves run as a second list, so a cell of foliage with four gathers costs the group four lanes rather than one lane
 // four gathers while its neighbours wait. Each gather is written into its cell's record (sdf-views-probes.hlsli), which
 // views reads in place of gathering, and each representative's into the history for the next render.
 #define SDF_VIEWS_PROBES_PASS
 #include "sdf-pixel-pass.hlsli"
 #include "sdf-views-probes.hlsli"
-#include "sdf-views-probe-history.hlsli"
+#include "sdf-probe-history.hlsli"
 #include "sdf-views-rate.hlsli"
 
 static const uint SdfProbeCellPixels = (SDF_VIEWS_PROBE_RATE * SDF_VIEWS_PROBE_RATE);
@@ -84,8 +84,8 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
     uint2 dims = worldViewDims(view);
     uint2 origin = (id.xy * SDF_VIEWS_PROBE_RATE);
     // Uniform across the view.
-    bool keeps = sdfViewsProbeHistoryKeeps(viewIndex);
-    bool reads = sdfViewsProbeHistoryReads(dims, viewIndex);
+    bool keeps = sdfProbeHistoryKeeps(sdfViewsProbeHistoryRW, viewIndex);
+    bool reads = sdfProbeHistoryReads(sdfViewsProbeHistory, keeps, dims, viewIndex);
 
     if (groupLane == 0u) {
         sdfProbeJobCount = 0u;
@@ -140,7 +140,7 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
         if (!present) {
             sdfViewsProbesStore(sdfViewsProbeRecord(id.xy, viewIndex), sdfMeshProbesNone(), 0u, false, rate, 0u);
             if (keeps) {
-                sdfViewsProbeHistoryStore(sdfViewsProbeHistoryEntry(id.xy, viewIndex), false, float3(0.0, 0.0, 0.0), 0u, 0u, sdfMeshProbesNone());
+                sdfProbeHistoryStore(sdfViewsProbeHistoryRW, sdfProbeHistoryEntry(id.xy, viewIndex), false, float3(0.0, 0.0, 0.0), 0u, 0u, sdfMeshProbesNone());
             }
         } else {
             uint first;
@@ -173,10 +173,10 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
         uint previous;
 
         sdfProbeReceiver(view, decoded.pixel, viewIndex, surfacePoint, normal, packedNormal, tolerance);
-        if (reads && sdfViewsProbeHistoryFind(viewIndex, surfacePoint, normal, tolerance, previous)) {
-            sdfProbeStoreJob(decoded, sdfViewsProbeHistoryLoad(previous));
+        if (reads && sdfProbeHistoryFind(sdfViewsProbeHistory, viewIndex, surfacePoint, normal, tolerance, previous)) {
+            sdfProbeStoreJob(decoded, sdfProbeHistoryLoad(sdfViewsProbeHistory, previous));
             if (decoded.extra == 0u) {
-                sdfViewsProbeHistoryCarry(sdfViewsProbeHistoryEntry(decoded.cell, viewIndex), previous);
+                sdfProbeHistoryCarry(sdfViewsProbeHistory, sdfViewsProbeHistoryRW, sdfProbeHistoryEntry(decoded.cell, viewIndex), previous);
             }
         } else {
             uint slot;
@@ -206,9 +206,9 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
         sdfProbeStoreJob(decoded, probes);
         if (keeps && (decoded.extra == 0u)) {
             // A gather no probe answers names no cage to keep; an incomplete one would stand past the probe that lands.
-            uint hold = sdfViewsProbeHistoryHoldOf((surfacePoint + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS)), windowBound);
+            uint hold = sdfProbeHistoryHoldOf((surfacePoint + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS)), windowBound);
 
-            sdfViewsProbeHistoryStore(sdfViewsProbeHistoryEntry(decoded.cell, viewIndex), (complete && (probes.share > 0.0)), surfacePoint, packedNormal, hold, probes);
+            sdfProbeHistoryStore(sdfViewsProbeHistoryRW, sdfProbeHistoryEntry(decoded.cell, viewIndex), (complete && (probes.share > 0.0)), surfacePoint, packedNormal, hold, probes);
         }
         sdfWorkTexels += 1u;
     }

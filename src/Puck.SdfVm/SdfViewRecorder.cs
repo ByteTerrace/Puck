@@ -21,6 +21,14 @@ internal abstract class SdfViewRecorder(SdfWorldPasses owner, string instance, S
         }
     }
 
+    // The fragment's names of a pass's ports: each port's resource name with the prefix the graph splices before the
+    // pass's part (the pass's name less its part) taken off.
+    private protected static string[] LocalNames(IReadOnlyList<ShaderPipelineResource> ports, string pass, string part) {
+        var prefix = pass[..^part.Length];
+
+        return [.. ports.Select(selector: port => (port.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: prefix) ? port.Name[prefix.Length..] : port.Name))];
+    }
+
     // Rebinds what the recorder declared for the residency its view left.
     private protected virtual void FollowedResidency() { }
     private protected void LeaveView() => owner.Leave(view: m_view);
