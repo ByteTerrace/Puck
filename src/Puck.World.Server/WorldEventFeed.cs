@@ -184,6 +184,11 @@ public sealed class WorldEventFeed {
     public int CollisionTrackedPairs => m_overlapping.Count;
     /// <summary>Exact collision overlap tests performed by this tick's collection.</summary>
     public int CollisionOverlapTests { get; private set; }
+    /// <summary>Gets the bodies the latest collection placed in its collision broadphase.</summary>
+    public int CollisionBroadphaseBodies { get; private set; }
+    /// <summary>Gets the bodies whose collision edges a held event-budgeted observe grant could deliver as of the latest
+    /// collection: the population's capacity under a wildcard grant.</summary>
+    public int CollisionListenedBodies { get; private set; }
     /// <summary>Gets the exact body/region containment tests this tick's collection performed: every body against a
     /// region whose frame changed, and otherwise each changed body inside a region's bounds or leaving it.</summary>
     public int RegionBodyTests { get; private set; }
@@ -401,6 +406,8 @@ public sealed class WorldEventFeed {
             }
         }
         m_collisionGrid.Rebuild(spheres: m_collisionBodies.AsSpan(start: 0, length: bodyCount));
+        CollisionBroadphaseBodies = bodyCount;
+        CollisionListenedBodies = population.Capacity;
 
         void Include(int index) {
             if (
@@ -834,6 +841,24 @@ public sealed class WorldEventFeed {
         m_edges.AddRange(collection: m_pendingRoutes);
         m_pendingRoutes.Clear();
         population.CompleteBodyEvents();
+        CountWork();
+    }
+    private void CountWork() {
+        var work = WorldEventWork.Process;
+        var collisionEdges = 0;
+
+        foreach (var edge in m_edges) {
+            if (edge.Family is WorldEventFamily.CollisionBegin or WorldEventFamily.CollisionEnd) { collisionEdges++; }
+        }
+        work.Add(kind: WorldEventWork.Collects, amount: 1L);
+        work.Add(kind: WorldEventWork.CollisionListenedBodies, amount: CollisionListenedBodies);
+        work.Add(kind: WorldEventWork.CollisionBroadphaseBodies, amount: CollisionBroadphaseBodies);
+        work.Add(kind: WorldEventWork.CollisionCandidates, amount: CollisionCandidates);
+        work.Add(kind: WorldEventWork.CollisionPairTests, amount: CollisionOverlapTests);
+        work.Add(kind: WorldEventWork.CollisionOverlaps, amount: m_overlapping.Count);
+        work.Add(kind: WorldEventWork.RegionBodyTests, amount: RegionBodyTests);
+        work.Add(kind: WorldEventWork.Edges, amount: m_edges.Count);
+        work.Add(kind: WorldEventWork.CollisionEdges, amount: collisionEdges);
     }
     /// <summary>Lists the regions (places) one body stands in as of the latest collection: the same occupancy latches
     /// region edges and <c>$region:</c> rule reads come from, innermost first (the smallest volume, so a room inside a
