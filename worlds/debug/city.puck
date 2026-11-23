@@ -783,7 +783,8 @@ prototypes {
     }
   }
 
-  // A street lamp: a timber post with a glowing lantern under a teal cap; its light is the city's, keyed on the clock.
+  // A street lamp: a timber post with a glowing lantern under a teal cap; its light is the city's, keyed on the clock,
+  // and hangs just under the lantern (3.8 m), since a light inside the solid lantern is occluded from everything it lights.
   prototype "street-lamp" {
     document {
       name: "street-lamp"
@@ -857,7 +858,7 @@ render {
       ],
       map(range(0, length(cityLampSpots)), i => point(
         name: $"lamp-{i}",
-        position: [cityLampSpots[i][0], 4.2, cityLampSpots[i][1]],
+        position: [cityLampSpots[i][0], 3.8, cityLampSpots[i][1]],
         temperature: 2700K,
         power: "state.cityLamps"
       ))
