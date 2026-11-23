@@ -1,6 +1,7 @@
 // The views pass's stage over the pixel's visibility record, which the surface pass wrote (sdf-surface-stage.hlsli):
 // views shades the record (sdfViewsStage below). A binned kernel (SDF_VIEWS_BINNED) reads the filtered occlusion and
-// shadows from the filter record its filter pass wrote; every other kernel filters in its own group.
+// shadows from the filter record, and its tile's light masks from the shade bins, which its filter pass wrote; every
+// other kernel filters and decides its tile's lights in its own group.
 #ifndef PASSES_SDF_VIEWS_STAGE_HLSLI
 #define PASSES_SDF_VIEWS_STAGE_HLSLI
 #include "sdf-light-stage.hlsli"
@@ -45,8 +46,9 @@ float3 sdfViewsStage(SdfPixel p, bool shadesPixel, out float coverage, out float
     bool curvatureShading = worldCurvatureShadingEnabled();
     float3 surfacePoint = sdfPixelSurfacePoint(p, s.t);
     int material = s.material;
-    // The view's mode is uniform across the group, so every lane reaches the tile's barriers or none does. A screen's
-    // face walks no light (sdfLightStage), so it joins neither the tile's boxes nor its seen lights.
+    // The view's mode is uniform across the group, so every lane of an unsplit kernel reaches the tile's barriers or none
+    // does. A screen's face walks no light (sdfLightStage), so it joins neither the tile's boxes nor its seen lights; the
+    // filter pass of a binned view passes the same (sdf-world-views-filter.comp.hlsl).
     SdfLightMasks lights = sdfViewsTileLights(p, useFinalShading, (s.hit && (material < SDF_SCREEN_MATERIAL)), surfacePoint, s.t);
 
     if (!p.active || !shadesPixel) {

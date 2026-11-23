@@ -301,9 +301,12 @@ declared cost, never by opening the bounds.
 `surface` phase before the light walk (the material's final response and
 shading normal), a `light` phase once per light the walk visits and a
 `compose` phase after the fold. The walk leaves out lights that cannot reach
-the view or the 8×8 tile (past a light's range or outside a spot's cone), so a
-light phase cannot rely on running where its light's `reach` is zero. A phase it omits takes
-the standard's default. The engine keeps what
+the view or the 8×8 tile (past a light's range or outside a spot's cone), and
+traced lights the surface's probes do not see, so a light phase cannot rely on
+running where its light's `reach` is zero or where a traced light's
+`probeShare` is zero
+([the rule](#a-pixel-walks-the-lights-that-reach-it-and-that-its-probes-see)).
+A phase it omits takes the standard's default. The engine keeps what
 a per-pixel program cannot express: the shadow filter, the irradiance gather,
 the cel outline (it reads neighbour depth and normal), local adaptation and the
 atmosphere. One generated invocation serves opaque and glass shading. The
@@ -377,10 +380,14 @@ published set yet, records plain kernels that hold no program state.
 **Pixels shade in bins by whole tiles.** A frame that runs programs classifies
 8×8 tiles after the tile-coherent filter and shades the tiles with no program
 on a plain kernel, so a pixel that runs no program does not pay a program
-kernel's registers. A pixel-granular list was set aside: it loses the 2D
-locality the probe gather and the cascade reads depend on. The filtered
-occlusion and shadows go to a record of their own, because a group writing
-them into the visibility record would race a neighbouring group's gather.
+kernel's registers. The filtered occlusion and shadows go to a record of their
+own, because a group writing them into the visibility record would race a
+neighbouring group's gather, and the filter pass writes each tile's light masks
+beside its bin, so a binned views kernel reads everything it shades a pixel by
+from records and holds no group state. A tile is still the unit a job shades:
+a list of shading samples in a tile's place is the
+[rendering plan](../plans/rendering.md#gpu-submission-and-routed-worlds)'s next
+step for this pass.
 
 **Pipeline state stays engine-owned.** A program changes compute bytecode and
 nothing else: no authored blend, depth, format, binding or workgroup size. The
@@ -596,11 +603,13 @@ Skipping one changes no pixel, since a point or spot light's falloff is exactly
 zero at its range (below). The views pass narrows that mask again for each 8×8
 tile it shades (`sdfViewsTileLights`): a light is kept where its sphere of range
 meets a box about the tile's hit points, and a spot where its cone also meets
-them, and a bound screen where some of those points lie in front of its face
+them, and a screen where some of those points lie in front of its face
 and its picture is not black, so a pixel walks only the lights that reach near
 it. The boxes hold the
 very points the light stage shades, so a tile's mask changes no pixel either,
-and no light can pop at a tile edge.
+and no light can pop at a tile edge. A tile also leaves out the traced lights
+its pixels' probes do not see
+([below](#a-pixel-walks-the-lights-that-reach-it-and-that-its-probes-see)).
 
 Work that changes every frame updates less often where it is far or small on
 screen (the owner's request), by the same rule: a reduced rate is a visible
@@ -758,6 +767,79 @@ draw one. A view's surface pass folds `ContentRevision` into its signature, so
 it renders again exactly when a layer it reads changes. Where the guarantee
 stops: a caster no box bounds (a seeded motion history, an unboxed draw) owes
 the whole layer, and a far moving caster's rectangles wait for the far period.
+
+## A pixel walks the lights that reach it and that its probes see
+
+**The problem.** The views pass visits lights a pixel at a time: each visit
+loads the light, evaluates its reach and its visibility, and runs the
+material's light response, an authored light phase included. Reach alone does
+not bound that walk indoors. A fixture's range is sized by the darkest exposure
+the world takes, so in the hall it crosses the walls and floors about its room,
+and a mask of the lights whose range and cone meet a tile's hit points holds
+the fixtures of the rooms beside, above and below. At the lift lobby that is
+15.9 lights a pixel, of which the irradiance volume's probes see 4.7 from the
+pixel; every other visit would end in a probe share of exactly zero, after the
+whole of its work.
+
+**What already held each light's visibility.** Nothing in the frame traces a
+light. The key light's shadow is the world's cascades, drawn once per world and
+filtered in the surface pass
+([above](#a-worlds-shadows-are-drawn-once-and-cost-what-moved)). A static point
+or spot light's occlusion is the volume's: each probe holds a bit for every
+traced light it sees, traced in the background, and the probe lookup already
+writes, for each cell of pixels, the lights any corner of its gather sees
+([global illumination](#global-illumination)). A walk that reads those bits
+one light at a time has already paid for the visit.
+
+**What was weighed.**
+
+| Option | What it would give | Decision |
+|---|---|---|
+| Cull each tile's lights by the probes' bits as well as by reach | The walk visits the lights that reach the tile and that some pixel of it can see. The data exists, per world, cached, and costs the tile a few words of the probe record | Built |
+| A shadow map or cached visibility image per fixture | An exact shadow edge for every fixture | Not built: memory and redraws for every fixture (the hall holds a hundred), to answer what the probes' bits already answer at the volume's resolution. A fixture that needs a sharp shadow takes a shadow slot, as a second directional does |
+| A world-space grid of light lists (froxels or a hashed grid) in place of the tile's boxes | The same reach cull, built once for a view | Not built: it holds no visibility unless each cell stores light bits, which is the probe volume. The tile's boxes already bound the exact points shaded |
+| A per-pixel early-out only | No visit's light phase runs for an unseen light | Built as the rule's enforcement (below), but not enough alone: a wave runs the walk's steps for every light any of its lanes keeps, so the saving comes from the tile leaving the light out |
+
+**The rule.** A traced point or spot light adds nothing at a surface where
+its share of the probes about the surface is exactly zero. The default response
+already gave no light there (its visibility is the share times the ambient
+occlusion); the light phase's door now answers no light before it runs an
+authored program (`SdfLightInputs.unseen`, tested in the generated
+`sdfShadeLightPhase`), so a program's light phase cannot rely on running for a
+traced light its surface's probes do not see, as it cannot for a light whose
+`reach` is zero. On that rule a tile leaves out every traced light the probes
+about none of its shaded pixels see (`sdfViewsTileLights`,
+`sdfViewsLightsSeen`). A directional, an untraced light (one that rides an
+anchor) and a screen are never left out this way: a directional's visibility is
+its cascades' wherever they hold the point, and the others have no bits.
+
+**Where a tile is decided.** One workgroup decides a tile's masks: the unsplit
+views kernels in their own group and, for a binned view, the filter pass, which
+writes them into the tile's words of the shade bins. The binned views kernels
+read them there, so they hold no barrier and no tile state and shade any pixel
+from its records alone.
+
+**What enforces it, and where that stops.** A pixel's seen lights are a
+superset of the lights whose share is above zero at it: every light where no
+probe answers the pixel (its lights then go unoccluded), the record's `any`
+bits where its cell's representative serves it, and its own gather's corners
+otherwise (`sdfMeshLightAgreement`, the one loop the record's agreement and the
+pixel's read share). A light the tile left out is therefore unseen at every
+pixel of it, and the door gives it no response, so the mask changes no pixel:
+a paused still of the painting room with the cull on and off differs by at most
+one level in a tenth of a percent of pixels, inside the difference between two
+captures of one mode. The guarantee rests on the probes' bits as every other
+reader does: a fixture switched on shows once the volume has traced it, as
+before, since its share was zero until then. A static fixture has no authored
+way to opt out of the volume's occlusion
+([open item](../plans/rendering.md#gpu-submission-and-routed-worlds)).
+
+**What it costs and saves.** A tile that keeps no traced light reads no probe
+record, so the open valley pays nothing for the rule. In the hall the walk's
+visits fall to the lights that are seen: at the lift lobby on Direct3D 12 at
+1280 by 900, 5.4 million visits a frame over 1.15 million pixels where reach
+alone keeps 18.3 million. A visit costs the same whichever kernel makes it, so
+the views pass's time follows the visits it no longer makes.
 
 ## A diagnostic view never covers its evidence
 

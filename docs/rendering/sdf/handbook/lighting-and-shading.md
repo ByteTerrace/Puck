@@ -445,9 +445,17 @@ narrows the mask once more for each 8×8 tile (`sdfViewsTileLights` in
 `passes/sdf-views-lights.hlsli`): it bounds the tile's hit points by two boxes,
 the hits nearer than the middle of the tile's depth range and the rest, and keeps
 a light whose sphere of range meets a box and, for a spot, whose cone meets the
-sphere about it. A bound screen is kept where a box reaches in front of its
-face and its mean luminance is above zero. A pixel then walks only the lights
-and screens that can reach its tile.
+sphere about it. A screen is kept where a box reaches in front of its
+face and its mean luminance is above zero. Of the lights the irradiance volume
+traces (a static point or spot light), a tile keeps only those the probes about
+one of its shaded pixels see, read from the probe lookup's records: a traced
+light adds nothing where its share of the probes is zero, under the default
+response and an authored light phase alike, so a room's pixels walk the
+fixtures that light the room and not those whose range crosses its walls. A
+pixel then walks only the lights and screens that can reach its tile. A binned
+view's filter pass decides each tile's masks and writes them into the shade
+bins, where its views kernels read them
+([the decision](../../../decisions/rendering.md#a-pixel-walks-the-lights-that-reach-it-and-that-its-probes-see)).
 
 ## Photometric units and exposure
 

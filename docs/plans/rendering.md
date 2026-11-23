@@ -868,15 +868,63 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
   the same history could serve. Check: `world.counters gpu pass
   sdf.world$views-probes counter texels` (gathers run) over the route.
 - Bring the main view under its share of the frame at 2560 by 1440 on the RTX
-  4070. The largest passes are views' light walk (each tile's lights through the
-  authored light phase; at the hall's lobby it is most of the views pass), the
-  resolve, the surface pass's shadow filter and the mesh pass, all at native
-  resolution under the `high` table's `renderScale: 1`. Views' registers sit at
-  an occupancy step: adding live state across the light walk (nine words of the
-  light agreement held in registers) measured slower, so a change to that walk is
-  judged by the views timing with the specialized sets installed
-  (`world.shaders.status`). Check: the route's per-chapter `world` node GPU means,
-  without shadows and secondary views, read in the lead's quiet window.
+  4070, at native resolution under the `high` table's `renderScale: 1`. The
+  views pass walks only the lights that reach a tile and that its probes see
+  ([decision](../decisions/rendering.md#a-pixel-walks-the-lights-that-reach-it-and-that-its-probes-see)),
+  so what it costs now is the same in a room and in the open: its time follows
+  the instructions its waves run, and a wave runs the whole kernel when any of
+  its lanes shades. The steps, in order:
+  1. **Shade a list of samples in a tile's place.** A views job shades whole
+     8×8 tiles, so its waves carry lanes that shade nothing (a miss, a pixel a
+     coarser shading rate left out) and lanes of several programs' arms, and
+     the wave pays for all of them. A binned views kernel reads everything it
+     shades a pixel by from records (the filter record, the probe record, the
+     tile's light masks), so its group no longer has to be a tile. Build: the
+     filter pass counts each tile's shading samples by bin (a bin an arm of the
+     published set, the plain bin, and none for a miss); the bins pass gives
+     each tile a run of its bin's list; the filter's lanes write their pixels
+     into the run in raster order (a wave prefix count); and views dispatches
+     each bin over its list, a sample a lane. `SdfShadeDispatch` prices a job by
+     its samples. A tile's samples stay together, so the records a job reads
+     keep their locality. Check: samples listed equal the view's shading hits,
+     the views pass's `march.steps` a sample stands, the groups dispatched are
+     the samples over 64 rounded up, and the route's views means fall by about
+     the share of lanes that shaded nothing.
+  2. **Make a coarser shading rate pay, or leave it off.** Read on the RTX 4070
+     at 1280 by 900 on Direct3D 12 with `viewsRate.maxRate` 2 in the `high`
+     table: in the painting room 64% of the classification tiles shade one
+     sample in four and the views pass does not move, because a group saves
+     only when every cell of its 8×8 is coarse and then only one of its two
+     waves; and the probe lookup, which classifies the tiles, costs a quarter
+     of a millisecond to a millisecond and a half more. `high` therefore keeps
+     full rate. After step 1 a coarse tile lists a quarter of its samples and
+     the saving is real; the classification's cost is then the item to cut
+     (`sdfRateTile`). Check: the same two readings after step 1.
+  3. **Classify a receiver's shadow before filtering it.** The cascade filter
+     is half of the surface pass at the stage (`world.shadows off` against
+     `high`). A receiver whose whole search disk lies in front of every caster
+     is lit, and one whose whole filter disk lies behind every caster by more
+     than the filter's margins is in umbra; both answers are exact, and a
+     farthest and nearest depth for each block of a layer decides them from
+     four reads in place of the search's twelve taps and the filter's sixteen.
+     Build: a two-level reduction of each entry's depth, redrawn with the layer
+     and with each rectangle (`SdfWorldShadows`), bound beside it, and tested at
+     the head of `sdfMeshShadow`. Check: taps counted a pixel fall indoors and
+     on open ground, and a paused still stands within a level.
+  4. **Give a static fixture an authored way out of the volume's occlusion.**
+     An unanchored point or spot light is always traced
+     (`WorldEnvironmentResolve`), and a traced light adds nothing where no
+     probe sees it, so an author who wants a fixture to light through what the
+     volume measured has no way to say so. Build: `shadow: never` on a point or
+     spot light writes an untraced record. Check: such a light's response is
+     unchanged across a wall under an authored light phase.
+  The kernels' registers were read on Vulkan (`[pipeline-statistics]`): the
+  specialized binned views kernel compiles to 168 with the light walk and 128
+  with it compiled out, the plain binned kernel to 128 and the filter to 40.
+  Direct3D 12's are unread: PIX's analysis of a debug-world capture of 2.9 GB
+  took the host past 25 GB of memory before it wrote a counter. Check for the
+  whole item: the route's per-chapter `world` node GPU means, read in the lead's
+  quiet window.
 - Measure geometry instancing in the indirect records rather than repeating
   the slower one-draw vertex-search experiment.
 - Measure front-to-back order or a depth prepass against mesh overdraw,
@@ -1005,11 +1053,14 @@ and each judged on presented frames in motion:
   clipping on luma (Salvi 2016) keeps more of a stable history than the box.
   Check: a pan past specular and ink detail shows less ghosting at equal
   shimmer, with a still pixel's history unchanged.
-- **Shading rate is measured on the RTX 4070.** Per-tile `viewsRate` is
-  authored only in the RTX 2060's row (`worlds/standard/quality.puck`);
-  whether it pays at 2560 by 1440 on the 4070 is read, not assumed. Check:
-  the 4070 route read at `maxRate` 1 and 2, with captures of the tiles it
-  coarsens.
+- **A coarser shading rate does not pay on the RTX 4070 as built.** Per-tile
+  `viewsRate` is authored only in the RTX 2060's row
+  (`worlds/standard/quality.puck`). Read on the 4070 at `maxRate` 2, the views
+  pass does not move and the probe lookup costs more
+  ([the views item](#gpu-submission-and-routed-worlds) holds the reading and
+  the step that makes it pay). The 2060's row shades three quarters of the
+  display each way as well, and its reading is still owed
+  ([the RTX 2060's frame](#the-rtx-2060s-frame)).
 - **Ink is remembered as a feature.** The views pass writes an ink bit so the
   resolve treats ink as a remembered sub-pixel feature, as FSR 2's lock does.
   This joins [the ink plan](ink.md)'s resolve work. Check: a moving ink line

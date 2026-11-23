@@ -240,8 +240,8 @@ A frame with active programs shades its views **in bins** while
 `world.shaders.bins` is on (`SdfWorldPackage.WithBins`; the residency's
 `ShadesInBins`, taken once a frame by `PrepareShade` with the selection):
 `views-filter` writes each hit's filtered occlusion and shadows into a filter
-record and each 8×8 tile's bin (no pixel with a program, or any) into the shade
-bins; `views-bins` sorts the tiles and writes each job's indirect arguments; and
+record and each 8×8 tile's bin (no pixel with a program, or any) and light masks
+into the shade bins; `views-bins` sorts the tiles and writes each job's indirect arguments; and
 `views` shades bin zero with `sdf-world-views-shade-plain` and bin one with the
 selection's `sdf-world-views-shade` (interpreter or specialization), each bin's
 jobs through `SdfShadeDispatch.RecordBin`. The three passes share one plan a
@@ -376,7 +376,11 @@ kernels' lifetime, publication or binning keeps all nine.
    and the visibility record alone, which the views signature (the lighting
    signature) and the visibility input's generation cover, so a views pass that
    re-records while its filter stands (a screen changed) reads bins that are
-   still the frame's.
+   still the frame's. A tile's light masks, which the filter writes beside its
+   bin, depend on the lights table, the rows a light rides, the probe records
+   and the screens' emission, all of which that signature covers as well; they
+   test no screen's binding, which it does not cover, and the walk asks that
+   itself.
 8. *Every job the views pass records reads arguments the bins pass wrote for
    it this frame, and covers its own tiles.* The three passes of one view share
    one plan a frame (`SdfWorldPasses.ShadePlanOf`, cached by its inputs), so the

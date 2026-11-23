@@ -137,9 +137,9 @@ void sdfViewsFilterUnpack(uint2 words, out float ambient, out float4 shadows) {
 
 // A view's shade bins (SdfWorldPackage.ShadeTiles), over its 8x8 tiles in row order from the render extent's corner: a
 // header of each bin's tile count, the bin's first entry in the tile list and the scatter's cursor, SDF_SHADE_BINS words
-// each; then each tile's bin; then the tile list, every bin's tiles together in bin order. Bin zero holds the tiles no
-// pixel of which has a program, which the plain kernel shades; bin one every other tile, which the frame's shading
-// selection shades.
+// each; then each tile's bin; then the tile list, every bin's tiles together in bin order; then each tile's light masks,
+// SDF_SHADE_TILE_LIGHT_WORDS words a tile (sdf-views-lights.hlsli). Bin zero holds the tiles no pixel of which has a
+// program, which the plain kernel shades; bin one every other tile, which the frame's shading selection shades.
 static const uint SdfShadeCountWord = 0u;
 static const uint SdfShadeOffsetWord = SDF_SHADE_BINS;
 static const uint SdfShadeCursorWord = (2u * SDF_SHADE_BINS);
@@ -153,13 +153,21 @@ uint sdfShadeTileCount() {
     return (sdfShadeTilesAcross() * ((passGroup.imageExtent.y + (SDF_VISIBILITY_GROUP_EDGE - 1u)) / SDF_VISIBILITY_GROUP_EDGE));
 }
 uint sdfShadeBinsBase(uint viewIndex) {
-    return (viewIndex * (SDF_SHADE_TILE_HEADER_WORDS + (2u * sdfShadeTileCount())));
+    return (viewIndex * (SDF_SHADE_TILE_HEADER_WORDS + ((2u + SDF_SHADE_TILE_LIGHT_WORDS) * sdfShadeTileCount())));
 }
 uint sdfShadeTileBinWord(uint viewIndex, uint tile) {
     return ((sdfShadeBinsBase(viewIndex) + SDF_SHADE_TILE_HEADER_WORDS) + tile);
 }
 uint sdfShadeListWord(uint viewIndex, uint entry) {
     return (((sdfShadeBinsBase(viewIndex) + SDF_SHADE_TILE_HEADER_WORDS) + sdfShadeTileCount()) + entry);
+}
+// The first word of a tile's light masks: the tile's light mask words, then its screen mask.
+uint sdfShadeTileLightsWord(uint viewIndex, uint tile) {
+    return (((sdfShadeBinsBase(viewIndex) + SDF_SHADE_TILE_HEADER_WORDS) + (2u * sdfShadeTileCount())) + (SDF_SHADE_TILE_LIGHT_WORDS * tile));
+}
+// The tile a pixel lies in, in the row order the bins count tiles in.
+uint sdfShadeTileOf(uint2 pixel) {
+    return (((pixel.y / SDF_VISIBILITY_GROUP_EDGE) * sdfShadeTilesAcross()) + (pixel.x / SDF_VISIBILITY_GROUP_EDGE));
 }
 // A bin's job width in tiles (SdfShadeDispatch), zero for a bin the frame records no job of.
 uint sdfShadeBinWidth(uint bin) {
