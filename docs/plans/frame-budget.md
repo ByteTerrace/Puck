@@ -145,14 +145,17 @@ disagree on needed.
 - **Fewer samples.** Rendering at three quarters and reconstructing is how most
   shipped renderers spend a 1440p frame, and the mechanism exists
   (`renderScale`, the temporal resolve). It is an authored value of the quality
-  table, and it does not make a city's lights cheaper. The budget is set at
-  full rate so that the scale stays the authors' choice.
+  table, and it does not make a city's lights cheaper. Ruled out for the bar:
+  the frame bar is read at the highest quality at native resolution, so the
+  RTX 4070's table keeps a scale of one and the budget is met at full rate.
 - **A governor.** `WorldDynamicResolution` already moves the render grid inside
   the ceiling's allocation without a rebuild, and no table turns it on. With
   `world.render-scale auto on` at the lobby it held a grid of seven eighths and
   a median interval of one refresh. Its GPU signal holds the views' time to the
   whole display period within a tenth (`WorldDynamicResolution.Deadband`), so
-  it rests above the period as readily as below.
+  it rests above the period as readily as below. Ruled out as a pacing guard:
+  the frame bar is met by the architecture, never by lowering quality, so no
+  table of a bar device turns it on.
 
 ### Lights at a city's scale
 
@@ -198,43 +201,36 @@ from the cells its frustum meets.
 Each step lands with the check that shows it worked, read at the stage standing
 and over the route, before and after, in one World session each.
 
-1. **Resolve slots once.** The lookup resolves a slot at two sites, where a
-   history entry serves a gather and where it gathers, so its kernel carries
-   the resolve twice. Have the gather loop leave its gathers in group memory and
-   one loop resolve every job, a job a lane. Check: `views-probes` over the
-   route's valley chapter falls, with `views` unchanged.
-2. **A coarser lookup with interpolation.** A cell of four pixels a side; views
+1. **A coarser lookup with interpolation.** A cell of four pixels a side; views
    blends the four cells about a pixel, weighing each by the reuse test, and a
    pixel no cell serves takes a pool slot. Check: `views-probes` under 0.8 ms
    and the records under 80 MiB, with no cell visible in a presented burst
    along the hall's floor.
-3. **Light lists.** As above. Check: the walk's visits a pixel are unchanged in
+2. **Light lists.** As above. Check: the walk's visits a pixel are unchanged in
    the debug world; `SdfLights.MaxLights` is gone; a row of 512 point lights
    renders with each cluster's list holding only its own.
-4. **Classify a receiver's shadow before filtering it.** The
+3. **Classify a receiver's shadow before filtering it.** The
    [rendering plan](rendering.md#gpu-submission-and-routed-worlds)'s item: a
    depth bound for each block of a layer answers lit and umbra exactly from
    four reads. Check: `surface` under 1.2 ms at the stage.
-5. **A prefiltered environment.** The environment node writes the reflected
+4. **A prefiltered environment.** The environment node writes the reflected
    sky, its panels included, at a few roughness levels; views takes one lookup.
    Check: `SDF_VIEWS_OMIT_REFLECTION` removes under 0.4 ms.
-6. **A sample record for the resolve.** Views writes each render pixel's luma
+5. **A sample record for the resolve.** Views writes each render pixel's luma
    and chroma, reactivity, identity, distance, motion and air; the resolve
    reads nine records and no mesh. Check: `resolve` under 1.2 ms moving, and
    the history surface holds four words.
-7. **One probe cache a residency.** The hashed table above. Check: no view
+6. **One probe cache a residency.** The hashed table above. Check: no view
    holds a probe history; a nested view rated to five frames a second gathers
    only what entered it.
-8. **The governor.** Hold the views' GPU time to a share of the period that
-   leaves room for what their timestamps do not see (the upload, background
-   work, the root), make the share the quality table's, and let the standard's
-   tables turn it on. Check: over the route no iteration waits a second refresh
-   for the GPU, and the grid reads one wherever the frame is under budget.
-9. **The root places in place.** One image, each shown view writing its own
-   rect. Check: `main` under 0.2 ms with one view shown.
-10. **Glass storage by coverage**, and one published image a frame in flight.
+7. **The root places in place.** One image, each shown view writing its own
+   rect. A hidden view's pass cannot stand in today because the two stage
+   images alternate, so its output would stand for an image a later pass
+   overwrites (`ShaderPipelineRenderNode.AliasRefusalOf`). Check: `main` under
+   0.2 ms with one view shown.
+8. **Glass storage by coverage**, and one published image a frame in flight.
     Check: the fixed class at the stage.
-11. **Count what the slots give up.** A slot lists at most eight lights its
+9. **Count what the slots give up.** A slot lists at most eight lights its
     corners disagree on, and the pool holds an extra for one pixel in eight.
     Count the lights rounded and the groups that kept no extra, on
     `world.counters gpu pass sdf.world$views-probes`. Check: both read zero
@@ -248,5 +244,5 @@ corners would give: its cubes are `sdfMeshProbeCube`'s, its agreement
 "all" is in its list with `sdfMeshLightVisibility`'s share. One function writes
 a slot (`sdfViewsProbesStoreSlot`) and the views kernels include no reader of a
 corner, so a slot cannot disagree with a second path. The guarantee stops at
-the two limits step 11 counts: a light past the list is rounded to seen or
+the two limits the last step counts: a light past the list is rounded to seen or
 unseen, and a group of cells past the pool reads its representatives' slots.
