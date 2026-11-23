@@ -1,5 +1,4 @@
 using Puck.Abstractions.Counting;
-using Puck.SignedDistance.Queries;
 
 namespace Puck.World.Client;
 
@@ -15,7 +14,7 @@ public interface IWorldFieldQuery<TQuery, TResult> where TQuery : struct, IWorld
     static abstract WorldFieldQueryFamily Family { get; }
     /// <summary>Gets the field the query reads. An answer is reused only over the same instance, which the query
     /// layer never changes after construction.</summary>
-    SdfFieldEvaluator Field { get; }
+    WorldQueryField Field { get; }
 
     /// <summary>Returns whether the answer this query was marched for stands for <paramref name="asked"/>: never
     /// further from the answer a march of <paramref name="asked"/> would give than the bound this query's family

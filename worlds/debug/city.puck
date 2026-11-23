@@ -31,6 +31,7 @@ import "../standard/bounds"
 import "../standard/domains"
 import "../standard/citizen"
 import "../standard/vehicle"
+import "../standard/market"
 
 // The city draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -130,6 +131,7 @@ let hallLots = map([-110, -160, -190], z => { x: -22, z: z })
 let stallCount = 12
 let stallRing = map(range(0, stallCount), i => {
   id: $"stall-{i}"
+  index: i
   x: 18 * sine(i * 6.283185307179586 / stallCount)
   z: -50 + 18 * cosine(i * 6.283185307179586 / stallCount)
   yaw: i * 360 / stallCount
@@ -199,6 +201,18 @@ navigation {
 
 vehicleDesign(producers: { vehicleRing: vehicleSteering, vehicleWorks: vehicleSteering })
 vehicleLooks(colors: vehicleColors)
+
+// The market (../standard/market.puck): each stall sells to the Moth from a 2 by 2 m spot on the fountain side of its
+// counter, 15.8 m out from the fountain, at 3 to 6 coins.
+marketStalls(
+  stalls: map(stallRing, stall => {
+    key: stall.id
+    x: round(15.8 * sine(stall.yaw * 3.141592653589793 / 180) * 1024) / 1024
+    z: round((-50 + 15.8 * cosine(stall.yaw * 3.141592653589793 / 180)) * 1024) / 1024
+    price: 3 + stall.index % 4
+  }),
+  clock: cityDay
+)
 
 // The citizens (../standard/citizen.puck). `citizenCount` of them, numbered down from the top of the body capacity
 // above the Moth's eight (avatars/moth.puck), in blocks of one look each: look `b` is block `b`, its citizens standing
@@ -378,12 +392,12 @@ placements {
     }
   }
 
-  // The citizens, a block of each look in a disc 10 m across: six blocks across the avenue's ground
-  // and four deep, between the arrival frame and the ring road.
+  // The citizens, a block of each look in a disc 10 m across: six blocks across and four deep from the ring road
+  // south into the square, 9 m clear of the arrival frame, whose glass carries only the player's body back.
   for b in range(0, citizenLookCount) {
     placement $"citizens-{b}" {
       prototype: $"citizen-{floorDivide(b, length(citizenHats))}-{b % length(citizenHats)}"
-      position [(-36 + 14.4 * (b % 6)), 0, (-6 - 8.6 * floorDivide(b, 6))]
+      position [(-36 + 14.4 * (b % 6)), 0, (-20 - 7 * floorDivide(b, 6))]
       inhabit {
         count: citizenBlock
         kit: "citizen"

@@ -6,7 +6,6 @@ using Puck.Hosting;
 using Puck.Physics.Motion;
 using Puck.SdfVm;
 using Puck.SignedDistance;
-using Puck.SignedDistance.Queries;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
 
@@ -49,7 +48,7 @@ public sealed class CreationLeadGuessLawTests {
     private sealed class GuessingSource(WorldClient inner, IWorldSeatGuess? guess) : IWorldStampSource {
         public WorldDefinition Definition => inner.Definition;
         public WorldStateMirror StateMirror => inner.StateMirror;
-        public SdfFieldEvaluator? StaticField => inner.StaticField;
+        public WorldQueryField? StaticField => inner.StaticField;
         public IWorldSeatGuess? SeatGuess => guess;
         public WorldPoseCarries Carries => inner.Carries;
         public int EntityCapacity => inner.EntityCapacity;

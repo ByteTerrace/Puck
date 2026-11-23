@@ -1045,26 +1045,52 @@ public sealed partial class WorldDocument {
     // entries, the action-state register file their State slices, and its cell writes. The tick broadcast and the
     // per-sink primer each own one, so building a primer, which a delivery may do between the tick's snapshot being
     // built and being fanned out, never rewrites what that snapshot lends.
-    private sealed class SnapshotCarrier(bool consumesContinuity) {
+    // The tick carrier lends its storage to the outbox (IWorldSnapshotLender): a recorded delivery takes the storage over
+    // instead of copying it, and the carrier builds its next snapshot into storage the outbox returned or into new arrays.
+    private sealed class SnapshotCarrier(bool consumesContinuity) : IWorldSnapshotLender {
+        // Storage the outbox returned, reused before any new array is allocated.
+        private readonly Stack<WorldSnapshotStorage> m_returned = new();
+        private WorldSnapshotStorage m_storage = new();
+
         // Whether this carrier's snapshots take each body's one-shot continuity hint (the tick broadcast) or only peek
         // at it (a primer), and so whether they carry only the cells written since the last tick or every cell.
         public bool ConsumesContinuity { get; } = consumesContinuity;
-        public EntitySnapshot[] Entries { get; private set; } = [];
-        public long[] State { get; private set; } = [];
-
-        private FieldCellDelta[] m_cells = [];
+        public EntitySnapshot[] Entries => m_storage.Entries;
+        public long[] State => m_storage.State;
 
         // Sizes the entries and register file for a population, keeping storage already large enough.
         public void Reserve(int capacity, int stateSlots) {
-            if (Entries.Length < capacity) { Entries = new EntitySnapshot[capacity]; }
-            if (State.Length < (capacity * stateSlots)) { State = new long[(capacity * stateSlots)]; }
+            var storage = m_storage;
+
+            if (storage.Entries.Length < capacity) { storage.Entries = new EntitySnapshot[capacity]; }
+            if (storage.State.Length < (capacity * stateSlots)) { storage.State = new long[(capacity * stateSlots)]; }
         }
         // Returns the first count cells of this carrier's cell storage, growing it to the next power of two when short.
         public Memory<FieldCellDelta> ReserveCells(int count) {
-            _ = ArrayCapacity.EnsureScratch(ref m_cells, count);
-            return m_cells.AsMemory(length: count, start: 0);
+            var cells = m_storage.Cells;
+
+            _ = ArrayCapacity.EnsureScratch(ref cells, count);
+            m_storage.Cells = cells;
+
+            return cells.AsMemory(length: count, start: 0);
         }
+
+        public bool Lends(ReadOnlyMemory<EntitySnapshot> entries) =>
+            System.Runtime.InteropServices.MemoryMarshal.TryGetArray(memory: entries, segment: out var segment) &&
+            ReferenceEquals(objA: segment.Array, objB: m_storage.Entries);
+        public WorldSnapshotStorage Surrender() {
+            var surrendered = m_storage;
+
+            lock (m_returned) { m_storage = (m_returned.TryPop(result: out var returned) ? returned : new WorldSnapshotStorage()); }
+
+            return surrendered;
+        }
+        public void Return(WorldSnapshotStorage storage) { lock (m_returned) { m_returned.Push(item: storage); } }
     }
+
+    // The owner of the storage the tick's snapshot lends, which the output hub takes the storage over from when it
+    // records the snapshot for a later delivery.
+    internal IWorldSnapshotLender TickSnapshotLender => m_tickCarrier;
 
     // The ONE grant-table DENIAL emission — the loud stderr line plus the submitter-routed denied echo (Rejected,
     // Denied). Grant's administration and co-drive-consent refusals, Revoke's administration refusal, a lever write

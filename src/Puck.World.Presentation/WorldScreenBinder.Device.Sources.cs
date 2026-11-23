@@ -46,29 +46,27 @@ public sealed partial class WorldScreenBinder {
     }
     /// <summary>Creates the producer of a probe source instance (<see cref="WorldImageProducerSettings.ProbeId"/>): an
     /// imported source adapted like any other (<see cref="Adapt"/>), whose feed is the probe output's ring, so the capture
-    /// gate hands out its latest published slot, or its capture fill while the gate fills or before the probe's first
-    /// frame. Only the boot world runs a
-    /// probe host: a probe of a world shown through a screen opens with a fault naming that world.</summary>
+    /// gate hands out its latest published slot, or its capture fill while the gate fills, before the probe's first
+    /// frame, or while its run cannot start. The probe is its world's own: the ring its world's probe host writes
+    /// (<see cref="ProbeKey"/>), the boot world's host's or the host of a world shown through a screen.</summary>
     /// <param name="context">The source instance and its settings.</param>
     /// <returns>The producer, whose feed owns nothing: the probe's ring belongs to this binder.</returns>
     public IRenderGraphExternalProducer ProbeSource(RenderGraphExternalProducerContext context) {
         var instance = SourceInstanceOf(context: context);
-        var world = WorldSourceInstances.WorldOf(instance: instance);
+        var world = (WorldSourceInstances.WorldOf(instance: instance) ?? WorldDefinitionLoader.BootInstanceName);
 
         return Adapt(opening: (WorldSourceInstances.SourceOf(instance: instance) switch {
-            WorldScreenSource.Probe probe when string.Equals(
-                a: world,
-                b: WorldDefinitionLoader.BootInstanceName,
-                comparisonType: StringComparison.Ordinal
-            ) => new WorldImageSourceOpening(
-                Context: context,
-                Fault: null,
-                Feed: new ProbeSourceFeed(feed: GetOrAddProbeFeed(id: probe.Id))
-            ),
             WorldScreenSource.Probe probe => new WorldImageSourceOpening(
                 Context: context,
-                Fault: $"probe '{probe.Id}' of world '{world}': no probe host runs for a world shown through a screen",
-                Feed: null
+                Fault: null,
+                Feed: new ProbeSourceFeed(
+                    binder: this,
+                    feed: GetOrAddProbeFeed(id: ProbeKey(
+                        id: probe.Id,
+                        world: world
+                    )),
+                    world: world
+                )
             ),
             _ => new WorldImageSourceOpening(
                 Context: context,

@@ -137,11 +137,7 @@ internal sealed partial class PlayerCommandModule {
 
             if (
                 m_roster.IsJoined(slot: rosterSlot) &&
-                !string.Equals(
-                a: location.Endpoint.Identity,
-                b: WorldInstanceHost.BootInstanceName,
-                comparisonType: StringComparison.Ordinal
-            )
+                !WorldDefinitionLoader.IsBootInstance(name: location.Endpoint.Identity)
             ) {
                 var routedChannels = m_seatBindings.Channels(slot: rosterSlot);
 
@@ -350,11 +346,7 @@ internal sealed partial class PlayerCommandModule {
 
                 if (
                     m_roster.IsJoined(slot: requestedSpawnIndex) &&
-                    !string.Equals(
-                    a: location.Endpoint.Identity,
-                    b: WorldInstanceHost.BootInstanceName,
-                    comparisonType: StringComparison.Ordinal
-                )
+                    !WorldDefinitionLoader.IsBootInstance(name: location.Endpoint.Identity)
                 ) {
                     if (WorldDefinitionRows.FindSpawnPoint(
                         spawnPoints: location.Endpoint.Definition.SpawnPoints,
@@ -467,11 +459,7 @@ internal sealed partial class PlayerCommandModule {
 
             if (
                 m_roster.IsJoined(slot: rosterSlot) &&
-                !string.Equals(
-                a: location.Endpoint.Identity,
-                b: WorldInstanceHost.BootInstanceName,
-                comparisonType: StringComparison.Ordinal
-            )
+                !WorldDefinitionLoader.IsBootInstance(name: location.Endpoint.Identity)
             ) {
                 if (!location.Endpoint.TryEntityPose(
                     index: location.EntityIndex,
@@ -821,11 +809,7 @@ internal sealed partial class PlayerCommandModule {
 
             if (
                 m_roster.IsJoined(slot: routedSlot) &&
-                !string.Equals(
-                a: route.Endpoint.Identity,
-                b: WorldInstanceHost.BootInstanceName,
-                comparisonType: StringComparison.Ordinal
-            )
+                !WorldDefinitionLoader.IsBootInstance(name: route.Endpoint.Identity)
             ) {
                 route.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.Stop(
                     Principal: context.Principal,
@@ -1109,11 +1093,7 @@ internal sealed partial class PlayerCommandModule {
             if (
                 m_roster.IsJoined(slot: rosterSlot) &&
                 (seatRouter.TryRoute(slot: rosterSlot) is { } location) &&
-                !string.Equals(
-                a: location.Endpoint.Identity,
-                b: WorldInstanceHost.BootInstanceName,
-                comparisonType: StringComparison.Ordinal
-            ) &&
+                !WorldDefinitionLoader.IsBootInstance(name: location.Endpoint.Identity) &&
                 seatRouter.TryRouteQuery(
                 caller: context.Principal,
                 factory: authorityIndex => new WorldQuery.PlayerWhere(Index: (authorityIndex - 1)),

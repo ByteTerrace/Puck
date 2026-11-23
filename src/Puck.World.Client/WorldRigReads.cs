@@ -2,7 +2,6 @@ using System.Numerics;
 using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.SdfVm;
-using Puck.SignedDistance.Queries;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
 
@@ -316,7 +315,7 @@ public sealed class WorldRigReads {
     /// <param name="read">One of the rig's <see cref="CreationRigReadKind.Probe"/> reads.</param>
     /// <returns>The presentation query field, or <see langword="null"/> when the client has none.</returns>
     /// <exception cref="ArgumentException"><paramref name="read"/> is not one of the rig's probe reads.</exception>
-    public SdfFieldEvaluator? ProbeField(CreationRigRead read) {
+    public WorldQueryField? ProbeField(CreationRigRead read) {
         Require(kind: CreationRigReadKind.Probe, read: read);
 
         return m_client?.StaticField;

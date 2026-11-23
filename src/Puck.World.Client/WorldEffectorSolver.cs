@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.Maths;
-using Puck.SignedDistance.Queries;
 
 namespace Puck.World.Client;
 
@@ -239,7 +238,7 @@ public static class WorldEffectorSolver {
     /// <returns><see langword="true"/> when the march hit.</returns>
     /// <remarks>The march starts <see cref="ProbeBackoff"/> behind the origin, so a tip already resting on the surface
     /// it probes answers the same way one reaching toward it does.</remarks>
-    public static bool TryProbeSurface(ref WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer> answer, SdfFieldEvaluator? field, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, float standoff, out Vector3 target, out Vector3 normal) {
+    public static bool TryProbeSurface(ref WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer> answer, WorldQueryField? field, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, float standoff, out Vector3 target, out Vector3 normal) {
         if ((field is null) || (reach <= 0f) || (towards.LengthSquared() <= 0f)) {
             WorldFieldQueryWork.Surface.Skip();
             target = origin;
@@ -267,7 +266,7 @@ public static class WorldEffectorSolver {
     /// <param name="distance">The replant distance, world units: the drift a stance holds through.</param>
     /// <returns><see langword="true"/> when the probe hit a surface point farther than <paramref name="distance"/>
     /// from <paramref name="latch"/>.</returns>
-    public static bool StanceDrifted(ref WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer> answer, SdfFieldEvaluator? field, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, Vector3 latch, float distance) {
+    public static bool StanceDrifted(ref WorldFieldAnswer<WorldSurfaceQuery, WorldSurfaceAnswer> answer, WorldQueryField? field, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, Vector3 latch, float distance) {
         if ((field is null) || (reach <= 0f) || (towards.LengthSquared() <= 0f)) {
             WorldFieldQueryWork.Surface.Skip();
             return false;
@@ -315,7 +314,7 @@ public readonly record struct WorldSurfaceAnswer(bool Hit, Vector3 Target, Vecto
 /// <param name="Latch">A stance question's latched surface point, world units.</param>
 /// <param name="Slack">A stance question's replant distance, world units; zero for a question reused only on
 /// bit-identical inputs.</param>
-public readonly record struct WorldSurfaceQuery(SdfFieldEvaluator Field, Vector3 Origin, Vector3 Towards, Quaternion Rotation, float Reach, float Standoff,
+public readonly record struct WorldSurfaceQuery(WorldQueryField Field, Vector3 Origin, Vector3 Towards, Quaternion Rotation, float Reach, float Standoff,
     bool Normal = false, Vector3 Latch = default, float Slack = 0f) : IWorldFieldQuery<WorldSurfaceQuery, WorldSurfaceAnswer> {
     /// <summary>How much farther than the probe ray a stance question's hit may move: the hit on a plane at angle
     /// θ from the ray's normal moves 1/cos θ times the ray, so 2 covers a surface up to <see cref="StanceSlope"/>.</summary>

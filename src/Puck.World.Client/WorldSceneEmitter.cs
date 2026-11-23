@@ -295,13 +295,22 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         Span<int> revision = stackalloc int[WorldClient.RevisionComponentCount];
 
         m_client.WriteRevision(destination: revision);
-        if (m_prepared && revision.SequenceEqual(other: m_preparedRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && (m_preparedCode == Puck.Abstractions.CodeRevision.Current) && !m_census.TryTakeMove()) { return; }
+        var standing = (m_prepared && revision.SequenceEqual(other: m_preparedRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && (m_preparedCode == Puck.Abstractions.CodeRevision.Current) && !m_census.TryTakeMove());
+        var holdingMoved = (m_preparedHolding != m_client.HoldingRevision);
+
+        if (standing && !holdingMoved) { return; }
         revision.CopyTo(destination: m_preparedRevision);
         m_prepared = true;
+        m_preparedHolding = m_client.HoldingRevision;
         m_preparedPresentation = m_continuum.PresentationRevision;
         m_preparedCode = Puck.Abstractions.CodeRevision.Current;
+        // A delivery that moved holdings alone, on rows the rigid catalog copies, moves those copies and nothing else.
+        if (standing && m_animator.Rigid.TryPresentHoldingsAlone(definition: m_client.Definition)) { return; }
         ReconcileStamps();
+        m_animator.Rigid.PresentHoldings(placements: m_client.Definition.Placements);
     }
+    // The holding revision the latest reconcile read (WorldClient.HoldingRevision).
+    private int m_preparedHolding;
 
     private void ReconcileStamps() {
         var definition = m_client.Definition;
@@ -313,7 +322,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             }
         }
         m_catalog.ObserveArticulation(m_presentedStamps);
-        m_animator.Rigid.ReconcileStatic(definition, definition.Placements);
+        m_animator.Rigid.ReconcileStatic(definition, definition.Placements, riding: true);
         m_animator.Reconcile(
             placementFrames: definition.PlacementFrames,
             looks: definition.Looks,
@@ -397,7 +406,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// stamped body's live scale moves (<see cref="WorldBodyStampCensus.TryTakeMove"/>), the continuum's pinned
     /// presentation decisions (<see cref="WorldContinuum.PresentationRevision"/>), the operator's shape isolation
     /// (<see cref="WorldShapeIsolation.Revision"/>), and a counter that moves when the set of screens a body carries
-    /// moves (<see cref="WorldCreationInstances.TryCarriedScreen"/>).
+    /// moves (<see cref="WorldCreationInstances.TryCarriedScreen"/>), then the two counters through which a response composes
+    /// again (<see cref="WorldRigidAssets.HoldingComposeRevision"/>, <see cref="WorldRigidAssets.StaticTemplateRevision"/>).
     /// <para>
     /// Separate components, not their sum, and the client's three stay split too. One of them — the client's server
     /// revision — is assigned from a snapshot and can move down, so any addition anywhere on this path can cancel: a
@@ -450,6 +460,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         }
 
         destination[(WorldClient.RevisionComponentCount + 5)] = m_carriedRevision;
+        destination[(WorldClient.RevisionComponentCount + 6)] = m_animator.Rigid.HoldingComposeRevision;
+        destination[(WorldClient.RevisionComponentCount + 7)] = m_animator.Rigid.StaticTemplateRevision;
     }
 
     private void RefreshCarryableScreens() {
@@ -577,7 +589,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// composed words are byte-identical to the unscoped build.</summary>
     public bool OwnsMaterialScope => true;
     /// <inheritdoc/>
-    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 6);
+    public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 8);
     /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
     public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
     /// <summary>Gets a monotonic revision bumped whenever <see cref="StaticVolumes"/> is rebuilt.</summary>

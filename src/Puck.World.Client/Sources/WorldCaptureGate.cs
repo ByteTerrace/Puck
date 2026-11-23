@@ -39,16 +39,17 @@ public sealed class WorldCaptureGate {
     /// <param name="content">The content class.</param>
     /// <returns><see langword="true"/> for external content while <see cref="Filling"/>.</returns>
     public bool Fills(ImageContentClass content) => ((content == ImageContentClass.External) && Filling);
-    /// <summary>Returns whether a feed resolves to its fill right now: external content while <see cref="Filling"/>, or an
-    /// external feed whose answer (<see cref="IWorldImportFeed.Answer"/>) is not rendered, waiting or refused. Reading it
-    /// produces no work.</summary>
+    /// <summary>Returns whether a feed resolves to its fill right now: a feed that stands its fill in
+    /// (<see cref="IWorldImportFeed.ShowsFill"/>), external content while <see cref="Filling"/>, or an external feed whose
+    /// answer (<see cref="IWorldImportFeed.Answer"/>) is not rendered, waiting or refused. Reading it produces no
+    /// work.</summary>
     /// <param name="feed">The feed.</param>
     /// <returns><see langword="true"/> when the feed's image resolves to its capture fill.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="feed"/> is <see langword="null"/>.</exception>
     public bool FillsFeed(IWorldImportFeed feed) {
         ArgumentNullException.ThrowIfNull(argument: feed);
 
-        return (feed.Descriptor.FillsCaptures && (Filling || !feed.Answer.IsRendered));
+        return (feed.ShowsFill || (feed.Descriptor.FillsCaptures && (Filling || !feed.Answer.IsRendered)));
     }
     /// <summary>Resolves one feed's image for a submitted frame: its fill when <see cref="FillsFeed"/> holds, otherwise its
     /// own acquired frame. A filled feed is never acquired, so nothing it holds needs retiring.</summary>

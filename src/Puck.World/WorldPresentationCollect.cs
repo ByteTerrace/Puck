@@ -91,7 +91,7 @@ internal sealed class WorldPresentationCollect(WorldServer server, WorldInstance
 
         if (
             (routes?.TryRoute(slot: seat) is { } route) &&
-            !string.Equals(a: route.Endpoint.Identity, b: WorldInstanceHost.BootInstanceName, comparisonType: StringComparison.Ordinal)
+            !WorldDefinitionLoader.IsBootInstance(name: route.Endpoint.Identity)
         ) {
             if (!instances.TryGet(instance: out var instance, name: route.Endpoint.Identity) || (instance is null)) {
                 return true;

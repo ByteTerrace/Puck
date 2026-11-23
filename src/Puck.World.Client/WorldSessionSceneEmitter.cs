@@ -135,7 +135,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private CameraSnapshot? m_dressedCamera;
     // The last dressed program's fixed-point field, built when a pick first asks for it, and the far distance a pick
     // marches it to.
-    private SdfFieldEvaluator? m_dressedField;
+    private WorldQueryField? m_dressedField;
     private SdfProgram? m_dressedFieldProgram;
     private float m_dressedFarDistance;
 
@@ -728,7 +728,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             m_dressedFieldProgram = program;
 
             try {
-                m_dressedField = new SdfFieldEvaluator(program: builder.Build(), reading: SdfFieldReading.Contact, regional: true);
+                m_dressedField = new WorldQueryField(fixedPart: new SdfFieldEvaluator(program: builder.Build(), reading: SdfFieldReading.Contact, regional: true));
             } catch (ArgumentException) {
                 // A static placement the fixed-point evaluator does not interpret (a path, a non-uniform scale).
                 m_dressedField = null;
@@ -746,6 +746,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     }
 
     private int m_preparedDefinition = int.MinValue;
+    private int m_preparedComposing = int.MinValue;
     private int m_preparedSnapshot = int.MinValue;
 
     public void PrepareFrame() {
@@ -761,16 +762,23 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         set => m_source.Guess = value;
     }
     private void PrepareRegistrations() {
-        if ((m_preparedDefinition == m_mirror.DefinitionRevision) && (m_preparedSnapshot == m_mirror.SnapshotRevision) && !m_census.TryTakeMove()) { return; }
+        var standing = ((m_preparedSnapshot == m_mirror.SnapshotRevision) && (m_preparedComposing == m_mirror.ComposingRevision) && !m_census.TryTakeMove());
+
+        if (standing && (m_preparedDefinition == m_mirror.DefinitionRevision)) { return; }
         m_preparedDefinition = m_mirror.DefinitionRevision;
         m_preparedSnapshot = m_mirror.SnapshotRevision;
+        m_preparedComposing = m_mirror.ComposingRevision;
         var definition = Scoped(m_mirror.Definition);
+
+        // A delivery that moved holdings alone, on rows the rigid catalog copies, moves those copies and nothing else.
+        if (standing && m_pool.Rigid.TryPresentHoldingsAlone(definition: definition)) { return; }
 
         m_census.Refresh(m_source);
         var stamps = (m_onlyPrototypes is null) ? m_census.Stamps : [];
         m_catalog.ObserveArticulation(stamps);
-        m_pool.Rigid.ReconcileStatic(definition, definition.Placements);
+        m_pool.Rigid.ReconcileStatic(definition, definition.Placements, riding: true);
         m_pool.Reconcile(definition.PlacementFrames, definition.Placements, definition.Creations, definition.Dynamics, stamps, definition.Looks);
+        m_pool.Rigid.PresentHoldings(placements: definition.Placements);
         m_avatars.Prepare();
     }
 
@@ -783,7 +791,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     /// <summary>Writes each rebuild revision independently so opposing moves cannot mask a change.</summary>
     public void WriteRevision(Span<int> destination) {
-        destination[0] = m_mirror.DefinitionRevision;
+        destination[0] = m_mirror.ComposingRevision;
         destination[1] = m_catalog.ArticulatedRevision;
 
         if (BakedColors().TryTakeMove()) {
@@ -807,6 +815,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             }
         }
         destination[4] = m_bodyColorRevision;
+        destination[5] = m_pool.Rigid.HoldingComposeRevision;
+        destination[6] = m_pool.Rigid.StaticTemplateRevision;
     }
 
     // The bound colors the static build bakes, over the session's own followed state mirror: the one path the local
@@ -832,7 +842,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <summary>Gets the actual catalog, articulation and local-template transform count.</summary>
     public int DynamicSlotCount => (m_catalog.SlotCount + m_pool.DynamicSlotCount);
     /// <inheritdoc/>
-    public int RevisionComponentCount => 5;
+    public int RevisionComponentCount => 7;
     /// <inheritdoc/>
     /// <remarks>The mirrored world's static placements' meshes, fixed by each live <see cref="Emit"/>, then its stamp
     /// pool's (<see cref="WorldCreationInstances.MeshDraws"/>).</remarks>

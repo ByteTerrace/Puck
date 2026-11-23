@@ -20,7 +20,7 @@ public sealed partial class WorldFramePresenter {
         // its editor section sets the pitch and snapping the seat's edits land on.
         var endpoint = m_continuum.Route(slot: slot).Endpoint;
         var world = endpoint.Identity;
-        var definition = (string.Equals(a: world, b: WorldDefinitionLoader.BootInstanceName, comparisonType: StringComparison.Ordinal)
+        var definition = (WorldDefinitionLoader.IsBootInstance(name: world)
             ? m_client.Definition
             : endpoint.Definition);
         if (definition.EditorRaw is not { } editor) {

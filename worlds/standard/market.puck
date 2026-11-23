@@ -1,0 +1,68 @@
+// A market: stalls that sell their stock to a player for coins and restock each morning. A module library: it hands
+// its importers a template and emits no document. A world expands `marketStalls` with its stalls' buying spots, and a
+// player buys by pressing the context button (`interact`) while standing at a stall's spot.
+//
+// A trade is an ordinary composition of state effects, the way the schema's market recipe describes, never a market
+// mutation of its own: one rule checks that the buyer can pay and the stall has stock, and moves the price from the
+// buyer's purse to the stall's till and one item from the stall's stock to the buyer's goods, all in the one firing,
+// so no trade is ever half made.
+//
+// `stalls` lists each stall as `{ key, x, z, price }`: `key` its name in the rows, `x` and `z` the centre of the
+// 2 by 2 m spot a buyer stands on, `price` its price in coins. `buyerBody` and `buyerSeat` name the body that stands on
+// the spot and the seat whose context button buys (the debug world's Moth is body 0 on seat 1). Each stall opens with
+// `stock` items and the buyer with `purse` coins; at `restockHour` of `clock` (skies.puck's `dayCycle` row) every stall
+// is restocked and its till emptied. The rows: `marketStock`, `marketPrice` and `marketTill` keyed by stall,
+// `marketPurse` and `marketGoods` the buyer's, and `marketSales` the trades made.
+template marketStalls(stalls, clock, stock = 5, purse = 20, restockHour = 7, buyerBody = 0, buyerSeat = 1) {
+  state {
+    world [
+      { name: "marketPurse", kind: "Int", value: purse }
+      { name: "marketGoods", kind: "Int", value: 0 }
+      { name: "marketSales", kind: "Int", value: 0 }
+      {
+        name: "marketStock"
+        kind: "Int"
+        capacity: length(stalls)
+        cells: map(stalls, s => { key: s.key, value: stock })
+      }
+      {
+        name: "marketPrice"
+        kind: "Int"
+        capacity: length(stalls)
+        cells: map(stalls, s => { key: s.key, value: s.price })
+      }
+      {
+        name: "marketTill"
+        kind: "Int"
+        capacity: length(stalls)
+        cells: map(stalls, s => { key: s.key, value: 0 })
+      }
+    ]
+  }
+
+  for stall in stalls {
+    rule $"market-buy-{stall.key}" {
+      when (channel(buyerSeat, interact) >= 1 and
+        bodyPosition(body, buyerBody, x) > (stall.x - 1) and
+        bodyPosition(body, buyerBody, x) < (stall.x + 1) and
+        bodyPosition(body, buyerBody, z) > (stall.z - 1) and
+        bodyPosition(body, buyerBody, z) < (stall.z + 1) and
+        marketPurse >= marketPrice[stall.key] and
+        marketStock[stall.key] >= 1)
+      mode: Edge
+      marketPurse = marketPurse - marketPrice[stall.key]
+      marketTill[stall.key] = marketTill[stall.key] + marketPrice[stall.key]
+      marketStock[stall.key] = marketStock[stall.key] - 1
+      marketGoods = marketGoods + 1
+      marketSales = marketSales + 1
+    }
+  }
+
+  rule "market-restock" {
+    when clock >= (restockHour / 24) and clock < ((restockHour + 1) / 24)
+    mode: Edge
+    forEach: marketStock
+    marketStock[$each] = stock
+    marketTill[$each] = 0
+  }
+}

@@ -1742,6 +1742,15 @@ counts in `sdf.transforms`, never in `records.posed`.
   The host draws arrive with a journal too: `SdfMeshDrawComposer` composes each producer's draws (a scene's statics
   and stamp pool, `WorldSceneMeshDraws`; the composition's emitters) and copies and owes only the rows a producer's
   journal names, which the dresser's host cursor reads.
+- **A response swaps copies, never the program.** A delivery that moved only placement holdings stays out of the
+  readers' rebuild watch (`WorldClient.HoldingRevision`, `WorldSessionMirror.ComposingRevision`; the delivered rows are
+  judged, before live values are bound). A responding static row, or one riding a body, is a rigid copy whose catalog
+  holds a template for every creation it can show (`WorldRigidAssets.ReconcileStatic`), so the sweep moves its copies'
+  template range and pose alone (`WorldRigidAssets.PresentHoldings`, `PlaceStaticCopies`, `PackRiding`). The program
+  composes again only through `HoldingComposeRevision` (a responding row the catalog refuses: glass, a pattern of
+  riding occurrences, a riding creation with volumes) or `StaticTemplateRevision` (a template set the latest emission did not write); a new path that
+  presents a response goes through one of the two. A solid row's response still rebuilds the presentation query field
+  whole (`WorldFramePresenter.RebuildStaticField`).
 - **A pack visits only what woke.** The stamp pool, its rigid bodies (`WorldRigidAssets.Pack`) and the catalog
   avatars (`WorldCatalogAvatars.Pack`) each keep an awake set, so a frame costs the registrations something woke, never
   the pool: a body's presented inputs through the source's journal (`IWorldStampSource.BodyChanges`, which

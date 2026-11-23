@@ -35,11 +35,7 @@ internal static class WorldInputReadBack {
     internal static QueryAnswer ForSeat(IServerLink bootLink, WorldSeatAuthorityRouter router, int slot, Principal caller, Func<int, WorldQuery> query) {
         if (
             (router.TryRoute(slot: slot) is { } route) &&
-            !string.Equals(
-            a: route.Endpoint.Identity,
-            b: WorldInstanceHost.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )
+            !WorldDefinitionLoader.IsBootInstance(name: route.Endpoint.Identity)
         ) {
             return Ask(
                 caller: caller,

@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Numerics;
 using Puck.Maths;
 using Puck.SdfVm.Views;
-using Puck.SignedDistance.Queries;
 
 namespace Puck.World.Client;
 
@@ -111,7 +110,7 @@ public sealed class WorldCameraClearance {
     /// <param name="eyeRadius">The full-size radius of the sphere swept, in metres.</param>
     /// <param name="retractionSkin">The full-size distance, in metres, short of a hit the room is reported.</param>
     /// <returns>The room, in world units, at most <paramref name="length"/>.</returns>
-    public float AvailableRoom(SdfFieldEvaluator? field, Vector3 head, Vector3 backward, float length, float scale, float eyeRadius, float retractionSkin) =>
+    public float AvailableRoom(WorldQueryField? field, Vector3 head, Vector3 backward, float length, float scale, float eyeRadius, float retractionSkin) =>
         Clear(answer: ref m_answers[FirstPersonQuestion], field: field, targetObstructed: false, target: head, direction: backward, length: length,
             radius: FixedQ4816.FromDouble(value: (eyeRadius * scale)), scale: scale, retractionSkin: retractionSkin, obstructedSkin: 0f);
 
@@ -132,7 +131,7 @@ public sealed class WorldCameraClearance {
     // How far along the boom the eye can travel from the target before geometry, swept by a sphere of radius, stops it or
     // its sightline, up to the boom's whole length (all of it with no field): the held answer where it covers the question,
     // otherwise a sweep.
-    private static float Clear(ref WorldFieldAnswer<ClearanceQuery, float> answer, SdfFieldEvaluator? field, bool targetObstructed, Vector3 target, Vector3 direction, float length, FixedQ4816 radius, float scale, float retractionSkin, float obstructedSkin) {
+    private static float Clear(ref WorldFieldAnswer<ClearanceQuery, float> answer, WorldQueryField? field, bool targetObstructed, Vector3 target, Vector3 direction, float length, FixedQ4816 radius, float scale, float retractionSkin, float obstructedSkin) {
         if (field is null) {
             WorldFieldQueryWork.Clearance.Skip();
 
@@ -151,7 +150,7 @@ public sealed class WorldCameraClearance {
     // drift within Margin, and one blocked within Radius + 2 * Margin stays blocked within Radius + Margin. The held room
     // therefore lies between the rooms a sweep of the asked question finds at Radius and at Radius + 2 * Margin, as a fresh
     // sweep's does: the eye never comes nearer geometry than its asked radius, and stands off at most 2 * Margin more.
-    private readonly record struct ClearanceQuery(SdfFieldEvaluator Field, bool TargetObstructed, Vector3 Target, Vector3 Direction, float Length, long Radius, float Scale,
+    private readonly record struct ClearanceQuery(WorldQueryField Field, bool TargetObstructed, Vector3 Target, Vector3 Direction, float Length, long Radius, float Scale,
         float RetractionSkin, float ObstructedSkin, float Margin) : IWorldFieldQuery<ClearanceQuery, float> {
         public static WorldFieldQueryFamily Family => WorldFieldQueryWork.Clearance;
 
@@ -192,7 +191,7 @@ public sealed class WorldCameraClearance {
     }
     // A target inside geometry is inside a shell around the pivot, such as a portal frame a body walks through; the sweep
     // then starts obstructedSkin out along the boom, past that shell.
-    private static float March(SdfFieldEvaluator field, bool targetObstructed, Vector3 target, Vector3 direction, float length, FixedQ4816 radius, float scale, float retractionSkin, float obstructedSkin) {
+    private static float March(WorldQueryField field, bool targetObstructed, Vector3 target, Vector3 direction, float length, FixedQ4816 radius, float scale, float retractionSkin, float obstructedSkin) {
         var fixedLength = FixedQ4816.FromDouble(value: length);
         var fixedScale = FixedQ4816.FromDouble(value: scale);
         var skin = (targetObstructed
@@ -240,7 +239,7 @@ public sealed class WorldCameraClearance {
     private readonly ref struct Probe {
         private readonly bool m_cutaway;
         private readonly Span<WorldFieldAnswer<ClearanceQuery, float>> m_answers;
-        private readonly SdfFieldEvaluator? m_field;
+        private readonly WorldQueryField? m_field;
         private readonly float m_minimumBoom;
         private readonly float m_obstructedSkin;
         private readonly float m_retractionSkin;
@@ -248,7 +247,7 @@ public sealed class WorldCameraClearance {
         private readonly Vector3 m_target;
         private readonly bool m_targetObstructed;
 
-        public Probe(Span<WorldFieldAnswer<ClearanceQuery, float>> answers, SdfFieldEvaluator? field, bool targetObstructed, Vector3 target, in WorldChaseBody subject, float length, float scale, in SdfCameraClearance clearance) {
+        public Probe(Span<WorldFieldAnswer<ClearanceQuery, float>> answers, WorldQueryField? field, bool targetObstructed, Vector3 target, in WorldChaseBody subject, float length, float scale, in SdfCameraClearance clearance) {
             EyeRadius = (clearance.EyeRadius * scale);
             m_answers = answers;
             m_cutaway = clearance.Cutaway;
@@ -401,7 +400,7 @@ public sealed class WorldCameraClearance {
     /// rests at the authored boom; otherwise the eased, shortened or risen eye.</returns>
     /// <param name="clearance">The camera program's resolved clearance, full-size.</param>
     /// <param name="scale">The body's live scale, applied to every authored distance and the close target.</param>
-    public Vector3 Resolve(SdfFieldEvaluator? field, Vector3 desiredEye, Vector3 target, in WorldChaseBody subject, Vector3 up, in SdfCameraDynamics dynamics, float deltaSeconds,
+    public Vector3 Resolve(WorldQueryField? field, Vector3 desiredEye, Vector3 target, in WorldChaseBody subject, Vector3 up, in SdfCameraDynamics dynamics, float deltaSeconds,
         in SdfCameraClearance clearance, float scale = 1f) {
         var offset = (desiredEye - target);
         var length = offset.Length();
