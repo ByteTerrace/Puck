@@ -523,9 +523,9 @@ step), validation writes and rewinds the arena, a foreign state effect mutates
 another body at once, and a selector commit (`CommitKitEffects`) synchronizes
 every input owner. Kit bodies and seats therefore stay serial, in today's
 order, with today's semantics: no frozen cross-body image is introduced, the
-flock keeps its own frozen image (`WorldPopulation.Flock`), and shared
-navigation (`NavigationRuntime.Shared`) and flock perception keep their caller
-order. The one semantic
+flock keeps its own frozen image (`WorldPopulation.Flock`), and goal-field reads
+(`NavigationRuntime.GoalField`, whose steps do not depend on order but whose
+cache is single-threaded) and flock perception keep their caller order. The one semantic
 consequence of E1: a kit body reads a rigid body's post-step pose whatever their
 relative index, where today a kit body with a lower index reads the rigid body's
 pre-step pose. A scenario with a kit producer targeting a rigid body changes

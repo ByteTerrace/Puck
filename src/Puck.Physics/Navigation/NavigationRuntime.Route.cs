@@ -42,43 +42,36 @@ public sealed partial class NavigationRuntime {
     private RouteWorkspace? m_route;
 
     // The union of every domain's cells as one graph: a node is a domain's cell at its domain's offset, its edges the
-    // domain's own baked edges plus a junction to each cell of another domain standing at the same place. A junction
-    // joins two walkable cells whose route positions share their X and Z exactly and, between two surfaces, differ in
-    // height by no more than the lower step height of the two (two volume cells must coincide), so a route crosses
-    // between domains only where both domains prove the same ground. Exact coincidence is what makes the hop free of
-    // any unproven segment: aligned grids (origins and cell sizes exact in fixed point and multiples of each other)
-    // share cell centers where they overlap.
+    // domain's own baked edges plus a junction to each cell of another domain of its network standing at the same place.
+    // A junction joins two walkable cells whose route positions share their X and Z exactly and, between two surfaces,
+    // differ in height by no more than the lower step height of the two (two volume cells must coincide), so a route
+    // crosses between domains only where both domains prove the same ground. Exact coincidence is what makes the hop free
+    // of any unproven segment: aligned grids (origins and cell sizes exact in fixed point and multiples of each other)
+    // share cell centers where they overlap. Route searches and goal fields share the junctions; each node's partners are
+    // kept in ascending node order, so a goal field's junction rank names the same partner whichever search joined it.
+    private readonly int[] m_offsets;
+    private readonly bool[] m_joined;
+    private readonly Dictionary<int, List<int>> m_junctions = [];
+
     private sealed class RouteWorkspace {
-        public RouteWorkspace(NavigationRuntime runtime) {
-            Offsets = new int[(runtime.Count + 1)];
-            for (var index = 0; (index < runtime.Count); index++) {
-                Offsets[(index + 1)] = checked((Offsets[index] + runtime[index].CellCount));
-            }
-
-            var total = Offsets[runtime.Count];
-
-            Cost = new int[total];
-            Heuristic = new int[total];
-            Parent = new int[total];
-            OpenStamp = new int[total];
-            ClosedStamp = new int[total];
-            Open = new NodeHeap(cells: total);
-            Joined = new bool[(runtime.Count * runtime.Count)];
+        public RouteWorkspace(int cells) {
+            Cost = new int[cells];
+            Heuristic = new int[cells];
+            Parent = new int[cells];
+            OpenStamp = new int[cells];
+            ClosedStamp = new int[cells];
+            Open = new NodeHeap(cells: cells);
         }
 
-        public readonly int[] Offsets;
         public readonly int[] Cost;
         public readonly int[] Heuristic;
         public readonly int[] Parent;
         public readonly int[] OpenStamp;
         public readonly int[] ClosedStamp;
         public readonly NodeHeap Open;
-        public readonly bool[] Joined;
-        public readonly Dictionary<int, List<int>> Junctions = [];
         public int Stamp;
-        public int JunctionCount;
 
-        public long Bytes => checked((((long)Cost.Length) * (7L * sizeof(int))) + Joined.Length);
+        public long Bytes => checked(((long)Cost.Length) * (7L * sizeof(int)));
     }
 
     // f = g + h, then the smaller h, then the lower node: a total order, so the heap never breaks a tie itself.
@@ -94,8 +87,9 @@ public sealed partial class NavigationRuntime {
         }
     }
 
-    /// <summary>Gets the junctions between domains the route searches have found so far, each counted once.</summary>
-    public int JunctionCount => (m_route?.JunctionCount ?? 0);
+    /// <summary>Gets the junctions between domains the route searches and goal fields have found so far, each counted
+    /// once.</summary>
+    public int JunctionCount { get; private set; }
     /// <summary>Gets the bytes of the cross-domain route search's workspace, allocated on the first route search; zero
     /// before it.</summary>
     public long RouteWorkspaceBytes => (m_route?.Bytes ?? 0L);
@@ -106,8 +100,9 @@ public sealed partial class NavigationRuntime {
     /// <param name="position">The world position, a body's foot or any point over ground.</param>
     /// <param name="domain">The domain's index, or -1.</param>
     /// <param name="cell">The cell's index in it, or -1.</param>
+    /// <param name="network">The index of a domain whose network the search keeps to, or -1 for every domain.</param>
     /// <returns><see langword="true"/> when some domain holds a walkable cell there.</returns>
-    public bool TryLocate(in FixedVector3 position, out int domain, out int cell) {
+    public bool TryLocate(in FixedVector3 position, out int domain, out int cell, int network = -1) {
         domain = -1;
         cell = -1;
         var best = FixedQ4816.MaxValue;
@@ -115,7 +110,11 @@ public sealed partial class NavigationRuntime {
         for (var index = 0; (index < m_domains.Length); index++) {
             var candidate = m_domains[index];
 
-            if (!candidate.CoversRouteHeight(position: in position) || !candidate.TryCell(node: out var node, position: in position)) {
+            if (
+                ((network >= 0) && (index != network) && !Joins(left: candidate, right: m_domains[network])) ||
+                !candidate.CoversRouteHeight(position: in position) ||
+                !candidate.TryCell(node: out var node, position: in position)
+            ) {
                 continue;
             }
 
@@ -130,10 +129,10 @@ public sealed partial class NavigationRuntime {
 
         return (domain >= 0);
     }
-    /// <summary>Finds a route from a walkable cell to the nearest cell a goal accepts, across domains: one bounded A*
-    /// over every domain's baked edges and the junctions where domains share a cell, its cost each step's length in
-    /// millimetres and its heuristic the horizontal Chebyshev distance to the goal's bounds, which never exceeds the cost
-    /// left. It bakes the domains it reaches and joins a pair of domains the first time it settles a cell inside the
+    /// <summary>Finds a route from a walkable cell to the nearest cell a goal accepts, across the start domain's network:
+    /// one bounded A* over its domains' baked edges and the junctions where they share a cell, its cost each step's length
+    /// in millimetres and its heuristic the horizontal Chebyshev distance to the goal's bounds, which never exceeds the
+    /// cost left. It bakes the domains it reaches and joins a pair of domains the first time it settles a cell inside the
     /// second one's footprint and height band.</summary>
     /// <param name="fromDomain">The start cell's domain.</param>
     /// <param name="fromCell">The start cell.</param>
@@ -147,6 +146,13 @@ public sealed partial class NavigationRuntime {
     /// accepts the start, <see cref="NavigationStatus.OutsideDomain"/> when the start is not a walkable cell,
     /// <see cref="NavigationStatus.Unreachable"/>, <see cref="NavigationStatus.SearchLimit"/> or <see cref="NavigationStatus.PathLimit"/>.</returns>
     public NavigationStatus FindRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, List<NavigationRouteNode> route, int maxExpanded, int maxNodes, out NavigationRouteWork work) {
+        var status = SearchRoute(fromCell: fromCell, fromDomain: fromDomain, goal: goal, maxExpanded: maxExpanded, maxNodes: maxNodes, route: route, work: out work);
+
+        m_work.Add(amount: 1, kind: NavigationSearchWork.Routes);
+        m_work.Add(amount: work.Expanded, kind: NavigationSearchWork.RouteExpansions);
+        return status;
+    }
+    private NavigationStatus SearchRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, List<NavigationRouteNode> route, int maxExpanded, int maxNodes, out NavigationRouteWork work) {
         ArgumentNullException.ThrowIfNull(argument: goal);
         ArgumentNullException.ThrowIfNull(argument: route);
         route.Clear();
@@ -155,14 +161,15 @@ public sealed partial class NavigationRuntime {
             return NavigationStatus.OutsideDomain;
         }
 
-        var workspace = (m_route ??= new RouteWorkspace(runtime: this));
-        var start = (workspace.Offsets[fromDomain] + fromCell);
+        var workspace = (m_route ??= new RouteWorkspace(cells: checked((int)CellCount)));
+        var start = (m_offsets[fromDomain] + fromCell);
         var bounds = goal.Bounds;
         var order = new RouteOrder(workspace: workspace);
         var joins = 0;
         var expanded = 0;
         Span<int> next = stackalloc int[MaxRouteSteps];
         Span<int> cost = stackalloc int[MaxRouteSteps];
+        Span<byte> slots = stackalloc byte[MaxRouteSteps];
 
         workspace.Open.Clear();
         if (++workspace.Stamp == int.MaxValue) {
@@ -173,9 +180,9 @@ public sealed partial class NavigationRuntime {
         OpenRoute(bounds: in bounds, cost: 0, node: start, order: order, parent: -1, workspace: workspace);
         while (workspace.Open.Count != 0) {
             var current = workspace.Open.Pop(order: order);
-            var domainIndex = DomainOf(node: current, workspace: workspace);
+            var domainIndex = DomainOf(node: current);
             var domain = m_domains[domainIndex];
-            var cell = (current - workspace.Offsets[domainIndex]);
+            var cell = (current - m_offsets[domainIndex]);
 
             workspace.ClosedStamp[current] = workspace.Stamp;
             expanded++;
@@ -193,21 +200,20 @@ public sealed partial class NavigationRuntime {
                 return NavigationStatus.SearchLimit;
             }
 
-            var count = domain.RouteSteps(cost: cost, next: next, node: cell);
+            var count = domain.RouteSteps(cost: cost, next: next, node: cell, slot: slots);
 
             for (var step = 0; (step < count); step++) {
-                RelaxRoute(bounds: in bounds, cost: checked((workspace.Cost[current] + cost[step])), node: (workspace.Offsets[domainIndex] + next[step]), order: order, parent: current, workspace: workspace);
+                RelaxRoute(bounds: in bounds, cost: checked((workspace.Cost[current] + cost[step])), node: (m_offsets[domainIndex] + next[step]), order: order, parent: current, workspace: workspace);
             }
 
             var position = domain.Foot(node: cell);
 
             for (var other = 0; (other < m_domains.Length); other++) {
-                if ((other != domainIndex) && !workspace.Joined[((domainIndex * m_domains.Length) + other)] && m_domains[other].CoversRouteHeight(position: in position)) {
-                    Join(first: domainIndex, second: other, workspace: workspace);
+                if ((other != domainIndex) && !m_joined[((domainIndex * m_domains.Length) + other)] && m_domains[other].CoversRouteHeight(position: in position) && Join(first: domainIndex, second: other)) {
                     joins++;
                 }
             }
-            if (workspace.Junctions.TryGetValue(key: current, value: out var junctions)) {
+            if (m_junctions.TryGetValue(key: current, value: out var junctions)) {
                 foreach (var junction in junctions) {
                     RelaxRoute(bounds: in bounds, cost: workspace.Cost[current], node: junction, order: order, parent: current, workspace: workspace);
                 }
@@ -218,14 +224,14 @@ public sealed partial class NavigationRuntime {
         return NavigationStatus.Unreachable;
     }
 
-    private int DomainOf(int node, RouteWorkspace workspace) {
-        var index = Array.BinarySearch(array: workspace.Offsets, index: 0, length: m_domains.Length, value: node);
+    private int DomainOf(int node) {
+        var index = Array.BinarySearch(array: m_offsets, index: 0, length: m_domains.Length, value: node);
 
         if (index < 0) {
             index = (~index - 1);
         }
         // Equal offsets name empty domains before a non-empty one; the node belongs to the last of them.
-        while (((index + 1) < m_domains.Length) && (workspace.Offsets[(index + 1)] <= node)) {
+        while (((index + 1) < m_domains.Length) && (m_offsets[(index + 1)] <= node)) {
             index++;
         }
 
@@ -237,11 +243,11 @@ public sealed partial class NavigationRuntime {
         val2: Millimetres(value: FixedQ4816.Max(x: FixedQ4816.Zero, y: FixedQ4816.Max(x: (bounds.Minimum.Z - position.Z), y: (position.Z - bounds.Maximum.Z))))
     );
     private void OpenRoute(int node, int cost, int parent, in FixedAabb bounds, RouteOrder order, RouteWorkspace workspace) {
-        var domainIndex = DomainOf(node: node, workspace: workspace);
+        var domainIndex = DomainOf(node: node);
 
         workspace.Cost[node] = cost;
         workspace.Parent[node] = parent;
-        workspace.Heuristic[node] = DistanceTo(bounds: in bounds, position: m_domains[domainIndex].Position(node: (node - workspace.Offsets[domainIndex])));
+        workspace.Heuristic[node] = DistanceTo(bounds: in bounds, position: m_domains[domainIndex].Position(node: (node - m_offsets[domainIndex])));
         workspace.OpenStamp[node] = workspace.Stamp;
         workspace.Open.Push(node: node, order: order);
     }
@@ -264,8 +270,8 @@ public sealed partial class NavigationRuntime {
                 return NavigationStatus.PathLimit;
             }
 
-            var domainIndex = DomainOf(node: node, workspace: workspace);
-            var cell = (node - workspace.Offsets[domainIndex]);
+            var domainIndex = DomainOf(node: node);
+            var cell = (node - m_offsets[domainIndex]);
 
             route.Add(item: new NavigationRouteNode(Cell: cell, Domain: domainIndex, Position: m_domains[domainIndex].Position(node: cell)));
         }
@@ -273,20 +279,27 @@ public sealed partial class NavigationRuntime {
         route.Reverse();
         return NavigationStatus.Active;
     }
-    // Records every junction between two domains, in both directions, the first time a search needs them.
-    private void Join(int first, int second, RouteWorkspace workspace) {
+    // Whether two domains can join at all: one network, and neither a medium.
+    private static bool Joins(Domain left, Domain right) =>
+        ((left.Tuning.Kind != NavigationKind.Medium) && (right.Tuning.Kind != NavigationKind.Medium) && string.Equals(a: left.Tuning.Network, b: right.Tuning.Network, comparisonType: StringComparison.Ordinal));
+    // Records every junction between two domains, in both directions, the first time a search or a goal field needs
+    // them; returns whether this call joined the pair.
+    private bool Join(int first, int second) {
         // The cached result is a property of the pair, independent of the search that first reached it.
         if (first > second) {
             (first, second) = (second, first);
         }
-        workspace.Joined[((first * m_domains.Length) + second)] = true;
-        workspace.Joined[((second * m_domains.Length) + first)] = true;
+        if (m_joined[((first * m_domains.Length) + second)]) {
+            return false;
+        }
+        m_joined[((first * m_domains.Length) + second)] = true;
+        m_joined[((second * m_domains.Length) + first)] = true;
 
         var left = m_domains[first];
         var right = m_domains[second];
 
-        if ((left.Tuning.Kind == NavigationKind.Medium) || (right.Tuning.Kind == NavigationKind.Medium)) {
-            return;
+        if (!Joins(left: left, right: right)) {
+            return true;
         }
 
         var surfaces = ((left.Tuning.Kind == NavigationKind.Surface) && (right.Tuning.Kind == NavigationKind.Surface));
@@ -315,18 +328,23 @@ public sealed partial class NavigationRuntime {
                 continue;
             }
 
-            Link(from: (workspace.Offsets[first] + cell), to: (workspace.Offsets[second] + other), workspace: workspace);
-            Link(from: (workspace.Offsets[second] + other), to: (workspace.Offsets[first] + cell), workspace: workspace);
-            workspace.JunctionCount++;
-        }
-    }
-    private static void Link(int from, int to, RouteWorkspace workspace) {
-        if (!workspace.Junctions.TryGetValue(key: from, value: out var list)) {
-            list = [];
-            workspace.Junctions[from] = list;
+            Link(from: (m_offsets[first] + cell), to: (m_offsets[second] + other));
+            Link(from: (m_offsets[second] + other), to: (m_offsets[first] + cell));
+            JunctionCount++;
         }
 
-        list.Add(item: to);
+        return true;
+    }
+    // Keeps each node's partners in ascending node order.
+    private void Link(int from, int to) {
+        if (!m_junctions.TryGetValue(key: from, value: out var list)) {
+            list = [];
+            m_junctions[from] = list;
+        }
+
+        var at = list.BinarySearch(item: to);
+
+        list.Insert(index: ((at < 0) ? ~at : at), item: to);
     }
     // A non-negative fixed-point length in whole millimetres, rounded down.
     private static int Millimetres(FixedQ4816 value) => checked((int)((value.Value * 1000L) >> 16));
@@ -368,8 +386,9 @@ public sealed partial class NavigationRuntime {
         // Writes the cells one step from a cell that a route may take, with each step's cost in millimetres: its length,
         // and on a surface one cell's length more for each cell short of RouteClearanceCells that the cell stepped onto
         // stands from the edge of the walkable ground (RouteClearance), so a route keeps off a wall where the ground
-        // allows and passes a doorway through its middle, rather than hugging the corners the shortest line touches.
-        internal int RouteSteps(int node, Span<int> next, Span<int> cost) {
+        // allows and passes a doorway through its middle, rather than hugging the corners the shortest line touches. Each
+        // step's neighbour slot (NeighborSlot) goes to slot.
+        internal int RouteSteps(int node, Span<int> next, Span<int> cost, Span<byte> slot) {
             EnsureBaked();
 
             var straight = Millimetres(value: Tuning.CellSize);
@@ -382,11 +401,43 @@ public sealed partial class NavigationRuntime {
                 }
 
                 next[count] = step.Node;
-                cost[count] = checked(((straight * step.Cost) / StraightCost) + ((clearance.Length == 0) ? 0 : (straight * (RouteClearanceCells - clearance[step.Node]))));
+                cost[count] = RouteStepCost(axes: step.Axes, clearance: clearance, next: step.Node, straight: straight);
+                slot[count] = NeighborSlot(dx: step.Dx, dy: step.Dy, dz: step.Dz);
                 count++;
             }
 
             return count;
+        }
+        // Writes the cells one route step before a cell, the steps RouteSteps takes from each of them into it, with the
+        // same costs: the reverse of the route graph a goal field searches from its goal.
+        internal int RoutePredecessors(int node, Span<int> from, Span<int> cost) {
+            EnsureBaked();
+
+            var straight = Millimetres(value: Tuning.CellSize);
+            var clearance = RouteClearance();
+            var count = 0;
+
+            foreach (var step in Neighbors(node: node)) {
+                if (!CanTraverse(current: step.Node, dx: -step.Dx, dy: -step.Dy, dz: -step.Dz, next: node, x: (step.X + step.Dx), y: (step.Y + step.Dy), z: (step.Z + step.Dz))) {
+                    continue;
+                }
+
+                from[count] = step.Node;
+                cost[count] = RouteStepCost(axes: step.Axes, clearance: clearance, next: node, straight: straight);
+                count++;
+            }
+
+            return count;
+        }
+        // A step's length in millimetres and, on a surface, the clearance surcharge of the cell it steps onto.
+        private static int RouteStepCost(int axes, byte[] clearance, int next, int straight) =>
+            checked(((straight * StepCost(axes: axes)) / StraightCost) + ((clearance.Length == 0) ? 0 : (straight * (RouteClearanceCells - clearance[next]))));
+        // The cell one step from a cell along a neighbour slot.
+        internal int NeighborAt(int node, byte slot) {
+            var (dx, dy, dz) = SlotOffset(slot: slot);
+
+            Coordinates(node: node, x: out var x, y: out var y, z: out var z);
+            return Index(x: (x + dx), y: (y + dy), z: (z + dz));
         }
 
         // The clearance, in cells, past which a route step costs no more than its length.

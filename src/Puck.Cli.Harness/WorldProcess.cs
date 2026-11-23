@@ -191,6 +191,7 @@ public sealed class WorldProcess : IDisposable {
     public void Kill() {
         Exception? termination = null;
 
+        Host.HostStartTracker.Session.Finish(process: m_process, readiness: m_readiness);
         try {
             KillTree(process: m_process);
         } catch (Exception exception) {

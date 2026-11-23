@@ -27,6 +27,7 @@ import "painting-kit"
 import "place-kit"
 import "walkers"
 import "city-day"
+import "../standard/bounds"
 
 // The city draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -307,27 +308,16 @@ placements {
 }
 
 prototypes {
-  // The ground: the town's bank down to the river, the river's water 0.8 m below it, and the far bank.
+  // The ground: the town's bank down to the river, the river's water 0.8 m below it, and the far bank, each given its
+  // world bounds, which boundsBox turns into the creation's author frame.
   prototype "floor" {
     document {
       name: "floor"
       palette: cityPalette
       schema: "puck.creation.v1"
-      shape Box "north-bank" {
-        material: paving
-        position [0, -1, -82.5]
-        scale [150, 1, 122.5]
-      }
-      shape Box "river" {
-        material: river
-        position [0, -1.4, -225]
-        scale [150, 0.6, 20]
-      }
-      shape Box "south-bank" {
-        material: stone
-        position [0, -1, -262.5]
-        scale [150, 1, 17.5]
-      }
+      boundsBox(label: "north-bank", x0: -150, x1: 150, y0: -2, y1: 0, z0: -205, z1: 40, slot: paving)
+      boundsBox(label: "river", x0: -150, x1: 150, y0: -2, y1: -0.8, z0: -245, z1: -205, slot: river)
+      boundsBox(label: "south-bank", x0: -150, x1: 150, y0: -2, y1: 0, z0: -280, z1: -245, slot: stone)
     }
   }
 
@@ -344,11 +334,7 @@ prototypes {
       palette: cityPalette
       schema: "puck.creation.v1"
       for strip in roadStrips {
-        shape Box $"road-{strip.id}" {
-          material: road
-          position [((strip.x0 + strip.x1) / 2), 0.01, ((strip.z0 + strip.z1) / 2)]
-          scale [((strip.x1 - strip.x0) / 2), 0.01, ((strip.z1 - strip.z0) / 2)]
-        }
+        boundsBox(label: $"road-{strip.id}", x0: strip.x0, x1: strip.x1, y0: 0, y1: 0.02, z0: strip.z0, z1: strip.z1, slot: road)
       }
     }
   }

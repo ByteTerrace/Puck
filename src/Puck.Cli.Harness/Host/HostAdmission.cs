@@ -9,8 +9,8 @@ namespace Puck.Cli.Host;
 /// under the pressure threshold, while the commit headroom is under its reserve (allocation fails at the limit with
 /// physical memory still free) and while free disk is under the pressure threshold. A start is admitted by what it
 /// needs, never by a fixed free-memory or commit floor (<see cref="HostStartTracker"/>): the commit headroom must cover
-/// the start's own peak in private bytes (what its <see cref="HostStartProfile"/> has measured, else
-/// <see cref="HostLoadThresholds.DefaultPeakGb"/>)
+/// the start's own peak in private bytes (what its <see cref="HostStartProfile"/> has measured on this machine, else
+/// <see cref="HostLoadThresholds.DefaultPeakGb"/>, the machine's World budget)
 /// plus what the admitted starts still running have left to grow, since admitted Worlds grow into each other, and
 /// still hold the commit reserve afterwards (<see cref="HostLoadThresholds.CommitCovers"/>); free physical memory must
 /// cover the start's own private working set plus the running starts' private working-set growth and still sit at the

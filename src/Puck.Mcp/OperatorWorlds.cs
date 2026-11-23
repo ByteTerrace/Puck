@@ -59,6 +59,9 @@ public sealed record OperatorWorldStart(Process? Process, string? Build, IDispos
     /// <summary>Gets what reads each line the World writes, with whether it came on standard output, so the launch can mark
     /// the World ready on its own report of steady state; <see langword="null"/> for none.</summary>
     public Action<string, bool>? Observe { get; init; }
+    /// <summary>Gets what records what the World has reached, called once while it is still running, just before the adapter
+    /// asks it to quit; <see langword="null"/> for none.</summary>
+    public Action? Settle { get; init; }
 }
 
 /// <summary>
@@ -91,7 +94,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         public volatile string? StderrLog;
     }
 
-    private sealed class Started(Process process, string document, string checkout, string build, string runDirectory, IDisposable? lease, bool leased) {
+    private sealed class Started(Process process, string document, string checkout, string build, string runDirectory, IDisposable? lease, bool leased, Action? settle) {
         public string? AttachmentId;
 
         public readonly Process Process = process;
@@ -105,6 +108,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         public IDisposable? Lease = lease;
         public readonly bool Leased = leased;
         public Task Exited = Task.CompletedTask;
+        public Action? Settle = settle;
     }
 
     /// <summary>Gets whether this adapter started the World a process id names.</summary>
@@ -323,7 +327,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         }
 
         var begun = clock.GetTimestamp();
-        var started = new Started(build: start.Build!, checkout: checkout, document: path, lease: start.Lease, leased: windowed, process: process, runDirectory: runDirectory);
+        var started = new Started(build: start.Build!, checkout: checkout, document: path, lease: start.Lease, leased: windowed, process: process, runDirectory: runDirectory, settle: start.Settle);
 
         started.Exited = WatchAsync(clock: clock, observe: start.Observe, started: started);
         m_started[process.Id] = started;
@@ -560,6 +564,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         var killed = false;
 
         if (!started.Process.HasExited) {
+            Interlocked.Exchange(location1: ref started.Settle, value: null)?.Invoke();
+
             try {
                 started.Process.StandardInput.BaseStream.Write(buffer: "quit\n"u8);
                 started.Process.StandardInput.BaseStream.Flush();

@@ -1211,10 +1211,10 @@ public static partial class WorldFactsVocabulary {
 
                 if (
                     (tokens.Length != (width + 1)) ||
-                    (tokens[width] is not ("hasPath" or "active" or "arrived" or "unreachable" or "remaining" or "pending" or "capacity"))
+                    (tokens[width] is not ("hasPath" or "active" or "arrived" or "unreachable" or "remaining"))
                 ) {
                     throw new RuleException(
-                        detail: $"'{name}' does not spell '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<hasPath|active|arrived|unreachable|remaining|pending|capacity>' ({WorldFactsCompileContext.BodyRefVocabulary})",
+                        detail: $"'{name}' does not spell '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<hasPath|active|arrived|unreachable|remaining>' ({WorldFactsCompileContext.BodyRefVocabulary})",
                         refusal: WorldRuleRefusal.SpatialChannelMalformed,
                         ruleName: ruleName
                     );
