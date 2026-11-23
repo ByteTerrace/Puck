@@ -55,10 +55,14 @@ public enum WorldNavigationConnectivity : byte {
 /// <param name="MaxStepHeight">For a surface domain, the greatest adjacent height delta.</param>
 /// <param name="MaxSlopeDegrees">For a surface domain, the greatest adjacent slope.</param>
 /// <param name="Medium">For a medium domain, the named lattice field that cells must remain inside.</param>
-/// <param name="Shared">Optional shared reverse-search policy. Absent uses independent bounded A* searches.
-/// Shared searches are queued and advanced on subsequent simulation ticks, independently of any leader.</param>
+/// <param name="Shared">Whether bodies navigating this domain follow shared goal fields: one field per goal over the
+/// domain's network, derived once and read a step at a time by every body heading there, in place of a route search per
+/// body. False keeps independent bounded A* searches, each within this domain.</param>
 /// <param name="Parent">Optional static placement frame. Origin and grid axes are local to that frame;
 /// probes remain vertical. The frame must be undistributed and unit scale.</param>
+/// <param name="Network">The network the domain joins. Domains join where they share a cell only when their networks
+/// match, so a route or goal field crosses from one district's pavement to the next but never onto a road of another
+/// network. Absent joins the one unnamed network.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldNavigationDomain(
     [property: DocumentText("a navigation domain name")] string Name,
@@ -80,18 +84,12 @@ public sealed record WorldNavigationDomain(
     float MaxSlopeDegrees = 0f,
     [property: DocumentName(WorldNameKind.Field, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Medium = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSharing? Shared = null,
+    bool Shared = false,
     [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)]
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null,
+    [property: DocumentText("a navigation network name")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Network = null
 );
-/// <summary>Bounds reusable destination trees and their aggregate expansion work in one navigation domain.</summary>
-/// <param name="GoalCapacity">Resident destination-cell trees. A full cache with pending work refuses another
-/// destination as capacity-limited; it never launches an unbudgeted independent search.</param>
-/// <param name="ExpandedNodesPerTick">Total reverse-Dijkstra expansions per simulation tick, shared fairly between
-/// pending resident goals. Each expansion inspects at most 26 edges. A tree can eventually settle every domain cell;
-/// the independent A* MaxExpandedNodes bound does not truncate a shared tree.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldNavigationSharing(int GoalCapacity, int ExpandedNodesPerTick);
 /// <summary>Hard representation ceilings for authored navigation work and memory.</summary>
 public static class WorldNavigationCapacity {
     /// <summary>The greatest cell count in one domain.</summary>
@@ -104,12 +102,10 @@ public static class WorldNavigationCapacity {
     public const int MaxMediumSegmentSubdivisions = 32;
     /// <summary>The greatest route length retained per body.</summary>
     public const int MaxPathNodes = 1_024;
-    /// <summary>The greatest sum of domain cells times resident shared goals; bounds boot workspace and checkpoints.</summary>
-    public const int MaxSharedCellsPerWorld = 1_048_576;
-    /// <summary>The greatest aggregate authored shared-tree expansion budget per simulation tick.</summary>
-    public const int MaxSharedExpandedPerTick = 65_536;
-    /// <summary>The greatest resident destination-tree count per shared domain.</summary>
-    public const int MaxSharedGoals = 16;
+    /// <summary>The bytes a world's resident goal fields hold together before the least recently read is dropped: a
+    /// field holds one byte per cell of its network, so this keeps a few hundred goals over the largest world resident.
+    /// A dropped field is derived again with the same steps, so the bound sets memory and work, never a route.</summary>
+    public const long MaxGoalFieldBytes = 64L * 1024L * 1024L;
 }
 /// <summary>The stable authored-name to navigation-domain ordinal table.</summary>
 public sealed class WorldNavigationDomainTable {

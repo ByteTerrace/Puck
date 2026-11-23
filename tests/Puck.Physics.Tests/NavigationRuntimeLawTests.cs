@@ -11,7 +11,7 @@ public sealed class NavigationRuntimeLawTests {
 
     private static FixedQ4816 Q(double x) => FixedQ4816.FromDouble(value: x);
     private static FixedVector3 V(double x, double y, double z) => new(X: Q(x: x), Y: Q(x: y), Z: Q(x: z));
-    private static NavigationCapacity Capacity() => new(MaxConcurrentRequesters: 4096, MaxMediumSegmentSubdivisions: 32);
+    private static NavigationCapacity Capacity() => new(MaxMediumSegmentSubdivisions: 32, GoalFieldBytes: 64L << 20);
     // A 5 m by 3 m floor whose top is at zero.
     private static FixedStaticCollider Floor() => FixedStaticCollider.AxisAlignedBox(center: V(x: 2, y: -0.5, z: 1), halfExtents: V(x: 4, y: 0.5, z: 3));
     // A wall across x = 2, from z = -1 to z = 2.25, leaving a gap at the far edge of the floor.
@@ -36,7 +36,7 @@ public sealed class NavigationRuntimeLawTests {
         MaxExpandedNodes: (width * depth),
         MaxPathNodes: 256,
         Medium: null,
-        Shared: null
+        Shared: false
     );
 
     [Fact]
@@ -141,7 +141,7 @@ public sealed class NavigationRuntimeLawTests {
             MaxExpandedNodes: 108,
             MaxPathNodes: 108,
             Medium: null,
-            Shared: null
+            Shared: false
         );
         var domain = new NavigationRuntime(domains: [row], geometry: Field(Floor(), Wall()), fields: null, capacity: Capacity())[0];
 

@@ -1017,7 +1017,7 @@ public static partial class WorldDefinitionValidator {
             var producerPath = $"{path}[{name}]";
 
             if (
-                (domain.Shared is not null) &&
+                domain.Shared &&
                 (domain.Kind != WorldNavigationKind.Surface) &&
                 (errors.Count == 0) &&
                 !FlockColliderFitsDomain(
