@@ -87,27 +87,30 @@ public sealed partial class WorldCompileSession {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
         ArgumentNullException.ThrowIfNull(argument: document);
 
+        return TryComposeAndParse(authored: out authored, catalog: catalog, catalogFingerprint: catalogFingerprint, composed: out _,
+            document: document, path: path, reason: out reason, sourceCompilation: sourceCompilation);
+    }
+    // Composes the document and parses the composition beside the document's directory, keeping the composed bytes a
+    // compiled world's header pins.
+    private bool TryComposeAndParse(string path, byte[] document, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? authored,
+        out byte[] composed, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog, WorldCompiledSource? sourceCompilation) {
         authored = null;
 
-        if (!TryComposeBytes(
+        return (TryComposeBytes(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
             document: document,
-            json: out var json,
+            json: out composed,
             path: path,
             reason: out reason,
             sourceCompilation: sourceCompilation
-        ) || !WorldDefinitionFileSource.TryParseDocument(
-            definition: out var parsed,
+        ) && WorldDefinitionLoader.TryParseBeside(
+            definition: out authored,
+            documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: path),
             reason: out reason,
             sourceName: path,
-            utf8: json
-        )) {
-            return false;
-        }
-
-        authored = (parsed! with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: path) });
-        return true;
+            utf8: composed
+        ));
     }
     /// <summary>Composes and parses <paramref name="document"/> (<see cref="TryReadAuthored"/>) and derives its
     /// compiled world fresh for the boot instance (<see cref="CompiledWorld.TryCompile"/>): the file <c>puck compile</c>
@@ -130,21 +133,17 @@ public sealed partial class WorldCompileSession {
 
         // The header records the composed bytes' hash, which a boot composing the same bytes keys the compiled world by
         // before it parses anything.
-        return (TryComposeBytes(
+        return (TryComposeAndParse(
+            authored: out var parsed,
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
+            composed: out var json,
             document: document,
-            json: out var json,
             path: path,
             reason: out reason,
             sourceCompilation: sourceCompilation
-        ) && WorldDefinitionFileSource.TryParseDocument(
-            definition: out var parsed,
-            reason: out reason,
-            sourceName: path,
-            utf8: json
         ) && CompiledWorld.TryCompile(
-            authored: (parsed! with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: path) }),
+            authored: parsed,
             bytes: out compiledWorld,
             catalogFingerprint: catalogFingerprint,
             chunks: CompiledWorldChunks.Standard,

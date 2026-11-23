@@ -492,8 +492,9 @@ public static partial class WorldDefinitionFileSource {
         }
 
         try {
-            if (!TryParseDocument(
+            if (!WorldDefinitionLoader.TryParseBeside(
                 definition: out var parsed,
+                documentDirectory: WorldDocumentPaths.DirectoryOf(documentPath: path),
                 reason: out reason,
                 sourceName: shown,
                 utf8: json
@@ -502,7 +503,7 @@ public static partial class WorldDefinitionFileSource {
             }
 
             contentHash = hash;
-            definition = (parsed! with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: path) });
+            definition = parsed;
 
             return true;
         } catch (Exception exception) {
