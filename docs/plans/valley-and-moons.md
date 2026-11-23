@@ -126,7 +126,7 @@ what a federated world is for.
 |---|---|---|
 | The moon | A body stands anywhere on the sphere and keeps its feet toward the centre | `body.pose` above four points far apart, then `body.where`: grounded, at the sphere's radius give or take the relief |
 | The portal | Walking into the moon painting arrives out of the frame at the pole, and walking back into the frame arrives out of the painting | The two `world.transfer` lines and the instance `body.where` names |
-| The moon in the sky | From the valley floor the moon hangs where `moonCentre` puts it, drawn from the moon's own world, with the valley's sky round it | A capture from the launch field; the `sky$moon` instance in `world.counters gpu` |
+| The moon in the sky | From the valley floor the moon hangs where `moonCentre` puts it, drawn from the moon's own world and lit by its sun, with the valley's sky round it | A capture from the launch field; the `sky$moon` instance in `world.counters gpu` |
 | The ship | A seat boards, lifts off, cruises, and letting go near the ground lands it | `body.where` on the ship and the seat (`anchor=body:<ship>`), `body.hold` reading `landed`, `touchdown` and `cruise` |
 | The seam | The ship and its pilot cross in one tick, land at the same point of the shared frame, and the pilot drives the ship again there | One `world.adjacency` line per body, and the seat's `world.transfer` line reading `driving body:<n> (kit 'ship')` |
 | The landing | Inside the moon's reach the ship rolls to stand against the pull and settles on the ground | `body.where` on the seat: grounded at the sphere's radius, its up along the radius |
@@ -141,25 +141,47 @@ Built by this feature:
 - A rider's crossing (`WorldInstanceHost.RiddenMount`, `WorldTransferCommitMember.Drives`).
 - A view of a place at a distance (`InfinityViewSpec.Follows`, `Bound` and `GeometryCoverage`).
 - A collider read from a creation in an adjacency's reach proof (`WorldAdjacencyPolicy.TryBodyReach`).
+- A hold's probe from the middle of the collider along the body's own up, so a hold takes ground all round a
+  sphere (`WorldBody`'s hold probe origin).
 
 Left open, in the order they matter to the trip:
 
-1. **The air has no altitude.** The valley's sky is the same blue at the seam
+1. **The moon in the sky is unlit.** The view draws the moon where the frame
+   puts it, with the valley's sky round it, but only the moon's faint sky light
+   reaches it: the sun that lights the same ground through the painting's
+   window does not light it in the sky view's instance. The cause is not found.
+   The check is a capture from the launch field in which the moon's sunlit side
+   is as bright as the valley's sunlit walls.
+2. **The valley is not in the moon's sky.** A view of the debug world from the
+   moon draws that whole world again, every exhibit included, as one more
+   residency. What a world shows of itself from far away has to be a product of
+   its own (phase 4's scenery published for a far viewer) before the moon's sky
+   can hold the valley.
+3. **A refused device allocation ends the World.** With the moon's two
+   residencies (the painting's window and the sky view) beside the debug world's
+   own, the device's memory account refused a mesh region's growth and the
+   frame threw (`SdfWorldTables.EnsureMeshRegionCapacity`). A refusal has to
+   shed detail, not end the run.
+4. **No key boards the ship.** Boarding and leaving are `body.engage` and
+   `body.disengage`. A seat's own press beside a body it may drive, and the
+   pilot's camera and bindings, are the possession work the city's driver
+   needs too ([the city plan](city.md)).
+5. **The air has no altitude.** The valley's sky is the same blue at the seam
    as on the floor, and the moon's sky is black, so the sky changes in one frame
    at the crossing. Phase 5's shell atmosphere is the fix: the air's layers and
    the fog thin with the viewer's height, and exposure follows.
-2. **A crossing turns a body about up only.** `WorldFrameIsometry` and the
+6. **A crossing turns a body about up only.** `WorldFrameIsometry` and the
    adjacency validator admit a yaw, so the two worlds' axes agree and the side of
    the moon that faces the valley has its up pointing down in the shared frame.
    The arrival frame therefore stands at the far pole. Phase 6's whole frame
    (orientation, up, angular velocity) lets a frame stand anywhere and lets a
    banked or pitched ship cross as it is.
-3. **A door does not take a rider.** A ship flown into a painting crosses
+7. **A door does not take a rider.** A ship flown into a painting crosses
    without its pilot; only an adjacency queues the rider.
-4. **The ship has no title.** It crosses as a body of whichever world holds it.
+8. **The ship has no title.** It crosses as a body of whichever world holds it.
    Custody for a vehicle (who may recall it, what a visited world may do to it)
    waits for the companion plan's roles.
-5. **The moon's cell.** The sectors bake at the terrain pass's cell, so the
+9. **The moon's cell.** The sectors bake at the terrain pass's cell, so the
    ground shows facets underfoot, as the valley's walls do.
 
 ## The owner's rulings

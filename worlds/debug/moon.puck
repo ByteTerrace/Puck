@@ -6,7 +6,8 @@
 // Boot the debug world, never this one. moon.md beside this file says how to get here and what to look at.
 //
 // The two worlds share one frame up to a shift: a point at `p` here stands at `p + moonCentre` in the debug world
-// (moon-frame.puck), so the valley lies below the moon's south side and the pole's sky looks away from it.
+// (moon-frame.puck), so the valley lies below the moon's south side and the pole's sky looks away from it. The valley
+// is not drawn in this sky: a view of the debug world from here would draw that whole world a second time.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -262,25 +263,6 @@ render {
       ])
       stars(name: "stars", luminance: moonStarLuminance, density: 90, brightness: 1.3, seed: 7)
       sunDisc(name: "sun", light: 0, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
-      // The valley, seen from where the viewer stands in the frame the two worlds share: the debug world's ground
-      // alone, hanging in the moon's sky where the seam leads back to it.
-      {
-        $type: "view"
-        name: "valley"
-        destination: "debug"
-        anchor: moonCentre
-        follow: true
-        coverage: true
-        bound {
-          center [0, 120, 0]
-          radius: 1100
-        }
-        farDistance: 7500
-        scale: 1
-        refresh: 1
-        shadows: true
-        fallback: "#00000000"
-      }
     ]
   }
   atmosphere {

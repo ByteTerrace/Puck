@@ -38,7 +38,7 @@ dayCycle(
       farDistance: 7000
       scale: 1
       refresh: 1
-      shadows: true
+      shadows: false
       fallback: "#00000000"
     }
   ]

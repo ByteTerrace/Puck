@@ -49,6 +49,10 @@ template shipFlight(kit = "ship", cruise = 60, boost = 4, taxi = 4, approach = 2
   0.7
   0.2
 ], exit = [3, 0.4, 0]) {
+  // The collider's middle above the skids' line. A surface hold's reach is measured from there, so each reach below
+  // is this plus the height over the ground the hold should take hold at.
+  let middle = 1.5
+
   bodyMotionPrograms [
     {
       kind: Motion
@@ -113,7 +117,7 @@ template shipFlight(kit = "ship", cruise = 60, boost = 4, taxi = 4, approach = 2
             bond: Surface
             hold: Gravity
             cone [0, 50]
-            reach: 0.5
+            reach: (middle + 0.4)
             forward: Heading
             speed: taxi
             gravity: standardGravity
@@ -125,7 +129,7 @@ template shipFlight(kit = "ship", cruise = 60, boost = 4, taxi = 4, approach = 2
             bond: Surface
             hold: Gravity
             cone [0, 60]
-            reach: flare
+            reach: (middle + flare)
             forward: Heading
             speed: approach
             gravity { fall: 4, rise: 4 }

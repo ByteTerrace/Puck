@@ -20,8 +20,9 @@ let launchBodies = 1
 // The ship's body: the population's highest slot (debug.puck's capacity, less one).
 let launchShipBody = (galleryPopulation + 2 + boardRoomBodies + cardBodies + freeCameraBodies + 1)
 
-// The pad stands on the floor toward the moon's bearing, and the ship on it faces that way.
-let launchPad = [118, 148]
+// The pad stands on the open floor north-east of the hall, toward the moon's bearing and far enough from the wall
+// under it that the moon shows over the rim, and the ship on it faces that way.
+let launchPad = [84, 86]
 let launchPadTop = 0.35
 let launchPadRadius = 8
 let launchHeading = 220
