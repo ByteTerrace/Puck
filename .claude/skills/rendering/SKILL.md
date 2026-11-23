@@ -931,20 +931,38 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   probe lookup pass (`views-probes`) runs `sdfMeshProbesAt` at one representative
   pixel of each `SdfWorldPackage.ViewsProbeRate`-pixel cell, at its geometric
   normal, and again at each other pixel of the cell whose receiver does not lie
-  within the normal bias of the representative's, on its tangent plane and facing
-  alike (`sdfViewsProbesCompatible`), each into its cell's record; views reads the
+  within the screen-measured tolerance of the representative's (`sdfViewsProbeTolerance`:
+  two pixels along the surface or the normal bias, half a pixel off its tangent
+  plane, facing alike; `sdfViewsProbesCompatible`), each into its cell's record; views reads the
   gather the record names for its pixel (`sdfViewsProbesAt`) and never gathers, so
   the reuse never steps across a visibility edge the record shows and the shading
-  kernels carry none of the gather's code. The lookup runs a group's gathers as
-  one list, a gather a lane: in foliage a quarter of the pixels gather, and inside
-  the views kernel each warp holding one would pay a whole gather at views'
-  occupancy. The cube reads
-  stay per shading sample, along its shading normal and mirror direction. The gather
+  kernels carry none of the gather's code. A temporal view first reuses the
+  preceding frame's gather for a receiver that passes the same tolerance against
+  the receiver it was taken at (`passes/sdf-views-probe-history.hlsli`, the
+  fragment's `viewsProbeHistory` history buffer, bound per recording by
+  `SdfWorldPassRecorder.BindHistory`); only a complete gather is kept, and an
+  entry stands under the volume's geometry serial and, past a window's move, only
+  where `sdfViewsProbeHistoryHolds` still holds its receiver
+  (`SdfMeshIrradianceParameters.Geometry` and `Windows`, stepped in
+  `SdfMeshIrradiance.Publish`; a new input a gather reads must step one of them).
+  `world.counters gpu pass sdf.world$views-probes counter texels` counts the gathers
+  that ran. The lookup runs a group's gathers no history serves as one list, a
+  gather a lane: in foliage many pixels gather, and inside the views kernel each warp
+  holding one would pay a whole gather at views' occupancy. Records and history lie in
+  planes, one word of every cell a plane (`sdfViewsProbeWord`), so a wave's
+  accesses coalesce. The cube reads
+  stay per shading sample, along its shading normal and mirror direction; views
+  keeps no corner weight live across its light walk and reads a traced light's
+  visibility from the record's light agreement (`sdfViewsLightVisibility`), loading
+  the gather (`sdfViewsProbesWhole`) only for a light the corners disagree on or a
+  pixel with a gather of its own. The gather
   supplies indirect light, reflections and traced static-light visibility; glass
   gathers at its own pane (`passes/sdf-glass-stage.hlsli`), since a pane is lit
   apart from the surface behind it. `passes/sdf-views-split.hlsli` holds the
   views pass's compile-out switches for reading each part's share of
-  `sdf.world$views` with a reload.
+  `sdf.world$views` with a reload; a reload re-specializes the authored shading
+  sets, which takes minutes, so read `world.shaders.status` for `specialized=` equal
+  to `programs=` before reading a views timing.
   Each probe publishes its own measured cubes, without neighbour filtering.
   Visibility uses a 12×12 octahedral first-hit surface map, one bounded ray
   per texel. Each word packs ray distance and two signed normal bytes;

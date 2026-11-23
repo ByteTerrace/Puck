@@ -211,10 +211,10 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         m_outputs = [.. context.Outputs.Select(selector: LocalName)];
         m_readsRateHistory = m_inputs.Contains(value: SdfWorldPackage.Parts.HistorySurface);
         m_historyPorts = [
-            .. m_inputs.Select(selector: static (name, port) => (Port: port, Input: true, Member: HistoryReadMemberOf(version: name)))
-                .Where(predicate: static entry => entry.Member is not null).Select(selector: static entry => (entry.Port, entry.Input, entry.Member!)),
-            .. m_outputs.Select(selector: static (name, port) => (Port: port, Input: false, Member: HistoryWrittenMemberOf(version: name)))
-                .Where(predicate: static entry => entry.Member is not null).Select(selector: static entry => (entry.Port, entry.Input, entry.Member!)),
+            .. m_inputs.Select(selector: static (name, port) => (Port: port, Input: true, Name: name)).Where(predicate: static entry => IsHistory(version: entry.Name))
+                .Select(selector: static entry => (entry.Port, entry.Input, ReadMemberOf(version: entry.Name)!)),
+            .. m_outputs.Select(selector: static (name, port) => (Port: port, Input: false, Name: name)).Where(predicate: static entry => IsHistory(version: entry.Name))
+                .Select(selector: static entry => (entry.Port, entry.Input, WrittenMemberOf(version: entry.Name)!)),
         ];
         var fragment = owner.FragmentOf(instance: context.Instance)!;
 
@@ -1045,7 +1045,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             var bound = recording.Inputs[port];
 
             if (bound.Buffer is { } buffer) {
-                if (ReadMemberOf(version: name) is { } member) {
+                if (!IsHistory(version: name) && (ReadMemberOf(version: name) is { } member)) {
                     tables.WriteInterfaceBuffer(buffer: buffer, layout: layout, member: member, set: set);
                 }
             } else if (string.Equals(
@@ -1061,7 +1061,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             var bound = recording.Outputs[port];
 
             if (bound.Buffer is { } buffer) {
-                if (WrittenMemberOf(version: name) is { } member) {
+                if (!IsHistory(version: name) && (WrittenMemberOf(version: name) is { } member)) {
                     tables.WriteInterfaceBuffer(buffer: buffer, layout: layout, member: member, set: set);
                 }
             } else if (bound.Kind == ShaderPipelineResourceKind.Image) {
@@ -1120,17 +1120,8 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             }
         }
     }
-    // The member a pass reads a history buffer's preceding allocation through, or null for a port that is no history.
-    private static string? HistoryReadMemberOf(string version) => version switch {
-        SdfWorldPackage.Parts.HistorySurface => SdfWorldPackage.HistorySurface,
-        SdfWorldPackage.Parts.ProbeHistory => SdfWorldPackage.ViewsProbeHistory,
-        _ => null,
-    };
-    // The member a pass writes a history buffer's current allocation through, or null for a port that is no history.
-    private static string? HistoryWrittenMemberOf(string version) => version switch {
-        SdfWorldPackage.Parts.ProbeHistory => SdfWorldPackage.ViewsProbeHistoryWritten,
-        _ => null,
-    };
+    // Whether a fragment buffer is history, whose allocations alternate across submissions (BindHistory).
+    private static bool IsHistory(string version) => version is SdfWorldPackage.Parts.HistorySurface or SdfWorldPackage.Parts.ProbeHistory;
     // The member a pass reads a fragment buffer through, or null for one it reads through no member.
     private static string? ReadMemberOf(string version) => version switch {
         SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecords,
@@ -1138,6 +1129,8 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecords,
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecords,
         SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTiles,
+        SdfWorldPackage.Parts.HistorySurface => SdfWorldPackage.HistorySurface,
+        SdfWorldPackage.Parts.ProbeHistory => SdfWorldPackage.ViewsProbeHistory,
         _ => null,
     };
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
@@ -1149,6 +1142,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecordsWritten,
         SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTilesWritten,
         SdfWorldPackage.Parts.ShadeArguments => SdfWorldPackage.ShadeArgumentsWritten,
+        SdfWorldPackage.Parts.ProbeHistory => SdfWorldPackage.ViewsProbeHistoryWritten,
         _ => null,
     };
 }
