@@ -148,12 +148,6 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"views.root '{root}' names no views.graphs row.");
         }
-        if (
-            (views.NestingDepthRaw is { } nesting) &&
-            ((nesting < 0) || (nesting > RenderGraphInstanceSet.MaxNestingDepth))
-        ) {
-            errors.Add(item: $"views.nestingDepth {nesting} is outside 0 through {RenderGraphInstanceSet.MaxNestingDepth}: a portal seen through a portal nests at most {RenderGraphInstanceSet.MaxNestingDepth} screens deep.");
-        }
         if (views.BuiltinTransition is { } builtinTransition) {
             RequireViewTransition(
                 errors: errors,
@@ -190,11 +184,6 @@ public static partial class WorldDefinitionValidator {
                     graphs: graphs,
                     passes: static _ => 1
                 ),
-                nestingDepth: Math.Clamp(
-                    max: RenderGraphInstanceSet.MaxNestingDepth,
-                    min: 0,
-                    value: views.NestingDepth
-                ),
                 refusal: out var refusal,
                 set: out _
             )
@@ -203,6 +192,12 @@ public static partial class WorldDefinitionValidator {
         }
 
         return names;
+    }
+
+    private static void ValidateViewNesting(WorldValidationRun run) {
+        if (run.Definition.ViewNestingInput is < 0 or > RenderGraphInstanceSet.MaxNestingDepth) {
+            run.Errors.Add($"views.nestingDepth {run.Definition.ViewNestingInput} is outside 0 through {RenderGraphInstanceSet.MaxNestingDepth}: a portal seen through a portal nests at most {RenderGraphInstanceSet.MaxNestingDepth} screens deep.");
+        }
     }
     // A row's bound parameters: each value a finite number or a state token naming a Fixed or Int cell, and no field
     // both bound here and overridden, since a binding rewritten over an override every frame hides one of the two. The

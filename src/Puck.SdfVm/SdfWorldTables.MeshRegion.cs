@@ -529,12 +529,6 @@ public sealed partial class SdfWorldTables {
     // candidates); count is the rows the draw region holds records for (EnsureMeshDrawCapacity).
     private int StageChangedDraws(SdfMeshDraws draws, int count, GpuUploadRuns? candidates = null) {
         var records = m_meshDrawWords.AsSpan(length: (count * SdfMeshRecord.DrawWords), start: 0);
-        // The records as the region last held them, which a moved matrix is compared against before it is written.
-        var old = m_meshRegion.ContentsAt(
-            length: ((int)Math.Min(val1: m_meshRegion.ByteCount, val2: (((long)count) * SdfMeshRegion.DrawBytes))),
-            offset: 0
-        );
-
         m_meshDrawDifferences.Clear();
         var changedRecords = 0;
         var changedWords = 0L;
@@ -587,13 +581,9 @@ public sealed partial class SdfWorldTables {
 
                     var wasLive = ReadStagedSelection(row: index, record: record, box: out var before, glass: out var wasGlass);
                     var posed = (sameRoster && (difference == SdfMeshDrawDifference.Matrix) && (index < m_stagedCount));
-                    var mask = StageMeshDraw(draw: in draw, incremental: true, index: index, old: old, posed: ref posed, record: record, tally: ref tally);
+                    var mask = StageMeshDraw(draw: in draw, index: index, posed: posed, record: record, tally: ref tally);
 
-                    if (posed) {
-                        NotePosedRow(row: index, wasLive: wasLive, before: in before, wasGlass: wasGlass, draw: in draw, record: record);
-                    } else {
-                        NoteStagedRow(row: index, wasLive: wasLive, before: in before, wasGlass: wasGlass, draw: in draw, record: record);
-                    }
+                    NoteStagedRow(row: index, wasLive: wasLive, before: in before, wasGlass: wasGlass, draw: in draw, record: record);
                     // A grown region's new bytes are unknown to its host copy, so its zeros are not evidence of device
                     // zeros: initialize every word of a newly exposed record, including zero placement words.
                     if (index >= m_stagedCount) { mask = (ulong.MaxValue >> (64 - SdfMeshRecord.DrawWords)); }

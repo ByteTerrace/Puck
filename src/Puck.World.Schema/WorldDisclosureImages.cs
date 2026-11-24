@@ -438,7 +438,10 @@ public sealed partial class WorldDisclosureImages {
         if (entry.FrameDocument is { } frame) {
             var basis = frame with { PlacementsRaw = null, StateRaw = null, CreationsRaw = null, ShadesRaw = null };
             if (!basis.Equals(m_frameBaseOf)) {
-                m_frameBase = Digest(WorldDefinitionSerialization.SerializeCompact(basis));
+                var members = WorldDefinitionMembers.Of(basis, m_frameBaseOf, out var written);
+
+                m_work.Add(DefinitionBytes, written);
+                m_frameBase = Convert.FromHexString(members.Pin);
                 m_frameBaseOf = basis;
             }
             Span<byte> parts = stackalloc byte[5 * SHA256.HashSizeInBytes];

@@ -211,10 +211,17 @@ public static partial class WorldDefinitionValidator {
             validate: static (run, _) => ValidateAdmission(deferred: run.Deferred, entries: run.Definition.Admission, errors: run.Errors, populationCapacity: run.Definition.Population.Capacity)
         ),
         new(
+            name: "views.nestingDepth",
+            granularity: WorldValidationGranularity.Section,
+            owns: WorldDocumentInputs.Of(WorldDocumentInput.ViewNesting),
+            reads: WorldDocumentInputs.None,
+            validate: static (run, _) => ValidateViewNesting(run)
+        ),
+        new(
             name: "document",
             granularity: WorldValidationGranularity.Section,
-            owns: WorldDocumentInputs.All,
-            reads: WorldDocumentInputs.All,
+            owns: WorldDocumentInputs.None, // VerifyPartitions assigns the remaining inputs.
+            reads: WorldDocumentInputs.All.Except(WorldDocumentInputs.Of(WorldDocumentInput.ViewNesting)),
             validate: static (run, _) => run.Compilation = ValidateDocumentPartition(run: run)
         ),
     ];
@@ -222,8 +229,7 @@ public static partial class WorldDefinitionValidator {
     private static readonly Lazy<WorldValidationPartition[]> VerifiedPartitions = new(valueFactory: VerifyPartitions, mode: LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>Gets the validation partitions, in the order a whole-document validation runs them. Every part of a
-    /// document is owned by exactly one of them; the last, <c>document</c>, owns every part no other partition
-    /// owns and reads the whole document.</summary>
+    /// document is owned by exactly one of them; the last, <c>document</c>, owns every part no other partition owns.</summary>
     /// <exception cref="InvalidOperationException">The table leaves a part without an owner or gives one two.</exception>
     public static IReadOnlyList<WorldValidationPartition> Partitions => VerifiedPartitions.Value;
 
@@ -274,6 +280,7 @@ public static partial class WorldDefinitionValidator {
         ArgumentNullException.ThrowIfNull(argument: after);
 
         var run = new WorldValidationRun {
+            Before = before,
             Definition = after,
             Delivered = delivered,
             Machines = machines,
@@ -394,8 +401,8 @@ public static partial class WorldDefinitionValidator {
             if (owned.Overlaps(other: partition.Owns)) { problems.Add(item: $"partition '{partition.Name}' owns {owned.Intersect(other: partition.Owns)}, which another partition owns"); }
             owned |= partition.Owns;
         }
-        if (!string.Equals(a: last.Name, b: "document", comparisonType: StringComparison.Ordinal) || (last.Reads != WorldDocumentInputs.All)) {
-            problems.Add(item: "the last partition must be the document partition, reading the whole document");
+        if (!string.Equals(a: last.Name, b: "document", comparisonType: StringComparison.Ordinal)) {
+            problems.Add(item: "the last partition must be the document partition");
         }
         if (problems.Count > 0) {
             throw new InvalidOperationException(message: $"The validation partition table is unsound: {string.Join(separator: "; ", values: problems)}.");

@@ -30,7 +30,7 @@ public sealed class WorldEditorFrameLawTests {
         }
     }
     private sealed class Adjacency(IReadOnlyList<WorldAdjacencyProjection> projections) : IWorldAdjacencySource {
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => projections;
+        public WorldAdjacencyRead Visuals() => new(projections);
     }
     private sealed class Neighbour(WorldDefinition definition) : IWorldAdjacencyNeighbour {
         public string Authority => North;

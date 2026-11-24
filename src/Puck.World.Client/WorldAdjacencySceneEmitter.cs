@@ -38,7 +38,7 @@ namespace Puck.World.Client;
 /// reservation class. A band is reserved for every direct edge PLUS every derivable corner pair
 /// (<c>WorldAdjacencyBands.ProjectionCapacity</c>), so the reservation grows quadratically in authored edges.</para>
 /// </remarks>
-public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
+public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter, IDisposable {
     // The moving half of the same per-band reservation. KEEP IN SYNC: the probe branch reserves exactly this many
     // worst-case rigs per band and EmitEntities selects at most this many delivered bodies, so a live band can never
     // outgrow the envelope SdfWorldTables.UploadProgram freezes.
@@ -128,7 +128,22 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // shifted direct/corner list into the old program's ranges, producing the border-riding flicker. WriteRevision
     // still observes topology changes and requests a rebuild; until that rebuild lands, transforms follow exactly
     // the projection image that compiled the current program.
-    private WorldAdjacencyProjection[] m_emittedProjections = [];
+    private readonly Lock m_emittedGate = new();
+    private WorldAdjacencyRead? m_emittedRead;
+
+    /// <summary>Releases the projection image held by the emitted program.</summary>
+    public void Dispose() => HoldEmitted(null);
+
+    private void HoldEmitted(WorldAdjacencyRead? read) {
+        WorldAdjacencyRead? previous;
+
+        lock (m_emittedGate) { (previous, m_emittedRead) = (m_emittedRead, read); }
+        previous?.Dispose();
+    }
+
+    private WorldAdjacencyRead? ReadEmitted() {
+        lock (m_emittedGate) { return m_emittedRead?.Retain(); }
+    }
 
     /// <summary>Initializes the emitter over the boot definition's own adjacency rows.</summary>
     /// <param name="client">The snapshot-fed client view — this world's own definition (never re-read from the
@@ -179,7 +194,8 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         foreach (var motion in m_liveSet) { m_liveSlots[motion] = -1; }
         m_liveSet.Clear();
         m_liveSlotCount = 0;
-        var visuals = m_source.Visuals();
+        using var read = m_source.Visuals();
+        var visuals = read.Projections;
 
         for (var band = 0; (band < Math.Min(visuals.Count, m_bandCount)); band++) {
             Select(band: band, projection: visuals[band]);
@@ -330,18 +346,6 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         }
     }
 
-    // A plain indexed copy of the first `count` entries — the ONLY place EmitCurrent allocates a fresh
-    // m_emittedProjections array, reached only when a live edit authors more adjacency projections than this
-    // composition reserved at boot.
-    private static WorldAdjacencyProjection[] CopyProjections(IReadOnlyList<WorldAdjacencyProjection> source, int count) {
-        var copy = new WorldAdjacencyProjection[count];
-
-        for (var index = 0; (index < count); index++) {
-            copy[index] = source[index];
-        }
-
-        return copy;
-    }
     // Selects and emits the delivered bodies this band actually renders. Two bounds, both load-bearing:
     //   - the neighbour's OWN delivered table width, never the engine-wide body ceiling (the bound contact
     //     resolution and PackDynamicTransforms already walk);
@@ -534,30 +538,11 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
         // One Visuals() read, indexed rather than foreach'd — the compile-time type is the IReadOnlyList seam, and
         // an indexer read costs no enumerator where a foreach over it would allocate one.
-        var projections = m_source.Visuals();
-        var bandLimit = Math.Min(
-            val1: projections.Count,
-            val2: m_bandCount
-        );
+        using var read = m_source.Visuals();
+        var projections = read.Projections;
 
         if (includeEntities) {
-            // m_emittedProjections stays a bare array — PackDynamicTransforms foreach's it every produced frame, and
-            // an array foreach costs no enumerator where an IReadOnlyList foreach would. Visuals()'s own concrete
-            // return is already a freshly-built array for this tick, so the untruncated case stores it directly
-            // rather than copying; only an over-authored live band (more than this composition reserved at boot)
-            // pays for a copy, bounded to what actually fits.
-            m_emittedProjections = ((projections.Count > m_bandCount)
-                ? CopyProjections(
-                    count: bandLimit,
-                    source: projections
-                )
-                : ((projections is WorldAdjacencyProjection[] array)
-                    ? array
-                    : CopyProjections(
-                        count: projections.Count,
-                        source: projections
-                    )
-            ));
+            HoldEmitted(read.Retain());
         }
 
         for (var bandIndex = 0; (bandIndex < projections.Count); bandIndex++) {
@@ -642,9 +627,11 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     /// <remarks>An entity repacks only while its mapped pose moves. The emitted set changes only with a rebuild, which
     /// owes the whole table, so an unemitted entity's range stays parked.</remarks>
     public void PackDynamicTransforms(DynamicTransform[] slots, in SdfEmitContext context, SdfMovedTransforms moved) {
-        var bandIndex = 0;
+        using var read = ReadEmitted();
+        var projections = read?.Projections ?? [];
 
-        foreach (var projection in m_emittedProjections) {
+        for (var bandIndex = 0; bandIndex < Math.Min(projections.Count, m_bandCount); bandIndex++) {
+            var projection = projections[bandIndex];
             var neighbour = projection.Neighbour;
             var bandBase = context.SlotBase;
             var alpha = neighbour.InterpolationAlpha;
@@ -717,7 +704,6 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     table: slots
                 );
             }
-            bandIndex++;
         }
         PublishStaticCopies();
     }
@@ -732,7 +718,8 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         // Poll every band's neighbour reachability/definition-revision — a live neighbour edit (or a neighbour
         // becoming reachable/unreachable) bumps this component so the host rebuilds, exactly like every other
         // watched counter in this composition. One Visuals() call, reused by both passes below.
-        var visuals = m_source.Visuals();
+        using var read = m_source.Visuals();
+        var visuals = read.Projections;
 
         m_observedAdjacencies.Clear();
 

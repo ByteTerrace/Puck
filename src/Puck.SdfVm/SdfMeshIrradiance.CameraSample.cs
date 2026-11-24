@@ -12,6 +12,7 @@ public sealed partial class SdfMeshIrradiance {
     // The latest completed GPU reading. Exposure adapts over seconds, so a view reads its own latest row at whatever
     // position its camera now stands; only a cut (fresh) asks for a row scheduled after the view's cut.
     private GpuCameraSampleReading? m_gpuCameraSample;
+    private uint[] m_gpuCameraSampleWritable = [];
     // What the last scheduled camera sample asked: its distinct positions, the volume key and scene, and each view's cut.
     private Vector3[] m_gpuCameraSampleAsked = [];
     private ReferenceRevision[] m_gpuCameraSampleAskedCuts = [];
@@ -41,6 +42,7 @@ public sealed partial class SdfMeshIrradiance {
         Vector4[] origins;
         Vector4[] lighting;
         int words;
+        uint[] result;
         lock (m_gate) {
             var count = frame.Views.Count;
             if (m_gpuCameraSampleViewPositions.Length != count) {
@@ -79,6 +81,7 @@ public sealed partial class SdfMeshIrradiance {
             if (!frame.ConvergesLighting && !cut && Time.GetElapsedTime(m_gpuCameraSampleAt) < LightingInterval) { return; }
             if (TakeSnapshot() is not { } captured) { return; }
             snapshot = captured;
+            result = ArrayCapacity.EnsureScratch(ref m_gpuCameraSampleWritable, (distinct * SdfMeshProbeRelight.CameraSampleOutputWords) + 1);
             positions = scratchPositions.AsSpan(start: 0, length: distinct).ToArray();
             rows = scratchRows.AsSpan(start: 0, length: count).ToArray();
             cuts = [.. m_gpuCameraSampleViewCuts];
@@ -99,18 +102,20 @@ public sealed partial class SdfMeshIrradiance {
             m_gpuCameraSampleAskedOf = client;
             m_gpuCameraSampleAt = Time.GetTimestamp();
         }
-        m_gpuCameraSampleTask = ReadCameraSample(gpu, snapshot, origins, lighting, words, positions, rows, cuts);
+        m_gpuCameraSampleTask = ReadCameraSample(gpu, snapshot, origins, lighting, words, positions, rows, cuts, result);
     }
     // A method of its own rather than a local function of ScheduleGpuCameraSamples: a local function that captures the schedule's
     // locals makes the compiler allocate their closure on entry, on every frame, though most frames return before they
     // are set.
-    private async Task ReadCameraSample(SdfMeshProbeGpuWork gpu, Snapshot snapshot, Vector4[] origins, Vector4[] lighting, int words, Vector3[] positions, int[] rows, ReferenceRevision[] cuts) {
+    private async Task ReadCameraSample(SdfMeshProbeGpuWork gpu, Snapshot snapshot, Vector4[] origins, Vector4[] lighting, int words, Vector3[] positions, int[] rows, ReferenceRevision[] cuts, uint[] result) {
         try {
-            var answer = await gpu.CameraSample(snapshot.Scene, origins, lighting, words, snapshot.Geometry, snapshot.WindowVersion).ConfigureAwait(false);
+            var answer = await gpu.CameraSample(snapshot.Scene, origins, lighting, words, snapshot.Geometry, snapshot.WindowVersion, result).ConfigureAwait(false);
             // Admission checked the scene and window, and the device read the volume they stood for, so the reading
             // stands for its positions even when the window has moved on since.
             lock (m_gate) {
                 if (m_disposed || !ReferenceEquals(GpuTrace, gpu)) { return; }
+                // Every camera reader holds this gate. After the exchange, no reader can reach the former answer.
+                m_gpuCameraSampleWritable = m_gpuCameraSample?.Words ?? [];
                 m_gpuCameraSample = new GpuCameraSampleReading(gpu, answer, positions, rows, cuts);
             }
         } catch (OperationCanceledException) {

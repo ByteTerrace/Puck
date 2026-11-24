@@ -660,17 +660,8 @@ public static class SdfMeshRegion {
             var slot = unchecked((int)record[SdfMeshRecord.FrameSlotWord]);
 
             if ((slot >= 0) && (slot < transforms.Count)) {
-                box = SdfMeshBox.Ridden(
-                    carryRotation: new Quaternion(x: Float(words: record, word: SdfMeshRecord.CarryRotationWord), y: Float(words: record, word: (SdfMeshRecord.CarryRotationWord + 1)),
-                        z: Float(words: record, word: (SdfMeshRecord.CarryRotationWord + 2)), w: Float(words: record, word: (SdfMeshRecord.CarryRotationWord + 3))),
-                    carryScale: Float(words: record, word: SdfMeshRecord.CarryScaleWord),
-                    carryTranslation: ReadSelectionVector(offset: SdfMeshRecord.CarryTranslationWord, words: record),
-                    center: ReadSelectionVector(words: selection, offset: 0),
-                    half: new Vector3(x: BitConverter.UInt32BitsToSingle(value: selection[4]), y: BitConverter.UInt32BitsToSingle(value: selection[9]),
-                        z: BitConverter.UInt32BitsToSingle(value: selection[14])),
-                    scale: Float(words: record, word: SdfMeshRecord.ScaleWord),
-                    slot: transforms[slot]
-                );
+                _ = TryReadSlotBox(record, out var local);
+                box = local.Carry.Place(local.Center, local.Half, local.Scale, transforms[slot]);
             }
 
             return true;
@@ -686,7 +677,39 @@ public static class SdfMeshRegion {
 
         return true;
 
-        static float Float(ReadOnlySpan<uint> words, int word) => BitConverter.UInt32BitsToSingle(value: words[word]);
+    }
+
+    internal readonly record struct SelectionCarry(Quaternion Rotation, Vector3 Translation, float Scale) {
+        public SdfMeshBox Place(Vector3 center, Vector3 half, float scale, in DynamicTransform transform) => SdfMeshBox.Ridden(
+            center: center, half: half, slot: transform, scale: scale,
+            carryRotation: Rotation, carryTranslation: Translation, carryScale: Scale
+        );
+    }
+    internal readonly record struct SlotSelection(Vector3 Center, Vector3 Half, float Scale, SelectionCarry Carry);
+
+    // Decode the box into the slot's frame before its carry. Individual selection and slot judgement share this door.
+    internal static bool TryReadSlotBox(ReadOnlySpan<uint> record, out SlotSelection local) {
+        var selection = record.Slice(length: SelectionWords, start: SdfMeshRecord.SelectionWord);
+        var flags = selection[3];
+
+        if ((flags & (SdfMeshRecord.SlotBoxFlag | SdfMeshRecord.AbsentFlag | 1u)) != SdfMeshRecord.SlotBoxFlag) {
+            local = default;
+            return false;
+        }
+        local = new(
+            Center: ReadSelectionVector(selection, 0),
+            Half: new(Float(selection, 4), Float(selection, 9), Float(selection, 14)),
+            Scale: Float(record, SdfMeshRecord.ScaleWord),
+            Carry: new(
+                Rotation: new(Float(record, SdfMeshRecord.CarryRotationWord), Float(record, SdfMeshRecord.CarryRotationWord + 1),
+                Float(record, SdfMeshRecord.CarryRotationWord + 2), Float(record, SdfMeshRecord.CarryRotationWord + 3)),
+                Translation: ReadSelectionVector(record, SdfMeshRecord.CarryTranslationWord),
+                Scale: Float(record, SdfMeshRecord.CarryScaleWord)
+            )
+        );
+        return true;
+
+        static float Float(ReadOnlySpan<uint> words, int word) => BitConverter.UInt32BitsToSingle(words[word]);
     }
     /// <summary>The words of a record's selection rows, from <see cref="SdfMeshRecord.SelectionWord"/>.</summary>
     public const int SelectionWords = 16;

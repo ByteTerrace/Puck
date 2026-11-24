@@ -35,6 +35,14 @@ public static class CanonicalJsonDocument {
     public static byte[] SerializeCompact<T>(T value, JsonTypeInfo<T> jsonTypeInfo) where T : class {
         ArgumentNullException.ThrowIfNull(argument: value);
 
+        return SerializeCompact(value, (JsonTypeInfo)jsonTypeInfo);
+    }
+
+    /// <summary>Serializes a canonical member using its declared type, including a null member when present.</summary>
+    /// <param name="value">The member's value.</param>
+    /// <param name="jsonTypeInfo">The member type's source-generated metadata.</param>
+    /// <returns>The compact canonical UTF-8 bytes.</returns>
+    public static byte[] SerializeCompact(object? value, JsonTypeInfo jsonTypeInfo) {
         using var stream = new MemoryStream();
 
         using (var writer = new Utf8JsonWriter(
