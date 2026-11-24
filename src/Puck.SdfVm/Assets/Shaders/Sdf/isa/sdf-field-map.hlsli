@@ -3,6 +3,9 @@ case SDF_OP_RESET_POINT:
 {
     localPosition = worldPosition;
     distanceScale = 1.0;
+#ifdef SDF_FIELD_DUAL
+    localJacobian = SDF_DUAL_IDENTITY;
+#endif
     currentSlot = SDF_TRANSFORM_SLOT_NONE;
 #ifdef SDF_DYNAMIC_TRANSFORMS
     rootDynamicIndex = index + 1u;
@@ -21,6 +24,9 @@ case SDF_OP_RESET_POINT:
         if (key == frameKey && framePending == SDF_SEGMENT_NONE) {
             localPosition = framePosition;
             distanceScale = frameScale;
+            #ifdef SDF_FIELD_DUAL
+            localJacobian = frameJacobian;
+            #endif
             currentSlot = frameSlot;
             index += frameLength;
         } else {
@@ -33,20 +39,33 @@ case SDF_OP_RESET_POINT:
 case SDF_OP_TRANSLATE:
 {
     SDF_VM_LOAD_DATA0;
+#ifdef SDF_FIELD_DUAL
+    { SdfDual3 sdfDualMapped = sdfTranslatePoint(sdfdMake(localPosition, localJacobian), data0.xyz); localPosition = sdfDualMapped.v; localJacobian = sdfDualMapped.d; }
+#else
     localPosition = sdfTranslatePoint(localPosition, data0.xyz);
+#endif
     break;
 }
 case SDF_OP_ROTATE:
 {
     SDF_VM_LOAD_DATA0;
+#ifdef SDF_FIELD_DUAL
+    { SdfDual3 sdfDualMapped = sdfRotatePoint(sdfdMake(localPosition, localJacobian), data0); localPosition = sdfDualMapped.v; localJacobian = sdfDualMapped.d; }
+#else
     localPosition = sdfRotatePoint(localPosition, data0);
+#endif
     break;
 }
 case SDF_OP_SCALE:
 {
     SDF_VM_LOAD_DATA0;
+#ifdef SDF_FIELD_DUAL
+    { SdfDual3 sdfDualMapped = sdfScalePoint(sdfdMake(localPosition, localJacobian), data0.xyz); localPosition = sdfDualMapped.v; localJacobian = sdfDualMapped.d; }
+    distanceScale = sdfScaleDistance(distanceScale, data0.w);
+#else
     localPosition = sdfScalePoint(localPosition, data0.xyz);
     distanceScale = sdfScaleDistance(distanceScale, data0.w);
+#endif
     break;
 }
 case SDF_OP_TRANSFORM_DYNAMIC:
@@ -59,8 +78,14 @@ case SDF_OP_TRANSFORM_DYNAMIC:
     uint dynamicSlot = (uint)data0.x;
     if (index == rootDynamicIndex) {
         localPosition = sdfWorldPointInSlot(worldPosition, dynamicSlot, dynamicRoot);
+#ifdef SDF_FIELD_DUAL
+        localJacobian = sdfdRotateJacobian(SDF_DUAL_IDENTITY, sdfDynamicTransformRow(3u * dynamicSlot + 1u));
+#endif
     } else {
         localPosition = sdfPointInSlot(localPosition, dynamicSlot);
+#ifdef SDF_FIELD_DUAL
+        localJacobian = sdfdRotateJacobian(localJacobian, sdfDynamicTransformRow(3u * dynamicSlot + 1u));
+#endif
     }
     currentSlot = (int)dynamicSlot;
     break;
@@ -71,6 +96,7 @@ case SDF_OP_TRANSFORM_DYNAMIC:
 case SDF_OP_ROTATE_PLANE:
 {
     SDF_VM_LOAD_DATA0;
+    SDF_FIELD_DUAL_UNCOVERED;
     uint u = (SDF_INSTRUCTION_SHAPE(instructionHeader) == SDF_PLANE_YZ) ? SDF_AXIS_Y : SDF_AXIS_X;
     uint v = (SDF_INSTRUCTION_SHAPE(instructionHeader) == SDF_PLANE_XY) ? SDF_AXIS_Y : SDF_AXIS_Z;
     uint driver = SDF_INSTRUCTION_BLEND(instructionHeader);
@@ -85,7 +111,11 @@ case SDF_OP_ROTATE_PLANE:
 case SDF_OP_ELONGATE:
 {
     SDF_VM_LOAD_DATA0;
+#ifdef SDF_FIELD_DUAL
+    { SdfDual3 sdfDualMapped = sdfElongatePoint(sdfdMake(localPosition, localJacobian), data0.xyz); localPosition = sdfDualMapped.v; localJacobian = sdfDualMapped.d; }
+#else
     localPosition = sdfElongatePoint(localPosition, data0.xyz);
+#endif
     break;
 }
 case SDF_OP_SHAPE_BLEND:
@@ -134,11 +164,19 @@ case SDF_OP_SHAPE_BLEND:
     }
 
     uint shapeType = SDF_INSTRUCTION_SHAPE(instructionHeader);
+#ifdef SDF_FIELD_DUAL
+    SdfDual shapeDual = evaluateShape(shapeType, sdfdMake(localPosition, localJacobian), data0, data1);
+    float candidate = ((shapeDual.v * distanceScale) + laneErosion);
+#else
     float candidate = ((evaluateShape(shapeType, localPosition, data0, data1) * distanceScale) + laneErosion);
+#endif
 
     // Hand the DISTANCE-SCALED (plus any pending lane erosion) candidate to the shared blend tail below.
     float shapeStepScale = asfloat(SDF_SHAPE_STEP_SCALE(shapeBoundMeta));
     composeCandidate = shapeStepScale > 0.0 ? candidate * shapeStepScale : candidate;
+#ifdef SDF_FIELD_DUAL
+    composeGradient = (shapeDual.d * (distanceScale * ((shapeStepScale > 0.0) ? shapeStepScale : 1.0)));
+#endif
     composeBlend = SDF_INSTRUCTION_BLEND(instructionHeader);
     composeSmooth = data1.x;
     composePending = true;
@@ -162,32 +200,49 @@ case SDF_OP_REPEAT:
 {
     SDF_VM_LOAD_DATA0;
     SDF_VM_LOAD_DATA1;
+#ifdef SDF_FIELD_DUAL
+    { SdfDual3 sdfDualMapped = sdfRepeatPoint(sdfdMake(localPosition, localJacobian), data0.xyz, data1.xyz); localPosition = sdfDualMapped.v; localJacobian = sdfDualMapped.d; }
+#else
     localPosition = sdfRepeatPoint(localPosition, data0.xyz, data1.xyz);
+#endif
     break;
 }
 case SDF_OP_REPEAT_LIMITED:
 {
     SDF_VM_LOAD_DATA0;
     SDF_VM_LOAD_DATA1;
+#ifdef SDF_FIELD_DUAL
+    { SdfDual3 sdfDualMapped = sdfRepeatLimitedPoint(sdfdMake(localPosition, localJacobian), data0.xyz, data1.xyz); localPosition = sdfDualMapped.v; localJacobian = sdfDualMapped.d; }
+#else
     localPosition = sdfRepeatLimitedPoint(localPosition, data0.xyz, data1.xyz);
+#endif
     break;
 }
 case SDF_OP_ONION:
 {
     SDF_VM_LOAD_DATA0;
+#ifdef SDF_FIELD_DUAL
+    { SdfDual sdfDualEdited = sdfOnionField(sdfdMake(result.distance, result.gradient), data0.x); result.distance = sdfDualEdited.v; result.gradient = sdfDualEdited.d; }
+#else
     result.distance = sdfOnionField(result.distance, data0.x);
+#endif
     break;
 }
 case SDF_OP_DILATE:
 {
     SDF_VM_LOAD_DATA0;
+#ifdef SDF_FIELD_DUAL
+    { SdfDual sdfDualEdited = sdfDilateField(sdfdMake(result.distance, result.gradient), data0.x); result.distance = sdfDualEdited.v; result.gradient = sdfDualEdited.d; }
+#else
     result.distance = sdfDilateField(result.distance, data0.x);
+#endif
     break;
 }
 case SDF_OP_WALLPAPER_FOLD:
 {
     SDF_VM_LOAD_DATA0;
     SDF_VM_LOAD_DATA1;
+    SDF_FIELD_DUAL_UNCOVERED;
     // header lanes: y = the wallpaper group, z = the fold plane (0 = XZ, 1 = XY, 2 = YZ), w = the
     // parity-material stride. The fold is an isometry, so distanceScale is untouched.
     uint group = SDF_INSTRUCTION_SHAPE(instructionHeader);
@@ -212,6 +267,7 @@ case SDF_OP_WALLPAPER_FOLD:
 case SDF_OP_LOG_SPHERE:
 {
     SDF_VM_LOAD_DATA0;
+    SDF_FIELD_DUAL_UNCOVERED;
     float foldRadius = max(length(localPosition), SDF_LOGSPHERE_MIN_RADIUS);
     float logRadius = log(foldRadius);
     float shell = round(logRadius * data0.z);   // nearest shell index k
@@ -243,6 +299,7 @@ case SDF_OP_CELL_JITTER:
 {
     SDF_VM_LOAD_DATA0;
     SDF_VM_LOAD_DATA1;
+    SDF_FIELD_DUAL_UNCOVERED;
     float3 cell = round(localPosition * data1.xyz);   // data1.xyz = 1/spacing (host-baked)
     // asuint(int3(cell)) is well-defined two's-complement for a negative rounded index on both backends.
     uint3 seed = uint3(SDF_INSTRUCTION_SHAPE(instructionHeader), (SDF_INSTRUCTION_SHAPE(instructionHeader) * SDF_HASH_STREAM_A), (SDF_INSTRUCTION_SHAPE(instructionHeader) * SDF_HASH_STREAM_B));
@@ -310,6 +367,7 @@ case SDF_OP_CELL_JITTER:
 case SDF_OP_REPEAT_POLAR:
 {
     SDF_VM_LOAD_DATA0;
+    SDF_FIELD_DUAL_UNCOVERED;
     uint polarAxis = SDF_INSTRUCTION_SHAPE(instructionHeader);
     // The fold plane (u,v) perpendicular to the axis; the axial coordinate is untouched.
     float2 pv;
@@ -345,11 +403,24 @@ case SDF_OP_DISPLACE:
     // a band introduces a jump that corrupts footprint hits and finite-difference curvature.
     float3 df = (data0.xyz * localPosition);
     result.distance += (data0.w * ((sin(df.x) * sin(df.y)) * sin(df.z)));
+#ifdef SDF_FIELD_DUAL
+    float3 dfSin = sin(df);
+    float3 dfCos = cos(df);
+    float3 displaceSlope = ((data0.w * data0.xyz) * float3((dfCos.x * dfSin.y) * dfSin.z, (dfSin.x * dfCos.y) * dfSin.z, (dfSin.x * dfSin.y) * dfCos.z));
+    result.gradient += mul(displaceSlope, localJacobian);
+#endif
     break;
 }
 case SDF_OP_DOMAIN_WARP:
 {
     SDF_VM_LOAD_DATA0;
+#ifdef SDF_FIELD_DUAL
+    float3x3 warp = float3x3(
+        1.0, (data0.w * data0.x) * cos(data0.x * localPosition.y), 0.0,
+        0.0, 1.0, (data0.w * data0.y) * cos(data0.y * localPosition.z),
+        (data0.w * data0.z) * cos(data0.z * localPosition.x), 0.0, 1.0);
+    localJacobian = mul(warp, localJacobian);
+#endif
     localPosition += (data0.w * float3(
         sin(data0.x * localPosition.y),
         sin(data0.y * localPosition.z),
@@ -359,7 +430,11 @@ case SDF_OP_DOMAIN_WARP:
 case SDF_OP_SYMMETRY_PLANE:
 {
     SDF_VM_LOAD_DATA0;
+#ifdef SDF_FIELD_DUAL
+    { SdfDual3 sdfDualMapped = sdfSymmetryPlanePoint(sdfdMake(localPosition, localJacobian), data0.xyz, data0.w); localPosition = sdfDualMapped.v; localJacobian = sdfDualMapped.d; }
+#else
     localPosition = sdfSymmetryPlanePoint(localPosition, data0.xyz, data0.w);
+#endif
     break;
 }
 case SDF_OP_PUSH_FIELD:
@@ -373,6 +448,9 @@ case SDF_OP_PUSH_FIELD:
     }
     fieldDepth++;
     result.distance = SDF_FAR_DISTANCE;
+#ifdef SDF_FIELD_DUAL
+    result.gradient = float3(0.0, 0.0, 0.0);
+#endif
     if (trackMaterial) {
         result.material = 0;
         result.instanceIndex = -1;
@@ -398,6 +476,9 @@ case SDF_OP_POP_FIELD:
     if (candidateScale > 0.0) {
         composeCandidate *= candidateScale;
     }
+#ifdef SDF_FIELD_DUAL
+    composeGradient = (result.gradient * ((candidateScale > 0.0) ? candidateScale : 1.0));
+#endif
     if (trackMaterial) {
         composeMaterial = result.material;
         composeInstance = result.instanceIndex;
@@ -427,13 +508,22 @@ case SDF_OP_NOISE_DISPLACE:
     uint reliefRows = SDF_INSTRUCTION_MATERIAL(instructionHeader);
     if ((reliefRows > SDF_MAX_RELIEF_ROWS) || (reliefRows > (index - segmentMeta.z))) { return sdfIsaErrorHit(); }
     float weight = ((reliefRows == 0u) ? 1.0 : sdfMaskProduct((index - reliefRows), reliefRows, localPosition, dataOffset));
+#ifdef SDF_FIELD_DUAL
+    // The masks' weight varies along the surface, and the dual overload reads it as a constant.
+    if (reliefRows != 0u) { SDF_FIELD_DUAL_UNCOVERED; }
+#endif
+#ifdef SDF_FIELD_DUAL
+    { SdfDual sdfDualEdited = sdfReliefField(sdfdMake(result.distance, result.gradient), sdfdMake(localPosition, localJacobian), weight, data0.x, data0.y, data0.z, data0.w, data1.x, SDF_INSTRUCTION_SHAPE(instructionHeader), SDF_INSTRUCTION_BLEND(instructionHeader)); result.distance = sdfDualEdited.v; result.gradient = sdfDualEdited.d; }
+#else
     result.distance = sdfReliefField(result.distance, localPosition, weight, data0.x, data0.y, data0.z, data0.w, data1.x, SDF_INSTRUCTION_SHAPE(instructionHeader), SDF_INSTRUCTION_BLEND(instructionHeader));
+#endif
     break;
 }
 case SDF_OP_AXIAL_PROFILE:
 {
     SDF_VM_LOAD_DATA0;
     SDF_VM_LOAD_DATA1;
+    SDF_FIELD_DUAL_UNCOVERED;
     uint axis = SDF_INSTRUCTION_SHAPE(instructionHeader);
     if (axis >= 3u) { return sdfIsaErrorHit(); }
     distanceScale *= sdfAxialProfile(localPosition, axis, data0, data1);
@@ -442,6 +532,7 @@ case SDF_OP_AXIAL_PROFILE:
 case SDF_OP_SHEAR:
 {
     SDF_VM_LOAD_DATA0;
+    SDF_FIELD_DUAL_UNCOVERED;
     uint target = SDF_INSTRUCTION_SHAPE(instructionHeader), driver = SDF_INSTRUCTION_BLEND(instructionHeader);
     if (target >= 3u || driver >= 3u) { return sdfIsaErrorHit(); }
     sdfShear(localPosition, target, driver, data0.xyz);
@@ -454,6 +545,10 @@ case SDF_OP_GAUSSIAN_PUSH:
     float3 gaussianPush = float3(data0.w, data1.w, asfloat(SDF_INSTRUCTION_SHAPE(instructionHeader)));
     float3 gaussianOffset = ((localPosition - data0.xyz) / data1.xyz);
     float gaussianWeight = exp(-dot(gaussianOffset, gaussianOffset));
+#ifdef SDF_FIELD_DUAL
+    float3 gaussianSlope = ((-2.0 * gaussianWeight) * (gaussianOffset / data1.xyz));
+    localJacobian = mul(SDF_DUAL_IDENTITY - sdfdOuter(gaussianPush, gaussianSlope), localJacobian);
+#endif
     localPosition -= (gaussianPush * gaussianWeight);
     break;
 }
@@ -461,6 +556,7 @@ case SDF_OP_LANE_ERODE:
 {
     SDF_VM_LOAD_DATA0;
     SDF_VM_LOAD_DATA1;
+    SDF_FIELD_DUAL_UNCOVERED;
     float lane = sdfFieldLane(currentSlot, (uint)data0.x);
     float t = saturate((lane - data0.y) / (data0.z - data0.y));
 
@@ -480,7 +576,11 @@ case SDF_OP_LANE_ERODE:
 case SDF_OP_CELL_DISPLACE:
 {
     SDF_VM_LOAD_DATA0;
+#ifdef SDF_FIELD_DUAL
+    { SdfDual sdfDualEdited = sdfCellDisplaceField(sdfdMake(result.distance, result.gradient), sdfdMake(localPosition, localJacobian), data0.x, data0.y, data0.z, SDF_INSTRUCTION_SHAPE(instructionHeader), SDF_INSTRUCTION_BLEND(instructionHeader)); result.distance = sdfDualEdited.v; result.gradient = sdfDualEdited.d; }
+#else
     result.distance = sdfCellDisplaceField(result.distance, localPosition, data0.x, data0.y, data0.z, SDF_INSTRUCTION_SHAPE(instructionHeader), SDF_INSTRUCTION_BLEND(instructionHeader));
+#endif
     break;
 }
 case SDF_OP_RELIEF_ROW:

@@ -208,6 +208,13 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         var commandBuffer = recording.CommandBuffer;
         var mask = m_tables.Pipeline(kernel: SdfKernel.MeshBakeMask);
         var sampler = m_tables.Pipeline(kernel: SdfKernel.MeshBake);
+        var gradientSampler = m_tables.Pipeline(kernel: SdfKernel.MeshBakeGradient);
+        var values = false;
+        var gradients = false;
+
+        foreach (var lattice in batch.Lattices) {
+            if (lattice.WithGradient) { gradients = true; } else { values = true; }
+        }
 
         recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: masks.BufferHandle,
             sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: GpuStage.ComputeShader,
@@ -220,8 +227,15 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: samplesBuffer.BufferHandle,
             sourceAccessMask: GpuAccess.TransferRead, sourceStageMask: GpuStage.Transfer,
             destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
-        Bind(commandBuffer: commandBuffer, pass: slot.BakeSet, pipeline: sampler, recorder: recorder, world: world);
-        recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: ((uint)samples.CeilingDivide(divisor: 64)), groupCountY: 1, groupCountZ: 1);
+        // The two samplers write disjoint lattices' words, each leaving the other's samples alone.
+        if (values) {
+            Bind(commandBuffer: commandBuffer, pass: slot.BakeSet, pipeline: sampler, recorder: recorder, world: world);
+            recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: ((uint)samples.CeilingDivide(divisor: 64)), groupCountY: 1, groupCountZ: 1);
+        }
+        if (gradients) {
+            Bind(commandBuffer: commandBuffer, pass: slot.BakeSet, pipeline: gradientSampler, recorder: recorder, world: world);
+            recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: ((uint)samples.CeilingDivide(divisor: 64)), groupCountY: 1, groupCountZ: 1);
+        }
         recording.CopyToReadback(bytes: sampleBytes, source: samplesBuffer);
     }
     /// <inheritdoc/>

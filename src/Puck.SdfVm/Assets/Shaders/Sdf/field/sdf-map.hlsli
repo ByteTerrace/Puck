@@ -29,6 +29,33 @@ float3 sdfRigidFoldPoint(float3 p, uint extensionOffset, uint dataOffset) {
     }
     return p;
 }
+#ifdef SDF_FIELD_DUAL
+// The same fold run over a dual point: each arm resolves to its formula's dual overload.
+SdfDual3 sdfRigidFoldPoint(SdfDual3 p, uint extensionOffset, uint dataOffset) {
+    uint4 prefix = sdfProgramWord(extensionOffset);
+    p = sdfdSubtract(p, asfloat(prefix.xyz));
+    if ((prefix.w & SDF_RIGID_LEAF_IDENTITY_ROTATION) == 0u) {
+        p = sdfdRotateInverse(p, asfloat(sdfProgramWord(extensionOffset + 1u)));
+    }
+    uint first = (prefix.w & SDF_RIGID_LEAF_SHAPE_MASK);
+    uint count = min(sdfProgramWord(extensionOffset + 2u).x, SDF_RIGID_LEAF_MAX_FOLD_RUN);
+    if ((first > sdfProgramLayout.instructionCount) || (count > (sdfProgramLayout.instructionCount - first))) {
+        return sdfdLift(asfloat(0x7fc00000u).xxx);
+    }
+    [loop]
+    for (uint step = 0u; (step < count); step++) {
+        uint index = (first + step);
+        uint op = SDF_INSTRUCTION_OP(sdfFieldHeader(index));
+        float4 data0 = sdfFieldData(dataOffset, index, 0u);
+        float4 data1 = sdfFieldData(dataOffset, index, 1u);
+        switch (op) {
+#include "../isa/sdf-field-rigid.hlsli"
+            default: return sdfdLift(asfloat(0x7fc00000u).xxx);
+        }
+    }
+    return p;
+}
+#endif
 // Region admission and the primitive action both come from the shape catalogue.
 precise float sdfReliefRegionDistance(uint shapeType, float3 p, float4 data0, float4 data1) {
     float result;
@@ -129,6 +156,11 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     uint framePending = SDF_SEGMENT_NONE;
     float3 framePosition = worldPosition;
     float frameScale = 1.0;
+#ifdef SDF_FIELD_DUAL
+    // The local point's Jacobian over the world point, and the frame cache's copy of it.
+    float3x3 localJacobian = SDF_DUAL_IDENTITY;
+    float3x3 frameJacobian = SDF_DUAL_IDENTITY;
+#endif
     int frameSlot = SDF_TRANSFORM_SLOT_NONE;
     SdfDynamicRoot dynamicRoot;
     dynamicRoot.slot = SDF_TRANSFORM_SLOT_NONE;
@@ -149,6 +181,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     result.material = 0;
     result.instanceIndex = -1;
     result.frameSlot = SDF_TRANSFORM_SLOT_NONE;
+#ifdef SDF_FIELD_DUAL
+    result.gradient = float3(0.0, 0.0, 0.0);
+#endif
 
     // Each validated scope saves its immediate parent's complete field.
 #if SDF_MAX_FIELD_SCOPE_DEPTH != 4
@@ -268,12 +303,19 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             if (planReady) {
                 float3 rigidBasePosition = worldPosition;
                 int rigidSlot = SDF_TRANSFORM_SLOT_NONE;
+#ifdef SDF_FIELD_DUAL
+                // A rigid chain's Jacobian is a rotation: the slot's, then each leaf's own.
+                float3x3 rigidBaseJacobian = SDF_DUAL_IDENTITY;
+#endif
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
                 if (plan.z != SDF_TRANSFORM_SLOT_STATIC_WORD) {
                     uint dynamicSlot = (uint)SDF_TRANSFORM_SLOT_UNPACK(plan.z);
                     rigidSlot = (int)dynamicSlot;
                     rigidBasePosition = sdfWorldPointInSlot(worldPosition, dynamicSlot, dynamicRoot);
+#ifdef SDF_FIELD_DUAL
+                    rigidBaseJacobian = sdfdRotateJacobian(SDF_DUAL_IDENTITY, sdfDynamicTransformRow(3u * dynamicSlot + 1u));
+#endif
                 }
 #endif
 
@@ -307,6 +349,23 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     uint4 shapeHeader = sdfProgramWord(SDF_PROGRAM_HEADER_VECTORS + shapeIndex);
 
 
+#ifdef SDF_FIELD_DUAL
+                    SdfDual3 rigidPoint = sdfdMake(rigidBasePosition, rigidBaseJacobian);
+
+                    if (folded) {
+                        rigidPoint = sdfRigidFoldPoint(rigidPoint, (leafOffset + 3u), dataOffset);
+                    }
+
+                    rigidPoint = sdfdSubtract(rigidPoint, asfloat(packedPose.xyz));
+
+                    if ((packedShape & SDF_RIGID_LEAF_IDENTITY_ROTATION) == 0u) {
+                        rigidPoint = sdfdRotateInverse(rigidPoint, asfloat(sdfProgramWord(leafOffset + 1u)));
+                    }
+
+                    float4 shapeData0 = sdfFieldData(dataOffset, shapeIndex, 0u);
+                    float4 shapeData1 = sdfFieldData(dataOffset, shapeIndex, 1u);
+                    SdfDual candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shapeHeader), rigidPoint, shapeData0, shapeData1);
+#else
                     float3 leafBasePosition = rigidBasePosition;
 
                     if (folded) {
@@ -322,6 +381,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     float4 shapeData0 = sdfFieldData(dataOffset, shapeIndex, 0u);
                     float4 shapeData1 = sdfFieldData(dataOffset, shapeIndex, 1u);
                     float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shapeHeader), rigidPosition, shapeData0, shapeData1);
+#endif
                     int material = (trackMaterial ? (int)SDF_INSTRUCTION_MATERIAL(shapeHeader) : 0);
 
                     sdfComposeCandidate(result, candidate, SDF_INSTRUCTION_BLEND(shapeHeader), material, segmentInstance, rigidSlot, shapeData1.x, 0.0, trackMaterial);
@@ -336,6 +396,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             if (index == framePending) {
                 framePosition = localPosition;
                 frameScale = distanceScale;
+#ifdef SDF_FIELD_DUAL
+                frameJacobian = localJacobian;
+#endif
                 frameSlot = currentSlot;
                 framePending = SDF_SEGMENT_NONE;
             }
@@ -357,6 +420,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             int composeSlot = SDF_TRANSFORM_SLOT_NONE;
             float composeSmooth = 0.0;
             float composeOperand = 0.0;
+#ifdef SDF_FIELD_DUAL
+            float3 composeGradient = float3(0.0, 0.0, 0.0);
+#endif
 
             switch (op) {
 #include "../isa/sdf-field-map.hlsli"
@@ -372,7 +438,11 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             // is a contact locus of ties). Then blend the candidate into result.distance. composePending is false for
             // every point/field op AND for a bound-skipped SHAPE, so those paths are byte-for-byte the pre-scope walk.
             if (composePending) {
+#ifdef SDF_FIELD_DUAL
+                sdfComposeCandidate(result, sdfdMake(composeCandidate, composeGradient), composeBlend, composeMaterial, composeInstance, composeSlot, composeSmooth, composeOperand, trackMaterial);
+#else
                 sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeInstance, composeSlot, composeSmooth, composeOperand, trackMaterial);
+#endif
             }
         }
     }

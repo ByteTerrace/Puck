@@ -251,6 +251,152 @@ internal class SdfFormula {
         } finally { Widening = false; }
     }
 
+    // === The dual reader ===============================================================================================
+    // A fourth lowering, for the bake's gradient walk (SDF_FIELD_DUAL): each formula again as an HLSL overload of the
+    // same name whose walk-state inputs (the point, the running and candidate distances) are duals, values carried with
+    // their derivatives along the sample's world axes (field/sdf-dual.hlsli). Activity is forward: a node is active when
+    // it reads an active input, except where its derivative is zero everywhere it is defined (a rounding, a comparison),
+    // and an active node lowers to the dual library's function of its operation while an inactive one keeps the plain
+    // reader's text. A helper is emitted once for each pattern of active arguments its callers pass, as an overload.
+    private static readonly string[] DualStates = ["p", "current", "candidate", "distance"];
+
+    internal static string EmitAllDual(params SdfFormula[] formulas) {
+        var written = new HashSet<string>();
+        var output = new StringBuilder();
+        foreach (var formula in formulas) {
+            if (formula.Result == SdfFormulaType.Condition) { continue; }
+            var mask = formula.Parameters(shader: true).Select(static parameter => parameter.Bound && DualStates.Contains(parameter.Shader)).ToArray();
+            if (mask.Any(static active => active) && formula.ResultActive(mask)) { formula.EmitDual(mask, written, output); }
+        }
+        return output.ToString().TrimEnd() + "\n";
+    }
+
+    private static bool Differentiable(SdfFormulaType type) =>
+        type is SdfFormulaType.Scalar or SdfFormulaType.Vector2 or SdfFormulaType.Vector3;
+
+    private static string DualTypeName(SdfFormulaType type) => type switch {
+        SdfFormulaType.Scalar => "SdfDual",
+        SdfFormulaType.Vector2 => "SdfDual2",
+        SdfFormulaType.Vector3 => "SdfDual3",
+        _ => throw new ArgumentOutOfRangeException(nameof(type)),
+    };
+
+    // Which named values a pattern of active parameters makes active, step by step.
+    private Dictionary<string, bool> DualNames(bool[] mask) {
+        var names = new Dictionary<string, bool>();
+        var parameters = Parameters(shader: true).ToArray();
+        for (var index = 0; index < parameters.Length; index++) { names[parameters[index].Name] = mask[index] && Differentiable(parameters[index].Type); }
+        foreach (var step in m_steps) {
+            if (step.Name is { } name) { names[name] = Active(step.Value, names); }
+        }
+        return names;
+    }
+
+    private bool ResultActive(bool[] mask) {
+        var names = DualNames(mask);
+        return m_steps.Any(step => step.Name is null && Active(step.Value, names));
+    }
+
+    private static bool Active(SdfFormulaNode node, Dictionary<string, bool> names) => node.Op switch {
+        SdfFormulaOp.Name => names.TryGetValue(node.Text, out var active) && active,
+        SdfFormulaOp.Literal or SdfFormulaOp.Constant or SdfFormulaOp.Round or SdfFormulaOp.Floor => false,
+        SdfFormulaOp.Equal or SdfFormulaOp.Less or SdfFormulaOp.LessEqual or SdfFormulaOp.Greater or SdfFormulaOp.GreaterEqual or SdfFormulaOp.And => false,
+        SdfFormulaOp.Call => node.Function!.ResultActive(node.Inputs.Select(input => Active(input, names)).ToArray()),
+        _ => node.Inputs.Any(input => Active(input, names)),
+    };
+
+    private void EmitDual(bool[] mask, HashSet<string> written, StringBuilder output) {
+        if (!written.Add(Name + "/" + string.Concat(mask.Select(static active => active ? '1' : '0')))) { return; }
+        var names = DualNames(mask);
+        var body = new StringBuilder();
+        var parameters = Parameters(shader: true).ToArray();
+        var arguments = parameters.Select((parameter, index) => (names[parameter.Name] ? DualTypeName(parameter.Type) : TypeName(parameter.Type, shader: true)) + " " + parameter.Name);
+        body.Append(DualTypeName(Result)).Append(' ').Append(Call(Name, arguments)).Append(" {\n");
+        foreach (var step in m_steps) {
+            body.Append("    ");
+            if (step.When is { } condition) {
+                body.Append("if (").Append(DualValue(condition, names, written, output)).Append(") { return ").Append(DualLift(step.Value, names, written, output)).Append("; }\n");
+            } else if (step.Name is { } name) {
+                var active = names[name];
+                body.Append(active ? DualTypeName(step.Value.Type) : TypeName(step.Value.Type, shader: true)).Append(' ').Append(name).Append(" = ")
+                    .Append(active ? Dual(step.Value, names, written, output) : DualValue(step.Value, names, written, output)).Append(";\n");
+            } else {
+                body.Append("return ").Append(DualLift(step.Value, names, written, output)).Append(";\n");
+            }
+        }
+        output.Append(body.Append("}\n")).Append('\n');
+    }
+
+    // The plain value of a node: an active node's dual value, else the plain reader's text over its inputs' values.
+    private static string DualValue(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) =>
+        Active(node, names)
+            ? Dual(node, names, written, output) + ".v"
+            : Render(node, shader: true, input => DualValue(input, names, written, output));
+
+    // A node as a dual whether active or not: an inactive value lifts to a constant.
+    private static string DualLift(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) =>
+        Active(node, names) ? Dual(node, names, written, output) : $"sdfdLift({DualValue(node, names, written, output)})";
+
+    // An active node as the dual library's call; an inactive operand passes its plain value to the mixed overloads.
+    private static string Dual(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) {
+        string Operand(int index) => Active(node.Inputs[index], names) ? Dual(node.Inputs[index], names, written, output) : DualValue(node.Inputs[index], names, written, output);
+        string Lifted(int index) => DualLift(node.Inputs[index], names, written, output);
+        string Value(int index) => DualValue(node.Inputs[index], names, written, output);
+        bool ActiveAt(int index) => Active(node.Inputs[index], names);
+        string Constants(int from) {
+            for (var index = from; index < node.Inputs.Length; index++) {
+                if (ActiveAt(index)) { throw new InvalidOperationException($"Field formula operation {node.Op} has no derivative through operand {index}."); }
+            }
+            return string.Concat(Enumerable.Range(from, node.Inputs.Length - from).Select(index => ", " + Value(index)));
+        }
+        string Function(string name, params string[] operands) => name + "(" + string.Join(", ", operands) + ")";
+        return node.Op switch {
+            SdfFormulaOp.Name => node.Text,
+            SdfFormulaOp.Add => Function("sdfdAdd", Operand(0), Operand(1)),
+            SdfFormulaOp.Subtract => Function("sdfdSubtract", Operand(0), Operand(1)),
+            SdfFormulaOp.Multiply => Function("sdfdMultiply", Operand(0), Operand(1)),
+            SdfFormulaOp.Divide => Function("sdfdDivide", Operand(0), Operand(1)),
+            SdfFormulaOp.MultiplyComponents => Function("sdfdMultiplyComponents", Operand(0), Operand(1)),
+            SdfFormulaOp.DivideComponents => Function("sdfdDivideComponents", Operand(0), Operand(1)),
+            SdfFormulaOp.Min => Function("sdfdMin", Operand(0), Operand(1)),
+            SdfFormulaOp.Max => Function("sdfdMax", Operand(0), Operand(1)),
+            SdfFormulaOp.Dot => Function("sdfdDot", Operand(0), Operand(1)),
+            SdfFormulaOp.Negate => Function("sdfdNegate", Operand(0)),
+            SdfFormulaOp.X => Function("sdfdX", Operand(0)),
+            SdfFormulaOp.Y => Function("sdfdY", Operand(0)),
+            SdfFormulaOp.Z => Function("sdfdZ", Operand(0)),
+            SdfFormulaOp.Vector2 => Function("sdfdVec2", Lifted(0), Lifted(1)),
+            SdfFormulaOp.Vector3 => Function("sdfdVec3", Lifted(0), Lifted(1), Lifted(2)),
+            SdfFormulaOp.Abs => Function("sdfdAbs", Operand(0)),
+            SdfFormulaOp.Length => Function("sdfdLength", Operand(0)),
+            SdfFormulaOp.Clamp => (ActiveAt(1) || ActiveAt(2)) ? Function("sdfdClamp", Lifted(0), Lifted(1), Lifted(2)) : Function("sdfdClamp", Lifted(0), Value(1), Value(2)),
+            SdfFormulaOp.Lerp => Function("sdfdLerp", Lifted(0), Lifted(1), Lifted(2)),
+            SdfFormulaOp.SegmentParameter => ActiveAt(1) ? Function("sdfdSegmentParameter", Lifted(0), Lifted(1)) : Function("sdfdSegmentParameter", Lifted(0), Value(1)),
+            SdfFormulaOp.MinLength => Function("sdfdMinLength", Lifted(0), Lifted(1)),
+            // The shader's |p| · (min(r) · 1/r).
+            SdfFormulaOp.ScaledRatio => Function("sdfdMultiply", Operand(0), (ActiveAt(1) || ActiveAt(3)) ? Function("sdfdMultiply", Operand(1), Operand(3)) : $"({Value(1)} * {Value(3)})"),
+            SdfFormulaOp.Power => ActiveAt(1) ? Function("sdfdPower", Lifted(0), Lifted(1)) : Function("sdfdPower", Lifted(0), Value(1)),
+            SdfFormulaOp.FiniteOr => Function("sdfdFiniteOr", Lifted(0), Lifted(1)),
+            SdfFormulaOp.Select => Function("sdfdSelect", Value(0), Lifted(1), Lifted(2)),
+            SdfFormulaOp.Smoothstep => ActiveAt(0) || ActiveAt(1)
+                ? throw new InvalidOperationException("A field formula's smoothstep edges have no derivative.")
+                : Function("sdfdSmoothstep", Value(0), Value(1), Lifted(2)),
+            SdfFormulaOp.RotateInverse => "sdfdRotateInverse(" + Lifted(0) + Constants(1) + ")",
+            SdfFormulaOp.Ellipse2D => "sdfEllipse2D(" + Lifted(0) + ", float2(" + Constants(1).Substring(2) + "))",
+            SdfFormulaOp.Fbm3 => "sdfFbm3(" + Lifted(0) + Constants(1) + ")",
+            SdfFormulaOp.CellDistance => "sdfCellDistance(" + Lifted(0) + Constants(1) + ")",
+            SdfFormulaOp.Call => DualCall(node, names, written, output),
+            _ => throw new InvalidOperationException($"Field formula operation {node.Op} has no dual lowering."),
+        };
+    }
+
+    private static string DualCall(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) {
+        var mask = node.Inputs.Select(input => Active(input, names)).ToArray();
+        node.Function!.EmitDual(mask, written, output);
+        return Call(node.Function.Name, node.Inputs.Select((input, index) =>
+            mask[index] ? Dual(input, names, written, output) : DualValue(input, names, written, output)));
+    }
+
     protected SdfFormulaNode Invoke(params ISdfFormulaValue[] arguments) {
         if (m_parameters.Any(static parameter => parameter.Bound)
             || !m_parameters.Select(static parameter => parameter.Type).SequenceEqual(arguments.Select(static argument => argument.Node.Type))) {
@@ -271,10 +417,12 @@ internal class SdfFormula {
         _ => throw new ArgumentOutOfRangeException(nameof(type)),
     };
 
-    private static string Render(SdfFormulaNode node, bool shader) {
-        string At(int index) => Render(node.Inputs[index], shader);
+    // inputs renders each operand; by default the same reader's text, the dual reader's plain values otherwise.
+    private static string Render(SdfFormulaNode node, bool shader, Func<SdfFormulaNode, string>? inputs = null) {
+        var operand = inputs ?? (input => Render(input, shader));
+        string At(int index) => operand(node.Inputs[index]);
         string Binary(string op) => $"({At(0)} {op} {At(1)})";
-        string Arguments() => string.Join(", ", node.Inputs.Select(input => Render(input, shader)));
+        string Arguments() => string.Join(", ", node.Inputs.Select(operand));
         // A scalar or vector intrinsic: HLSL's lower-case overload, or the C# carrier's static method of that name.
         string Math(string name) => shader
             ? $"{name.ToLowerInvariant()}({Arguments()})"
@@ -292,7 +440,7 @@ internal class SdfFormula {
             SdfFormulaOp.X => Member("X"),
             SdfFormulaOp.Y => Member("Y"),
             SdfFormulaOp.Z => Member("Z"),
-            SdfFormulaOp.Vector2 or SdfFormulaOp.Vector3 => (shader ? "" : "new ") + Call(TypeName(node.Type, shader), node.Inputs.Select(input => Render(input, shader))),
+            SdfFormulaOp.Vector2 or SdfFormulaOp.Vector3 => (shader ? "" : "new ") + Call(TypeName(node.Type, shader), node.Inputs.Select(operand)),
             SdfFormulaOp.Abs => Math("Abs"),
             SdfFormulaOp.Min => Math("Min"),
             SdfFormulaOp.Max => Math("Max"),
@@ -351,7 +499,7 @@ internal class SdfFormula {
             SdfFormulaOp.GreaterEqual => Binary(">="),
             SdfFormulaOp.And => Binary(Widening ? "&" : "&&"),
             SdfFormulaOp.Select => Widening ? $"Wide.Select({At(0)}, {At(1)}, {At(2)})" : $"({At(0)} ? {At(1)} : {At(2)})",
-            SdfFormulaOp.Call => Call(node.Function!.NameIn(shader), node.Inputs.Select(input => Render(input, shader))
+            SdfFormulaOp.Call => Call(node.Function!.NameIn(shader), node.Inputs.Select(operand)
                 .Concat(!shader && !Widening && node.Function!.UsesPower ? ["ref powerWork"] : [])),
             _ => throw new ArgumentOutOfRangeException(nameof(node)),
         };

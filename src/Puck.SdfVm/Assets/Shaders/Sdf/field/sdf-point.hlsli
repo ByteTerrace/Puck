@@ -2,16 +2,23 @@
 #ifndef FIELD_SDF_POINT_HLSLI
 #define FIELD_SDF_POINT_HLSLI
 // The winning candidate's instance and dynamic frame travel with its material.
+// The gradient walk (SDF_FIELD_DUAL) carries the field's gradient at the sample beside its distance.
 struct SdfHit {
     float distance;
     int material;
     int instanceIndex;
     int frameSlot;
+#ifdef SDF_FIELD_DUAL
+    float3 gradient;
+#endif
 };
 
 SdfHit sdfIsaErrorHit() {
     SdfHit result;
     result.distance = 0.0;
+#ifdef SDF_FIELD_DUAL
+    result.gradient = float3(0.0, 0.0, 0.0);
+#endif
     result.material = SDF_ISA_ERROR_MATERIAL;
     result.instanceIndex = -1;
     result.frameSlot = SDF_TRANSFORM_SLOT_NONE;

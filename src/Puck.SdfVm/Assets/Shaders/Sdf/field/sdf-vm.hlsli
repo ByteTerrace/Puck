@@ -17,10 +17,24 @@
 #include "sdf-program.hlsli"
 #include "sdf-point.hlsli"
 #include "sdf-noise.hlsli"
+// The gradient walk (SDF_FIELD_DUAL, the bake's gradient kernel) carries every point and distance with its derivatives
+// through the same walk; an arm that keeps no derivatives marks the sample uncovered, and its gradient is then the
+// stencil's (passes/sdf-mesh-bake-gradient.comp.hlsl).
+#ifdef SDF_FIELD_DUAL
+#include "sdf-ellipse.hlsli"
+#include "sdf-dual.hlsli"
+static bool sdfFieldDualCovered = true;
+#define SDF_FIELD_DUAL_UNCOVERED sdfFieldDualCovered = false
+#else
+#define SDF_FIELD_DUAL_UNCOVERED
+#endif
 // What each instruction does to the walk and a relief band's weight: shared formulas generated with their fixed-point
-// twins (Puck.SignedDistance's SdfFieldFormulas).
+// twins (Puck.SignedDistance's SdfFieldFormulas), and their dual overloads for the gradient walk.
 #include "../isa/sdf-field-op-formulas.hlsli"
 #include "../isa/sdf-field-relief-formulas.hlsli"
+#ifdef SDF_FIELD_DUAL
+#include "../isa/sdf-field-op-dual.hlsli"
+#endif
 #include "sdf-shapes.hlsli"
 #include "sdf-blend.hlsli"
 #include "sdf-layout.hlsli"

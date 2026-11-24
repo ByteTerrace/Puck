@@ -175,6 +175,9 @@ public sealed class SdfFieldCatalogueGenerator : IIncrementalGenerator {
                 source.AppendLine("    /// <summary>Lowers the catalogue's shared formulas to shader functions.</summary>");
                 source.AppendLine("    public static string GenerateFormulasHlsl() => SdfFormula.EmitAll(true,");
                 source.AppendLine("        " + string.Join(", ", formulas.Select(static item => "SdfFieldFormulas." + item.Use.Field).Distinct()) + ");");
+                source.AppendLine("    /// <summary>Lowers the catalogue's shared formulas to the gradient walk's dual overloads.</summary>");
+                source.AppendLine("    public static string GenerateDualFormulasHlsl() => SdfFormula.EmitAllDual(");
+                source.AppendLine("        " + string.Join(", ", formulas.Select(static item => "SdfFieldFormulas." + item.Use.Field).Distinct()) + ");");
             }
             source.AppendLine("}");
             context.AddSource(catalogue + ".g.cs", source.ToString());

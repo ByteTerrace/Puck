@@ -50,9 +50,15 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
         if (mode == 3) { MemoryMarshal.Cast<int, Vector3>(words[Samples..])[local] = gradient; }
     }
 
-    /// <summary>Gets the field evaluations the dispatch makes: five a sample that measures the gradient, one
-    /// otherwise.</summary>
-    public int Taps => (Gradients ? (5 * Samples) : Samples);
+    /// <summary>The work a sample that measures the gradient costs, in samples that do not: one walk of the field in
+    /// forward mode (sdf-mesh-bake-gradient.comp.hlsl), whose value carries three partials through every operation. A
+    /// sample whose walk meets an operation that keeps no derivatives still takes the stencil's five walks; the rate the
+    /// bake measures its batches at absorbs them.</summary>
+    public const int GradientCost = 2;
+
+    /// <summary>Gets the work the dispatch makes, in field walks of a sample that measures no gradient: one a sample, and
+    /// <see cref="GradientCost"/> a sample that measures the gradient.</summary>
+    public int Taps => (Gradients ? (GradientCost * Samples) : Samples);
 
     /// <summary>Gets the first plane along Z of its group's final lattice that a slab of it samples, or -1 for any other
     /// lattice. A slab keeps its final lattice's <see cref="Origin"/>: its sample at plane <c>z</c> of its own lies at
@@ -120,8 +126,8 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     public int SampledHandles { get; init; }
     /// <summary>Gets the byte length of the packed output of every lattice.</summary>
     public int OutputBytes => Lattices.Sum(static lattice => lattice.OutputBytes);
-    /// <summary>Gets the field evaluations the batch's lattices make (<see cref="SdfMeshBakeRequest.Taps"/>), the unit the
-    /// bake's GPU time is measured in.</summary>
+    /// <summary>Gets the work the batch's lattices make (<see cref="SdfMeshBakeRequest.Taps"/>), the unit the bake's GPU
+    /// time is measured in.</summary>
     public long Taps {
         get {
             var taps = 0L;
@@ -2333,7 +2339,7 @@ public sealed partial class SdfMeshPathBake {
     // takes. Gradient taps are spaced by the contour's finest cell.
     private static SdfMeshBakeRequest FinalChunk(Group group, FinalLattice final) {
         var gradients = (final.Stage == FinalStage.Gradients);
-        var count = Math.Clamp(value: (LatticeTaps / (gradients ? 5 : 1)), min: 1, max: (final.Points.Length - final.Answered));
+        var count = Math.Clamp(value: (LatticeTaps / (gradients ? SdfMeshBakeRequest.GradientCost : 1)), min: 1, max: (final.Points.Length - final.Answered));
 
         return RequestOf(cell: final.Sampled!.ContourCell, dims: (count, 1, 1), gradients: gradients, group: group, origin: Vector3.Zero) with {
             WithMaterial = final.Stage == FinalStage.Refinement,
@@ -2470,7 +2476,7 @@ public sealed partial class SdfMeshPathBake {
     // The next chunk of the vertices a group's field check measures (gradients at taps the crease spacing apart) or of its
     // material points (values alone), as many as a frame's share of field evaluations takes.
     private static SdfMeshBakeRequest PointsChunk(Group group, bool gradients) {
-        var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: (LatticeTaps / (gradients ? 5 : 1)));
+        var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: (LatticeTaps / (gradients ? SdfMeshBakeRequest.GradientCost : 1)));
 
         return RequestOf(cell: (gradients ? group.CreaseSpacing : Vector3.One), dims: (count, 1, 1), gradients: gradients, group: group, origin: Vector3.Zero) with {
             MaterialOnly = !gradients,
