@@ -615,8 +615,26 @@ public static class WorldAdjacencyPolicy {
             )
         );
     }
-    /// <summary>Derives the greatest collider-center reach in a document for overlap and reciprocal-contact proofs.</summary>
+    // One derivation a definition: every adjacency projection and ownership sweep of every tick asks for it, and a
+    // creation's collider compiles whole each time it is derived.
+    private sealed record BodyReach(bool Proven, FixedQ4816 Reach, string Reason);
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, BodyReach> BodyReaches = new();
+
+    /// <summary>Derives the greatest collider-center reach in a document for overlap and reciprocal-contact proofs, once
+    /// a definition.</summary>
+    /// <param name="definition">The document.</param>
+    /// <param name="reach">The reach, or zero when it cannot be proven.</param>
+    /// <param name="reason">Why the reach cannot be proven, or empty.</param>
+    /// <returns><see langword="true"/> when every kit's collider bounds its reach.</returns>
     public static bool TryBodyReach(WorldDefinition definition, out FixedQ4816 reach, out string reason) {
+        var known = BodyReaches.GetValue(key: definition, derive: static candidate => new BodyReach(
+            Proven: DeriveBodyReach(definition: candidate, reach: out var derived, reason: out var why), Reach: derived, Reason: why));
+
+        reach = known.Reach;
+        reason = known.Reason;
+        return known.Proven;
+    }
+    private static bool DeriveBodyReach(WorldDefinition definition, out FixedQ4816 reach, out string reason) {
         reach = FixedQ4816.Zero;
         foreach (var kit in definition.Kits) {
             if ((kit?.Collider) is not { } collider) {
