@@ -70,30 +70,17 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <returns>The world's board, the same one for every caller.</returns>
     internal TierBoard TiersOf(object world) => m_tiers.GetValue(key: world, createValueCallback: static _ => new TierBoard());
 
-    /// <summary>The tier one residency draws each of its groups at, by the group's shape and where it stands in the
-    /// world (<see cref="PlaceOf"/>), which the residencies drawing a second scene of its world read: a shape many
-    /// placements share is drawn at as many tiers as its copies' distances ask, so the shape alone names no group.
-    /// Where two groups share a shape and a place, the finest. Thread-safe: the publisher writes it whole under a lock
-    /// the readers take.</summary>
+    /// <summary>The tiers one residency draws each shape of its groups at (<see cref="SdfMeshBakeGroup.Shape"/>), which
+    /// the residencies drawing a second scene of its world read. A shape's mesh at a tier is one mesh however many
+    /// groups draw it, so what a follower must match to share the world's meshes is the set of tiers a shape is drawn
+    /// at, never which copy draws which: a copy's place is no part of the content (a body's pose moves it, and two
+    /// scenes pose their bodies on their own clocks and rates), and keying by it led none of a second scene's moving
+    /// groups. Thread-safe: the publisher writes it whole under a lock the readers take.</summary>
     internal sealed class TierBoard {
-        /// <summary>The cells a metre is cut into where a group's place is told from another's: 64, well under the
-        /// spacing of any two placements and well over the difference rounding makes between two scenes' copies of one
-        /// placement's transform.</summary>
-        public const float PlaceCellsPerMetre = 64f;
-
         private readonly Lock m_gate = new();
-        private readonly Dictionary<(UInt128 Shape, long Place), int> m_tiers = [];
+        // Each shape's drawn tiers, one bit a tier.
+        private readonly Dictionary<UInt128, uint> m_tiers = [];
         private long m_revision;
-
-        /// <summary>Returns the cell a group's world-space box is centred in, as one number: the place a group stands
-        /// at, alike for the same placement in two scenes of one world and apart for two copies of one shape.</summary>
-        /// <param name="center">The centre of the group's box, in world space.</param>
-        /// <returns>The place.</returns>
-        public static long PlaceOf(System.Numerics.Vector3 center) {
-            static long Cell(float value) => (((long)MathF.Round(x: (value * PlaceCellsPerMetre))) & 0x1FFFFFL);
-
-            return ((Cell(value: center.X) | (Cell(value: center.Y) << 21)) | (Cell(value: center.Z) << 42));
-        }
 
         /// <summary>Gets a count that moves each time the board is published.</summary>
         public long Revision => Interlocked.Read(location: ref m_revision);
@@ -101,25 +88,44 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         /// <summary>Replaces the board's tiers with those a publisher lists.</summary>
         /// <typeparam name="TState">The publisher's state.</typeparam>
         /// <param name="state">The publisher's state.</param>
-        /// <param name="list">Lists each group's shape, place and tier through the callback it is handed.</param>
-        public void Publish<TState>(TState state, Action<TState, Action<UInt128, long, int>> list) {
+        /// <param name="list">Lists each group's shape and the tier it draws through the callback it is handed.</param>
+        public void Publish<TState>(TState state, Action<TState, Action<UInt128, int>> list) {
             lock (m_gate) {
                 m_tiers.Clear();
-                list(arg1: state, arg2: (shape, place, tier) => {
-                    ref var held = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_tiers, exists: out var exists, key: (shape, place));
+                list(arg1: state, arg2: (shape, tier) => {
+                    ref var held = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_tiers, exists: out _, key: shape);
 
-                    held = (exists ? Math.Min(val1: held, val2: tier) : tier);
+                    held |= (1u << Math.Clamp(value: tier, min: 0, max: SdfMeshTier.Last));
                 });
                 _ = Interlocked.Increment(location: ref m_revision);
             }
         }
-        /// <summary>Returns the tier the publisher draws a group at.</summary>
+        /// <summary>Returns the tier a follower draws a group of a shape at: of the tiers the publisher draws the shape
+        /// at, the one nearest the tier the follower demands, the coarser of two equally near.</summary>
         /// <param name="shape">The group's shape.</param>
-        /// <param name="place">The group's place (<see cref="PlaceOf"/>).</param>
+        /// <param name="demanded">The tier the follower's own demand asks for.</param>
         /// <param name="tier">The tier, when this returns <see langword="true"/>.</param>
-        /// <returns><see langword="false"/> where the publisher draws no group of the shape at the place.</returns>
-        public bool TryGet(UInt128 shape, long place, out int tier) {
-            lock (m_gate) { return m_tiers.TryGetValue(key: (shape, place), value: out tier); }
+        /// <returns><see langword="false"/> where the publisher draws no group of the shape.</returns>
+        public bool TryGet(UInt128 shape, int demanded, out int tier) {
+            uint drawn;
+
+            lock (m_gate) {
+                if (!m_tiers.TryGetValue(key: shape, value: out drawn)) {
+                    tier = 0;
+                    return false;
+                }
+            }
+            tier = Nearest(drawn: drawn, demanded: demanded);
+            return true;
+        }
+        // The set bit nearest a tier, the higher (coarser) of two equally near; drawn holds at least one bit.
+        private static int Nearest(uint drawn, int demanded) {
+            demanded = Math.Clamp(value: demanded, min: 0, max: SdfMeshTier.Last);
+            for (var step = 0; (step <= SdfMeshTier.Last); step++) {
+                if (((demanded + step) <= SdfMeshTier.Last) && ((drawn & (1u << (demanded + step))) != 0u)) { return (demanded + step); }
+                if (((demanded - step) >= 0) && ((drawn & (1u << (demanded - step))) != 0u)) { return (demanded - step); }
+            }
+            return System.Numerics.BitOperations.TrailingZeroCount(value: drawn);
         }
     }
 

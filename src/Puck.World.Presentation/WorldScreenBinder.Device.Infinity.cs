@@ -55,7 +55,7 @@ public sealed partial class WorldScreenBinder {
         foreach (var key in m_staleInfinityRoots) {
             var root = m_infinityRoots[key];
 
-            foreach (var entry in root.Entries.Values) { ReleaseInfinity(entry: entry); }
+            foreach (var entry in root.Entries.Values) { LeaveInfinity(entry: entry, root: root); }
             m_renderProbe?.UnregisterInfinityPlan(owner: root);
             _ = m_infinityRoots.Remove(key: key);
         }
@@ -66,7 +66,7 @@ public sealed partial class WorldScreenBinder {
                     WorldFramePresenter retainedPresenter => ReferenceEquals(objA: retainedPresenter, objB: Presenter),
                     WorldRoutedScene scene => (Presenter?.Presents(scene: scene) == true),
                     SessionFeed feed => m_feeds.Contains(item: feed),
-                    InfinityEntry entry => entry.Root.Entries.Values.Contains(value: entry),
+                    InfinityEntry entry => (entry.Roots.Count != 0),
                     // The boot frame's home films, which FitBootSky retires by its own begin and end each frame.
                     _ when ReferenceEquals(objA: consumer.Target, objB: m_homeFilms) => (Presenter is not null),
                     _ => false,
@@ -161,21 +161,17 @@ public sealed partial class WorldScreenBinder {
                 && (!ready || waits || !ReferenceEquals(objA: held.Mirror, objB: source.Mirror) || !ReferenceEquals(objA: held.Hosted?.Token, objB: source.Hosted?.Token)
                     || (held.Planned.Spec != planned.Spec) || !held.Prototypes.SequenceEqual(second: (prototypes ?? []))
                     || ((far is not null) && !ReferenceEquals(objA: held.Far, objB: far)))) {
-                ReleaseInfinity(entry: held);
                 _ = root.Entries.Remove(key: planned.Name);
+                LeaveInfinity(entry: held, root: root);
             }
             if (ready && !waits && !root.Entries.ContainsKey(key: planned.Name)) {
-                var entry = ((far is not null)
-                    ? CreateFarInfinity(root, planned, source.Mirror!, source.Instance!, source.Hosted, far)
-                    : CreateInfinity(root, planned, source.Mirror!, source.Instance!, source.Hosted, prototypes));
-
-                root.Entries.Add(key: planned.Name, value: entry);
+                root.Entries.Add(key: planned.Name, value: JoinInfinity(root, planned, source.Mirror!, source.Instance!, source.Hosted, prototypes, far));
             }
         }
         foreach (var (name, entry) in root.Entries.ToArray()) {
             if (plan.Views.Any(predicate: view => (view.Name == name))) { continue; }
-            ReleaseInfinity(entry: entry);
             _ = root.Entries.Remove(key: name);
+            LeaveInfinity(entry: entry, root: root);
         }
 
         root.Plan = plan;
@@ -218,6 +214,48 @@ public sealed partial class WorldScreenBinder {
             foreach (var child in children) { owners[WorldViewNames.NestedSky(name, child.Name)] = (mirror, source.Instance!); }
             return children;
         }
+    }
+    // Every layer of one content, whichever roots plan it: a layer is a function of the world it shows (the mirror and
+    // the hosted session it is drawn from), its spec, the far product it draws when it draws one, the prototypes a far
+    // layer keeps and, where the world holds screens,
+    // the nesting depth they open at. The roots planning one content hold one entry, so one residency, whose views are
+    // every holder's consumers'. JoinInfinity and LeaveInfinity are the only doors an entry enters or leaves a root by.
+    private readonly Dictionary<InfinityContent, InfinityEntry> m_infinityContents = [];
+
+    private static InfinityContent ContentOf(InfinityRoot root, WorldInfinityView planned, WorldSessionMirror mirror,
+        WorldObservedSession? hosted, IReadOnlyList<string>? prototypes, SdfFarProduct? far) => new(
+            Far: far,
+            Mirror: mirror,
+            Hosted: hosted?.Token,
+            Spec: planned.Spec,
+            Prototypes: string.Join(separator: '\n', values: (prototypes ?? [])),
+            ScreenDepth: (((planned.Spec.Kind == InfinityViewKind.World) && (mirror.Definition.Screens.Count != 0)) ? (root.Depth + planned.Depth) : -1));
+    // The entry of a planned layer's content, made by the first root that plans it and joined by every other.
+    private InfinityEntry JoinInfinity(InfinityRoot root, WorldInfinityView planned, WorldSessionMirror mirror,
+        string instance, WorldObservedSession? hosted, IReadOnlyList<string>? prototypes, SdfFarProduct? far) {
+        var content = ContentOf(far: far, hosted: hosted, mirror: mirror, planned: planned, prototypes: prototypes, root: root);
+
+        if (!m_infinityContents.TryGetValue(key: content, value: out var entry)) {
+            entry = ((far is not null)
+                ? CreateFarInfinity(root, planned, mirror, instance, hosted, far)
+                : CreateInfinity(root, planned, mirror, instance, hosted, prototypes));
+            entry.Identity = content;
+            m_infinityContents.Add(key: content, value: entry);
+        }
+        entry.Roots.Add(item: root);
+        m_infinityEntriesMoved = true;
+        return entry;
+    }
+    // Takes a root's hold on an entry away, its consumers' views with it, and releases the entry once no root holds it.
+    private void LeaveInfinity(InfinityEntry entry, InfinityRoot root) {
+        _ = entry.Roots.Remove(item: root);
+        m_infinityEntriesMoved = true;
+        if (entry.Roots.Count != 0) {
+            PruneInfinityIndices(entry: entry);
+            return;
+        }
+        _ = m_infinityContents.Remove(key: entry.Identity);
+        ReleaseInfinity(entry: entry);
     }
     private InfinityEntry CreateInfinity(InfinityRoot root, WorldInfinityView planned, WorldSessionMirror mirror,
         string instance, WorldObservedSession? hosted, IReadOnlyList<string>? prototypes) {
@@ -316,10 +354,12 @@ public sealed partial class WorldScreenBinder {
         m_infinityEntriesMoved = true;
     }
     private void ReleaseInfinityRoots() {
-        foreach (var root in m_infinityRoots.Values) {
-            foreach (var entry in root.Entries.Values) { ReleaseInfinity(entry: entry); }
-            m_renderProbe?.UnregisterInfinityPlan(owner: root);
+        foreach (var entry in m_infinityContents.Values) {
+            entry.Roots.Clear();
+            ReleaseInfinity(entry: entry);
         }
+        m_infinityContents.Clear();
+        foreach (var root in m_infinityRoots.Values) { m_renderProbe?.UnregisterInfinityPlan(owner: root); }
         m_infinityRoots.Clear();
         m_infinityEntries.Clear();
         m_infinityEntriesMoved = false;
@@ -332,9 +372,7 @@ public sealed partial class WorldScreenBinder {
     private List<InfinityEntry> InfinityEntries() {
         if (!m_infinityEntriesMoved) { return m_infinityEntries; }
         m_infinityEntries.Clear();
-        foreach (var root in m_infinityRoots.Values) {
-            m_infinityEntries.AddRange(collection: root.Entries.Values);
-        }
+        m_infinityEntries.AddRange(collection: m_infinityContents.Values);
         m_infinityEntriesMoved = false;
         return m_infinityEntries;
     }
@@ -374,7 +412,11 @@ public sealed partial class WorldScreenBinder {
     private sealed class InfinityEntry(InfinityRoot root, WorldInfinityView planned, WorldSessionMirror mirror, string instance,
         WorldObservedSession? hosted, string name, WorldSessionSceneEmitter emitter, IReadOnlyList<string> prototypes,
         Func<WorldObservedSession?, WorldObservedSession?> current) {
+        // The root that made the entry, which names it and holds its nested cameras' consumers.
         public InfinityRoot Root { get; } = root;
+        // Every root that plans the entry's content (JoinInfinity), the maker among them while it does.
+        public List<InfinityRoot> Roots { get; } = [];
+        public InfinityContent Identity { get; set; }
         public WorldInfinityView Planned { get; } = planned;
         public WorldSessionMirror Mirror { get; } = mirror;
         public string Instance { get; } = instance;
@@ -384,7 +426,7 @@ public sealed partial class WorldScreenBinder {
         public WorldSessionSceneEmitter Emitter { get; } = emitter;
         public IReadOnlyList<string> Prototypes { get; } = prototypes;
         public List<SdfViewSnapshot> Views { get; } = [];
-        public Dictionary<string, int> Indices { get; } = new(comparer: StringComparer.Ordinal);
+        public Dictionary<InfinityConsumer, int> Indices { get; } = new(comparer: ReferenceEqualityComparer.Instance);
 
         public IDisposable? Envelope { get; set; }
         public SdfWorldResidency? Residency { get; set; }
@@ -429,6 +471,7 @@ public sealed partial class WorldScreenBinder {
     private readonly record struct InfinityObservation(string Owner, string Layer, WorldObservedSession? Hosted,
         WorldObservationAdmission? Observation, bool Available);
     private readonly record struct InfinityOutput(InfinityEntry Entry, int Index);
+    private readonly record struct InfinityContent(SdfFarProduct? Far, WorldSessionMirror Mirror, object? Hosted, InfinityViewSpec Spec, string Prototypes, int ScreenDepth);
     private sealed class InfinityScreenSources(InfinityEntry entry) : ISdfScreenSources {
         public IReadOnlyList<int> Screens => AllScreens;
 
