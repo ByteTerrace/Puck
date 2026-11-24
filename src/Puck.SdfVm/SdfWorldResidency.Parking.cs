@@ -32,8 +32,9 @@ public sealed partial class SdfWorldResidency {
 
     // The clock the residency's observation and wake are timed by (its selector's), taken when its tables are first built.
     private TimeProvider? m_clock;
-    // When a reader last asked for the residency (Observe), on m_clock; zero before the first.
+    // When a reader last asked for the residency (Observe), on m_clock; zero before the first. Which instance asked.
     private long m_observedAt;
+    private string? m_observedBy;
     private bool m_parked;
     private long m_parks;
     private long m_wakes;
@@ -104,7 +105,9 @@ public sealed partial class SdfWorldResidency {
     /// <summary>Records that a reader of the frame asked for the residency: a view the frame renders, or for a residency
     /// the sight does not judge (<see cref="Sighted"/>), a view the frame reads. A parked residency wakes at its next
     /// preparation.</summary>
-    internal void Observe() {
+    /// <param name="reader">The instance whose read or render asked, which <c>world.residency</c> names.</param>
+    internal void Observe(string reader) {
+        m_observedBy = reader;
         if (m_clock is { } clock) { m_observedAt = clock.GetTimestamp(); }
         if (m_parked) { m_wakeOwed = true; }
     }
@@ -197,5 +200,5 @@ public sealed partial class SdfWorldResidency {
     }
     /// <summary>Describes the residency's parking for <c>world.residency</c>.</summary>
     /// <returns>One line.</returns>
-    public string DescribeParking() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"parking parked={(m_parked ? "yes" : "no")} sighted={(m_sighted ? "yes" : "no")} wake-owed={(m_wakeOwed ? "yes" : "no")} parks={m_parks} wakes={m_wakes} unobserved={UnobservedSeconds():0.0}s read-ago={SecondsSince(at: m_observedAt):0.0}s wanted={m_wantedWhy ?? "never"}{(float.IsNaN(f: m_wantedMetres) ? string.Empty : $"@{m_wantedMetres:0.0}m")} by={m_wantedBy ?? "none"} wanted-ago={SecondsSince(at: m_wantedAt):0.0}s pressed-after={PressedParkAfter:0.0}s lighting-drops={m_lightingDrops} parkable-device-bytes={ParkableBytes} waking={(Waking is null ? "no" : "yes")}");
+    public string DescribeParking() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"parking parked={(m_parked ? "yes" : "no")} sighted={(m_sighted ? "yes" : "no")} wake-owed={(m_wakeOwed ? "yes" : "no")} parks={m_parks} wakes={m_wakes} unobserved={UnobservedSeconds():0.0}s read-ago={SecondsSince(at: m_observedAt):0.0}s read-by={m_observedBy ?? "none"} wanted={m_wantedWhy ?? "never"}{(float.IsNaN(f: m_wantedMetres) ? string.Empty : $"@{m_wantedMetres:0.0}m")} by={m_wantedBy ?? "none"} wanted-ago={SecondsSince(at: m_wantedAt):0.0}s pressed-after={PressedParkAfter:0.0}s lighting-drops={m_lightingDrops} parkable-device-bytes={ParkableBytes} waking={(Waking is null ? "no" : "yes")}");
 }

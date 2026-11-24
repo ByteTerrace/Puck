@@ -479,7 +479,9 @@ over the navigation of the seat's delivered world (`WorldPortalReach`, `IWorldSe
 `NavigationRuntime.MeasureRoute`), within the glass's world's `views.portalLead` plus the glass's reach, and by the
 straight line on its facing side where no domain covers the walk or the consumer is a window. `world.residency`'s
 parking line names who last wanted a residency and why (`wanted=seen|unknown|walk@…|line@…|rendered by=`) beside
-`read-ago` and `wanted-ago`, so a world that never parks names its holder. An infinity layer's residency is released
+`read-ago`, `read-by` (the instance whose render or read last observed it) and `wanted-ago`, so a world that never
+parks names its holder. A world the seat stands in is read by the seat's own view (`read-by=world`) whatever its
+`wanted-ago` says: check `body.where 0`'s `instance:` before calling such a read unwanted. An infinity layer's residency is released
 once no output names it (`WorldScreenBinder.ReleaseUnreadInfinityResidencies`): a consumer whose target has not fitted
 its sky for `InfinityConsumerRetireSeconds` retires. Never add a `TryWaitIdle` to a release
 path; `SdfWorldTables.Dispose` and `IGpuSurfaceUpload.DisposeCompleted` wait for nothing. A render node's build in
