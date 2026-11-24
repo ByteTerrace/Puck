@@ -585,6 +585,21 @@ public static partial class GpuWorkReport {
     }
     // Sums the summary columns over the selected passes of an executed sample, and the work outside every pass when
     // the selection names no pass. A detail row is part of its pass's row, so only pass rows are read.
+    /// <summary>Sums a completed sample's draws, vertices, texels written and dispatches (indirect ones included): the
+    /// counts its summary line prints (<see cref="TryAppendSummary"/>).</summary>
+    /// <param name="sample">A sample a completed read filled.</param>
+    /// <param name="selection">The passes to sum, or <see langword="null"/> for every pass and the work outside them.</param>
+    /// <returns>The four sums.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="sample"/> is <see langword="null"/>.</exception>
+    public static (long Draws, long Vertices, long Texels, long Dispatches) Summarize(GpuWorkSample sample, GpuWorkSelection? selection = null) {
+        ArgumentNullException.ThrowIfNull(sample);
+
+        Span<long> totals = stackalloc long[SummaryNames.Length];
+
+        Total(sample: sample, selection: (selection ?? GpuWorkSelection.All), totals: totals);
+
+        return (totals[0], totals[1], totals[2], totals[3]);
+    }
     private static void Total(GpuWorkSample sample, GpuWorkSelection selection, Span<long> totals) {
         totals.Clear();
 

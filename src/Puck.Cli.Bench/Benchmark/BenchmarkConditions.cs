@@ -14,6 +14,9 @@ internal static class BenchmarkConditions {
     public const string Clean = "clean";
     /// <summary>The verdict of a run whose conditions make its timings untrustworthy.</summary>
     public const string Disturbed = "disturbed";
+    /// <summary>The verdict of a run no verb watched (one typed into a World by hand and folded): only the adapter's clock
+    /// was judged, and what the rest of the machine did is unknown.</summary>
+    public const string Unwatched = "unwatched";
 
     /// <summary>Joins the competition the verb read and the adapter the World read into one run's <c>machine</c> object.</summary>
     /// <param name="run">The World's own report of the run, whose <c>adapter</c> holds the adapter's state.</param>
@@ -30,7 +33,7 @@ internal static class BenchmarkConditions {
         }
 
         return new JsonObject {
-            ["verdict"] = ((reasons.Count == 0) ? Clean : Disturbed),
+            ["verdict"] = ((reasons.Count > 0) ? Disturbed : ((competition is null) ? Unwatched : Clean)),
             ["disturbed"] = reasons,
             ["competition"] = ((competition is null) ? new JsonObject { ["recorded"] = false } : Competition(report: competition)),
         };
@@ -60,10 +63,18 @@ internal static class BenchmarkConditions {
 
     /// <summary>Writes the verdict over every run of a report as one line, or <see langword="null"/> when they are all quiet.</summary>
     /// <param name="runs">The report's runs.</param>
-    /// <returns>The line, <c>DISTURBED: &lt;backend&gt;: &lt;reasons&gt; | ...</c>, or <see langword="null"/>.</returns>
+    /// <returns>The line, <c>DISTURBED: &lt;backend&gt;: &lt;reasons&gt; | ...</c>, <c>UNWATCHED: ...</c> when a run no
+    /// verb watched is among them and none is disturbed, or <see langword="null"/>.</returns>
     public static string? Describe(IEnumerable<JsonObject> runs) {
-        var disturbed = runs.Select(selector: static run => (Backend: (run["backend"]?.GetValue<string>() ?? "?"), Reasons: ReasonsOf(run: run))).Where(predicate: static run => (run.Reasons.Count > 0)).ToArray();
+        var all = runs.ToArray();
+        var disturbed = all.Select(selector: static run => (Backend: (run["backend"]?.GetValue<string>() ?? "?"), Reasons: ReasonsOf(run: run))).Where(predicate: static run => (run.Reasons.Count > 0)).ToArray();
 
-        return ((disturbed.Length == 0) ? null : $"DISTURBED, its timings are not a verdict: {string.Join(separator: " | ", values: disturbed.Select(selector: static run => $"{run.Backend}: {string.Join(separator: "; ", values: run.Reasons)}"))}");
+        if (disturbed.Length > 0) {
+            return $"DISTURBED, its timings are not a verdict: {string.Join(separator: " | ", values: disturbed.Select(selector: static run => $"{run.Backend}: {string.Join(separator: "; ", values: run.Reasons)}"))}";
+        }
+
+        return all.Any(predicate: static run => (run["machine"]?["verdict"]?.GetValue<string>() == Unwatched))
+            ? "UNWATCHED: no verb read what the rest of the machine did while a run played; only the adapter's clock was judged"
+            : null;
     }
 }
