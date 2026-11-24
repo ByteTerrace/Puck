@@ -97,6 +97,11 @@ public static class WorldApplicationDefaults {
 /// world's <c>render.nested</c>, so each device chooses what its windows, portals and filmed screens give up at each size.
 /// Absent runs the world's table.</param>
 /// <param name="IndirectBudget">The irradiance work each presented frame grants the volume on this device (<see cref="WorldRenderIndirectBudget"/>), in place of the world's <c>render.indirect.budget</c>, so each device chooses how much lighting work it affords a frame. Absent runs the world's budget.</param>
+/// <param name="ShadowTexels">The texels along each side of a full-resolution shadow cascade (the near, far and
+/// secondary entries) on this device, a power of two from <see cref="MinShadowTexels"/> through
+/// <see cref="MaxShadowTexels"/>: a shadow tier below High and a nested view's row halve it as they halve the engine's.
+/// Each entry's depth, exit and glass layers are sized by its square, so it sets what every world's shadows hold on the
+/// device. Absent keeps the engine's 2048.</param>
 [method: JsonConstructor]
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
@@ -118,8 +123,23 @@ public readonly record struct WorldQualityPreset(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarShadows? FarShadows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfViewsRate? ViewsRate = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNestedViewQuality>? Nested = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectBudget? IndirectBudget = null
-);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectBudget? IndirectBudget = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ShadowTexels = null
+) {
+    /// <summary>The fewest texels a side <see cref="ShadowTexels"/> takes.</summary>
+    public const int MinShadowTexels = 256;
+    /// <summary>The most texels a side <see cref="ShadowTexels"/> takes.</summary>
+    public const int MaxShadowTexels = 8192;
+
+    /// <summary>Returns why a cascade's texels a side cannot be authored, or <see langword="null"/> when they can.</summary>
+    /// <param name="texels">The texels a side.</param>
+    /// <param name="path">The document path the refusal names.</param>
+    /// <returns>The refusal, or <see langword="null"/>.</returns>
+    public static string? ShadowTexelsRefusal(int texels, string path) =>
+        (((texels >= MinShadowTexels) && (texels <= MaxShadowTexels) && System.Numerics.BitOperations.IsPow2(value: texels))
+            ? null
+            : $"{path} must be a power of two from {MinShadowTexels} through {MaxShadowTexels}.");
+}
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
 /// scale), the graphics-menu defaults a server-pulled world would carry.</summary>

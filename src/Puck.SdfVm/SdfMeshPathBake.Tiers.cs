@@ -600,6 +600,9 @@ public sealed partial class SdfMeshPathBake {
     // and the board revision and product revision it last read and published at.
     private readonly List<(int Index, int Tier)> m_followCandidates = [];
     private long m_tiersFollowed;
+    // The followed board's last census (FollowedTiers): the groups it leads, those of them drawn at another tier, and the
+    // groups and placed bytes it leads none of.
+    private (int Led, int Apart, int Unled, long UnledBytes) m_boardCensus;
     private long m_followedRevision = -1L;
     private long m_publishedRevision = -1L;
     private object? m_publishedWorld;
@@ -618,9 +621,23 @@ public sealed partial class SdfMeshPathBake {
 
         if (revision != m_followedRevision) {
             m_followedRevision = revision;
+
+            var (led, unled, unledBytes, apart) = (0, 0, 0L, 0);
+
             foreach (var group in m_groups) {
-                if (!group.Retired && group.Listed && group.HasDemandBox) { Attend(group: group); }
+                if (group.Retired || !group.Listed) { continue; }
+                if (group.HasDemandBox) { Attend(group: group); }
+                // What the board leads, as world.residency reads it: the groups the world's own residency draws, those it
+                // draws at another tier than this bake does now, and the groups and bytes it does not draw at all.
+                if (board.TryGet(place: SdfMeshLibrary.TierBoard.PlaceOf(center: SdfMeshDemand.WorldBoxOf(group: group, transforms: frame.DynamicTransforms).Center), shape: group.Shape, tier: out var tier)) {
+                    led++;
+                    if (tier != (group.Replaces ?? group).Tier) { apart++; }
+                } else {
+                    unled++;
+                    unledBytes += group.PlacedBytes;
+                }
             }
+            m_boardCensus = (led, apart, unled, unledBytes);
         }
         return board;
     }

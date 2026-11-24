@@ -29,6 +29,11 @@ public readonly record struct SdfFrameSettings {
     /// <summary>The key light's distant shadow map (<c>render.distantShadows</c> or the device table's row), which
     /// <see cref="SdfMeshShadowCascades.Fit"/> adds to the world's cascade set while it is on; the default is off.</summary>
     public SdfDistantShadows DistantShadows { get; init; }
+    /// <summary>The texels along each side of a full-resolution shadow cascade (the near, far and secondary entries) on the
+    /// presenting device (a device table's <c>shadowTexels</c>), which a view's <see cref="SdfViewQuality.ShadowResolution"/>
+    /// halves (<see cref="SdfMeshShadowCascades.TexelsFor"/>); the default is
+    /// <see cref="SdfShadowResolutions.DefaultTexels"/>.</summary>
+    public int ShadowTexels { get; init; } = SdfShadowResolutions.DefaultTexels;
     /// <summary>How the key light's far shadow entry keeps up with what moves (<c>render.farShadows</c> or the device
     /// table's row) while <see cref="SdfUpdateRates.ShadowFar"/> is on: its refreshes a second and the light turn its held
     /// static layer tolerates; the default refreshes it every frame (<see cref="SdfFarShadows.EveryFrame"/>).</summary>

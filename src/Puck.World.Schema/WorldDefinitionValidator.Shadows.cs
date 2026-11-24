@@ -19,6 +19,7 @@ public static partial class WorldDefinitionValidator {
         if (preset.ViewsRate?.Refusal(path: $"{path}.viewsRate") is { } rate) { errors.Add(item: rate); }
         if (preset.FarShadows?.Refusal(path: $"{path}.farShadows") is { } far) { errors.Add(item: far); }
         if (preset.IndirectBudget?.Refusal(path: $"{path}.indirectBudget") is { } budget) { errors.Add(item: budget); }
+        if ((preset.ShadowTexels is { } texels) && (WorldQualityPreset.ShadowTexelsRefusal(path: $"{path}.shadowTexels", texels: texels) is { } shadowTexels)) { errors.Add(item: shadowTexels); }
         if ((preset.Indirect is { } chosen) && !Enum.IsDefined(value: chosen)) { errors.Add(item: $"{path}.indirect must be off, medium or high."); }
         ValidateNested(preset.Nested, $"{path}.nested", errors);
     }

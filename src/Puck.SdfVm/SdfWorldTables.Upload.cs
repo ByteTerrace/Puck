@@ -168,11 +168,19 @@ public sealed partial class SdfWorldTables {
     // A background client's buffer can be a source of the frame upload. Use the same retirement door as tables.
     /// <summary>Retains a replaced background resource through pending copies and the device timeline.</summary>
     /// <param name="replaced">The object to dispose after its last submitted use.</param>
-    public void RetireBackgroundResource(GpuRegion replaced) {
+    /// <param name="released">The callback run once the object is disposed, or <see langword="null"/> for none.</param>
+    public void RetireBackgroundResource(GpuRegion replaced, Action? released = null) {
         var source = replaced.Buffer(slot: 0);
 
-        m_retired.Hold(item: replaced,
+        m_retired.Hold(item: ((released is null) ? replaced : new ReleasedRegion(Region: replaced, Released: released)),
             pendingUse: () => (ReferenceEquals(objA: m_meshIrradianceSource, objB: source) && (m_meshIrradianceSlots.Count > 0)));
+    }
+    // A retired region whose owner waits to hear it was disposed.
+    private sealed record ReleasedRegion(GpuRegion Region, Action Released) : IDisposable {
+        public void Dispose() {
+            Region.Dispose();
+            Released();
+        }
     }
 
     // Device teardown after drain/loss releases even unsubmitted carries.

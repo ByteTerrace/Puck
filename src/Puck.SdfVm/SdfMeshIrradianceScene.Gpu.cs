@@ -207,9 +207,12 @@ public sealed partial class SdfMeshIrradianceScene {
         matrix[0] = normal.M11; matrix[1] = normal.M12; matrix[2] = normal.M13;
         matrix[3] = normal.M21; matrix[4] = normal.M22; matrix[5] = normal.M23;
         matrix[6] = normal.M31; matrix[7] = normal.M32; matrix[8] = normal.M33;
-        record[SdfMeshProbeTrace.GeometryWord] = (uint)placement.IndexWord;
+        // A geometry tracing a coarser level reads that level's indices and materials, which the region lays after the
+        // finer levels' (Geometry.FirstTriangle), so a hit's triangle is the level's own.
+        var first = instance.Geometry.FirstTriangle;
+        record[SdfMeshProbeTrace.GeometryWord] = (uint)(placement.IndexWord + (3 * first));
         record[SdfMeshProbeTrace.GeometryWord + 1] = (uint)placement.VertexWord;
-        record[SdfMeshProbeTrace.GeometryWord + 2] = instance.TriangleMaterials.IsEmpty ? uint.MaxValue : (uint)placement.MaterialWord;
+        record[SdfMeshProbeTrace.GeometryWord + 2] = instance.TriangleMaterials.IsEmpty ? uint.MaxValue : (uint)(placement.MaterialWord + first);
         record[SdfMeshProbeTrace.GeometryWord + 3] = unchecked((uint)instance.Material);
         record[SdfMeshProbeTrace.IdentityWord] = instance.Identity ? 1u : 0u;
         record[SdfMeshProbeTrace.InstanceIndexWord] = (uint)index;

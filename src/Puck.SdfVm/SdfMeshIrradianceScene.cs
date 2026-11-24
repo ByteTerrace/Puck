@@ -269,8 +269,11 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// <param name="counters">The owning volume's traversal counters, or null for a scene-local counter set.</param>
     /// <returns>The scene, empty when no static draw holds a triangle. An empty scene has no occluders and can still
     /// supply measured sky irradiance; it is distinct from a scene not built yet.</returns>
+    /// <param name="traceError">The most a traced surface may stand from a mesh's own triangles, in the mesh's object
+    /// units: each mesh traces its coarsest level whose measured error is within it (<see cref="SdfMeshLevel.Error"/>),
+    /// or its own triangles. Zero, the default, traces every mesh's own triangles.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> is <see langword="null"/>.</exception>
-    public static SdfMeshIrradianceScene Build(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous = null, WorkCounterSet? counters = null) {
+    public static SdfMeshIrradianceScene Build(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous = null, WorkCounterSet? counters = null, float traceError = 0f) {
         ArgumentNullException.ThrowIfNull(argument: draws);
 
         var geometries = new Dictionary<GeometryKey, Geometry>();
@@ -285,7 +288,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             if (!draw.IsStatic) { continue; }
             statics++;
 
-            var key = GeometryKey.Of(mesh: draw.Mesh);
+            var key = GeometryKey.Of(error: traceError, mesh: draw.Mesh);
 
             if (geometries.ContainsKey(key: key)) { continue; }
             if ((previous is not null) && previous.TryFind(geometry: out var held, key: key)) {
@@ -311,7 +314,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         try {
             // The largest first, so one long build does not start last.
             pending.Sort(comparison: static (a, b) => b.Mesh.TriangleCount.CompareTo(value: a.Mesh.TriangleCount));
-            _ = Parallel.For(fromInclusive: 0, toExclusive: pending.Count, body: index => built[index] = Geometry.Build(mesh: pending[index].Mesh, workspace: workspace));
+            _ = Parallel.For(fromInclusive: 0, toExclusive: pending.Count, body: index => built[index] = Geometry.Build(key: pending[index].Key, mesh: pending[index].Mesh, workspace: workspace));
 
             var trianglesBuilt = 0L;
 
@@ -331,7 +334,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 var draw = draws[index];
 
                 if (!draw.IsStatic) { continue; }
-                if (Instance.TryCreate(draw: in draw, geometry: geometries[GeometryKey.Of(mesh: draw.Mesh)], instance: out var instance)) {
+                if (Instance.TryCreate(draw: in draw, geometry: geometries[GeometryKey.Of(error: traceError, mesh: draw.Mesh)], instance: out var instance)) {
                     content.Instances[content.InstanceCount++] = instance;
                     if (materialRuns.Add(item: (draw.Mesh.TriangleMaterials, draw.Material))) {
                         AddMaterials(draw: in draw, materials: materials);
@@ -744,10 +747,21 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             return ((distance > 1.0e-4f) && (distance < maximum));
         }
     }
-    // A geometry's identity: its mesh's position and index buffers. A mesh renumbered into another program's materials
-    // (SdfMeshLibrary) shares both, so its draws take the same geometry and read their own triangle materials.
-    internal readonly record struct GeometryKey(ReadOnlyMemory<Vector3> Positions, ReadOnlyMemory<uint> Indices) {
-        public static GeometryKey Of(SdfMesh mesh) => new(Indices: mesh.Indices, Positions: mesh.Positions);
+    // A geometry's identity: its mesh's position buffer and the index buffer of the level it traces. A mesh renumbered
+    // into another program's materials (SdfMeshLibrary) shares both, so its draws take the same geometry and read their
+    // own triangle materials of that level.
+    internal readonly record struct GeometryKey(ReadOnlyMemory<Vector3> Positions, ReadOnlyMemory<uint> Indices, int Level) {
+        // The mesh's coarsest level whose measured error lies within `error` (SdfMeshLevel.Error, in the mesh's object
+        // units; a level's vertices are the mesh's own, so it moves the surface by no more than that), else its own
+        // triangles, level zero. Zero traces level zero always.
+        public static GeometryKey Of(SdfMesh mesh, float error) {
+            var levels = mesh.Levels;
+
+            for (var level = levels.Count; (level > 0); level--) {
+                if (levels[(level - 1)].Error <= error) { return new(Indices: levels[(level - 1)].Indices, Level: level, Positions: mesh.Positions); }
+            }
+            return new(Indices: mesh.Indices, Level: 0, Positions: mesh.Positions);
+        }
     }
 
     // The world bounds of a box in a draw's frame: its eight corners carried out through the draw's transform.
@@ -790,6 +804,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         public required bool Solid { get; init; }
         public required int Material { get; init; }
         public required ReadOnlyMemory<uint> TriangleMaterials { get; init; }
+        // The contour's precision about a triangle: half the bake cell's diagonal, and the error of the level the geometry
+        // traces in place of the mesh's own triangles, each carried out through the draw's transform.
         public float BakeHalfDiagonal { get; init; }
 
         // A draw whose transform has no inverse (a zero scale) draws nothing a ray can meet.
@@ -811,9 +827,10 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 Material = draw.Material,
                 NormalToWorld = normalToWorld,
                 ObjectToWorld = matrix,
-                TriangleMaterials = draw.Mesh.TriangleMaterials,
+                TriangleMaterials = ((geometry.Level == 0) ? draw.Mesh.TriangleMaterials : draw.Mesh.Levels[(geometry.Level - 1)].TriangleMaterials),
                 WorldToObject = inverse,
-                BakeHalfDiagonal = (0.5f * Vector3.TransformNormal(draw.Mesh.BakeCell, matrix).Length()),
+                BakeHalfDiagonal = ((0.5f * Vector3.TransformNormal(draw.Mesh.BakeCell, matrix).Length()) +
+                    (geometry.Error * MathF.Max(x: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length(), y: MathF.Max(x: new Vector3(x: matrix.M21, y: matrix.M22, z: matrix.M23).Length(), y: new Vector3(x: matrix.M31, y: matrix.M32, z: matrix.M33).Length())))),
             };
             return true;
         }
@@ -891,6 +908,14 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         // Each braid's frame, in the order of Braids; every node of a braid's subtree is packed in it.
         public BraidFrame[] Frames { get; private set; } = [];
         public int Count => (Indices.Length / 3);
+        // The level of its mesh the geometry traces (zero for the mesh's own triangles), that level's first triangle in
+        // the mesh's levelled numbering (the region lays each level's indices and materials after the finer levels',
+        // SdfMeshRegion.WriteMesh), and the level's measured error in the mesh's object units.
+        public int Level { get; init; }
+        public int FirstTriangle { get; init; }
+        public float Error { get; init; }
+        // The traced level's indices: the mesh's own for level zero, else a copy in the geometry's storage, since a
+        // published mesh lets its coarser levels' indices go once its words land (SdfMesh.Restore.cs).
         public required ReadOnlyMemory<uint> Indices { get; init; }
         public required SdfMesh Mesh { get; init; }
         public PackedNode[] Nodes { get; private set; } = [];
@@ -910,21 +935,41 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         }
         public void Corner(int index, out Vector3 v0, out Vector3 e1, out Vector3 e2) =>
             Corner(e1: out e1, e2: out e2, indices: Indices.Span, positions: Positions.Span, triangle: Triangles[index], v0: out v0);
-        public static Geometry Build(SdfMesh mesh, MemoryAccount.Owner workspace) {
+        public static Geometry Build(GeometryKey key, SdfMesh mesh, MemoryAccount.Owner workspace) {
             var storage = MemoryAccount.Shared.CreateOwner(name: "sdf.mesh-gi.trace-scene", memoryClass: MemoryClass.Elastic);
-            try { return Build(mesh, workspace, storage); }
+            try { return Build(key, mesh, workspace, storage); }
             catch { ReleaseStorage(storage); throw; }
         }
 
-        private static Geometry Build(SdfMesh mesh, MemoryAccount.Owner workspace, MemoryAccount.Owner storage) {
-            var count = mesh.TriangleCount;
+        private static Geometry Build(GeometryKey key, SdfMesh mesh, MemoryAccount.Owner workspace, MemoryAccount.Owner storage) {
+            var (level, first, error, traced) = (0, 0, 0f, mesh.Indices);
+
+            if (key.Level > 0) {
+                // A hold restores the level's indices if the mesh let them go; the copy keeps none of the mesh's parts past
+                // the build. A mesh the store can no longer restore traces its own triangles, which it always keeps.
+                using var held = mesh.Hold();
+
+                if (held.Readable) {
+                    level = key.Level;
+                    first = mesh.TriangleCount;
+                    for (var finer = 1; (finer < level); finer++) { first += mesh.Levels[(finer - 1)].TriangleCount; }
+                    error = mesh.Levels[(level - 1)].Error;
+
+                    var copy = storage.AllocateArray<uint>(key.Indices.Length);
+
+                    key.Indices.Span.CopyTo(destination: copy);
+                    traced = copy;
+                }
+            }
+
+            var count = (traced.Length / 3);
             var chunks = count.CeilingDivide(divisor: ParallelPrimitives);
             var pieces = new Pieces[chunks];
 
             // Each chunk's pieces in triangle order, joined in chunk order, so a geometry builds alike on every run.
             Chunked(count: count, body: (start, end) => {
                 var positions = mesh.Positions.Span;
-                var indices = mesh.Indices.Span;
+                var indices = traced.Span;
                 var own = new Pieces(capacity: (end - start), workspace);
 
                 for (var index = start; (index < end); index++) {
@@ -956,7 +1001,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                         triangles[index] = owners[order[index]];
                     }
 
-                    return new Geometry(storage) { Braids = braids, Frames = frames, Indices = mesh.Indices, Mesh = mesh, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles, Depth = depth, MedianSplits = medians };
+                    return new Geometry(storage) { Braids = braids, Frames = frames, Indices = traced, Level = level, FirstTriangle = first, Error = error, Mesh = mesh, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles, Depth = depth, MedianSplits = medians };
                 } finally {
                     RentedArrays.Return(array: order, owner: workspace);
                 }
