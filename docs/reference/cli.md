@@ -319,6 +319,7 @@ puck world release checkpoint [--request <guid>] [--host <installed-host>]
 puck world release restore <recovery-point> [--operation <guid>] [--discard-progress] [--host <installed-host>]
 puck azure prepare-world-release [--output <package-directory>]
 puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-image <image> --target-image <image> --output <evidence-directory> [--steps <count>] [--document-directory <asset-layout>]
+puck world release rehearse [<package-directory>] (--silo <path> | --image <reference>) [--extensions-dir <directory>] [--document-directory <directory>] [--output <directory>] [--timeout <seconds>]
 puck world probe <host> <port> <public-key-file>
 puck wasm build
 ```
@@ -503,7 +504,12 @@ A recovered source is reported as a failed deployment, not a successful upgrade.
 
 `world release deploy` verifies the package, retains its files and versioned
 deployment inputs, protects and pulls the exact source and target registry
-digests, and runs qualification before entering the coordinator. Repeating a
+digests, and runs qualification before entering the coordinator. A host whose
+deployment declares its hosted data scratch replaces the hosted world instead
+([the decision](../decisions/runtime-and-delivery.md#releases)): it qualifies the
+candidate alone, then stops the group's compute, discards its hosted data and
+bootstraps the release; everything below in this paragraph describes a durable
+declaration. Repeating a
 pending target resumes it. Another target follows whatever its predecessor left
 (`WorldReleaseCoordinator.Succession` and `SupersedeAsync`): it accepts an
 admitted release, closing its rollback window as it claims the group; it admits a
@@ -614,6 +620,23 @@ contract cannot capture rejects qualification.
 Rollback and restore remain hosted maintenance operations
 until their coordinator can perform the corresponding guarded storage and
 admission transitions.
+
+`world release rehearse [<package-directory>] (--silo <path> | --image <reference>) [--extensions-dir <directory>] [--document-directory <directory>] [--output <directory>] [--timeout <seconds>]`
+rehearses a replace deployment on this machine, against a local directory store:
+the coordinator's bootstrap transaction from its Drain phase (the definitions
+published through unowned roots, their recovery roots, the group record in
+Activate), then the release's own silo started on a managed silo document as a
+worker starts it, reached through its loopback release-control routes. It passes
+once the silo opens admission, keeps answering public health across a progress
+window and drains with a success code; a failure prints the private health reason
+and the silo's own lines. The argument is a release package, or a
+`puck world prepare` output, which is packaged first under one generated owner.
+`--silo` names a built `Puck.World.Silo.dll` or its executable; the release's
+machine providers must be installed where the silo looks (`--extensions-dir`).
+`--image` runs the same verb inside a world-silo image, with its CLI, silo,
+extensions and asset layout and no network; without an argument it rehearses the
+image's own composed worlds. Qualification is not part of a rehearsal.
+
 Azure credentials, deployment ordering, and access restoration belong to
 [`puck azure`](../development/ci.md#azure-production-deployment), which reaches these
 verbs in process.
