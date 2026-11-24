@@ -1104,6 +1104,14 @@ internal sealed partial class PlayerCommandModule {
                 // since the query was submitted.
                 var current = (seatRouter.TryRoute(slot: rosterSlot) ?? location);
 
+                // An authority in another process answers a query later than this call returns, so this process
+                // answers from what that authority last delivered: the body's pose as its mirror holds it.
+                if (routed.Output is null) {
+                    return (current.Endpoint.Mirror.TryReadBody(body: out var delivered, index: current.EntityIndex)
+                        ? new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[body.where: body:{current.EntityIndex} pos=({delivered.Position.X:0.00}, {delivered.Position.Y:0.00}, {delivered.Position.Z:0.00}) delivered=tick:{delivered.Tick} authority={current.Endpoint.Authority} [{current.Endpoint.Identity}] anchor=body:{current.EntityIndex}]"))
+                        : CommandResult.Error(output: $"[body.where: seat {rosterSlot + 1}'s body:{current.EntityIndex} is at '{current.Endpoint.Authority}', which has not delivered it yet]"));
+                }
+
                 return new CommandResult(Output: $"{routed.Output[..^1]} anchor=body:{current.EntityIndex}]") { IsError = routed.IsError };
             }
         }

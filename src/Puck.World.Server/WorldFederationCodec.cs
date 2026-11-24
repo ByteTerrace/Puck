@@ -313,14 +313,32 @@ public static partial class WorldFederationCodec {
             mount
         );
     }
-    private static bool TryDeserializeDefinition(byte[] bytes, string field, out WorldDefinition? definition, out WireFailure failure) {
+    // A replica's document crosses as a manifest and is a delivery: assembled over the document its recipient holds,
+    // every member read as untrusted input, the content it names by pin fetched before its rows are checked, and
+    // validated as what a recipient presents.
+    private static bool TryAssembleDefinition(ReadOnlySpan<byte> manifest, string field, out WorldDefinition? definition, out WireFailure failure, WorldProjectionHold? hold, Func<ContentPin, byte[]?>? fetch, ContentAddressedStore? content) {
         try {
-            definition = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
+            if (!((hold is not null)
+                ? hold.TryHoldReplica(definition: out definition, manifest: manifest, reason: out var reason)
+                : WorldDocumentManifest.TryAssemble(
+                    basis: null,
+                    definition: out definition,
+                    held: assembled => WorldContentIndex.Fetch(definition: assembled, fetch: fetch, held: content),
+                    manifest: manifest,
+                    reason: out reason,
+                    resolve: WorldDocumentManifest.Resolve(content: content, fetch: fetch)
+                ))) {
+                definition = null;
+                failure = new WireFailure(
+                    Refusal: WireRefusal.PayloadMalformed,
+                    Detail: $"{field} does not assemble — {reason}"
+                );
+
+                return false;
+            }
             failure = default;
 
             return true;
-            // WorldDefinitionSerialization.Deserialize reports a bad document as InvalidDataException and a document that
-            // parses but fails local validation as InvalidOperationException; both are untrusted-input refusals here.
         } catch (Exception exception) when ((exception is JsonException or InvalidDataException or InvalidOperationException or ArgumentException or FormatException or NotSupportedException)) {
             definition = null;
             failure = new WireFailure(
@@ -490,7 +508,7 @@ public static partial class WorldFederationCodec {
         ) is { } projection)
             ? WorldProjection.SerializeCompact(projection: projection)
             : ((tier == WorldDisclosureTier.Replica)
-                ? WorldDefinitionSerialization.SerializeCompact(definition: WorldStateDisclosure.Disclose(definition, arena!, recipient).Definition)
+                ? WorldDocumentManifest.Encode(definition: WorldStateDisclosure.Disclose(definition, arena!, recipient).Definition, source: null)
                 : throw new ArgumentOutOfRangeException(
                     paramName: nameof(tier),
                     actualValue: tier,
@@ -845,15 +863,13 @@ public static partial class WorldFederationCodec {
 
         return writer.ToArray();
     }
-    /// <summary>Encodes a reservation verdict, disclosing the destination document at <paramref name="tier"/>.</summary>
+    /// <summary>Encodes a reservation verdict. It carries no document: the source resolves a traveller's arrival
+    /// against the copy of the destination's document it holds, and the destination's own document reaches a
+    /// recipient only through its observation stream, where disclosure is applied.</summary>
     /// <param name="reply">The verdict.</param>
-    /// <param name="tier">The tier the admission door decided for the reserving peer.</param>
-    /// <param name="authority">The composing authority's addressable namespace.</param>
-    /// <param name="revision">The document revision this composition names.</param>
     /// <returns>The encoded leaf.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="reply"/> is <see langword="null"/>.</exception>
-    /// <param name="time">The authoritative tick the disclosed document's composition stands at.</param>
-    public static byte[] EncodeReservationReply(WorldTransferReservationReply reply, WorldDisclosureTier tier, string authority, int revision, in ArenaTime time) {
+    public static byte[] EncodeReservationReply(WorldTransferReservationReply reply) {
         ArgumentNullException.ThrowIfNull(argument: reply);
 
         var writer = new WireWriter(capacity: 4096);
@@ -883,30 +899,15 @@ public static partial class WorldFederationCodec {
             }
         );
 
-        writer.WriteBlock(value: ((reply.DestinationDefinition is { } definition)
-            ? EncodeDocument(
-                authority: authority,
-                definition: definition,
-                revision: revision,
-                tier: tier,
-                time: in time,
-                version: default
-            )
-            : []));
-
         return writer.ToArray();
     }
-    /// <summary>Encodes the final observable authority epoch for one traveler, disclosing the carried document at
-    /// <paramref name="tier"/> to the traveler itself: the peer principal owning the route's
-    /// <see cref="WorldAuthorityRouteDescription.Entity"/> at its final authority, which is the identity that
-    /// authority's transfer table resolves the traveler's credential to.</summary>
+    /// <summary>Encodes the final observable authority epoch for one traveler. It names the version of the document
+    /// the route was composed against and carries no document: the document reaches the traveler through its
+    /// observation stream alone, where disclosure is applied.</summary>
     /// <param name="route">The route description.</param>
     /// <param name="tier">The tier the admission door decided for the asking peer.</param>
-    /// <param name="authority">The composing authority's addressable namespace.</param>
-    /// <param name="revision">The document revision this composition names.</param>
     /// <returns>The encoded leaf.</returns>
-    /// <param name="time">The authoritative tick the disclosed document's composition stands at.</param>
-    public static byte[] EncodeRoute(in WorldAuthorityRouteDescription route, WorldDisclosureTier tier, string authority, int revision, in ArenaTime time) {
+    public static byte[] EncodeRoute(in WorldAuthorityRouteDescription route, WorldDisclosureTier tier) {
         var writer = new WireWriter(capacity: 4096);
 
         writer.WriteString(value: route.Endpoint);
@@ -923,18 +924,7 @@ public static partial class WorldFederationCodec {
         writer.WriteByte(value: route.CatalogRig);
         writer.WriteFixed(value: route.TravelTurn);
         writer.WriteNullableString(value: route.PlacementId);
-        writer.WriteBlock(value: EncodeDocument(
-            definition: route.Definition,
-            version: route.Version,
-            tier: tier,
-            authority: authority,
-            revision: revision,
-            time: in time,
-            recipient: Principal.Peer(
-                generation: route.Entity.Generation,
-                index: route.Entity.Index
-            )
-        ));
+        writer.WriteBlock(value: DocumentLeaf(payload: [], tier: tier, version: route.Version));
 
         return writer.ToArray();
     }
@@ -1351,18 +1341,15 @@ public static partial class WorldFederationCodec {
         var payload = body[DocumentHeaderBytes..];
 
         if (tier == WorldDisclosureTier.Replica) {
-            if (!TryDeserializeDefinition(
-                bytes: payload.ToArray(),
-                field: "definition",
+            return TryAssembleDefinition(
+                content: content,
                 definition: out definition,
-                failure: out failure
-            )) {
-                return false;
-            }
-
-            WorldContentIndex.Fetch(definition: definition!, fetch: fetch, held: content);
-
-            return true;
+                failure: out failure,
+                fetch: fetch,
+                field: "definition",
+                hold: hold,
+                manifest: payload
+            );
         }
 
         if (tier == WorldDisclosureTier.Frames) {
@@ -1529,14 +1516,13 @@ public static partial class WorldFederationCodec {
             reader: ref reader
         );
     }
-    /// <summary>Decodes a reservation verdict.</summary>
+    /// <summary>Decodes a reservation verdict, which carries no document
+    /// (<see cref="WorldTransferReservationReply.DestinationDefinition"/> is <see langword="null"/>).</summary>
     /// <param name="body">The leaf bytes.</param>
     /// <param name="reply">The verdict on success.</param>
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    /// <param name="fetch">The authorized prototype fetch door.</param>
-    /// <param name="content">The store the sender's content is kept in, or <see langword="null"/> for the process's.</param>
-    public static bool TryDecodeReservationReply(ReadOnlySpan<byte> body, out WorldTransferReservationReply? reply, out WireFailure failure, Func<ContentPin, byte[]?>? fetch = null, ContentAddressedStore? content = null) {
+    public static bool TryDecodeReservationReply(ReadOnlySpan<byte> body, out WorldTransferReservationReply? reply, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
         reply = null;
@@ -1598,11 +1584,6 @@ public static partial class WorldFederationCodec {
             );
         }
 
-        var definitionBytes = reader.ReadBlock(
-            field: "reservation reply document",
-            maxBytes: (WireLimits.MaxDocumentBytes + DocumentHeaderBytes)
-        );
-
         if (reader.Failed) {
             return Finish(
                 failure: out failure,
@@ -1610,29 +1591,12 @@ public static partial class WorldFederationCodec {
             );
         }
 
-        WorldDefinition? definition = null;
-
-        if (
-            (definitionBytes.Length > 0) &&
-            !TryDecodeDocument(
-            content: content,
-            fetch: fetch,
-            body: definitionBytes,
-            definition: out definition,
-            failure: out failure,
-            tier: out _,
-            version: out _
-        )
-        ) {
-            return false;
-        }
-
         reply = new WorldTransferReservationReply(
             Accepted: accepted,
             AcceptedMembers: acceptedMembers,
             BodyIndices: slots,
             DeadlineDestinationTick: deadline,
-            DestinationDefinition: definition,
+            DestinationDefinition: null,
             Reason: reason,
             Refusals: refusals
         ) {
@@ -1644,14 +1608,19 @@ public static partial class WorldFederationCodec {
             reader: ref reader
         );
     }
-    /// <summary>Decodes a route description and checks it against the definition it carries.</summary>
+    /// <summary>Decodes a route description and checks it against the document its receiver holds for the authority.
+    /// A route names its document's version and carries no document, so the decoded route's
+    /// <see cref="WorldAuthorityRouteDescription.Definition"/> is <paramref name="held"/>.</summary>
     /// <param name="body">The leaf bytes.</param>
+    /// <param name="held">The document the receiver holds for the route's authority: its own copy of the world, or
+    /// the one the authority's observation stream last delivered.</param>
     /// <param name="route">The route on success.</param>
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    /// <param name="fetch">The authorized prototype fetch door.</param>
-    /// <param name="content">The store the sender's content is kept in, or <see langword="null"/> for the process's.</param>
-    public static bool TryDecodeRoute(ReadOnlySpan<byte> body, out WorldAuthorityRouteDescription route, out WireFailure failure, Func<ContentPin, byte[]?>? fetch = null, ContentAddressedStore? content = null) {
+    /// <exception cref="ArgumentNullException"><paramref name="held"/> is <see langword="null"/>.</exception>
+    public static bool TryDecodeRoute(ReadOnlySpan<byte> body, WorldDefinition held, out WorldAuthorityRouteDescription route, out WireFailure failure) {
+        ArgumentNullException.ThrowIfNull(argument: held);
+
         var reader = new WireReader(bytes: body);
 
         route = default;
@@ -1670,11 +1639,14 @@ public static partial class WorldFederationCodec {
             reader: ref reader
         );
         var placementId = reader.ReadNullableString(field: "route placement id");
-        var definitionBytes = reader.ReadBlock(
-            field: "route document",
-            maxBytes: (WireLimits.MaxDocumentBytes + DocumentHeaderBytes)
+        var versionBytes = reader.ReadBlock(
+            field: "route document version",
+            maxBytes: DocumentHeaderBytes
         );
 
+        if (!reader.Failed && (versionBytes.Length != DocumentHeaderBytes)) {
+            reader.Fail(detail: "a route names its document's version and carries no document", refusal: WireRefusal.PayloadMalformed);
+        }
         if (reader.Failed) {
             return Finish(
                 failure: out failure,
@@ -1682,20 +1654,10 @@ public static partial class WorldFederationCodec {
             );
         }
 
-        if (
-            !TryDecodeDocument(
-            content: content,
-            fetch: fetch,
-            body: definitionBytes,
-            definition: out var definition,
-            failure: out failure,
-            tier: out _,
-            version: out var version
-        ) ||
-            (definition is null)
-        ) {
-            return false;
-        }
+        // The route is read against the document its receiver holds for the authority; the authority's own document
+        // arrives on the observation stream.
+        var definition = held;
+        var version = ReadDocumentVersion(versionBytes);
 
         if (!version.IsDelivered) {
             failure = new WireFailure(

@@ -89,6 +89,9 @@ public sealed partial class WorldInstanceHost {
                 // answer of the drain that records it, so what this source settles is a function of its records and
                 // the destination's word. A prior confirmed commit still fences restoration.
                 var status = WorldTransferStatus.Committed;
+                // What the destination said when it answered the commit with anything but a commit, for the narration
+                // of the cohort's return.
+                var refused = string.Empty;
 
                 if (pending.CommitAnswer is { } commit) {
                     if (!commit.IsCompleted) { index++; continue; }
@@ -96,6 +99,7 @@ public sealed partial class WorldInstanceHost {
                     m_inDoubtTransfers[index] = pending;
                     if (!commit.IsCompletedSuccessfully || commit.Result.Step != WorldTransferStep.Answered) { index++; continue; }
                     status = commit.Result.Status;
+                    refused = commit.Result.Reason;
                     if (status == WorldTransferStatus.Uncertain) { index++; continue; }
                 } else if (
                     !targetAuthority.TryStatus(
@@ -140,7 +144,9 @@ public sealed partial class WorldInstanceHost {
                             continue;
                         }
                         if (!answer.IsCompletedSuccessfully) { index++; continue; }
-                        var (step, verdict, _) = answer.Result;
+                        var (step, verdict, answered) = answer.Result;
+
+                        refused = answered;
                         if (
                             (step == WorldTransferStep.Answered) &&
                             (verdict == WorldTransferStatus.Committed)
@@ -238,7 +244,7 @@ public sealed partial class WorldInstanceHost {
                     if (m_narration.HasNarrationSink) {
                         m_narration.Narrate(
                             channel: "world.transfer",
-                            text: $"[world.transfer: transfer={pending.Transfer.TransferId} RESOLVED absent at '{pending.TargetName}' — every member restored to '{pending.Transfer.SourceInstance}' from retained recovery state]"
+                            text: $"[world.transfer: transfer={pending.Transfer.TransferId} RESOLVED absent at '{pending.TargetName}'{((refused.Length > 0) ? $" ({refused})" : string.Empty)} — every member restored to '{pending.Transfer.SourceInstance}' from retained recovery state]"
                         );
                     }
                     if (pending.Spawned) { ReapIfEmpty(name: pending.TargetName); }
@@ -252,6 +258,7 @@ public sealed partial class WorldInstanceHost {
                         transfer: in transfer,
                         reason: $"'{pending.TargetName}' has no record of the reservation this crossing was committed against"
                     );
+                    RetryRemoteJoin(members: rollingBack.Landed);
                     continue;
                 }
             } catch (Exception exception) when ((exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException)) {

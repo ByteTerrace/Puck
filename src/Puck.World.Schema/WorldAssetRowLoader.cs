@@ -1,62 +1,63 @@
 using System.Text.Json;
+using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.World.Authoring;
 
 namespace Puck.World;
 
 /// <summary>
-/// Resolves a name/source/hash asset reference row's document off disk — <see cref="WorldMusicRow.Source"/>, <see
-/// cref="TableRow.Source"/>, <see cref="WorldTune.Source"/> and <see cref="WorldPatch.Source"/> resolve beside the
-/// document that authored the row (<see cref="WorldDocumentPaths"/>). Shared by <see cref="WorldDefinitionValidator"/>
-/// (which also hash-pins and vocabulary-checks the loaded document) and <c>Server.WorldServer</c> (which compiles it)
-/// so the load step has exactly one source of truth.
+/// Loads the document a name/source/hash asset reference row names: <see cref="WorldMusicRow"/>,
+/// <see cref="TableRow"/>, <see cref="WorldTune"/> and <see cref="WorldPatch"/>. A row of a document loaded from a
+/// directory resolves its <c>source</c> beside that document (<see cref="WorldDocumentPaths"/>). A row of a document
+/// with no directory, which is what another process delivers, is read by its <c>hash</c> alone through the process's
+/// content resolver (<see cref="WorldProjectionContent.Resolver"/>), and its <c>source</c> is a label that is never
+/// opened. Shared by <see cref="WorldDefinitionValidator"/> (which also hash-pins and vocabulary-checks the loaded
+/// document) and <c>Server.WorldServer</c> (which compiles it), so the load step has exactly one source of truth.
 /// </summary>
 public static class WorldAssetRowLoader {
-    private const string InlineJson = "data:application/json;base64,";
-    // Bounds the embedding cache and the once-per-row failure reports; a full table is cleared and refilled, never
-    // grown, since every entry is derived again from its row on a miss.
-    private const int MaxEmbeddings = 4096;
+    /// <summary>The most bytes the canonical document of one asset row holds when it is read by pin.</summary>
+    public const int MaxPinnedRowBytes = (1 << 20);
 
-    // A validated embedding by content pin: the canonical bytes of a document whose canonical hash is the pin, as the
-    // inline source every delivery of that row carries. The key is the content's identity, so an entry can never go
-    // stale; a miss loads, canonicalizes and checks the pin again.
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(AudioFamily Family, string Hash), string> Embeddings = new();
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(AudioFamily Family, string Name, string Hash), byte> Reported = new();
+    /// <summary>Returns the function that gives a family's canonical bytes from a document file's bytes: the bytes a
+    /// row's <c>hash</c> names, which are not the file as written.</summary>
+    /// <param name="family">The row's family, one of <see cref="AssetRowFamilies"/>.</param>
+    /// <param name="name">The row's name, quoted by a canonicalizer's refusal.</param>
+    /// <returns>A function that answers the canonical bytes, or <see langword="null"/> for bytes that do not parse and
+    /// canonicalize as the family's document.</returns>
+    public static Func<ReadOnlyMemory<byte>, byte[]?> Canonical(string family, string name) => bytes => (family switch {
+        AssetRowFamilies.Music => Canonical<MusicDocument>(bytes, document => Loaded.From(MusicCanonicalizer.Canonicalize(document: document, source: name))),
+        AssetRowFamilies.Patch => Canonical<SynthPatchDocument>(bytes, document => Loaded.From(SynthPatchCanonicalizer.Canonicalize(document: document, source: name))),
+        AssetRowFamilies.Table => Canonical<TableDocument>(bytes, document => Loaded.From(TableCanonicalizer.Canonicalize(document: document, source: name))),
+        AssetRowFamilies.Tune => Canonical<AudioDocument>(bytes, document => Loaded.From(AudioCanonicalizer.Canonicalize(document: document, source: name))),
+        _ => Loaded.Failed($"'{family}' is not an asset row family."),
+    }).Bytes;
 
-    /// <summary>The audio asset families a world delivers embedded.</summary>
-    internal enum AudioFamily : byte {
-        /// <summary>A <c>puck.synthesizer-patch.v1</c> row.</summary>
-        Patch,
-        /// <summary>A <c>puck.tune.v1</c> row.</summary>
-        Tune,
-        /// <summary>A <c>puck.music.v1</c> row.</summary>
-        Music,
-    }
+    /// <summary>Returns whether bytes are a family's canonical document: they parse, canonicalize, and canonicalize to
+    /// themselves. It is the check content fetched from another process passes before it is stored.</summary>
+    /// <param name="family">The row's family, one of <see cref="AssetRowFamilies"/>.</param>
+    /// <param name="bytes">The candidate bytes.</param>
+    /// <returns><see langword="true"/> when the bytes are the family's canonical form.</returns>
+    public static bool IsCanonical(string family, ReadOnlyMemory<byte> bytes) =>
+        ((Canonical(family: family, name: family)(arg: bytes) is { } canonical) && canonical.AsSpan().SequenceEqual(other: bytes.Span));
 
-    /// <summary>Whether the source is a self-contained audio asset rather than a filesystem path.</summary>
-    public static bool IsEmbeddedAudio(string source) => source.StartsWith(InlineJson, StringComparison.Ordinal);
+    /// <summary>Returns whether this process holds the content a row's pin names, so a read by pin has somewhere to
+    /// look. It opens nothing.</summary>
+    /// <param name="hash">The row's <c>hash</c>.</param>
+    /// <returns><see langword="true"/> when the pin parses and a file or a store holds it.</returns>
+    public static bool IsHeld(string hash) => (TryPin(hash: hash, pin: out var pin) && WorldProjectionContent.Resolver.Contains(pin: pin));
+    /// <summary>Reads a row's <c>hash</c> as a content pin. An asset row carries the bare 64 digits of its canonical
+    /// document's digest, and a pin's own text form is accepted beside it.</summary>
+    /// <param name="hash">The row's <c>hash</c>.</param>
+    /// <param name="pin">The pin, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the hash names a pin.</returns>
+    public static bool TryPin([System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] string? hash, out ContentPin pin) {
+        if (hash is null) {
+            pin = default;
 
-    /// <summary>Materializes the published audio assets so a remote or routed listener needs no authority filesystem
-    /// path. A row whose document no longer loads or no longer matches its pin is dropped from the delivery and reported
-    /// once on standard error, naming the row.</summary>
-    /// <param name="definition">The authority's definition.</param>
-    /// <returns>The definition with every deliverable audio row carrying its canonical content inline.</returns>
-    public static WorldDefinition EmbedAudio(WorldDefinition definition) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
+            return false;
+        }
 
-        var directory = definition.DocumentDirectory;
-
-        return definition with {
-            PatchesRaw = [.. definition.Patches.Select(patch => Embed(AudioFamily.Patch, patch.Name, patch.Source, patch.Hash,
-                () => LoadCanonical(AssetRowFamilies.Patch, directory, patch.Name, patch.Source, patch.Hash))
-                is { } source ? patch with { Source = source } : null).OfType<WorldPatch>()],
-            TunesRaw = [.. definition.Tunes.Select(tune => Embed(AudioFamily.Tune, tune.Name, tune.Source, tune.Hash,
-                () => LoadCanonical(AssetRowFamilies.Tune, directory, tune.Name, tune.Source, tune.Hash))
-                is { } source ? tune with { Source = source } : null).OfType<WorldTune>()],
-            Music = definition.Music?.Select(row => Embed(AudioFamily.Music, row.Name, row.Source, row.Hash,
-                () => LoadCanonical(AssetRowFamilies.Music, directory, row.Name, row.Source, row.Hash))
-                is { } source ? row with { Source = source } : null).OfType<WorldMusicRow>().ToArray(),
-        };
+        return (ContentPin.TryParseHex(hex: hash, pin: out pin) || ContentPin.TryParse(pin: out pin, text: hash));
     }
 
     /// <summary>Computes the canonical content pin of an asset reference row's source document: the digest every
@@ -70,7 +71,7 @@ public static class WorldAssetRowLoader {
     /// <param name="error">Why the document did not load or canonicalize, when this method returns <see langword="false"/>.</param>
     /// <returns>Whether the source loaded and canonicalized.</returns>
     public static bool TryCanonicalHash(string family, string? documentDirectory, string name, string source, out string pin, out string error) {
-        var loaded = LoadCanonical(family: family, documentDirectory: documentDirectory, name: name, source: source, hash: null);
+        var loaded = LoadCanonical(family: family, documentDirectory: documentDirectory, name: name, source: source);
 
         pin = (loaded.Hash ?? string.Empty);
         error = (loaded.Error ?? string.Empty);
@@ -85,58 +86,38 @@ public static class WorldAssetRowLoader {
         public static Loaded Failed(string? error) => new(null, null, error);
     }
 
-    private static Loaded LoadCanonical(string family, string? documentDirectory, string name, string source, string? hash) => family switch {
-        AssetRowFamilies.Music => LoadCanonical<MusicDocument>(documentDirectory, source, hash, document => Loaded.From(MusicCanonicalizer.Canonicalize(document: document, source: name))),
-        AssetRowFamilies.Patch => LoadCanonical<SynthPatchDocument>(documentDirectory, source, hash, document => Loaded.From(SynthPatchCanonicalizer.Canonicalize(document: document, source: name))),
-        AssetRowFamilies.Table => LoadCanonical<TableDocument>(documentDirectory, source, hash, document => Loaded.From(TableCanonicalizer.Canonicalize(document: document, source: name))),
-        AssetRowFamilies.Tune => LoadCanonical<AudioDocument>(documentDirectory, source, hash, document => Loaded.From(AudioCanonicalizer.Canonicalize(document: document, source: name))),
+    private static Loaded LoadCanonical(string family, string? documentDirectory, string name, string source) => family switch {
+        AssetRowFamilies.Music => LoadCanonical<MusicDocument>(documentDirectory, source, document => Loaded.From(MusicCanonicalizer.Canonicalize(document: document, source: name))),
+        AssetRowFamilies.Patch => LoadCanonical<SynthPatchDocument>(documentDirectory, source, document => Loaded.From(SynthPatchCanonicalizer.Canonicalize(document: document, source: name))),
+        AssetRowFamilies.Table => LoadCanonical<TableDocument>(documentDirectory, source, document => Loaded.From(TableCanonicalizer.Canonicalize(document: document, source: name))),
+        AssetRowFamilies.Tune => LoadCanonical<AudioDocument>(documentDirectory, source, document => Loaded.From(AudioCanonicalizer.Canonicalize(document: document, source: name))),
         _ => Loaded.Failed($"'{family}' is not an asset row family."),
     };
-    private static Loaded LoadCanonical<TDocument>(string? documentDirectory, string source, string? hash, Func<TDocument, Loaded> canonicalize) where TDocument : class {
-        if (!TryLoad(documentDirectory: documentDirectory, source: source, document: out TDocument? document, error: out var error, hash: hash)) {
+    private static Loaded LoadCanonical<TDocument>(string? documentDirectory, string source, Func<TDocument, Loaded> canonicalize) where TDocument : class {
+        if (!TryLoad(documentDirectory: documentDirectory, source: source, document: out TDocument? document, error: out var error, hash: null)) {
             return Loaded.Failed(error);
         }
 
+        return Canonicalized(document: document!, canonicalize: canonicalize);
+    }
+    private static Loaded Canonical<TDocument>(ReadOnlyMemory<byte> bytes, Func<TDocument, Loaded> canonicalize) where TDocument : class {
         try {
-            return canonicalize(document!);
+            return ((JsonSerializer.Deserialize<TDocument>(utf8Json: bytes.Span, options: DocumentJsonOptions.Shared) is { } document)
+                ? Canonicalized(document: document, canonicalize: canonicalize)
+                : Loaded.Failed("the document parsed to nothing."));
+        } catch (JsonException exception) {
+            return Loaded.Failed(exception.Message);
+        }
+    }
+    private static Loaded Canonicalized<TDocument>(TDocument document, Func<TDocument, Loaded> canonicalize) where TDocument : class {
+        try {
+            return canonicalize(document);
         } catch (Exception exception) when (exception is DocumentValidationException or InvalidOperationException) {
             return Loaded.Failed(exception.Message.ReplaceLineEndings(replacementText: " "));
         }
     }
 
-    private static string? Embed(AudioFamily family, string name, string source, string hash, Func<Loaded> load) {
-        if (Embeddings.TryGetValue(key: (family, hash), value: out var known)) { return known; }
-        if (IsEmbeddedAudio(source: source)) { return source; }
-        var loaded = load();
-        if ((loaded.Bytes is not { } bytes) || !string.Equals(loaded.Hash, hash, StringComparison.Ordinal)) {
-            if (Reported.Count >= MaxEmbeddings) { Reported.Clear(); }
-            if (Reported.TryAdd(key: (family, name, hash), value: 0)) {
-                Console.Error.WriteLine(value: $"[world.audio: {family.ToString().ToLowerInvariant()}[{name}] is withheld from deliveries: {(loaded.Error ?? "its canonical content no longer matches its pin.")}]");
-            }
-            return null;
-        }
-        var embedded = InlineJson + Convert.ToBase64String(inArray: bytes);
-        RememberEmbedding(family: family, hash: hash, source: embedded);
-        return embedded;
-    }
-
-    /// <summary>Records an embedded source as the validated content of its pin.</summary>
-    /// <param name="family">The asset family.</param>
-    /// <param name="hash">The content pin.</param>
-    /// <param name="source">The inline source.</param>
-    internal static void RememberEmbedding(AudioFamily family, string hash, string source) {
-        if (Embeddings.Count >= MaxEmbeddings) { Embeddings.Clear(); }
-        Embeddings[(family, hash)] = source;
-    }
-    /// <summary>Determines whether an embedded source is one this process already validated for its pin.</summary>
-    /// <param name="family">The asset family.</param>
-    /// <param name="hash">The content pin.</param>
-    /// <param name="source">The inline source.</param>
-    /// <returns><see langword="true"/> when the source is byte-for-byte a validated embedding of the pin.</returns>
-    internal static bool IsKnownEmbedding(AudioFamily family, string hash, string source) =>
-        Embeddings.TryGetValue(key: (family, hash), value: out var known) && string.Equals(known, source, StringComparison.Ordinal);
-
-    private static bool TryLoad<TDocument>(string? documentDirectory, string source, out TDocument? document, out string? error, string? hash = null) where TDocument : class {
+    private static bool TryLoad<TDocument>(string? documentDirectory, string source, out TDocument? document, out string? error, string? hash) where TDocument : class {
         document = null;
 
         if (string.IsNullOrWhiteSpace(value: source)) {
@@ -145,47 +126,46 @@ public static class WorldAssetRowLoader {
             return false;
         }
 
-        if (IsEmbeddedAudio(source)) {
-            try {
-                var embedded = Convert.FromBase64String(source[InlineJson.Length..]);
-                if (!string.Equals(Puck.Assets.ContentPin.Compute(embedded).Hex, hash, StringComparison.Ordinal)) {
-                    error = "embedded audio source does not match its content pin.";
-                    return false;
-                }
-                document = JsonSerializer.Deserialize<TDocument>(embedded, DocumentJsonOptions.Shared);
-                error = document is null ? "embedded audio source parsed to no document." : null;
-                return document is not null;
-            } catch (Exception exception) when (exception is FormatException or JsonException) {
-                error = "embedded audio source is malformed.";
-                return false;
-            }
-        }
-
-        if (!WorldDocumentPaths.TryResolve(
-            documentDirectory: documentDirectory,
-            path: source,
-            reason: out var unresolved,
-            resolved: out var resolved
-        )) {
-            error = $"source {unresolved}.";
-
-            return false;
-        }
-
-        if (!File.Exists(path: resolved)) {
-            error = $"source '{source}' does not exist.";
-
-            return false;
-        }
-
         byte[] bytes;
 
-        try {
-            bytes = File.ReadAllBytes(path: resolved);
-        } catch (IOException exception) {
-            error = $"source '{source}' could not be read: {exception.Message}";
+        if ((documentDirectory is null) && !Path.IsPathRooted(path: source)) {
+            // A document with no directory names no file: the row's pin is its content, and the path is a label.
+            if (!TryPin(hash: hash, pin: out var pin)) {
+                error = $"source '{source}' is relative, this document has no directory to resolve it beside, and the row carries no content pin to read it by.";
 
-            return false;
+                return false;
+            }
+            if (!WorldProjectionContent.Resolver.TryRead(content: out var pinned, maximumBytes: MaxPinnedRowBytes, pin: pin)) {
+                error = $"source '{source}' is read by its pin {pin}, which this process does not hold.";
+
+                return false;
+            }
+            bytes = pinned.ToArray();
+        } else {
+            if (!WorldDocumentPaths.TryResolve(
+                documentDirectory: documentDirectory,
+                path: source,
+                reason: out var unresolved,
+                resolved: out var resolved
+            )) {
+                error = $"source {unresolved}.";
+
+                return false;
+            }
+
+            if (!File.Exists(path: resolved)) {
+                error = $"source '{source}' does not exist.";
+
+                return false;
+            }
+
+            try {
+                bytes = File.ReadAllBytes(path: resolved);
+            } catch (IOException exception) {
+                error = $"source '{source}' could not be read: {exception.Message}";
+
+                return false;
+            }
         }
 
         WorldBootWork.Count(kind: WorldBootWork.AssetLoads);
@@ -217,25 +197,46 @@ public static class WorldAssetRowLoader {
     /// <param name="definition">The definition to list.</param>
     /// <returns>The family, name, and authored source of each row; a <see langword="null"/> row is skipped.</returns>
     public static IEnumerable<(string Family, string Name, string Source)> Rows(WorldDefinition definition) {
+        foreach (var (family, name, source, _) in PinnedRows(definition: definition)) {
+            yield return (family, name, source);
+        }
+    }
+    /// <summary>Lists every asset row a definition declares with its content pin, in <see cref="Rows"/>' order: the
+    /// rows whose content travels by pin.</summary>
+    /// <param name="definition">The definition to list.</param>
+    /// <returns>The family, name, authored source and <c>hash</c> of each row; a <see langword="null"/> row is
+    /// skipped.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static IEnumerable<(string Family, string Name, string Source, string Hash)> PinnedRows(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        foreach (var row in (definition.Music ?? [])) {
-            if (row is not null) { yield return ("music", row.Name, row.Source); }
+        return PinnedRows(music: definition.Music, patches: definition.Patches, tables: definition.Tables, tunes: definition.Tunes);
+    }
+    /// <summary>Lists the asset rows of each family with their content pins, in <see cref="Rows"/>' order.</summary>
+    /// <param name="music">The score rows, or <see langword="null"/>.</param>
+    /// <param name="tables">The table rows, or <see langword="null"/>.</param>
+    /// <param name="tunes">The tune rows, or <see langword="null"/>.</param>
+    /// <param name="patches">The patch rows, or <see langword="null"/>.</param>
+    /// <returns>The family, name, authored source and <c>hash</c> of each row; a <see langword="null"/> row is
+    /// skipped.</returns>
+    public static IEnumerable<(string Family, string Name, string Source, string Hash)> PinnedRows(IReadOnlyList<WorldMusicRow>? music, IReadOnlyList<Puck.State.TableRow>? tables, IReadOnlyList<WorldTune>? tunes, IReadOnlyList<WorldPatch>? patches) {
+        foreach (var row in (music ?? [])) {
+            if (row is not null) { yield return (AssetRowFamilies.Music, row.Name, row.Source, row.Hash); }
         }
-        foreach (var row in (definition.Tables ?? [])) {
-            if (row is not null) { yield return ("table", row.Name, row.Source); }
+        foreach (var row in (tables ?? [])) {
+            if (row is not null) { yield return (AssetRowFamilies.Table, row.Name, row.Source, row.Hash); }
         }
-        foreach (var row in definition.Tunes) {
-            if (row is not null) { yield return ("tune", row.Name, row.Source); }
+        foreach (var row in (tunes ?? [])) {
+            if (row is not null) { yield return (AssetRowFamilies.Tune, row.Name, row.Source, row.Hash); }
         }
-        foreach (var row in definition.Patches) {
-            if (row is not null) { yield return ("patch", row.Name, row.Source); }
+        foreach (var row in (patches ?? [])) {
+            if (row is not null) { yield return (AssetRowFamilies.Patch, row.Name, row.Source, row.Hash); }
         }
     }
     /// <summary>Loads a <see cref="WorldMusicRow"/>'s referenced <c>puck.music.v1</c> document.</summary>
     /// <param name="documentDirectory">The directory of the document that authored the row
-    /// (<see cref="WorldDefinition.DocumentDirectory"/>), or <see langword="null"/> for a document with none, which
-    /// refuses a relative source by name.</param>
+    /// (<see cref="WorldDefinition.DocumentDirectory"/>), or <see langword="null"/> for a document with none, whose
+    /// row is read by its pin.</param>
     /// <param name="row">The reference row.</param>
     /// <param name="document">The loaded document, when this method returns <see langword="true"/>.</param>
     /// <param name="error">A human-readable failure reason, when this method returns <see langword="false"/>.</param>
@@ -249,8 +250,8 @@ public static class WorldAssetRowLoader {
         );
     /// <summary>Loads a <see cref="WorldPatch"/>'s referenced <c>puck.synthesizer-patch.v1</c> document.</summary>
     /// <param name="documentDirectory">The directory of the document that authored the row
-    /// (<see cref="WorldDefinition.DocumentDirectory"/>), or <see langword="null"/> for a document with none, which
-    /// refuses a relative source by name.</param>
+    /// (<see cref="WorldDefinition.DocumentDirectory"/>), or <see langword="null"/> for a document with none, whose
+    /// row is read by its pin.</param>
     /// <param name="row">The reference row.</param>
     /// <param name="document">The loaded document, when this method returns <see langword="true"/>.</param>
     /// <param name="error">A human-readable failure reason, when this method returns <see langword="false"/>.</param>
@@ -264,8 +265,8 @@ public static class WorldAssetRowLoader {
         );
     /// <summary>Loads a <see cref="TableRow"/>'s referenced <c>puck.table.v1</c> document.</summary>
     /// <param name="documentDirectory">The directory of the document that authored the row
-    /// (<see cref="WorldDefinition.DocumentDirectory"/>), or <see langword="null"/> for a document with none, which
-    /// refuses a relative source by name.</param>
+    /// (<see cref="WorldDefinition.DocumentDirectory"/>), or <see langword="null"/> for a document with none, whose
+    /// row is read by its pin.</param>
     /// <param name="row">The reference row.</param>
     /// <param name="document">The loaded document, when this method returns <see langword="true"/>.</param>
     /// <param name="error">A human-readable failure reason, when this method returns <see langword="false"/>.</param>
@@ -274,12 +275,13 @@ public static class WorldAssetRowLoader {
             document: out document,
             documentDirectory: documentDirectory,
             error: out error,
-            source: row.Source
+            source: row.Source,
+            hash: row.Hash
         );
     /// <summary>Loads a <see cref="WorldTune"/>'s referenced <c>puck.tune.v1</c> document.</summary>
     /// <param name="documentDirectory">The directory of the document that authored the row
-    /// (<see cref="WorldDefinition.DocumentDirectory"/>), or <see langword="null"/> for a document with none, which
-    /// refuses a relative source by name.</param>
+    /// (<see cref="WorldDefinition.DocumentDirectory"/>), or <see langword="null"/> for a document with none, whose
+    /// row is read by its pin.</param>
     /// <param name="row">The reference row.</param>
     /// <param name="document">The loaded document, when this method returns <see langword="true"/>.</param>
     /// <param name="error">A human-readable failure reason, when this method returns <see langword="false"/>.</param>

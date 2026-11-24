@@ -34,6 +34,9 @@ public sealed class WorldSeatDriver {
     private const int MaxStuckPlans = 3;
     // The ticks a pose and a line are given to land before the next step reads the world.
     private const int LandTicks = 2;
+    // How long, in seconds of the authority's time, a pose step waits for its pose to show in a delivery before it fails:
+    // a pose sent to an authority in another process crosses a lane, applies at a tick and returns in a later delivery.
+    private const int PoseLandSeconds = 3;
     // The heading error, in degrees, a crossing turns inside before it walks, and the ticks it gives the turn.
     private const double AlignDegrees = 3.0;
     private const int AlignTicks = 45;
@@ -359,9 +362,12 @@ public sealed class WorldSeatDriver {
                     }
 
                     // A pose that did not land (refused, or overtaken by a crossing in flight) leaves the chapter
-                    // starting somewhere its author did not mean.
+                    // starting somewhere its author did not mean. A pose sent to an authority in another process
+                    // lands in a later delivery, so the step waits for it up to PoseLandSeconds before it fails.
                     if ((point is not { } at) || ((Point(at) - read.Position).LengthSquared > FixedQ4816.One)) {
-                        Fail(kind: "pose", place: read.Place, reason: $"the body is not where step {m_step} ({Describe(step: pose)}) set it down", tick: tick);
+                        if ((point is null) || (elapsed >= ((ulong)(PoseLandSeconds * rateHz)))) {
+                            Fail(kind: "pose", place: read.Place, reason: $"the body is not where step {m_step} ({Describe(step: pose)}) set it down", tick: tick);
+                        }
                         return still;
                     }
                     NextStep(tick: tick, rateHz: rateHz);

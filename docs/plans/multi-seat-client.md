@@ -73,9 +73,10 @@ Each line was read in this tree; a plan's citations are leads to recheck.
   `PlayerRoster.PrincipalOf` for its slot. `IServerLink.SubmitIntent` documents
   that a connection carries up to four submissions a tick, one per local seat.
 - **A client is an authority.** A `--connect` client boots its own copy of the
-  world and enqueues a transfer of seat 0's body to a remote destination
-  (`WorldInstanceHost.EnqueueTransfer` with `TransferScope.Body`, in
-  `Program.cs`). The transfer runs over `WorldRemoteAuthority`'s ordered lanes
+  world and sends every seat that stands in it to the remote destination
+  (`WorldInstanceHost.FollowRemoteJoin`): the seats the document seats at
+  boot as one party in one reservation, and a seat that joins later by
+  itself. The transfer runs over `WorldRemoteAuthority`'s ordered lanes
   (`WorldFederationLane`: one for the transaction, one for routed submissions),
   authenticated by the client authority's federation key
   (`--federation-key-file`).
@@ -220,6 +221,21 @@ can assemble an identity; the member path gains exactly one call, to
 stops:** the proof is of key possession at admission. It says nothing about
 which person holds which controller afterwards, and a client holding four keys
 drives four bodies.
+
+**What holds today, before this decision is built.** Nothing enforces the
+invariant yet: a member is admitted under the arrival verdict of the authority
+that handed it over, so every seat of a client is that client's authority and
+no more. Two things the build must keep from the path that exists. The
+destination resolves a traveller's principal from its own transfer table
+(`WorldServer.TryTransferredPrincipal`) and stamps it on every routed
+submission and input (`WorldLocalForwardedAuthority.TryApplyIntent`,
+`WorldLocalForwardedAuthority.TryApplySubmission`), so a client never names
+the principal it acts as; a member's verdict must be bound to that table's
+entry at the commit and nowhere else. And a connection's credential is
+rechecked against the admission policy an install published
+(`WorldServer.AdmissionPolicy`), on the connection's own thread; the member's
+claim is verified the same way, against that list, and commits under the
+authority gate only while the list is still the same instance.
 
 **Attacks it closes.**
 
@@ -376,10 +392,21 @@ admission rows the step needs. No check is a timing.
    seat in turn moves that seat's body on the host and no other
    (`body.where` for the four); `world.tick.federated-batches` rises for four
    owners and `world.tick.federated-restarts` stays at zero.
-   *Built in part:* the party crosses and is admitted, and batches arrive for
-   four owners with no restart; no body moves yet, because each traveller's
-   input owner on the host holds no source
-   ([the packet](open-items.md#a-multi-seat-client) records what ran).
+   *Built.* The seats the document seats at boot cross as one party in one
+   reservation (the join waits for every eager seat, and holds its slot for
+   `WorldInstanceHost.RemoteJoinHoldSeconds`, since a host can take seconds
+   over its first ticks and a lapsed reservation decides nothing). Each seat's
+   input moves its own body: on a headless pair over `worlds/minimal`,
+   `world.at <tick> seat <n>` held one stick on each of the four seats and the
+   four travellers on the host moved along four different axes, and
+   `puck benchmark --world worlds/minimal --route walk --remote local --seats 4
+   --headless` reports all four seats arrived. What had stopped the bodies
+   moving was not the seats: a connection thread on the host read the live
+   document while a tick was prepared, which threw and closed the lane that
+   carried a seat's input admission
+   ([the packet](open-items.md#a-multi-seat-client) records it). Not checked
+   here: `world.tick.federated-restarts` across a long run, and the debug
+   world on four seats.
 2. **A member proves itself.** The nonce in the reply, the claim in the
    commit, the member path through `WorldAdmissionDoor.TryAdmit`, the seat
    credential source and its key-file implementation, the guest count.

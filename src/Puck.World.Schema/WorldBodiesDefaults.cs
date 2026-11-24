@@ -130,11 +130,15 @@ public readonly record struct WorldBodiesDefaults(
     /// to seat 0 Eager (a session always needs a first player) and every remaining seat OnDemand.</summary>
     [JsonIgnore]
     public IReadOnlyList<SeatActivationPolicy> SeatActivation => (SeatActivationRaw ?? DeriveSeatActivation(localSeats: LocalSeats));
-    /// <summary>Gets the spawn-point name selected by each local seat ordinal, one entry per <see cref="LocalSeats"/>
-    /// — ABSENT resolves to <see cref="WorldSpawnPointDefaults.ImplicitOriginId"/> for every seat (see
-    /// <see cref="WorldDefinition.SpawnPoints"/>, which guarantees that name resolves).</summary>
+    /// <summary>Gets the spawn-point name selected by each local seat ordinal, one entry per <see cref="LocalSeats"/>.
+    /// An authored list shorter than the seats gives every seat past it the list's last name, so a world seats four
+    /// players at one point by naming it once; absent, every seat resolves to
+    /// <see cref="WorldSpawnPointDefaults.ImplicitOriginId"/> (see <see cref="WorldDefinition.SpawnPoints"/>, which
+    /// guarantees that name resolves).</summary>
     [JsonIgnore]
-    public IReadOnlyList<string> SeatSpawns => (SeatSpawnsRaw ?? DeriveSeatSpawns(localSeats: LocalSeats));
+    public IReadOnlyList<string> SeatSpawns => ((SeatSpawnsRaw is { Count: > 0 } authored)
+        ? ((authored.Count >= LocalSeats) ? authored : [.. authored, .. Enumerable.Repeat(element: authored[^1], count: (LocalSeats - authored.Count))])
+        : (SeatSpawnsRaw ?? DeriveSeatSpawns(localSeats: LocalSeats)));
     /// <summary>Gets the independently authored producer-state sequences for local-seat bodies — ABSENT resolves to
     /// the inert index sequence (no variation).</summary>
     [JsonIgnore]

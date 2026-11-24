@@ -545,7 +545,7 @@ public sealed class WorldPeerHost : IDisposable {
                         if (m_server.Output.HasNarrationSink) {
                             m_server.Output.Narrate(
                                 channel: "world.federation",
-                                text: $"[world.federation: the connection from '{federationAuthority}' ended on a fault ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"
+                                text: $"[world.federation: the connection from '{federationAuthority}' ended on a fault ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")}) in {string.Join(separator: " < ", values: new System.Diagnostics.StackTrace(e: exception).GetFrames().Take(count: 5).Select(selector: static frame => $"{frame.GetMethod()?.DeclaringType?.Name}.{frame.GetMethod()?.Name}"))}]"
                             );
                         }
                         throw;
@@ -1333,13 +1333,7 @@ public sealed class WorldPeerHost : IDisposable {
         await WorldFederationCodec.WriteResponseAsync(
             stream: stream,
             kind: WorldFederationResponse.Reservation,
-            body: await EncodeFederationReplyAsync(sourceAuthority: sourceAuthority, credential: credential, encode: tier => WorldFederationCodec.EncodeReservationReply(
-                reply: reply,
-                tier: tier,
-                authority: m_server.AuthorityIdentity,
-                revision: m_server.Population.Revision,
-                time: m_server.DeliveryTime
-            )),
+            body: await EncodeFederationReplyAsync(sourceAuthority: sourceAuthority, credential: credential, encode: _ => WorldFederationCodec.EncodeReservationReply(reply: reply)),
             ct: ct
         ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -1425,13 +1419,7 @@ public sealed class WorldPeerHost : IDisposable {
         await WorldFederationCodec.WriteResponseAsync(
             stream: stream,
             kind: WorldFederationResponse.Route,
-            body: await EncodeFederationReplyAsync(sourceAuthority: sourceAuthority, credential: credential, encode: tier => WorldFederationCodec.EncodeRoute(
-                route: in route,
-                tier: tier,
-                authority: m_server.AuthorityIdentity,
-                revision: m_server.Population.Revision,
-                time: m_server.DeliveryTime
-            )),
+            body: await EncodeFederationReplyAsync(sourceAuthority: sourceAuthority, credential: credential, encode: tier => WorldFederationCodec.EncodeRoute(route: in route, tier: tier)),
             ct: ct
         ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -1856,7 +1844,6 @@ public sealed class WorldPeerHost : IDisposable {
         var view = m_server.DeliveryView(null, tier);
         var sink = new WorldFederationProjectionSink(
             isCurrent: () => (ReferenceEquals(objA: policy, objB: m_server.AdmissionPolicy) && credential.IsValid()),
-            authority: m_server.AuthorityIdentity,
             server: m_server,
             tier: tier,
             view: view,

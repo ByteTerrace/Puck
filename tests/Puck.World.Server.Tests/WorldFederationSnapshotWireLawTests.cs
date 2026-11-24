@@ -120,7 +120,6 @@ public sealed class WorldFederationSnapshotWireLawTests(ITestOutputHelper output
     [Fact]
     public void AnOverCapSnapshotDetachesTheSinkByName() {
         var sink = new WorldFederationProjectionSink(
-            authority: "wire",
             disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
             tier: WorldDisclosureTier.Replica
         );

@@ -106,7 +106,7 @@ public sealed class WorldTickScriptLawTests {
                     authority: authority,
                     gates: new FixedGate(gate: gate)
                 ),
-                new WorldTickScriptCommandModule(script: Script),
+                new WorldTickScriptCommandModule(router: static () => throw new InvalidOperationException(message: "this law issues no line as a seat"), script: Script),
                 new ProbeModule(
                     completed: Completed,
                     log: Log

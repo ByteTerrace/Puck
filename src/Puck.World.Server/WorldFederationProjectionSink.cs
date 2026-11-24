@@ -13,7 +13,7 @@ namespace Puck.World.Server;
 /// at every authoritative tick whether or not the tick's frame is sampled; <see cref="Release"/> lets the feed go when
 /// the stream ends.</summary>
 /// <param name="tier">The tier the admission door decided for the peer.</param>
-/// <param name="authority">The composing authority's addressable namespace.</param>
+
 /// <param name="disclosure">Reads the live snapshot disclosure.</param>
 /// <param name="isCurrent">Reads whether the projection's authority route still holds, or <see langword="null"/> for
 /// one that always does.</param>
@@ -21,7 +21,7 @@ namespace Puck.World.Server;
 /// <param name="server">The authority whose store, clock and document a presentation-tier feed reads; required at
 /// <see cref="WorldDisclosureTier.Presentation"/>.</param>
 /// <param name="view">An ingress-minted view with live admission, or null to mint it from the server and tier.</param>
-public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, string authority,
+public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null, WorldServer? server = null,
     WorldRecipientView? view = null) : IWorldDetachableSink, IWorldInterestSink {
     /// <summary>The maximum encoded records one projection subscriber retains while its wire consumer is behind.</summary>
@@ -175,9 +175,12 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         m_cursor.ForgetDocument();
         if (m_cursor.DeliverDefinition(view: m_view) is { } whole) {
             WriteRecord(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
-                payload: WorldDefinitionSerialization.SerializeCompact(definition: whole), tier: tier, version: Version));
+                payload: Manifest(definition: whole), tier: tier, version: Version));
         }
     }
+    // A replica's document travels as its manifest: member digests, with only what disclosure and the running world
+    // changed from the source this authority loaded carried inline.
+    private byte[] Manifest(WorldDefinition definition) => WorldDocumentManifest.Encode(definition: definition, source: server?.Document.Revision.Definition);
     private void Write(WorldFederationResponse kind, byte[] body) => Write(new Record(kind, body));
 
     private void Write(Record record) {
@@ -251,7 +254,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             var cut = AnnounceCut();
 
             WriteRecord(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
-                payload: WorldDefinitionSerialization.SerializeCompact(definition: delivered), tier: tier, version: Version));
+                payload: Manifest(definition: delivered), tier: tier, version: Version));
             // The same decision a session sink completes its replica by. The running tick's snapshot reaches the peer
             // whatever its cadence while the cursor owes rows (DeliverSnapshot), so it counts as following.
             var completion = m_cursor.Completion(cut: cut, replaced: replaced, snapshotFollows: server!.SnapshotFollows);
@@ -368,13 +371,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     }
     public void PrimeRoute(in WorldAuthorityRouteDescription route) => WriteRecord(
         WorldFederationResponse.Route,
-        WorldFederationCodec.EncodeRoute(
-            authority: authority,
-            revision: checked((int)m_cursor.Sequence),
-            route: in route,
-            tier: tier,
-            time: (server?.DeliveryTime ?? ArenaTime.At(engineTick: 0UL, tick: 0UL))
-        )
+        WorldFederationCodec.EncodeRoute(route: in route, tier: tier)
     );
     /// <summary>Releases what the peer's feed holds, its anchor rows included: the peer is gone. Called under the
     /// authority gate once the sink is detached, so no delivery follows it.</summary>

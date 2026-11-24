@@ -238,7 +238,7 @@ public sealed class DeliveryReviewLawTests {
         using var observation = Observe(fixture, dealt);
         // A federation peer, the public observer, whose cadence samples none of this law's ticks.
         var current = true;
-        var peer = new WorldFederationProjectionSink(WorldDisclosureTier.Replica, fixture.Server.AuthorityIdentity,
+        var peer = new WorldFederationProjectionSink(WorldDisclosureTier.Replica,
             () => new WorldSinkDisclosure(new WorldObserverDisclosure(UpdateSeconds: WorldObserverDisclosure.MaximumUpdateSeconds), -1), server: fixture.Server, isCurrent: () => current);
         using var attached = fixture.Server.AttachSink(peer);
         fixture.Step();

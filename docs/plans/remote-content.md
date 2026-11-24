@@ -52,8 +52,9 @@ Four words are used throughout.
   screen observes through. It serves the session's stream to the viewers who
   look at the screen, and stops when a viewer loses the screen.
 - **The document travels as a manifest of pins.** A client whose package matches
-  the hosted world is sent a few kilobytes where it is sent 21.9 MB today, and
-  no single message grows with the world.
+  the hosted world is sent a few kilobytes and the members disclosure changed,
+  where it was sent 21.9 MB. A reservation's answer and a route description
+  carry no document at all.
 - **The remote seat's input is lost at the authority's input admission,** which
   was settled by running a pair. The intent stream carries a backlog of most of
   a second, the admission refuses a batch applied after the tick it was
@@ -525,18 +526,49 @@ Members that came from the wire are read as untrusted input
 (`WorldJsonContext.Untrusted`), which the reload door's reader does not do
 today because it reads an author's own file.
 
-A reservation's answer and a route description stop carrying a document. They
-name its version, and the document arrives on the observation stream. That
-leaves one door through which a document reaches a recipient, the delivery
-cursor (`WorldDeliveryCursor`), which is where disclosure is applied.
+**As built** (`WorldDocumentManifest`). The manifest names every root member
+with its digest. A member's bytes travel inline when they are small, or when
+the member differs from the same member of the document the authority loaded
+(`WorldDocument.Revision`): such a member is what disclosure and the running
+world made of it, no installed package holds it, and its digest may move again
+before a fetch for it could arrive. Every other member is stable content of
+the authority's source, which its fetch door answers by digest
+(`WorldProjectionPrototypeFetch.FetchAsync`, through
+`WorldRecipientView.Replica`) for as long as the recipient is delivered it.
+The recipient assembles over a document it already holds (`WorldProjectionHold`'s
+basis): its own copy of the world first, then each document the stream
+delivered. A member it holds under the manifest's digest is its own instance
+and is neither sent nor parsed; only the changed members are read
+(`WorldDefinitionMembers.Replace`, through the untrusted reader) and only what
+the change reaches is validated, as a delivery
+(`WorldDefinitionValidator.TryValidateChange`). Two parts of the design are
+not built: a member is not split by row, so one large member a recipient does
+not hold is fetched whole, and the authority sends the whole manifest each
+time and not only its changed entries.
+
+A reservation's answer and a route description stop carrying a document. A
+route names its document's version, and the document arrives on the
+observation stream. That leaves one door through which a document reaches a
+recipient, the delivery cursor (`WorldDeliveryCursor`), which is where
+disclosure is applied. The source of a transfer resolves a mapped arrival
+against the copy of the destination's document it holds
+(`WorldTransferReservationReply.DestinationDefinition` is the destination's
+live document only when both run in one process), and a route is read against
+the document its receiver holds for the authority
+(`WorldFederationCodec.TryDecodeRoute`).
 
 **A delivered document is checked as a delivery, not as an authored source.**
-The client refuses today's delivery for a rule that reads a cell the client was
-not sent. A client runs no rules of a world it only presents. The validator is
+The client refused a delivery for a rule that reads a cell the client was not
+sent. A client runs no rules of a world it only presents. The validator is
 already divided into partitions that each declare the parts they read
 (`WorldDefinitionValidator.Partitions`), so a delivered document is checked by
 the partitions whose parts the client consumes and by the bounded decoder, and
-never by the partitions that compile rules or open files.
+never by the checks that compile rules or open files. As built, a validation
+run carries one flag (`WorldDefinitionValidator.TryValidateDelivered`): with it
+the document partition compiles no rule, rule group, interaction, table or
+search, opens no voice sample set, and checks an audio row only when this
+process holds the content its pin names. The document partition was not split
+in two; the flag gates the checks inside it.
 
 **Evidence.** The pair's refusal, and the client's own package: a player build
 ships the world it joins, so for most members the client already holds the
@@ -725,7 +757,8 @@ objects, which the existing withdrawal releases.
 | A machine's image and inputs go only to a recipient delivered its declaration | The one door that opens a machine subscription reads the recipient's current delivery | Has no other door |
 | A window's world goes only to a recipient delivered the screen | The one relay request handler, and the sink's test at each delivery | Has no other producer of a relayed stream |
 | Two screens share a relay only on the authority's word | The authority assigns a screen to a relay from its own audience key, which never leaves it | Has no key to compare |
-| A document reaches a recipient through one door | Reservation and route answers carry no document | Has no field to put one in |
+| A document reaches a recipient through one door | Reservation and route answers carry no document, and a replica's document crosses only as a manifest the one decoder assembles and validates as a delivery (`WorldFederationCodec.TryDecodeDocument`) | Has no field to put one in |
+| A network thread never reads a tick in flight | `WorldServer.Definition` throws outside its boundary; a connection reads `WorldServer.AdmissionPolicy` and `DeclaredEndpoint`, which every install publishes | Throws, and the connection narrates the fault |
 | A remote event is applied or its stream restarts | The federated door's refusal branch | Has no path past the reset |
 | A span closed for a loss is shown at most its lease | One caller closes for a loss | Is not asked |
 
@@ -808,7 +841,7 @@ its picture needs.
 3. **Content by pin.** The resolver shared by every scene, the loaders moved to
    it, pins on a voice set's samples, the text catalog and the machines'
    presentation half in the projection, the bounds on fetched content and
-   delivered fonts, `EmbedAudio` and the text catalog's directory deleted.
+   delivered fonts, inline audio and the text catalog's directory deleted.
    *Built in part:* the resolver (`ContentResolver`, reached as
    `WorldProjectionContent.Resolver`) answers a pin from a file a world this
    process runs names and then from the shared store, and counts where each
@@ -836,12 +869,22 @@ its picture needs.
    font and two prototype bodies on its first run and reported no fault, read
    them from the authority's store on its second run with no fetch, and
    reported a catalog asking for the whole Basic Multilingual Plane as past
-   the glyph ceiling. *Not built:* the other loaders (audio rows, voice sets,
-   machine content), pins on a voice set's samples, and the deletion of
-   `EmbedAudio`. The fetch door and its request kind still carry the name
-   prototype (`WorldProjectionPrototypeFetch`), which the loaders' move
-   renames. The delivered text itself has not been seen drawn: that needs a
-   rendering host.
+   the glyph ceiling. The audio rows (patches, tunes, the score and tables)
+   are read by pin as well: a row of a document with no directory is read
+   through the resolver by its `hash` alone (`WorldAssetRowLoader`), a loaded
+   document registers each row's file with its family's canonicalizer
+   (`WorldContentIndex.Register`, `ContentResolver.Register`), a delivery's
+   audio pins are fetched before its rows are checked, fetched bytes are
+   admitted only when they are their family's canonical form
+   (`WorldAssetRowLoader.IsCanonical`), and nothing is copied into a
+   delivered document any more: the inline form and its cache are deleted.
+   *Not built:* voice sets and machine content, and pins on a voice set's
+   samples, so a delivered world's sampled voices are silent and its
+   validation skips them. A document loaded from a directory still reads its
+   rows by path; only a document with no directory reads by pin. The fetch
+   door and its request kind still carry the name prototype
+   (`WorldProjectionPrototypeFetch`). The delivered text itself has not been
+   seen drawn: that needs a rendering host.
    *How the rest is shaped.* Every loader of a pinned row reads by pin through
    the resolver and takes no directory, for a loaded document and a delivered
    one alike, so the loader has no path to open. A loaded document's rows are
@@ -862,6 +905,15 @@ its picture needs.
    with one font removed from the client's copy it reads one fetch of that
    font's size.
 4. **The manifest, and delivery validation.** Decision 4.
+   *Built,* at the granularity of a root member
+   ([decision 4](#decision-4-the-document-travels-as-a-manifest) says what is
+   left). On a headless pair over the debug world staged as the benchmark
+   stages it, the transfer commits, the client's seat reads as remote with its
+   body delivered (`world.benchmark topology`), and the client plans its route
+   over the delivered document. `world.counters world.projection` counts the
+   manifests sent, their bytes and inline bytes on the authority, and the
+   members held, read inline and fetched on the client. The row-edit check was
+   not run.
    *Check:* the debug world's transfer commits; the bytes of the first document
    delivery are counted per stream and are the manifest's size when both
    processes boot one package; a one-row edit (`world.row.set`) delivers bytes

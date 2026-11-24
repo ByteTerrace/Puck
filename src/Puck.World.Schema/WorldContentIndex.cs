@@ -32,6 +32,19 @@ public static class WorldContentIndex {
                 }
             }
         }
+        // An asset row's pin names its family's canonical document, not the file as written, so its entry carries the
+        // family's canonicalizer and a read answers the canonical bytes.
+        if (
+            moved ||
+            !ReferenceEquals(objA: definition.Music, objB: previous?.Music) ||
+            !ReferenceEquals(objA: definition.Tables, objB: previous?.Tables) ||
+            !ReferenceEquals(objA: definition.Tunes, objB: previous?.Tunes) ||
+            !ReferenceEquals(objA: definition.Patches, objB: previous?.Patches)
+        ) {
+            foreach (var (family, name, source, hash) in WorldAssetRowLoader.PinnedRows(definition: definition)) {
+                RegisterFile(canonical: WorldAssetRowLoader.Canonical(family: family, name: name), directory: directory, hash: hash, source: source);
+            }
+        }
     }
     /// <summary>Fetches the content a delivered document names by pin that this process does not hold, so the
     /// presentation's later reads by pin find it without touching the network. It runs where a delivery is decoded, on
@@ -50,7 +63,7 @@ public static class WorldContentIndex {
 
         var resolver = WorldProjectionContent.Resolver;
 
-        foreach (var (pin, maximumBytes, admit) in Named(text: definition.Text)) {
+        foreach (var (pin, maximumBytes, admit) in Named(music: definition.Music, patches: definition.Patches, text: definition.Text, tunes: definition.Tunes)) {
             if (!resolver.Contains(held: held, pin: pin)) {
                 _ = resolver.TryRead(admit: admit, content: out _, fetch: fetch, held: held, maximumBytes: maximumBytes, pin: pin);
             }
@@ -68,8 +81,25 @@ public static class WorldContentIndex {
     public static bool Names(WorldProjectionDocument projection, ContentPin pin, out int maximumBytes) {
         ArgumentNullException.ThrowIfNull(argument: projection);
 
-        foreach (var (named, bound, _) in Named(text: projection.Text)) {
-            if (named == pin) {
+        return Names(maximumBytes: out maximumBytes, named: Named(music: projection.Music, patches: projection.Patches, text: projection.Text, tunes: projection.Tunes), pin: pin);
+    }
+    /// <summary>Returns whether a document names a pin among the content its recipient reads by pin: the test an
+    /// authority's fetch door applies to the document a replica-tier recipient is currently delivered.</summary>
+    /// <param name="definition">The document as the recipient is delivered it.</param>
+    /// <param name="pin">The requested pin.</param>
+    /// <param name="maximumBytes">The most bytes content of the pin's family holds, when this returns
+    /// <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when a pinned content row of the document carries the pin.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static bool Names(WorldDefinition definition, ContentPin pin, out int maximumBytes) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        return Names(maximumBytes: out maximumBytes, named: Named(music: definition.Music, patches: definition.Patches, text: definition.Text, tunes: definition.Tunes), pin: pin);
+    }
+
+    private static bool Names(IEnumerable<(ContentPin Pin, int MaximumBytes, Func<ReadOnlyMemory<byte>, bool> Admit)> named, ContentPin pin, out int maximumBytes) {
+        foreach (var (candidate, bound, _) in named) {
+            if (candidate == pin) {
                 maximumBytes = bound;
 
                 return true;
@@ -81,24 +111,30 @@ public static class WorldContentIndex {
         return false;
     }
 
-    // Every pin a document reads content by, with the most bytes its family admits and the check fetched bytes must
-    // pass before they are stored. A family of content row that carries a pin owes a branch here as well.
-    private static IEnumerable<(ContentPin Pin, int MaximumBytes, Func<ReadOnlyMemory<byte>, bool> Admit)> Named(Puck.Text.TextFontCatalogDefinition? text) {
+    // Every pin a document's presentation reads content by, with the most bytes its family admits and the check
+    // fetched bytes must pass before they are stored. A family of content row that carries a pin owes a branch here as
+    // well. A table is not here: only rules read one, and a recipient runs no rules of a world it presents.
+    private static IEnumerable<(ContentPin Pin, int MaximumBytes, Func<ReadOnlyMemory<byte>, bool> Admit)> Named(Puck.Text.TextFontCatalogDefinition? text, IReadOnlyList<WorldTune>? tunes, IReadOnlyList<WorldPatch>? patches, IReadOnlyList<WorldMusicRow>? music) {
         foreach (var font in (text?.Fonts ?? [])) {
             if ((font is not null) && ContentPin.TryParse(pin: out var pin, text: font.Hash)) {
                 yield return (pin, Puck.Text.FontAtlasSourceResolver.MaxPinnedFontBytes, static bytes => Puck.Text.OpenTypeFontFace.HasFontSignature(bytes: bytes.Span));
+            }
+        }
+        foreach (var (family, _, _, hash) in WorldAssetRowLoader.PinnedRows(music: music, patches: patches, tables: null, tunes: tunes)) {
+            if (WorldAssetRowLoader.TryPin(hash: hash, pin: out var pin)) {
+                yield return (pin, WorldAssetRowLoader.MaxPinnedRowBytes, bytes => WorldAssetRowLoader.IsCanonical(bytes: bytes, family: family));
             }
         }
     }
 
     // A row the validator would refuse (no pin, a path that resolves nowhere) records nothing; its reader refuses it by
     // name.
-    private static void RegisterFile(string directory, string source, string hash) {
+    private static void RegisterFile(string directory, string source, string hash, Func<ReadOnlyMemory<byte>, byte[]?>? canonical = null) {
         if (
-            ContentPin.TryParse(pin: out var pin, text: hash) &&
+            WorldAssetRowLoader.TryPin(hash: hash, pin: out var pin) &&
             WorldDocumentPaths.TryResolve(documentDirectory: directory, path: source, reason: out _, resolved: out var resolved)
         ) {
-            WorldProjectionContent.Resolver.Register(path: Path.GetFullPath(path: resolved), pin: pin);
+            WorldProjectionContent.Resolver.Register(canonical: canonical, path: Path.GetFullPath(path: resolved), pin: pin);
         }
     }
 }

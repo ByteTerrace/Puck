@@ -23,6 +23,21 @@ public sealed partial class WorldInstanceHost {
     private int m_remoteJoinEager;
     private bool m_remoteJoinPartySent;
 
+    /// <summary>How long, in seconds of the destination's time, a joining seat's reservation holds its slot. A host
+    /// that joins at boot can take seconds to step its own first ticks, and a reservation that lapsed before its commit
+    /// arrived decides nothing, so the join asks for a hold that outlasts a slow start.</summary>
+    public const double RemoteJoinHoldSeconds = 60.0;
+
+    // Lets the join send a seat again after its crossing came home because the authority no longer held the
+    // reservation: the lease lapsed, which decided nothing about the seat. A reservation the authority refused is not
+    // retried, since that is the authority's answer.
+    private void RetryRemoteJoin(IReadOnlyList<LandedMember> members) {
+        if (m_remoteJoin is null) { return; }
+        foreach (var member in members) {
+            if (((uint)member.SourceSlot) < ((uint)m_remoteJoinTried.Length)) { m_remoteJoinTried[member.SourceSlot] = 0; }
+        }
+    }
+
     /// <summary>Sends every local seat that stands in the boot world to a remote authority, now and as each one
     /// joins.</summary>
     /// <param name="documentPath">The document the boot world was loaded from, which names the world the remote
@@ -93,6 +108,7 @@ public sealed partial class WorldInstanceHost {
             _ = EnqueueTransfer(
                 actingPrincipal: Principal.Console,
                 destination: destination,
+                holdSeconds: RemoteJoinHoldSeconds,
                 partyAllOrNothing: false,
                 scope: TransferScope.Party,
                 sourceInstance: BootInstanceName,
@@ -103,6 +119,7 @@ public sealed partial class WorldInstanceHost {
                 _ = EnqueueTransfer(
                     actingPrincipal: Principal.Console,
                     destination: destination,
+                    holdSeconds: RemoteJoinHoldSeconds,
                     scope: TransferScope.Body,
                     sourceInstance: BootInstanceName,
                     sourceSlot: waiting[index]
