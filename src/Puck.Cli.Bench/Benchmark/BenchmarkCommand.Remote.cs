@@ -140,11 +140,15 @@ public static partial class BenchmarkCommand {
     }
 
     // Boots the pair's authority, headless and listening, and waits until it has bound its endpoint.
-    private static SweepWorld BootAuthority(WorldBuild build, SuiteBudget budget, string directory, RemotePair pair, int timeout) {
+    private static SweepWorld BootAuthority(WorldBuild build, SuiteBudget budget, string directory, RemotePair pair, int timeout, int jitterMs = 0, ulong jitterSeed = 1UL) {
         _ = Directory.CreateDirectory(path: directory);
 
         var request = new WorldLaunchRequest(Verb, build.Path) {
-            Arguments = ["--listen", pair.Endpoint, "--federation-key-file", pair.KeyFile],
+            Arguments = [
+                "--listen", pair.Endpoint,
+                "--federation-key-file", pair.KeyFile,
+                .. ((jitterMs > 0) ? new[] { "--peer-jitter-ms", jitterMs.ToString(CultureInfo.InvariantCulture), "--peer-jitter-seed", jitterSeed.ToString(CultureInfo.InvariantCulture) } : []),
+            ],
             ExitAfterSeconds = WorldLaunch.Backstop(TimeSpan.FromSeconds(Allowance(timeout))),
             Shape = WorldShape.Headless,
             StateDirectory = Path.Combine(directory, "state"),

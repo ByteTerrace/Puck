@@ -56,6 +56,9 @@ public sealed record WorldBootInputs(
     /// <summary>Gets the peer identity key file (<c>--federation-key-file</c>), or <see langword="null"/> for the
     /// state root's own.</summary>
     public string? FederationKeyFile { get; init; }
+    /// <summary>Gets the deterministic peer stream delivery schedule (<c>--peer-jitter-ms</c> and
+    /// <c>--peer-jitter-seed</c>).</summary>
+    public Puck.Networking.Peers.PeerDeliverySchedule PeerDelivery { get; init; }
     /// <summary>Gets the schedule output directory (<c>--schedule-dir</c>), which also arms the document's
     /// <c>schedule</c> section, or <see langword="null"/> for a boot that runs no schedule.</summary>
     public string? ScheduleDirectory { get; init; }

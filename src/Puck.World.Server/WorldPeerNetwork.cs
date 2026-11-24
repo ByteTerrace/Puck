@@ -12,6 +12,7 @@ public sealed class WorldPeerNetwork : IDisposable {
     private readonly Lazy<Peer> m_peer;
 
     private bool m_disposed;
+    private ulong m_nextStreamOrdinal;
 
     /// <summary>Creates a lazily initialized network owner.</summary>
     /// <param name="identityFile">A PKCS8 peer identity file to load or create; null creates an ephemeral identity.</param>
@@ -21,9 +22,12 @@ public sealed class WorldPeerNetwork : IDisposable {
     /// run on; <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
     /// <param name="transportHandshakeTimeout">The wall-clock bound on each QUIC/TLS handshake;
     /// <see langword="null"/> is <see cref="QuicPeerTransport.DefaultHandshakeTimeout"/>.</param>
-    public WorldPeerNetwork(string? identityFile = null, bool allowOutbound = true, TimeProvider? timeProvider = null, TimeSpan? transportHandshakeTimeout = null) {
+    /// <param name="deliverySchedule">Optional deterministic delivery jitter and bunching schedule applied to streams
+    /// opened on this network.</param>
+    public WorldPeerNetwork(string? identityFile = null, bool allowOutbound = true, TimeProvider? timeProvider = null, TimeSpan? transportHandshakeTimeout = null, PeerDeliverySchedule deliverySchedule = default) {
         m_allowOutbound = allowOutbound;
         Clock = (timeProvider ?? TimeProvider.System);
+        DeliverySchedule = deliverySchedule;
         m_peer = new(valueFactory: () => CreatePeer(
             handshakeTimeout: transportHandshakeTimeout,
             path: identityFile,
@@ -35,6 +39,8 @@ public sealed class WorldPeerNetwork : IDisposable {
     /// lane, answer deadline and retry pacing that dials through this network reads it too, so one host has one clock
     /// for its whole peer surface.</summary>
     public TimeProvider Clock { get; }
+    /// <summary>Gets the deterministic delivery schedule applied to streams opened on this network.</summary>
+    public PeerDeliverySchedule DeliverySchedule { get; }
     /// <summary>Gets the process or hosted authority's shared peer. The owner, not its consumers, disposes it.</summary>
     public Peer Peer {
         get {
@@ -79,13 +85,20 @@ public sealed class WorldPeerNetwork : IDisposable {
         } catch { identity.Dispose(); throw; }
     }
 
+    internal PeerStream OpenStream(PeerLink link) => new(
+        link: link,
+        schedule: DeliverySchedule,
+        streamOrdinal: (Interlocked.Increment(location: ref m_nextStreamOrdinal) - 1UL),
+        timeProvider: Clock
+    );
+
     /// <summary>Opens one authenticated application stream on the shared peer.</summary>
     /// <param name="endpoint">The remote QUIC endpoint.</param>
     /// <param name="ct">The connection deadline or cancellation.</param>
     /// <returns>A stream owning its peer link.</returns>
     public async ValueTask<Stream> ConnectAsync(EndPoint endpoint, CancellationToken ct) {
         if (!m_allowOutbound) { throw new InvalidOperationException(message: "closed rewind group refuses outbound federation"); }
-        return new PeerStream(link: await Peer.DialAsync(
+        return OpenStream(link: await Peer.DialAsync(
             ct: ct,
             endpoint: endpoint
         ).ConfigureAwait(continueOnCapturedContext: false));

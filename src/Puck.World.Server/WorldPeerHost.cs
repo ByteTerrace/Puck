@@ -210,7 +210,7 @@ public sealed class WorldPeerHost : IDisposable {
             PeerStream client;
 
             try {
-                client = new PeerStream(link: await incoming.ReadAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false));
+                client = m_network.OpenStream(link: await incoming.ReadAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false));
             } catch (Exception ex) when ((ex is OperationCanceledException or ObjectDisposedException or ChannelClosedException)) {
                 break;
             }
