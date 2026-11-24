@@ -89,6 +89,10 @@ public sealed record InfinityViewSpec(
     /// <summary>Gets a value indicating whether a view of a world draws only that world's geometry, its image alpha
     /// the geometry's coverage, so the viewer's own sky shows around it.</summary>
     public bool GeometryCoverage { get; init; }
+    /// <summary>Gets a value indicating whether a view of a world draws that world's far product
+    /// (<see cref="SdfFarProduct"/>) rather than a residency of the whole world, wherever one can be had. Such a view
+    /// shows no nested sky: the product holds geometry alone.</summary>
+    public bool FarProduct { get; init; }
     /// <summary>Gets a value indicating whether the view's image alpha is its coverage: far geometry always, a world
     /// when it asks for <see cref="GeometryCoverage"/>.</summary>
     public bool Covers => ((Kind == InfinityViewKind.Far) || GeometryCoverage);

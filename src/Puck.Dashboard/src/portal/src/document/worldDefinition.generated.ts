@@ -8085,6 +8085,17 @@ export type WorldExports = {
   bindings?: (string | null)[] | null;
 };
 
+export type WorldFarProduct = {
+  /**
+   * The error, in metres, the product's finest level is levelled against; its coarser levels, which a far view's draws choose between by the pixels they cover, stay within multiples of it. Within [0.01, 1024]. Absent is one metre.
+   */
+  cell?: number;
+  /**
+   * The least size, in metres, a static part's longest side reaches to enter the product: what the nearest far viewer resolves. Within [0, 8192]. Absent keeps every static part.
+   */
+  minimumSize?: number;
+};
+
 /**
  * How the key light's far shadow cascade keeps up with what moves: the casters that moved are drawn again Hertz times a second of presentation time, and the cascade is drawn whole again when the light turns past TurnDegrees, the eye crosses an eighth of its reach or a static caster changes, that redraw spread over at least the frames of one period. A dynamic caster's shadow lags it by up to one period, and every shadow lags a turning light by up to the turn. A device's quality row chooses it (FarShadows).
  */
@@ -11689,6 +11700,10 @@ export type WorldRenderDefaults = {
    * The maximum shared shading footprint and classification tile size. Absent shades every pixel.
    */
   viewsRate?: SdfViewsRate | null;
+  /**
+   * What the world shows of itself to a far viewer (WorldFarProduct): the product a sky view asking for it draws. Absent takes the product's defaults.
+   */
+  farProduct?: WorldFarProduct | null;
 };
 
 export type WorldRenderEnvironment = {
@@ -12972,6 +12987,10 @@ export type WorldRenderSkyLayerView = {
    * Whether the view draws only the destination's geometry, so this world's sky shows around it. Absent is not: the destination's own sky fills the view.
    */
   coverage?: boolean | null;
+  /**
+   * Whether the view draws the destination's far product (its settled static scene, merged at the coarse levels its own render.farProduct asks for) rather than a residency of the whole destination: no bake, none of its bodies, creations or screens, and only the product's triangles held. A view that asks for it and has no product yet draws the destination whole until one is built from that residency. Absent is not.
+   */
+  farProduct?: boolean | null;
   layerName?: string | null;
   /**
    * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.

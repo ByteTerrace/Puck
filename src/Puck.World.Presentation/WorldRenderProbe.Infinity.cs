@@ -28,7 +28,12 @@ public sealed partial class WorldRenderProbe {
     /// <summary>Formats each live root's planned infinity count against its cap and its named fallbacks.
     /// GPU allocations and completed dispatch counts remain in the ordinary live render budget.</summary>
     /// <returns>The current plans, or an explicit empty inventory before any plan is registered.</returns>
-    public string DescribeInfinityBudget() => ((m_infinityPlans.Count == 0) ? "infinity views: none" :
+    public string DescribeInfinityBudget() => (((m_infinityPlans.Count == 0) ? "infinity views: none" :
         string.Join(separator: Environment.NewLine, values: m_infinityPlans.Values.OrderBy(entry => entry.Name, StringComparer.Ordinal)
-            .Select(selector: entry => $"{entry.Name}: {string.Join(separator: "; ", values: entry.Plan.Describe())}")));
+            .Select(selector: entry => $"{entry.Name}: {string.Join(separator: "; ", values: entry.Plan.Describe())}")))
+        + ((FarProducts is { } far) ? (Environment.NewLine + far()) : string.Empty));
+    /// <summary>Gets or sets what describes the far products the presentation holds (each world's, its source draws,
+    /// triangles and bytes, and the builds made), which <see cref="DescribeInfinityBudget"/> appends; read and written on
+    /// the console/frame owner thread.</summary>
+    public Func<string>? FarProducts { get; set; }
 }

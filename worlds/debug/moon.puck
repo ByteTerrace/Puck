@@ -7,8 +7,8 @@
 //
 // The two worlds share one frame up to a shift: a point at `p` here stands at `p + moonCentre` in the debug world
 // (moon-frame.puck), so the valley lies below the moon's south side and the pole's sky looks away from it. The valley
-// is not drawn in this sky: a view of the debug world from here starts a residency of that whole world
-// (valley-and-moons.md's open gaps).
+// hangs in this sky as the debug world's far product (the sky's `debug` view): its settled ground and standing masses,
+// merged once from what the debug world already baked, so seeing the planet bakes nothing and holds none of its bodies.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -303,6 +303,26 @@ render {
         seed: spaceStarSeed
       )
       sunDisc(name: "sun", light: 0, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
+      // The planet below: the debug world, seen from where the viewer stands in the frame the two worlds share, so the
+      // valley a ship climbed out of lies under the seam it crossed and shrinks as the ship nears the moon. It draws the
+      // debug world's far product (its render.farProduct), never a residency of that world: the seam is the hand-over,
+      // below it the debug world draws itself. Only geometry is drawn, inside the bound round the caldera, so the void
+      // and the stars show round it. It mirrors the moon the valley's sky holds (day.puck).
+      {
+        $type: "view"
+        name: "debug"
+        destination: "debug"
+        anchor: moonCentre
+        follow: true
+        coverage: true
+        farProduct: true
+        bound { center [0, 150, 0], radius: 1500 }
+        farDistance: 7000
+        scale: 1
+        refresh: 1
+        shadows: false
+        fallback: "#00000000"
+      }
     ]
   }
   atmosphere {
