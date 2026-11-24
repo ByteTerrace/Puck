@@ -1936,9 +1936,22 @@ public static partial class WorldSchema {
             run: run
         );
 
-        // Fully expand every $ref the exporter itself emitted for a repeated (but non-recursive) type, so duplicate
-        // content the exporter caught and duplicate content it didn't (polymorphic union arms bypass its cache — see
-        // the class doc) are grouped alike, then hoist every repeated shape into common.schema.json.
+        var (reduced, common) = Hoist(
+            merged: merged,
+            run: run,
+            sameDocument: false
+        );
+
+        return Split(
+            reduced: reduced,
+            common: common
+        );
+    }
+    // Fully expands every $ref the exporter itself emitted for a repeated (but non-recursive) type, so duplicate
+    // content the exporter caught and duplicate content it didn't (polymorphic union arms bypass its cache — see the
+    // class doc) are grouped alike, then hoists every repeated shape into one def each. The reduced document references
+    // a def in common.schema.json, or in its own $defs when sameDocument is set.
+    private static (JsonObject Reduced, JsonObject Defs) Hoist(JsonObject merged, ExportRun run, bool sameDocument) {
         var hoist = new HoistPass(
             merged: merged,
             run: run
@@ -1954,9 +1967,8 @@ public static partial class WorldSchema {
             node: hoist.CommonDefs,
             targetDefNames: targetDefNames
         );
-
         FinalizeRefs(
-            insideCommon: false,
+            insideCommon: sameDocument,
             node: reduced
         );
         FinalizeRefs(
@@ -1964,24 +1976,21 @@ public static partial class WorldSchema {
             insideCommon: true
         );
 
-        return Split(
-            reduced: reduced,
-            common: hoist.CommonDefs
-        );
+        return (reduced, hoist.CommonDefs);
     }
 
     /// <summary>Exports the JSON Schema for <see cref="WorldProjectionDocument"/> as one document. Unsplit,
     /// deliberately: the projection has no top-level section a person opens on its own, so the split
-    /// <see cref="WorldDefinition"/> takes buys nothing here.</summary>
+    /// <see cref="WorldDefinition"/> takes buys nothing here. Its repeated shapes are hoisted as the definition's are,
+    /// into the document's own <c>$defs</c>, so a shape every scalar site shares is written once.</summary>
     /// <param name="postProcessPackages">The post-process packages the host offers, applied as in <see cref="Export"/>.</param>
     /// <returns>The generated schema root.</returns>
     public static JsonObject ExportProjection(IReadOnlyList<PostProcessPackageSchema> postProcessPackages) {
         ArgumentNullException.ThrowIfNull(postProcessPackages);
 
-        var nested = new NestedExports();
         var run = new ExportRun(
             index: XmlDocIndex.Value,
-            nested: nested
+            nested: null
         );
         var exporterOptions = new JsonSchemaExporterOptions {
             TransformSchemaNode = (context, node) => Transform(
@@ -2018,20 +2027,26 @@ public static partial class WorldSchema {
             );
         }
 
-        RestoreSkippedPropertyAnnotations(
-            node: root,
-            run: run
-        );
+        ResolveTitleCollisions(typesByNode: run.TypesByNode);
+        ResolveDiscriminatorSplits(run: run);
         ApplyPostProcessPackages(
             packages: postProcessPackages,
             root: root
         );
-        ResolveNestedRefs(
-            nested: nested,
-            root: root
+        RestoreSkippedPropertyAnnotations(
+            node: root,
+            run: run
         );
 
-        return root;
+        var (reduced, defs) = Hoist(
+            merged: root,
+            run: run,
+            sameDocument: true
+        );
+
+        reduced["$defs"] = defs;
+
+        return reduced;
     }
     /// <summary>Exports the JSON Schema for <see cref="WorldCountersReport"/> as one document.</summary>
     /// <returns>The generated schema root.</returns>
