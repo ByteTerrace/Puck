@@ -23,7 +23,6 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     private int m_claimCount = 1;
 
     private readonly SdfMeshClaims m_meshClaims;
-    private readonly SdfMeshClaims m_cachedMeshClaims;
 
     /// <summary>Acquires a scene claim before an independently completing reader starts.</summary>
     public SdfMeshIrradianceScene Acquire() {
@@ -44,7 +43,6 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
         if (count == 0) {
             m_meshClaims.Dispose();
-            m_cachedMeshClaims.Dispose();
             m_content.Release();
             foreach (var geometry in m_geometries.Values) { geometry.Release(); }
             foreach (var entry in m_retained) { entry.Value.Release(); }
@@ -119,7 +117,6 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         GeometryDepth = source.GeometryDepth;
         MedianSplits = source.MedianSplits;
         m_meshClaims = source.m_meshClaims.Clone();
-        m_cachedMeshClaims = new([], cached: true);
         AcquireGeometries();
     }
 
@@ -448,9 +445,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         TriangleCount = triangles;
         TrianglesBuilt = trianglesBuilt;
         TrianglesRetained = retained.Sum(selector: static entry => ((long)entry.Value.Count));
-        m_meshClaims = new SdfMeshClaims(meshes: draws.Where(predicate: static draw => draw.IsStatic).Select(selector: static draw => draw.Mesh)
-            .Concat(second: geometries.Values.Select(selector: static geometry => geometry.Mesh)));
-        m_cachedMeshClaims = new(retained.Select(selector: static entry => entry.Value.Mesh), cached: true);
+        // The draws' meshes; each geometry, retained ones included, pins the mesh it reads itself (Geometry.Mesh).
+        m_meshClaims = new SdfMeshClaims(meshes: draws.Where(predicate: static draw => draw.IsStatic).Select(selector: static draw => draw.Mesh));
         AcquireGeometries();
     }
 
@@ -898,6 +894,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             Nodes = [];
             Triangles = [];
             ReleaseStorage(storage);
+            m_mesh.Release(cached: true);
         }
 
         public long HierarchyBytes => Nodes.LongLength * System.Runtime.CompilerServices.Unsafe.SizeOf<PackedNode>() +
@@ -917,7 +914,13 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         // The traced level's indices: the mesh's own for level zero, else a copy in the geometry's storage, since a
         // published mesh lets its coarser levels' indices go once its words land (SdfMesh.Restore.cs).
         public required ReadOnlyMemory<uint> Indices { get; init; }
-        public required SdfMesh Mesh { get; init; }
+        // The mesh whose buffers the geometry reads. The geometry holds a claim on it from its making to its last release,
+        // so every holder of a geometry claim, a build that borrowed it from another scene included (TryAcquireShared),
+        // reads a mesh that stands: a second scene's draws may name another mesh of the same buffers (a renumbered
+        // variant, SdfMesh.GeometrySource), whose claims never pin this one. A cached claim, so the draws' claims decide
+        // whether the mesh counts as live.
+        public required SdfMesh Mesh { get => m_mesh; init => m_mesh = value.Acquire(cached: true); }
+        private readonly SdfMesh m_mesh = null!;
         public PackedNode[] Nodes { get; private set; } = [];
         public required ReadOnlyMemory<Vector3> Positions { get; init; }
         public int[] Triangles { get; private set; } = [];
