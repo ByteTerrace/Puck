@@ -8,14 +8,17 @@ namespace Puck.World.Client;
 /// <summary>A world's default render graph, synthesized from its document when it authors no root of its own: the
 /// <c>sdf.world</c> producers — <see cref="WorldViewGraphs.WorldInstance"/> for the first view and one more per later view
 /// the world can compose (<see cref="WorldViewNames.World"/>) — and, when there is anything to draw over the world, the
-/// root graph (<see cref="WorldViewGraphs.MainInstance"/>) that reads them. The root places each view's output into its
-/// rect with one <c>place</c> pass per view (<c>main$view$&lt;n&gt;</c>), the first writing the letterbox color outside
-/// its rect (<see cref="RenderGraphPackageCatalog.PlaceLetterbox"/>) so pixels no view covers show it. Each view's output
-/// is already the working image: its own graph's display pass converted its scene light (the sharpen, the bloom, the
-/// world's tone curve and the encode, <c>SdfWorldPackage.WithDisplay</c>), so a place pass only places.
-/// Then the root places each pane over the scene with one <c>place</c> pass per <c>views.graphs</c> instance a layout
-/// slot names, and runs each <c>views.post</c> row as a pass of its post-process package, named by the row, in document
-/// order. That image is the scene (<see cref="Scene"/>): the world as the editor holds and compares it. A presentation
+/// root graph (<see cref="WorldViewGraphs.MainInstance"/>) that reads them. The root places each view's output into
+/// its rect, and over them each pane (a <c>views.graphs</c> instance a layout slot names), with one pass for every
+/// <see cref="RenderGraphPackageCatalog.PlaceSourceCount"/> of them (<see cref="RenderGraphPackageCatalog.PlaceViews"/>,
+/// <c>main$place$&lt;n&gt;</c>): it writes each output pixel once whatever number of views and panes is shown, and
+/// draws nothing when none is, so the world's own image stands for the root's. With more than one view the first pass
+/// writes the letterbox color outside every rect (<see cref="RenderGraphPackageCatalog.PlaceLetterbox"/>) so pixels no
+/// view covers show it. A host places each view and pane by the name of its version (<see cref="ViewPasses"/>,
+/// <see cref="Panes"/>). Each view's output is already the working image: its own graph's display pass converted its
+/// scene light (the sharpen, the bloom, the world's tone curve and the encode, <c>SdfWorldPackage.WithDisplay</c>), so
+/// placing only places. Then the root runs each <c>views.post</c> row as a pass of its post-process package, named by
+/// the row, in document order. That image is the scene (<see cref="Scene"/>): the world as the editor holds and compares it. A presentation
 /// that draws the overlay draws it in an instance of its own over the scene (<see cref="OverlayInstance"/>, appended by
 /// <see cref="AppendOverlay"/>), which is then the display's root, so whatever is composed between them, an editor
 /// comparison among them, sits under the HUD, the console and the cursor. A pane is a working image of its own shader's
@@ -110,12 +113,12 @@ public sealed class WorldRootGraph {
     public IReadOnlyList<RenderGraphInstance> Producers { get; }
     /// <summary>Gets the views the graph places: the most a world's layouts compose (<see cref="ViewsOf"/>).</summary>
     public int Views { get; }
-    /// <summary>Gets the root graph's place pass for each view, in view order, each also the name of the version its
-    /// source is bound under: one per view with more than one view, and none otherwise, when the world's one view is the
-    /// root's base as it is.</summary>
+    /// <summary>Gets the name each view is placed by, in view order: the version its producer is bound under in the
+    /// root graph, which a host names to place the view (<c>IRenderGraphPlacements</c>). One per view with more than one
+    /// view, and none otherwise, when the world's one view is the root's base as it is.</summary>
     public IReadOnlyList<string> ViewPasses { get; }
-    /// <summary>Gets the <c>views.graphs</c> instances the root places, one <c>place</c> pass each, in the order a layout
-    /// slot first names them.</summary>
+    /// <summary>Gets the <c>views.graphs</c> instances the root places, each the name of the version it is bound under
+    /// and placed by, in the order a layout slot first names them.</summary>
     public IReadOnlyList<string> Panes { get; }
     /// <summary>Gets the root graph's plan, or <see langword="null"/> when nothing is drawn into the scene over the world
     /// and the world is the scene.</summary>
@@ -166,7 +169,14 @@ public sealed class WorldRootGraph {
         var viewCount = (PlacesViews(views: views)
             ? views
             : 0);
-        var passCount = ((viewCount + placed.Count) + entries.Count);
+        // What the root places, each by the name of its version: the views in view order, then the panes over them, in
+        // one pass for every group of sources a placement pass takes.
+        string[] sources = [
+            .. Enumerable.Range(count: viewCount, start: 1).Select(selector: ViewPass),
+            .. placed,
+        ];
+        var groups = ((sources.Length + (RenderGraphPackageCatalog.PlaceSourceCount - 1)) / RenderGraphPackageCatalog.PlaceSourceCount);
+        var passCount = (groups + entries.Count);
         var overlayPlan = (overlay
             ? PlanOverlay(packages: packages)
             : null);
@@ -214,41 +224,26 @@ public sealed class WorldRootGraph {
                 retained: ((from is null) && (index < (passCount - 1)))
             ));
 
-            if (index < viewCount) {
-                var view = ViewPass(view: (index + 1));
+            if (index < groups) {
+                var first = (index * RenderGraphPackageCatalog.PlaceSourceCount);
+                var inputs = new List<ResourceReference>(capacity: (1 + RenderGraphPackageCatalog.PlaceSourceCount)) { new(Name: input) };
 
-                resources.Add(item: Image(
+                for (var source = 0; ((source < RenderGraphPackageCatalog.PlaceSourceCount) && ((first + source) < sources.Length)); source++) {
+                    resources.Add(item: Image(
                         initialization: ShaderPipelineInitialization.External,
-                    name: view
-                ));
+                        name: sources[(first + source)]
+                    ));
+                    inputs.Add(item: new ResourceReference(Name: sources[(first + source)]));
+                }
                 passes.Add(item: new RenderGraphPackagePass(
-                    Config: ((index == 0) ? FirstViewConfig : null),
-                    Inputs: [
-                        new ResourceReference(Name: input),
-                        new ResourceReference(Name: view),
-                    ],
-                    Name: view,
+                    Config: (((index == 0) && (viewCount > 0)) ? FirstViewConfig : null),
+                    Inputs: inputs,
+                    Name: PlacePass(group: (index + 1)),
                     Outputs: [new ResourceReference(Name: output)],
-                    Package: RenderGraphPackageCatalog.Place
-                ));
-            } else if ((index - viewCount) < placed.Count) {
-                var pane = placed[(index - viewCount)];
-
-                resources.Add(item: Image(
-                    initialization: ShaderPipelineInitialization.External,
-                    name: pane
-                ));
-                passes.Add(item: new RenderGraphPackagePass(
-                    Inputs: [
-                        new ResourceReference(Name: input),
-                        new ResourceReference(Name: pane),
-                    ],
-                    Name: pane,
-                    Outputs: [new ResourceReference(Name: output)],
-                    Package: RenderGraphPackageCatalog.Place
+                    Package: RenderGraphPackageCatalog.PlaceViews
                 ));
             } else {
-                var entryIndex = (index - (viewCount + placed.Count));
+                var entryIndex = (index - groups);
                 var entry = entries[entryIndex];
 
                 entryOf[entry.Name] = entryIndex;
@@ -471,9 +466,9 @@ public sealed class WorldRootGraph {
         Name: name,
         Retained: retained
     );
-    // Whether the root places each view with a pass of its own: with more than one view. Otherwise the world's one view is
-    // the root's base as it is. The first view's pass is placed over nothing the display shows, so outside its rect it
-    // writes the letterbox color (FirstViewConfig), which every later view's pass keeps as its base.
+    // Whether the root places its views: with more than one view. Otherwise the world's one view is the root's base as it
+    // is. The first pass that places a view is placed over nothing the display shows, so outside every rect it writes
+    // the letterbox color (FirstViewConfig), which every later pass keeps as its base.
     private static bool PlacesViews(int views) => (views > 1);
     private static string StageVersion(int index) => WorldViewNames.Root(
         "stage",
@@ -482,6 +477,10 @@ public sealed class WorldRootGraph {
     private static string ViewPass(int view) => WorldViewNames.Root(
         ViewPart,
         view.ToString(provider: CultureInfo.InvariantCulture)
+    );
+    private static string PlacePass(int group) => WorldViewNames.Root(
+        RenderGraphPackageCatalog.Place,
+        group.ToString(provider: CultureInfo.InvariantCulture)
     );
 }
 /// <summary>A world's default render graph that the graph compiler refused, such as a <c>views.post</c> row whose

@@ -10,7 +10,7 @@ namespace Puck.World.Client.Tests;
 /// <summary>The default render graph a world gets when it authors no root (<see cref="WorldRootGraph"/>): the world
 /// alone as the scene when nothing is drawn into it; otherwise the root graph reading the world and running each
 /// <c>views.post</c> row as a pass of its package, named by the row, in document order, planned by the graph compiler;
-/// a <c>place</c> pass per pane a layout slot names, ahead of them, reading the pane's instance; the overlay in an
+/// one placement pass over the panes a layout slot names, ahead of them, reading each pane's instance; the overlay in an
 /// instance of its own over the scene, which is then the root; and a row whose config does not bind refused by the
 /// compiler, naming the row.</summary>
 public sealed class WorldRootGraphLawTests {
@@ -124,7 +124,7 @@ public sealed class WorldRootGraphLawTests {
 
         Assert.Equal(
             actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: ["left:place", "right:place", $"grain:{FilmGrain}"]
+            expected: ["main$place$1:place.views", $"grain:{FilmGrain}"]
         );
         Assert.Equal(
             actual: (graph.Root, string.Join(separator: ",", values: main.Reads.Select(selector: static read => read.Producer))),
@@ -149,7 +149,7 @@ public sealed class WorldRootGraphLawTests {
 
         Assert.Equal(
             actual: (panesOnly.Root, Assert.Single(collection: panesOnly.Plan!.Steps).Name),
-            expected: (WorldViewGraphs.MainInstance, "left")
+            expected: (WorldViewGraphs.MainInstance, "main$place$1")
         );
     }
     [Fact]
@@ -181,8 +181,8 @@ public sealed class WorldRootGraphLawTests {
         );
         Assert.Empty(collection: graph.Post);
     }
-    // A pane takes its authored name as its version and its place pass, a post pass its row's name, and the root declares
-    // its own versions and passes in the generated form, so a pane or a post pass may be named what those once were.
+    // A pane takes its authored name as its version, a post pass its row's name, and the root declares its own versions
+    // and passes in the generated form, so a pane or a post pass may be named what those once were.
     [Fact]
     public void APaneOrAPostPassNamedLikeTheRootsOwnVersionsAndPassesComposes() {
         var graph = WorldRootGraph.Compose(
@@ -194,7 +194,7 @@ public sealed class WorldRootGraphLawTests {
 
         Assert.Equal(
             actual: graph.Plan!.Steps.Select(selector: static step => step.Name),
-            expected: ["frame", "stage1", "overlay"]
+            expected: ["main$place$1", "overlay"]
         );
         Assert.Equal(
             actual: graph.OverlayPlan!.Steps.Select(selector: static step => step.Name),
@@ -242,7 +242,7 @@ public sealed class WorldRootGraphLawTests {
         );
         Assert.Equal(
             actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: ["main$view$1:place", "main$view$2:place", "main$view$3:place", "pane:place"]
+            expected: ["main$place$1:place.views"]
         );
         Assert.Equal(
             actual: graph.ViewPasses,
@@ -256,10 +256,10 @@ public sealed class WorldRootGraphLawTests {
         // Each view's footprint follows its rect frame by frame, so the root states none of its own.
         Assert.Empty(collection: graph.Footprints);
     }
-    /// <summary>The first view's place pass writes the letterbox color outside its rect and every later place pass keeps
-    /// its base there, so pixels no view or pane covers show the letterbox color, never a view's clamped edge.</summary>
+    /// <summary>The pass that places the views writes the letterbox color outside every rect, so pixels no view or pane
+    /// covers show the letterbox color, never a view's clamped edge.</summary>
     [Fact]
-    public void OnlyTheFirstViewsPlacePassLetterboxesOutsideItsRect() {
+    public void ThePassThatPlacesTheViewsLetterboxesOutsideEveryRect() {
         var plan = Assert.IsType<RenderGraphPlan>(@object: WorldRootGraph.Compose(
             overlay: false,
             packages: RenderGraphPackageCatalog.Engine,
@@ -278,7 +278,7 @@ public sealed class WorldRootGraphLawTests {
 
                 return $"{pass.Name}:{BinaryPrimitives.ReadUInt32LittleEndian(source: values.Bytes.Span[((int)pass.Parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceLetterbox))..])}";
             }),
-            expected: ["main$view$1:1", "main$view$2:0", "main$view$3:0", "pane:0"]
+            expected: ["main$place$1:1"]
         );
     }
     [Fact]

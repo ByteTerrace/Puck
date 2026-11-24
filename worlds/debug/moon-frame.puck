@@ -39,7 +39,7 @@ let sharedSunHeading = 37
 // Space as both worlds draw it, so the sky is the same on either side of the seam: a near-black void and its stars.
 let spaceColor = "#02030A"
 let spaceLuminance = 1
-let spaceStarLuminance = 600
+let spaceStarLuminance = 3000
 let spaceStarDensity = 90
 let spaceStarBrightness = 1.3
 let spaceStarSeed = 7

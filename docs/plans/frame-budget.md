@@ -58,14 +58,14 @@ Per-pixel storage of the main view at 2560 by 1440 (`host.memory families 0`):
 
 | Storage | Now, MiB | Budget, MiB | How |
 |---|---|---|---|
-| Stationary window (`historyWindow`) | 458 | 250 | A word of colour and a word of coverage, weight and packed transport a phase |
+| Stationary window (`historyWindow`) | 369 | 250 | Three words a phase as built (`sdfPackWindowSample`); two needs the transport kept once a pixel, below |
 | Probe records (`viewsProbes`) | 68 | 80 | A cell of four pixels a side with interpolation, as built |
 | Probe histories (`viewsProbeHistory`, `glassProbeHistory`) | 118 each | 60 | One world-space cache a residency in place of a history a view |
 | Glass sums, target, depth and lit image | 340 | 40 | Allocated for the tiles glass covers |
 | History surface and colour | 227 | 120 | Motion and identity in the sample record |
 | Visibility records, mesh target and depth | 186 | 150 | A draw and triangle in one word of the target |
 | Lit images, sky runs, transport, reactivity, filter | 330 | 200 | Sky runs at half size; transport from the sample record |
-| The root's frame and stages (`main`) | 249 | 60 | Placement in place; one published image a frame in flight |
+| The root's frame (`main`) | 230 | 60 | The stages are gone with the one placement pass; what is left is one published image a frame in flight |
 | **Total** | **about 2,200** | **under 1,000** | |
 
 ## Where the time goes
@@ -93,10 +93,12 @@ against the same frame:
   (`SDF_VIEWS_OMIT_MATERIALS`) the small one.
 - **`resolve`**: standing, every pixel sums its window; `world.temporal off`
   removes the pass and a third of the probe lookup with it.
-- **`main` 0.8 ms**: the root places each of the layout's eight views with a
-  pass of its own, and a view the layout does not show still copies the whole
-  image, since two stage images alternate and a hidden pass may not stand in
-  (`WorldRootGraph`, `PlacePackage`).
+- **`main`**: the root places every view and pane in one pass
+  (`RenderGraphPackageCatalog.PlaceViews`, `WorldRootGraph`), which writes each
+  output pixel once and draws nothing while one view stands for the world, so
+  `world.counters gpu node main` reads no dispatch in single-seat play. Before
+  it, each of the layout's eight views had a pass of its own that copied the
+  whole image whether or not the view was shown: 0.8 ms.
 - **Render scale**: at `world.render-scale 0.75` the main view costs about
   seven tenths of its full-rate time. Every pass before the resolve follows the
   samples; the resolve does not.
@@ -224,9 +226,9 @@ disagree on needed.
   slots, since a pixel across an edge from its own cell's representative is
   usually compatible with a neighbour's. A slot is 28 words to blend, where a
   gather was sixteen corners.
-- **Merging passes.** The root's placement (eight passes for one view) and the
-  filter's light tiles are the two that pay. `views-bins` and the pyramid cost
-  under 0.2 ms together.
+- **Merging passes.** The root's placement (eight passes for one view, now
+  one) and the filter's light tiles are the two that pay. `views-bins` and the
+  pyramid cost under 0.2 ms together.
 - **Fewer samples.** Rendering at three quarters and reconstructing is how most
   shipped renderers spend a 1440p frame, and the mechanism exists
   (`renderScale`, the temporal resolve). It is an authored value of the quality
@@ -337,9 +339,27 @@ pass's cost. Then the time:
    the debug world; `SdfLights.MaxLights` is gone; a row of 512 point lights
    renders with each cluster's list holding only its own.
 3. **Classify a receiver's shadow before filtering it.** The
-   [rendering plan](rendering.md#gpu-submission-and-routed-worlds)'s item: a
-   depth bound for each block of a layer answers lit and umbra exactly from
-   four reads. Check: `surface` under 1.2 ms at the stage.
+   [rendering plan](rendering.md#gpu-submission-and-routed-worlds)'s item, with
+   one correction to its shape. A plain depth bound for each block of a layer
+   answers umbra, but it answers lit only for a receiver that faces the light:
+   the filter compares each tap against the receiver's own plane
+   (`sdfMeshShadowGap`'s `gradient`), and open ground under a slanted sun
+   changes depth across a block by more than any caster stands off it, so the
+   block's nearest depth always reads in front of the receiver. The bound that
+   classifies the common case is relative to a plane: for each block of 32
+   texels a side (the filter's reach, `SdfKernelInterfaces.MeshShadowFilterTexels`,
+   spans at most two a side, so four reads) the layer's least-squares plane
+   and the least and greatest depth off it, for the depth and the exit layer,
+   and whether the block holds glass extinction. A receiver is lit where its
+   own plane lies behind every block's plane less its nearest residual at the
+   footprint's corners, in umbra where it lies in front of every block's plane
+   plus its farthest residual by the filter's slope and cone margins, and
+   filters otherwise; a block with extinction classifies nothing. The bounds
+   belong to a layer pair (`SdfWorldShadows`' `Pair`) and are reduced by one
+   compute kernel after each drawing into it, over the blocks its area
+   touches. The invariant: a classified receiver's visibility is what the
+   filter's taps would sum to, which a device law holds by running both over
+   one layer. Check: `surface` under 1.2 ms at the stage, and the law.
 4. **A prefiltered environment.** The environment node writes the reflected
    sky, its panels included, at a few roughness levels; views takes one lookup.
    Check: `SDF_VIEWS_OMIT_REFLECTION` removes under 0.4 ms.
@@ -350,14 +370,25 @@ pass's cost. Then the time:
 6. **One probe cache a residency.** The hashed table above. Check: no view
    holds a probe history; a nested view rated to five frames a second gathers
    only what entered it.
-7. **The root places in place.** One image, each shown view writing its own
-   rect. A hidden view's pass cannot stand in today because the two stage
-   images alternate, so its output would stand for an image a later pass
-   overwrites (`ShaderPipelineRenderNode.AliasRefusalOf`). Check: `main` under
-   0.2 ms with one view shown.
+7. **The root's four-seat placement, read.** The placement pass is built and
+   read with one seat, where it draws nothing. Its several-source path (four
+   seats, a pane beside a view) has not run in a window: no console route
+   joins a second seat without devices. Check: the measure lane's four-seat
+   route shows each seat's view in its rect with `main$place$1` at one
+   dispatch, on both backends.
 8. **Glass storage by coverage**, and one published image a frame in flight.
     Check: the fixed class at the stage.
-9. **Count what the slots give up.** A slot lists at most eight lights its
+9. **The stationary window in two words a phase.** A phase's transport takes
+   a word of its own because it differs by phase only where the footprint
+   holds surfaces at two depths. Kept once a pixel as the transport per unit
+   coverage, with a phase holding its coverage and weight beside its colour,
+   it is exact everywhere else; at a depth edge a running mean would follow
+   the jitter, which is the shimmer the window exists to remove, so such a
+   pixel needs either the per-phase word or no window. Decide by a presented
+   burst of a fogged silhouette. The standing resolve also sums every phase
+   every frame; a sum kept in fixed point with one phase replaced reads one
+   phase instead of eight.
+10. **Count what the slots give up.** A slot lists at most eight lights its
     corners disagree on, and the pool holds an extra for one pixel in eight.
     Count the lights rounded and the groups that kept no extra, on
     `world.counters gpu pass sdf.world$views-probes`. Check: both read zero

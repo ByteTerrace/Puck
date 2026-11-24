@@ -172,6 +172,8 @@ public sealed record WorldAdjacencyBoundary(DocumentVector3 Center, float Outwar
 /// <param name="Hysteresis">An authored non-negative minimum ownership deadband in world units. The runtime still
 /// derives its contact/vertical safety threshold and uses the larger value; authoring this can widen a seam but
 /// never weaken its safety floor. Reciprocal rows must agree.</param>
+/// <param name="Presentation">How a presentation of this world shows a seat that crossed the edge. Absent is
+/// <see cref="WorldAdjacencyPresentation.Joined"/>.</param>
 public sealed record WorldAdjacency(
     SafeName Name,
     [property: DocumentText("a destination name")] string Destination,
@@ -181,8 +183,22 @@ public sealed record WorldAdjacency(
     [property: DocumentText("logical input channels")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OnUnavailable = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Capacity = null,
     float LivenessGraceSeconds = 0f,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float Hysteresis = 0f
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float Hysteresis = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] WorldAdjacencyPresentation Presentation = WorldAdjacencyPresentation.Joined
 );
+/// <summary>How a presentation shows a seat that crossed an adjacency: whether the two worlds are one place drawn
+/// together across the seam, or two places of which a seat sees the one it stands in.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldAdjacencyPresentation>))]
+public enum WorldAdjacencyPresentation {
+    /// <summary>One place: a seat that crossed stays presented in the frame of the world it left, the neighbour's
+    /// ground and bodies drawn in the seam's band (a doorway between two rooms of a quilt).</summary>
+    Joined = 0,
+
+    /// <summary>Two places: a seat that crossed is presented in the neighbour's own scene, with its sky, its lights
+    /// and its bodies as they look there, as a traveller through a portal is (a sky seam between a planet and a
+    /// moon, where the crossing leaves the band far behind).</summary>
+    Apart = 1,
+}
 /// <summary>One body's deterministic sweep through an invisible ownership boundary.</summary>
 /// <param name="Crossed">Whether the segment left the boundary's owned (non-positive) half-space through the
 /// authored rectangle. A body already beyond the plane also reports a crossing so a multi-edge corner traversal
