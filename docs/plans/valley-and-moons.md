@@ -196,20 +196,27 @@ Built by this feature:
 
 Left open, in the order they matter to the trip:
 
-1. **The valley is not in the moon's sky.** A view of the debug world from the
-   moon draws that whole world again, every exhibit included, as one more
-   residency. What a world shows of itself from far away has to be a product of
-   its own (phase 4's scenery published for a far viewer) before the moon's sky
-   can hold the valley. Past the seam the pilot now sees the moon's own scene,
-   so the valley drops out of the view below in one frame; the moon's sky gains
-   a view of the debug world once one mesh store serves every residency
-   ([streaming and memory](streaming-and-memory.md)).
-3. **A refused device allocation ends the World.** With the moon's two
+1. **The valley is not in the moon's sky.** A `view` layer of the debug world
+   in the moon's sky (anchored at `moonCentre`, following the viewer, geometry
+   alone inside a 1,500 m bound round the caldera) was built and measured on a
+   windowed Direct3D 12 round trip, and taken out again. The shared mesh store
+   shared 4,196 of its groups, but the view still started a residency of the
+   whole debug world (7,163 groups, 8,386 instances, 6,751 of them dynamic) and
+   baked 360 groups the store did not hold (coarser tiers for the far view).
+   Its start held the frame thread for about half a second on the tick the
+   ship crossed, and its bakes took the bake room the moon's own routed
+   residency needed (refinements deferred with no room left), so the ship drew
+   as its proxy box for most of the outbound chapter. What a world shows of
+   itself from far away has to be a product of its own: phase 4's scenery
+   published for a far viewer, a residency of the far product rather than of
+   the world. The check is the same view drawn from it: no new bakes in the
+   view's residency and no frame-thread hold at the crossing.
+2. **A refused device allocation ends the World.** With the moon's two
    residencies (the painting's window and the sky view) beside the debug world's
    own, the device's memory account refused a mesh region's growth and the
    frame threw (`SdfMeshRegionStore.EnsureCapacity`). A refusal has to
    shed detail, not end the run.
-4. **A body across a joined seam is drawn as a catalog rig.** Where an edge
+3. **A body across a joined seam is drawn as a catalog rig.** Where an edge
    presents its two worlds as one place, a seat that crossed keeps the boot
    scene's catalog avatar and the neighbour's bodies are rigs inside the
    seam's band (`WorldAdjacencySceneEmitter`), whatever looks they wear. The
@@ -217,42 +224,65 @@ Left open, in the order they matter to the trip:
    worlds will. The pools that stamp a creation look read one world's bodies
    (`WorldBodyStampCensus`), so the fix gives the boot scene's pool the
    travelling seat and the band's bodies as stamp sources.
-5. **Each authority keeps its own day.** The two worlds start their `day`
+4. **Each authority keeps its own day.** The two worlds start their `day`
    rows alike and advance them at one rate, so they agree until one is written
    (`world.state.cell.set day`): the moon's phase then stops matching the
-   valley's sun. A clock one world reads from another needs a federated
-   read. At night the valley's sun casts no light below its horizon while
-   the moon's shines all the way round, so a night crossing lights the ship in
-   one frame.
-6. **A crossing turns a body about up only.** `WorldFrameIsometry` and the
+   valley's sun. The decision: the moon reads its parent's day through
+   federation, not a shared authored clock. A tick clock shared by both
+   documents agrees only while both authorities count one engine tick from one
+   start, which a remote authority does not, and it cannot be written, which
+   takes away the documented lever for moving the time. The moon's `day` clock
+   will name the destination whose clock it follows; a presentation that holds
+   that destination's session reads the leader's phase through it, and one
+   that holds none reads the moon's own advancing row. The invariant is one
+   day wherever both worlds are drawn, enforced at the one door every keyed
+   value's phase passes, `WorldStateMirror`'s clock phase read. It is not
+   built: the mirror has no reach to another world's mirror yet, which the
+   client's endpoints hold. The check: write `day` on the debug world and read
+   the moon's key light direction in `world.lighting` from a seat on either
+   side of the seam. The night crossing no longer lights the ship in one
+   frame: the valley's sun rises with height to the moon's full strength
+   (hall.puck's `key` light, a second track on `altitude`).
+5. **A crossing turns a body about up only.** `WorldFrameIsometry` and the
    adjacency validator admit a yaw, so the two worlds' axes agree and the side of
    the moon that faces the valley has its up pointing down in the shared frame.
    The arrival frame therefore stands at the far pole. Phase 6's whole frame
    (orientation, up, angular velocity) lets a frame stand anywhere and lets a
    banked or pitched ship cross as it is.
-7. **A door does not take a rider.** A ship flown into a painting crosses
+6. **A door does not take a rider.** A ship flown into a painting crosses
    without its pilot; only an adjacency queues the rider.
-8. **The ship has no title.** It crosses as a body of whichever world holds it.
+7. **The ship has no title.** It crosses as a body of whichever world holds it.
    Custody for a vehicle (who may recall it, what a visited world may do to it)
    waits for the companion plan's roles.
-9. **The moon's cell.** The sectors bake at the terrain pass's cell, so the
+8. **The moon's cell.** The sectors bake at the terrain pass's cell, so the
    ground shows facets underfoot, as the valley's walls do.
-10. **The crossing stalls.** The tick a body crosses the seam, a headless
-    World steps no tick for about half a second each way (the route's own
-    report names it), and a windowed one skips presentations. What the
-    crossing waits on is not attributed yet.
-11. **A re-drive reads the neighbour as it stands.** The tape carries when a
+9. **The crossing stalls, windowed.** Attributed on a windowed Direct3D 12
+    trip (`world.benchmark run moon`'s frames): on the ticks the ship crosses
+    into the moon, the frame thread's produce runs 210 to 330 ms for three
+    frames while the seat's routed residency of the moon starts (193 groups,
+    92 to bake, planned on the frame thread) after no residency of it existed.
+    The fix is to start the seam neighbour's routed residency before the
+    crossing, while the seat is inside the approach band, so the crossing
+    presents a residency already planned (residency motion judgement). Headless,
+    two trips stepped every tick across both crossings. The headless stalls the
+    route reported came from elsewhere: the run's first ticks after boot, and a
+    city tick every few seconds while the city is resident in the debug world,
+    whose citizens' goal fields derive on the step thread (290 to 400 ms per
+    derivation in `NavigationRuntime.BuildGoalField`, from a sampled trace).
+10. **A re-drive reads the neighbour as it stands.** The tape carries when a
     neighbour delivered, never what it showed (`WorldEventFeed`'s remarks), so
     a re-drive of a tick in which a body met a neighbour's bodies or ground
     across a seam reads them as they are when it runs. The ship's own
     crossing no longer depends on them; two bodies meeting across a seam
     still do. The tape needs the contact band's content: the neighbour's
     bodies within reach of the seam, and its definition's identity.
-12. **A re-drive of the tick a seat boards on diverges** in the boot world's
+11. **A re-drive of the tick a seat boards on diverged** in the boot world's
     input: the routed input from the pilot to the ship records the
     population's revision, 2 live and 3 replayed
-    (`WorldTick.AppendRoutedInputHash`). Until it reproduces, the trip has no
-    committed scenario.
+    (`WorldTick.AppendRoutedInputHash`). Boarding on the ground reproduces
+    (`moon-trip-tests.puck`, `puck test --reproduce`); the recorded divergence
+    boarded in the air near the seam in the debug world, which no committed
+    scenario yet reaches.
 
 ## The owner's rulings
 

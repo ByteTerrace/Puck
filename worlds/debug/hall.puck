@@ -1402,11 +1402,22 @@ render {
   lighting {
     lights: concat(
       [
+        // The day turns the sun and dims it below the horizon (day.puck); above the valley the horizon falls away,
+        // so the sun's light rises with the viewer's height (launch.puck's `altitude` clock) to the full strength the
+        // moon's sun has all the way round, and a night crossing of the sky seam keeps the light it had.
         directional(
           name: "key",
           direction: [3, 5, -4],
           color: "#FFF0DC",
-          illuminance: 100000lx,
+          illuminance: {
+            clock: altitude
+            combine: Maximum
+            keys [
+              { at: 0, value: 0 }
+              { at: 300, value: 0 }
+              { at: 2250, value: 100000, ease: Step }
+            ]
+          },
           shadow: always,
           angularRadius: 0.2
         )
