@@ -1,11 +1,13 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
 using Puck.Cli.Canary;
 using Puck.Cli.Sweep;
 using Puck.World;
 using Puck.World.Protocol;
+using Puck.World.Transpiler.Decompiler;
 
 namespace Puck.Cli.Bench;
 
@@ -56,116 +58,84 @@ public static partial class BenchmarkCommand {
             var document = Path.Combine(path1: Path.GetDirectoryName(path: full)!, path2: $".benchmark-pair-{Guid.NewGuid():N}{WorldDocumentName.SourceSuffix}");
             var localSeats = Math.Max(val1: basisDefinition.Population.LocalSeats, val2: seats);
             var networkPlayers = (pair ? Math.Max(val1: basisDefinition.Population.NetworkPlayers, val2: seats) : basisDefinition.Population.NetworkPlayers);
-            var bodyFields = new List<string>();
+            var delta = new JsonObject {
+                ["basis"] = basis,
+            };
+            var bodies = new JsonObject();
 
             if (networkPlayers > basisDefinition.Population.NetworkPlayers) {
-                bodyFields.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"networkPlayers: {networkPlayers}"));
+                bodies["networkPlayers"] = networkPlayers;
                 if (basisDefinition.Population.Capacity < (localSeats + networkPlayers)) {
-                    bodyFields.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"capacity: {(localSeats + networkPlayers)}"));
+                    bodies["capacity"] = (localSeats + networkPlayers);
                 }
             }
             if (seats > 1) {
                 if (localSeats > basisDefinition.Population.LocalSeats) {
-                    bodyFields.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"localSeats: {localSeats}"));
+                    bodies["localSeats"] = localSeats;
                 }
 
                 // A leg on several seats seats them all at boot: a World started with no devices joins none on demand.
-                var activations = Enumerable.Range(start: 0, count: localSeats)
-                    .Select(selector: index => ((index < seats)
+                bodies["seatActivation"] = new JsonArray(items: [.. Enumerable.Range(start: 0, count: localSeats)
+                    .Select(selector: index => (JsonNode?)JsonValue.Create(value: ((index < seats)
                         ? "Eager"
                         : ((basisDefinition.Population.SeatActivation is { Count: var existingCount } existing && (index < existingCount))
                             ? existing[index].ToString()
-                            : "OnDemand")));
-
-                bodyFields.Add(item: $"seatActivation [{string.Join(separator: ", ", values: activations)}]");
+                            : "OnDemand"))))]);
             }
-
-            var source = new StringBuilder()
-                .Append(provider: CultureInfo.InvariantCulture, handler: $"// The benchmark's staged world: {(pair ? "the world as its authority and a client on one machine" : "the world")}{((seats > 1) ? $", with {seats} seats" : string.Empty)}.\nbasis: {JsonValue.Create(value: basis).ToJsonString()}\n");
 
             if (pair) {
                 var authoredNamespace = ((basisDefinition.Host.AuthorityNamespace is { Length: > 0 } declared) ? declared : null);
                 var subject = (authoredNamespace ?? PairNamespace);
 
                 if (authoredNamespace is null) {
-                    _ = source.Append(provider: CultureInfo.InvariantCulture, handler: $"host {{ authorityNamespace: \"{PairNamespace}\" }}\n");
+                    delta["host"] = new JsonObject { ["authorityNamespace"] = PairNamespace };
                 }
-                if (bodyFields.Count > 0) {
-                    _ = source.Append(provider: CultureInfo.InvariantCulture, handler: $"bodies {{ {string.Join(separator: ", ", values: bodyFields)} }}\n");
+                if (bodies.Count > 0) {
+                    delta["bodies"] = bodies;
                 }
 
-                var admissionEntries = (basisDefinition.Admission ?? []);
-                var hasVisitorAdmission = admissionEntries.Any(predicate: static entry =>
+                var entries = new List<WorldAdmissionEntry>(collection: (basisDefinition.Admission ?? []));
+                var hasVisitorAdmission = entries.Any(predicate: static entry =>
                     (entry.Mode == WorldAdmissionTrustMode.FederatedAuthority) &&
                     entry.AdmitsArrival(kind: WorldAdmissionArrival.Visitor));
 
-                _ = source.Append(value: "admission [\n");
-                foreach (var entry in admissionEntries) {
-                    _ = source.Append(provider: CultureInfo.InvariantCulture, handler: $"  {FormatAdmissionEntry(entry: entry)}\n");
-                }
                 if (!hasVisitorAdmission) {
-                    _ = source
-                        .Append(value: "  { admits: Session, disclosure: Replica, domain: \"*\", grants [{ budget: 64, capability: Observe, subject: \"all\" }], mode: FederatedAuthority }\n")
-                        .Append(value: "  { admits: Visitor, disclosure: Presentation, domain: \"*\", grants [{ budget: 8, capability: Drive, exclusive: true }, { budget: 64, capability: Observe }], mode: FederatedAuthority }\n");
+                    entries.Add(item: new WorldAdmissionEntry(
+                        Domain: WorldAdmissionEntry.AnyAuthority,
+                        Mode: WorldAdmissionTrustMode.FederatedAuthority,
+                        Grants: [new WorldAdmissionGrant(Capability: WorldCapability.Observe, Subject: GrantSubject.All, Budget: 64)],
+                        Disclosure: WorldDisclosureTier.Replica,
+                        Admits: WorldAdmissionArrival.Session));
+                    entries.Add(item: new WorldAdmissionEntry(
+                        Domain: WorldAdmissionEntry.AnyAuthority,
+                        Mode: WorldAdmissionTrustMode.FederatedAuthority,
+                        Grants: [
+                            new WorldAdmissionGrant(Capability: WorldCapability.Drive, Exclusive: true, Budget: 8),
+                            new WorldAdmissionGrant(Capability: WorldCapability.Observe, Budget: 64),
+                        ],
+                        Disclosure: WorldDisclosureTier.Presentation,
+                        Admits: WorldAdmissionArrival.Visitor));
                 }
-                _ = source
-                    .Append(provider: CultureInfo.InvariantCulture, handler: $"  {{ domain: \"{identity.Domain}\", subject: {JsonValue.Create(value: subject).ToJsonString()}, mode: SignsDirectly, algorithm: \"ecdsa-p256-sha256\", publicKey: \"{identity.PublicKeyBase64}\", grants [] }}\n")
-                    .Append(value: "]\n");
+                entries.Add(item: new WorldAdmissionEntry(
+                    Domain: identity.Domain,
+                    Mode: WorldAdmissionTrustMode.SignsDirectly,
+                    Grants: [],
+                    Subject: subject,
+                    Algorithm: "ecdsa-p256-sha256",
+                    PublicKey: identity.PublicKeyBase64));
+                delta["admission"] = JsonSerializer.SerializeToNode(
+                    value: (IReadOnlyList<WorldAdmissionEntry>)entries,
+                    jsonTypeInfo: WorldJsonContext.Default.For<IReadOnlyList<WorldAdmissionEntry>>());
                 File.WriteAllBytes(path: key, bytes: identity.Pkcs8);
-            } else if (bodyFields.Count > 0) {
-                _ = source.Append(provider: CultureInfo.InvariantCulture, handler: $"bodies {{ {string.Join(separator: ", ", values: bodyFields)} }}\n");
+            } else if (bodies.Count > 0) {
+                delta["bodies"] = bodies;
             }
-            File.WriteAllText(path: document, contents: source.ToString(), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            var comment = string.Create(provider: CultureInfo.InvariantCulture, handler: $"// The benchmark's staged world: {(pair ? "the world as its authority and a client on one machine" : "the world")}{((seats > 1) ? $", with {seats} seats" : string.Empty)}.\n");
+            var printed = WorldDecompiler.Decompile(root: (JsonObject)WorldDecompiler.WithoutNulls(node: delta)!);
+
+            File.WriteAllText(path: document, contents: (comment + printed), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             return new RemotePair(Document: document, Endpoint: (pair ? endpoint : string.Empty), KeyFile: (pair ? key : string.Empty));
-        }
-
-        private static string FormatAdmissionEntry(Puck.World.Protocol.WorldAdmissionEntry entry) {
-            var members = new List<string>();
-
-            if (entry.Admits is { } admits) {
-                members.Add(item: $"admits: {admits}");
-            }
-            if (entry.Algorithm is { } algorithm) {
-                members.Add(item: $"algorithm: {JsonValue.Create(value: algorithm).ToJsonString()}");
-            }
-            if (entry.Disclosure is { } disclosure) {
-                members.Add(item: $"disclosure: {disclosure}");
-            }
-            members.Add(item: $"domain: {JsonValue.Create(value: entry.Domain).ToJsonString()}");
-            members.Add(item: $"grants [{string.Join(separator: ", ", values: entry.Grants.Select(selector: FormatAdmissionGrant))}]");
-            members.Add(item: $"mode: {entry.Mode}");
-            if (entry.PublicKey is { } publicKey) {
-                members.Add(item: $"publicKey: {JsonValue.Create(value: publicKey).ToJsonString()}");
-            }
-            if (entry.Subject is { } subject) {
-                members.Add(item: $"subject: {JsonValue.Create(value: subject).ToJsonString()}");
-            }
-
-            return $"{{ {string.Join(separator: ", ", values: members)} }}";
-        }
-
-        private static string FormatAdmissionGrant(Puck.World.Protocol.WorldAdmissionGrant grant) {
-            var members = new List<string>();
-
-            if (grant.Budget is { } budget) {
-                members.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"budget: {budget}"));
-            }
-            members.Add(item: $"capability: {grant.Capability}");
-            if (grant.EventBudget is { } eventBudget) {
-                members.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"eventBudget: {eventBudget}"));
-            }
-            if (grant.Exclusive) {
-                members.Add(item: "exclusive: true");
-            }
-            if (grant.KindMask is { } kindMask) {
-                members.Add(item: $"kindMask: {System.Text.Json.JsonSerializer.Serialize(value: kindMask, jsonTypeInfo: WorldJsonContext.Default.For<MutationKindMask>())}");
-            }
-            if (grant.Subject is { } subject) {
-                members.Add(item: $"subject: {System.Text.Json.JsonSerializer.Serialize(value: subject, jsonTypeInfo: WorldJsonContext.Default.For<GrantSubject>())}");
-            }
-
-            return $"{{ {string.Join(separator: ", ", values: members)} }}";
         }
     }
 

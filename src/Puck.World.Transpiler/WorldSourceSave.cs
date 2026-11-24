@@ -175,7 +175,7 @@ public static class WorldSourceSave {
 
         // The snapshot spells an absent member as null, which composes the same as no member and keeps a row from
         // printing as its construct.
-        try { candidate = WorldDecompiler.Decompile(root: (JsonObject)WithoutNulls(node: target)!); } catch (WorldDecompileRefusedException exception) {
+        try { candidate = WorldDecompiler.Decompile(root: (JsonObject)WorldDecompiler.WithoutNulls(node: target)!); } catch (WorldDecompileRefusedException exception) {
             reason = $"{exception.Message}; rename the generated row before saving source, or save a JSON delta";
             return false;
         }
@@ -265,11 +265,6 @@ public static class WorldSourceSave {
         reason = string.Empty;
         return true;
     }
-    private static JsonNode? WithoutNulls(JsonNode? node) => node switch {
-        JsonObject obj => new JsonObject(properties: obj.Where(predicate: static member => (member.Value is not null)).Select(selector: static member => KeyValuePair.Create(key: member.Key, value: WithoutNulls(node: member.Value)))),
-        JsonArray array => new JsonArray(items: [.. array.Select(selector: WithoutNulls)]),
-        _ => node?.DeepClone(),
-    };
     private static long Write(string path, string text, bool bom) {
         var bytes = Encoding.UTF8.GetBytes(s: text);
 
@@ -435,7 +430,7 @@ public static class WorldSourceSave {
         // default one as its value; the printed row leaves both to the lowering, which the rewrite's own check
         // compares against.
         private static JsonNode Lowered(string pointer, JsonNode row) {
-            var bare = WithoutNulls(node: row)!;
+            var bare = WorldDecompiler.WithoutNulls(node: row)!;
             JsonNode fragment = new JsonArray(bare.DeepClone());
 
             foreach (var segment in DocumentJsonPointer.Segments(pointer: pointer).Reverse()) {
