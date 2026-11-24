@@ -126,7 +126,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // The one reason a residency's views wait on work outside their recording: the frame source's first, then lighting.
     private static string? HeldOf(SdfWorldResidency residency) => ((residency.SourceWaiting is { } source)
         ? $"residency '{residency.Name}' holds its frame while {source}"
-        : LightingWaitOf(residency: residency));
+        : ((residency.Waking is { } waking) ? $"residency '{residency.Name}' keeps its views' last images while {waking}" : LightingWaitOf(residency: residency)));
     // Names the part of the convergence still waited for (SdfMeshIrradiance.Convergence) while one stands.
     private static string? LightingWaitOf(SdfWorldResidency residency) => (residency.LightingPending
         ? ((residency.MeshIrradiance.Convergence is { Stage: not SdfMeshConvergenceStage.None } convergence)
@@ -273,6 +273,11 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         var entry = Refresh(instance: instance);
 
         entry.UnreadFrames = unreadFrames;
+        // A parked residency's view stands on the image it last rendered while that image is of the view it resolves at
+        // the scale it asks; anything else renders, which wakes the residency (SdfWorldResidency.Stage).
+        if (entry.View is { Residency.StandsParked: true }) {
+            return ((entry.RenderedBindings == entry.Bindings) && (entry.RenderedScale == entry.CurrentScale));
+        }
         if ((entry.View is { } current) && (current.Residency.Tables is { } packed)) {
             UpdateSurfaceInputs(entry: entry, instance: instance, tables: packed, view: current);
             // A view that stands whole asks no pass for its signature, so its scopes are kept held here.
@@ -504,12 +509,18 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             }
         }
         SdfCaptureWork.ProcessWork.Add(kind: SdfCaptureWork.Held, amount: m_residencies.Count);
+        ParkUnobserved();
         // A frame that ended before its readers were all prepared leaves captures of its own behind.
         m_packsPending.Clear();
         m_capturesPending.Clear();
         m_captureReaders.Clear();
         if (m_host is { IsReleased: false } host) {
             CaptureForPack(residency: host, context: in context);
+        }
+        // A parked residency the sight wanted, or a render asked for, builds its tables this frame whether or not anything
+        // reads it, so its world and lighting stand before its glass is seen.
+        foreach (var residency in m_residencies.Keys) {
+            if (residency is { IsReleased: false, IsParked: true, StandsParked: false }) { CaptureForPack(residency: residency, context: in context); }
         }
         // A residency's minimum, after the host has placed the cameras its routes read: meshes arriving or lighting
         // settling is served whatever reads it. A residency a reader of this frame asks for is prepared for that reader
@@ -543,6 +554,56 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             CaptureForPack(residency: due, context: in context);
         }
         SdfCaptureWork.ProcessWork.Add(kind: SdfCaptureWork.MinimumHeld, amount: held);
+    }
+
+    /// <summary>The seconds a park's bytes count as given back before the device's retirement has disposed them, so one
+    /// pressing excess parks only as many residencies as it needs.</summary>
+    public const double ParkSettleSeconds = 1d;
+
+    // The device bytes parked residencies gave back within the last ParkSettleSeconds, with when, on the selector's clock.
+    private readonly Queue<(long At, long Bytes)> m_parkedRecently = new();
+
+    // Parks at most one residency a frame (SdfWorldResidency.Park): of the residencies other than the host that hold
+    // tables, the one no reader has asked for longest, once that is SdfWorldResidency.PressedParkAfter while the
+    // device's pool stands past its limit (SdfResidencySelector.Excess, less what parks in the last ParkSettleSeconds gave
+    // back and the retirement has yet to dispose) or SdfWorldResidency.IdleParkSeconds otherwise. The pool's limit follows
+    // the system's budget for the process, so a world nobody looks at gives its fixed storage back before the system
+    // moves memory a view reads out of the device. Runs after every residency began its frame and before any is
+    // captured, so no residency it parks has begun a preparation.
+    private void ParkUnobserved() {
+        SdfResidencySelector? selector = null;
+
+        foreach (var residency in m_residencies.Keys) {
+            if (residency.Tables is { } tables) { selector = tables.Grant.Selector; break; }
+        }
+        if (selector is null) { return; }
+
+        var now = selector.Time.GetTimestamp();
+        var settle = ((long)(ParkSettleSeconds * selector.Time.TimestampFrequency));
+        var pending = 0L;
+
+        while ((m_parkedRecently.Count > 0) && ((now - m_parkedRecently.Peek().At) > settle)) { _ = m_parkedRecently.Dequeue(); }
+        foreach (var (_, bytes) in m_parkedRecently) { pending += bytes; }
+
+        var pressed = (selector.Excess > pending);
+        SdfWorldResidency? candidate = null;
+        var longest = 0d;
+
+        foreach (var residency in m_residencies.Keys) {
+            if (residency.IsReleased || ReferenceEquals(objA: residency, objB: m_host) || (residency.Tables is null)) { continue; }
+
+            var unobserved = residency.UnobservedSeconds();
+
+            if ((unobserved >= (pressed ? residency.PressedParkAfter : SdfWorldResidency.IdleParkSeconds)) && (unobserved > longest)) {
+                candidate = residency;
+                longest = unobserved;
+            }
+        }
+        if (candidate is null) { return; }
+
+        var parked = candidate.ParkableBytes;
+
+        if (candidate.Park()) { m_parkedRecently.Enqueue(item: (now, parked)); }
     }
 
     // The residencies a reader or the minimum captured this frame whose frames are not packed yet (CaptureForPack),
@@ -580,6 +641,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         var residency = view.Residency;
 
         Begin(residency: residency);
+        // A world behind glass is observed by the sight (SdfWorldResidency.Want), since its image is read every frame a
+        // consumer binds it, and a parked one stands on its views' last images until a render or the sight wakes it.
+        if (!residency.Sighted) { residency.Observe(); }
+        if (residency.StandsParked) { return; }
         CaptureForReader(residency: residency, context: in context);
         if (residency.CapturePackingDomain is not null) { m_captureReaders.Add(item: entry); }
     }
@@ -703,6 +768,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// them.</remarks>
     public void PrepareRender(string instance, in FrameContext context) {
         if (BegunResidencyOf(instance: instance) is not { } residency) { return; }
+        residency.Observe();
         _ = residency.Stage(context: in context);
         NoteImageWindow(instance: instance, residency: residency);
     }

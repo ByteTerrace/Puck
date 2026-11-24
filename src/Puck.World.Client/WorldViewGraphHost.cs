@@ -1776,12 +1776,47 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         for (var kept = producer; (kept is not null) && m_arrivalKept.Add(item: kept); kept = m_arrivalReached.GetValueOrDefault(key: kept)) { }
     }
 
+    // Tells each world behind a session's glass that it is wanted this frame (IWorldViewScenes.Want): a view that renders
+    // (one ReserveArrivals reached) sees the glass, too small to render or not, or its sight is not known yet, or the glass
+    // stands out of its sight within WorldPortalVisibility.LeadMetres. A world behind glass no rendering view wants gives
+    // its residency's tables back, and a wanted one that gave them back builds them again before its glass shows
+    // (SdfWorldResidency.Want). Runs after ReserveArrivals, whose walk names the consumers that render.
+    private void WantSightedWorlds(in FootprintFrame frame) {
+        if (ViewScenes is not { } scenes) { return; }
+
+        foreach (var footprint in m_screenFootprints) {
+            if (m_portals.Contains(item: footprint.Producer) && m_arrivalReached.ContainsKey(key: footprint.Consumer)) {
+                WantIfSighted(consumer: footprint.Consumer, frame: in frame, producer: footprint.Producer, scenes: scenes);
+            }
+        }
+        foreach (var (camera, filmed) in m_filmedViews) {
+            if (m_arrivalReached.ContainsKey(key: camera.Name)) { WantIfSighted(consumer: camera.Name, frame: in frame, producer: filmed.Name, scenes: scenes); }
+        }
+    }
+    // Wants the world a session view renders when its consumer sees the glass it shows on (an occluded glass is not seen,
+    // PortalSightOf; a small one is), its sight is not known, or the glass leads (Leads); a view that is no portal is
+    // wanted whenever its consumer renders.
+    private void WantIfSighted(string consumer, string producer, IWorldViewScenes scenes, in FootprintFrame frame) {
+        if (!m_portals.Contains(item: producer)
+            || (PortalSightOf(consumer: consumer, coverage: out _, frame: in frame, glass: out _, pixels: (double.PositiveInfinity, double.PositiveInfinity), producer: producer) is PortalSight.Seen or PortalSight.Small or PortalSight.Unknown)
+            || Leads(consumer: consumer, producer: producer, scenes: scenes)) {
+            scenes.Want(view: producer);
+        }
+    }
+    // Whether a consumer's current camera stands within WorldPortalVisibility.LeadMetres of the glass a session it reads
+    // shows on, in the consumer's world.
+    private bool Leads(string consumer, string producer, IWorldViewScenes scenes) =>
+        ((scenes.PortalGlass(consumer: consumer, glass: out var glass, producer: producer) == WorldPortalGlass.Found)
+            && (m_cameras.TryGetValue(key: consumer, value: out var camera) || scenes.TryVisibilityCamera(camera: out camera, view: consumer))
+            && WorldPortalVisibility.Leads(camera: in camera, glass: glass!));
+
     // Finish only after this frame's cameras and placements have been composed. First form the visible graph without
     // rate holds, then measure its display shares before deciding which glass is small. Measuring last frame's pruned
     // graph would delay wake-up when a consumer grows or a portal becomes visible again.
     private void CompleteFootprints() {
         var frame = new FootprintFrame(this);
         ReserveArrivals(frame: in frame);
+        WantSightedWorlds(frame: in frame);
         ReserveShrinks();
         RootFilmedViews(frame: in frame);
         var firstScreen = m_footprints.Count;

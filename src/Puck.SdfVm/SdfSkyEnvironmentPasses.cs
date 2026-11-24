@@ -78,10 +78,13 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
     /// frame's other residencies (<see cref="SdfWorldPasses.ReadsPrepared"/>), once a frame whichever reader asks
     /// first.</remarks>
     public void PrepareRead(string instance, in FrameContext context) {
-        if (BegunResidencyOf(instance: instance) is { } residency) { views.CaptureForReader(residency: residency, context: in context); }
+        if (BegunResidencyOf(instance: instance) is { StandsParked: false } residency) { views.CaptureForReader(residency: residency, context: in context); }
     }
     /// <inheritdoc/>
+    /// <remarks>A parked residency's environment stands on what it last projected
+    /// (<see cref="SdfWorldResidency.StandsParked"/>).</remarks>
     public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context, in RenderGraphReadStands reads) {
+        if (BegunResidencyOf(instance: instance) is { StandsParked: true }) { return true; }
         if ((BegunResidencyOf(instance: instance) is not { } residency) || !residency.Prepare(context: context)) { return false; }
         var tables = residency.Tables!;
 

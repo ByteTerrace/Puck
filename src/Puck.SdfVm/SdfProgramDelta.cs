@@ -10,16 +10,24 @@ namespace Puck.SdfVm;
 /// <see cref="GpuRegion.MaxCopyRuns"/> runs, neighbours pair up and the words between them are owed again.
 /// </summary>
 public sealed class SdfProgramDelta {
+    // The program the delta is measured from, held weakly: the delta stands beside every frame of its later program, and
+    // only tables that still hold the earlier one apply it (LeadsFrom), which keeps it alive themselves, so a strong
+    // reference would keep a whole earlier program's words alive for as long as the later one stands.
+    private readonly WeakReference<SdfProgram> m_from;
+
     private SdfProgramDelta(SdfProgram from, SdfProgram to, GpuUploadRuns runs) {
-        From = from;
+        m_from = new WeakReference<SdfProgram>(target: from);
         Runs = runs;
         To = to;
     }
 
-    /// <summary>Gets the program the delta is measured from.</summary>
-    public SdfProgram From { get; }
-    /// <summary>Gets the runs of words in which <see cref="To"/> differs from <see cref="From"/>, every word past
-    /// <see cref="From"/>'s end included.</summary>
+    /// <summary>Returns whether the delta is measured from a program: whether tables that hold
+    /// <paramref name="program"/> may upload <see cref="To"/> by copying <see cref="Runs"/> alone.</summary>
+    /// <param name="program">The program the tables hold.</param>
+    /// <returns><see langword="true"/> when <paramref name="program"/> is the program the delta was measured from.</returns>
+    public bool LeadsFrom(SdfProgram? program) => ((program is not null) && m_from.TryGetTarget(target: out var from) && ReferenceEquals(objA: from, objB: program));
+    /// <summary>Gets the runs of words in which <see cref="To"/> differs from the program the delta was measured from,
+    /// every word past that program's end included.</summary>
     public GpuUploadRuns Runs { get; }
     /// <summary>Gets the program the delta leads to.</summary>
     public SdfProgram To { get; }

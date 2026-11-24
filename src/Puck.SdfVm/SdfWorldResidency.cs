@@ -221,6 +221,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             $"shadows {(m_tables?.DescribeShadows() is { Length: > 0 } shadows ? shadows : "none")}",
             ((m_tables is { } tables) ? $"{tables.Grant.Selector.Describe()}{tables.Grant.Selector.Work.Describe()}" : "selector=none"),
             (m_tables?.DescribeFixedCost() ?? "fixed-cost=none"),
+            DescribeParking(),
             $"{(m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none")} late-stagings={LateStagings}{(m_tables?.GpuWork.Describe() ?? string.Empty)}",
             (m_tables?.DescribeFrameSampled() ?? "frame-sampled=none"),
             $"change-history-logical-bytes transforms={(m_frame?.MovedTransforms?.StorageBytes ?? 0)} draws={(m_frame?.DrawRows.Changes?.StorageBytes ?? 0)} dresser-scratch={m_meshDresser.ScratchBytes} staging-runs={(m_tables?.DrawChangeScratchBytes ?? 0)} (array payload; headers excluded)",
@@ -244,15 +245,17 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// dispatches, or its tables still owe the staged meshes' words or their upload
     /// (<see cref="SdfWorldTables.MeshesArriving"/>), which land only after such a frame's upload. A frame that renders
     /// none of its views still prepares the residency and may pack a frame, which moves what the background work binds,
-    /// so a residency nobody renders stops landing until one of its views renders again. Read on the frame thread; never
+    /// so a residency nobody renders stops landing until one of its views renders again. A parked residency
+    /// (<see cref="IsParked"/>) has nothing arriving until a reader wakes it. Read on the frame thread; never
     /// waits.</summary>
-    public bool MeshesArriving => (MeshPathBake.Pending || (m_tables?.MeshesArriving ?? false));
+    public bool MeshesArriving => (!m_parked && (MeshPathBake.Pending || (m_tables?.MeshesArriving ?? false)));
     /// <summary>Gets whether the residency owes work its preparation serves whether or not anything reads it this frame
     /// (its minimum): its meshes are arriving (<see cref="MeshesArriving"/>), whose bake plans and lands through a prepared
     /// frame, or its lighting is settling (<see cref="SdfMeshIrradiance.Settling"/>), whose trace a prepared frame stages,
     /// so a world becomes resident and lit before its glass shows. False once both are done, when only a reader prepares
-    /// it. Read on the frame thread; never waits.</summary>
-    public bool OwesPreparation => (MeshesArriving || MeshIrradiance.Settling);
+    /// it, and while it is parked (<see cref="IsParked"/>), when only a reader wakes it. Read on the frame thread; never
+    /// waits.</summary>
+    public bool OwesPreparation => (!m_parked && (MeshesArriving || MeshIrradiance.Settling));
     /// <summary>Gets whether the latest staging held a draw out of the frame because its mesh had not landed
     /// (<see cref="SdfWorldTables.DrawsAwaitMeshes"/>); <see langword="false"/> before the tables are built.</summary>
     public bool DrawsAwaitMeshes => (m_tables?.DrawsAwaitMeshes ?? false);
@@ -851,6 +854,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// they are built.</returns>
     /// <exception cref="ObjectDisposedException">The residency is released.</exception>
     public bool Stage(in FrameContext context) {
+        // A staging is for a render, which a parked residency wakes for.
+        if (m_parked) { m_wakeOwed = true; }
         _ = Prepare(context: in context);
 
         if (m_tables is not { } tables) { return false; }
@@ -1327,6 +1332,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
         if (m_tables is not null) {
             return true;
         }
+        // A parked residency builds its tables only for a render or for the sight's want (StandsParked).
+        if (StandsParked) {
+            return false;
+        }
 
         m_deviceContext = device;
         m_tables = m_pipelines.TryBuild(
@@ -1358,6 +1367,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
         // pipeline is (EnsureProbeWork).
         tables.Grant.Name = MeshPathBake.Residency;
         MeshIrradiance.Time = tables.Grant.Selector.Time;
+        // A residency built for a reader counts as observed from now; a park's wake withholds the views until what the
+        // park took is back (Waking).
+        m_clock = tables.Grant.Selector.Time;
+        m_observedAt = m_clock.GetTimestamp();
+        Wake();
         tables.GpuWork.Add(client: new SdfMeshBakeGpuWork(bake: MeshPathBake, tables: tables));
         MeshPathBake.DispatchReport = tables.GpuWork.Describe;
         // A lattice a worker readies is taken when it is ready, not at the next frame.

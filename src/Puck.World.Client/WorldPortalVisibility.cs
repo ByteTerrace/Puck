@@ -38,6 +38,25 @@ public static class WorldPortalVisibility {
     /// still bakes or lands its meshes: the least that keeps it rendering, since a world's meshes arrive only in frames
     /// that render one of its views.</summary>
     public const double ArrivalShare = 0.0625;
+    /// <summary>The distance, in metres, within which a glass out of its consumer's sight still keeps the world behind
+    /// it resident (<see cref="Leads"/>): a turn or a step brings it into sight before the world could build its tables
+    /// and lighting again.</summary>
+    public const float LeadMetres = 16f;
+
+    /// <summary>Returns whether a glass out of a camera's sight stands near enough that the world behind it should stay
+    /// resident: its nearest point lies within <see cref="LeadMetres"/> of the camera.</summary>
+    /// <param name="camera">The consumer's camera.</param>
+    /// <param name="glass">The screen row the session shows on.</param>
+    /// <returns>Whether the glass leads.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="glass"/> is <see langword="null"/>.</exception>
+    public static bool Leads(in CameraSnapshot camera, WorldScreen glass) {
+        ArgumentNullException.ThrowIfNull(argument: glass);
+
+        var (origin, right, up, thickness) = Slab(glass);
+        var reach = ((right.Length() + up.Length()) + thickness.Length());
+
+        return (Vector3.Distance(value1: camera.Position, value2: origin) <= (LeadMetres + reach));
+    }
     /// <summary>The fraction the frustum's sides are widened by when the visible part of a glass is found
     /// (<see cref="Window"/>, <see cref="Coverage"/>): room for the reader's texture filter at the image's edge.</summary>
     public const float VisibleMargin = 0.02f;
