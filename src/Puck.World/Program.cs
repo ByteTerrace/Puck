@@ -516,7 +516,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     var widthOverride = parseResult.GetValue(option: widthOption);
     var heightOverride = parseResult.GetValue(option: heightOption);
 
-    if (parseResult.GetResult(option: frameBarOption) is not null) {
+    // A default makes the option's result implicit on every parse, so only a named --frame-bar counts.
+    if (parseResult.GetResult(option: frameBarOption) is { Implicit: false }) {
         if ((widthOverride is not null) || (heightOverride is not null)) {
             Console.Error.WriteLine(value: "--frame-bar sizes the window from the device profile; it refuses beside --width or --height.");
 
@@ -789,18 +790,10 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     }
     batchHost?.Initialize?.Invoke(host);
     if (connectTarget is { } remoteEndpoint) {
-        var instances = host.Services.GetRequiredService<WorldInstanceHost>();
-
-        _ = instances.EnqueueTransfer(
-            sourceInstance: WorldInstanceHost.BootInstanceName,
-            scope: WorldInstanceHost.TransferScope.Body,
-            sourceSlot: 0,
-            destination: WorldInstanceHost.TransferDestination.Remote(
-                name: "remote-boot",
-                documentPath: worldSource.SourcePath,
-                authority: remoteEndpoint
-            ),
-            actingPrincipal: Principal.Console
+        // Every local seat crosses, the ones seated now as one party and each later one as it joins.
+        host.Services.GetRequiredService<WorldInstanceHost>().JoinRemote(
+            authority: remoteEndpoint,
+            documentPath: worldSource.SourcePath
         );
     }
     // A rendering World compiles its own code in the background, so a first crossing or a first addon write runs compiled

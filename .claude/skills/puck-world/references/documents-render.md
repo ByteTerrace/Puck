@@ -99,8 +99,14 @@ layer by `name`. `WorldRenderKeys.Expand` turns section keys into value keys
 and `WorldKeyResolver` resolves them, for the validator with no live source and
 for the client through its state mirror. Ordered values (gradient stop
 elevations, the ink band) are judged by `JudgeAscending` over every phase of
-their one clock, between keys as well as at them. A projection carries the tick
-clocks, and each state clock a value keys on as an anchored clock
+their one clock, between keys as well as at them. A view clock (a `timeline.clocks`
+row with a `view`, `WorldClockView`) reads how far the frame's first view
+stands from a point, along an axis or in any direction, clamped at the span's
+end, so a look keys on the viewer's height (`worlds/debug/launch.puck`'s
+`altitude`); the presenter writes `WorldStateMirror.ViewPoint` before it
+resolves the environment, a rate may not key on it, and a value still reads one
+clock. A projection carries the tick
+and view clocks, and each state clock a value keys on as an anchored clock
 (`WorldClock.Anchor`, refused in an authored document) whose phase the
 recipient predicts with `WorldClockAnchor.Predict`, the authority's own
 prediction; `WorldClockAnchorLedger` sends a new anchor at exactly the ticks

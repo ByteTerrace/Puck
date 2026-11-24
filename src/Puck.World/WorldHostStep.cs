@@ -223,6 +223,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         // WorldServer.Step. A transfer is a host act, so it settles at this host's one fixed point rather than
         // inline with whichever instance's step produced it; a transfer drained here was enqueued by a per-step
         // portal scan during the PREVIOUS call, so it lands and is advanced exactly once, this same tick.
+        _ = m_instances.FollowRemoteJoin();
         m_instances.DrainPendingTransfers();
         _ = m_seatRouter.DeliverRouteChanges();
         m_instances.SubmitExternallyClockedSeatIntents();

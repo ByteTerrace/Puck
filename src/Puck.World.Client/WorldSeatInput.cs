@@ -108,26 +108,36 @@ public sealed class WorldSeatInput {
     public bool Admitted => m_admitted;
 
     /// <summary>Sends the immutable compiled source registry through the existing grant-checked command door. A repeat of
-    /// the admission last sent, to the same authority for the same owner and body, waits until
-    /// <see cref="AdmissionRetryTicks"/> of that authority's engine ticks have passed: the authority answers an identical
-    /// admission by keeping the profile it holds, so a seat whose publication has not arrived resends it at that pace
-    /// rather than encoding its whole registry every step.</summary>
+    /// the admission last sent, to the same authority for the same owner and body, is held back while that one is
+    /// unanswered, and after its answer until <see cref="AdmissionRetryTicks"/> of that authority's ticks have passed
+    /// since it was sent: the authority answers an identical admission by keeping the profile it holds, and its
+    /// publication follows the answer by a delivery, so a seat keeps at most one admission on the authority's ordered
+    /// lane and never queues a copy behind it each step.</summary>
     public void Admit(WorldAuthorityEndpoint endpoint, Principal owner, int body, bool freshAttachment) {
-        var tick = endpoint.EngineTick;
+        var tick = endpoint.NextInputTick;
 
         if (!freshAttachment && ReferenceEquals(objA: m_admittedAt, objB: endpoint) && (m_admittedOwner == owner) && (m_admittedBody == body) &&
-            (tick >= m_admittedTick) && ((tick - m_admittedTick) < AdmissionRetryTicks)) {
+            ((Volatile.Read(location: ref m_admissionsUnanswered) != 0) || ((tick >= m_admittedTick) && ((tick - m_admittedTick) < AdmissionRetryTicks)))) {
             return;
         }
-        endpoint.Submissions.SubmitCommand(command: new WorldCommand.AdmitInput(EntityIndex: body, FreshAttachment: freshAttachment, Principal: owner, Sources: m_contracts));
         (m_admittedAt, m_admittedOwner, m_admittedBody, m_admittedTick) = (endpoint, owner, body, tick);
+        _ = Interlocked.Increment(location: ref m_admissionsUnanswered);
+        _ = endpoint.Submissions.SubmitEnvelope(
+            completion: _ => Interlocked.Decrement(location: ref m_admissionsUnanswered),
+            operationId: Guid.Empty,
+            payload: new WorldSubmissionPayload.Command(Value: new WorldCommand.AdmitInput(EntityIndex: body, FreshAttachment: freshAttachment, Principal: owner, Sources: m_contracts)),
+            principal: owner
+        );
     }
-    /// <summary>The engine ticks a seat waits before it resends an identical admission whose publication has not arrived.</summary>
+    /// <summary>The authority ticks a seat waits, from sending an admission, before it resends an identical one whose
+    /// publication has not arrived.</summary>
     public const ulong AdmissionRetryTicks = 30;
     private WorldAuthorityEndpoint? m_admittedAt;
     private Principal m_admittedOwner;
     private int m_admittedBody = int.MinValue;
     private ulong m_admittedTick;
+    // The admissions sent and not yet answered. An answer arrives on whichever thread the link completes on.
+    private int m_admissionsUnanswered;
     /// <summary>Installs a matching publication and rebuilds the controller's kept physical/latch image.</summary>
     public bool Reconcile(in WorldInputPublication publication, SeatController seat, InputRouter? router = null, int slot = 0) {
         var sources = publication.Sources.Span;

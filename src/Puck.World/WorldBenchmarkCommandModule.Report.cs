@@ -283,6 +283,15 @@ public sealed partial class WorldBenchmarkCommandModule {
             }
         }
         node["gpu"] = DescribeGpu(chapter: chapter);
+        if (chapter.Submitted is { Count: > 0 } submitted) {
+            node["submitted"] = new JsonObject {
+                ["samples"] = submitted.Count,
+                ["drawsMean"] = (submitted.Draws / (double)submitted.Count),
+                ["drawsMax"] = submitted.DrawsMax,
+                ["dispatchesMean"] = (submitted.Dispatches / (double)submitted.Count),
+                ["dispatchesMax"] = submitted.DispatchesMax,
+            };
+        }
         if (chapter.EndIndex >= 0) {
             var (peak, budget, beyond) = chapter.Device;
 

@@ -277,6 +277,14 @@ public sealed partial class WorldServer : IWorldServerHost {
     }
     /// <summary>Gets the live world definition this server runs — swapped in place as buffered edits apply.</summary>
     public WorldDefinition Definition { get { ThrowIfTickPending(); return m_document.Definition; } }
+    /// <summary>Gets the live definition's <c>admission</c> rows as the last install published them. Unlike
+    /// <see cref="Definition"/> it is readable from any thread at any time, a tick in flight included: a network thread
+    /// admits a connection and rechecks its credential against this list, and commits under the authority gate only
+    /// while the list is still the same instance.</summary>
+    public IReadOnlyList<WorldAdmissionEntry>? AdmissionPolicy => m_document.Admission;
+    /// <summary>Gets the live definition's <c>host.authority</c> as the last install published it, readable from any
+    /// thread at any time as <see cref="AdmissionPolicy"/> is.</summary>
+    public string? DeclaredEndpoint => m_document.HostAuthority;
 
     /// <summary>Materializes gameplay cells only for an explicit export or edit boundary.</summary>
     public WorldDefinition ExportDefinition() {

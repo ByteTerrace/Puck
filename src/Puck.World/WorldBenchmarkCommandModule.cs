@@ -51,7 +51,9 @@ namespace Puck.World;
 /// on a host that composes no seat view.</param>
 /// <param name="deviceProfile">The device profile the process runs under, which the report names; absent reports none.</param>
 /// <param name="host">The host settings the process resolved, whose window the report names; absent reports none.</param>
-public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, Func<InputRouter> router, WorldDefinitionSource source, HostFrameTimeline? timeline = null, PresentPacingControl? pacing = null, WorldStateRoot? stateRoot = null, PresentationReadings? readings = null, WorldGpuTiming? gpuTiming = null, WorldServer? server = null, Puck.World.Client.WorldSeatAuthorityRouter? seatRouter = null, Puck.World.Client.WorldSeatSenses? senses = null, WorldDeviceProfileState? deviceProfile = null, WorldHostSettings? host = null) : ICommandModule {
+/// <param name="gpuWork">The render nodes' registry, whose newest completed submissions a chapter samples for the draws and
+/// dispatches a frame submits; absent on a host that composes no renderer.</param>
+public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, Func<InputRouter> router, WorldDefinitionSource source, HostFrameTimeline? timeline = null, PresentPacingControl? pacing = null, WorldStateRoot? stateRoot = null, PresentationReadings? readings = null, WorldGpuTiming? gpuTiming = null, WorldServer? server = null, Puck.World.Client.WorldSeatAuthorityRouter? seatRouter = null, Puck.World.Client.WorldSeatSenses? senses = null, WorldDeviceProfileState? deviceProfile = null, WorldHostSettings? host = null, Puck.Abstractions.Gpu.IGpuWorkRegistry? gpuWork = null) : ICommandModule {
     /// <summary>The host work, in milliseconds, past which an iteration is over by default: one 60 Hz period.</summary>
     public const double DefaultBudgetMilliseconds = (1000.0 / 60.0);
     /// <summary>The wall time, in seconds, after which a run that has not finished is ended by default.</summary>
@@ -83,7 +85,6 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         "world.residency",
         "world.counters render.record --json",
         "world.counters gpu.queue --json",
-        "world.counters gpu --json",
         "world.counters sdf --json",
         "world.counters world.field-queries --json",
         "world.counters world.captures --json",
@@ -140,6 +141,8 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         public List<WorldTickScript.Line> OpenReads { get; } = [];
         public List<WorldTickScript.Line> CloseReads { get; } = [];
         public Dictionary<string, (double Sum, double Max, int Count)> Gpu { get; } = new(comparer: StringComparer.Ordinal);
+        // The draws and dispatches of the newest completed submission of every render node, summed at each sample.
+        public (long Draws, long DrawsMax, long Dispatches, long DispatchesMax, int Count) Submitted { get; set; }
         public bool LastOfLoop { get; set; }
         public WorldTickScript.Line? Where { get; set; }
         public WorldTickScript.Line? Hash { get; set; }
@@ -178,6 +181,9 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     }
 
     private readonly List<Chapter> m_chapters = [];
+    // Reused by every sample of the render nodes' submitted work, so a sample allocates nothing.
+    private readonly List<Puck.Abstractions.Gpu.GpuWorkNode> m_gpuNodes = [];
+    private readonly Puck.Abstractions.Gpu.GpuWorkSample m_gpuSample = new();
     private readonly List<Program> m_programs = [];
     // Every seat line the run has armed, in the order they run: the chapters' program lines and the releases each chapter
     // starts with. A run that ends lets go what the lines that reached the seat left held.
@@ -838,13 +844,33 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             : new CommandResult(Output: $"[world.benchmark: loop {chapter.Loop} ends; loop {(chapter.Loop + 1)} is armed]"));
     }
 
-    // Folds the rolling mean of every GPU pass the nodes hold into the chapter the sample belongs to.
+    // Folds the rolling mean of every GPU pass the nodes hold, and the draws and dispatches of every node's newest
+    // completed submission, into the chapter the sample belongs to.
     private CommandResult Sample(int index) {
         if (!m_running || (index < 0) || (index >= m_chapters.Count) || (gpuTiming is not { Available: true })) {
             return new CommandResult(Output: string.Empty);
         }
 
         var chapter = m_chapters[index];
+
+        if (gpuWork is not null) {
+            var (draws, dispatches) = (0L, 0L);
+
+            m_gpuNodes.Clear();
+            gpuWork.CopyNodes(nodes: m_gpuNodes);
+            foreach (var node in m_gpuNodes) {
+                if (!node.Work.TryReadCompleted(sample: m_gpuSample) || (m_gpuSample.Submission == 0L)) { continue; }
+
+                var summed = Puck.Abstractions.Gpu.GpuWorkReport.Summarize(sample: m_gpuSample);
+
+                draws += summed.Draws;
+                dispatches += summed.Dispatches;
+            }
+
+            var held = chapter.Submitted;
+
+            chapter.Submitted = ((held.Draws + draws), Math.Max(val1: held.DrawsMax, val2: draws), (held.Dispatches + dispatches), Math.Max(val1: held.DispatchesMax, val2: dispatches), (held.Count + 1));
+        }
 
         foreach (var timing in gpuTiming.Readings()) {
             if (timing.LastSubmission == 0) {

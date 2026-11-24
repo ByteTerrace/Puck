@@ -152,11 +152,11 @@ public static class WorldRenderRoot {
         packages.Register(factory: host.Pickers, package: RenderGraphPackageCatalog.SdfWorld);
         host.Environment = new SdfSkyEnvironmentPasses(views: host.Pickers);
         packages.Register(factory: host.Environment, package: RenderGraphPackageCatalog.SkyEnvironment);
-        // The root places each pane where the host's composer shows it this frame.
-        packages.Register(
-            factory: new PlacePackage(placements: host),
-            package: RenderGraphPackageCatalog.Place
-        );
+        // The root places each view and pane where the host's composer shows it this frame.
+        var place = new PlacePackage(placements: host);
+
+        packages.Register(factory: place, package: RenderGraphPackageCatalog.Place);
+        packages.Register(factory: place, package: RenderGraphPackageCatalog.PlaceViews);
 
         // Every post-process package the catalog offers, not only the ones the booted views.post rows run: a live views.post
         // edit may name any of them, and a factory reads its stages only when a pass builds.

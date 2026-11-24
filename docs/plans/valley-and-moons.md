@@ -21,8 +21,8 @@ work in the debug world; quarantined worlds stay quarantined.
 | Shadows | Partial | Key-light receiver splits at 16 and 120 m, second light at 40 m, casters reaching 200 m beyond each cascade toward the light (`SdfMeshShadowCascades`, authored as `render.shadowCoverage`); macro terrain shadowing is missing, and stretching the far cascade to the walls costs 25 times its vertices ([illumination step 1](illumination.md#the-build-order)). |
 | Depth transport | Exists, to qualify | Reconstruction packs coverage-weighted inverse distance in half lanes for harmonic-mean filtering; single samples already carry float `t`. Longer ranges are qualified, and lanes widened together only if precision runs out. |
 | Sky | Exists | `Disc` and `View` layers, stars, clouds, panorama. A `View` of another world stays at infinity and fills its region unless it asks to follow the viewer and to draw geometry alone (`InfinityViewSpec.Follows`, `GeometryCoverage`); a far view always uses geometry coverage. |
-| Atmosphere | Partial | A dome seen from the ground (`SdfAtmosphere`, `sdf-atmosphere.hlsli`); no altitude dependence, no spherical shell, no transition to vacuum. |
-| Worlds and portals | Partial | Portals are planes; adjacency seams are planar, and the debug world's `sky` seam to the moon is the first live one. A crossing maps a body by a turn about up and carries its yaw and velocity; a body's whole frame (pitch, roll, up, angular velocity) is not carried. A rider crosses behind the body it rides (`WorldMount`). |
+| Atmosphere | Partial | A dome seen from the ground (`SdfAtmosphere`, `sdf-atmosphere.hlsli`) whose fog and haze thin with height (`WorldRenderAirHeight`); a keyed look reads how high the viewer stands through a view clock (`WorldClockView`), so a sky fades to space as she climbs. No spherical shell. |
+| Worlds and portals | Partial | Portals are planes; adjacency seams are planar, and the debug world's `sky` seam to the moon is the first live one. A crossing maps a body by a turn about up and carries its yaw and velocity; a body's whole frame (pitch, roll, up, angular velocity) is not carried. A rider crosses behind the body it rides (`WorldMount`). An edge authors whether its two worlds are one place drawn together or two places (`WorldAdjacencyPresentation`). |
 | Regions | Partial | One physical field topology per world today (the combat and weather decisions widen it). |
 | Streaming | Missing | No predictive residency of surface tiles. |
 
@@ -115,9 +115,13 @@ what a federated world is for.
 | Its pull and a body's up | `WorldGravityArea` (a radial sphere), `WorldBodyUpPolicy`, `WorldUpTurnRates` | None |
 | The portal | The painting wing's `paintingFace` and the shared `arrivalFrame`; references, destinations and sessions | None |
 | The moon in the sky | `WorldRenderSkyLayer.View` and the infinity-view machinery (`InfinityViewSpec`, `InfinityViewFit`) | A view that moves with the viewer, bounds itself by a sphere and draws geometry alone |
+| One sun | The standard's day cycle on both worlds from one start and rate (`moon-frame.puck`'s shared day) | None |
+| The air's height | Keyed sky layers and the height fog; `timeline.clocks` | A view clock (`WorldClockView`): a clock whose phase is how far the viewer stands from a point |
 | The ship | A kit and a `fly` program in `worlds/standard/ship.puck`: three holds (`WorldHold`) over the walk program's operations | None |
+| The pilot's camera | A camera program in `worlds/standard/ship.puck` (`shipCamera`) | The kit's rider camera (`WorldMount.Camera`), and the ridden body delivered with its rider (`EntitySnapshot.Mount`) |
+| The flight as one line | A `routes` row (`worlds/debug/moon-route.puck`) played by the standard's `pilot` seat program | A route's flight step (`WorldRouteStep.Fly`) and a seat program's climb and sink buttons (`WorldSeatProgramOp.Rise`) |
 | Boarding | `ControlApplication` and `WorldEngagement.Compose` (possession), `WorldPerceptionAnchor`, the context button's engage probe | The kit's `mount` facet (`WorldMount`): the pilot's own body rides the body it drives, and `mount.board` (`WorldMountBoard`) boards it on a press from beside it |
-| The seam | `WorldAdjacency` rows, `WorldAdjacencyOwnership.Sweep`, the transfer escrow | A rider crosses behind the body it rides, and the destination hands it that body to drive again |
+| The seam | `WorldAdjacency` rows, `WorldAdjacencyOwnership.Sweep`, the transfer escrow | A rider crosses behind the body it rides, and the destination hands it that body to drive again; past an edge authored `Apart` the seat is presented in the neighbour's own scene |
 | A ship that stays a ship | `kits.assignment.select` and `looks.assignment.select` by a body register, as the Moth's suit crosses | None |
 
 ### Stages and how each is checked
@@ -150,46 +154,60 @@ Built by this feature:
   (`WorldPopulation.SeatRider`).
 - An adjacency that resolves its neighbours at a host boundary (`WorldAdjacencyFields.ResolveNeighbours`), so two
   adjacent worlds step in one wave.
+- The moon lit in the valley's sky. Both worlds run one day (`moon-frame.puck`), so the moon's lit side is the side
+  the valley's sun is on and its phase tells the hour.
+- A view clock (`WorldClockView`): a `timeline.clocks` row whose phase is how far the frame's first view stands from
+  a point, along an axis or in any direction. The debug world's `altitude` clock keys the day's air, the clouds and
+  the stars of space on it (`day.puck`), and the fog thins with height, so the sky at the seam is the sky the moon
+  draws past it.
+- A rider's camera (`WorldMount.Camera`): the camera program a seat takes in place of the seat rig while it rides or
+  drives a body of the kit, on whichever authority simulates it. An authority delivers the body a body rides
+  (`EntitySnapshot.Mount`), so a client frames a rider through its mount without that authority's grants. The
+  standard's ship authors its own (`shipCamera`).
+- A flight as a route (`WorldRouteStep.Fly`, `WorldSeatProgramOp.Rise`): `world.benchmark run moon` plays the round
+  trip through seat 1's own controls with the standard's `pilot` seat program (`shipPilot`), boarding included, and
+  the controls follow the seat across the seam. On a headless World both chapters arrive.
+- An edge that is two places (`WorldAdjacencyPresentation.Apart`): a seat that crossed the sky seam is presented in
+  the moon's own scene, so the ship and its pilot are drawn as they look, under the moon's light and exposure.
 
 Left open, in the order they matter to the trip:
 
-1. **The moon in the sky is unlit.** The view draws the moon where the frame
-   puts it, with the valley's sky round it, as a black disc: the sun that
-   lights the same ground for a body standing on it does not light it in the
-   sky view's instance. Publishing the view's image unexposed
-   (`SdfFrameBlock`'s expose share for a geometry-only view) did not change
-   it, so the image itself holds no light. Untried: the layer's
-   `shadows: false`, and the lights the sky view's instance is handed. The
-   check is a capture from the launch field in which the moon's sunlit side
-   is as bright as the valley's sunlit walls.
+1. **A keyed value reads one clock, so the valley's exposure cannot follow both the day and the
+   height.** Its exposure floor is keyed on the day, and above about 1,500 m the darkening sky
+   pulls the meter down to that floor: the ship and the moon blow out to white before the seam,
+   and the moon's own exposure takes over in one frame past it. The fix is a keyed scalar that
+   adds a second track on another clock (the day's floor plus a lift keyed on `altitude`), which
+   also lets one star layer answer both the night and the height. Until then the two stars layers
+   in `day.puck` stand in for the second. The check is the presented frames from 1,500 m to the
+   seam with the ship's hull holding its tone.
 2. **The valley is not in the moon's sky.** A view of the debug world from the
    moon draws that whole world again, every exhibit included, as one more
    residency. What a world shows of itself from far away has to be a product of
    its own (phase 4's scenery published for a far viewer) before the moon's sky
-   can hold the valley.
+   can hold the valley. Past the seam the pilot now sees the moon's own scene,
+   so the valley drops out of the view below in one frame; the moon's sky gains
+   a view of the debug world once one mesh store serves every residency
+   ([streaming and memory](streaming-and-memory.md)).
 3. **A refused device allocation ends the World.** With the moon's two
    residencies (the painting's window and the sky view) beside the debug world's
    own, the device's memory account refused a mesh region's growth and the
    frame threw (`SdfMeshRegionStore.EnsureCapacity`). A refusal has to
    shed detail, not end the run.
-4. **The pilot has no camera of her own.** The context button boards and
-   leaves the ship, but the camera is the Moth's chase rig on the ship: a
-   4.2 m boom on a 3 m hull, which fills the frame. A rig the seat takes while
-   it drives a body (a longer boom, the hull's pivot) is the possession work
-   the city's driver needs too ([the city plan](city.md)).
-5. **The air has no altitude.** The valley's sky is the same blue at the seam
-   as on the floor, and the moon's sky is black, so the sky changes in one frame
-   at the crossing. Phase 5's shell atmosphere is the fix: the air's layers and
-   the fog thin with the viewer's height, and exposure follows. The authored
-   surface is a third kind of `timeline.clocks` row beside the tick clock and
-   the state clock: a view clock, whose phase is how far the viewer stands
-   from a point, along an axis for a flat world or in any direction for a
-   round one, over an authored span. Every keyed look already reads a clock
-   through `WorldKeyResolver` and the state mirror, so a sky layer's opacity,
-   a star field's luminance, the fog and the exposure key on altitude as they
-   key on the day, and a last key eased `Step` holds past the span. One
-   environment resolves a frame (`WorldEnvironmentResolve`), so the clock
-   reads the frame's first view; seats sharing a split screen share it.
+4. **A body across a joined seam is drawn as a catalog rig.** Where an edge
+   presents its two worlds as one place, a seat that crossed keeps the boot
+   scene's catalog avatar and the neighbour's bodies are rigs inside the
+   seam's band (`WorldAdjacencySceneEmitter`), whatever looks they wear. The
+   sky seam is authored apart and does not meet it; a ground seam between two
+   worlds will. The pools that stamp a creation look read one world's bodies
+   (`WorldBodyStampCensus`), so the fix gives the boot scene's pool the
+   travelling seat and the band's bodies as stamp sources.
+5. **Each authority keeps its own day.** The two worlds start their `day`
+   rows alike and advance them at one rate, so they agree until one is written
+   (`world.state.cell.set day`): the moon's phase then stops matching the
+   valley's sun. A clock one world reads from another needs a federated
+   read. At night the valley's sun casts no light below its horizon while
+   the moon's shines all the way round, so a night crossing lights the ship in
+   one frame.
 6. **A crossing turns a body about up only.** `WorldFrameIsometry` and the
    adjacency validator admit a yaw, so the two worlds' axes agree and the side of
    the moon that faces the valley has its up pointing down in the shared frame.
@@ -203,13 +221,10 @@ Left open, in the order they matter to the trip:
    waits for the companion plan's roles.
 9. **The moon's cell.** The sectors bake at the terrain pass's cell, so the
    ground shows facets underfoot, as the valley's walls do.
-10. **The pilot's view past the seam.** Across the seam the window shows a
-    grey gradient and the pilot and ship as bare part primitives, where a
-    walker out of the painting sees the moon's ground and sky (and the same
-    primitives over the Moth). The crossing also bakes the whole debug world a
-    second time, as the moon's neighbour across the seam, and skips eight
-    presentations. The neighbour a seam shows has to be the far product of
-    gap 2, not the world again.
+10. **The crossing stalls.** The tick a body crosses the seam, a headless
+    World steps no tick for about half a second each way (the route's own
+    report names it), and a windowed one skips presentations. What the
+    crossing waits on is not attributed yet.
 11. **A re-drive reads the neighbour as it stands.** The tape carries when a
     neighbour delivered, never what it showed (`WorldEventFeed`'s remarks), so
     a re-drive of a tick in which a body met a neighbour's bodies or ground
@@ -222,8 +237,10 @@ Left open, in the order they matter to the trip:
     population's revision, 2 live and 3 replayed
     (`WorldTick.AppendRoutedInputHash`). Until it reproduces, the trip has no
     committed scenario.
-13. **A scripted flight ends at a crossing.** `body.fly` holds its input for
-    the body's source world only, so a scripted trip is one line per leg.
+13. **The climb is slow.** The ship's boost multiplies its speed over the
+    ground and not its climb, so the 5,900 m the route climbs take about a
+    hundred seconds each way. Whether the boost lifts too is the ship's kit to
+    author; how long the ascent should be is the owner's open question below.
 
 ## The owner's rulings
 

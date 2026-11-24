@@ -54641,6 +54641,19 @@
             "description": "An authored non-negative minimum ownership deadband in world units. The runtime still derives its contact/vertical safety threshold and uses the larger value; authoring this can widen a seam but never weaken its safety floor. Reciprocal rows must agree.",
             "type": "number",
             "default": 0
+          },
+          "presentation": {
+            "description": "How a presentation of this world shows a seat that crossed the edge. Absent is Joined.",
+            "enum": [
+              "Joined",
+              "Apart"
+            ],
+            "default": "Joined",
+            "title": "WorldAdjacencyPresentation",
+            "x-enumDescriptions": {
+              "Joined": "One place: a seat that crossed stays presented in the frame of the world it left, the neighbour\u0027s ground and bodies drawn in the seam\u0027s band (a doorway between two rooms of a quilt).",
+              "Apart": "Two places: a seat that crossed is presented in the neighbour\u0027s own scene, with its sky, its lights and its bodies as they look there, as a traveller through a portal is (a sky seam between a planet and a moon, where the crossing leaves the band far behind)."
+            }
           }
         },
         "required": [

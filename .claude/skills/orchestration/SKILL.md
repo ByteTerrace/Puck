@@ -92,13 +92,14 @@ collided runs, while the same expensive work ran eight times).
   several lanes' requests, timing goes through `puck measure` or a direct
   `bench frames` under `puck lease quiet`, and a red result goes back to the
   lane that owns it. The full benchmark route runs once per batch on the merged
-  tip (`puck benchmark --route debug`, whose default window is the frame bar's
-  2560 by 1440 on the RTX 4070), never once per lane. Its report is the batch's
-  frame-time reading for what it ran and no more: the RTX 4070 at that size,
-  each backend it played, and the authority in process. The benchmark has no
-  remote endpoint (`BenchmarkCommand`'s options), so it does not read the
-  remote topology, and a verdict on that topology waits for the route against
-  a remote authority ([the benchmark's open items](../../../docs/plans/open-items.md#the-benchmark));
+  tip (`puck lease quiet --wait 600 -- puck benchmark`, the standing set:
+  the debug route and the moon round trip on each backend, the remote leg and
+  the four-seat leg, each window at its device's frame bar), never once per
+  lane ([what the lead runs](../../../docs/plans/benchmark.md#what-the-lead-runs)).
+  Its report is the batch's frame-time reading for what it ran and no more:
+  the device at that size, each backend and topology it played, and the legs
+  it lists unrun with their reasons; the debug world's remote delivery is
+  still refused by name ([the benchmark's open items](../../../docs/plans/open-items.md#the-benchmark));
   every frame-bar verdict the lead reports names the device, the size, the
   topology and the real-time route it rests on. A landing never waits for the
   window.

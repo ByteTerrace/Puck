@@ -14,7 +14,6 @@ internal static class BenchmarkSummary {
     // The counters a chapter's work per iteration is read from: each line's label and the counter names whose change is
     // summed for it.
     private static readonly (string Label, string[] Counters)[] Work = [
-        ("dispatches", ["counters.gpu.dispatches", "counters.gpu.dispatches.indirect"]),
         ("captures", ["counters.sdf.captures.run"]),
         ("records restaged", ["counters.sdf.instances.records.posed"]),
         ("field queries marched", ["counters.world.field-queries.surface.marched", "counters.world.field-queries.clearance.marched"]),
@@ -52,7 +51,11 @@ internal static class BenchmarkSummary {
         _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"\n## {run["leg"] ?? run["route"]} · {run["backend"]} · {adapter}\n\n");
         _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"- Device profile {profile?["profile"] ?? "none"} (table {profile?["table"] ?? "none"}); window {(window is null ? "none" : $"{window["width"]}x{window["height"]} {window["presentation"]}")}{((conditions["frameBar"] is { } bar) ? $", sized by --frame-bar {bar}" : string.Empty)}; budget {Number(node: run["budgetMilliseconds"]):0.00} ms ({run["budgetSource"]}).\n");
         _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"- Topology {topology?["kind"] ?? "none"}{((topology?["endpoint"] is { } endpoint) ? $" ({endpoint})" : string.Empty)}{((conditions["seats"] is { } seats) ? $", {seats} seat(s)" : string.Empty)}; start {run["start"]}; {run["iterations"]} iteration(s){((Number(node: run["iterationsDropped"]) > 0) ? $", {run["iterationsDropped"]} DROPPED past the recording" : string.Empty)}.\n");
-        _ = text.Append(value: ((reasons.Count == 0) ? "- Machine: clean.\n" : $"- Machine: DISTURBED, its timings are not a verdict: {string.Join(separator: "; ", values: reasons)}.\n"));
+        _ = text.Append(value: ((reasons.Count > 0)
+            ? $"- Machine: DISTURBED, its timings are not a verdict: {string.Join(separator: "; ", values: reasons)}.\n"
+            : ((run["machine"]?["verdict"]?.GetValue<string>() == BenchmarkConditions.Unwatched)
+                ? "- Machine: UNWATCHED: no verb read the rest of the machine while it played; only the adapter's clock was judged.\n"
+                : "- Machine: clean.\n")));
         if (run["complete"]?.GetValue<bool>() != true) {
             _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"- Ended early: {run["ended"]}.\n");
         }
@@ -105,6 +108,10 @@ internal static class BenchmarkSummary {
         var frames = Change(readings: readings, name: "counters.render.record.frames");
         var work = new List<string> { string.Create(provider: CultureInfo.InvariantCulture, handler: $"allocated {Number(node: chapter["frames"]?["allocatedBytesPerIteration"]):0} B an iteration") };
 
+        if (chapter["submitted"] is JsonObject submitted) {
+            work.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"dispatches {Number(node: submitted["dispatchesMean"]):0} a frame (max {submitted["dispatchesMax"]}), draws {Number(node: submitted["drawsMean"]):0} (max {submitted["drawsMax"]}) over {submitted["samples"]} samples"));
+        }
+
         foreach (var (label, counters) in Work) {
             var sum = counters.Select(selector: name => Change(readings: readings, name: name)).Where(predicate: static change => change is not null).Sum(selector: static change => change!.Value);
 
@@ -123,7 +130,7 @@ internal static class BenchmarkSummary {
                 _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"- Residencies ({residencies.Count}): {string.Join(separator: ", ", values: residencies.OfType<JsonObject>().Select(selector: static row => $"{row["name"]} ({row["groups"]} groups)"))}\n");
             }
             if (census["duplicates"] is JsonArray { Count: > 0 } duplicates) {
-                _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"- DUPLICATE residencies, the same groups held twice: {string.Join(separator: "; ", values: duplicates.Select(selector: static names => string.Join(separator: " = ", values: (names as JsonArray ?? []).Select(selector: static name => name!.ToString()))))}\n");
+                _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"- DUPLICATE residencies, one world's groups held twice: {string.Join(separator: "; ", values: duplicates.OfType<JsonObject>().Select(selector: static pair => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{string.Join(separator: " and ", values: (pair["residencies"] as JsonArray ?? []).Select(selector: static name => name!.ToString()))} share about {Number(node: pair["shared"]):P0} of their groups")))}\n");
             }
         }
     }

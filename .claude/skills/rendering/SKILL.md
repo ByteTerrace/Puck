@@ -651,6 +651,7 @@ add the row you found.
 | Know which draws a raster pass selected and at which level (triangles drawn by level and tier, mesh bytes no pass selected) | The occlusion kernel's selection marks, taken only while a reading asked (`SdfWorldTables.MarksSelections`), one stage in `SdfWorldTables.SelectionMarkFrames`, read back with the portal sight verdicts through the slot's one readback (`SdfMeshOcclusion`) and read against the row epoch (`SdfWorldTables.ObserveSelectionMarks`); `world.residency`'s selection line | `src/Puck.SdfVm` |
 | Show something where a group's detail has not landed or was refused | The group's floor: planned first on an arrival in view (`SdfMeshDemand.Sees`; one out of view bakes its detail directly, behind the groups in view), kept while detail draws, evicted to on refusal (`SdfMeshPathBake.Floor.cs`, `Group.KeptFloor`); `world.residency`'s floor line | [mesh bake](references/mesh-bake.md#groups-poses-and-materials) |
 | Name a backend's compiled-kernel extension, or its target from an extension or some bytecode | `ShaderBytecode.FileExtension` (the extension), `ShaderTargets` (`Of` a backend or bytecode, `FileExtension` and `DeployedPath` of a `ShaderTarget`); never a `.dxil`/`.spv` ternary or string compare. A kernel-loading API (`SdfKernelSet.Load`, `SdfWorldPipelineCatalog.LoadDeployed`, `GpuRegionCopyPass`, `SdfMeshRasterPass`) takes a `ShaderTarget`, never an extension string | `src/Puck.Abstractions/Gpu/Shaders`, `src/Puck.Shaders.Model/Compiler/ShaderTarget.cs` |
+| Place several images into rects of one output in one pass, or let a package pass leave trailing inputs unbound | `RenderGraphPackageCatalog.PlaceViews` (the `place` kernel's body, `place.hlsli`, over up to `PlaceSourceCount` sources, recorded by `PlacePackage`, each source placed by its version's name through `IRenderGraphPlacements`), which `WorldRootGraph` places every view and pane through; `RenderGraphPackage.OptionalInputs` | `src/Puck.Shaders/Graph/PlacePackage.cs`, `src/Puck.Shaders.Model/Graph/RenderGraphPackages.cs`; [shaders reference](../../../docs/reference/shaders.md#the-default-root-graph) |
 | Build a render-graph package's one cached pass pipeline and recover it in `Create` | `PassPipelineBuild.AcquireAsync` and `Of` | `src/Puck.Shaders/Graph` |
 | Let a package recorder record on a job-pool worker, or change state outside its instance before it does | `IRenderGraphPackageRecorder.PrepareRecord` (frame thread, before the wave forks) and `RecordingDomain` (what recordings that must share a thread name: an SDF view's residency through `SdfViewRecorder`), grouped by `RenderGraphRuntime.RecordWave` | `src/Puck.Shaders/Graph/RenderGraphRuntime.Waves.cs`; [runtime contracts](references/runtime-contracts.md#1-image-lifetime-is-leased-per-image-and-per-reader) |
 | Spread one node's passes across command lists recorded on several threads | `IRenderGraphPackageEmitter` (`Decide` in pass order, `Emit` on a lane), the node's walk and lanes (`ShaderPipelineRenderNode.RecordPasses`, `EmitLane`, `FrameSlot.Lists`), the wave's emission fork (`RenderGraphRuntime.EmitWave`), lane counts (`GpuWorkLedger.EnterLane`) | `src/Puck.Shaders/ShaderPipelineRenderNode.Emission.cs`; [runtime contracts](references/runtime-contracts.md#1-image-lifetime-is-leased-per-image-and-per-reader) |
@@ -1207,7 +1208,15 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `world.screenshot <path.png> presented 8`), which holds and settles nothing
   and reports each frame's changed pixels and luma change against the one
   before. A still scene with `world.temporal on` that changes in a presented
-  burst is flickering; a clean settled still proves nothing about it.
+  burst is flickering; a clean settled still proves nothing about it. The
+  report's changed-pixel counts include every moving body in frame (the Moth's
+  idle, the companion's hover, the lawn's grass), which reads as half a percent
+  of the frame changing: frame a view that holds none
+  (`view.override camera look`), or read the burst's files and take each
+  pixel's luma range over the still region. The debug world's day runs on the
+  engine's clock, a whole day in 24 minutes, so two captures minutes apart show
+  different sun, haze and exposure: compare captures taken within a minute, or
+  hold the day.
 - **A `views.graphs` pane is not an SDF image.** It is a render-graph instance
   with its own shader; it reloads with `pipeline.reload`, not
   `world.shaders.reload`.

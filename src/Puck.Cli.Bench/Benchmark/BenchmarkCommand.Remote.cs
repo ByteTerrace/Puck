@@ -136,7 +136,7 @@ public static partial class BenchmarkCommand {
 
         while (reader.ReadLine() is { } line) {
             if (line.StartsWith(value: "[world.transfer: ", comparisonType: StringComparison.Ordinal) && line.Contains(value: "refused reservation", comparisonType: StringComparison.Ordinal)) {
-                return ConsoleReadings.Truncate(text: line.Length <= 600 ? line : line[..600]);
+                return ((line.Length <= 600) ? line : (line[..600] + "..."));
             }
         }
 

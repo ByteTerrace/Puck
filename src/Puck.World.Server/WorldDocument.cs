@@ -52,6 +52,16 @@ public sealed partial class WorldDocument {
 
     /// <summary>Gets the live world definition, swapped in place as buffered edits apply.</summary>
     internal WorldDefinition Definition => m_definition;
+    /// <summary>Gets the <c>admission</c> section of the live definition as the last install published it: the one
+    /// part of the document a thread outside the tick may read, since a connection is admitted and its credential
+    /// rechecked on network threads while a tick runs.</summary>
+    internal IReadOnlyList<WorldAdmissionEntry>? Admission => Volatile.Read(location: ref m_admission);
+    /// <summary>Gets the live definition's <c>host.authority</c> as the last install published it, readable from any
+    /// thread as <see cref="Admission"/> is.</summary>
+    internal string? HostAuthority => Volatile.Read(location: ref m_hostAuthority);
+
+    private IReadOnlyList<WorldAdmissionEntry>? m_admission;
+    private string? m_hostAuthority;
     /// <summary>Gets the install ordinal of the live definition within this activation: zero for the boot document,
     /// one more at every install since.</summary>
     internal long Sequence => m_sequence;
@@ -127,6 +137,8 @@ public sealed partial class WorldDocument {
 
         m_base = definition;
         m_definition = definition;
+        m_admission = definition.Admission;
+        m_hostAuthority = definition.Host.Authority;
         m_host = host;
         m_revision = new WorldSourceRevision(ContentHash: string.Empty, Definition: definition);
         WorldContentIndex.Register(definition: definition);
@@ -153,6 +165,8 @@ public sealed partial class WorldDocument {
         var previous = m_definition;
 
         m_definition = definition;
+        Volatile.Write(location: ref m_admission, value: definition.Admission);
+        Volatile.Write(location: ref m_hostAuthority, value: definition.Host.Authority);
         WorldContentIndex.Register(definition: definition, previous: previous);
         if (Host.Arena is { } arena) { WorldStateReader.Bind(definition, arena); }
         m_sequence++;

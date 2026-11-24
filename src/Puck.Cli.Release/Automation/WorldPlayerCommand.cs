@@ -318,7 +318,6 @@ public static class WorldPlayerCommand {
         var directory = Path.Combine(path1: logs, path2: "warm-headless");
         var request = new WorldLaunchRequest(Artifact: Path.Combine(path1: output, path2: "Puck.World.dll"), Step: Verb) {
             Arguments = ["--paused", "--cache-dir", Path.Combine(path1: output, path2: CacheName)],
-            Executable = Path.Combine(path1: output, path2: (OperatingSystem.IsWindows() ? "Puck.World.exe" : "Puck.World")),
             ExitAfterSeconds = WorldLaunch.Backstop(deadline: TimeSpan.FromMinutes(minutes: 10)),
             Shape = WorldShape.Headless,
             StateDirectory = Path.Combine(path1: directory, path2: "state"),
@@ -445,7 +444,6 @@ public static class WorldPlayerCommand {
             Arguments = ["--width", target.Width.ToString(provider: CultureInfo.InvariantCulture), "--height", target.Height.ToString(provider: CultureInfo.InvariantCulture),
                 "--cache-dir", Path.Combine(path1: output, path2: CacheName), "--mesh-cache", policy],
             Backend = backend,
-            Executable = Path.Combine(path1: output, path2: (OperatingSystem.IsWindows() ? "Puck.World.exe" : "Puck.World")),
             ExitAfterSeconds = WorldLaunch.Backstop(deadline: deadline),
             Shape = WorldShape.Windowed,
             StateDirectory = Path.Combine(path1: directory, path2: "state"),

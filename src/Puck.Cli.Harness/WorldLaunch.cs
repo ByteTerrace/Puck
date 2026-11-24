@@ -92,8 +92,25 @@ public sealed record WorldLaunchRequest(string Step, string Artifact) {
             _ => null,
         }, Store: WorldDevices.StoreOf(arguments: Arguments))
         : new HostStartProfile(Kind: Kind));
-    /// <summary>Gets the program the launch starts: <see cref="Executable"/>, or <c>dotnet</c>.</summary>
-    public string FileName => (Executable ?? "dotnet");
+    /// <summary>Gets the program the launch starts: <see cref="Executable"/>, the build's own host when
+    /// <see cref="Artifact"/> is a self-contained build (a player build), which <c>dotnet</c> cannot run, or
+    /// <c>dotnet</c>.</summary>
+    public string FileName => (Host ?? "dotnet");
+
+    // The executable that starts the World in place of dotnet: the named one, or a self-contained build's apphost beside
+    // its entry assembly, found by the runtime configuration that carries the runtime inside the build.
+    private string? Host => (Executable ?? SelfContainedHost(artifact: Artifact));
+
+    /// <summary>Returns the apphost of a self-contained build: the executable beside its entry assembly, when the build's
+    /// runtime configuration carries the runtime inside it (<c>includedFrameworks</c>).</summary>
+    /// <param name="artifact">The build's entry assembly.</param>
+    /// <returns>The apphost's path, or <see langword="null"/> for a framework-dependent build or one with no apphost.</returns>
+    public static string? SelfContainedHost(string artifact) {
+        var configuration = Path.ChangeExtension(path: artifact, extension: ".runtimeconfig.json");
+        var host = Path.ChangeExtension(path: artifact, extension: (OperatingSystem.IsWindows() ? ".exe" : null));
+
+        return (File.Exists(path: configuration) && File.Exists(path: host) && File.ReadAllText(path: configuration).Contains(value: "\"includedFrameworks\"", comparisonType: StringComparison.Ordinal)) ? host : null;
+    }
 
     /// <summary>Builds the World's command line after <see cref="FileName"/>: the entry assembly (unless an executable
     /// starts it), the shared arguments every World a verb starts carries, then <see cref="Arguments"/>.</summary>
@@ -101,7 +118,7 @@ public sealed record WorldLaunchRequest(string Step, string Artifact) {
     public IReadOnlyList<string> CommandLine() {
         var arguments = new List<string>();
 
-        if (Executable is null) { arguments.Add(item: Artifact); }
+        if (Host is null) { arguments.Add(item: Artifact); }
         arguments.AddRange(collection: new WorldBootArguments(World: World) {
             Backend = Backend,
             ExitAfterSeconds = ExitAfterSeconds,
