@@ -483,7 +483,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// shows cost a frame at most one capture; on any other frame every owed residency. Every other residency is
     /// prepared only for an instance the frame reads (<see cref="PrepareRead"/>), or when a recording or a new binding
     /// reaches it.</remarks>
-    public void BeginFrame(in FrameContext context) {
+    public void BeginFrame(in FrameContext context, JobPool? jobs = null) {
         m_context = context;
         ShadeReleases.BeginFrame();
 
@@ -554,6 +554,12 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             CaptureForPack(residency: due, context: in context);
         }
         SdfCaptureWork.ProcessWork.Add(kind: SdfCaptureWork.MinimumHeld, amount: held);
+        // The host's pack needs nothing the readers' rounds resolve: its screens' sources were published before the frame
+        // and its views were filmed with its capture. So it begins here and runs on its lane beside the rounds, and the
+        // frame's pack (ReadsPrepared) joins it.
+        if ((jobs is { Serial: false }) && (m_host is { IsReleased: false } packed) && packed.BeginPack(context: in context)) {
+            _ = packed.PackAhead();
+        }
     }
 
     /// <summary>The seconds a park's bytes count as given back before the device's retirement has disposed them, so one
@@ -723,6 +729,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                 }
             }
             fork.Run(jobs: jobs);
+            // Every upload is queued, in schedule order, before the first hand-off, which carries them all to the queue in
+            // one execute; each publishes only after that (SdfWorldTables.PublishUpload), and all of it precedes every view.
+            fork.Each(action: static residency => residency.QueueStage());
             fork.Each(action: static residency => residency.EndStage());
         } finally {
             fork.Clear();
@@ -1069,10 +1078,13 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         // The view the instance's passes follow, and how often a change of it could not be followed in place, which
         // moves the revision and so rebuilds the passes.
         public SdfWorldView? Followed { get; set; }
+        // The counts move with the resolved residency's capacity. An instance that resolves no residency for a while (its
+        // world released or not yet routed, as at a crossing) keeps the capacity it was last counted at, so it neither
+        // rebuilds for the gap nor counts its scratch at zero viewports and instances, which no buffer can be sized by.
         public long Revision {
             get {
                 lock (m_gate) {
-                    var capacity = (Residency?.CapacityRevision ?? 0L);
+                    var capacity = (Residency?.CapacityRevision ?? m_revisionCapacity);
 
                     if ((m_revisionCapacity != capacity) || (m_revisionSwitches != Switches)) {
                         m_revisionCapacity = capacity;
@@ -1105,9 +1117,10 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         public ShaderPipelineStorageCounts CountsAt(uint width, uint height) => (Residency?.CountsAt(
             height: height,
             width: width
-        ) ?? new ShaderPipelineStorageCounts(
-            Height: height,
-            Width: width
+        ) ?? SdfWorldResidency.CountsFor(
+            height: height,
+            instances: ((int)Math.Clamp(value: Volatile.Read(location: ref m_revisionCapacity), min: 1L, max: int.MaxValue)),
+            width: width
         ));
     }
 }

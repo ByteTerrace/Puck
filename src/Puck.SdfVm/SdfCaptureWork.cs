@@ -32,6 +32,11 @@ public static class SdfCaptureWork {
     public static readonly WorkKind PackedBeside = new(name: "sdf.captures.packed-beside", unit: "residencies", workClass: WorkClass.Pacing);
     /// <summary>Counts those of <see cref="PackedBeside"/> a job-pool worker packed, as against the frame thread.</summary>
     public static readonly WorkKind PackedOnWorker = new(name: "sdf.captures.packed-on-worker", unit: "residencies", workClass: WorkClass.Pacing);
+    /// <summary>Counts the packs a frame handed to the residency's own lane once its host had captured
+    /// (<see cref="SdfWorldResidency.PackAhead"/>), which run beside the readers' capture rounds.</summary>
+    public static readonly WorkKind PackedAhead = new(name: "sdf.captures.packed-ahead", unit: "residencies", workClass: WorkClass.Pacing);
+    /// <summary>Counts the joins of a pack run ahead that found it still running, so the frame thread waited for it.</summary>
+    public static readonly WorkKind PackAheadWaits = new(name: "sdf.captures.pack-ahead-waits", unit: "joins", workClass: WorkClass.Pacing);
     /// <summary>Counts the residencies whose uploads were recorded as partitions of one fork of the job pool
     /// (<see cref="SdfWorldPasses.RendersScheduled"/>), the forking thread's own share included.</summary>
     public static readonly WorkKind UploadedBeside = new(name: "sdf.captures.uploaded-beside", unit: "residencies", workClass: WorkClass.Pacing);
@@ -45,5 +50,5 @@ public static class SdfCaptureWork {
     public static readonly WorkKind Pumped = new(name: "sdf.captures.pumped", unit: "residencies", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the process's capture counts.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.captures", kinds: [Held, Run, Minimum, MinimumHeld, CapturePacks, CapturePacksOnWorker, PackedBeside, PackedOnWorker, UploadedBeside, UploadedOnWorker, Pumped]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.captures", kinds: [Held, Run, Minimum, MinimumHeld, CapturePacks, CapturePacksOnWorker, PackedBeside, PackedOnWorker, PackedAhead, PackAheadWaits, UploadedBeside, UploadedOnWorker, Pumped]);
 }

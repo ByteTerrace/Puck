@@ -41,8 +41,9 @@ public sealed partial class SdfWorldTables {
     private bool m_meshStoreCopies;
 
     /// <summary>Opens the frame's upload on the frame thread: waits the previous upload and takes the next ring slot.
-    /// <see cref="RecordUpload"/> then records it and <see cref="CloseUpload"/> submits it, in that order, once
-    /// each.</summary>
+    /// <see cref="RecordUpload"/> then records it and <see cref="CloseUpload"/> submits it (or <see cref="QueueUpload"/>,
+    /// <see cref="HandOffUpload"/> and <see cref="PublishUpload"/> do, for uploads handed over together), in that order,
+    /// once each.</summary>
     /// <exception cref="ObjectDisposedException">The tables are disposed.</exception>
     internal void OpenUpload() {
         ObjectDisposedException.ThrowIf(
@@ -134,8 +135,17 @@ public sealed partial class SdfWorldTables {
         recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
         recorder.EndCommandBuffer(commandBufferHandle: commandBuffer);
     }
-    /// <summary>Submits the recorded upload fenced, on the frame thread, and publishes it to the tables' readers.</summary>
+    /// <summary>Submits the recorded upload fenced, hands it to the queue and publishes it to the tables' readers, on the
+    /// frame thread: <see cref="QueueUpload"/>, the hand-off, then <see cref="PublishUpload"/>.</summary>
     internal void CloseUpload() {
+        QueueUpload();
+        m_frameFences[m_currentSlot].HandOff();
+        PublishUpload();
+    }
+    /// <summary>Submits the recorded upload fenced, on the frame thread. In an open batch the submission is deferred, and
+    /// its fence reads as unsignaled until the batch hands it to the queue, so a caller that queues several residencies'
+    /// uploads hands them over together, by one split, before it publishes any (<see cref="PublishUpload"/>).</summary>
+    internal void QueueUpload() {
         using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Upload);
         var slot = m_currentSlot;
 
@@ -143,10 +153,26 @@ public sealed partial class SdfWorldTables {
             commandBufferHandles: [m_commandPools[slot].CommandBufferHandle],
             fence: m_frameFences[slot]
         );
-        // A deferred upload can carry the shared mesh store's compaction for another residency.
-        // Hand it to the queue before publishing any of its writes, including on a late stage.
-        // The fence stays armed for retirement. HandOff does not wait for GPU completion.
-        m_frameFences[slot].HandOff();
+    }
+    /// <summary>Hands the queued upload to the queue if its batch has not yet (<see cref="IGpuSubmissionFence.HandOff"/>),
+    /// with every submission deferred before it: the first of a frame's uploads to hand off carries the others queued
+    /// ahead of the frame's views in one execute.</summary>
+    internal void HandOffUpload() {
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Upload);
+        m_frameFences[m_currentSlot].HandOff();
+    }
+    /// <summary>Publishes the queued upload to the tables' readers once it has reached the queue.</summary>
+    /// <exception cref="InvalidOperationException">The upload is still deferred in an open batch.</exception>
+    internal void PublishUpload() {
+        var slot = m_currentSlot;
+
+        // Invariant: nothing the upload writes is published (the shared mesh store's compaction, which another residency's
+        // views read, the shadows' slot, the upload count the background work binds against) before the upload reached
+        // the queue. Enforced here, the one door to publication: a deferred upload is refused. The fence stays armed for
+        // retirement; reaching the queue waits for no GPU completion.
+        if (!m_frameFences[slot].ReachedQueue) {
+            throw new InvalidOperationException(message: "An upload is published only once it has reached the queue; hand it off first.");
+        }
         m_shadows?.Submitted(slot: slot);
         m_uploads = checked((m_uploads + 1UL));
         if (m_meshStoreCopies) { m_meshStoreCopies = false; m_meshStore.SubmittedOwed(); }
