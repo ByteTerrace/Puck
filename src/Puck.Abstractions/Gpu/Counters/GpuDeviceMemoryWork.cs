@@ -253,7 +253,7 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
                     Peak: row.Peak,
                     Released: row.Released,
                     Segment: row.Segment
-                ))];
+                ) { AtSegmentPeak = row.AtPeak })];
         }
     }
 
@@ -406,6 +406,7 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             row.Allocate(bytes: bytes);
             m_owners?.Settle(admission: grant.Admission, segment: placed, settlement: GpuMemorySettlement.Counted);
             named?.Allocate(bytes: bytes);
+            NotePeak(row: row);
 
             if (segments.ExpectedPool(role: role) != placed.Pool) {
                 row.Disagreements++;
@@ -550,6 +551,7 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
 
             entry.Placed += bytes;
             named.Allocate(bytes: bytes);
+            NotePeak(row: entry.Row);
             m_placements.Add(key: token, value: new Placement(Allocation: entry, Bytes: bytes, Family: named));
 
             return token;
@@ -688,18 +690,37 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             observer?.Change(backing: MemoryBacking.DeviceBlocks, bytes: -bytes);
         }
     }
-    // One segment's row: the physical row of its device blocks.
+    // One segment's row: the physical row of its device blocks, and its held and named bytes when its families were last
+    // read at its peak (NotePeak).
     private sealed class SegmentRow(GpuMemorySegment segment, IAllocationObserver? observer) : HeldRow(namedIn: null, observer: observer) {
         public GpuMemorySegment Segment = segment;
         public long Disagreements;
         public long Named;
+        public long PeakReadHeld;
+        public long PeakReadNamed;
     }
-    // One family's row in one segment, a part of that segment's row.
+    // One family's row in one segment, a part of that segment's row, and what it held when the segment's families were
+    // last read at the segment's peak.
     private sealed class FamilyRow(string family, SegmentRow segment, IAllocationObserver? observer) : HeldRow(namedIn: segment, observer: observer) {
         public string Family { get; } = family;
         public SegmentRow Parent { get; } = segment;
+        public long AtPeak;
 
         public GpuMemorySegment Segment => Parent.Segment;
+    }
+    // The bytes a segment's held and named bytes grow by, at its peak, before its families are read again: what each
+    // family's AtPeak may lag the peak's true moment by.
+    private const long PeakReadBytes = (1L << 20);
+    // Under m_gate, after a family names more of a segment: while the segment stands at its peak and has grown by
+    // PeakReadBytes since its families were last read there, reads what each family of the segment holds, so a reading
+    // can name who held the most the device ever held, not each family's own peak taken at different moments.
+    private void NotePeak(SegmentRow row) {
+        if ((row.Held < row.Peak) || (((row.Held + row.Named) - (row.PeakReadHeld + row.PeakReadNamed)) < PeakReadBytes)) { return; }
+        row.PeakReadHeld = row.Held;
+        row.PeakReadNamed = row.Named;
+        foreach (var family in m_families.Values) {
+            if (ReferenceEquals(objA: family.Parent, objB: row)) { family.AtPeak = family.Held; }
+        }
     }
 }
 /// <summary>One segment's row of a backend's device memory ledger, in bytes.</summary>
@@ -724,4 +745,8 @@ public readonly record struct GpuSegmentLedger(GpuMemorySegment Segment, long He
 /// <param name="Peak">The most they held at once.</param>
 /// <param name="Allocated">The bytes its resources were given there over the process's life.</param>
 /// <param name="Released">The bytes its resources gave back there over the process's life.</param>
-public readonly record struct GpuFamilyLedger(string Family, GpuMemorySegment Segment, long Held, long Peak, long Allocated, long Released);
+public readonly record struct GpuFamilyLedger(string Family, GpuMemorySegment Segment, long Held, long Peak, long Allocated, long Released) {
+    /// <summary>Gets the bytes the family held when the segment last stood at its peak, read within a mebibyte of that
+    /// moment: beside every family's, who held the most the segment ever held at once.</summary>
+    public long AtSegmentPeak { get; init; }
+}
