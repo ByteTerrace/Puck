@@ -172,20 +172,8 @@ revision counters, not traced.
 
 ### A node's own history survives a withdrawal
 
-Confirmed. A withdrawal unpublishes and stops there:
-
-`src/Puck.Shaders/ShaderPipelineRenderNode.cs:2203-2210`
-
-```csharp
-    public void WithdrawPublication() {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-        Unpublish();
-        m_publicationLost = true;
-    }
-```
+`ShaderPipelineRenderNode.WithdrawPublication` clears the publication and marks
+it lost. The node keeps its history storage.
 
 Only `ShaderPipelineRenderNode.Reset` marks the node's storage uninitialized
 (`src/Puck.Shaders/ShaderPipelineRenderNode.Tracker.cs`). An authored

@@ -472,6 +472,7 @@ public sealed partial class RenderGraphRuntime {
 
             if (m_nodes[index] is { } node) {
                 node.CaptureArmed = m_onNodeCaptureArmed;
+                node.PublicationAbandoned = m_onPublicationAbandoned;
             }
             if (m_sources[index] is { } source) {
                 uploadSources.Add(item: index);

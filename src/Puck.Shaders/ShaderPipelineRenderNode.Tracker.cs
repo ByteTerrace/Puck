@@ -256,20 +256,12 @@ public sealed partial class ShaderPipelineRenderNode {
     // An output a package that drew nothing leaves standing for an input publishes that input: an owned one moved into the
     // output layout, a host-owned one handed back in its host's layout with the rest.
     private void RecordPresentation(RuntimeResource selected, int slot, nint command, IGpuRecorder recorder) {
-        var (published, publishedName, instance) = PublicationOf(
+        var (published, _, instance) = PublicationOf(
             selected: selected,
             slot: slot
         );
 
         var outputLayout = m_outputLayout;
-
-        m_publishedLayout = (published.Spec.IsExternal
-            ? ResolveExternalLayout(name: published.Spec.Name)
-            : outputLayout);
-        // An external output that stands for nothing publishes the preview the node encodes it into, an image of its own.
-        m_publishedBinding = (((selected.Alias.Target is not null) && published.Spec.IsExternal)
-            ? publishedName
-            : null);
 
         if (
             !published.Spec.IsExternal &&

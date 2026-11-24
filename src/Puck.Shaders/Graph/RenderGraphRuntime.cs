@@ -13,7 +13,8 @@ namespace Puck.Shaders;
 /// <param name="Output">An exported image or buffer version of the producer, or null for its default output.
 /// Selection names the resource from the scheduled producer frame, including a standing or previous frame.</param>
 /// <param name="Optional">Whether an absent named image binds the shared stand-in while that optional graph feature is off.</param>
-public readonly record struct RenderGraphRuntimeInput(string Version, string Producer, string? Output = null, bool Optional = false);
+/// <param name="SampledByName">Whether a package also samples the producer by name through its frame reads.</param>
+public readonly record struct RenderGraphRuntimeInput(string Version, string Producer, string? Output = null, bool Optional = false, bool SampledByName = false);
 /// <summary>The graph one instance runs, and where its reads land in it.</summary>
 /// <param name="Pipeline">The planned graph with its compiled shader passes. Its default output
 /// (<see cref="ShaderPipelinePlan.DefaultOutput"/>) is what consumers read unless they select an exported buffer.</param>
@@ -157,11 +158,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private bool[] m_allPassesArePackages = [];
     // Tracks forwarded or direct node captures so steady frames check capture presence in O(1) instead of scanning m_nodes.
     private readonly Action m_onNodeCaptureArmed;
+    private readonly Action<ShaderPipelineRenderNode> m_onPublicationAbandoned;
     private int m_forwardedCaptureIndex = -1;
     private int m_captureProbeNeeded;
 
     private RenderGraphRuntime(RenderGraphInstanceSet set, RenderGraphRuntimeGraph?[] graphs, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, SourceGraph?[] sources, Binding[][] inputs, int root, IGpuDeviceContext device, RenderGraphPackageRecorders packages, PackageGraphs packageGraphs, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint inFlightFrames, GpuImageLeases images, RenderGraphStandIns standIns) {
         m_onNodeCaptureArmed = () => _ = Interlocked.Exchange(location1: ref m_captureProbeNeeded, value: 1);
+        m_onPublicationAbandoned = ForgetAbandonedOutput;
         m_standIns = standIns;
         m_images = images;
         m_packageGraphs = packageGraphs;
@@ -437,6 +440,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 ProducerName: set.Instances[producer].Name,
                 Output: input.Output,
                 Optional: input.Optional,
+                SampledByName: input.SampledByName,
                 Version: input.Version!
             );
         }
@@ -1412,12 +1416,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 schedule: schedule,
                 tick: frame.Tick
             );
-            work.Next(HostFrameWorkPart.Flush);
-            Complete();
         } finally {
             work.Next(HostFrameWorkPart.Flush);
             SettleHandOvers(queue: queue);
         }
+        Complete();
         work.Next(HostFrameWorkPart.Pump);
         if (rendering.LongestRecord >= 0) { RenderRecordWork.Process.Frame(longestRecordTicks: rendering.LongestRecord); }
 
@@ -1568,7 +1571,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private readonly record struct Published(GpuPixelFormat Format, ulong SizeBytes, bool Borrowed = false, uint? StrideBytes = null);
     // One input resolved at install: the version it binds, the producer whose output it reads, and whether it reads that
     // output's previous frame.
-    private readonly record struct Binding(string Version, int Producer, string ProducerName, ShaderPipelineResourceKind Kind, GpuPixelFormat Format, bool PreviousFrame, string? Output, bool RetainsPublication = true, bool Optional = false);
+    private readonly record struct Binding(string Version, int Producer, string ProducerName, ShaderPipelineResourceKind Kind, GpuPixelFormat Format, bool PreviousFrame, string? Output, bool RetainsPublication = true, bool Optional = false, bool SampledByName = false);
     // One completed output of an instance: the frame it belongs to, its published image and the layout it is in, its
     // buffer when it is one, its provenance and external-content label, and what the image stands for when it is not
     // the instance's own (RenderGraphRuntime.Standing.cs).

@@ -127,9 +127,11 @@ public sealed partial class SdfWorldTables {
             commandBufferHandles: [m_commandPools[slot].CommandBufferHandle],
             fence: m_frameFences[slot]
         );
+        // A deferred upload can carry the shared mesh store's compaction for another residency.
+        // Hand it to the queue before publishing any of its writes, including on a late stage.
+        // The fence stays armed for retirement. HandOff does not wait for GPU completion.
+        m_frameFences[slot].HandOff();
         m_shadows?.Submitted(slot: slot);
-        // Publish submission only after the fence has been armed by the queue. Before this point an initially
-        // signaled fence must not satisfy geometry staged for the next upload.
         m_uploads = checked((m_uploads + 1UL));
         if (m_meshStoreCopies) { m_meshStoreCopies = false; m_meshStore.SubmittedOwed(); }
         m_uploadedBindingRevision = m_bindingRevision;

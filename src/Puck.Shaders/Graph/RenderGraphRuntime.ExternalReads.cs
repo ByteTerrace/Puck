@@ -51,14 +51,15 @@ public sealed partial class RenderGraphRuntime {
         return false;
     }
     // Whether a graph instance's graph binds a version to a producer.
-    private bool BindsProducer(int index, int producer) {
+    private bool BindsProducer(int index, int producer, bool portsOnly = false) {
+        var bound = false;
         foreach (var binding in m_inputs[index]) {
-            if (binding.Producer == producer) {
-                return true;
-            }
+            if (binding.Producer != producer) { continue; }
+            if (!portsOnly) { return true; }
+            if (binding.SampledByName) { return false; }
+            bound = true;
         }
-
-        return false;
+        return bound;
     }
     private RenderGraphExternalReads? BindReads(int index, RenderGraphSchedule schedule, bool unbound) {
         // An install replaces the graphs' bindings, and with them which reads a graph leaves unbound.
@@ -97,7 +98,8 @@ public sealed partial class RenderGraphRuntime {
                     !unbound ||
                     !BindsProducer(
                         index: index,
-                        producer: edge.Producer
+                        producer: edge.Producer,
+                        portsOnly: true
                     )
                 ) {
                     producers.Add(item: m_set.Instances[edge.Producer].Name);

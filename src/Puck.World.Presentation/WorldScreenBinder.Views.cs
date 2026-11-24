@@ -235,14 +235,11 @@ public sealed partial class WorldScreenBinder {
                 ? WorldViewDemand.Screen
                 : WorldViewDemand.None);
 
-            if (
-                (
-                    (registration.Seat == DefaultViewSeat) &&
-                    HasViewExportReferences(cameraName: registration.Row.Name)
-                ) ||
-                (HasRetainedView(registrationName: name) && !m_parkedViews.Contains(item: name))
-            ) {
+            if ((registration.Seat == DefaultViewSeat) && HasViewExportReferences(cameraName: registration.Row.Name)) {
                 demand |= WorldViewDemand.Root;
+            }
+            if (HasRetainedView(registrationName: name) && !m_parkedViews.Contains(item: name)) {
+                demand |= WorldViewDemand.Root | WorldViewDemand.Overlay;
             }
 
             var (width, height) = WorldViewInstances.Fit(

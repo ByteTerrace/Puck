@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.Shaders;
 
 namespace Puck.Overlays;
 
@@ -10,5 +11,6 @@ public interface IOverlayFrameSources {
     /// <param name="lease">The acquired lease on a same-device sampleable image, when live.</param>
     /// <returns><see langword="true"/> when content is live this frame; <see langword="false"/> when there is
     /// nothing to show (the element then draws nothing, never a placeholder).</returns>
-    bool TryAcquire(int key, out GpuImageLease lease);
+    /// <param name="samples">The named images this overlay recording can sample.</param>
+    bool TryAcquire(int key, in RenderGraphFrameSamples samples, out GpuImageLease lease);
 }

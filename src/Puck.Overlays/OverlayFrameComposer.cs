@@ -303,10 +303,19 @@ public sealed class OverlayFrameComposer {
     /// annotation outlines, the radial action menu and the drawn cursor, the last two outside the replace-band suppression.</summary>
     /// <param name="renderTicks">The frame's presented time (<c>FrameContext.PresentedTicks</c>).</param>
     /// <returns><see langword="true"/> when the frame has anything to draw.</returns>
-    public bool Compose(ulong renderTicks) {
+    /// <param name="samples">Named camera images available to HUD frames in this recording.</param>
+    public bool Compose(ulong renderTicks, RenderGraphFrameSamples samples = default) {
         m_sources.FeedTick?.Invoke();
         m_builder.BeginFrame();
-        m_frameSlots.BeginFrame();
+        m_frameSlots.BeginFrame(samples);
+        try {
+            return ComposeChannels(renderTicks);
+        } finally {
+            m_frameSlots.EndSampling();
+        }
+    }
+
+    private bool ComposeChannels(ulong renderTicks) {
         m_currentFrameRenderTicks = renderTicks;
         m_hudWriter?.RefreshFrame(renderTicks: renderTicks);
 

@@ -90,10 +90,12 @@ public sealed partial class WorldScreenBinder {
     }
     // Follows one level's screens and every feed they show.
     private bool ReconcileLevel(WorldNestedScreens<SessionFeed> screens, NestedSessions sessions) {
+        var cameras = screens.Cameras;
         var moved = screens.Reconcile(
             nestingDepth: m_nestingDepth,
             sessions: sessions
         );
+        m_cameraLevelsMoved |= !ReferenceEquals(objA: cameras, objB: screens.Cameras);
 
         // Indexed, since a level's views may close while the frame walks them.
         for (var index = 0; (index < screens.Views.Count); index++) {
@@ -162,6 +164,7 @@ public sealed partial class WorldScreenBinder {
         AddPresentedFeeds();
 
         m_feedsMoved = false;
+        m_cameraLevelsMoved = true;
         m_accessBindingsVersion++;
     }
     private void AddFeed(SessionFeed feed) {
@@ -568,24 +571,34 @@ public sealed partial class WorldScreenBinder {
             );
         }
     }
-    // The level whose screens show a camera view of another world, by the view's name, or null.
-    private WorldNestedScreens<SessionFeed>? NestedCameraLevel(string name) => (PresentedCameraLevel(name: name) ?? FeedCameraLevel(name: name));
-    // The level a session's destination's screens make up that shows a camera view of that world, or null.
-    private WorldNestedScreens<SessionFeed>? FeedCameraLevel(string name) {
+    private readonly Dictionary<string, WorldNestedScreens<SessionFeed>> m_cameraLevels = new(comparer: StringComparer.Ordinal);
+    private bool m_cameraLevelsMoved = true;
+
+    // The level whose screens show this camera. A stable frame performs no scans of the held worlds or cameras.
+    private WorldNestedScreens<SessionFeed>? NestedCameraLevel(string name) {
         EnsureFeeds();
+        if (m_cameraLevelsMoved) { RebuildCameraLevels(); }
+        return m_cameraLevels.GetValueOrDefault(key: name);
+    }
 
-        foreach (var feed in m_feeds) {
-            if (
-                (feed.Nested is { } level) &&
-                level.TryCamera(
-                    camera: out _,
-                    name: name
-                )
-            ) {
-                return level;
-            }
+    private void RebuildCameraLevels() {
+        m_cameraLevels.Clear();
+        // Earlier levels win name collisions: infinity layers, routed worlds, then feeds.
+        foreach (var entry in InfinityEntries()) {
+            if (entry.Screens is { } level) { AddCameraLevel(level: level); }
         }
+        foreach (var level in m_routedScreens.Values) { AddCameraLevel(level: level); }
+        foreach (var feed in m_feeds) {
+            if (feed.Nested is { } level) { AddCameraLevel(level: level); }
+        }
+        m_cameraLevelsMoved = false;
+    }
 
-        return null;
+    private void AddCameraLevel(WorldNestedScreens<SessionFeed> level) {
+        var cameras = level.Cameras;
+
+        for (var index = 0; (index < cameras.Count); index++) {
+            _ = m_cameraLevels.TryAdd(key: cameras[index].Name, value: level);
+        }
     }
 }

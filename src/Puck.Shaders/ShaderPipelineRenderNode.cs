@@ -1228,10 +1228,22 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     // Whether a selected output publishes through the preview: an external image, which the node does not own, is
     // encoded into an RGBA8 image it does. Every other image output publishes itself, a float one included.
     private static bool NeedsPreview(ShaderPipelineResource spec) => ((spec.Kind == ShaderPipelineResourceKind.Image) && spec.IsExternal);
-    private Surface Output(int slot) {
-        var selectedName = (m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput);
-        var selectedResource = m_resourceLookup[selectedName];
+    // Publish the handle, forwarded binding and layout together. A discarded recording leaves the
+    // last publication intact, including the metadata a paused capture needs to read it.
+    private string PublishSelectedOutput(RuntimeResource selected, int slot) {
+        var (resource, name, instance) = PublicationOf(selected: selected, slot: slot);
+        var surface = Output(selectedResource: selected, published: resource, publishedName: name, instance: instance, slot: slot);
+        // An external image selected directly is encoded into the node's own preview target.
+        // Only a forwarded image keeps its producer's binding and layout.
+        var binding = (((selected.Alias.Target is not null) && resource.Spec.IsExternal && surface.IsSameDeviceImage) ? name : null);
+        var layout = ((binding is null) ? m_outputLayout : ResolveExternalLayout(name: binding));
 
+        m_publishedBinding = binding;
+        m_publishedLayout = layout;
+        Publish(surface: surface);
+        return name;
+    }
+    private Surface Output(RuntimeResource selectedResource, RuntimeResource published, string publishedName, int instance, int slot) {
         // A buffer output publishes no image; a graph instance's consumers bind the buffer itself (LatestOutputBuffer).
         if (selectedResource.Spec.Kind == ShaderPipelineResourceKind.Buffer) {
             return default;
@@ -1250,10 +1262,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 SurfaceEncoder.CaptureFormat
             );
         }
-        var (published, publishedName, instance) = PublicationOf(
-            selected: PresentationResource(selected: selectedResource),
-            slot: slot
-        );
         var resolved = ResolveImage(
             index: instance,
             name: publishedName,
@@ -2045,7 +2053,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
 
     // What preparation reserved for one frame's recording.
-    private readonly record struct FrameJob(int Slot, RuntimeResource Selected, bool Previewed, IGpuExportableImage? Exported);
+    private readonly record struct FrameJob(int Slot, RuntimeResource Selected, bool Previewed, IGpuExportableImage? Exported, DeliveryLabel BindingLabel);
 
     // Reserves the next slot: its previous submission retired, its leases retired, its regions bound, this frame's leases
     // held and the cadence checkpointed, so a failed recording can roll back.
@@ -2079,6 +2087,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         }
         m_recording.PrepareEndedAt = Stopwatch.GetTimestamp();
         return new FrameJob(
+            BindingLabel: FrameBindingLabel(),
             Exported: exported,
             Previewed: NeedsPreview(spec: selectedResource.Spec),
             Selected: selectedResource,
@@ -2158,8 +2167,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         NoteRenderGrid();
         NoteRenderCompletion(fence: slot.Fence!, slot: slotIndex);
         PublishBuffers(slot: slotIndex);
-        Publish(surface: Output(slot: slotIndex));
-        m_publishedLabel = FrameBindingLabel();
+        _ = PublishSelectedOutput(selected: job.Selected, slot: slotIndex);
+        m_publishedLabel = job.BindingLabel;
         m_publishedStateTick = Frame.StateTick;
         m_publishedAtRequestedExtent = !RendersAnotherExtent;
         m_outputRefreshRequested = false;

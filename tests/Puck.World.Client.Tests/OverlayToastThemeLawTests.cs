@@ -46,6 +46,6 @@ public sealed class OverlayToastThemeLawTests {
     }
 
     private sealed class EmptyFrames : IOverlayFrameSources {
-        public bool TryAcquire(int key, out Puck.Hosting.GpuImageLease lease) { lease = default; return false; }
+        public bool TryAcquire(int key, in Puck.Shaders.RenderGraphFrameSamples samples, out Puck.Hosting.GpuImageLease lease) { lease = default; return false; }
     }
 }
