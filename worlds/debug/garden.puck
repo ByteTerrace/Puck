@@ -16,6 +16,7 @@ import "suit"
 import "size"
 import "painting-kit"
 import "place-kit"
+import "../standard/visitors"
 // The pond plot west of the frames: a hound pack, stalking spiders, dragonflies and fish (pond.puck).
 import "garden-pond"
 
@@ -29,9 +30,17 @@ metadata {
   description: "A destination of the debug world painting wing: a sunset plot with a green floor, a golden obelisk, two frames back to the debug world and one onto the hearth."
 }
 
-// A traveller from the debug world arrives here, and the debug world's window onto the garden observes it whole.
+// Four local seats and four visitor slots fit inside the basis's eight-slot reserve (pond.puck), keeping every creature index.
+bodies {
+  localSeats: 4
+  networkPlayers: 4
+  reconnectGraceSeconds: 3
+}
+
+// The debug world's window onto the garden observes it whole as a session; arriving visitors receive the standard visitor row.
 admission [
   {
+    admits: Session
     disclosure: Replica
     domain: "*"
     grants [
@@ -48,6 +57,7 @@ admission [
     ]
     mode: FederatedAuthority
   }
+  visitorAdmissionRow(domain: "*")
 ]
 
 references [

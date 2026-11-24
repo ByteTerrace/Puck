@@ -4,7 +4,7 @@ basis: "debug"
 documentId: "machine-debugger-tests"
 
 // Schedules act as seat1. Positioning another body requires the same explicit Drive grant as live play.
-grants: map(range(4, 3), i => { grantee: "seat1", budget: 64, capability: Drive, subject: $"body:{i}" })
+grants: map(range(14, 3), i => { grantee: "seat1", budget: 64, capability: Drive, subject: $"body:{i}" })
 
 machines [
   {
@@ -50,25 +50,25 @@ test "every machine passes the six checks on bundled diagnostic cartridges" {
     seat1: world.state.cell.set machineDebugger p0 1536
     seat1: world.state.cell.set machineDebugger p1 1553
     ticks 30
-    seat1: body.pose 7 0.05 29.4 0 0 0 4
+    seat1: body.pose 7 0.05 29.4 0 0 0 14
     seat1: world.state.cell.set machineDebugger run 1
     ticks 100
     seat1: world.state.cell.set machineDebugger run 0
     seat1: world.state.cell.set machineDebugger screen 1
-    seat1: world.state.cell.set machineDebugger body 5
+    seat1: world.state.cell.set machineDebugger body 15
     seat1: world.state.cell.set machineDebugger address 33554432
     seat1: world.state.cell.set machineDebugger length 262144
     ticks 3
-    seat1: body.pose 5.5 0.05 31.6 0 0 0 5
+    seat1: body.pose 5.5 0.05 31.6 0 0 0 15
     seat1: world.state.cell.set machineDebugger run 1
     ticks 100
     seat1: world.state.cell.set machineDebugger run 0
     seat1: world.state.cell.set machineDebugger screen 2
-    seat1: world.state.cell.set machineDebugger body 6
+    seat1: world.state.cell.set machineDebugger body 16
     seat1: world.state.cell.set machineDebugger address 0
     seat1: world.state.cell.set machineDebugger length 2048
     ticks 3
-    seat1: body.pose 2 0.05 30.5 0 0 0 6
+    seat1: body.pose 2 0.05 30.5 0 0 0 16
     seat1: world.state.cell.set machineDebugger run 1
     ticks 100
   }
@@ -98,13 +98,13 @@ test "every machine passes the six checks on bundled diagnostic cartridges" {
 test "withholding input fails responsive while the other checks pass" {
   when {
     seat1: world.state.cell.set machineDebugger screen 2
-    seat1: world.state.cell.set machineDebugger body 6
+    seat1: world.state.cell.set machineDebugger body 16
     seat1: world.state.cell.set machineDebugger address 0
     seat1: world.state.cell.set machineDebugger length 2048
     seat1: world.state.cell.set machineDebugger window 12
     seat1: world.state.cell.set machineDebugger withhold 1
     ticks 30
-    seat1: body.pose 2 0.05 30.5 0 0 0 6
+    seat1: body.pose 2 0.05 30.5 0 0 0 16
     seat1: world.state.cell.set machineDebugger run 1
     ticks 100
   }

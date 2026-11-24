@@ -8292,6 +8292,636 @@
       },
       "default": null
     },
+    "navigation": {
+      "description": "The world\u0027s navigation domains, area types, marked areas and cost profiles, so a recipient plans routes over the delivered document (WorldDocumentNavigation).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "domains": {
+          "description": "Finite rectangular domains, each compiled from the world\u0027s deterministic solid field.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One finite navigation grid compiled from the world\u0027s collision and optional medium truth.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "description": "The stable domain name referenced by navigated producer targets.",
+                "type": "string"
+              },
+              "kind": {
+                "description": "Whether cells follow ground, free 3D space, or a live medium.",
+                "enum": [
+                  "Surface",
+                  "Volume",
+                  "Medium"
+                ],
+                "title": "WorldNavigationKind",
+                "x-enumDescriptions": {
+                  "Surface": "A 2D grid whose Y values are sampled from solid ground.",
+                  "Volume": "A 3D grid of collision-free space.",
+                  "Medium": "A 3D grid constrained to one live fluid-medium field."
+                }
+              },
+              "origin": {
+                "description": "The center of cell (0,0,0), relative to Parent when present and world-space otherwise; for a surface domain, resolved world Y is the ground-probe baseline.",
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "cellSize": {
+                "description": "The square cell width in world units.",
+                "type": "number"
+              },
+              "width": {
+                "description": "The number of cells along the frame\u0027s X axis.",
+                "type": "integer"
+              },
+              "depth": {
+                "description": "The number of cells along the frame\u0027s Z axis.",
+                "type": "integer"
+              },
+              "agentRadius": {
+                "description": "The solid-clearance sphere radius. A medium domain also keeps this whole volume submerged.",
+                "type": "number"
+              },
+              "arrivalDistance": {
+                "description": "How close a body must come before advancing to the next waypoint.",
+                "type": "number"
+              },
+              "maxExpandedNodes": {
+                "description": "The hard A* expansion budget for one route search.",
+                "type": "integer"
+              },
+              "maxPathNodes": {
+                "description": "The hard stored-waypoint budget for one route.",
+                "type": "integer"
+              },
+              "layers": {
+                "description": "The number of cells along world Y; surface domains require one.",
+                "type": "integer",
+                "default": 1
+              },
+              "connectivity": {
+                "description": "The volume neighbour set; ignored by surface domains.",
+                "enum": [
+                  "Axis",
+                  "FacesAndEdges",
+                  "Full"
+                ],
+                "default": "Full",
+                "title": "WorldNavigationConnectivity",
+                "x-enumDescriptions": {
+                  "Axis": "The six axis-aligned neighbours.",
+                  "FacesAndEdges": "Axis and two-axis diagonal neighbours.",
+                  "Full": "All 26 neighbours, including three-axis diagonals."
+                }
+              },
+              "probeUp": {
+                "description": "For a surface domain, the ground-search distance above origin Y.",
+                "type": "number",
+                "default": 0
+              },
+              "probeDown": {
+                "description": "For a surface domain, the ground-search distance below origin Y.",
+                "type": "number",
+                "default": 0
+              },
+              "agentHeight": {
+                "description": "For a surface domain, the clearance capsule height.",
+                "type": "number",
+                "default": 0
+              },
+              "maxStepHeight": {
+                "description": "For a surface domain, the greatest adjacent height delta.",
+                "type": "number",
+                "default": 0
+              },
+              "maxSlopeDegrees": {
+                "description": "For a surface domain, the greatest adjacent slope.",
+                "type": "number",
+                "default": 0
+              },
+              "medium": {
+                "description": "For a medium domain, the named lattice field that cells must remain inside.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "shared": {
+                "description": "Whether bodies navigating this domain follow shared goal fields: one field per goal over the domain\u0027s network, derived once and read a step at a time by every body heading there, in place of a route search per body. False keeps independent bounded A* searches, each within this domain.",
+                "type": "boolean",
+                "default": false
+              },
+              "parent": {
+                "description": "Optional static placement frame. Origin and grid axes are local to that frame; probes remain vertical. The frame must be undistributed and unit scale.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "network": {
+                "description": "The network the domain joins. Domains join where they share a cell only when their networks match, so a route or goal field crosses from one district\u0027s pavement to the next but never onto a road of another network. Absent joins the one unnamed network.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "area": {
+                "description": "The area type of the domain\u0027s cells no area marks, one of AreaTypes; absent leaves them unmarked, costing one under every profile.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "name",
+              "kind",
+              "origin",
+              "cellSize",
+              "width",
+              "depth",
+              "agentRadius",
+              "arrivalDistance",
+              "maxExpandedNodes",
+              "maxPathNodes"
+            ],
+            "additionalProperties": false,
+            "title": "WorldNavigationDomain"
+          },
+          "default": null
+        },
+        "areaTypes": {
+          "description": "The area type names the world\u0027s areas, domains and profiles use, in a stable order. The engine gives no type a meaning: a type costs what each profile says.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "default": null
+        },
+        "areas": {
+          "description": "Marked volumes in precedence order: a cell takes the type of the last area holding the point a body standing on it stands at, else its domain\u0027s own Area.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One marked navigation area: a volume whose cells take an area type. Exactly one of Placement and Region is authored.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "type": {
+                "description": "The area type, one of AreaTypes.",
+                "type": "string"
+              },
+              "placement": {
+                "description": "A static placement whose Region is the area\u0027s volume, so one authored region both senses bodies and marks the ground under it.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "region": {
+                "$ref": "#/$defs/WorldPlacementRegion",
+                "description": "The area\u0027s own volume in world space: a sphere of Radius or a box of HalfExtents about Center, turned by YawDegrees.",
+                "default": null
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false,
+            "title": "WorldNavigationArea"
+          },
+          "default": null
+        },
+        "profiles": {
+          "description": "Named cost profiles a navigated producer target selects (Profile). A target with no profile pays one for every area.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "A named navigation cost profile: what one kind of agent pays to cross each area type. A step costs its length (and the route search\u0027s clearance surcharge) times the multiplier of the area it steps onto.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "description": "The name a navigated target\u0027s profile selects.",
+                "type": "string"
+              },
+              "costs": {
+                "description": "Each priced area type\u0027s multiplier, positive and at most MaxAreaCost; a type left out, and an unmarked cell, cost one.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "default": null
+              },
+              "exclude": {
+                "description": "The area types the agent never steps onto. A body already standing on one may step off it.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "default": null
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false,
+            "title": "WorldNavigationProfile"
+          },
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldNavigationSection"
+    },
+    "inputModes": {
+      "description": "The world\u0027s input-mode tuples and transitions, projected without authority-only selector partitions (WorldProjectedInputModes), so a visitor\u0027s seat reconciles authority-published mappings.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "global": {
+          "description": "Actions eligible in every tuple.",
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "families": {
+          "description": "Projected input-mode families.",
+          "type": "array",
+          "items": {
+            "description": "One input-mode family as a visitor\u0027s client sees it: its states\u0027 eligible channels, suppressions and directed transitions, without authority-only selector envelopes.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "description": "Family name.",
+                "type": "string"
+              },
+              "default": {
+                "description": "Default state name.",
+                "type": "string"
+              },
+              "states": {
+                "description": "Named states and their eligible channels.",
+                "type": "array",
+                "items": {
+                  "description": "One state of a WorldProjectedInputModeFamily.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "name": {
+                      "description": "Stable state name.",
+                      "type": "string"
+                    },
+                    "channels": {
+                      "description": "Eligible logical action names.",
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "channels"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldProjectedInputModeState"
+                }
+              },
+              "seatState": {
+                "description": "The seatModes family name when this family\u0027s selector is SeatState; otherwise null.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "suspendedBy": {
+                "description": "Selections in other families that suppress this family\u0027s channels.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "description": "Suppresses channels by another family\u0027s selection, independently of its suppression.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "family": {
+                      "description": "Other family.",
+                      "type": "string"
+                    },
+                    "states": {
+                      "description": "Selections which suppress this family\u0027s channels.",
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "family",
+                    "states"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldInputModeSuppression"
+                },
+                "default": null
+              },
+              "transitions": {
+                "description": "Directed keep sets across state transitions.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "description": "Directed continuity, intersected across every changed family.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "from": {
+                      "description": "Old state.",
+                      "type": "string"
+                    },
+                    "to": {
+                      "description": "New state.",
+                      "type": "string"
+                    },
+                    "keep": {
+                      "description": "Same-meaning held actions allowed to continue.",
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "conditionalKeep": {
+                      "description": "Additional continuing actions when the old and new tuples match authored selections.",
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "description": "Adds continuity for named actions under finite source and destination tuple conditions.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "keep": {
+                            "description": "Additional same-meaning actions.",
+                            "type": "array",
+                            "items": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "from": {
+                            "description": "Required selections in the old tuple; omitted families are unconstrained.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "additionalProperties": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "default": null
+                          },
+                          "to": {
+                            "description": "Required selections in the new tuple; omitted families are unconstrained.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "additionalProperties": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "default": null
+                          }
+                        },
+                        "required": [
+                          "keep"
+                        ],
+                        "additionalProperties": false,
+                        "title": "WorldInputConditionalKeep"
+                      },
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to",
+                    "keep"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldInputModeTransition"
+                },
+                "default": null
+              }
+            },
+            "required": [
+              "name",
+              "default",
+              "states"
+            ],
+            "additionalProperties": false,
+            "title": "WorldProjectedInputModeFamily"
+          }
+        },
+        "combinations": {
+          "description": "Allowed tuples keyed by family, when authored.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "global",
+        "families"
+      ],
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldProjectedInputModes"
+    },
+    "seatModes": {
+      "description": "The world\u0027s per-seat mode families, so a visitor\u0027s bindings and player.mode resolve them.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "An AUTHORED per-seat mode family \u2014 a document-declared name plus its admitted states. player.mode \u003Cfamily\u003E \u003Cstate\u003E [seat] flips a seat\u0027s published state within the family; Puck.World.WorldContextFamilies context rows may then map a (family, state) pair to a binding group exactly as a built-in family does.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The family\u0027s stable name. Must not collide with a built-in family name (roster, engagement, layout) or the reserved state: prefix.",
+            "type": "string"
+          },
+          "defaultState": {
+            "description": "The state a seat publishes before any player.mode flip \u2014 one of States.",
+            "type": "string"
+          },
+          "states": {
+            "description": "Gets the family\u0027s admitted states. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
+            "type": "array",
+            "items": {
+              "description": "One state of a WorldSeatModeFamily.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "name": {
+                  "description": "The state\u0027s stable name \u2014 the token player.mode \u003Cfamily\u003E \u003Cstate\u003E takes and the value WorldContextFamilies context rows key on.",
+                  "type": "string"
+                },
+                "target": {
+                  "description": "The control application this state drives, or null for an ordinary state (the seat drives its own body normally). \u0022camera\u0022 is the only admitted value: entering the state possesses the seat\u0027s declared camera body (see CameraPlacementIdPrefix) through the authority\u0027s input runtime and ordinary Engage door, diverting the seat\u0027s own body intent to Idle and resolving its view through views.cameraRig instead.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false,
+              "title": "WorldSeatModeState"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "defaultState",
+          "states"
+        ],
+        "additionalProperties": false,
+        "title": "WorldSeatModeFamily"
+      },
+      "default": null
+    },
+    "inputEventsPerStep": {
+      "description": "The per-step ordered input event bound from inputHistory.maximumEventsPerStep, when authored.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "default": null
+    },
+    "bodyState": {
+      "description": "The body-lane register declarations (WorldProjectedBodyRegister) mapping EntitySnapshot.State ordinals to $bodyState:\u003Cname\u003E bindings and bodies.scale.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldProjectedBodyRegister"
+      },
+      "default": null
+    },
+    "identityState": {
+      "description": "The identity-lane register declarations (WorldProjectedBodyRegister) following BodyState in EntitySnapshot.State.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldProjectedBodyRegister"
+      },
+      "default": null
+    },
     "schema": {
       "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed projection. A document that omits it is refused: the initializer names what the canonical writer emits, and does not stand in for a tag a peer left out.",
       "type": "string"
@@ -19069,6 +19699,33 @@
       "items": {
         "$ref": "#/$defs/SdfShadeExpressionNullable"
       }
+    },
+    "WorldProjectedBodyRegister": {
+      "description": "One body or identity register as a visitor\u0027s client sees it: its name and storage kind, which map the ordinal slots of EntitySnapshot.State to $bodyState:\u003Cname\u003E bindings and bodies.scale without disclosing authority-only birth, reset-fact or write-envelope rules.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "description": "The register\u0027s name, unique across body and identity registers.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Whether the register stores a fixed-point counter or remaining engine ticks.",
+          "enum": [
+            "Counter",
+            "Timer"
+          ],
+          "title": "ActionStateKind"
+        }
+      },
+      "required": [
+        "name",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "title": "WorldProjectedBodyRegister"
     }
   }
 }

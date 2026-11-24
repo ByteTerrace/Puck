@@ -86,6 +86,108 @@ public sealed record WorldProjectedMachine(
         Cable: Cable
     );
 }
+/// <summary>The client-facing half of <see cref="WorldInputModes"/>: the global channels, allowed tuple combinations,
+/// and per-family states, suppressions and transitions a visitor's <c>WorldSeatInput</c> compiles its tuple mappings
+/// and held-action continuity from. Selector partitions over <c>state.body</c>, <c>state.identity</c> and kits stay on
+/// the authority that selects tuples; only a <see cref="WorldInputModeSelectorKind.SeatState"/> family's seat-mode name
+/// crosses so <c>player.mode</c> routes authoritative seat-mode changes to the authority.</summary>
+/// <param name="Global">Actions eligible in every tuple.</param>
+/// <param name="Families">Projected input-mode families.</param>
+/// <param name="Combinations">Allowed tuples keyed by family, when authored.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldProjectedInputModes(
+    IReadOnlyList<string> Global,
+    IReadOnlyList<WorldProjectedInputModeFamily> Families,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<IReadOnlyDictionary<string, string>>? Combinations = null
+) {
+    /// <summary>Projects an authored <see cref="WorldInputModes"/> section for a presentation-tier peer.</summary>
+    public static WorldProjectedInputModes? Of(WorldInputModes? modes) => ((modes is null)
+        ? null
+        : new WorldProjectedInputModes(
+            Global: modes.Global,
+            Families: [.. modes.Families.Select(selector: WorldProjectedInputModeFamily.Of)],
+            Combinations: modes.Combinations
+        ));
+
+    /// <summary>Hydrates the client-side <see cref="WorldInputModes"/> representation.</summary>
+    public WorldInputModes ToInputModes() => new(
+        Global: Global,
+        Families: [.. Families.Select(selector: static family => family.ToFamily())],
+        Combinations: Combinations
+    );
+}
+/// <summary>One input-mode family as a visitor's client sees it: its states' eligible channels, suppressions and
+/// directed transitions, without authority-only selector envelopes.</summary>
+/// <param name="Name">Family name.</param>
+/// <param name="Default">Default state name.</param>
+/// <param name="States">Named states and their eligible channels.</param>
+/// <param name="SeatState">The <c>seatModes</c> family name when this family's selector is
+/// <see cref="WorldInputModeSelectorKind.SeatState"/>; otherwise <see langword="null"/>.</param>
+/// <param name="SuspendedBy">Selections in other families that suppress this family's channels.</param>
+/// <param name="Transitions">Directed keep sets across state transitions.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldProjectedInputModeFamily(
+    string Name,
+    string Default,
+    IReadOnlyList<WorldProjectedInputModeState> States,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SeatState = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldInputModeSuppression>? SuspendedBy = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldInputModeTransition>? Transitions = null
+) {
+    /// <summary>Projects one authored <see cref="WorldInputModeFamily"/>.</summary>
+    public static WorldProjectedInputModeFamily Of(WorldInputModeFamily family) {
+        ArgumentNullException.ThrowIfNull(argument: family);
+
+        return new WorldProjectedInputModeFamily(
+            Name: family.Name,
+            Default: family.Default,
+            States: [.. family.States.Select(selector: static state => new WorldProjectedInputModeState(Name: state.Name, Channels: state.Channels))],
+            SeatState: ((family.Selector.Kind == WorldInputModeSelectorKind.SeatState) ? family.Selector.Name : null),
+            SuspendedBy: family.SuspendedBy,
+            Transitions: family.Transitions
+        );
+    }
+
+    /// <summary>Rebuilds the client-side family representation with an authority-selected marker.</summary>
+    public WorldInputModeFamily ToFamily() => new(
+        Name: Name,
+        Selector: ((SeatState is { } seatState)
+            ? new WorldInputModeSelector(Kind: WorldInputModeSelectorKind.SeatState, Name: seatState) { AuthoritySelected = true }
+            : new WorldInputModeSelector(Kind: WorldInputModeSelectorKind.Engagement) { AuthoritySelected = true }),
+        Default: Default,
+        States: [.. States.Select(selector: static state => new WorldInputModeState(Name: state.Name, Channels: state.Channels))],
+        SuspendedBy: SuspendedBy,
+        Transitions: Transitions
+    );
+}
+/// <summary>One state of a <see cref="WorldProjectedInputModeFamily"/>.</summary>
+/// <param name="Name">Stable state name.</param>
+/// <param name="Channels">Eligible logical action names.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldProjectedInputModeState(string Name, IReadOnlyList<string> Channels);
+/// <summary>One body or identity register as a visitor's client sees it: its name and storage kind, which map the
+/// ordinal slots of <c>EntitySnapshot.State</c> to <c>$bodyState:&lt;name&gt;</c> bindings and <c>bodies.scale</c>
+/// without disclosing authority-only birth, reset-fact or write-envelope rules.</summary>
+/// <param name="Name">The register's name, unique across body and identity registers.</param>
+/// <param name="Kind">Whether the register stores a fixed-point counter or remaining engine ticks.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldProjectedBodyRegister(string Name, Puck.Physics.Motion.ActionStateKind Kind) {
+    /// <summary>Projects one declared <see cref="ActionStateSlot"/>.</summary>
+    public static WorldProjectedBodyRegister Of(ActionStateSlot slot) {
+        ArgumentNullException.ThrowIfNull(argument: slot);
+
+        return new WorldProjectedBodyRegister(
+            Name: slot.Name,
+            Kind: slot.Kind
+        );
+    }
+
+    /// <summary>Hydrates the client-side register declaration.</summary>
+    public ActionStateSlot ToSlot() => new(
+        Name: Name,
+        Kind: Kind
+    );
+}
 /// <summary>Where a projection came from and what it is. Every projection carries this: a document that cannot say
 /// which authority composed it, at what revision, and under which tier is a document a reader has to guess
 /// about.</summary>
@@ -179,6 +281,17 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// by the pin (<see cref="WorldProjectionContent.Resolver"/>).</param>
 /// <param name="Machines">The world's machines, projected (see <see cref="WorldProjectedMachine"/>), so a recipient
 /// knows what each machine screen shows.</param>
+/// <param name="Navigation">The world's navigation domains, area types, marked areas and cost profiles, so a recipient
+/// plans routes over the delivered document (<c>WorldDocumentNavigation</c>).</param>
+/// <param name="InputModes">The world's input-mode tuples and transitions, projected without authority-only selector
+/// partitions (<see cref="WorldProjectedInputModes"/>), so a visitor's seat reconciles authority-published mappings.</param>
+/// <param name="SeatModes">The world's per-seat mode families, so a visitor's bindings and <c>player.mode</c> resolve them.</param>
+/// <param name="InputEventsPerStep">The per-step ordered input event bound from <c>inputHistory.maximumEventsPerStep</c>,
+/// when authored.</param>
+/// <param name="BodyState">The body-lane register declarations (<see cref="WorldProjectedBodyRegister"/>) mapping
+/// <c>EntitySnapshot.State</c> ordinals to <c>$bodyState:&lt;name&gt;</c> bindings and <c>bodies.scale</c>.</param>
+/// <param name="IdentityState">The identity-lane register declarations (<see cref="WorldProjectedBodyRegister"/>)
+/// following <paramref name="BodyState"/> in <c>EntitySnapshot.State</c>.</param>
 public sealed record WorldProjectionDocument(
     WorldProjectionProvenance Provenance,
     WorldMotionDefaults Motion,
@@ -222,7 +335,13 @@ public sealed record WorldProjectionDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHighlightRow>? Highlights = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? Shades = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Text.TextFontCatalogDefinition? Text = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProjectedMachine>? Machines = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProjectedMachine>? Machines = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSection? Navigation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldProjectedInputModes? InputModes = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatModeFamily>? SeatModes = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? InputEventsPerStep = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProjectedBodyRegister>? BodyState = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProjectedBodyRegister>? IdentityState = null
 ) {
     /// <summary>The document schema version. A reader refuses any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.projection.v1";
@@ -423,7 +542,13 @@ public static class WorldProjection {
             Text: definition.Text,
             Machines: ((definition.MachinesRaw is { Count: > 0 } machines)
             ? [.. machines.Select(selector: WorldProjectedMachine.Of)]
-            : null)
+            : null),
+            Navigation: definition.NavigationRaw,
+            InputModes: WorldProjectedInputModes.Of(modes: definition.InputModes),
+            SeatModes: definition.SeatModesRaw,
+            InputEventsPerStep: definition.InputHistory?.MaximumEventsPerStep,
+            BodyState: ((definition.BodyState.Count > 0) ? [.. definition.BodyState.Select(selector: WorldProjectedBodyRegister.Of)] : null),
+            IdentityState: ((definition.IdentityState.Count > 0) ? [.. definition.IdentityState.Select(selector: WorldProjectedBodyRegister.Of)] : null)
         );
 
         WorldStateDisclosure.ValidateBindings(
@@ -458,6 +583,22 @@ public static class WorldProjection {
             time: time
         );
     }
+
+    private static readonly CodeDerivedTable<WorldDefinition, Dictionary<string, string>> KeyedClockTable = new();
+
+    private static Dictionary<string, string> KeyedClocksFor(WorldDefinition definition) => KeyedClockTable.GetValue(
+        key: definition,
+        derive: static candidate => KeyedClocks(definition: candidate, values: WorldKeyedValues.AuthoredBy(definition: candidate).Keyed)
+    );
+
+    internal static WorldTimelineSection? ComposeTimeline(WorldDefinition definition, WorldClockAnchorLedger? anchors, StateArena arena, in ArenaTime time) =>
+        CarriedClocks(
+            anchors: anchors,
+            arena: arena,
+            definition: definition,
+            keyed: KeyedClocksFor(definition: definition),
+            time: in time
+        );
 
     // Every clock a value of the document keys on, by the path that first names it: a keyed section's own clock and
     // each keyed value's.
@@ -670,7 +811,7 @@ public static class WorldProjection {
     }
 
     // The declared spaces a disclosed vector row names, in declaration order; null when no vector row was disclosed.
-    private static StateSpace[]? SpacesOf(IReadOnlyList<WorldObservedRow>? observations, IReadOnlyList<StateSpace>? spaces) {
+    internal static StateSpace[]? SpacesOf(IReadOnlyList<WorldObservedRow>? observations, IReadOnlyList<StateSpace>? spaces) {
         if (
             (observations is null) ||
             (spaces is null)
@@ -701,9 +842,49 @@ public static class WorldProjection {
         return references;
     }
     internal static WorldPrototype FlattenPrototype(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted, WorldPrototype prototype) {
+        if (!WorldStateDocumentValues.HasReference(graph: prototype)) {
+            return prototype;
+        }
         WorldStateDisclosure.ValidateBindings(arena: arena, definition: definition, graph: prototype,
             recipient: recipient, unrestricted: unrestricted);
         return Flatten(prototype, definition);
+    }
+
+    internal static bool TryPrototypeContent(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted, ContentPin pin, ContentAddressedStore store, out byte[]? bytes) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: arena);
+        ArgumentNullException.ThrowIfNull(argument: store);
+
+        bytes = null;
+        var authored = WorldKeyedValues.AuthoredBy(definition: definition);
+
+        if (!unrestricted) {
+            RefuseHiddenClocks(
+                arena: arena,
+                definition: definition,
+                keyed: KeyedClocks(definition: definition, values: authored.Keyed),
+                recipient: recipient
+            );
+            RefuseHiddenBindings(
+                arena: arena,
+                bound: authored.Bound,
+                definition: definition,
+                recipient: recipient
+            );
+        }
+
+        var pinText = pin.ToString();
+
+        foreach (var prototype in definition.Creations) {
+            var flattened = FlattenPrototype(definition, arena, recipient, unrestricted, prototype);
+
+            if (string.Equals(a: WorldProjectionContent.Put(prototype: flattened, store: store).Content, b: pinText, comparisonType: StringComparison.Ordinal)) {
+                bytes = (store.TryGet(content: out var held, pin: pin) ? held : null);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Serializes a projection to its compact canonical UTF-8 bytes, the form it travels to a recipient in:
@@ -806,10 +987,14 @@ public static class WorldProjection {
     /// <exception cref="ArgumentNullException"><paramref name="projection"/> is <see langword="null"/>.</exception>
     /// <param name="content">The recipient content cache, or the shared store.</param>
     /// <param name="fetch">The authorized fetch door for missing prototype objects.</param>
-    public static bool TryToDefinition(WorldProjectionDocument projection, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out string reason, ContentAddressedStore? content = null, Func<ContentPin, byte[]?>? fetch = null) {
+    /// <param name="known">A definition already held by the recipient whose literal prototypes may satisfy matching pins.</param>
+    /// <param name="fallbackKnown">A secondary definition held by the recipient whose literal prototypes may satisfy matching pins.</param>
+    /// <param name="previousProjection">The projection <paramref name="known"/> was hydrated from, so sections the delta left untouched keep <paramref name="known"/>'s instances.</param>
+    public static bool TryToDefinition(WorldProjectionDocument projection, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out string reason, ContentAddressedStore? content = null, Func<ContentPin, byte[]?>? fetch = null, WorldDefinition? known = null, WorldDefinition? fallbackKnown = null, WorldProjectionDocument? previousProjection = null) {
         ArgumentNullException.ThrowIfNull(argument: projection);
 
         definition = null;
+        var same = ((known is not null) && (previousProjection is not null));
 
         // Nullable annotations do not constrain collection elements on the JSON boundary.
         if ((projection.Kits is null) || projection.Kits.Any(predicate: static kit => (kit is null)) ||
@@ -817,78 +1002,214 @@ public static class WorldProjection {
             (projection.KeyLights?.Rows?.Any(predicate: static row => (row is null)) == true) ||
             (projection.Highlights?.Any(predicate: static row => (row is null)) == true) ||
             (projection.Machines?.Any(predicate: static row => (row is null)) == true) ||
+            (projection.SeatModes?.Any(predicate: static row => ((row is null) || string.IsNullOrWhiteSpace(value: row.Name) || (row.States.Count == 0) || row.States.Any(predicate: static state => ((state is null) || string.IsNullOrWhiteSpace(value: state.Name))) || !row.States.Any(predicate: state => string.Equals(a: state.Name, b: row.DefaultState, comparisonType: StringComparison.Ordinal)))) == true) ||
+            ((projection.InputModes is { } projectedInputModes) && (
+                (projectedInputModes.Global is null) ||
+                projectedInputModes.Global.Any(predicate: static name => string.IsNullOrWhiteSpace(value: name)) ||
+                (projectedInputModes.Families is null) ||
+                projectedInputModes.Families.Any(predicate: family => (
+                    (family is null) ||
+                    (family.States is null) ||
+                    family.States.Any(predicate: static state => ((state is null) || (state.Channels is null))) ||
+                    ((family.SeatState is { } seatFamily) && (projection.SeatModes?.Any(predicate: row => string.Equals(a: row.Name, b: seatFamily, comparisonType: StringComparison.Ordinal)) != true)))))) ||
+            (projection.InputEventsPerStep is < 1 or > ushort.MaxValue) ||
+            ((projection.Navigation is { } navigation) && (
+                (navigation.Domains?.Any(predicate: static row => (row is null)) == true) ||
+                (navigation.AreaTypes?.Any(predicate: static row => (row is null)) == true) ||
+                (navigation.Areas?.Any(predicate: static row => (row is null)) == true) ||
+                (navigation.Profiles?.Any(predicate: static row => (row is null)) == true))) ||
             ((projection.Text is { } catalog) && ((catalog.Fonts is null) || catalog.Fonts.Any(predicate: static row => (row is null)))) ||
+            (projection.BodyState?.Any(predicate: static row => ((row is null) || !CellName.TryParse(candidate: row.Name, name: out _, reason: out _) || !Enum.IsDefined(value: row.Kind))) == true) ||
+            (projection.IdentityState?.Any(predicate: static row => ((row is null) || !CellName.TryParse(candidate: row.Name, name: out _, reason: out _) || !Enum.IsDefined(value: row.Kind))) == true) ||
             (projection.Observations?.Any(predicate: static row => ((row is null) || (row.Cells is null) || row.Cells.Any(predicate: static cell => (cell is null)))) == true)) {
-            reason = "projection kits, machines, fonts, observations and observed cells must be non-null rows.";
+            reason = "projection kits, machines, input modes, seat modes, body registers, navigation, fonts, observations and observed cells must be non-null well-formed rows.";
 
             return false;
         }
-
-        if (!WorldProjectionContent.TryResolve(references: projection.Creations, store: (content ?? WorldProjectionContent.Shared),
-            fetch: fetch, prototypes: out var prototypes, reason: out reason)) {
-            return false;
-        }
-        var state = WorldFieldsSection.ToStateSection(composite: (projection.FieldRegions ?? []));
-
-        if (projection.Observations is { Count: > 0 } observations) {
-            var rows = new List<WorldStateRow>(collection: (state.World ?? []));
-
-            foreach (var observed in observations) {
-                if (!TryObservedRow(
-                    observed: observed,
-                    reason: out reason,
-                    row: out var row
-                )) {
+        if (((projection.BodyState?.Count ?? 0) + (projection.IdentityState?.Count ?? 0)) > 0) {
+            if (((projection.BodyState?.Count ?? 0) + (projection.IdentityState?.Count ?? 0)) > StateCapacity.MaxBodySlots) {
+                reason = $"projection declares more than {StateCapacity.MaxBodySlots} body and identity registers.";
+                return false;
+            }
+            var seenRegisters = new HashSet<string>(comparer: StringComparer.Ordinal);
+            foreach (var row in (projection.BodyState ?? [])) {
+                if (!seenRegisters.Add(item: row.Name)) {
+                    reason = $"projection declares duplicate body/identity register '{row.Name}'.";
                     return false;
                 }
+            }
+            foreach (var row in (projection.IdentityState ?? [])) {
+                if (!seenRegisters.Add(item: row.Name)) {
+                    reason = $"projection declares duplicate body/identity register '{row.Name}'.";
+                    return false;
+                }
+            }
+        }
 
-                rows.Add(item: row);
+        IReadOnlyList<WorldPrototype>? prototypes;
+
+        if (same && ReferenceEquals(objA: projection.Creations, objB: previousProjection!.Creations)) {
+            prototypes = known!.CreationsRaw;
+        } else if (!WorldProjectionContent.TryResolve(references: projection.Creations, store: (content ?? WorldProjectionContent.Shared),
+            fetch: fetch, prototypes: out var resolvedPrototypes, reason: out reason, known: known, fallbackKnown: fallbackKnown)) {
+            return false;
+        } else {
+            prototypes = resolvedPrototypes;
+        }
+
+        var reuseFields = (same && ReferenceEquals(objA: projection.FieldRegions, objB: previousProjection!.FieldRegions));
+        var reuseBodyRegisters = (same &&
+            ReferenceEquals(objA: projection.BodyState, objB: previousProjection!.BodyState) &&
+            ReferenceEquals(objA: projection.IdentityState, objB: previousProjection.IdentityState));
+        var reuseState = (reuseFields && reuseBodyRegisters &&
+            ReferenceEquals(objA: projection.Observations, objB: previousProjection!.Observations) &&
+            ReferenceEquals(objA: projection.Spaces, objB: previousProjection.Spaces));
+        WorldStateSection? state;
+
+        if (reuseState) {
+            state = known!.StateRaw;
+        } else {
+            var builtState = WorldFieldsSection.ToStateSection(composite: (projection.FieldRegions ?? []));
+            var fieldRowCount = (builtState.World?.Count ?? 0);
+
+            if (projection.Observations is { Count: > 0 } observations) {
+                var rows = new List<WorldStateRow>(capacity: (fieldRowCount + observations.Count));
+                if (builtState.World is { } fieldRows) {
+                    rows.AddRange(collection: fieldRows);
+                }
+                var prevObs = (reuseFields ? previousProjection?.Observations : null);
+                var prevWorld = (reuseFields ? known?.StateRaw?.World : null);
+                var canShareRows = ((prevObs is not null) && (prevWorld is not null) &&
+                    (prevWorld.Count == (fieldRowCount + prevObs.Count)) && (prevObs.Count == observations.Count));
+
+                for (var obsIndex = 0; (obsIndex < observations.Count); obsIndex++) {
+                    var observed = observations[obsIndex];
+                    if (canShareRows && ReferenceEquals(objA: observed, objB: prevObs![obsIndex])) {
+                        rows.Add(item: prevWorld![fieldRowCount + obsIndex]);
+                        continue;
+                    }
+                    if (!TryObservedRow(
+                        observed: observed,
+                        reason: out reason,
+                        row: out var row
+                    )) {
+                        return false;
+                    }
+
+                    rows.Add(item: row);
+                }
+
+                builtState = (builtState with {
+                    Spaces = projection.Spaces,
+                    World = rows,
+                });
             }
 
-            state = (state with {
-                Spaces = projection.Spaces,
-                World = rows,
-            });
+            var bodySlots = ((same && ReferenceEquals(objA: projection.BodyState, objB: previousProjection!.BodyState))
+                ? known!.StateRaw?.Body
+                : ((projection.BodyState is { Count: > 0 } projectedBody)
+                    ? [.. projectedBody.Select(selector: static slot => slot.ToSlot())]
+                    : null));
+            var identitySlots = ((same && ReferenceEquals(objA: projection.IdentityState, objB: previousProjection!.IdentityState))
+                ? known!.StateRaw?.Identity
+                : ((projection.IdentityState is { Count: > 0 } projectedIdentity)
+                    ? [.. projectedIdentity.Select(selector: static slot => slot.ToSlot())]
+                    : null));
+
+            if ((bodySlots is not null) || (identitySlots is not null)) {
+                builtState = (builtState with {
+                    Body = bodySlots,
+                    Identity = identitySlots,
+                });
+            }
+
+            state = builtState;
         }
 
-        var kits = new WorldKit[projection.Kits.Count];
+        WorldKitsSection kitsSection;
 
-        for (var index = 0; (index < kits.Length); index++) {
-            var kit = projection.Kits[index];
+        if (same && ReferenceEquals(objA: projection.Kits, objB: previousProjection!.Kits) && (projection.Assignment == previousProjection.Assignment) && (known!.KitsRaw is { } heldKits)) {
+            kitsSection = heldKits;
+        } else {
+            var kits = new WorldKit[projection.Kits.Count];
 
-            // An empty producer/action table is the honest hydration: this client never runs either, and the
-            // authority that does never reads this document.
-            kits[index] = new WorldKit(
-                Name: kit.Name,
-                BodyMotionProgram: kit.BodyMotionProgram,
-                Motion: kit.Motion,
-                Collider: kit.Collider,
-                BodyContact: kit.BodyContact
+            for (var index = 0; (index < kits.Length); index++) {
+                var kit = projection.Kits[index];
+
+                // An empty producer/action table is the honest hydration: this client never runs either, and the
+                // authority that does never reads this document.
+                kits[index] = new WorldKit(
+                    Name: kit.Name,
+                    BodyMotionProgram: kit.BodyMotionProgram,
+                    Motion: kit.Motion,
+                    Collider: kit.Collider,
+                    BodyContact: kit.BodyContact
+                );
+            }
+
+            kitsSection = new WorldKitsSection(
+                Assignment: projection.Assignment,
+                Rows: kits
             );
         }
+
+        var shadesUnchanged = (same && ReferenceEquals(objA: projection.Shades, objB: previousProjection!.Shades));
+        var placementsSection = ((same && ReferenceEquals(objA: projection.Placements, objB: previousProjection!.Placements) && (known!.PlacementsRaw is { } heldPlacements))
+            ? heldPlacements
+            : new WorldPlacementsSection(Rows: projection.Placements));
+        var looksSection = ((same && shadesUnchanged && ReferenceEquals(objA: projection.Looks, objB: previousProjection!.Looks) && (projection.LookAssignment == previousProjection.LookAssignment) && (known!.LooksRaw is { } heldLooks))
+            ? heldLooks
+            : new WorldLooksSection(
+                Assignment: projection.LookAssignment,
+                Rows: projection.Looks
+            ));
+        var renderRaw = ((same && shadesUnchanged && ReferenceEquals(objA: projection.Render, objB: previousProjection!.Render) && (known!.RenderRaw is { } heldRender))
+            ? heldRender
+            : projection.Render);
+        var machinesRaw = ((same && ReferenceEquals(objA: projection.Machines, objB: previousProjection!.Machines))
+            ? known!.MachinesRaw
+            : ((projection.Machines is { Count: > 0 } projectedMachines)
+                ? [.. projectedMachines.Select(selector: static machine => machine.ToMachine())]
+                : null));
+        var metadataSection = ((same && ReferenceEquals(objA: projection.Metadata, objB: previousProjection!.Metadata))
+            ? known!.Metadata
+            : ((projection.Metadata is { } metadata)
+                ? new WorldMetadataSection(
+                    Title: metadata.Title,
+                    Description: metadata.Description
+                )
+                : null));
+
+        var inputModes = ((same && ReferenceEquals(objA: projection.InputModes, objB: previousProjection!.InputModes))
+            ? known!.InputModes
+            : projection.InputModes?.ToInputModes());
+        var inputHistory = ((same && (projection.InputEventsPerStep == previousProjection!.InputEventsPerStep))
+            ? known!.InputHistory
+            : ((projection.InputEventsPerStep is { } eventsPerStep)
+                ? new WorldInputHistory(EventCapacity: Math.Max(val1: 256, val2: eventsPerStep), MaximumEventsPerStep: eventsPerStep)
+                : null));
 
         var hydrated = new WorldDefinition(
             MotionRaw: projection.Motion,
             SpawnPointsRaw: projection.SpawnPoints,
-            RenderRaw: projection.Render,
+            RenderRaw: renderRaw,
             ScreensRaw: projection.Screens,
             ScreenMaterialsRaw: projection.ScreenMaterials,
             CamerasRaw: projection.Cameras,
             PopulationRaw: projection.Population,
             PlayerDefaultsRaw: projection.PlayerDefaults,
             ChannelsRaw: projection.Channels,
-            TargetRegistersRaw: [],
-            BodyMotionProgramsRaw: [],
-            KitsRaw: new WorldKitsSection(
-                Assignment: projection.Assignment,
-                Rows: kits
-            ),
+            InputModes: inputModes,
+            InputHistory: inputHistory,
+            TargetRegistersRaw: (same ? known!.TargetRegistersRaw : []),
+            BodyMotionProgramsRaw: (same ? known!.BodyMotionProgramsRaw : []),
+            KitsRaw: kitsSection,
             DefaultSeatKitRaw: projection.DefaultSeatKit,
-            AddonsRaw: [],
+            AddonsRaw: (same ? known!.AddonsRaw : []),
             BindingOverlaysRaw: projection.BindingOverlays,
-            StorageRaw: new WorldStorageDefaults(),
+            StorageRaw: (same ? known!.StorageRaw : new WorldStorageDefaults()),
             CreationsRaw: prototypes,
-            PlacementsRaw: new WorldPlacementsSection(Rows: projection.Placements),
+            PlacementsRaw: placementsSection,
             SpeakersRaw: projection.Speakers,
             TunesRaw: projection.Tunes,
             PatchesRaw: projection.Patches,
@@ -897,44 +1218,40 @@ public static class WorldProjection {
             CollisionRaw: projection.Collision,
             HostRaw: null,
             ViewsRaw: projection.Views,
-            LooksRaw: new WorldLooksSection(
-                Assignment: projection.LookAssignment,
-                Rows: projection.Looks
-            ),
+            LooksRaw: looksSection,
             DynamicsRaw: projection.Dynamics,
-            GrantsRaw: [],
+            GrantsRaw: (same ? known!.GrantsRaw : []),
             HudRaw: projection.Hud,
-            StateRaw: state,
-            InputHoldRaw: new WorldInputHoldAuthoring(
+            StateRaw: (same ? known!.StateRaw : state),
+            InputHoldRaw: (same ? known!.InputHoldRaw : new WorldInputHoldAuthoring(
                 CeilingSeconds: 0f,
                 DefaultSeconds: 0f,
                 EqualizeByDefault: false,
                 LowerAfterSeconds: 0f,
                 Participants: []
-            ),
+            )),
             Simulation: projection.Simulation,
             Interactions: projection.Interactions,
             References: projection.References,
             Destinations: projection.Destinations,
             Adjacencies: projection.Adjacencies,
-            Metadata: ((projection.Metadata is { } metadata)
-            ? new WorldMetadataSection(
-                    Title: metadata.Title,
-                    Description: metadata.Description
-                )
-            : null),
+            Metadata: metadataSection,
             TimelineRaw: projection.Timeline,
             HapticsRaw: projection.Haptics,
             KeyLightsRaw: projection.KeyLights,
             HighlightsRaw: projection.Highlights,
+            SeatModesRaw: projection.SeatModes,
+            NavigationRaw: projection.Navigation,
             Text: projection.Text,
-            MachinesRaw: ((projection.Machines is { Count: > 0 } projectedMachines)
-            ? [.. projectedMachines.Select(selector: static machine => machine.ToMachine())]
-            : null)
+            MachinesRaw: machinesRaw
         ) {
             DocumentId = projection.Provenance.DocumentId,
-            ShadesRaw = projection.Shades,
+            ShadesRaw = (shadesUnchanged ? known!.StoredShades : projection.Shades),
         };
+
+        if (same && !reuseState) {
+            hydrated = hydrated.WithStateSection(state: state);
+        }
 
         if (Uncarried(definition: hydrated) is { } uncarried) {
             reason = uncarried;
@@ -942,7 +1259,14 @@ public static class WorldProjection {
             return false;
         }
 
-        if (!WorldDefinitionValidator.TryValidateDeliveredAudio(definition: hydrated, reason: out reason)) {
+        var audioUnchanged = (same &&
+            ReferenceEquals(objA: projection.Audio, objB: previousProjection!.Audio) &&
+            ReferenceEquals(objA: projection.Speakers, objB: previousProjection.Speakers) &&
+            ReferenceEquals(objA: projection.Tunes, objB: previousProjection.Tunes) &&
+            ReferenceEquals(objA: projection.Patches, objB: previousProjection.Patches) &&
+            ReferenceEquals(objA: projection.Music, objB: previousProjection.Music));
+
+        if (!audioUnchanged && !WorldDefinitionValidator.TryValidateDeliveredAudio(definition: hydrated, reason: out reason)) {
             return false;
         }
 
@@ -954,8 +1278,28 @@ public static class WorldProjection {
             return false;
         }
 
+        var inputUnchanged = (same &&
+            ReferenceEquals(objA: projection.Channels, objB: previousProjection!.Channels) &&
+            ReferenceEquals(objA: projection.InputModes, objB: previousProjection.InputModes) &&
+            ReferenceEquals(objA: projection.SeatModes, objB: previousProjection.SeatModes) &&
+            (projection.InputEventsPerStep == previousProjection.InputEventsPerStep));
+
+        if (!inputUnchanged) {
+            try {
+                _ = WorldInputCatalog.For(definition: resolved);
+            } catch (ArgumentException exception) {
+                reason = $"projection input contract is invalid: {exception.Message}";
+
+                return false;
+            }
+        }
+
         definition = resolved;
-        WorldContentIndex.Fetch(definition: resolved, fetch: fetch, held: content);
+        if (!audioUnchanged || !ReferenceEquals(objA: projection.Text, objB: previousProjection!.Text)) {
+            WorldContentIndex.Fetch(definition: resolved, fetch: fetch, held: content);
+        }
+
+        reason = string.Empty;
 
         return true;
     }
@@ -1187,6 +1531,69 @@ public static class WorldProjectionContent {
             ConfiguredStore = store;
         }
     }
+    private sealed class DerivedPrototype {
+        public ContentPin Pin { get; init; }
+        public string Text { get; init; } = string.Empty;
+        public ContentAddressedStore? Store;
+    }
+
+    private static readonly CodeDerivedTable<WorldPrototype, DerivedPrototype> DerivedPrototypes = new();
+    private static readonly CodeDerivedTable<WorldDefinition, Dictionary<ContentPin, WorldPrototype>> KnownPrototypes = new();
+
+    private static DerivedPrototype DerivedOf(WorldPrototype prototype, out byte[]? serialized) {
+        if (DerivedPrototypes.TryGetValue(key: prototype, value: out var cached)) {
+            serialized = null;
+
+            return cached;
+        }
+
+        serialized = Serialize(prototype: prototype);
+        var pin = ContentPin.Compute(content: serialized);
+        var created = new DerivedPrototype {
+            Pin = pin,
+            Text = pin.ToString(),
+        };
+
+        DerivedPrototypes.AddOrUpdate(key: prototype, value: created);
+
+        return created;
+    }
+
+    private static Dictionary<ContentPin, WorldPrototype> KnownOf(WorldDefinition definition) {
+        if (KnownPrototypes.TryGetValue(key: definition, value: out var cached)) {
+            return cached;
+        }
+
+        var table = new Dictionary<ContentPin, WorldPrototype>();
+
+        foreach (var prototype in definition.Creations) {
+            if ((prototype is null) || WorldStateDocumentValues.HasReference(graph: prototype)) {
+                continue;
+            }
+
+            var derived = DerivedOf(prototype: prototype, serialized: out _);
+
+            _ = table.TryAdd(key: derived.Pin, value: prototype);
+        }
+
+        KnownPrototypes.AddOrUpdate(key: definition, value: table);
+
+        return table;
+    }
+
+    private static bool TryKnownPrototype(ContentPin pin, WorldDefinition? known, WorldDefinition? fallbackKnown, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldPrototype? prototype) {
+        if ((known is not null) && KnownOf(definition: known).TryGetValue(key: pin, value: out prototype)) {
+            return true;
+        }
+        if ((fallbackKnown is not null) && !ReferenceEquals(objA: fallbackKnown, objB: known) && KnownOf(definition: fallbackKnown).TryGetValue(key: pin, value: out prototype)) {
+            return true;
+        }
+
+        prototype = null;
+
+        return false;
+    }
+
     /// <summary>Serializes exactly the disclosed prototype body, without its world-local name.</summary>
     /// <param name="prototype">The flattened prototype.</param>
     /// <returns>Its compact canonical bytes.</returns>
@@ -1197,17 +1604,30 @@ public static class WorldProjectionContent {
     /// <param name="prototype">The disclosed prototype.</param>
     /// <param name="store">The content store.</param>
     /// <returns>The name and content pin.</returns>
-    public static WorldPrototypeReference Put(WorldPrototype prototype, ContentAddressedStore store) => new(
-        Id: prototype.Id, Content: store.Put(content: Serialize(prototype: prototype)).ToString());
+    public static WorldPrototypeReference Put(WorldPrototype prototype, ContentAddressedStore store) {
+        ArgumentNullException.ThrowIfNull(argument: prototype);
+        ArgumentNullException.ThrowIfNull(argument: store);
+
+        var derived = DerivedOf(prototype: prototype, serialized: out var serialized);
+
+        if (!ReferenceEquals(objA: Volatile.Read(location: ref derived.Store), objB: store) || !store.Contains(pin: derived.Pin)) {
+            _ = store.Put(content: (serialized ?? Serialize(prototype: prototype)));
+            Volatile.Write(location: ref derived.Store, value: store);
+        }
+
+        return new WorldPrototypeReference(Id: prototype.Id, Content: derived.Text);
+    }
     /// <summary>Resolves references from the recipient's cache, fetching only missing objects and verifying their pins.</summary>
     /// <param name="references">The references delivered by the authority.</param>
     /// <param name="store">The recipient cache.</param>
     /// <param name="fetch">The authorized fetch door, or null when all objects must already be held.</param>
     /// <param name="prototypes">The hydrated prototypes on success.</param>
     /// <param name="reason">The refusal on failure.</param>
+    /// <param name="known">A definition already held by the recipient whose literal prototypes may satisfy matching pins.</param>
+    /// <param name="fallbackKnown">A secondary definition held by the recipient whose literal prototypes may satisfy matching pins.</param>
     /// <returns>Whether every reference resolved.</returns>
     public static bool TryResolve(IReadOnlyList<WorldPrototypeReference> references, ContentAddressedStore store,
-        Func<ContentPin, byte[]?>? fetch, out IReadOnlyList<WorldPrototype> prototypes, out string reason) {
+        Func<ContentPin, byte[]?>? fetch, out IReadOnlyList<WorldPrototype> prototypes, out string reason, WorldDefinition? known = null, WorldDefinition? fallbackKnown = null) {
         var result = new List<WorldPrototype>();
 
         prototypes = [];
@@ -1215,6 +1635,24 @@ public static class WorldProjectionContent {
         if (references is null) { return false; }
         foreach (var reference in references) {
             if ((reference is null) || !ContentPin.TryParse(text: reference.Content, pin: out var pin)) { return false; }
+
+            if (TryKnownPrototype(pin: pin, known: known, fallbackKnown: fallbackKnown, prototype: out var local)) {
+                var reused = ((local.Id == reference.Id)
+                    ? local
+                    : new WorldPrototype(Id: reference.Id, Document: local.Document, Mesh: local.Mesh));
+
+                if (!ReferenceEquals(objA: reused, objB: local)) {
+                    DerivedPrototypes.AddOrUpdate(
+                        key: reused,
+                        value: new DerivedPrototype {
+                            Pin = pin,
+                            Text = pin.ToString(),
+                        }
+                    );
+                }
+                result.Add(item: reused);
+                continue;
+            }
 
             // A fetched body is parsed before it is stored, so bytes that are no prototype never enter the store; a
             // body the store already held is parsed after the read.
@@ -1230,7 +1668,16 @@ public static class WorldProjectionContent {
             ) || ((body is null) && !TryParse(bytes: bytes.Span, body: out body))) {
                 return false;
             }
-            result.Add(item: new WorldPrototype(Id: reference.Id, Document: body!.Document, Mesh: body.Mesh));
+            var hydrated = new WorldPrototype(Id: reference.Id, Document: body!.Document, Mesh: body.Mesh);
+            DerivedPrototypes.AddOrUpdate(
+                key: hydrated,
+                value: new DerivedPrototype {
+                    Pin = pin,
+                    Store = store,
+                    Text = pin.ToString(),
+                }
+            );
+            result.Add(item: hydrated);
         }
         prototypes = result;
         reason = string.Empty;

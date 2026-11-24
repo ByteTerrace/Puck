@@ -236,6 +236,30 @@ bodies {
   reconnectGraceSeconds: 3
 }
 
+// Extend suit, flight-pack and noclip toggles beyond body 0 to the remaining local seats and admitted visitors.
+for b in range(1, (seatPopulation + visitorPopulation)) {
+  rule $"suit-toggle-body-{b}" {
+    when channel(body, b, suit) >= 1 and fact(body, b, Airborne) == 0
+    mode: Edge
+    setBodyState(key: $"{b}", state: "suit", expression: 1 - bodyState(body, b, suit))
+  }
+  rule $"suit-off-flight-body-{b}" {
+    when bodyState(body, b, suit) == 0 and bodyState(body, b, flightFuel) > 0
+    mode: Level
+    setBodyState(key: $"{b}", state: "flightFuel", expression: 0)
+  }
+  rule $"fly-body-{b}" {
+    when channel(body, b, rise) >= 1 and channel(body, b, jump) == 0 and bodyState(body, b, flightFuel) == 0 and bodyState(body, b, suit) == 1
+    mode: Level
+    setBodyState(key: $"{b}", state: "flightFuel", expression: 1000)
+  }
+  rule $"noclip-toggle-body-{b}" {
+    when channel(body, b, noclip) >= 1
+    mode: Edge
+    setBodyState(key: $"{b}", state: "noclip", expression: 1 - bodyState(body, b, noclip))
+  }
+}
+
 placements {
   policy {
     authoringHeadroomInstances: 4096

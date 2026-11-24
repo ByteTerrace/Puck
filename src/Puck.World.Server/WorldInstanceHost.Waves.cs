@@ -128,7 +128,8 @@ public sealed partial class WorldInstanceHost {
 
             row.Instance = instance;
             row.RateHz = rateHz;
-            row.Administrative = ((rateHz <= 0) || instance.IsPaused);
+            var idleClientRow = ((Boot is { } boot) && IsIdleClientBoot(boot: boot) && !IsOccupied(instance: instance) && !PresentsScreens(instance: instance));
+            row.Administrative = ((rateHz <= 0) || instance.IsPaused || idleClientRow);
             row.StepWidth = (row.Administrative ? 0UL : FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz)));
             row.Done = row.Administrative;
             row.Burst = 0;

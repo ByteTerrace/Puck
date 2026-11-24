@@ -196,6 +196,28 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     public WorldProjectionDocument? Project(WorldClockAnchorLedger? anchors = null, int sequence = 0, Puck.Assets.ContentAddressedStore? content = null) => !Observes ? null :
         WorldProjection.Compose(Source, WorldDisclosureTier.Presentation, authority, sequence, Arena, time(),
             recipient, Unrestricted, anchors, content: content, view: this);
+    /// <summary>Returns the disclosed prototype bytes for <paramref name="pin"/> when this view observes and its
+    /// presentation carries that prototype reference, without composing the whole projection.</summary>
+    /// <param name="pin">The requested content pin.</param>
+    /// <param name="store">The authority's content store.</param>
+    /// <param name="bytes">The prototype bytes when disclosed and held.</param>
+    /// <returns><see langword="true"/> when a creation of this view's presentation discloses <paramref name="pin"/>.</returns>
+    public bool TryPrototype(Puck.Assets.ContentPin pin, Puck.Assets.ContentAddressedStore store, out byte[]? bytes) {
+        if (!Observes) {
+            bytes = null;
+            return false;
+        }
+
+        return WorldProjection.TryPrototypeContent(
+            arena: Arena,
+            bytes: out bytes,
+            definition: Source,
+            pin: pin,
+            recipient: recipient,
+            store: store,
+            unrestricted: Unrestricted
+        );
+    }
     /// <summary>Advances a delivery's row images, never a read's history.</summary>
     public IReadOnlyList<WorldRowReplacement> Advance(WorldDeliveryCursor cursor, ReadOnlySpan<int> rows) => cursor.Advance(this, rows);
 }

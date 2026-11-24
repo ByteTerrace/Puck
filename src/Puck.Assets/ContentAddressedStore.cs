@@ -16,7 +16,8 @@ namespace Puck.Assets;
 /// <c>refs/&lt;category&gt;/&lt;name&gt;</c> holds a one-line text pointer (<c>sha256/&lt;hex64&gt;</c>).
 /// <see cref="ObjectPath(string, ContentPin)"/> and <see cref="ObjectRelativePath"/> state the object layout once; a
 /// reader that shares the tree without opening a store addresses objects through them. Every write is a complete-file
-/// replacement through <see cref="AtomicFile"/>: the bytes are staged in a flushed temporary beside the destination and
+/// replacement through <see cref="AtomicFile"/>: the bytes are staged in a temporary beside the destination (flushed to
+/// stable storage unless the store has a cache <see cref="Retention"/>, whose readers verify every object's pin) and
 /// renamed over it, so a reader never observes a partially-written object or ref, and a write that fails at any step
 /// deletes its temporary. A temporary's name ends in <see cref="AtomicFile.TemporarySuffix"/>, which no ref may, so
 /// <see cref="ListRefs"/> and retention skip a write in progress. Saving bytes already present preserves a verified
@@ -157,11 +158,21 @@ public sealed class ContentAddressedStore {
 
         if (!Holds(objectPath: objectPath, pin: pin)) {
             // A missing or corrupt object is replaced, so the publication overwrites; the staged write deletes its
-            // temporary on every path that does not publish it.
-            using var pending = AtomicFile.StageAllBytes(bytes: content, path: objectPath);
-
+            // temporary on every path that does not publish it. A cache's reader verifies every object's pin on read
+            // and re-fetches or re-derives on a miss, so a cache skips the stable-storage flush while keeping atomic
+            // temp-then-rename publication; a release store flushes before publishing.
             try {
-                pending.Commit();
+                if (Retention is not null) {
+                    AtomicFile.WriteVerifiedCache(
+                        path: objectPath,
+                        state: content,
+                        write: static (stream, bytes) => stream.Write(buffer: bytes)
+                    );
+                } else {
+                    using var pending = AtomicFile.StageAllBytes(bytes: content, path: objectPath);
+
+                    pending.Commit();
+                }
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException) && Holds(objectPath: objectPath, pin: pin)) {
                 // An identical concurrent writer already published the object.
             }

@@ -151,9 +151,13 @@ internal sealed class WorldDeliveryRows {
             ref readonly var delta = ref span[index];
             bool discloses;
             if (delta.Row >= 0) {
-                m_changed.Add(index: delta.Row);
-                if (delta.Row != wholeRow) { wholeRow = delta.Row; wholeRowReads = view.ReadsWhole(delta.Row); }
-                discloses = wholeRowReads;
+                if (rows) {
+                    m_changed.Add(index: delta.Row);
+                    if (delta.Row != wholeRow) { wholeRow = delta.Row; wholeRowReads = view.ReadsWhole(delta.Row); }
+                    discloses = wholeRowReads;
+                } else {
+                    discloses = false;
+                }
             } else if (delta.Cell < 0) {
                 discloses = false;
             } else {

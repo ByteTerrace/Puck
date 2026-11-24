@@ -65,7 +65,7 @@ test "raising the lobby's blinds, as gallery.blinds does, opens the sight line" 
   expect {
     hallBlinds.level0 == 0
     hallBlinds.level1 == 1
-    los(body, 0, body, 8) == 1
+    los(body, 0, body, 18) == 1
   }
 }
 
@@ -80,6 +80,6 @@ test "lowering them again stops it" {
   }
   expect {
     hallBlinds.level0 == 1
-    los(body, 0, body, 8) == 0
+    los(body, 0, body, 18) == 0
   }
 }

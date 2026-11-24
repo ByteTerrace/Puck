@@ -10,9 +10,9 @@ import "../games/chess"
 // the room's doorway aisle. chess.md beside this file says how to move a piece,
 // read the game and set the opponent.
 
-// The Moth basis seats eight bodies; the 32 pieces and the board cursor take the rest.
+// The debug world reserves 18 lower slots (4 seats, 8 visitors and 6 range targets); the 32 pieces and the board cursor take the rest.
 bodies {
-  capacity: 41
+  capacity: 51
 }
 
 // The pieces are bodies 18 to 49, piece n body 49 - n, above the four seats, eight visitors and six range walkers

@@ -48,9 +48,11 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
     // What one endpoint's delivered document compiles to, kept until the mirror says its scene changed.
     private sealed class World {
         public WorldStateLease? Scale;
-        public IWorldSeatNavigation? Navigation;
+        public IWorldSeatNavigation? LastNavigation;
+        public readonly WorldDocumentProduct<IWorldSeatNavigation> Navigation = new();
         public int NavigationRevision = -1;
-        public WorldPlaces Places = WorldPlaces.None;
+        public WorldPlaces LastPlaces = WorldPlaces.None;
+        public readonly WorldDocumentProduct<WorldPlaces> Places = new();
         public int PlacesRevision = -1;
     }
 
@@ -65,13 +67,22 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
         var world = WorldOf(endpoint: endpoint);
         var revision = endpoint.Mirror.DefinitionRevision;
 
-        if ((world.Navigation is null) || (world.NavigationRevision != revision)) {
-            world.Navigation = navigation(arg1: endpoint.Definition, arg2: world.Navigation);
+        if ((world.LastNavigation is null) || (world.NavigationRevision != revision)) {
+            var definition = endpoint.Definition;
+            var previous = world.LastNavigation;
+
+            world.LastNavigation = world.Navigation.Of(
+                document: definition,
+                build: () => navigation(arg1: definition, arg2: previous)
+            );
             world.NavigationRevision = revision;
         }
 
-        return world.Navigation;
+        return world.LastNavigation;
     }
+    /// <summary>Reports whether a seat's input source registry is admitted by its routed authority.</summary>
+    public bool InputAdmitted(int slot) => client.IsSeatInputAdmitted(slot: slot);
+
     /// <summary>Lists the places of the endpoint's delivered document whose volume holds a point, innermost first.</summary>
     /// <param name="endpoint">The authority.</param>
     /// <param name="point">The world point.</param>
@@ -158,11 +169,16 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
         var revision = endpoint.Mirror.DefinitionRevision;
 
         if (world.PlacesRevision != revision) {
-            world.Places = WorldPlaces.Of(definition: endpoint.Definition);
+            var definition = endpoint.Definition;
+
+            world.LastPlaces = world.Places.Of(
+                document: definition,
+                build: () => WorldPlaces.Of(definition: definition)
+            );
             world.PlacesRevision = revision;
         }
 
-        return world.Places;
+        return world.LastPlaces;
     }
     // The body's live scale: the register the delivered document's bodies.scale names, read through the delivered state.
     private float Scale(in Reading reading) {

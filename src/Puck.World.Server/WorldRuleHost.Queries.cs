@@ -236,24 +236,23 @@ public sealed partial class WorldRuleHost {
 
         return false;
     }
-    // $channel: — the 1-based local seat's channel value as its body integrates it that tick: the drained
-    // CommandSnapshot's direct read folded with co-driving contributions and the admitted held overlay (a probe axis
-    // or any other held sample reaches a channel only through that overlay), in the channel's own FixedQ4816 domain.
-    // Compile time already bounded seat to 0..LocalSeatCount-1 and channelOrdinal to a declared channel; an
-    // out-of-range seat, or one no local seat currently occupies, reads Zero — the convention $parked:/$machine:/
-    // $region: already set.
-    private FixedQ4816 ReadChannelValue(int seat, int ordinal) {
+    // $channel: — the 1-based local seat's or addressed human-occupied body's channel value as its body integrates it
+    // that tick: the drained CommandSnapshot's direct read folded with co-driving contributions and the admitted held
+    // overlay (a probe axis or any other held sample reaches a channel only through that overlay), in the channel's own
+    // FixedQ4816 domain. An out-of-range index, or one no human seat or admitted remote human occupies, reads Zero — the
+    // convention $parked:/$machine:/$region: already set.
+    private FixedQ4816 ReadChannelValue(int bodyIndex, int ordinal) {
         if (
-            (((uint)seat) >= ((uint)Host.Population.LocalSeatCount)) ||
-            !Host.Population.IsHumanOccupied(bodyIndex: seat)
+            (((uint)bodyIndex) >= ((uint)Host.Population.Capacity)) ||
+            !Host.Population.IsHumanOccupied(bodyIndex: bodyIndex)
         ) {
             return FixedQ4816.Zero;
         }
 
         var catalog = Host.Population.InputCatalog;
 
-        if (((uint)ordinal) < ((uint)catalog.Channels.Length)) { Host.Input.ObserveBodyChannel(body: seat, channel: ((ushort)ordinal)); }
-        return (((Host.Body(index: seat) is { } body) && (((uint)ordinal) < ((uint)catalog.Channels.Length)) &&
+        if (((uint)ordinal) < ((uint)catalog.Channels.Length)) { Host.Input.ObserveBodyChannel(body: bodyIndex, channel: ((ushort)ordinal)); }
+        return (((Host.Body(index: bodyIndex) is { } body) && (((uint)ordinal) < ((uint)catalog.Channels.Length)) &&
             body.Channels.TryGetOrdinal(name: catalog.Channels[ordinal].Name, ordinal: out var address))
             ? body.ReadChannelScalar(ordinal: address) : FixedQ4816.Zero);
     }
@@ -313,8 +312,8 @@ public sealed partial class WorldRuleHost {
             return operand.Read(
                 press: ((operand.Facet == PointerFacet.Press)
                     ? ReadChannelValue(
-                        ordinal: operand.PressChannel,
-                        seat: operand.Seat
+                        bodyIndex: operand.Seat,
+                        ordinal: operand.PressChannel
                     )
                     : FixedQ4816.Zero),
                 ray: ReadPointerRay(seat: operand.Seat)
@@ -337,8 +336,8 @@ public sealed partial class WorldRuleHost {
                 return operand.Read(
                     press: ((operand.Facet == PointerFacet.Press)
                         ? ReadChannelValue(
-                            ordinal: operand.PressChannel,
-                            seat: seat
+                            bodyIndex: seat,
+                            ordinal: operand.PressChannel
                         )
                         : FixedQ4816.Zero),
                     ray: ray

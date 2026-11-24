@@ -73,7 +73,8 @@ public static partial class BenchmarkCommand {
                     .Append(provider: CultureInfo.InvariantCulture, handler: $"host {{ authorityNamespace: \"{PairNamespace}\" }}\n")
                     .Append(provider: CultureInfo.InvariantCulture, handler: $"bodies {{ networkPlayers: {seats}{((seated.Length > 0) ? $", {seated}" : string.Empty)} }}\n")
                     .Append(value: "admission [\n")
-                    .Append(value: "  { disclosure: Replica, domain: \"*\", grants [{ budget: 8, capability: Drive, exclusive: true }, { budget: 64, capability: Observe }], mode: FederatedAuthority }\n")
+                    .Append(value: "  { admits: Session, disclosure: Replica, domain: \"*\", grants [{ capability: Observe, subject: \"all\" }], mode: FederatedAuthority }\n")
+                    .Append(value: "  { admits: Visitor, disclosure: Replica, domain: \"*\", grants [{ budget: 8, capability: Drive, exclusive: true }, { budget: 64, capability: Observe }], mode: FederatedAuthority }\n")
                     .Append(provider: CultureInfo.InvariantCulture, handler: $"  {{ domain: \"{identity.Domain}\", subject: \"{PairNamespace}\", mode: SignsDirectly, algorithm: \"ecdsa-p256-sha256\", publicKey: \"{identity.PublicKeyBase64}\", grants [] }}\n")
                     .Append(value: "]\n");
                 File.WriteAllBytes(path: key, bytes: identity.Pkcs8);

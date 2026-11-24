@@ -100,8 +100,8 @@ test "a seated player picks two elements with the cursor and drops tokens into t
     ticks 4
     seat1: body.press confirm
     ticks 20
-    seat1: body.pose 64.79 9.97 30.88 0 0 0 500
-    seat1: body.pose 65.21 9.97 30.88 0 0 0 499
+    seat1: body.pose 64.79 9.97 30.88 0 0 0 510
+    seat1: body.pose 65.21 9.97 30.88 0 0 0 509
     ticks 150
   }
   expect {
@@ -128,10 +128,10 @@ test "the hand wells resolve while another table is still moving" {
     goAiSide = 0
   }
   when {
-    seat1: body.pose 56.5 1000 30.6 0 0 0 470
+    seat1: body.pose 56.5 1000 30.6 0 0 0 480
     ticks 150
-    seat1: body.pose 64.79 9.97 30.88 0 0 0 500
-    seat1: body.pose 65.21 9.97 30.88 0 0 0 499
+    seat1: body.pose 64.79 9.97 30.88 0 0 0 510
+    seat1: body.pose 65.21 9.97 30.88 0 0 0 509
     ticks 150
   }
   expect {

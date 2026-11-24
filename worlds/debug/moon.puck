@@ -23,6 +23,7 @@ import "place-kit"
 import "moon-frame"
 import "moon-surface"
 import "../standard/skies"
+import "../standard/visitors"
 // A ship that crosses the sky seam is a ship here: the craft register and the selectors that read it.
 import "craft-form"
 
@@ -36,9 +37,10 @@ metadata {
   description: "The pale moon of the debug world's valley: a cratered sphere to walk and fly round, reached through the painting wing's moon painting or by ship through the sky seam."
 }
 
-// A traveller from the debug world arrives here, and the debug world's sky and painting observe it whole.
+// The debug world's sky and painting observe the moon whole as sessions; arriving visitors receive the standard visitor row.
 admission [
   {
+    admits: Session
     disclosure: Replica
     domain: "*"
     grants [
@@ -55,6 +57,7 @@ admission [
     ]
     mode: FederatedAuthority
   }
+  visitorAdmissionRow(domain: "*")
 ]
 
 references [
@@ -98,6 +101,9 @@ adjacencies [
 // The moon holds more than a traveller's own body: a ship and its pilot arrive as two.
 bodies {
   capacity: 16
+  localSeats: 4
+  networkPlayers: 8
+  reconnectGraceSeconds: 3
 }
 
 // The pull: toward the centre at `moonGravity` everywhere inside `moonReach`. Outside it only the valley's pull is

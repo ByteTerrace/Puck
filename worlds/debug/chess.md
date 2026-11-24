@@ -86,8 +86,8 @@ columns toward +X. Lift a piece onto a square by posing its body at y = 10.35,
 
 | Move | Console line |
 |---|---|
-| e2-e4 (the e2 pawn, body 27) | `body.pose 56.4 10.35 22.5 0 0 0 27` |
-| Ng1-f3 (body 33) | `body.pose 56.2 10.35 22.3 0 0 0 33` |
+| e2-e4 (the e2 pawn, body 37) | `body.pose 56.4 10.35 22.5 0 0 0 37` |
+| Ng1-f3 (body 43) | `body.pose 56.2 10.35 22.3 0 0 0 43` |
 | Take a piece off the board | pose its body onto the table beside the board past the h-file, as `body.pose 55.6 10.35 22.3 0 0 0 <body>` |
 
 Seat 1 holds `Drive` over the 32 piece bodies, so it may pose them as well as

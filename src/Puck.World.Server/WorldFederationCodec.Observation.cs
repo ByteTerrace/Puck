@@ -71,11 +71,13 @@ public static class WorldProjectionPrototypeFetch {
     /// <param name="ceiling">The connection's disclosure ceiling.</param>
     /// <param name="traveler">The traveler credential, or null for public observation.</param>
     /// <param name="content">The authority's content store, or the shared store.</param>
+    /// <param name="requireValid">Checks the caller's live connection credential under the authority gate.</param>
     /// <returns>The disclosed bytes, or null on refusal.</returns>
     public static ValueTask<byte[]?> FetchAsync(WorldServer server, ContentPin pin, string sourceAuthority, WorldDisclosureTier ceiling,
-        WorldTravelerObservation? traveler = null, ContentAddressedStore? content = null) {
+        WorldTravelerObservation? traveler = null, ContentAddressedStore? content = null, Action? requireValid = null) {
         var forward = false;
         var bytes = server.ExecuteAuthorityOperation(operation: () => {
+            requireValid?.Invoke();
             Principal? recipient = null;
 
             if (traveler is { } request) {
@@ -116,11 +118,13 @@ public static class WorldProjectionPrototypeFetch {
                         return pinned.ToArray();
                     }
                 }
-                var projection = view.Project(content: store)!;
-
-                if (projection.Creations.Any(predicate: reference => (reference.Content == pin.ToString()))) {
-                    return (store.TryGet(content: out var body, pin: pin) ? body : null);
+                if (!view.Observes) {
+                    return null;
                 }
+                if (view.TryPrototype(pin: pin, store: store, bytes: out var prototypeBody)) {
+                    return prototypeBody;
+                }
+                var projection = view.Project(content: store)!;
 
                 // Content a row of the projection names by pin, a font for one, is read from where this authority
                 // holds it: the file its own document names, through the one reader, which hashes it.

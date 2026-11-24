@@ -499,8 +499,8 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         ArgumentNullException.ThrowIfNull(argument: operand);
 
         return Fact.Finite(value: ReadChannelValue(
-            ordinal: operand.ChannelOrdinal,
-            seat: operand.Seat
+            bodyIndex: ResolveBodyRef(bodyRef: operand.Body),
+            ordinal: operand.ChannelOrdinal
         ));
     }
     /// <inheritdoc/>

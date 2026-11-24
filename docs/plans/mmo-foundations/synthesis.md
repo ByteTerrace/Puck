@@ -308,7 +308,7 @@ assigned (a search for `DurableImages =` over `src/` finds nothing) **[opened]**
 ```
 
 The destination's consumed-epoch fence is real and per destination
-**[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:2249-2251`):
+**[opened]** (`src/Puck.World.Server/WorldTransferEscrow.cs:2257-2259`):
 
 ```csharp
                 (knownEpoch >= mobility.Epoch)

@@ -35,6 +35,9 @@ public sealed record WorldBootInputs(
     /// <summary>Gets the GPU capture tool the boot loaded before any device (<c>--capture-tool</c>), which
     /// <c>gpu.capture</c> drives, or <see langword="null"/> for none.</summary>
     public IGpuCaptureTool? CaptureTool { get; init; }
+    /// <summary>Gets the remote authority endpoint (<c>--connect</c>) the boot world's seats join at boot, or
+    /// <see langword="null"/> for a standalone authority.</summary>
+    public string? ConnectEndpoint { get; init; }
     /// <summary>Gets the subject a <c>--authentication-config-file</c> connection signs as, which the boot server
     /// takes as its authority identity, or <see langword="null"/> to keep the document's own.</summary>
     public string? ConnectionSubject { get; init; }

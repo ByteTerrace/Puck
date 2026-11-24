@@ -814,9 +814,10 @@ public static class WorldBootComposition {
         // Console lines pinned to exact boot ticks (world.at), published at the same call site as the schedule rows.
         services.AddSingleton(implementationFactory: static sp => {
             var server = sp.GetRequiredService<WorldServer>();
+            var instances = sp.GetRequiredService<WorldInstanceHost>();
 
             return new WorldTickScript(
-                completedTick: () => ((server.NextInputTick > 0UL) ? (server.NextInputTick - 1UL) : 0UL),
+                completedTick: () => instances.HostScriptTick(bootServer: server),
                 registry: sp.GetRequiredService<Func<CommandRegistry>>(),
                 source: () => sp.GetRequiredService<TextCommandSource>()
             );
@@ -990,6 +991,13 @@ public static class WorldBootComposition {
                 Tape = sp.GetRequiredService<WorldReplayTape>(),
             };
 
+            if (sp.GetService<WorldBootInputs>() is { ConnectEndpoint: { } remoteEndpoint } bootInputs) {
+                host.JoinRemote(
+                    authority: remoteEndpoint,
+                    documentPath: bootOrigin.SourcePath,
+                    listens: (bootInputs.HostSettings.Listen is not null)
+                );
+            }
             host.AdmitBoot(row: bootRow);
 
             return host;
@@ -1185,6 +1193,7 @@ public static class WorldBootComposition {
         var worldSource = inputs.Source;
         var hostSettings = inputs.HostSettings;
 
+        services.AddSingleton(implementationInstance: inputs);
         services.AddPuckExtensions(extensions: inputs.Extensions);
         services.AddWorldMachineCatalog(machineCatalog: inputs.MachineCatalog);
         services.AddSingleton(implementationInstance: inputs.StateRoot);

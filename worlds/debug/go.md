@@ -60,9 +60,9 @@ physics. Seat 1 plays every side the computer does not own.
 Point ordinal = 19 × row + column, along +Z and +X respectively. Point 0 is
 (55.78, 29.88), centre 180 is (56.5, 30.6), and point 360 is (57.22, 31.32).
 Black stones are `goStone0` through `goStone180`; White's are `goStone181`
-through `goStone360`. The cursor is body 471 and stone n is body 470 − n.
+through `goStone360`. The cursor is body 481 and stone n is body 480 − n.
 Off-board stone n reads `-1 - n`. Seat 1 may pose every stone; for example,
-`body.pose 56.58 10 30.6 0 0 0 470` drops the first black stone at point 181.
+`body.pose 56.58 10 30.6 0 0 0 480` drops the first black stone at point 181.
 
 | Action | Console |
 |---|---|

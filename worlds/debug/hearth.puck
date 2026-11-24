@@ -14,6 +14,7 @@ import "moth-controls"
 import "suit"
 import "size"
 import "painting-kit"
+import "../standard/visitors"
 
 // The hearth draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -25,9 +26,17 @@ metadata {
   description: "A world reached only through the garden: a warm room under a dark sky with a glowing ember and a frame back to the garden."
 }
 
-// A traveller from the garden arrives here, and the garden's window onto the hearth observes it whole.
+bodies {
+  capacity: 12
+  localSeats: 4
+  networkPlayers: 8
+  reconnectGraceSeconds: 3
+}
+
+// The garden's window onto the hearth observes it whole as a session; arriving visitors receive the standard visitor row.
 admission [
   {
+    admits: Session
     disclosure: Replica
     domain: "*"
     grants [
@@ -44,6 +53,7 @@ admission [
     ]
     mode: FederatedAuthority
   }
+  visitorAdmissionRow(domain: "*")
 ]
 
 references [

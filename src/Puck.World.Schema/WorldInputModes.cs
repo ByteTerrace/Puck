@@ -36,7 +36,12 @@ public sealed record WorldInputModeFamily(
 public sealed record WorldInputModeSelector(
     WorldInputModeSelectorKind Kind,
     [property: DocumentText("a body register or shared seat-mode family selected by the selector kind")] string? Name = null
-);
+) {
+    /// <summary>Marks a selector hydrated from a presentation projection: the authority owns tuple selection, so the
+    /// client compiles tuples and continuity without evaluating or proving the selector's hidden body-state envelope.</summary>
+    [JsonIgnore]
+    internal bool AuthoritySelected { get; init; }
+}
 /// <summary>Sources whose finite envelopes can be proved when a document is admitted.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldInputModeSelectorKind>))]
 public enum WorldInputModeSelectorKind : byte {
