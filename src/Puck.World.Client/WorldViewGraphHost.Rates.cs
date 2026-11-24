@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Counting;
 using Puck.Hosting;
 using Puck.Maths;
@@ -15,26 +16,29 @@ namespace Puck.World.Client;
 // per lever), so the views, and the screens, that take a tier together render on alternate halves of it; its
 // footprints carry the lead (RenderGraphRefresh.LeadSeconds) until the render it asks for.
 public sealed partial class WorldViewGraphHost {
-    private readonly Dictionary<(string Consumer, string Producer), (PortalSight Sight, double Width, double Height, int Glass)> m_portalCoverage = [];
-
-    // A completion's cameras and placements stand while it decides demand. The stack-scoped frame clears the
-    // scratch cache on construction and is the only path to its readings; nothing is retained across completions.
+    // A completion's cameras and placements stand while it decides demand. The stack-scoped frame stamps a new frame on
+    // construction and is the only path to its readings, each read once an edge (m_edgeSights).
     private readonly ref struct FootprintFrame {
         private readonly WorldViewGraphHost m_host;
+        private readonly long m_frame;
         public readonly SdfUpdateRates Rates;
+        public readonly FootprintTopology Topology;
 
         public FootprintFrame(WorldViewGraphHost host) {
             m_host = host;
             Rates = host.FrameRates;
-            host.m_portalCoverage.Clear();
+            Topology = host.Topology;
+            m_frame = ++host.m_footprintFrames;
         }
 
-        public PortalSight PortalCoverage(string consumer, string producer, out (double Width, double Height) coverage, out int glass) {
-            var key = (consumer, producer);
-            if (!m_host.m_portalCoverage.TryGetValue(key, out var reading)) {
-                var sight = m_host.ReadPortalCoverage(consumer, producer, out coverage, out glass);
-                reading = (sight, coverage.Width, coverage.Height, glass);
-                m_host.m_portalCoverage.Add(key, reading);
+        public PortalSight PortalCoverage(int edge, out (double Width, double Height) coverage, out int glass) {
+            ref var reading = ref m_host.m_edgeSights[edge];
+
+            if (reading.Frame != m_frame) {
+                reading.Sight = m_host.ReadPortalCoverage(consumer: Topology.Names[Topology.Consumer[edge]], producer: Topology.Names[Topology.Producer[edge]], coverage: out var read, glassIndex: out reading.Glass);
+                (reading.Width, reading.Height) = read;
+                reading.Occlusion = 0;
+                reading.Frame = m_frame;
             }
             coverage = (reading.Width, reading.Height);
             glass = reading.Glass;
@@ -72,10 +76,12 @@ public sealed partial class WorldViewGraphHost {
     private readonly HashSet<string> m_visiblePortals = new(comparer: StringComparer.Ordinal);
 
     // DecideScreenFootprints' working storage, reused each frame: the footprints it decides, each one's state, and the
-    // instances its kept footprints and the roots demand so far.
+    // instances (by topology id) its kept footprints and the roots demand so far.
     private readonly List<RenderGraphFootprint> m_pending = [];
     private readonly List<FootprintState> m_pendingState = [];
-    private readonly HashSet<string> m_demanded = new(comparer: StringComparer.Ordinal);
+    private readonly MarkedIndexSet m_demanded = new();
+    // Whether each pending footprint's consumer has a display share, read once before the decisions.
+    private readonly List<bool> m_pendingShared = [];
 
     private enum FootprintState : byte {
         Waiting = 0,
