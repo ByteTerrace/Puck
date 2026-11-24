@@ -516,7 +516,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     var widthOverride = parseResult.GetValue(option: widthOption);
     var heightOverride = parseResult.GetValue(option: heightOption);
 
-    if (parseResult.GetResult(option: frameBarOption) is not null) {
+    // A default makes the option's result implicit on every parse, so only a named --frame-bar counts.
+    if (parseResult.GetResult(option: frameBarOption) is { Implicit: false }) {
         if ((widthOverride is not null) || (heightOverride is not null)) {
             Console.Error.WriteLine(value: "--frame-bar sizes the window from the device profile; it refuses beside --width or --height.");
 
