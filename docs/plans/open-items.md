@@ -129,7 +129,7 @@ lanes, [the release](#the-release), the
 
 ### The first lanes
 
-Four campaigns, started together in the first hour, one principal each, with
+From here on at most two subagents run at once (the owner's standing order, AGENTS.md); the five lanes below started before it and finish as briefed, and any continuation runs two at a time. Four campaigns, started together in the first hour, one principal each, with
 the two milestones folded into them rather than queued behind them (the
 owner's ruling). How they run:
 

@@ -178,12 +178,15 @@ same short lock that registers tickets, before any resource grant.
 
 Writing is cheap and verifying is expensive: builds, boots, suites and GPU
 windows on one shared machine set the pace, so the work in flight is bounded by
-what the machine can verify. How many lanes run at once has no fixed maximum
-or minimum (the owner's ruling): the lead judges it each time from the work in
-hand (concurrent builds, measuring lanes that load would skew, GPU legs,
-shared files, its own capacity to inspect and merge) and launches more only
-when that judgement says the machine and the lead can absorb them. The owner's
-direction:
+what the machine can verify. **At most two subagents run at once** (the
+owner's standing order, so that agents stay focused and cooperate instead of
+competing for the machine and the same files): the lead starts a third only
+when the owner explicitly asks for a fan-out, and a workflow's agents count
+toward the two. The partner session on another machine is a peer, not a
+subagent, and does not count. Within that cap the lead still judges from the
+work in hand (concurrent builds, measuring lanes that load would skew, GPU
+legs, shared files, its own capacity to inspect and merge) whether a second
+lane pays. The owner's direction:
 
 - **Check what running cannot show, early, without gating it.** A change in a
   class [hazards](../../../docs/development/hazards.md#silent-invariants) marks
@@ -823,10 +826,11 @@ valley wall sector empty. The mesh bake
   representative subset; run the full set once at the end and again at
   integration. Two lanes that each need the same exclusive lease for long
   stretches are not parallel work; sequence them or split the lease-bound part.
-- **Workflows are a standing permission (the owner's ruling):** the lead runs the
-  Workflow tool whenever a multi-agent orchestration pays for itself (a wave, a
-  fan-out of independent reviews or research, a pipeline of write then verify),
-  without asking first; the agent-count guidance in the tool still applies.
+- **Workflows are a standing permission (the owner's ruling)** within the
+  two-subagent cap: the lead runs the Workflow tool when an orchestration of at
+  most two agents at a time pays for itself (a pipeline of write then verify),
+  without asking first. A wider fan-out (a wave, parallel reviews or research)
+  waits for the owner to ask for one.
   A workflow agent does not take its agent type's `isolation`: an `agentType:
   'principal'` writer without `isolation: 'worktree'` in its `agent()` options
   edits the lead's main checkout, and once switched branches there to commit.
