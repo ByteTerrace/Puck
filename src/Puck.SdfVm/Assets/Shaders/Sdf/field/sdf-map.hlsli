@@ -4,17 +4,20 @@
 // Only the mesh bake sets this, sampling one instance group's field without the segments no instance owns.
 static bool sdfMapOmitWorldSegments = false;
 // A folded rigid leaf's point: the pose before its fold run, then the run as written with the generic interpreter's
-// exact formulas (symmetry plane, repeat, limited repeat, and the translate/rotate/identity scale between them).
-float3 sdfRigidFoldPoint(float3 p, uint extensionOffset, uint dataOffset) {
+// exact formulas (symmetry plane, repeat, limited repeat, and the translate/rotate/identity scale between them). The
+// point is a float3, or the gradient walk's SdfDual3 (SDF_FIELD_DUAL), whose formula overloads every step resolves to;
+// a malformed run answers a point of NaN either way.
+template<typename TPoint>
+TPoint sdfRigidFoldPoint(TPoint p, uint extensionOffset, uint dataOffset) {
     uint4 prefix = sdfProgramWord(extensionOffset);
-    p -= asfloat(prefix.xyz);
+    p = sdfTranslatePoint(p, asfloat(prefix.xyz));
     if ((prefix.w & SDF_RIGID_LEAF_IDENTITY_ROTATION) == 0u) {
-        p = rotatePointByInverseQuaternion(p, asfloat(sdfProgramWord(extensionOffset + 1u)));
+        p = sdfRotatePoint(p, asfloat(sdfProgramWord(extensionOffset + 1u)));
     }
     uint first = (prefix.w & SDF_RIGID_LEAF_SHAPE_MASK);
     uint count = min(sdfProgramWord(extensionOffset + 2u).x, SDF_RIGID_LEAF_MAX_FOLD_RUN);
     if ((first > sdfProgramLayout.instructionCount) || (count > (sdfProgramLayout.instructionCount - first))) {
-        return asfloat(0x7fc00000u).xxx;
+        return sdfTranslatePoint(p, asfloat(0x7fc00000u).xxx);
     }
     [loop]
     for (uint step = 0u; (step < count); step++) {
@@ -24,38 +27,11 @@ float3 sdfRigidFoldPoint(float3 p, uint extensionOffset, uint dataOffset) {
         float4 data1 = sdfFieldData(dataOffset, index, 1u);
         switch (op) {
 #include "../isa/sdf-field-rigid.hlsli"
-            default: return asfloat(0x7fc00000u).xxx;
+            default: return sdfTranslatePoint(p, asfloat(0x7fc00000u).xxx);
         }
     }
     return p;
 }
-#ifdef SDF_FIELD_DUAL
-// The same fold run over a dual point: each arm resolves to its formula's dual overload.
-SdfDual3 sdfRigidFoldPoint(SdfDual3 p, uint extensionOffset, uint dataOffset) {
-    uint4 prefix = sdfProgramWord(extensionOffset);
-    p = sdfdSubtract(p, asfloat(prefix.xyz));
-    if ((prefix.w & SDF_RIGID_LEAF_IDENTITY_ROTATION) == 0u) {
-        p = sdfdRotateInverse(p, asfloat(sdfProgramWord(extensionOffset + 1u)));
-    }
-    uint first = (prefix.w & SDF_RIGID_LEAF_SHAPE_MASK);
-    uint count = min(sdfProgramWord(extensionOffset + 2u).x, SDF_RIGID_LEAF_MAX_FOLD_RUN);
-    if ((first > sdfProgramLayout.instructionCount) || (count > (sdfProgramLayout.instructionCount - first))) {
-        return sdfdLift(asfloat(0x7fc00000u).xxx);
-    }
-    [loop]
-    for (uint step = 0u; (step < count); step++) {
-        uint index = (first + step);
-        uint op = SDF_INSTRUCTION_OP(sdfFieldHeader(index));
-        float4 data0 = sdfFieldData(dataOffset, index, 0u);
-        float4 data1 = sdfFieldData(dataOffset, index, 1u);
-        switch (op) {
-#include "../isa/sdf-field-rigid.hlsli"
-            default: return sdfdLift(asfloat(0x7fc00000u).xxx);
-        }
-    }
-    return p;
-}
-#endif
 // Region admission and the primitive action both come from the shape catalogue.
 precise float sdfReliefRegionDistance(uint shapeType, float3 p, float4 data0, float4 data1) {
     float result;

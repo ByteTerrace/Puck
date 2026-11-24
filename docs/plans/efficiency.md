@@ -127,8 +127,7 @@ signed component's sum or extremum is not the encoded components'. A world that
 wants paired-cell arithmetic gets it as expression functions over signed pairs,
 built when one asks.
 
-**Still to sweep.** Low-discrepancy sampling in place of more samples (the
-irradiance trace's ray sets, the probe placement's rejection rays) and
-`ReciprocalDivisor32` for repeated divisions in the bake's lattice indexing
-(`SdfSampledLattice`'s `FineCoordinates` divides a key by the fine lattice's row
-and plane sizes for every sample it visits).
+**Already in place.** The bake's lattice indexing divides through
+`ReciprocalDivisor32` (`SdfSampledLattice.FineCoordinates`), and the irradiance
+volume and temporal history draw their sample sets from the low-discrepancy
+sequences in `Puck.Maths` (`SdfMeshIrradiance`, `SdfTemporalHistory`).
