@@ -1357,6 +1357,30 @@ The target pays only the sampling, so a recording can run beside a
 Exit codes: 0 done, 2 refused (no diagnostics port, or the trace could not be
 read).
 
+## `puck host samples`—where another process's threads spend their time, beneath a frame
+
+`puck host samples (--pid <pid> [--seconds <n>] [--output <file>] | --trace <file>) [--thread <id>] [--focus <text>] [--depth <n>] [--from <s>] [--to <s>] [--top <n>]`
+attributes another .NET process's thread time by the runtime's sample
+profiler. With `--pid` the CLI records an EventPipe session on the target's
+diagnostics port for `--seconds` (default 6) with the sample profiler, plus
+loader, JIT and rundown events that name the code, and keeps the `.nettrace`
+at `--output`; `--trace` reads a trace already taken, such as a
+`dotnet-trace collect --profile cpu-sampling` or `thread-time` one. The
+profiler records each managed thread's stack about every millisecond, running
+or waiting, so a thread's samples beneath a frame are its share of wall time
+there. The report lists every thread's samples, named by its outermost engine
+frame, then, of the samples whose stack holds a frame naming `--focus` (its
+outermost such frame, so recursion counts once), the `callee` paths of
+`--depth` frames beneath it (default 1), with `self` for samples in the frame
+itself, each with its share of the focused samples. `--thread` reads one
+thread, and `--from` and `--to` read a window in seconds from the trace's
+start. A frame thread's parts read this way are attribution on a machine
+others share, never timings: for example `--focus
+WorldViewGraphHost.CompleteFootprints --depth 2` on the World's frame thread.
+
+Exit codes: 0 done, 2 refused (no diagnostics port, or the trace could not be
+read).
+
 ## `puck laws prove`—a law against its fix
 
 `puck laws prove <law>` shows that a law fails without its fix and passes
