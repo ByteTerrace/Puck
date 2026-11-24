@@ -405,18 +405,7 @@ public sealed partial class WorldScreenBinder {
     /// <remarks>Reads the residency the session already renders, the World's own, its endpoint scene's or its own, and
     /// creates none.</remarks>
     public object? ArrivingWorld(string view, string consumer) {
-        if (!m_feedsByName.TryGetValue(
-            key: view,
-            value: out var feed
-        )) {
-            return null;
-        }
-
-        var residency = (feed.Home
-            ? ViewHost
-            : ((feed.Route.Window is { } window)
-                ? m_routedResidencies.GetValueOrDefault(key: window.Scene)
-                : m_viewResidencies.GetValueOrDefault(key: feed.RegistrationName)?.Residency));
+        var residency = ResidencyOfFeed(view: view);
 
         if ((residency is null) || !residency.MeshesArriving) { return null; }
         // The consumer's own render brings the meshes of the world it renders.
@@ -424,6 +413,21 @@ public sealed partial class WorldScreenBinder {
 
         return residency;
     }
+    /// <inheritdoc/>
+    /// <remarks>Reads the residency the session already renders, as <see cref="ArrivingWorld"/> does; the World's own
+    /// residency is always wanted and is left as it is.</remarks>
+    public void Want(string view) {
+        if ((ResidencyOfFeed(view: view) is { } residency) && !ReferenceEquals(objA: residency, objB: ViewHost)) { residency.Want(); }
+    }
+    // The residency a session view renders: the World's own, its endpoint scene's or its own; null for a view no feed
+    // names or one whose residency does not exist yet. Creates none.
+    private Puck.SdfVm.SdfWorldResidency? ResidencyOfFeed(string view) => (m_feedsByName.TryGetValue(key: view, value: out var feed)
+        ? (feed.Home
+            ? ViewHost
+            : ((feed.Route.Window is { } window)
+                ? m_routedResidencies.GetValueOrDefault(key: window.Scene)
+                : m_viewResidencies.GetValueOrDefault(key: feed.RegistrationName)?.Residency))
+        : null);
 
     // What one level's screens present: the instance whose screen sessions they show, the world their glass stands in,
     // and the eye a window among them fits to, with the feed or routed scene the level belongs to.

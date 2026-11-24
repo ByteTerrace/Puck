@@ -707,6 +707,21 @@ public sealed class SdfGpuWork : IDisposable {
 
     private static double Seconds(long ticks) => (ticks / ((double)Stopwatch.Frequency));
 
+    /// <summary>Gets the bytes the work's slots' buffers and its clients' own tables and caches hold, by the memory they
+    /// live in; the slots' readbacks count as host-visible. Read on the frame thread.</summary>
+    public GpuMemoryBytes OwnedBytes {
+        get {
+            var bytes = default(GpuMemoryBytes);
+
+            foreach (var slot in m_slots) {
+                foreach (var held in slot.Held) {
+                    bytes += ((held.Readback || held.HostVisible) ? new GpuMemoryBytes(DeviceLocal: 0UL, HostVisible: held.Buffer.SizeBytes) : new GpuMemoryBytes(DeviceLocal: held.Buffer.SizeBytes, HostVisible: 0UL));
+                }
+            }
+            foreach (var client in m_clients) { bytes += client.OwnedBytes; }
+            return bytes;
+        }
+    }
     /// <summary>Describes the buffers the work holds for <c>world.residency</c>: its slots' buffers, readbacks among
     /// them, by the memory they live in and as its reservation stands, and its clients' own tables and caches.</summary>
     /// <returns>One line.</returns>
@@ -726,6 +741,12 @@ public sealed class SdfGpuWork : IDisposable {
 
         foreach (var client in m_clients) { clients += client.OwnedBytes; }
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"gpu-work slots={SlotCount} in-flight={m_inFlight} readback-bytes={readbacks} slot-device-bytes={device} slot-host-bytes={host} reserved-device-bytes={(m_hold?.DeviceBytes ?? 0L)} reserved-host-bytes={(m_hold?.HostBytes ?? 0L)} client-device-bytes={clients.DeviceLocal} client-host-bytes={clients.HostVisible}");
+    }
+    /// <summary>Stops every client's admission and wakes its pending submitters (<see cref="ISdfGpuWorkClient.Stop"/>),
+    /// for work that will not be pumped again before it is disposed: its tables were parked and wait in the device's
+    /// retirement. Releases nothing; <see cref="Dispose"/> stops them again and drains.</summary>
+    public void StopClients() {
+        foreach (var client in m_clients) { client.Stop(); }
     }
     /// <inheritdoc/>
     /// <remarks>Waits every job in flight, a host wait on its fence, then hands it back to its client unanswered; waits,

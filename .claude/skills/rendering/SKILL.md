@@ -440,7 +440,7 @@ its placements cover), and a held limit that falls under what the region holds t
 (`RefusesAhead`). A drawn mesh and a kept floor are placed and kept whatever the held limit says, since refusing either
 leaves a hole; the bake's budget (`SdfResidencyGrant.Budget`, `SdfMeshTier.BudgetEighths` of the same share) coarsens
 the drawn meshes, so a region stands over its share until it has. `world.residency` prints `region-held-limit`, `arena-held`, `arena-placed` and
-`shed`. A mapped region's chunks come from 64 MiB heaps kept for tiles, which are freed only when empty, so chunks
+`shed`. A mapped region's chunks come from small heaps kept for tiles (`DirectXHeapArena.TileHeapBytes`, a few chunks each), which are freed only when empty, so chunks
 given back leave spare memory only a mapped region can take (`IGpuMappedBuffer.SpareBytes`): the selector counts it as
 the regions' and a region grows into it without a promise. A refused mesh presses `Retier` on its own, so pressure
 raises the detail bias before it leaves a hole.
@@ -458,7 +458,14 @@ after each frame's batch, which queues a timeline checkpoint behind it, and the 
 (`SdfWorldResidency.ReleaseDeviceObjects`, final or on a loss) retires every build it still leases, a kernel reload's
 included, into `SdfWorldPipelineCatalog.RetiredBuilds` and waits for none; a loss alone then drains that table. So
 `WorldRenderRoot` drains the device's retirement
-itself before that table, in its holdings and in its loss. Never add a `TryWaitIdle` to a release
+itself before that table, in its holdings and in its loss.
+A residency no reader asked for parks on a live device (`SdfWorldResidency.Park`, decided once a frame by
+`SdfWorldPasses.ParkUnobserved` from `SdfResidencySelector.Excess`, the device pool past its limit, which follows the
+system's budget less the usage the ledgers do not hold): `m_tables` is cleared between frames and the tables go to the
+device's retirement, keeping the bake, the lighting's measured words, the frame and the leased pipeline set. Every
+path that reaches the tables goes through `m_tables`, so a reader that comes for a parked residency prepares it, which
+builds new tables, and its views keep their last images while `SdfWorldResidency.Waking` stands. A park while
+`OwesPreparation` would rebuild at once, so a parked residency owes nothing and has nothing arriving. Never add a `TryWaitIdle` to a release
 path; `SdfWorldTables.Dispose` and `IGpuSurfaceUpload.DisposeCompleted` wait for nothing. A render node's build in
 flight retires into its runtime's `GpuImageLeases.RetiredBuilds`, which `DrainDisposals` waits out before the device
 goes. A package recorder never sees a fence: a result its recording captured (a readback, a publication, a
