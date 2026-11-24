@@ -174,6 +174,27 @@ instead of racing. A recorder that shares state it does not name is caught only 
 review. `render.record` counts `waves`, `partitions`, `jobs.worker`,
 `passes.worker` and `lists`.
 
+**Residencies pack and upload side by side.** Before the frame is scheduled,
+every residency a reader or the minimum captured packs as a partition of one
+`JobClass.Frame` fork (`SdfWorldPasses.ReadsPrepared`), and once it is
+scheduled the uploads of the residencies it renders record as a second such
+fork (`SdfWorldPasses.RendersScheduled`). Each is three steps: the first on the
+frame thread (`SdfWorldResidency.BeginPack`, which asks the host for the
+screens' sources, surfaces, decals and texts and uploads a changed program;
+`BeginStage`, which waits the previous upload's fence and takes the ring slot),
+the middle on whichever thread holds the residency (`RunPack`, `RecordStage`),
+and the last on the frame thread again (`EndPack`, `EndStage`, which submits).
+The invariant is that a middle step reads and writes only its own residency,
+that residency's tables, bake, lighting and exposures, the frame it packs and
+the device. It holds because everything that reads the host or another
+residency sits in the first step; a new step that does belongs there, and
+nothing but review catches one that is put in the middle. A frame that locks
+presentation to a tick, converges its lighting or is withheld keeps all three
+steps on the frame thread (`SdfWorldResidency.PacksBeside`, `BeginStage`).
+`world.counters sdf.captures` counts the residencies packed and uploaded beside
+others and those a worker took
+([the plan](../../../../docs/plans/frame-production.md)).
+
 **A node's passes are decided in order and emitted side by side.** A recording
 walks its passes once, in order (`ShaderPipelineRenderNode.RecordPasses`): every
 skip, stand, cadence step, barrier-tracker move, ledger pass, history cursor,

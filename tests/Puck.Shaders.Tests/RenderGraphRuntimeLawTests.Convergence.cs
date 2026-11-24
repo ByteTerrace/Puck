@@ -122,6 +122,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             PrepareFootprints?.Invoke();
         }
         public void PrepareRead(string instance, in FrameContext context) => m_inner.PrepareRead(context: in context, instance: instance);
+        public void ReadsPrepared(in FrameContext context, Puck.Hosting.Jobs.JobPool? jobs) => m_inner.ReadsPrepared(context: in context, jobs: jobs);
         public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) =>
             m_inner.BuildAsync(cancellationToken: cancellationToken, context: context);
         public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) =>

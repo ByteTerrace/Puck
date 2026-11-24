@@ -1087,9 +1087,12 @@ staging and capture to demand in this order:
 `SdfWorldPasses.BeginFrame` serves every held residency's upkeep
 (`SdfWorldResidency.Upkeep`: background completions and submissions, upload
 polling, retirements and a requested trim), starts every residency's frame,
-captures the host residency, which places the cameras, and then prepares each
-residency that owes its minimum (`SdfWorldResidency.OwesPreparation`: meshes
-arriving or lighting settling). The runtime then seals the roots and footprints
+captures the host residency, which places the cameras, and then serves the
+minimum of the residencies that owe one (`SdfWorldResidency.OwesPreparation`:
+meshes arriving or lighting settling): one residency a frame, the one longest
+without a capture, on a frame that rates views, and every one of them on a
+frame that rates nothing
+([the frame's CPU production](frame-production.md#what-is-built)). The runtime then seals the roots and footprints
 (`RenderGraphFrame.Seal`, which `RenderGraphRuntimeNode` uses to rebuild its
 roots after the captures, closing step 2's stale filming-camera list) and
 prepares only what the frame reads (`RenderGraphRuntime.PrepareReaders` over
