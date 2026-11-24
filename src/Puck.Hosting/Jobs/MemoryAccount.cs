@@ -238,6 +238,17 @@ public sealed class MemoryAccount {
     /// (<see cref="Owner.TryReserveWithin"/>): a twentieth of a second.</summary>
     public static TimeSpan RoomSlice { get; } = TimeSpan.FromMilliseconds(milliseconds: 50);
 
+    // Whether the calling thread is one that never waits for room (NeverWaitOnThisThread): the one waiting door
+    // (Owner.TryReserveWithin) answers such a thread at once, so no caller on it can wait whatever patience it passes.
+    [ThreadStatic]
+    private static bool NeverWaits;
+
+    /// <summary>Marks the calling thread, for its life, as one that never waits for room: an owner asking on it to wait
+    /// (<see cref="Owner.TryReserveWithin"/>) is answered at once, as if its patience were zero. A pool whose work the
+    /// account paces by queues of its own (a mesh bake's workers) marks its threads, so no work on them holds a thread the
+    /// work that would give room back needs.</summary>
+    public static void NeverWaitOnThisThread() => NeverWaits = true;
+
     /// <summary>Gets the shortest time between two reclaims (<see cref="Reclaims"/>), in <see cref="Stopwatch"/> ticks:
     /// two seconds, so a machine that is short for another program's sake costs a bake one collection in that time and
     /// no more.</summary>
@@ -1438,7 +1449,8 @@ public sealed class MemoryAccount {
         /// host until a pool gains room or <paramref name="patience"/> runs out, asking again at least every
         /// <see cref="RoomSlice"/>. A caller that is refused does without: its work is a cache's, and a miss is derived
         /// again by work that is admitted on its own terms. The wait is bounded because a waiter can hold a worker the
-        /// forced job needs.</summary>
+        /// forced job needs, and a thread marked never to wait (<see cref="NeverWaitOnThisThread"/>) does not wait at
+        /// all.</summary>
         /// <param name="peak">The most bytes the owner's storage holds at once while the work runs.</param>
         /// <param name="patience">How long the owner waits for room before it does without.</param>
         /// <param name="reason">Why the calling thread waits, for the host's wait records.</param>
@@ -1449,6 +1461,7 @@ public sealed class MemoryAccount {
         /// <exception cref="InvalidOperationException">The owner is a device family or a segment's row.</exception>
         public bool TryReserveWithin(long peak, TimeSpan patience, in WaitReason reason) {
             if (TryReserve(peak: peak) || TryReserveForced(peak: peak)) { return true; }
+            if (NeverWaits) { return false; }
 
             var deadline = WaitDeadline.Synchronous(budget: patience);
 

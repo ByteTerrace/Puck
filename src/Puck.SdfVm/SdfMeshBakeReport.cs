@@ -144,11 +144,14 @@ internal static class SdfMeshBakeReport {
         public long StopDrained;
         public long StopSamples;
         public long StopTaps;
-        // The takes that stopped at a lattice the readback reservation had no room left for, the takes that waited for
-        // that reservation itself, the copies into the library the host memory account deferred, and the groups whose refused
-        // stage started their final lattice again (SdfMeshPathBake.Refusals).
+        // The takes that stopped at a lattice the readback reservation had no room left for, the lattices the account had no
+        // room to promise readback for, the refinements that waited at the head of the refinement queue for room for their
+        // peak (SdfMeshPathBake.Refinements, written with Interlocked by whichever thread ran the queue's door), the copies
+        // into the library the host memory account deferred, and the groups whose refused stage started their final lattice
+        // again (SdfMeshPathBake.Refusals).
         public long StopReadback;
         public long ReadbackWaits;
+        public long RefinementWaits;
         public long CopyWaits;
         public long Readmissions;
         public long Takes;
@@ -171,7 +174,7 @@ internal static class SdfMeshBakeReport {
             Array.Clear(array: StageTicks);
             Array.Clear(array: KindSamples);
             Takes = IdleTakes = Batches = StopTaps = StopSamples = StopBatch = StopDrained = StopReadback = 0;
-            ReadbackWaits = CopyWaits = Readmissions = 0;
+            ReadbackWaits = RefinementWaits = CopyWaits = Readmissions = 0;
             WaitingGroups = FlyingGroups = WorkingGroups = 0;
             FrameGateWaitMax = FrameGateWaitTotal = FrameGateWaitsSlow = 0;
             Dispatches = Samples = Taps = Discarded = Returned = RefinedCells = CutEdges = Softened = Merged = Loaded = 0;
@@ -238,7 +241,7 @@ internal static class SdfMeshBakeReport {
             var takes = Math.Max(val1: 1L, val2: Takes);
             var kinds = string.Join(separator: ",", values: Enumerable.Range(start: 0, count: KindNames.Length).Select(selector: kind => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{KindNames[kind]}:{KindSamples[kind]}")));
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" joined=[groups:{Joined},landed:{JoinedLanded},abandoned:{JoinedAbandoned},stalled:{JoinedStalled},samples-saved:{SamplesSaved}] {DescribeCheckpoints()} kinds=[{kinds}] cpu=[{stages}] batches={Batches} takes={Takes} idle={IdleTakes} stop=[taps:{StopTaps},samples:{StopSamples},batch:{StopBatch},readback:{StopReadback},drained:{StopDrained}] host-refusals=[readback-waits:{ReadbackWaits},copy-waits:{CopyWaits},readmitted:{Readmissions}] per-take=[waiting:{(WaitingGroups / ((double)takes)):0.0},flying:{(FlyingGroups / ((double)takes)):0.0},working:{(WorkingGroups / ((double)takes)):0.0}]{dispatches?.Invoke()} frame-gate=[max:{((FrameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((FrameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{FrameGateWaitsSlow}] gate=[{DescribeGate()}] managed=[{DescribeManaged()}] tail={PoolTailSeconds():0.0}s");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" joined=[groups:{Joined},landed:{JoinedLanded},abandoned:{JoinedAbandoned},stalled:{JoinedStalled},samples-saved:{SamplesSaved}] {DescribeCheckpoints()} kinds=[{kinds}] cpu=[{stages}] batches={Batches} takes={Takes} idle={IdleTakes} stop=[taps:{StopTaps},samples:{StopSamples},batch:{StopBatch},readback:{StopReadback},drained:{StopDrained}] host-refusals=[readback-waits:{ReadbackWaits},refine-waits:{Interlocked.Read(location: ref RefinementWaits)},copy-waits:{CopyWaits},readmitted:{Readmissions}] per-take=[waiting:{(WaitingGroups / ((double)takes)):0.0},flying:{(FlyingGroups / ((double)takes)):0.0},working:{(WorkingGroups / ((double)takes)):0.0}]{dispatches?.Invoke()} frame-gate=[max:{((FrameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((FrameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{FrameGateWaitsSlow}] gate=[{DescribeGate()}] managed=[{DescribeManaged()}] tail={PoolTailSeconds():0.0}s");
         }
         // Each gate site entered: its entries, the milliseconds it waited and held in all, and its longest hold.
         private string DescribeGate() {
@@ -390,11 +393,19 @@ internal static class SdfMeshBakeReport {
     /// <param name="selector">The group's selector.</param>
     /// <param name="peak">The group's peak bytes.</param>
     public static void AdmittedAlone(string residency, int selector, long peak) => Say(line: () => $"[sdf.mesh-bake] admitted alone residency={residency} group={selector} peak={peak} {AuthoringRoom()}");
-    /// <summary>Writes the line for a bake whose takes wait for the readback reservation that answers their lattices,
-    /// which the host memory account has no room for; no lattice is taken and no group admitted until it is held.</summary>
+    /// <summary>Writes the line for a bake whose take found no room to promise the readback that answers a lattice; the
+    /// lattice waits for a later take.</summary>
     /// <param name="residency">The residency's name.</param>
-    /// <param name="bytes">The reservation, in bytes.</param>
+    /// <param name="bytes">The readback the bake would have promised, in bytes.</param>
     public static void ReadbackDeferred(string residency, long bytes) => Say(line: () => $"[sdf.mesh-bake] readback deferred residency={residency} bytes={bytes} {AuthoringRoom()}");
+    /// <summary>Writes the line for a group whose refinement waits at the head of the refinement queue for room for its
+    /// peak; no refinement queued behind it starts before it.</summary>
+    /// <param name="residency">The residency's name.</param>
+    /// <param name="selector">The group's selector.</param>
+    /// <param name="peak">The refinement's peak bytes.</param>
+    /// <param name="waiting">The refinements queued, every bake's.</param>
+    /// <param name="refining">The refinements holding their peak, every bake's.</param>
+    public static void RefinementDeferred(string residency, int selector, long peak, int waiting, int refining) => Say(line: () => $"[sdf.mesh-bake] refinement deferred residency={residency} group={selector} peak={peak} waiting={waiting} refining={refining} {AuthoringRoom()}");
     /// <summary>Writes the line for a group whose copy into the mesh library (its published mesh, or its renumbered take
     /// of its leader's) the host memory account refused; it waits where it stands until the group can reserve the copy's
     /// bytes.</summary>
