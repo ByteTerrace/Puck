@@ -3291,7 +3291,6 @@ public sealed partial class SdfMeshPathBake {
                     m_pointMaterials?.Dispose();
                     Contour = null; Cut = null; Creases = null; Projection?.Dispose(); Projection = null;
                     Next = null; Deferred = null;
-                    Skin?.Release();
                     Memory.Dispose();
                 }
                 if (Retired && !m_released) {

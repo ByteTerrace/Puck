@@ -160,7 +160,7 @@ public sealed partial class WorldScreenBinder {
             if (root.Entries.TryGetValue(key: planned.Name, value: out var held)
                 && (!ready || waits || !ReferenceEquals(objA: held.Mirror, objB: source.Mirror) || !ReferenceEquals(objA: held.Hosted?.Token, objB: source.Hosted?.Token)
                     || (held.Planned.Spec != planned.Spec) || !held.Prototypes.SequenceEqual(second: (prototypes ?? []))
-                    || ((far is not null) && !ReferenceEquals(objA: held.Far, objB: far)))) {
+                    || !ReferenceEquals(objA: held.Far, objB: far))) {
                 _ = root.Entries.Remove(key: planned.Name);
                 LeaveInfinity(entry: held, root: root);
             }
