@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using Puck.Maths;
 
 namespace Puck.Cli.Bench;
 
@@ -59,7 +60,7 @@ internal static class BenchmarkCensus {
         }
 
         var rows = new JsonArray();
-        var byContent = new Dictionary<string, List<string>>(comparer: StringComparer.Ordinal);
+        var sketches = new List<(string Name, string? Content, ulong[] Sketch)>();
 
         foreach (var name in residencies.Keys.Where(predicate: static key => key.EndsWith(value: ".residency-id", comparisonType: StringComparison.Ordinal)).Select(selector: static key => key[..^".residency-id".Length])) {
             var groups = Number(values: residencies, suffix: $"{name}.groups") ?? 0;
@@ -73,16 +74,35 @@ internal static class BenchmarkCensus {
                 ["regionNamedBytes"] = Number(values: residencies, suffix: $"{name}.region-named"),
                 ["regionBudgetBytes"] = Number(values: residencies, suffix: $"{name}.region-budget"),
             });
-            if ((content is not null) && (groups > 0)) {
-                (byContent.TryGetValue(key: content, value: out var named) ? named : (byContent[content] = [])).Add(item: name);
+            if ((groups > 0) && residencies.TryGetValue(key: $"{name}.sketch", value: out var sketch)) {
+                sketches.Add(item: (name, content, [.. sketch.Split(separator: '.').Select(selector: static value => ulong.Parse(s: value, style: NumberStyles.HexNumber, provider: CultureInfo.InvariantCulture))]));
+            }
+        }
+
+        // Each pair of residencies whose groups overlap by at least half: the same world held twice under two names. The
+        // share is the sketches' estimate, exactly one where the two hold the same groups.
+        var duplicates = new JsonArray();
+
+        for (var left = 0; (left < sketches.Count); left++) {
+            for (var right = (left + 1); (right < sketches.Count); right++) {
+                var (a, b) = (sketches[left], sketches[right]);
+                var shared = (((a.Content is not null) && (a.Content == b.Content)) ? 1.0 : BottomKSketch.Resemblance(left: a.Sketch, right: b.Sketch, capacity: BottomKSketch.DefaultCapacity));
+
+                if (shared >= DuplicateShare) {
+                    duplicates.Add(item: new JsonObject { ["residencies"] = new JsonArray(a.Name, b.Name), ["shared"] = shared });
+                }
             }
         }
 
         census["residencies"] = rows;
-        census["duplicates"] = new JsonArray([.. byContent.Values.Where(predicate: static names => (names.Count > 1)).Select(selector: static names => (JsonNode)new JsonArray([.. names.Select(selector: static name => (JsonNode)name)]))]);
+        census["duplicates"] = duplicates;
 
         return census;
     }
+
+    // The share of shared groups at which two residencies are listed as one world held twice; the World's sketches are
+    // made at BottomKSketch.DefaultCapacity.
+    private const double DuplicateShare = 0.5;
 
     // The number a reading's value opens with, by the key it ends with; null where no key ends so.
     private static double? Number(SortedDictionary<string, string> values, string suffix) {

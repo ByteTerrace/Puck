@@ -369,7 +369,7 @@ public static partial class BenchmarkCommand {
     private static Leg[] StandingLegs(WorldBackendPreference?[] backends) => [
         .. backends.Select(selector: static backend => new Leg(Backend: backend, Name: DebugRoute, Plays: [
             new Play(Name: DebugRoute, Route: DebugRoute),
-            new Play(Name: MoonRoute, Route: MoonRoute, WaitsOn: "the world authors no `moon` route yet: the round trip (pad, sky seam, moon landing and back) waits on moon-trip's scripted boost tape, and plays here once the debug world's benchmark-route.puck authors it"),
+            new Play(Name: MoonRoute, Route: MoonRoute, WaitsOn: "the world authors no `moon` route: the round trip (the pad, the sky seam, a landing on the moon and back) plays here once it does"),
         ], Remote: null, Seats: 1)),
         new Leg(Backend: backends[0], Name: "remote", Plays: [new Play(Name: "remote", Route: DebugRoute)], Remote: "local", Seats: 1),
         new Leg(Backend: backends[0], Name: "four-seat", Plays: [new Play(Name: "four-seat", Route: DebugRoute)], Remote: null, Seats: MaxSeats),

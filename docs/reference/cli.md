@@ -3076,18 +3076,26 @@ every content search in this repo through the checkout's own `puck search` build
 
 ## `puck benchmark`—the route benchmark
 
-`puck benchmark` plays a route through a World in real time and reports what the host did: the benchmark of
-[the benchmark plan](../plans/benchmark.md), whose stage 3 is this verb. A route (`--route`, optionally the chapters
-whose names start with `--chapter`) is either the name of a `routes` row of the world's document, each chapter a list of
-places to go to and how that the route's seat program plays through the seat's own controls, or a `.puck` source whose
-`test` blocks are the chapters, each block's `when` lines a controller program and its `expect` lines its arrival. The verb boots a fresh World paused before its
-first tick (`--paused`), waits for the renderer with authority held, sends the in-game verb `world.benchmark run`
-and resumes. The World plays the route itself, as a `timedemo` does, arming each chapter's rows through the seat's own
-ingress at ticks it computes from the run's start; the verb is the launcher and the comparer, holds no copy of the route
-and pins no steps. Every process uses `--devices none` and its own state directory, and a windowed one takes the GPU
-lease through `WorldLaunch`.
+`puck benchmark` plays routes through Worlds in real time and reports what the host did: the instrument of
+[the benchmark plan](../plans/benchmark.md#the-instrument), which says what the lead and the RTX 2060 run. A route
+(`--route`, optionally the chapters whose names start with `--chapter`) is either the name of a `routes` row of the
+world's document, each chapter a list of places to go to and how that the route's seat program plays through the seat's
+own controls, or a `.puck` source whose `test` blocks are the chapters, each block's `when` lines a controller program
+and its `expect` lines its arrival. Without `--route` the verb runs the standing set, one World per leg: the debug route
+on each backend followed by the moon round trip in the same World, the debug route against a listening World it starts
+on this machine, and the debug route on four seats; a leg whose dependency the World lacks is reported unrun with the
+World's own reason (`unrun` in the report). The verb boots a fresh World paused before its first tick (`--paused`), waits
+for the renderer with authority held, sends the in-game verb `world.benchmark run` and resumes. The World plays the route
+itself, as a `timedemo` does, arming each chapter's rows through the seat's own ingress at ticks it computes from the
+run's start; the verb is the launcher and the comparer, holds no copy of the route and pins no steps. Every process uses
+`--devices none` and its own state directory, and a windowed one takes the GPU lease through `WorldLaunch`.
 
 ```sh
+puck benchmark
+puck benchmark --route debug --backend directx --remote local
+puck benchmark --world worlds/minimal --route walk --remote local --headless
+puck benchmark --world-artifact <player install>/Puck.World.dll --world <player install>/worlds/debug --cache-dir <player install>/cache
+puck benchmark fold <state directory>/benchmarks/<run>/run.json
 puck benchmark --route debug --loops 2 --backend directx vulkan
 puck benchmark --route seams --chapter 'the valley, dash' --backend directx vulkan
 puck benchmark --route seams --chapter 'the garden painting' --loops 3 --at 120
@@ -3101,6 +3109,28 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   another. Omitted, a Windows run plays both and another OS plays Vulkan. `--headless` plays one World with no window or
   renderer: the arrival, the state hash and the host iterations are reported, and every reading that needs a renderer (GPU
   passes, `world.residency`, the render counters) is absent.
+- **Size.** A windowed World opens at the device profile's frame bar (`Puck.World --frame-bar`, from `render.devices`'
+  `frameBar`: 2560 by 1440 on the RTX 4070, 1920 by 1080 on the RTX 2060) unless `--width` and `--height` both name a
+  size; `--profile <name>` names the profile whose bar applies. The World refuses a boot whose adapter no profile with a
+  bar matches, naming the profiles that author one.
+- **Topology and seats.** `--remote local` stages a delta over the world's entry beside it (its own namespace, a
+  wildcard arrival row admitting one remote player, and a row pinning the pair's own federation key), boots it as a
+  listening authority headless, boots the measured World with `--connect` to it, and waits on `world.benchmark topology`
+  until the seat's body is delivered by the remote authority; a reservation the authority refuses ends the wait at once
+  with its line, and the staged document is removed when the leg ends. `--remote <ip:port>` connects to an authority
+  already listening. A client of a remote authority boots running, since a paused boot commits no transfer, so its runs
+  are `attached`. `--seats <n>` plays the route on that many seats of one client (`world.benchmark run ... seats <n>`).
+- **Player builds.** `--world-artifact` names any World build: a player install's self-contained `Puck.World.dll` is
+  started through its own host (`WorldLaunchRequest.SelfContainedHost`), with `--world` and `--cache-dir` naming the
+  install's package and prewarmed caches. `puck benchmark fold <run.json or its directory>...` folds runs typed into a
+  World by hand (`world.benchmark run debug` in a player build's console) into a report and `summary.md` whose
+  conditions are the ones each run recorded: its build, backend, window, device profile, adapter, topology, overlay,
+  operating system and processors.
+- **Captures.** After a World's timed runs, each place a route's `captures` names is framed from four sides with the
+  operator camera from inside its region (`world.benchmark marks <route>` answers each region's centre and extent), each
+  after `world.wait bakes` and `world.wait residency` (60 s on a place's first side, 15 s on the others, 240 s for the
+  pass). Each capture is listed in its run's `captures` with its path, a `partial` flag when a wait released unsettled,
+  and the waits' answers; a capture the pass's time ran out before is listed as not taken.
 - **Where a run starts.** The World boots paused, so the route is armed before the first tick: `--at <tick>` names the tick
   the first chapter's first line lands at (otherwise four ticks after the boot), and every line then lands on the same
   absolute tick in every run. The report's `start` says `fresh`; a run typed into a running World with `world.benchmark
@@ -3129,9 +3159,11 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   that names the reason, lists every requested loop and marks each chapter ended, unfinished or unreached. The verb itself
   waits a further 240 s for the boot and collection.
 - **The report.** `<output>/<run id>/report.json` is a `puck.bench.v1` report (verb `benchmark`) whose `metrics` hold one
-  sample of every number of every chapter, named `<backend>.<cold|warm|steady>.<chapter-slug>.<metric>`, and whose
-  `benchmark` section holds, for each backend: its `conditions` (backend, shape, size, whether it ran uncapped, budget,
-  start tick, loops, operating system, logical processors), whether the run `complete`d and how it `ended`, whether it
+  sample of every number of every chapter, named `<leg>.<backend>.<cold|warm|steady>.<chapter-slug>.<metric>`, and whose
+  `benchmark` section holds `unrun` (each leg not run, with its reason) and, for each run (a leg on a backend): its
+  `conditions` (backend, shape, the frame-bar profile or the named size, the profile, whether it ran uncapped, budget,
+  start tick, loops, remote, seats, operating system, logical processors, and the World's own table, adapter, window,
+  topology and overlay), its `window`, `budgetSource` and `topology`, whether the run `complete`d and how it `ended`, whether it
   began in lockstep, its `boot` span, each loop's `run` statistics and each chapter's report. A chapter reports its identity
   (the hash of its program), arrival (`arrived`, `off course` with the gates it failed, `failed` with a route chapter's
   `failure`, or `unmeasured`; a route chapter adds every place it entered with its tick, its steps reached, its plans and its
@@ -3141,9 +3173,16 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   deviation, ticks stepped, collections and pauses, bytes allocated per iteration, the longest span that stepped no tick),
   its `hitches` (the count of iterations whose work passed the budget and the longest 32, each with its tick, the body's last
   sampled position, its phase split and its collections), each GPU pass's mean and maximum (`gpu`: the rolling window mean
-  `world.gpu-timing` prints, sampled every 30 ticks), and the change across the chapter of each `world.residency` degradation
-  count, the `render.record`, `gpu.queue` and `sdf` counters and `host.memory`'s working set, private bytes and ledger peaks, beside the raw answers of every chapter reading, the device memory families among them (`host.memory families 0`: every owner's device bytes at both ends of a chapter)
-  (`readings`; a reading the host cannot answer is listed under `unmeasured`). Each run also carries the machine it ran on:
+  `world.gpu-timing` prints, sampled every 30 ticks), its `frameThread` parts, and the change across the chapter of each
+  `world.residency` degradation count, the `render.record`, `gpu.queue`, `gpu`, `sdf`, `world.field-queries`,
+  `world.captures`, `world.disclosure` and `physics.bodies` counters and `host.memory`'s working set, private bytes and
+  ledger peaks (`readings`; a reading the host cannot answer is listed under `unmeasured`). Its `census` is the memory at
+  its end: host private, working set and managed heap against the profile's host bar, the device ledger's peak and its
+  memory beyond the ledger against the budget and the profile's device bar, and every residency by name with its groups,
+  vertex and region bytes and `content`, the digest of the groups it holds; `duplicates` lists the residencies holding the
+  same groups. `summary.md` beside the report sets the same figures out for a person: per run the device, profile,
+  window, topology, backend, build and machine verdict; per chapter the frame statistics, the frame thread's parts, the
+  heaviest GPU passes, work per recorded frame, the census and the captures. Each run also carries the machine it ran on:
   `adapter` (the graphics adapter's clocks, power, utilization, temperature, performance state and clock events, read every
   500 ms through NVML where the machine has it and unknown, with the reason, where it does not, summarized for the run and for
   each chapter) and `machine` (the CPU every process outside the verb's own tree used, the programs that used most, any other
@@ -3154,13 +3193,14 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   timings are not a verdict on the build ([the conditions](../plans/benchmark.md#comparing-runs)). The `boot` span is the statistics of the
   host's first iterations, from its first through the start of the first chapter, kept for the host's life in its boot
   recording (`HostFrameTimeline.Boot`, its first 16384 iterations); `truncated` says the host ran longer than that before the
-  route began. `<output>/<run id>/<backend>/run.json` is the World's own report (`puck.benchmark.run.v1`) and `frames.csv`
+  route began. `<output>/<run id>/<leg>-<backend>/<route>/world/run.json` is the World's own report (`puck.benchmark.run.v2`) and `frames.csv`
   holds every iteration with its loop, chapter and tick. An iteration is the host loop's interval, never the time a frame stood on the display, and
   percentiles are linearly interpolated between order statistics (`OrderStatistics.Quantile`), so the 99th percentile of
   fewer than 100 iterations lies between its two longest.
-- **Comparing.** `--against <report>` and `compare` compare the candidate with the baseline backend by backend, loop by loop
-  and chapter by chapter. A comparison is **refused**, by name, for `another-route` (the route or its chapters differ),
-  `unlike-conditions` (any condition differs, each named with both values), `began-in-lockstep` (either run began with
+- **Comparing.** `--against <report>` and `compare` compare each run of the candidate with the baseline's run of the same
+  leg and backend, loop by loop and chapter by chapter. A comparison is **refused**, by name, for `another-route` (the
+  route or its chapters differ), `unlike-conditions` (any condition differs, the World's own table, adapter, window,
+  topology and overlay among them, each named with both values), `began-in-lockstep` (either run began with
   presentation locked to ticks), `disturbed-run` (either run's machine was disturbed, each reason named) and `missing-metric` (a frame statistic, the hitch count or a GPU pass that one report holds
   and the other lacks, named). A chapter is **comparable**, a **changed workload** (its program hash differs: both are
   described and no difference is attributed to execution), or **unavailable** (off course, disturbed, unfinished, unreached or
@@ -3173,7 +3213,7 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   a completed comparison. `2`: a refusal, a usage error, a build or boot that failed.
 
 `puck measure request ... -- benchmark --route ...` admits the verb, with `--metric /metrics/<name>/median` over the report's
-metric names (`/metrics/directx.cold.the-lift-walk.frames.interval.p99/median`); the runner supplies
+metric names (`/metrics/seams.directx.cold.the-lift-walk.frames.interval.p99/median`); the runner supplies
 `--world-artifact` and `--output`. The verb takes no sample count of its own: the loops are separate metrics and the pairs are
 the measurement's replication.
 

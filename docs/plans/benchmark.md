@@ -22,6 +22,99 @@ interval and work, and `puck benchmark` boots, plays on each backend, reports
 and compares
 ([the CLI reference](../reference/cli.md#puck-benchmarkthe-route-benchmark)).
 
+## The instrument
+
+The owner's ruling for the campaigns is that the lead's observations be
+reliable, quick and never misleading. `puck benchmark` is that instrument: one
+command, run in a quiet window, whose report says what it measured and under
+what conditions, and refuses to compare what is unlike.
+
+### What the lead runs
+
+On the RTX 4070, under an exclusive quiet lease, at the start of a session,
+whenever a campaign says it is near its line, and after each merge batch:
+
+```sh
+puck lease quiet --wait 600 -- puck benchmark
+puck benchmark compare <earlier report directory> <this report directory>
+```
+
+Without `--route` the verb runs the standing set, one fresh World per leg:
+
+| Leg | What it plays | Until its dependency lands |
+|---|---|---|
+| `debug`, on Direct3D 12 and on Vulkan | The debug route, from a paused boot | Runs today |
+| `moon`, in the same World as `debug` | The world's `moon` route, the round trip below | Runs; a world that authors no `moon` route reports it unrun |
+| `remote` | The debug route against a listening World the verb starts on this machine (`--remote local`) | Runs; on the debug world the remote authority's delivery is refused, by name, until moon-trip's hosted-world work lands |
+| `four-seat` | The debug route on four seats of one client (`--seats 4`) | Reported unrun, naming the multi-seat client |
+
+Each windowed World opens at the device profile's frame bar (`render.devices`'
+`frameBar`: 2560 by 1440 on the RTX 4070, 1920 by 1080 on the RTX 2060), and
+each run judges its iterations against that bar's period. After a World's timed
+runs, the verb frames each place the route names in `captures` from four sides,
+each after its bakes and resident geometry settle, a capture whose waits
+released unsettled marked partial. The capture pass comes after every timed
+run, so its waits disturb none of the frames.
+
+The report directory holds `report.json` (`puck.bench.v1`), `summary.md` (the
+same report as a page a person reads) and, per run, the World's `run.json` and
+`frames.csv`. Per route and chapter it gives:
+
+- frame-time statistics of the presented iterations in motion: p50, p95, p99,
+  the worst and the hitches, against the frame bar's period;
+- the frame thread's parts (`host.frames`): producing a frame and stepping the
+  worlds, each by part;
+- each GPU pass's mean and maximum (`world.gpu-timing`);
+- counted work: dispatches, captures, records restaged and field queries
+  marched per recorded frame, queue executes, bytes allocated per iteration;
+- a memory census at the chapter's end: host private and working set against
+  the profile's host bar, the device ledger against the budget and the
+  profile's device bar, and every residency by name with `content`, the digest
+  of the groups it holds, so a world resident twice under two names is listed
+  as a duplicate;
+- the run's conditions: the device, profile, table, window, topology, backend,
+  build, overlay, the machine's competition and the adapter's clocks, with
+  DISTURBED and its reasons where the run cannot vouch for its timings.
+
+`compare` refuses a disturbed run, unlike conditions (the verb's and the
+World's own), another route and a run begun in lockstep, each by name.
+
+### What the RTX 2060 runs
+
+The 2060 is a release target and its readings come from the shipped build
+([AGENTS.md](../../AGENTS.md#the-bars)). It runs the same verb from its
+checkout's CLI, pointed at its player install, so the World, its package and its
+prewarmed caches are the release's and nothing is built or baked:
+
+```sh
+puck benchmark --world-artifact <install>/Puck.World.dll --world <install>/worlds/debug --cache-dir <install>/cache
+```
+
+A launch of a self-contained build starts its own host
+(`WorldLaunchRequest.SelfContainedHost`), as a player's stub does. A run typed by
+hand into the player build's console (`world.benchmark run debug`) writes its
+`run.json` under the World's state directory; `puck benchmark fold <run.json>`
+folds it into a report and summary whose conditions are the ones the World
+recorded for itself.
+
+To start a World at the frame-bar size through the MCP tool, `puck_world_start`
+takes `frameBar: "auto"` (or a profile's name), which passes `--frame-bar`.
+
+### The moon round trip and the four-seat route
+
+The moon route is the debug world's own `routes` row named `moon`
+(`worlds/debug/moon-route.puck`), played by the standard's `pilot` seat
+program: its first chapter boards the ship at the pad, flies up through the sky
+seam into the moon's world and lands; its second flies back across the seam and
+lands on the pad. Its `fly` steps hold the program's rise and boost controls,
+so the flight loads the seam, the moon's residency and the sky as a player's
+does. The instrument plays it in the same World as the debug route.
+
+The four-seat route plays one route on four seats of one client against one
+authority. `world.benchmark run <route> seats <n>` names the slot today, and
+refuses with the dependency until the multi-seat client gives each seat its own
+driver.
+
 ## What professional benchmarks do
 
 | Benchmark | What is played | Pace | What the viewer sees | What is reported | How runs compare |
