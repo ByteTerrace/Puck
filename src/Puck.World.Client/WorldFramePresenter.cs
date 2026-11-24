@@ -136,6 +136,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // The derived face rows of the delivery ReconcileDelivery last reconciled, which the binder, the emitter and the
     // presentation field all read: one WorldPrototypeFacets.Derive call per delivery.
     private IReadOnlyList<WorldScreen> m_deliveredFaces = [];
+    // The delivered definition's creation facets, derived again only when a part they read moves.
+    private readonly WorldDocumentProduct<WorldPrototypeFacets.DerivedFacets> m_facets = new();
+    // What the presentation field's latest completed build was built from: its document, the parts it read, and the
+    // faces it composed; a later delivery that moves none of them leaves the field standing.
+    private WorldDefinition? m_staticFieldDocument;
+    private WorldDocumentInputs m_staticFieldInputs = WorldDocumentInputs.All;
+    private IReadOnlyList<WorldScreen>? m_staticFieldFaces;
 
     // The definition delivery and neighbour revision the presentation field was built from (RebuildStaticField).
     private int m_staticFieldDefinition = -1;
@@ -749,13 +756,14 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             }
         }
 
-        m_staticFieldBuild = Task.Run(function: () => BuildStaticField(
+        // The build records what it reads of the document on its own thread, which the next delivery is judged by.
+        m_staticFieldBuild = Task.Run(function: () => WorldDocumentReads.Record(build: () => BuildStaticField(
             builder: builder,
             definition: definition,
             faces: faces,
             fixedPart: held,
             palettes: palettes
-        ));
+        ), inputs: out var read) with { Document = definition, Faces = faces, Inputs = read, KeptFixed = (held is not null) });
         AdoptStaticField();
     }
     // The presentation field's pool half: the fixed part, unless one is held (the delivered definition's solid placements
@@ -813,7 +821,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // Whether a solid row's shown creation follows a response sweep, which puts it in the field's responding part.
     private static bool Responds(WorldPlacement placement) => (placement.Respond is { Count: > 0 });
     // A finished presentation field build: its field, or the refusal that left none, and the placements it excluded.
-    private readonly record struct StaticFieldBuild(WorldQueryField? Field, ArgumentException? Refusal, List<(WorldPlacement Placement, string Reason)> Excluded);
+    // A build that kept a held fixed part read only the responding part's inputs, which join the fixed part's.
+    private readonly record struct StaticFieldBuild(WorldQueryField? Field, ArgumentException? Refusal, List<(WorldPlacement Placement, string Reason)> Excluded) {
+        public WorldDefinition? Document { get; init; }
+        public IReadOnlyList<WorldScreen>? Faces { get; init; }
+        public WorldDocumentInputs Inputs { get; init; }
+        public bool KeptFixed { get; init; }
+    }
     private void ReportFieldExclusion(WorldPlacement placement, string reason) {
         if (m_reportedFieldExclusions.Add(item: (placement.Id, reason))) {
             WorldClientDiagnostics.Report(channel: "world.presentation-field", text: $"excluded placement '{placement.Id}': {reason}");
@@ -836,6 +850,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         }
 
         m_client.PublishStaticField(field: built.Field);
+        m_staticFieldInputs = ((built.KeptFixed && (m_staticFieldDocument is not null)) ? (m_staticFieldInputs | built.Inputs) : built.Inputs);
+        m_staticFieldDocument = ((built.Field is null) ? null : built.Document);
+        m_staticFieldFaces = built.Faces;
 
         if (built.Refusal is { } refusal) {
             ReportStaticFieldUnavailable(exception: refusal);
@@ -876,11 +893,14 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // Derive the creation facets: a creation's eyes become cameras on WorldAnchor.Placement, its faces
         // become screens at the reserved derived range. Cameras concatenate onto the document rows; the reserved
         // face range re-points the boot-registered slots. Never written to the document — recomputed each delivery.
-        var facets = WorldPrototypeFacets.Derive(
-            definition: m_client.Definition,
-            derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: m_client.Definition),
+        // A delivery that moved no part the facets read (a views row) keeps them, and with them every reader keyed on them.
+        if (codeRevision != m_builtCodeRevision) { m_facets.Forget(); }
+        var definition = m_client.Definition;
+        var facets = m_facets.Of(document: definition, build: () => WorldPrototypeFacets.Derive(
+            definition: definition,
+            derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: definition),
             derivedFaceScreens: m_derivedFaceScreens
-        );
+        ));
 
         m_binder.ReconcileCameras(cameras: Concat(
             first: m_client.Definition.Cameras,
@@ -1993,6 +2013,14 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // rebuild for a body coming or going, or for a value-only state delivery that moves no shown creation, leaves it
         // as it was. A solid row's response moves it whether or not the program composed again: the scene presents a
         // response its copies keep at hand without composing (WorldRigidAssets.PresentHoldings).
+        // A delivery that moved none of the parts the field's latest build read, nor the faces it composed, leaves it
+        // standing: a views row moves no solid placement or screen.
+        if ((m_client.DefinitionRevision != m_staticFieldDefinition) && (m_staticFieldBuild is null) &&
+            (m_staticFieldDocument is { } fieldDocument) && ReferenceEquals(objA: m_deliveredFaces, objB: m_staticFieldFaces) &&
+            !WorldDocumentInputs.Changed(after: m_client.Definition, before: fieldDocument).Overlaps(other: m_staticFieldInputs)) {
+            m_staticFieldDefinition = m_client.DefinitionRevision;
+            m_staticFieldDocument = m_client.Definition;
+        }
         var fixedMoved = (
             (m_client.DefinitionRevision != m_staticFieldDefinition) ||
             (m_client.SolidResponseRevision != m_staticFieldResponses) ||

@@ -52,7 +52,8 @@ public sealed partial class RenderGraphRuntime {
     private sealed class OutputRecords {
         private Output[] m_current;
         private Output[] m_previous;
-        // The record a reservation pushed out of m_previous, which its withdrawal puts back.
+        // The record a reservation pushed out of m_previous, which its withdrawal puts back. Outside a reservation it holds
+        // no record, only the named-output array the next reservation fills, so a steady frame allocates none.
         private Output[] m_displaced;
 
         public OutputRecords(int count) {
@@ -87,9 +88,11 @@ public sealed partial class RenderGraphRuntime {
         // Puts back the records a reservation displaced, as if the frame had never been prepared.
         public void Withdraw(int index) {
             if (!m_current[index].Reserved) { return; }
+            var spare = m_current[index].Buffers;
+
             m_current[index] = m_previous[index];
             m_previous[index] = m_displaced[index];
-            m_displaced[index] = Output.None;
+            m_displaced[index] = (Output.None with { Buffers = spare });
         }
 
         public Output ReadAt(int producer, long frame, in DeliveryLatch latch) {
@@ -127,7 +130,7 @@ public sealed partial class RenderGraphRuntime {
             var buffers = node.LatestOutputBuffers(reuse: (reserved ? m_current[index].Buffers : m_previous[index].Buffers));
 
             if (reserved) {
-                m_displaced[index] = Output.None;
+                m_displaced[index] = (Output.None with { Buffers = m_displaced[index].Buffers });
             } else {
                 m_previous[index] = m_current[index];
             }

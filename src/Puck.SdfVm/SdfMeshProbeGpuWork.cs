@@ -674,12 +674,22 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         if (query.ClearsHitCache) { m_hitCacheOwed = false; }
         if (query.FillsCameraSampleCache) { m_cameraSampleCacheOwed = false; }
         var words = readback.Length / 4;
-        var readWords = (words == 0) ? [] : (query.Reuse is { } reuse && (reuse.Length >= words)) ? reuse : new uint[words];
-        try { readback.Read(MemoryMarshal.AsBytes(readWords.AsSpan(start: 0, length: words))); }
-        finally { readback.Release(); }
-        // A reused array is answered whole, its fault word at words - 1; any other answer drops the fault word's slot.
-        var result = (query.Reuse is not null) ? readWords : readWords[..^1];
-        var faults = readWords[words - 1];
+        // A reused array is answered whole, its fault word at words - 1; any other answer is read through pooled scratch
+        // into an array of its own words alone, the one allocation its answer's contract needs.
+        var whole = (query.Reuse is not null);
+        var pooled = (!whole && (words > 0));
+        var readWords = ((words == 0) ? [] : (whole ? ((query.Reuse!.Length >= words) ? query.Reuse : new uint[words]) : System.Buffers.ArrayPool<uint>.Shared.Rent(minimumLength: words)));
+        uint[] result;
+        uint faults;
+
+        try {
+            try { readback.Read(MemoryMarshal.AsBytes(readWords.AsSpan(start: 0, length: words))); }
+            finally { readback.Release(); }
+            faults = readWords[words - 1];
+            result = (whole ? readWords : readWords.AsSpan(start: 0, length: (words - 1)).ToArray());
+        } finally {
+            if (pooled) { System.Buffers.ArrayPool<uint>.Shared.Return(array: readWords); }
+        }
 
         m_volume.Counters.Add(SdfMeshIrradiance.TraversalFaults, faults);
         // A walk stopped at its step or stack bound is a scene the hierarchy cannot answer; each costs a ray its whole

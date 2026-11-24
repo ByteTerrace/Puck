@@ -233,7 +233,48 @@ across a benchmark chapter and divided by the frames.
    still gives back idle buffers. `sdf.captures.pumped` against
    `sdf.captures.held` read 685 against 3256 over 120 ticks of the settled
    spawn, about 21%.
-5. **Then the pipeline**, if the host world's own chain still bounds a frame.
+5. **Restaged draw records.** Measured, and left as they stand. Over a settled
+   spawn on the RTX 4070, about 400 restaged records split: 273 a rigid copy
+   whose pose epoch moves every tick (the card cursor, whose position arrives
+   as a teleport each tick, so its motion identity, and with it the record's
+   generation, moves; the generation is what lets the temporal resolve refuse
+   history across a jump, so the restage is correct), 96 pose-word writes of
+   two slot riders whose scale animates (`SdfMeshDrawDifference.Matrix`), 20
+   roster and 10 tier changes. That is a few records a frame out of about
+   23,000 rows: no structural change pays here. Moving a rider's scale into its
+   slot's row would remove the 96, and a cursor that glides instead of
+   teleporting would remove the 273; the second is the cursor rule's to decide.
+   Skinned rows write only their selection words (`NoteSkinnedRows`).
+6. **Steady allocation.** The frame thread's median allocation on the settled
+   spawn fell from about 43 KB to about 17 KB an iteration (`host.frames`).
+   What went: the reservations' named-output arrays, which the output records
+   now recycle (`OutputRecords`); the probe readback's second copy
+   (`SdfMeshProbeGpuWork.Complete` reads through pooled scratch); and the
+   binding bar's walk over every bank per slot (`CompiledBindingBarLayout.Places`,
+   one set per banks table). What remains on the frame thread is the simulation
+   step it runs between frames: the adjacency projections' body images
+   (`WorldSessionMirror.CaptureBodyImage`, about 3 MB a second) and the host's
+   presentation copies (`WorldPresentationCopy.Observations`). Those belong to
+   the federation work, not to frame production.
+7. **A view-graph change rebuilds what it changed.** The client now keeps what
+   it derives from a delivered definition while the delivery moves none of the
+   parts the derivation read, through the document's own read recording
+   (`WorldDocumentProduct`, over `WorldDocumentReads` and
+   `WorldDocumentInputs.Changed`): the creation facets
+   (`WorldFramePresenter.ReconcileDelivery`) and the presentation query field,
+   which records its reads on its build thread. A `world.row.set views
+   nestingDepth` pair rebuilt the field twice and now once (334 to 178 MB of
+   allocation across the pair, `puck host allocations`). The rest of the cost
+   is real new work and duplicate work elsewhere: opening the deeper screen
+   sessions (`WorldInstanceHost.OpenScreenSession`), each session's facets
+   derived again (`WorldPrototypeFacets.Seated`) and its scene composed, the new
+   residencies' programs, and the server's mutation pipeline, which validates,
+   compiles the rules and serializes the whole definition for a views row
+   (`WorldDefinitionValidator.TryValidateChange`, `WorldDeliveryCursor.DeliverDefinition`).
+   Those are the next step: the server's product plan
+   (`WorldDocument.PlanProducts`) already skips products whose inputs did not
+   move; validation, rule compilation and delivery need the same rule.
+8. **Then the pipeline**, if the host world's own chain still bounds a frame.
 
 ## Systems considered
 
@@ -248,3 +289,23 @@ across a benchmark chapter and divided by the frames.
   screens; the minimum takes their slowest tier and adds no lever.
 - `SdfFrame.Writer` already gives each residency a frame of its own to capture
   into, so a capture is a hand-off of three records, not a rebuild.
+- The output records (`RenderGraphRuntime.OutputRecords`) already held a
+  current and a previous record a reader resolves through; a reservation is a
+  third state of the same record, written ahead and replaced or withdrawn, so
+  every reader keeps the door it had (`RecordedAt`, `Resolve`).
+- The existing abandonment (`ShaderPipelineRenderNode.AbandonFrame`) already
+  rolled back a frame's cadence and retired its leases unsampled; the commit
+  loop reuses it for a consumer of a broken reservation instead of adding a
+  second gate. The stand-in rule (`RenderGraphRuntime.StandInFor`) stays for a
+  producer with no output at all.
+- `IRenderGraphPackageRecorder.RecordingDomain` and `RecordWave`'s grouping
+  already order a residency's recordings on one thread; the lighting sources'
+  recorded classification rests on that order rather than on a new latch.
+- `RenderGraphSlotResults` holds what a recording captured until its slot is
+  proven complete; a reservation needs proof of submission, not completion, so
+  it is settled at the commit.
+- `WorldDocumentReads` and `WorldDocumentInputs.Changed` already record what a
+  product reads of a document and name what a delivery changed; the server's
+  `WorldDocument.PlanProducts` decides its rebuilds by them.
+  `WorldDocumentProduct` is the client's holder of one such product, so a
+  reader does not keep its own document, inputs and comparison.
