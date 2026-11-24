@@ -1274,6 +1274,14 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   the walk, never one wrapper; a hit's normal and material stay `sdfProbeSurface`'s in both. The client takes the
   variant per job (`SdfMeshProbeGpuWork.TopFor`), and the structures' lifetime rule is the header of
   `SdfMeshProbeGpuWork.Rays.cs`: a structure is disposed only through `Retire` and `DrainRetired`.
+- **Every residency's probe scene shares one buffer.** `SdfMeshProbeScenes` (one per mesh region store,
+  `SdfMeshRegionStore.ProbeScenes`) places each trace geometry once, claimed by every probe client whose scene names it,
+  beside each client's prefix, whose first two words are its root words. A traced dispatch pushes the published
+  export's root word base, and the kernels read the root through `sdfProbeRootWord`, never `sdfProbeScene[0]`. Chunks
+  ride whichever residency's upload opens next (`SdfWorldTables.OpenUpload`, after the mesh region's owed copies), and a
+  client publishes only once the upload carrying its root words has completed (`SdfMeshProbeScenes.Upload.Rooted`). The
+  region unmaps every chunk no live allocation touches (`SdfMeshProbeScenes.Cover`). `world.residency`'s mesh-store line
+  ends with the `probe-scenes` reading (`live-bytes`, `geometries-shared`, `unmapped-bytes`).
 - **Mesh words go through one door.** `frame/sdf-mesh-words.hlsli` reads a draw's record through
   `sdfMeshRecordWord` and a mesh's own words (vertices, triangle materials, indices, level table, members) through
   `sdfMeshWord`, and then makes `sdfMeshRegion` an undeclared name, so a read around it does not compile.

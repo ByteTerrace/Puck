@@ -89,7 +89,16 @@ public sealed partial class SdfWorldTables {
         // upload that opens after they were owed, so no upload submitted earlier draws a mesh at words a later one fills.
         // Never record them in RecordUpload, which runs side by side with other residencies' recordings in no order.
         m_meshStoreCopies = m_meshStore.RecordOwed(client: this, commandBuffer: commandBuffer, readers: RegionReaders, recorder: recorder);
+        // The probe scenes' words ride the same door, under the same invariant: a probe job of any residency recorded
+        // after this upload opens reads a region whose words and growth this upload carries, and no client publishes
+        // a root until the upload that carried it has completed (SdfMeshProbeScenes.Upload.Rooted).
+        m_probeSceneCopies = (m_meshStore.ProbeScenesIfCreated?.RecordOwed(commandBuffer: commandBuffer, readers: GpuStage.ComputeShader, recorder: recorder) ?? false);
     }
+    // Whether the open upload's recording carries the probe scenes' owed copies (SdfMeshProbeScenes.RecordOwed).
+    private bool m_probeSceneCopies;
+    /// <summary>Gets the probe trace's scene words this residency's lighting shares with every residency attached to its
+    /// mesh region, or <see langword="null"/> once that region is gone.</summary>
+    internal SdfMeshProbeScenes? ProbeScenes => m_meshStore.ProbeScenes;
     /// <summary>Records the open upload into its ring slot's command list: the fillers' first transitions, the regions'
     /// copies, the lighting's and the world's shadow layers. It touches only these tables and the device's recorder, so
     /// it runs on whichever thread holds the tables between <see cref="OpenUpload"/> and <see cref="CloseUpload"/>.</summary>
@@ -141,6 +150,7 @@ public sealed partial class SdfWorldTables {
         m_shadows?.Submitted(slot: slot);
         m_uploads = checked((m_uploads + 1UL));
         if (m_meshStoreCopies) { m_meshStoreCopies = false; m_meshStore.SubmittedOwed(); }
+        if (m_probeSceneCopies) { m_probeSceneCopies = false; m_meshStore.ProbeScenesIfCreated?.SubmittedOwed(); }
         m_uploadedBindingRevision = m_bindingRevision;
         m_backgroundProgram = m_liveProgram;
         ServiceRetirements();

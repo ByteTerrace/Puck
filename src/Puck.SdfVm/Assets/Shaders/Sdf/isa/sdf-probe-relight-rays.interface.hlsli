@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-probe-relight-rays' (sha256/62c054dc9630182531951ee5bd90ea10b2beff1b50d12db94a9b323356e38823). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-probe-relight-rays' (sha256/cb6dc53b0def4b8dfb8a28b9089005badf798b488da58e4ba6eef527e35a7fd9). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_PROBE_RELIGHT_RAYS
 #define PUCK_SHADER_INTERFACE_SDF_PROBE_RELIGHT_RAYS
 
@@ -16,6 +16,12 @@
 [[vk::binding(10, 3)]] RWStructuredBuffer<uint> sdfProbeCacheRW : register(u10, space3);
 [[vk::binding(11, 3)]] StructuredBuffer<uint> sdfProbeCache : register(t11, space3);
 [[vk::binding(12, 3)]] RaytracingAccelerationStructure sdfProbeStructure : register(t12, space3);
+
+// The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
+struct SdfProbeRelightRaysPushedIndex {
+    [[vk::offset(0)]] uint index;
+};
+[[vk::push_constant]] ConstantBuffer<SdfProbeRelightRaysPushedIndex> pushedIndex : register(b0, space4);
 
 // This interface declares no work counters, so its passes count nothing: the counting functions a kernel calls
 // are declared empty, and a kernel written for a counting package compiles here unchanged.

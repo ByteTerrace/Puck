@@ -126,7 +126,7 @@ public sealed class SdfMeshIrradianceSceneLawTests {
         kept.Dispose();
         foreach (var scene in new[] { first, trimmed }) {
             var expected = scene.ExportGpu(placements: placements);
-            var export = typeof(SdfMeshIrradianceScene).GetMethod(name: "CreateGpuExport", bindingAttr: Hidden)!.Invoke(obj: scene, parameters: [placements, null])!;
+            var export = typeof(SdfMeshIrradianceScene).GetMethod(name: "CreateGpuExport", bindingAttr: Hidden)!.Invoke(obj: scene, parameters: [placements, null, null, true])!;
             var read = (WordReader)Delegate.CreateDelegate(type: typeof(WordReader), target: export, method: "Read");
 
             foreach (var width in new[] { 1, 2, 3, 5, 7, 31, 33 }) {

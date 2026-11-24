@@ -46,29 +46,38 @@ public sealed partial class SdfMeshIrradianceScene {
         return (instance.Geometry, instance.Mesh, instance.ObjectToWorld);
     }
     /// <summary>Exports the existing hierarchy in traversal order, referencing triangles in an already placed mesh
-    /// region. Word zero is the top root's address, or zero for an empty scene, and word one the first instance record's
-    /// (<see cref="SdfMeshProbeTrace.InstanceBaseWord"/>). No triangles or hierarchy are rebuilt.
-    /// The caller retains this scene and the region's placements until the GPU submission completes.</summary>
+    /// region. Its root words lie at word zero (a root word base of zero): the top root's address, or zero for an empty
+    /// scene, then the first instance record's (<see cref="SdfMeshProbeTrace.InstanceBaseWord"/>). No triangles or
+    /// hierarchy are rebuilt. The caller retains this scene and the region's placements until the GPU submission
+    /// completes.</summary>
     /// <param name="placements">The mesh placements of the upload the trace will bind.</param>
     /// <returns>Nodes, leaf indices, braid entries and instance records with absolute word addresses.</returns>
     public uint[] ExportGpu(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements) {
-        var export = CreateGpuExport(placements);
+        var export = CreateGpuExport(placements: placements, arena: null, claimant: null, prefixFirst: true);
         var words = new uint[export.Words];
         export.Read(0, words);
         return words;
     }
 
     // The runtime stages directly from the scene's existing arrays: geometry nodes and leaf ordinals, and the prefix (the
-    // top level's nodes, entries and instance records), each word written when a reader asks for it, so no part of the
-    // export gains a second host copy. A reader holds a scene claim and the captured placements for as long as it reads,
-    // as SdfMeshProbeGpuWork's upload does.
-    internal GpuExport CreateGpuExport(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, GpuArena? arena = null) {
+    // root words, then the top level's nodes, entries and instance records), each word written when a reader asks for it,
+    // so no part of the export gains a second host copy. A reader holds a scene claim and the captured placements for as
+    // long as it reads, as SdfMeshProbeScenes' uploads do. The claimant claims every geometry the export names in the
+    // arena (GpuPlacement.Claims), which frees a geometry only once no claimant claims it. The export's root words
+    // (GpuExport.Prefix) are its prefix's first two, which the uploader writes last, after every word Changed names.
+    // prefixFirst places the prefix before any geometry, so a fresh arena's root word base is zero.
+    internal GpuExport CreateGpuExport(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, GpuArena? arena = null, object? claimant = null, bool prefixFirst = false) {
         ArgumentNullException.ThrowIfNull(placements);
         arena ??= new GpuArena();
+        claimant ??= arena;
         var content = m_content;
         var geometries = new Dictionary<Geometry, (int Nodes, int Triangles, int Frames)>(capacity: m_geometries.Count);
         var segments = new List<GpuSegment>(capacity: ((3 * m_geometries.Count) + 2));
         var changed = new List<(int Word, int Count)>();
+        // An empty scene still exports one zero prefix word, so a prefix allocation always exists to free.
+        var prefixCount = Math.Max(1, PrefixWords);
+        var allocated = checked(SdfMeshProbeTrace.RootWords + prefixCount);
+        var rootWord = (prefixFirst ? arena.Allocate(allocated) : -1);
         foreach (var geometry in m_geometries.Values) {
             var count = geometry.GpuWords;
             if (count == 0) { continue; }
@@ -76,6 +85,7 @@ public sealed partial class SdfMeshIrradianceScene {
                 placement = new GpuPlacement(arena.Allocate(count));
                 arena.Geometries.Add(geometry, placement);
             }
+            _ = placement.Claims.Add(claimant);
             var nodes = placement.Word;
             var written = placement.WrittenWords;
             if (written < count) { changed.Add((nodes + written, count - written)); }
@@ -86,12 +96,11 @@ public sealed partial class SdfMeshIrradianceScene {
             segments.Add(new(triangles, geometry.Triangles.Length, GpuSegmentKind.Triangles, geometry, 0));
             segments.Add(new(frames, geometry.Frames.Length * SdfMeshProbeTrace.FrameWords, GpuSegmentKind.Frames, geometry, 0));
         }
-        // The prefix is allocated last, so a geometry that cannot be placed throws before anything only this export
-        // would free; a geometry placed meanwhile stays in the arena, which frees it at the next publication that does
-        // not name it. An empty scene still exports one zero prefix word, so a prefix allocation always exists to free.
-        var prefixCount = Math.Max(1, PrefixWords);
-        var prefix = arena.Allocate(prefixCount);
-        var prefixBytes = ((long)prefixCount * sizeof(uint));
+        // Otherwise the prefix is allocated last, so a geometry that cannot be placed throws before anything only this
+        // export would free; a geometry placed and claimed meanwhile stays in the arena until its claimant lets it go.
+        if (!prefixFirst) { rootWord = arena.Allocate(allocated); }
+        var prefix = checked(rootWord + SdfMeshProbeTrace.RootWords);
+        var prefixBytes = ((long)allocated * sizeof(uint));
         Counters.Add(kind: SdfMeshIrradiance.PrefixBytes, amount: prefixBytes);
         Counters.Raise(kind: SdfMeshIrradiance.PeakPrefixBytes, value: prefixBytes);
         var nodeWords = content.NodeCount * SdfMeshProbeTrace.NodeWords;
@@ -102,9 +111,9 @@ public sealed partial class SdfMeshIrradianceScene {
         var root = content.NodeCount == 0 ? 0u : (uint)prefix;
         segments.Add(new(prefix, prefixCount, GpuSegmentKind.Prefix, null, 0));
         changed.Add((prefix, prefixCount));
-        segments.Add(new(0, SdfMeshProbeTrace.RootWords, GpuSegmentKind.Root, null, 0));
+        segments.Add(new(rootWord, SdfMeshProbeTrace.RootWords, GpuSegmentKind.Root, null, 0));
         segments.Sort(static (a, b) => a.Word.CompareTo(b.Word));
-        return new GpuExport(arena.Words, Read) { Changed = changed, Root = root, Instances = (uint)instances, Prefix = prefix, Geometries = geometries };
+        return new GpuExport(arena.Words, Read) { Changed = changed, Root = root, Instances = (uint)instances, Prefix = rootWord, Geometries = geometries };
 
         void Read(int word, Span<uint> destination) {
             var low = PartitionPoint.Of(span: CollectionsMarshal.AsSpan(segments), state: word, isBefore: static (at, segment) => (segment.Word + segment.Count <= at));
@@ -207,39 +216,66 @@ public sealed partial class SdfMeshIrradianceScene {
         record[SdfMeshProbeTrace.SolidWord] = instance.Solid ? 1u : 0u;
     }
 
-    // Allocations still read by the published root are freed only after the replacement root's fence.
-    // The arena's unit is a word; word 0 is the root and never freed.
+    // The words of every scene one uploader holds: each geometry once, whichever claimants' exports name it, and each
+    // export's prefix. A claimant's published prefix and the geometries it claims are read by its queries, so an
+    // allocation is freed only when its claimant publishes a replacement with no query in flight (Publish), lets go
+    // (Release), or never published it (Abandon), and a geometry only once no claimant claims it. The unit is a word.
     internal sealed class GpuArena {
         private readonly GpuRangeAllocator m_ranges = new(size: ((ulong)uint.MaxValue >> SdfMeshProbeTrace.NodeCountBits));
-        private int m_prefix;
         private int m_words;
         internal Dictionary<Geometry, GpuPlacement> Geometries { get; } = [];
+        // The highest word any allocation has reached: the buffer the words are uploaded into is at least this long.
         internal int Words => m_words;
-        internal GpuArena() => Allocate(SdfMeshProbeTrace.RootWords);
         internal int Allocate(int words) {
             if (!m_ranges.TryAllocate(count: (ulong)words, start: out var start)) {
                 throw new InvalidOperationException("The probe scene exceeds its packed node address space.");
             }
             var word = checked((int)start);
             m_words = Math.Max(m_words, checked(word + words));
+            m_live.Add(word, words);
+            LiveWords += words;
             return word;
         }
-        internal void Publish(GpuExport export) {
-            if (m_prefix != 0) { _ = m_ranges.Free(start: (ulong)m_prefix); }
-            foreach (var geometry in Geometries.Keys.Where(geometry => !export.Geometries.ContainsKey(geometry)).ToArray()) {
-                _ = m_ranges.Free(start: (ulong)Geometries[geometry].Word);
-                Geometries.Remove(geometry);
+        private void Free(int start) {
+            _ = m_ranges.Free(start: (ulong)start);
+            if (m_live.Remove(start, out var words)) { LiveWords -= words; }
+        }
+        // Each live allocation's first word and length, which the uploader's buffer backs (SdfMeshProbeScenes.Cover).
+        private readonly Dictionary<int, int> m_live = [];
+        internal IReadOnlyDictionary<int, int> Live => m_live;
+        // The words the live allocations hold.
+        internal long LiveWords { get; private set; }
+        // Publishes a claimant's export in place of the one it published before: frees that one's prefix and lets go of
+        // the geometries the claimant claims that the new export does not name.
+        internal void Publish(object claimant, GpuExport export, GpuExport? previous) {
+            if (previous is not null) { Free(start: previous.Prefix); }
+            Unclaim(claimant: claimant, kept: export);
+        }
+        // Geometry is immutable and its completed words remain useful across roster changes, so the claimant keeps its
+        // claims and only the obsolete prefix is discarded. A later export resumes each geometry at its written prefix.
+        internal void Abandon(GpuExport export) => Free(start: export.Prefix);
+        // Lets go of everything a claimant holds: its published prefix and every claim.
+        internal void Release(object claimant, GpuExport? published) {
+            if (published is not null) { Free(start: published.Prefix); }
+            Unclaim(claimant: claimant, kept: null);
+        }
+        private void Unclaim(object claimant, GpuExport? kept) {
+            List<Geometry>? freed = null;
+            foreach (var (geometry, placement) in Geometries) {
+                if (((kept is not null) && kept.Geometries.ContainsKey(geometry)) || !placement.Claims.Remove(claimant) || (placement.Claims.Count != 0)) { continue; }
+                (freed ??= []).Add(geometry);
             }
-            m_prefix = export.Prefix;
+            if (freed is null) { return; }
+            foreach (var geometry in freed) {
+                Free(start: Geometries[geometry].Word);
+                _ = Geometries.Remove(geometry);
+            }
         }
-        internal void Abandon(GpuExport export) {
-            // Geometry is immutable and its completed chunks remain useful across roster changes. Only the obsolete
-            // scene prefix is discarded. A later export resumes each geometry at its fence-proven written prefix.
-            _ = m_ranges.Free(start: (ulong)export.Prefix);
-        }
+        // Notes that a completed copy wrote [word, word + count) of an export's words. A geometry placed again since the
+        // export named it (a placement at another word) is left as it is.
         internal void Complete(GpuExport export, int word, int count) {
-            foreach (var geometry in export.Geometries.Keys) {
-                var placement = Geometries[geometry];
+            foreach (var (geometry, placed) in export.Geometries) {
+                if (!Geometries.TryGetValue(geometry, out var placement) || (placement.Word != placed.Nodes)) { continue; }
                 var start = Math.Max(word, placement.Word);
                 var end = Math.Min(word + count, placement.Word + geometry.GpuWords);
                 if (start < end) { placement.Written.Add(start - placement.Word, end - start); }
@@ -249,9 +285,12 @@ public sealed partial class SdfMeshIrradianceScene {
 
     internal sealed class GpuPlacement(int word) {
         internal int Word { get; } = word;
-        // Completion callbacks can arrive in slot-index order, at most SlotCount disjoint runs ahead of the prefix.
-        internal GpuUploadRuns Written { get; } = new(SdfGpuWork.SlotCount + 2);
+        // Exact, so a run counts only words a completed copy wrote: copies of several claimants' exports complete in
+        // queue order, and a coarsened run would claim a word none of them wrote.
+        internal GpuUploadRuns Written { get; } = new(capacity: (SdfGpuWork.SlotCount + 2), exact: true);
         internal int WrittenWords => Written.Count != 0 && Written.Start(0) == 0 ? Written.Length(0) : 0;
+        // The claimants whose exports name the geometry; it is freed when the last lets go.
+        internal HashSet<object> Claims { get; } = new(ReferenceEqualityComparer.Instance);
     }
 
     private enum GpuSegmentKind : byte { Root, Prefix, Nodes, Triangles, Frames }
