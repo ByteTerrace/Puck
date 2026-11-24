@@ -218,13 +218,21 @@ instance was reported current again on the following frames.
 Each step names the count that shows it worked, read with `world.counters`
 across a benchmark chapter and divided by the frames.
 
-4. **The pump follows what completed.** Each residency's background work polls
-   every frame (`SdfWorldResidency.Upkeep`). The fence wakes the thread's shared
-   `WaitService.Signal`, which cannot identify the ready residency. Give the
-   pump readiness from the fence, a client's new job, and budget credit. Keep
-   device retirement and memory trims progressing even when no background job
-   is ready. Compare the number of residencies pumped per frame with the
-   number held.
+4. **The pump follows what completed.** Built. A residency's background work
+   rests once a step finds nothing to take (every client declined with no
+   deferral pending, or every slot busy), and a pump or the host wait's step of
+   a resting service does nothing else (`SdfGpuWork.Quiescent`). The shared
+   `WaitService.Signal` still wakes the thread, and each service then reads its
+   own causes: a completed slot fence, its own wake (`SdfGpuWork.Wake`, which
+   every client with work outside a frame calls, and a released readback), the
+   tables' next upload (`SdfWorldTables.Uploads`), a held frame. A client whose
+   next job comes due by the clock alone waits at most
+   `SdfGpuWork.QuiescentRest`; asking clients for their next due time would
+   remove that bound. Device retirement and memory trims run every frame
+   whatever the work does (`SdfWorldResidency.Upkeep`), and a resting service
+   still gives back idle buffers. `sdf.captures.pumped` against
+   `sdf.captures.held` read 685 against 3256 over 120 ticks of the settled
+   spawn, about 21%.
 5. **Then the pipeline**, if the host world's own chain still bounds a frame.
 
 ## Systems considered

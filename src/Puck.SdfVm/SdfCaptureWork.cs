@@ -39,6 +39,11 @@ public static class SdfCaptureWork {
     /// frame thread.</summary>
     public static readonly WorkKind UploadedOnWorker = new(name: "sdf.captures.uploaded-on-worker", unit: "residencies", workClass: WorkClass.Pacing);
 
+    /// <summary>Counts the residencies whose background GPU work a frame's upkeep stepped (<see cref="SdfGpuWork.Pump"/>):
+    /// against <see cref="Held"/>, the upkeep visits only a residency with a completed job, a client's offer, a new
+    /// upload, a held frame or a budget hold the passing of time lifts.</summary>
+    public static readonly WorkKind Pumped = new(name: "sdf.captures.pumped", unit: "residencies", workClass: WorkClass.Pacing);
+
     /// <summary>Gets the process's capture counts.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.captures", kinds: [Held, Run, Minimum, MinimumHeld, CapturePacks, CapturePacksOnWorker, PackedBeside, PackedOnWorker, UploadedBeside, UploadedOnWorker]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.captures", kinds: [Held, Run, Minimum, MinimumHeld, CapturePacks, CapturePacksOnWorker, PackedBeside, PackedOnWorker, UploadedBeside, UploadedOnWorker, Pumped]);
 }

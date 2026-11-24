@@ -197,8 +197,8 @@ defects, not looks.
    with headroom.** One lane over both, since both are the same discipline
    (work proportional to change, off the one thread): capture only what a
    view reads and capture routed scenes side by side (start from
-   `wip/frame-production`); a pump that visits what
-   completed; the input runtime proportional to seated or possessed bodies
+   `wip/frame-production`); the input runtime proportional to seated or
+   possessed bodies
    and grant changes; the step thread's copies and clears; fork and plan
    cost; `CaptureMotion`; the source watch on OS change notification instead
    of polling. Success line: the frame thread under 3 ms on the route at
@@ -863,8 +863,8 @@ wait behind them.
    serial preparation and filming. Mesh compaction marks only rows that
    reference moved meshes, using the same index for every residency.
    One fork records a frame ([as built](frame-production.md#one-fork-records-a-frame)).
-   Left, in [its order](frame-production.md#the-steps): a pump that visits
-   what completed. Check:
+   So does a pump that visits only the residencies whose work moved. Left: the
+   pipeline across frames, if the host world's chain still bounds a frame. Check:
    `world.counters sdf.captures` across a benchmark chapter,
    `run` a frame against `held`, with `packed-on-worker` and
    `uploaded-on-worker`, beside `host.frames`' capture and pack parts. At
