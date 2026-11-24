@@ -253,9 +253,13 @@ public static partial class SdfWorldPackage {
     public const string FrameSampled = "sdfFrameSampled";
     /// <summary>The bounded-volume table.</summary>
     public const string Volumes = "sdfVolumes";
-    /// <summary>The mesh region as a stream of words: the draw records, then the positions and indices the mesh pass
-    /// reads.</summary>
+    /// <summary>The presentation's mesh region as a stream of words: the positions, triangle materials and indices a
+    /// draw's record addresses, every residency's meshes in one buffer.</summary>
     public const string MeshRegion = "sdfMeshRegion";
+    /// <summary>A residency's draw records as a stream of words, one record a draw (<c>SdfMeshRecord</c>), whose word
+    /// offsets address the mesh region (<see cref="MeshRegion"/>). A reader that keeps both in one buffer binds it at
+    /// both members.</summary>
+    public const string MeshDrawRecords = "sdfMeshDraws";
     /// <summary>The mesh visibility target the mesh pass draws and the surface pass reads: per pixel the ray parameter, the
     /// draw index plus one (zero where no mesh covers it) and the triangle.</summary>
     public const string MeshVisibility = "meshVisibility";
@@ -425,6 +429,7 @@ public static partial class SdfWorldPackage {
         Table(element: ShaderValueType.Uint, name: MeshRegion),
         Table(element: ShaderValueType.Uint, name: MeshIrradiance),
         Table(element: ShaderValueType.Uint, name: FrameSampled),
+        Table(element: ShaderValueType.Uint, name: MeshDrawRecords),
     ];
     /// <summary>Gets the values the mesh bake's two kernels, the instance mask and the field sampler, read from their own
     /// pass block beside the extent: the live program's instance-mask width, the dispatch's lattices and their

@@ -683,7 +683,6 @@ public sealed partial class SdfMeshPathBake {
             // The region's account is read every frame: the next frame's tiers are budgeted by it (Retier).
             m_regionNamedBytes = ((long)tables.MeshRegionNamedBytes);
             m_regionRefused = tables.MeshRegionRefused;
-            tables.CoverRefusedBacking();
             ServeAhead(tables: tables);
             if (m_regionRefused > 0) {
                 scope.Continue(site: BakeGate.Evict);

@@ -71,31 +71,24 @@ public sealed partial class SdfWorldTables {
         );
 
     // Region index's region of byteCount bytes under the policy the device's profile selects, its ring in the memory the
-    // profile selects, named by its table's role and writing the copy sets reserved for it. The mesh region is always
-    // staged: it holds every drawn mesh's vertices and is rewritten only when the draws change, so it belongs in
-    // device-local memory rather than in the small host-visible device-local heap every residency's rings share. Its
-    // meshes land through the background GPU work (SdfWorldTables.MeshLanding.cs), so it has a slot per background slot
-    // past the upload ring's, and copy sets of its own for all of them (MeshRegionCopyPoolSizes).
-    // Every other region chooses its own residency (GpuRegion's profile constructor), again whenever it grows, so no table
-    // selects or re-selects a policy itself.
+    // profile selects, named by its table's role and writing the copy sets reserved for it. The draw region is always
+    // staged: every raster and every shaded pixel reads a draw's record, so the records belong in device-local memory
+    // rather than in the small host-visible device-local heap every residency's rings share. Every other region chooses
+    // its own residency (GpuRegion's profile constructor), again whenever it grows, so no table selects or re-selects a
+    // policy itself.
     private GpuRegion CreateRegion(int region, int byteCount) => ((region is MeshRegionIndex)
         ? new GpuRegion(
             bindings: m_gpu.Bindings,
             buffers: m_gpu.BufferFactory,
             byteCount: byteCount,
             copyPipeline: m_regionCopyPipeline,
+            copySets: m_regionCopyPool.Region(index: region),
             memory: GpuHostVisibleMemory.Host,
-            name: MeshRegionName,
+            name: RegionName(region: region),
             policy: GpuResidencyPolicy.Staged,
             recorder: m_gpu.Recorder,
-            slotCount: MeshRegionSlotCount,
-            hostCopies: m_regionHostCopies,
-            staging: new GpuObjectName(owner: SdfResidencySelector.RegionStagingOwner, part: "mesh-region"),
-            // The probe scene's bottom levels read their triangles from the region in place (SdfMeshProbeGpuWork.Rays).
-            destinationUsage: ((m_deviceContext.Capabilities?.Has(required: GpuOptionalCapabilities.RayQuery) ?? false) ? GpuBufferUsage.AccelerationStructureInput : GpuBufferUsage.None),
-            // Grows and shrinks in place where the device can back a buffer a chunk at a time, so a growth never holds
-            // two regions at once (SdfResidencySelector leaves no replacement's room for it).
-            mapped: true
+            slotCount: FrameRingSize,
+            hostCopies: m_regionHostCopies
         )
         : new GpuRegion(
             bindings: m_gpu.Bindings,
@@ -110,10 +103,6 @@ public sealed partial class SdfWorldTables {
             recorder: m_gpu.Recorder,
             slotCount: FrameRingSize
         ));
-
-    // The mesh region's buffers are named under an owner of their own, apart from the tables' other objects, so the
-    // account reserves and classes them as the elastic storage they are (SdfResidencySelector.RegionOwner).
-    private static GpuObjectName MeshRegionName => new(owner: SdfResidencySelector.RegionOwner, part: "mesh-region");
 
     // Disposes every region, then the copy pool reserved for them.
     private void DisposeRegions() {
@@ -184,19 +173,20 @@ public sealed partial class SdfWorldTables {
     }
 
     /// <summary>Describes the residency's fixed cost for <c>world.residency</c>: what its tables hold whatever detail is
-    /// resident, every buffer <see cref="TableBytes"/> counts but the mesh region's, which holds the resident meshes, and
-    /// the host copies of those regions; then the mesh region's own bytes beside it.</summary>
+    /// resident, every buffer <see cref="TableBytes"/> counts, the draw records among them, and the host copies of its
+    /// regions; then the presentation's mesh region beside it, which holds every residency's meshes once and is the
+    /// same figure in every residency's line.</summary>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeFixedCost() {
         var tables = TableBytes;
-        var mesh = (m_meshRegion?.OwnedBytes ?? default);
+        var mesh = m_meshStore.OwnedBytes;
         var copies = 0UL;
 
         for (var index = 0; (index < RegionCount); index++) {
-            if ((index != MeshRegionIndex) && (RegionAt(index: index) is { } region)) { copies += region.CpuShadowBytes; }
+            if (RegionAt(index: index) is { } region) { copies += region.CpuShadowBytes; }
         }
 
-        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"fixed-cost device-local={(tables.DeviceLocal - mesh.DeviceLocal)} host-visible={(tables.HostVisible - mesh.HostVisible)} host-copies={copies} (tables less the mesh region) mesh-region device-local={mesh.DeviceLocal} host-visible={mesh.HostVisible} host-copy={(m_meshRegion?.CpuShadowBytes ?? 0UL)}");
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"fixed-cost device-local={tables.DeviceLocal} host-visible={tables.HostVisible} host-copies={copies} (tables, the draw records among them) mesh-store device-local={mesh.DeviceLocal} host-visible={mesh.HostVisible} (the presentation's, held once)");
     }
 
     private GpuRegion? RegionAt(int index) => index switch {
@@ -221,7 +211,7 @@ public sealed partial class SdfWorldTables {
         VolumeRegionIndex => "volumes",
         DecalRegionIndex => "decals",
         ScreenMappingRegionIndex => "screen-mappings",
-        MeshRegionIndex => "mesh-region",
+        MeshRegionIndex => "mesh-draws",
         LightRegionIndex => "lights",
         SkyRegionIndex => "sky",
         SkyLayerRegionIndex => "sky-layers",

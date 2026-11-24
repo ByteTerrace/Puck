@@ -78,6 +78,10 @@ public sealed partial class SdfWorldTables {
         if (!keepsMotion) {
             RecordPreviousTables(commandBuffer: commandBuffer, previousSlot: previousSlot);
         }
+        // The presentation's mesh region records what it owes that no landing job carries (a compaction's moves, a
+        // grown region's carry) ahead of this residency's passes, whichever residency's plan owed it.
+        var storeCopies = m_meshStore.RecordOwed(client: this, commandBuffer: commandBuffer, readers: RegionReaders, recorder: recorder);
+
         RecordRegionCopies();
         RecordMeshIrradiance(command: commandBuffer);
         if (!keepsMotion) {
@@ -97,8 +101,7 @@ public sealed partial class SdfWorldTables {
         // Publish submission only after the fence has been armed by the queue. Before this point an initially
         // signaled fence must not satisfy geometry staged for the next upload.
         m_uploads = checked((m_uploads + 1UL));
-        // The flush above staged the moved meshes' words.
-        ReleaseUploadNeeds();
+        if (storeCopies) { m_meshStore.SubmittedOwed(); }
         m_uploadedBindingRevision = m_bindingRevision;
         m_backgroundProgram = m_liveProgram;
         ServiceRetirements();

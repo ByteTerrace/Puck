@@ -101,9 +101,9 @@ public sealed partial class SdfWorldTables {
     /// <param name="source">The selection.</param>
     internal void ForgetSelectionMarks(SdfMeshOcclusion source) => m_selections.TryRemove(key: source, value: out _);
 
-    // Sums the placed meshes no row naming them was marked selected within the window, once a mark round while a reading
-    // asked for it within the window (DescribeSelection): a mesh no draw names counts too, since it holds its words for
-    // nothing a pass reads. Only the report reads the sums, so a frame nobody reads them in walks no placement.
+    // Sums the meshes this residency's draws name that no row naming them was marked selected within the window, once a
+    // mark round while a reading asked for it within the window (DescribeSelection). Only the report reads the sums, so
+    // a frame nobody reads them in walks no mesh.
     private void CountUnselected() {
         if (((m_uploads - m_unselectedCountedAt) < SelectionMarkFrames) || ((m_uploads - Volatile.Read(location: ref m_selectionAskedAt)) > SelectionWindowUploads)) { return; }
         m_unselectedCountedAt = m_uploads;
@@ -113,8 +113,9 @@ public sealed partial class SdfWorldTables {
         var meshes = 0;
         var selected = 0L;
 
-        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.MarkMeshes, amount: m_meshArena.Placements.Count);
-        foreach (var mesh in m_meshArena.Placements.Keys) {
+        if (m_meshClaims is not { } claims) { return; }
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.MarkMeshes, amount: claims.Count);
+        foreach (var mesh in claims.Meshes) {
             var bytes = (((long)SdfMeshRegion.WordsOf(mesh: mesh)) * sizeof(uint));
             var used = false;
 

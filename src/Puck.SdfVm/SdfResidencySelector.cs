@@ -142,18 +142,61 @@ public sealed class SdfResidencySelector {
         device: m_account.ReserveDevice(memoryClass: MemoryClass.Workspace, owner: WorkOwner, pool: Pool),
         host: m_account.ReserveDevice(memoryClass: MemoryClass.Workspace, owner: WorkOwner, pool: PhysicalMemory.Host)
     );
-    /// <summary>Registers a residency: its grant, which reserves its mesh region and budgets its detail.</summary>
+    /// <summary>Registers a residency: its grant, which budgets its detail. The residency's meshes lie in the
+    /// presentation's one region (<see cref="AttachStore"/>), which holds the reservation.</summary>
     /// <param name="name">The residency's name, for the selector's line.</param>
-    /// <returns>The grant; disposing it releases its reservation and takes it out of the sum.</returns>
+    /// <returns>The grant; disposing it takes it out of the sum.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
     public SdfResidencyGrant Register(string name) {
         ArgumentNullException.ThrowIfNull(argument: name);
 
-        var grant = new SdfResidencyGrant(name: name, reservation: m_account.ReserveDevice(memoryClass: MemoryClass.Elastic, owner: RegionOwner, pool: Pool), selector: this);
+        var grant = new SdfResidencyGrant(name: name, reservation: null, selector: this);
 
         lock (m_gate) { m_grants.Add(item: grant); }
 
         return grant;
+    }
+    // Registers the presentation's mesh region: the grant that holds its reservation.
+    internal SdfResidencyGrant RegisterRegion() {
+        var grant = new SdfResidencyGrant(name: "mesh-store", reservation: m_account.ReserveDevice(memoryClass: MemoryClass.Elastic, owner: RegionOwner, pool: Pool), selector: this);
+
+        lock (m_gate) { m_region = grant; }
+
+        return grant;
+    }
+
+    private SdfMeshRegionStore? m_store;
+    // The region's grant while a store stands, and the bytes the residencies' names hold in it, each mesh once.
+    private SdfResidencyGrant? m_region;
+    private long m_regionNamed;
+
+    /// <summary>Gets the presentation's mesh region, or <see langword="null"/> while no residency is attached.</summary>
+    public SdfMeshRegionStore? Store { get { lock (m_gate) { return m_store; } } }
+
+    /// <summary>Attaches a residency's tables to the presentation's one mesh region, creating the region for the first:
+    /// the one door a residency's meshes reach device memory through, so a mesh any number of residencies name is
+    /// placed once. A residency that records with another region-copy pipeline than the region's (its kernels were
+    /// built again) gets a region of its own generation: the old one stays with the residencies still attached to
+    /// it.</summary>
+    /// <param name="device">The device.</param>
+    /// <param name="copyPipeline">The device's region-copy pipeline the tables record with.</param>
+    /// <param name="client">The tables.</param>
+    /// <returns>The region the tables name their meshes in.</returns>
+    internal SdfMeshRegionStore AttachStore(IGpuDeviceContext device, IGpuComputePipeline copyPipeline, SdfWorldTables client) {
+        while (true) {
+            SdfMeshRegionStore store;
+
+            lock (m_gate) {
+                if ((m_store is not { } held) || held.IsDisposed || !ReferenceEquals(objA: held.CopyPipeline, objB: copyPipeline)) {
+                    held = new SdfMeshRegionStore(copyPipeline: copyPipeline, device: device, selector: this);
+                    m_store = held;
+                }
+                store = held;
+            }
+            // The store's gate is never taken under the selector's: a staging holds the store's and asks the selector.
+            // The store's last residency may leave between the two, which disposes it; the next turn makes another.
+            if (store.TryAttach(client: client)) { return store; }
+        }
     }
     /// <summary>Describes the sum the selector holds: the pool, its limit, held and promised bytes, each class's bytes,
     /// the elastic budget, the one bias with its steps, the growths the account refused, and each residency's grant
@@ -189,7 +232,10 @@ public sealed class SdfResidencySelector {
                 var share = Whole(budget: budget);
 
                 if (share != long.MaxValue) { granted += share; }
-                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | grant {grant.Name}={((share == long.MaxValue) ? "unbounded" : $"{share}B")} named={grant.Named}B filled={grant.Filled}B region-limit={Bytes(bytes: ((grant.LimitBytes == long.MaxValue) ? null : grant.LimitBytes))} region-held-limit={Bytes(bytes: ((grant.HeldLimitBytes == long.MaxValue) ? null : grant.HeldLimitBytes))} region-held={grant.Capacity}B region-reserved={grant.Reserved}B region-retiring={grant.Retiring}B");
+                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | grant {grant.Name}={((share == long.MaxValue) ? "unbounded" : $"{share}B")} named={grant.Named}B filled={grant.Filled}B");
+            }
+            if (m_region is { } region) {
+                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | region named={m_regionNamed}B region-limit={Bytes(bytes: ((region.LimitBytes == long.MaxValue) ? null : region.LimitBytes))} region-held-limit={Bytes(bytes: ((region.HeldLimitBytes == long.MaxValue) ? null : region.HeldLimitBytes))} region-held={region.Capacity}B region-reserved={region.Reserved}B region-retiring={region.Retiring}B");
             }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | grants={((usable is null) ? "unbounded" : $"{granted}B")}");
         }
@@ -220,8 +266,18 @@ public sealed class SdfResidencySelector {
     private static string Bytes(long? bytes) => ((bytes is { } value) ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"{value}B") : "unbounded");
 
     internal void Release(SdfResidencyGrant grant) {
-        lock (m_gate) { _ = m_grants.Remove(item: grant); }
+        lock (m_gate) {
+            _ = m_grants.Remove(item: grant);
+            if (ReferenceEquals(objA: m_region, objB: grant)) { m_region = null; m_regionNamed = 0L; }
+        }
         PublishFloors();
+    }
+    internal void NoteRegionNamed(SdfResidencyGrant grant, long bytes) {
+        lock (m_gate) { if (ReferenceEquals(objA: m_region, objB: grant)) { m_regionNamed = bytes; } }
+    }
+    // The most bytes the region may place, which bounds every residency's budget.
+    internal long RegionLimitBytes {
+        get { lock (m_gate) { return (m_region?.LimitBytes ?? long.MaxValue); } }
     }
     internal void NoteSpare(long bytes) {
         lock (m_gate) { m_spare = Math.Max(val1: 0L, val2: bytes); }
@@ -254,7 +310,12 @@ public sealed class SdfResidencySelector {
     internal long ShareOf(SdfResidencyGrant grant) {
         var bounded = m_account.TryReadTotals(held: out var held, limit: out var limit, pool: Pool, promised: out var promised);
 
-        lock (m_gate) { return Whole(budget: BudgetOf(grant: grant, usable: (bounded ? UsableOf(held: held, limit: limit, promised: promised) : null))); }
+        lock (m_gate) {
+            // The region holds every residency's meshes: its share is the whole of what the limit leaves the regions.
+            if (ReferenceEquals(objA: grant, objB: m_region)) { return (bounded ? UsableOf(held: held, limit: limit, promised: promised) : long.MaxValue); }
+
+            return Whole(budget: BudgetOf(grant: grant, usable: (bounded ? UsableOf(held: held, limit: limit, promised: promised) : null)));
+        }
     }
     // The bytes a bake may fill, for a residency that names and expects the given bytes.
     internal long Budget(SdfResidencyGrant grant, long named, long filled) {
@@ -275,13 +336,8 @@ public sealed class SdfResidencySelector {
         ? UsableOf(held: admission.Held, limit: limit, promised: admission.Promised)
         : null);
     private long UsableOf(long limit, long held, long promised) {
-        var reserved = 0L;
-        var largest = 0L;
-
-        foreach (var grant in m_grants) {
-            reserved += grant.Reserved;
-            if (!grant.Mapped) { largest = Math.Max(val1: largest, val2: grant.Capacity); }
-        }
+        var reserved = (m_region?.Reserved ?? 0L);
+        var largest = ((m_region is { Mapped: false } region) ? region.Capacity : 0L);
 
         // The spare chunk memory is held, and only a mapped region takes it, so it is the regions' with what they reserved.
         return Math.Max(val1: 0L, val2: ((limit - Math.Max(val1: 0L, val2: (((held + promised) - reserved) - m_spare))) - largest));
@@ -341,6 +397,8 @@ public sealed class SdfResidencySelector {
                 anySpare |= other.Report.AnySpare;
                 canLower &= other.Report.CanLower;
             }
+            // The residencies name one region, where a mesh several of them name lies once.
+            if (m_region is not null) { named = Math.Min(val1: named, val2: m_regionNamed); }
             if (bounded) { over |= (named > ((UsableOf(held: held, limit: limit, promised: promised) / 8L) * SdfMeshTier.BudgetEighths)); }
             if (!ReferenceEquals(objA: primary, objB: grant)) { return m_bias; }
             m_decidedSerial = grant.ReportSerial;
@@ -399,7 +457,8 @@ public sealed class SdfResidencySelector {
 /// Called on the frame thread, apart from the reads the selector's line makes.
 /// </summary>
 public sealed class SdfResidencyGrant : IDisposable {
-    private readonly MemoryAccount.DeviceReservation m_reservation;
+    // The region's reservation; null for a residency's grant, which budgets detail and reserves nothing.
+    private readonly MemoryAccount.DeviceReservation? m_reservation;
     private readonly SdfResidencySelector m_selector;
 
     private long m_capacity;
@@ -411,7 +470,7 @@ public sealed class SdfResidencyGrant : IDisposable {
     private long m_releases;
     private bool m_disposed;
 
-    internal SdfResidencyGrant(SdfResidencySelector selector, string name, MemoryAccount.DeviceReservation reservation) {
+    internal SdfResidencyGrant(SdfResidencySelector selector, string name, MemoryAccount.DeviceReservation? reservation) {
         m_selector = selector;
         Name = name;
         m_reservation = reservation;
@@ -481,7 +540,7 @@ public sealed class SdfResidencyGrant : IDisposable {
         Volatile.Write(location: ref m_capacity, value: capacityBytes);
         if (Mapped) { m_selector.NoteSpare(bytes: spareBytes); }
 
-        var room = m_reservation.Room;
+        var room = Room;
         var grown = Math.Max(val1: capacityBytes, val2: (mostBytes - unbackedBytes));
         // A mapped region grows by the room and the spare chunk memory alone; any other region's replacement takes the
         // room beside what stands.
@@ -528,7 +587,7 @@ public sealed class SdfResidencyGrant : IDisposable {
     public long HeldLimitBytes => Volatile.Read(location: ref m_heldLimit);
     /// <summary>Gets the most bytes the reservation's peak may be raised by now (the pool's room), or
     /// <see cref="long.MaxValue"/> where nothing bounds the pool.</summary>
-    public long Room => m_reservation.Room;
+    public long Room => (m_reservation?.Room ?? long.MaxValue);
     /// <summary>Gets how many replaced buffers' releases the grant has recorded (<see cref="Released"/>), a count that
     /// only rises.</summary>
     public long Releases => Volatile.Read(location: ref m_releases);
@@ -545,7 +604,7 @@ public sealed class SdfResidencyGrant : IDisposable {
     public void Grown(long oldBytes, long newBytes) {
         Volatile.Write(location: ref m_capacity, value: newBytes);
         Volatile.Write(location: ref m_retiring, value: (Retiring + oldBytes));
-        m_reservation.Retiring(bytes: Retiring);
+        m_reservation?.Retiring(bytes: Retiring);
         ReserveStanding();
     }
     /// <summary>Records that the region kept its buffer after <see cref="ReserveGrowth"/>: the list fit, or the
@@ -573,7 +632,7 @@ public sealed class SdfResidencyGrant : IDisposable {
         _ = Interlocked.Increment(location: ref m_releases);
         Volatile.Write(location: ref m_retiring, value: Math.Max(val1: 0L, val2: (Retiring - bytes)));
         if (m_disposed) { return; }
-        m_reservation.Retiring(bytes: Retiring);
+        m_reservation?.Retiring(bytes: Retiring);
         ReserveStanding();
     }
     /// <summary>Returns the bytes the residency's bake may fill: what its draws name and its finer tiers in flight are
@@ -586,10 +645,15 @@ public sealed class SdfResidencyGrant : IDisposable {
     /// <returns>The budget, in bytes.</returns>
     public long Budget(long named, long filled) {
         var budget = m_selector.Budget(filled: filled, grant: this, named: named);
-        var limit = LimitBytes;
+        var limit = m_selector.RegionLimitBytes;
 
         return ((limit == long.MaxValue) ? budget : Math.Min(val1: budget, val2: ((limit / 8L) * SdfMeshTier.BudgetEighths)));
     }
+    /// <summary>Records the bytes the residencies' names hold in the region, each mesh once: what the selector's one
+    /// bias is pressed by, in place of the residencies' own counts, which count a mesh several of them name more than
+    /// once. The region's grant alone records it.</summary>
+    /// <param name="bytes">The bytes the names hold.</param>
+    public void RegionNamed(long bytes) => m_selector.NoteRegionNamed(bytes: bytes, grant: this);
     /// <summary>Reports a detail decision and returns the bias every demand is coarsened by from now on.</summary>
     /// <param name="report">What the residency's bake decided.</param>
     /// <returns>The selector's bias.</returns>
@@ -606,7 +670,7 @@ public sealed class SdfResidencyGrant : IDisposable {
     private void ReserveStanding() => _ = Reserve(floor: Standing, peak: Standing);
     // Sets the reservation's peak; a raise past the floor that the pool has no room for changes nothing.
     private bool Reserve(long peak, long floor) {
-        if (m_disposed || !m_reservation.TryReserve(floor: floor, peak: peak)) { return false; }
+        if (m_disposed || (m_reservation is null) || !m_reservation.TryReserve(floor: floor, peak: peak)) { return false; }
         Volatile.Write(location: ref m_reserved, value: peak);
 
         return true;
@@ -617,7 +681,7 @@ public sealed class SdfResidencyGrant : IDisposable {
         if (m_disposed) { return; }
         m_disposed = true;
         m_selector.Release(grant: this);
-        m_reservation.Dispose();
+        m_reservation?.Dispose();
         Volatile.Write(location: ref m_reserved, value: 0L);
     }
 }

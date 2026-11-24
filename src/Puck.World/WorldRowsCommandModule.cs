@@ -11,8 +11,8 @@ namespace Puck.World;
 /// as a miss and is counted in <c>world.counters gpu counter mesh-hits</c>; <c>status</c> prints what is armed. Each
 /// hit-bound form answers the forced frames still to prepare. <c>check on|off</c> enables the independent pack,
 /// generation ledger, seed and quiescent device comparisons in <c>sdf.rows.check</c>, including after device loss.
-/// <c>force limit bytes|auto</c> caps admission through the arena's placing function; <c>force relocate</c> packs its
-/// meshes; <c>force skip tables</c> leaves that consumer's cursor uncommitted beyond its retained history. The existing
+/// <c>force limit bytes|auto</c> caps admission through the presentation's mesh arena's placing function;
+/// <c>force skip tables</c> leaves that consumer's cursor uncommitted beyond its retained history. The existing
 /// <c>host.memory collect</c> and <c>gpu.faults lose</c> force trim and replacement tables. The verb answers the
 /// operator alone; forcing forms refuse until the renderer is built.
 /// </summary>
@@ -21,7 +21,7 @@ public sealed class WorldRowsCommandModule(WorldRenderProbe probe) : ICommandMod
     private const string Verb = "world.rows";
 
     private static readonly CommandForms WorldRowsForms = CommandForms.Of(verb: Verb, "check <on|off>",
-        "force hit-bound [<frames>]", "force limit <bytes|auto>", "force relocate", "force skip <tables|host|scene>", "force pack", "force dress-fault [<dresses>]", "status");
+        "force hit-bound [<frames>]", "force limit <bytes|auto>", "force skip <tables|host|scene>", "force pack", "force dress-fault [<dresses>]", "status");
 
     private CommandResult Handle(WireArgs args) {
         if ((args.Count == 2) && args.Is(index: 0, value: "check") && (args.Is(index: 1, value: "on") || args.Is(index: 1, value: "off"))) {
@@ -50,10 +50,6 @@ public sealed class WorldRowsCommandModule(WorldRenderProbe probe) : ICommandMod
 
         if ((args.Count == 1) && args.Is(index: 0, value: "status")) {
             return new(Output: $"[{Verb}: check={(SdfVm.SdfRowChecks.Enabled ? "on" : "off")} hit-bound={tables.HitBoundArmed} failure={(tables.RowCheckFailure ?? "none")}]");
-        }
-        if ((args.Count == 2) && args.Is(index: 0, value: "force") && args.Is(index: 1, value: "relocate")) {
-            tables.ForceMeshRelocation();
-            return new(Output: $"[{Verb}: relocation armed]");
         }
         if ((args.Count == 3) && args.Is(index: 0, value: "force") && args.Is(index: 1, value: "skip") && args.Is(index: 2, value: "tables")) {
             tables.ForceSkipTables();
@@ -86,7 +82,7 @@ public sealed class WorldRowsCommandModule(WorldRenderProbe probe) : ICommandMod
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
-            description: $"Operator row checks and forcing levers: {WorldRowsForms.Spelling}. check compares packing, an independent generation ledger, previous-matrix seeds and quiescent device bytes; world.counters sdf.rows.check reads comparisons, mismatches and forcing counts. force limit caps admission in bytes (auto restores the device limit). force relocate packs the mesh arena. force skip tables leaves the table cursor uncommitted beyond journal history. host.memory collect forces trim; gpu.faults lose creates new tables. force hit-bound zeroes the next frames' reader bound (default 1), so hits become counted misses in gpu.mesh-hits.rejected. status prints the check state, hit-bound frames and first comparison failure.",
+            description: $"Operator row checks and forcing levers: {WorldRowsForms.Spelling}. check compares packing, an independent generation ledger, previous-matrix seeds and quiescent device bytes; world.counters sdf.rows.check reads comparisons, mismatches and forcing counts. force limit caps admission in bytes (auto restores the device limit). force skip tables leaves the table cursor uncommitted beyond journal history. host.memory collect forces trim; gpu.faults lose creates new tables. force hit-bound zeroes the next frames' reader bound (default 1), so hits become counted misses in gpu.mesh-hits.rejected. status prints the check state, hit-bound frames and first comparison failure.",
             forms: WorldRowsForms,
             handler: (_, args) => Handle(args: args),
             name: Verb

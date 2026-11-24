@@ -19,11 +19,10 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the first row comparison failure since these tables were created, including the row's identity.</summary>
     public string? RowCheckFailure { get; private set; }
 
-    /// <summary>Forces admission through the arena's one placing function, then restages its rows absent until landed.</summary>
+    /// <summary>Caps the presentation's mesh region through its arena's one placing function
+    /// (<see cref="SdfMeshRegionStore.ForceLimit"/>), then restages this residency's rows, absent until landed.</summary>
     /// <param name="bytes">The admission cap in bytes; null restores the device limit.</param>
-    public void ForceMeshLimit(ulong? bytes) { m_meshArena.ForceLimit(bytes: bytes); m_meshSource = null; m_meshStaged = false; }
-    /// <summary>Forces the next staging to relocate the arena through its ordinary packing path.</summary>
-    public void ForceMeshRelocation() { m_meshArena.ForceRelocation(); m_meshSource = null; m_meshStaged = false; }
+    public void ForceMeshLimit(ulong? bytes) { m_meshStore.ForceLimit(bytes: bytes); m_meshSource = null; m_meshStaged = false; }
     /// <summary>Leaves the table consumer's cursor uncommitted longer than its bounded journal history.</summary>
     public void ForceSkipTables() => m_skipDrawThrough = checked(((m_drawCursor.Serial + SdfMovedTransforms.History) + 2));
 
@@ -48,7 +47,8 @@ public sealed partial class SdfWorldTables {
 
             if (absent) { SdfMeshRegion.WriteAbsent(record: expected); } else {
                 // The packer admits only live tokens; a corrupt zero is still diagnosed by the ledger below.
-                SdfMeshRegion.WriteDraw(draw, m_meshArena.Placements[draw.Mesh!], Math.Max(val1: 1u, val2: generation), expected);
+                _ = m_meshStore.TryPlacement(mesh: draw.Mesh!, placement: out var placement);
+                SdfMeshRegion.WriteDraw(draw, placement, Math.Max(val1: 1u, val2: generation), expected);
                 expected[(SdfMeshRecord.SelectionWord + 11)] = generation;
             }
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Packed);
@@ -103,7 +103,7 @@ public sealed partial class SdfWorldTables {
             estimatedSeconds = 0;
             job = null;
             if (!SdfRowChecks.Enabled || m_pending || (current.m_meshDrawCount == 0) || current.m_meshRegion.OwesCopy ||
-                current.m_meshRegion.OwesCarry || (current.m_landing.Count > 0) || (m_checkedRevision == current.m_meshRevision)) { return false; }
+                current.m_meshRegion.OwesCarry || (current.m_meshStore.LandingCount > 0) || (m_checkedRevision == current.m_meshRevision)) { return false; }
             m_pending = true;
             m_checkedRevision = current.m_meshRevision;
             job = new Job();
@@ -112,7 +112,7 @@ public sealed partial class SdfWorldTables {
         public void Record(object job, in SdfGpuWorkRecording recording) {
             var check = ((Job)job);
 
-            if (tables.m_meshRegion.OwesCopy || (tables.m_landing.Count > 0)) { return; }
+            if (tables.m_meshRegion.OwesCopy || (tables.m_meshStore.LandingCount > 0)) { return; }
             var bytes = (((int)tables.m_meshDrawCount) * SdfMeshRegion.DrawBytes);
 
             check.Expected = tables.m_meshRegion.ContentsAt(length: bytes, offset: 0).ToArray();
