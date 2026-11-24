@@ -25,7 +25,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null, WorldServer? server = null,
     WorldRecipientView? view = null) : IWorldDetachableSink, IWorldInterestSink {
     /// <summary>The maximum encoded records one projection subscriber retains while its wire consumer is behind.</summary>
-    public const int PendingDeliveryLimit = 8;
+    public const int PendingDeliveryLimit = 256;
     /// <summary>The named reason for detaching an observer whose wire queue fills.</summary>
     public const string BackpressureDetachReason = "world.observation.backpressure";
     /// <summary>The named reason for detaching a projection whose authority route is no longer current.</summary>

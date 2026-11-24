@@ -165,9 +165,10 @@ public static partial class BenchmarkCommand {
     // Waits until the seat's authority route names a remote authority and its latest delivery holds the seat's body, so a
     // route armed after it plays against that authority; refuses, naming the last topology the World read, once the wait
     // passes its bound.
-    private static void WaitForRemote(SweepWorld? authority, SuiteBudget budget, SweepWorld live, string clientLog, Action<string> print) {
+    private static void WaitForRemote(SweepWorld? authority, SuiteBudget budget, SweepWorld live, string clientLog, Action<string> print, int seats = 1) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var last = string.Empty;
+        var command = ((seats > 1) ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"world.benchmark topology {seats}") : "world.benchmark topology");
 
         while (clock.Elapsed < RemoteTimeout) {
             if (budget.Expired) {
@@ -178,14 +179,18 @@ public static partial class BenchmarkCommand {
                 throw new InvalidOperationException($"the remote authority refused the seat's transfer: {refused}");
             }
 
-            var topology = live.Run("world.benchmark topology", 30);
+            var topology = live.Run(command, 30);
 
             if (!topology.Ok) {
                 throw new InvalidOperationException($"the World cannot read its seat's topology: {topology.Output}");
             }
 
             last = topology.Output;
-            if (last.Contains("\"kind\":\"remote\"", StringComparison.Ordinal) && last.Contains("\"bodyDelivered\":true", StringComparison.Ordinal)) {
+            var jsonStart = last.IndexOf(value: '{');
+            var jsonEnd = last.LastIndexOf(value: '}');
+            var node = (((jsonStart >= 0) && (jsonEnd > jsonStart)) ? (JsonNode.Parse(json: last[jsonStart..(jsonEnd + 1)]) as JsonObject) : null);
+
+            if ((node?["kind"]?.GetValue<string>() == "remote") && (node["bodyDelivered"]?.GetValue<bool>() == true)) {
                 print($"{Verb}: {last}\n");
 
                 return;

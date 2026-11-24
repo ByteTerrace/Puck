@@ -87,27 +87,56 @@ public sealed partial class WorldBenchmarkCommandModule {
     // witness that the seat's body is there, which is the body that authority last delivered at the route's address. A
     // seat whose route still names a world this process steps is an in-process reading, whatever the run was started
     // with.
-    private JsonNode TopologyReport() {
+    private JsonNode TopologyReport(int? requestedSeats = null) {
         var slot = (m_driver?.Seat ?? 0);
+        var count = Math.Clamp(value: (requestedSeats ?? m_seatCount), min: 1, max: MaxSeats);
 
         if (seatRouter?.TryRoute(slot: slot) is not { } route) {
             return new JsonObject { ["endpoint"] = null, ["kind"] = "none" };
         }
 
-        var endpoint = route.Endpoint;
-        var delivered = endpoint.Mirror.TryReadBody(body: out var body, index: route.EntityIndex);
-        var ready = (delivered && (body.Generation == route.Entity.Generation) && (endpoint.ClockOwnedHere || (endpoint.Mirror.HasStreamDelivery && !ReferenceEquals(objA: endpoint.Definition, objB: WorldProjection.Undisclosed))));
+        static (JsonObject Node, bool Remote, bool Ready) DescribeSeat(Puck.World.Client.WorldSeatAuthorityRouter? router, int seatSlot) {
+            if (router?.TryRoute(slot: seatSlot) is not { } seatRoute) {
+                return (new JsonObject { ["seat"] = (seatSlot + 1), ["endpoint"] = null, ["kind"] = "none", ["bodyDelivered"] = false }, false, false);
+            }
 
-        return new JsonObject {
-            ["endpoint"] = endpoint.Identity,
-            ["kind"] = (endpoint.ClockOwnedHere ? "in-process" : "remote"),
-            ["authority"] = endpoint.Authority,
-            ["seat"] = (slot + 1),
-            ["body"] = route.EntityIndex,
-            ["generation"] = route.Entity.Generation,
-            ["bodyDelivered"] = ready,
-            ["deliveredAtTick"] = (ready ? body.Tick : null),
-        };
+            var seatEndpoint = seatRoute.Endpoint;
+            var delivered = seatEndpoint.Mirror.TryReadBody(body: out var seatBody, index: seatRoute.EntityIndex);
+            var ready = (delivered && (seatBody.Generation == seatRoute.Entity.Generation) && (seatEndpoint.ClockOwnedHere || (seatEndpoint.Mirror.HasStreamDelivery && !ReferenceEquals(objA: seatEndpoint.Definition, objB: WorldProjection.Undisclosed))));
+            var remote = !seatEndpoint.ClockOwnedHere;
+
+            return (new JsonObject {
+                ["endpoint"] = seatEndpoint.Identity,
+                ["kind"] = (remote ? "remote" : "in-process"),
+                ["authority"] = seatEndpoint.Authority,
+                ["seat"] = (seatSlot + 1),
+                ["body"] = seatRoute.EntityIndex,
+                ["generation"] = seatRoute.Entity.Generation,
+                ["bodyDelivered"] = ready,
+                ["deliveredAtTick"] = (ready ? seatBody.Tick : null),
+            }, remote, ready);
+        }
+
+        var (primary, allRemote, allReady) = DescribeSeat(router: seatRouter, seatSlot: slot);
+
+        if (count > 1) {
+            var seats = new JsonArray { primary.DeepClone() };
+
+            for (var extra = 1; (extra < count); extra++) {
+                var (companion, remote, ready) = DescribeSeat(router: seatRouter, seatSlot: (slot + extra));
+
+                allRemote &= remote;
+                allReady &= ready;
+                seats.Add(item: companion);
+            }
+            if (!allRemote && (primary["kind"]?.GetValue<string>() == "remote")) {
+                primary["kind"] = "mixed";
+            }
+            primary["bodyDelivered"] = allReady;
+            primary["seats"] = seats;
+        }
+
+        return primary;
     }
 
     // Writes the run's report and frames, whole or partial, and answers with the summary it also narrates on standard error.

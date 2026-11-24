@@ -470,7 +470,7 @@ public static partial class BenchmarkCommand {
             }
             print($"{Verb}: {profile.Output}\n");
             if (connect is not null) {
-                WaitForRemote(authority: authority, budget: budget, clientLog: Path.Combine(directory, "stderr.log"), live: live, print: print);
+                WaitForRemote(authority: authority, budget: budget, clientLog: Path.Combine(directory, "stderr.log"), live: live, print: print, seats: leg.Seats);
             }
 
             var paused = (connect is null);
