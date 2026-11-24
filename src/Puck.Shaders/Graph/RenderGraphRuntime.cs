@@ -158,11 +158,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private bool[] m_allPassesArePackages = [];
     // Tracks forwarded or direct node captures so steady frames check capture presence in O(1) instead of scanning m_nodes.
     private readonly Action m_onNodeCaptureArmed;
+    private readonly Action<ShaderPipelineRenderNode> m_onPublicationAbandoned;
     private int m_forwardedCaptureIndex = -1;
     private int m_captureProbeNeeded;
 
     private RenderGraphRuntime(RenderGraphInstanceSet set, RenderGraphRuntimeGraph?[] graphs, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, SourceGraph?[] sources, Binding[][] inputs, int root, IGpuDeviceContext device, RenderGraphPackageRecorders packages, PackageGraphs packageGraphs, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint inFlightFrames, GpuImageLeases images, RenderGraphStandIns standIns) {
         m_onNodeCaptureArmed = () => _ = Interlocked.Exchange(location1: ref m_captureProbeNeeded, value: 1);
+        m_onPublicationAbandoned = ForgetAbandonedOutput;
         m_standIns = standIns;
         m_images = images;
         m_packageGraphs = packageGraphs;
@@ -1414,12 +1416,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 schedule: schedule,
                 tick: frame.Tick
             );
-            work.Next(HostFrameWorkPart.Flush);
-            Complete();
         } finally {
             work.Next(HostFrameWorkPart.Flush);
             SettleHandOvers(queue: queue);
         }
+        Complete();
         work.Next(HostFrameWorkPart.Pump);
         if (rendering.LongestRecord >= 0) { RenderRecordWork.Process.Frame(longestRecordTicks: rendering.LongestRecord); }
 

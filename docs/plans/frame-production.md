@@ -143,8 +143,9 @@ The recorder and publisher must then use the same choice.
 The read paths are the image and buffer ports in `RenderGraphRuntime.Bind`,
 the package and external-producer reads in `RenderGraphRuntime.BindReads`,
 and reads through a standing output in `RenderGraphRuntime.Resolve`. A HUD
-frame showing a named camera needs an overlay-to-camera edge and the lease
-of that read. Captures, exports and the display observe only a publication
+frame showing a named camera now reads it through the overlay's graph edge.
+`RenderGraphFrameSamples.TrySample` checks the latch and passes the acquired
+image lease to the overlay's frame slot. Captures, exports and the display observe only a publication
 whose submission succeeded. A paused node can also submit a newly selected
 output. An external producer that submits inside its own `Produce` call must
 accept the same ordering constraint before it receives any reserved read.
@@ -155,15 +156,25 @@ Independent recordings still submit. The latch checks delivery provenance.
 Only the submitter can establish whether a producer reached the queue.
 `ShaderPipelineRenderNode.SettleHandOver` settles each deferred hand-over
 against its own fence, including when a batch splits. The runtime's output
-records and scheduling history must withdraw any write that the node rolls
-back. Keep the existing slot leases for images and the device's
+records and scheduling history withdraw a rolled-back node's write through
+`RenderGraphRuntime.ForgetAbandonedOutput`. A paused selection hands its
+submission to the queue before it publishes the selected image. Keep the existing slot leases for images and the device's
 `GpuRetirementQueue` for replaced allocations.
 
 Residency uploads precede view recording. `SdfMeshRegionStore.RecordOwed`
 puts compaction moves in the next upload. `SdfWorldResidency.EndStage`
-submits that upload. A deferred upload needs queue hand-over before a view
-records, including a residency discovered when a candidate graph installs.
-This requires submission order only. GPU completion can follow later.
+submits that upload. `SdfWorldTables.CloseUpload` hands off its fence before
+publishing the upload, including when installation triggers late staging.
+GPU completion can follow later.
+
+The reservation must also carry the lighting producer's delivery provenance.
+`SdfSkyEnvironmentRecorder.Submitted` publishes the sky and screen emission
+sequences. A view calls `SdfWorldPasses.SourceTaintOf` during recording to
+decide whether its lighting contains an external image. Reading yesterday's
+label while recording a consumer of today's buffer would let capture make
+that decision on different data from the shader. Resolve the prospective
+label with the producing pass's draw or stand-in decision and carry it on
+the same graph edge as the buffer.
 
 The checks are a forced producer recording failure with a dependent and an
 independent reader, a failed batch hand-over, and a graph replacement while
