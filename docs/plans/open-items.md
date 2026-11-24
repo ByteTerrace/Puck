@@ -2516,6 +2516,20 @@ Owner: rendering (GPU leg, the lead scheduling the GPU) · medium · Next: one
 draw identity, which visibility's V1 and V2 build on; then Vulkan's crossing
 frame and the pixel-pass gap at locked clocks.
 
+- [high] **One screen row of the main view is unwritten at some window
+  sizes.** At 1600 by 900 on Direct3D 12 (RTX 4070), a one-pixel row at about
+  y 488 across the left 77% of the frame reads no hit in the visibility buffer
+  (`world.view.pick primary 0.3 0.5433`: `kind=0 placement=none`, the row
+  below: the floor), standing in every presented frame; 1280 by 900 and the
+  frame bar's 2560 by 1421 show none. A dispatch or tile cover that rounds a
+  size not divisible by its group, or the one placement pass's rect math,
+  are the first suspects. Check: the row is absent at 1600 by 900 and at a
+  few odd sizes on both backends.
+- [low] **The windowed frame bar opens at 2560 by 1421** on a 1440-high
+  display, because the window's decorations take the difference; a frame-bar
+  reading names the size it ran at, and a borderless window would give the
+  full 1440.
+
 - [medium, before V1] Draw identity is tracked twice and the occlusion visible
   bit uses neither: a per-mesh identity counter in `SdfMesh` (read in
   `sdf-mesh-selection.hlsli`) beside the residency's per-index identity for
