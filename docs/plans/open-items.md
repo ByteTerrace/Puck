@@ -129,10 +129,37 @@ lanes, [the release](#the-release), the
 
 ### The first lanes
 
-Four campaigns, started together in the first hour, one principal each. The
-lead holds one quiet window at the start (both backends' route benchmark, the
-2060's city trace, a memory census) so every campaign starts from a quiet
-baseline, then runs a quiet window after each hand-back.
+Four campaigns, started together in the first hour, one principal each, with
+the two milestones folded into them rather than queued behind them (the
+owner's ruling). How they run:
+
+- **Integration.** Each principal merges the integration tip into its branch
+  often, and the lead merges a campaign's branch into `lead/rendering`
+  whenever it builds and boots, so the four branches stay close, no work is
+  lost and a regression names one campaign.
+- **Measurement is the lead's instrument** (the owner's ruling: observations
+  that are reliable, quick and never misleading). One `measure` lane builds it
+  first, from [the benchmark](benchmark.md): a single quiet-window run that
+  takes both backends over the route, the moon round trip, the four-seat
+  route and the remote-authority route, and reports frame-time statistics,
+  counters, a memory census and captures from every side. The lead runs it
+  under an exclusive `puck lease quiet` at the start, whenever a campaign
+  says it is near its line, and after each merge batch; campaigns work from
+  load-independent counts between windows.
+- **The RTX 2060 session is the second judge** (the owner's ruling). It takes
+  clean visual captures on its own player install and judges them beside the
+  lead's, alongside the city.
+- **Release first.** A green validation run, then the push, so the 2060 has a
+  consumer baseline from this head before the campaigns move it.
+
+The foundation's own reading of the four (the owner's ruling): the moon trip
+is foundational, because it proves how the planet, space and another body
+connect and whether memory, CPU and GPU are allocated as they should be; the
+gallery's near-black exhibits and the still shimmer are likely foundational
+defects, not looks.
+
+0. **`measure`** · the instrument above, landed before the first campaign
+   checkpoint.
 
 1. **`gpu-frame`: the GPU frame to 8 ms at 2560 by 1440 on the RTX 4070.**
    Build [the frame budget](frame-budget.md)'s architecture end to end in one
@@ -143,6 +170,11 @@ baseline, then runs a quiet window after each hand-back.
    view storage under 1,000 MiB; ink's edge search inside its share. Success
    line: the whole route at or under 10 ms in the quiet window, the look held
    in motion on both backends; 8 ms is the budget it keeps going toward.
+   It owns, first, the diagnosis of the gallery's near-black exhibits and the
+   8-frame still shimmer ([verification debts](#verification-debts), item 1),
+   since its rewrite is judged against the gallery, with the 2060's captures
+   as the second judge; and M2's rendering: four views of one world inside
+   the 4070's bar.
 2. **`memory`: every device inside its bars, and streaming where it pays.**
    One mesh store per presentation, so a mesh any number of residencies name
    is placed once (ends the duplicate debug world and the sky sessions'
@@ -155,6 +187,8 @@ baseline, then runs a quiet window after each hand-back.
    6 GiB device; the player build's four device checks settle (with the
    Vulkan tier misses fixed, which this lane owns since it owns the bake's
    residency and tiers); the next release publishes the player channel.
+   It owns M2's residency: four seats on one client hold one world
+   resident once however many views show it.
 3. **`cpu`: the frame thread under 3 ms and the city's authority at 30 Hz
    with headroom.** One lane over both, since both are the same discipline
    (work proportional to change, off the one thread): capture only what a
@@ -167,6 +201,10 @@ baseline, then runs a quiet window after each hand-back.
    2560 by 1440 and in the city through its painting; the city's headless
    authority at 30 Hz on the quiet RTX 2060 with the step thread under 60%
    busy.
+   It owns [a multi-seat client](#a-multi-seat-client) (M2), since it
+   rewrites the input runtime around seated bodies: four seats on one
+   client, each admitted to one remote authority under its own identity,
+   with a remote seat's input moving its body (M1).
 4. **`moon-trip`: the flight seamless from every perspective.** The moon lit
    in the valley's sky; the pilot's view past the seam correct, with the
    neighbour drawn from the shared mesh store, not a second bake (coordinate
@@ -176,6 +214,10 @@ baseline, then runs a quiet window after each hand-back.
    scripted tape so a flight is one line; the boarding re-drive's divergence.
    Success line: a recorded continuous round trip, pad to moon landing and
    back, presented in motion on D3D12 and Vulkan with no visible seam.
+   It owns [a hosted world on a client](#a-hosted-world-on-a-client) (M1):
+   a world delivered from another authority shows its text, machines and
+   session screens, which the moon on its own authority needs as much as a
+   client of the hosted debug world does.
 
 **The city stays with the RTX 2060 session** ([the city plan](city.md),
 stage 7 zoned districts, then stage 8 platform-generated sections, then the
