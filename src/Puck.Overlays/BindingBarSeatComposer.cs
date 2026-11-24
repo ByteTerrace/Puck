@@ -188,13 +188,7 @@ public static class BindingBarSeatComposer {
         destination.Clear();
 
         for (var index = 0; (index < slotSet.Count); index++) {
-            foreach (var bank in layout.Banks.Values) {
-                if (bank.Plates.ContainsKey(key: slotSet[index])) {
-                    destination.Add(item: slotSet[index]);
-
-                    break;
-                }
-            }
+            if (layout.Places(source: slotSet[index])) { destination.Add(item: slotSet[index]); }
         }
     }
     /// <summary>Composes the bar's command-chord hints from a page view. A chord row of the active group becomes a hint

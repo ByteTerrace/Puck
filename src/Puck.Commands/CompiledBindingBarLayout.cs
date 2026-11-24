@@ -46,6 +46,22 @@ public sealed record CompiledBindingBarLayout(ReadOnlyMemory<BindingBarFrame> Fr
         Frames: ReadOnlyMemory<BindingBarFrame>.Empty
     );
 
+    // The input sources some bank places, derived once per banks table; kept beside the record, not in it, so a layout's
+    // equality stays its frames and banks.
+    private static readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyDictionary<string, CompiledBindingBarBank>, HashSet<string>> Placed = new();
+
+    /// <summary>Returns whether some bank of the layout places a plate for an input source.</summary>
+    /// <param name="source">The input source id.</param>
+    /// <returns><see langword="true"/> when a bank places it.</returns>
+    public bool Places(string source) => Placed.GetValue(key: Banks, derive: static banks => {
+        var sources = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var bank in banks.Values) {
+            foreach (var plate in bank.Plates.Keys) { _ = sources.Add(item: plate); }
+        }
+        return sources;
+    }).Contains(item: source);
+
     /// <summary>Builds a compiled layout from raw bank tables: every plate of every bank sharing an edge and inset
     /// forms one frame, and each frame's plates are shifted so its nearest plate sits at pitch 0 along the edge's
     /// axis and its extent is centered across it. Every plate counts toward the extent, bound or not, so what a
