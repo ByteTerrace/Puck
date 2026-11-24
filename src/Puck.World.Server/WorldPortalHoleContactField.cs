@@ -22,23 +22,28 @@ namespace Puck.World.Server;
 /// </remarks>
 public sealed class WorldPortalHoleContactField : IContactField {
     private readonly IContactField m_inner;
-    private readonly WorldFaceAperture.Box[] m_openings;
+    private readonly (string PlacementId, string Face, WorldFaceAperture.Box Box)[] m_openings;
+    private readonly WorldPortalClosures? m_closures;
 
-    private WorldPortalHoleContactField(IContactField inner, WorldFaceAperture.Box[] openings) {
+    private WorldPortalHoleContactField(IContactField inner, (string PlacementId, string Face, WorldFaceAperture.Box Box)[] openings, WorldPortalClosures? closures) {
         m_inner = inner;
         m_openings = openings;
+        m_closures = closures;
     }
 
     /// <summary>Wraps <paramref name="inner"/> with the openings of every portal face <paramref name="definition"/>
     /// declares, or returns it unwrapped when the world declares none.</summary>
     /// <param name="inner">The world's own contact field.</param>
     /// <param name="definition">The world's definition.</param>
+    /// <param name="closures">The doors standing closed, whose openings hold a body back as their walls do; <see langword="null"/>
+    /// treats every door as open.</param>
     /// <returns>The field bodies resolve against.</returns>
-    public static IContactField Wrap(IContactField inner, WorldDefinition definition) {
+    public static IContactField Wrap(IContactField inner, WorldDefinition definition, WorldPortalClosures? closures = null) {
         var openings = WorldFacePortalPolicy.PortalApertures(definition: definition);
 
         return ((openings.Length > 0)
             ? new WorldPortalHoleContactField(
+                closures: closures,
                 inner: inner,
                 openings: openings
             )
@@ -85,7 +90,9 @@ public sealed class WorldPortalHoleContactField : IContactField {
 
         opening = null!;
 
-        foreach (var candidate in m_openings) {
+        foreach (var (placementId, face, candidate) in m_openings) {
+            if ((m_closures is { Any: true } closures) && closures.IsClosed(placementId: placementId, face: face)) { continue; }
+
             var frame = candidate.Frame;
             var offset = (position - frame.Origin);
             var depth = FixedVector3.Dot(

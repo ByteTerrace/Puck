@@ -79,13 +79,53 @@ public enum WorldPortalArrival {
 /// <param name="Capacity">The maximum number of live bodies and outstanding reservations admitted through this
 /// border at once, or <see langword="null"/> to use the destination population's remaining capacity. A full border
 /// refuses the current attempt immediately; it never queues.</param>
+/// <param name="Open">The state condition (<see cref="WorldPlacementResponseCondition.StateCondition"/>, the condition a
+/// placement's <c>respond</c> reads) under which the door is open, read each tick the authority scans its doors;
+/// <see langword="null"/> for a door always open. A closed door fires nothing: a body that walks into it meets the
+/// frame as though no door hung there, and a body standing in it when it closes stays on the side it is on.</param>
+/// <param name="Gate">Who may pass: a condition on a row keyed by body index, read at the traveller's own index
+/// (<see cref="WorldPortalGate.Admits"/>); <see langword="null"/> admits every traveller the destination admits. A body
+/// the gate refuses walks through the frame without crossing. The destination's admission still judges every body the
+/// gate lets in.</param>
 public sealed record WorldPlacementPortal(
     [property: DocumentText("a destination name")] string Destination,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPortalTravel? Travel = null,
     WorldPortalArrival Arrival = WorldPortalArrival.Spawn,
     [property: DocumentText("a counterpart in the destination world")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Counterpart = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Capacity = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Capacity = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementResponseCondition? Open = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPortalGate? Gate = null
 );
+/// <summary>A door's gate (<see cref="WorldPlacementPortal.Gate"/>): a row keyed by body index whose cell at a
+/// traveller's index decides whether that traveller passes. The author's rules write the row: a door bound to its
+/// opener writes the opener's cell, a party door writes each member's, so who may pass is a rule of play, never an
+/// engine choice.</summary>
+/// <param name="State">The keyed numeric row read, one cell per body index (key <c>"0"</c>, <c>"1"</c>, …).</param>
+/// <param name="Comparison">The comparison the traveller's cell must satisfy.</param>
+/// <param name="Value">The literal the cell is compared against; a cell the row does not hold reads as no value and
+/// refuses.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldPortalGate(
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] string State,
+    [property: JsonConverter(typeof(ExpressionComparisonJsonConverter))] ExpressionOp Comparison,
+    float Value
+) {
+    /// <summary>Returns whether the gate admits a traveller: its row's cell at the traveller's body index satisfies the
+    /// comparison.</summary>
+    /// <param name="definition">The document to read.</param>
+    /// <param name="bodyIndex">The traveller's body index at this authority.</param>
+    /// <param name="tick">The tick the cell is read as of.</param>
+    /// <param name="engineTick">The engine tick the cell is read as of.</param>
+    /// <param name="arena">The live store.</param>
+    /// <returns><see langword="true"/> when the cell holds a value that satisfies the comparison.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public bool Admits(WorldDefinition definition, int bodyIndex, ulong tick, ulong engineTick, StateArena? arena = null) => new WorldPlacementResponseCondition.StateCondition(
+        Comparison: Comparison,
+        Key: bodyIndex.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+        State: State,
+        Value: Value
+    ).Holds(arena: arena, definition: definition, engineTick: engineTick, tick: tick);
+}
 /// <summary>Parses and resolves a <see cref="WorldPlacementPortal.Counterpart"/> string — the one spelling shared by
 /// <see cref="WorldDefinitionValidator"/>'s boot-time format check and <c>Puck.World.WorldInstanceHost</c>'s
 /// transfer-time existence check against the destination's own delivered definition, so the two can never disagree

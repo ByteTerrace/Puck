@@ -23,8 +23,8 @@ state {
   ]
 }
 
-// A press of the context button inside the reach box flips the switch; the edge fires once a press.
-for b in range(0, (seatPopulation + visitorPopulation)) {
+// A seat's press of the context button inside the reach box flips the switch; the edge fires once a press.
+for b in range(0, seatPopulation) {
   let suffix = ((b == 0) ? "" : $"-{b}")
   rule $"moon-beacon-switch{suffix}" {
     when (channel(body, b, interact) >= 1 and
