@@ -173,8 +173,17 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             var refusal = WorldAdmissionDoor.TryAdmitArrival(
                 entries: view.Definition.Admission,
                 sourceAuthority: authority,
-                verdict: out var verdict
+                verdict: out var verdict,
+                kind: WorldAdmissionArrival.Visitor
             );
+            if (refusal is not null) {
+                refusal = WorldAdmissionDoor.TryAdmitArrival(
+                    entries: view.Definition.Admission,
+                    sourceAuthority: authority,
+                    verdict: out verdict,
+                    kind: WorldAdmissionArrival.Session
+                );
+            }
 
             return new CommandResult(Output: ((refusal is { } named)
                 ? $"[world.projection: peer '{authority}' {named} — no admission row names it; the wire default {WorldDisclosureTier.Presentation} applies]"

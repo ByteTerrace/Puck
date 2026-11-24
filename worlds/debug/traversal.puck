@@ -1,5 +1,7 @@
-// Optional development route runner, body 43. The sealed studio and gallery are independent passes.
+// Optional development route runner, body galleryPopulation. The sealed studio and gallery are independent passes.
+import "shapes"
 import "stand-in"
+let traversalBody = galleryPopulation
 // Route coordinates are WORLD coordinates. The studio course is offset (48, 0, -48).
 let traversalStudioGoals = [
   { x: 60.0, y: 0.01, z: -30.0 } // approach
@@ -107,8 +109,8 @@ addon "traversal" {
     { capability: Observe, subject: "state:traversal" }
     { capability: Observe, subject: "state:traversalRoute" }
     { capability: Observe, subject: "state:liftAt" }
-    { capability: Observe, subject: "body:43" }
-    { capability: Drive, subject: "body:43" }
+    { capability: Observe, subject: $"body:{traversalBody}" }
+    { capability: Drive, subject: $"body:{traversalBody}" }
     { capability: Mutate, subject: "section:State" }
     { capability: Mutate, subject: "section:Placements" }
     { capability: Edit, subject: "state:traversal" }
@@ -122,8 +124,8 @@ grants [
   { grantee: "addon:traversal", capability: Observe, subject: "state:traversal", budget: 5 }
   { grantee: "addon:traversal", capability: Observe, subject: "state:traversalRoute", budget: 3 }
   { grantee: "addon:traversal", capability: Observe, subject: "state:liftAt", budget: 1 }
-  { grantee: "addon:traversal", capability: Observe, subject: "body:43", budget: 2 }
-  { grantee: "addon:traversal", capability: Drive, subject: "body:43", budget: 3 }
+  { grantee: "addon:traversal", capability: Observe, subject: $"body:{traversalBody}", budget: 2 }
+  { grantee: "addon:traversal", capability: Drive, subject: $"body:{traversalBody}", budget: 3 }
   { grantee: "addon:traversal", capability: Mutate, subject: "section:State", kindMask: "UpsertStateCell", budget: 10 }
   {
     grantee: "addon:traversal"

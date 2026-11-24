@@ -771,6 +771,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         return (
             !boot.IsPaused &&
+            !IsIdleClientBoot(boot: boot) &&
             (rateHz > 0) &&
             (stepTicks == FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz)))
         );

@@ -1,1 +1,16 @@
-{ "name": "gallery-syllables", "a": "gallery/a.wav", "e": "gallery/e.wav", "i": "gallery/i.wav", "o": "gallery/o.wav", "u": "gallery/u.wav", "consonant": "gallery/b.wav", "playbackRateThousandths": 1500 }
+{
+  "name": "gallery-syllables",
+  "a": "gallery/a.wav",
+  "aHash": "7c016aafbe26f4d47bdc251b72e0f67500179936a4413b0ee6b7e86872b05baf",
+  "e": "gallery/e.wav",
+  "eHash": "8f9c4191d8e8c130f012a2d7c24992fdcd2513c1f0ef3e76eed6dc6411fc68a0",
+  "i": "gallery/i.wav",
+  "iHash": "aac4756237a3ddba3f533d152d1b814cb9774b6187b7e91250cdb15dcd47f68f",
+  "o": "gallery/o.wav",
+  "oHash": "2ae4011b97dbb98aef234a866a83560706a4e571c47e77f15bb0b038683ce2d5",
+  "u": "gallery/u.wav",
+  "uHash": "b33172275786c7658b58d81f1d07098994bbe6615793988432ddfeff30505cf9",
+  "consonant": "gallery/b.wav",
+  "consonantHash": "6a948c9c2d93fd2b718ff0fd219cfddaaac05d4fea0c32e370a76ac0f47a9fe5",
+  "playbackRateThousandths": 1500
+}

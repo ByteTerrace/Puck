@@ -62,7 +62,7 @@ with the camera at rest, it reads like this, each body taking the slowest tier
 whose threshold its size is at or below:
 
 ```text
-bodies: body:2=5.5px/m@10hz body:3=7.9px/m@10hz body:4=10.0px/m@10hz body:5=14.1px/m@15hz body:6=21.4px/m@30hz body:7=101.6px/m@60hz
+bodies: body:12=5.5px/m@10hz body:13=7.9px/m@10hz body:14=10.0px/m@10hz body:15=14.1px/m@15hz body:16=21.4px/m@30hz body:17=101.6px/m@60hz
 views: session$28=85px@30hz session$29=36px@15hz session$30=21px@15hz
 screens: …=0.59x@30hz …=0.28x@15hz …=0.15x@15hz
 ```
@@ -75,12 +75,12 @@ D is the distance down the lane from the spawn, at x = -100, z = 118 - D.
 
 | What | Where | Tier at 1280x900 | Tier at 3840x2160 |
 |---|---|---|---|
-| Walker, body 7 | D 10 | every frame | every frame |
-| Walker, body 6 | D 42 | 30 Hz | every frame |
-| Walker, body 5 | D 64 | 15 Hz | every frame |
-| Walker, body 4 | D 90 | 10 Hz | 30 Hz |
-| Walker, body 3 | D 115 | 10 Hz | 30 Hz |
-| Walker, body 2 | D 165 | 10 Hz | 15 Hz |
+| Walker, body 17 | D 10 | every frame | every frame |
+| Walker, body 16 | D 42 | 30 Hz | every frame |
+| Walker, body 15 | D 64 | 15 Hz | every frame |
+| Walker, body 14 | D 90 | 10 Hz | 30 Hz |
+| Walker, body 13 | D 115 | 10 Hz | 30 Hz |
+| Walker, body 12 | D 165 | 10 Hz | 15 Hz |
 | Screen `range-deck-9` | D 9, 8 m left | 30 Hz | every frame |
 | Screen `range-deck-24` | D 24, 8 m left | 15 Hz | 30 Hz |
 | Screen `range-deck-50` | D 50, 8 m left | 15 Hz | 15 Hz |

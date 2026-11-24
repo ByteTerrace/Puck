@@ -22,7 +22,9 @@ import "../standard/rig"
 
 // The hall's storey height and each level's floor top: level k's floor stands at 4.5k + 0.05 (hall.puck).
 let galleryStorey = 4.5
-let galleryPopulation = 43
+let seatPopulation = 4
+let visitorPopulation = 8
+let galleryPopulation = (41 + seatPopulation + visitorPopulation)
 // The board game room's bodies: the granary board's cursor (granaries.puck), Alchemy's cursor and 31
 // element tokens (alchemy.puck), Go's cursor and 361 stones (go.puck), then Reversi's cursor and 64 discs
 // (reversi.puck), and above them the card table's cursor, 52 cards and held marker (cardtable.puck). debug.puck imports

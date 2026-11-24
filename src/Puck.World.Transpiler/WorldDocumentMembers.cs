@@ -138,7 +138,7 @@ internal static class WorldDocumentMembers {
                 ((shape.Kind == System.Text.Json.Serialization.Metadata.JsonTypeInfoKind.None) && (shape.Properties.Count == 0))) { return node; }
             // These rows name canonical documents. Their compiled identity is the canonicalizer's digest;
             // source pins still use the same sha256/ spelling as file-backed assets, including through bindings.
-            if (((type == typeof(WorldPrototype)) || (type == typeof(WorldPatch)) || (type == typeof(WorldTune)) || (type == typeof(WorldMusicRow)) || (type == typeof(Puck.State.TableRow))) &&
+            if (((type == typeof(WorldPrototype)) || (type == typeof(WorldPatch)) || (type == typeof(WorldTune)) || (type == typeof(WorldMusicRow)) || (type == typeof(Puck.State.TableRow)) || (type == typeof(WorldVoiceProfile))) &&
                 Puck.Assets.ContentPin.TryParse(text: obj["hash"]?.ToString(), pin: out var pin)) {
                 obj["hash"] = pin.Hex;
             }
@@ -147,6 +147,18 @@ internal static class WorldDocumentMembers {
             if ((AssetFamily(type: type) is { } family) && (obj["hash"] is JsonValue { } authored) && authored.TryGetValue<string>(value: out var spelling) &&
                 string.Equals(a: spelling, b: "auto", comparisonType: StringComparison.Ordinal)) {
                 ResolveAutoPin(family: family, obj: obj);
+            }
+            if ((type == typeof(WorldVoiceProfile)) && (obj["hash"] is JsonValue { } voiceAuthored) && voiceAuthored.TryGetValue<string>(value: out var voiceSpelling) &&
+                string.Equals(a: voiceSpelling, b: "auto", comparisonType: StringComparison.Ordinal)) {
+                var sampleSetSource = (obj["sampleSet"]?.ToString() ?? string.Empty);
+
+                if (WorldVoiceSampleLoader.TryCanonicalHash(documentDirectory: basePath, source: sampleSetSource, pin: out var voiceDigest, error: out var voiceError)) {
+                    obj["hash"] = voiceDigest;
+                } else {
+                    diagnostics?.Report(diagnostic: sourceMap.Place(
+                        diagnostic: Diagnostic.Error(code: PuckDiagnosticCodes.SemanticValidation, message: $"Cannot compute the voice sampleSet content pin of '{sampleSetSource}': {voiceError}", span: SourceSpan.None),
+                        jsonPointer: DocumentJsonPointer.Child(name: "hash", pointer: Pointer())));
+                }
             }
             if (whole && (type == typeof(ShapeDocument))) {
                 WorldDocumentRowDefaults.OmitAbsentShapeMembers(shape: obj);

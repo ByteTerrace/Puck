@@ -96,6 +96,7 @@ public static class WorldWireLeaves {
         writer.WriteNullableString(value: trust.Subject);
         writer.WriteNullableString(value: trust.Algorithm);
         writer.WriteNullableString(value: trust.KeyHash);
+        writer.WriteByte(value: ((trust.Admits is { } admits) ? checked((byte)(((byte)admits) + 1)) : (byte)0));
     }
     /// <summary>Reads the authentication provenance retained by an admission.</summary>
     public static WorldAdmissionTrustIdentity? ReadAdmissionTrust(ref WireReader reader) {
@@ -103,8 +104,19 @@ public static class WorldWireLeaves {
         var mode = ((WorldAdmissionTrustMode)reader.ReadByte());
 
         if (!Enum.IsDefined(value: mode)) { reader.Fail(detail: "unknown admission trust mode", refusal: WireRefusal.EnumValueUnknown); }
-        return new(mode, reader.ReadString(field: "trust domain"), reader.ReadNullableString(field: "trust subject"),
-            reader.ReadNullableString(field: "trust algorithm"), reader.ReadNullableString(field: "trust key"));
+        var domain = reader.ReadString(field: "trust domain");
+        var subject = reader.ReadNullableString(field: "trust subject");
+        var algorithm = reader.ReadNullableString(field: "trust algorithm");
+        var keyHash = reader.ReadNullableString(field: "trust key");
+        var rawAdmits = reader.ReadByte();
+        WorldAdmissionArrival? admits = null;
+
+        if (rawAdmits != 0) {
+            var parsed = ((WorldAdmissionArrival)(rawAdmits - 1));
+            if (!Enum.IsDefined(value: parsed)) { reader.Fail(detail: "unknown admission arrival kind", refusal: WireRefusal.EnumValueUnknown); }
+            admits = parsed;
+        }
+        return new(mode, domain, subject, algorithm, keyHash, admits);
     }
     /// <summary>Writes a federation owner's accepted hold and pending ordered ingress through the shared input leaf.</summary>
     public static void WriteFederatedInput(WireWriter writer, WorldFederatedIntentCheckpoint input) {

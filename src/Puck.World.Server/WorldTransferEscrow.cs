@@ -1779,7 +1779,8 @@ public sealed partial class WorldTransferEscrow {
             if (WorldAdmissionDoor.TryAdmitArrival(
                 entries: m_server.Definition.Admission,
                 sourceAuthority: request.SourceAuthority,
-                verdict: out arrival
+                verdict: out arrival,
+                kind: WorldAdmissionArrival.Visitor
             ) is { } arrivalRefusal) {
                 return WorldTransferReservationReply.Refused(reason: $"no admission entry authorizes arrivals from '{request.SourceAuthority}' ({arrivalRefusal})");
             }
@@ -2350,7 +2351,8 @@ public sealed partial class WorldTransferEscrow {
             (WorldAdmissionDoor.TryAdmitArrival(
                 entries: m_server.Definition.Admission,
                 sourceAuthority: request.SourceAuthority,
-                verdict: out verdict
+                verdict: out verdict,
+                kind: WorldAdmissionArrival.Visitor
             ) is { } arrivalRefusal)
         ) {
             return WorldTransferReservationReply.Refused(reason: $"no admission entry authorizes arrivals from '{request.SourceAuthority}' ({arrivalRefusal})");
@@ -2539,9 +2541,9 @@ public sealed partial class WorldTransferEscrow {
             m_relandRolledBack = false;
         }
     }
-    public void RetireMobility(in WorldMobilityIdentity mobility) {
-        var incarnation = mobility.Incarnation;
+    public void RetireMobility(in WorldMobilityIdentity mobility) => RetireIncarnation(incarnation: mobility.Incarnation);
 
+    private void RetireIncarnation(WorldEntityAddress incarnation) {
         if (m_mobilityLeases.TryGetValue(
             key: incarnation,
             value: out var mobilityLease
@@ -2560,6 +2562,25 @@ public sealed partial class WorldTransferEscrow {
         foreach (var key in m_mobilityAdmissions.Keys.Where(predicate: candidate => (candidate.Incarnation == incarnation)).ToArray()) {
             _ = m_mobilityAdmissions.Remove(key: key);
         }
+    }
+
+    internal void RetireDepartedPeer(Principal peer) {
+        foreach (var (key, admission) in m_mobilityAdmissions.ToArray()) {
+            if (admission.Principal == peer) {
+                RetireIncarnation(incarnation: key.Incarnation);
+            }
+        }
+    }
+
+    internal IReadOnlyList<(WorldEntityAddress Incarnation, ulong Epoch)> SourceMobilities(string sourceAuthority) {
+        var result = new List<(WorldEntityAddress Incarnation, ulong Epoch)>();
+
+        foreach (var (key, admission) in m_mobilityAdmissions) {
+            if (string.Equals(a: key.SourceAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
+                result.Add(item: (key.Incarnation, admission.Epoch));
+            }
+        }
+        return result;
     }
     /// <summary>Answers what this destination holds for a source-scoped transfer. A key whose retry payload is retired
     /// still answers <see cref="WorldTransferStatus.Committed"/>. A key holding nothing live answers

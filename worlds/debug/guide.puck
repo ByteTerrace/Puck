@@ -283,6 +283,7 @@ hud {
           text: galleryMapDirections
           voice {
             sampleSet: "voices/gallery.sample-set.json"
+            hash: auto
             cadenceTicks: 18
             pitchThousandths: 800
             paceThousandths: 1100

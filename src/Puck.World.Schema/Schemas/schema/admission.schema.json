@@ -117,6 +117,20 @@
           "Presentation": "A puck.world.projection.v1 document \u2014 what a visitor\u0027s client needs to render and be embodied. The wire default: a peer whose admission entry authors no tier receives this.",
           "Replica": "The whole puck.world.definition.v1 document, verbatim \u2014 the sanctioned download. Authored explicitly, never defaulted into."
         }
+      },
+      "admits": {
+        "description": "Which federated arrival kind this row authorizes (Visitor or Session). Absent authorizes both.",
+        "enum": [
+          "Visitor",
+          "Session",
+          null
+        ],
+        "default": null,
+        "title": "WorldAdmissionArrival",
+        "x-enumDescriptions": {
+          "Visitor": "An arriving body or party reservation, its traveler projection, and its routed input/submissions.",
+          "Session": "An unembodied screen, portal window, or infinity-layer observation session."
+        }
       }
     },
     "required": [

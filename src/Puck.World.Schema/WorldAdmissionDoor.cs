@@ -236,7 +236,13 @@ public static class WorldAdmissionDoor {
 
         return AdmissionOutcome.Admit(verdict: matched) with { ValidThrough = result.ValidThrough };
     }
-    /// <summary>Decides what a traveler handed over by an already-authenticated federation authority is minted.</summary>
+    /// <summary>Returns whether any arrival row (<see cref="WorldAdmissionArrival.Visitor"/> or
+    /// <see cref="WorldAdmissionArrival.Session"/>) authorizes <paramref name="sourceAuthority"/>.</summary>
+    public static bool AdmitsAnyArrival(IReadOnlyList<WorldAdmissionEntry>? entries, string sourceAuthority) =>
+        ((TryAdmitArrival(entries: entries, sourceAuthority: sourceAuthority, verdict: out _, kind: WorldAdmissionArrival.Visitor) is null) ||
+        (TryAdmitArrival(entries: entries, sourceAuthority: sourceAuthority, verdict: out _, kind: WorldAdmissionArrival.Session) is null));
+
+    /// <summary>Decides what a traveler or session handed over by an already-authenticated federation authority is minted.</summary>
     /// <remarks>Performs no cryptographic verification: the caller must already have completed
     /// <c>Puck.Networking.IAuthenticator</c>'s signed-claim challenge/proof handshake for <paramref name="sourceAuthority"/>, or be
     /// the in-process authority that produced the namespace itself. The verdict's identity fields name the AUTHORITY,
@@ -244,19 +250,26 @@ public static class WorldAdmissionDoor {
     /// <param name="entries">The document's current <c>admission</c> rows.</param>
     /// <param name="sourceAuthority">The authenticated source-authority namespace.</param>
     /// <param name="verdict">What the arrival is minted, when admitted.</param>
+    /// <param name="kind">Which arrival kind is asking, or <see langword="null"/> when any arrival row matches.</param>
     /// <returns>The named refusal, or <see langword="null"/> when admitted.</returns>
-    public static WorldAdmissionRefusal? TryAdmitArrival(IReadOnlyList<WorldAdmissionEntry>? entries, string sourceAuthority, out WorldAdmissionVerdict? verdict) {
+    public static WorldAdmissionRefusal? TryAdmitArrival(IReadOnlyList<WorldAdmissionEntry>? entries, string sourceAuthority, out WorldAdmissionVerdict? verdict, WorldAdmissionArrival? kind = null) {
         verdict = null;
 
         if (entries is not { Count: > 0 } rows) {
             return WorldAdmissionRefusal.NoAdmissionEntries;
         }
 
+        WorldAdmissionEntry? sessionNamed = null;
         WorldAdmissionEntry? wildcard = null;
+        var hasClientSession = TrySplitClientSession(
+            keyDomain: out var clientDomain,
+            keySubject: out var clientSubject,
+            sourceAuthority: sourceAuthority
+        );
 
         foreach (var entry in rows) {
                 if (!AllowsOperatorTemplates(entry)) { continue; }
-            if (entry.Mode != WorldAdmissionTrustMode.FederatedAuthority) {
+            if ((entry.Mode != WorldAdmissionTrustMode.FederatedAuthority) || !entry.AdmitsArrival(kind: kind)) {
                 continue;
             }
 
@@ -276,6 +289,15 @@ public static class WorldAdmissionDoor {
                 return null;
             }
 
+            if (
+                hasClientSession &&
+                (sessionNamed is null) &&
+                (string.Equals(a: entry.Domain, b: clientDomain, comparisonType: StringComparison.Ordinal) ||
+                ((clientSubject.Length > 0) && string.Equals(a: entry.Domain, b: clientSubject, comparisonType: StringComparison.Ordinal)))
+            ) {
+                sessionNamed = entry;
+            }
+
             // A named authority beats the wildcard wherever both are authored, whichever order they appear in.
             wildcard ??= (string.Equals(
                 a: entry.Domain,
@@ -287,19 +309,51 @@ public static class WorldAdmissionDoor {
             );
         }
 
-        if (wildcard is { } any) {
+        if ((sessionNamed ?? wildcard) is { } matched) {
             verdict = new WorldAdmissionVerdict(
-                trustIdentity: WorldAdmissionTrustIdentity.FromEntry(entry: any),
+                trustIdentity: WorldAdmissionTrustIdentity.FromEntry(entry: matched),
                 identityDomain: sourceAuthority,
                 identitySubject: string.Empty,
-                templates: any.Grants,
-                tier: any.Tier
+                templates: matched.Grants,
+                tier: matched.Tier
             );
 
             return null;
         }
 
         return WorldAdmissionRefusal.NoArrivalAuthority;
+    }
+
+    // Parses a session-qualified client authority (`<64-hex-domain>/<subject>/<32-hex-session>` from
+    // WorldAttestedAuthenticator or `<uuid>/<32-hex-session>` from EntraWorldAuthenticator) so a FederatedAuthority row
+    // naming the underlying principal or subject still matches while preserving the per-run sourceAuthority on the verdict.
+    private static bool TrySplitClientSession(string sourceAuthority, out string keyDomain, out string keySubject) {
+        keyDomain = string.Empty;
+        keySubject = string.Empty;
+        var lastSlash = sourceAuthority.LastIndexOf(value: '/');
+
+        if ((lastSlash <= 0) || ((sourceAuthority.Length - lastSlash - 1) != 32) || !Guid.TryParseExact(input: sourceAuthority.AsSpan(start: (lastSlash + 1)), format: "N", result: out _)) {
+            return false;
+        }
+        var prefix = sourceAuthority.AsSpan(start: 0, length: lastSlash);
+        var firstSlash = prefix.IndexOf(value: '/');
+
+        if ((firstSlash == 64) && (prefix.Length > 65)) {
+            for (var i = 0; (i < 64); i++) {
+                var ch = prefix[i];
+                if (!(((ch >= '0') && (ch <= '9')) || ((ch >= 'a') && (ch <= 'f')))) {
+                    return false;
+                }
+            }
+            keyDomain = prefix[..64].ToString();
+            keySubject = prefix[65..].ToString();
+            return true;
+        }
+        if ((firstSlash < 0) && Guid.TryParseExact(input: prefix, format: "D", result: out _)) {
+            keyDomain = prefix.ToString();
+            return true;
+        }
+        return false;
     }
     /// <summary>Builds the trust list this world's key-bearing admission entries form, refusing by name rather than
     /// throwing. The seam a second consumer of the same trust decision uses — a counterpart's border attestation is

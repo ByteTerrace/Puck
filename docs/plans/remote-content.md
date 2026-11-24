@@ -879,9 +879,10 @@ its picture needs.
    admitted only when they are their family's canonical form
    (`WorldAssetRowLoader.IsCanonical`), and nothing is copied into a
    delivered document any more: the inline form and its cache are deleted.
-   *Not built:* voice sets and machine content, and pins on a voice set's
-   samples, so a delivered world's sampled voices are silent and its
-   validation skips them. A document loaded from a directory still reads its
+   *Not built:* machine content. Voice sample sets and their six syllable WAVs
+   are now pinned (`WorldVoiceProfile.Hash` with `hash: auto` and
+   `WorldVoiceSampleSet`'s syllable pins) and served/fetched through
+   `WorldContentIndex`. A document loaded from a directory still reads its
    rows by path; only a document with no directory reads by pin. The fetch
    door and its request kind still carry the name prototype
    (`WorldProjectionPrototypeFetch`). The delivered text itself has not been
@@ -923,6 +924,13 @@ its picture needs.
 5. **Authored admission and the idle boot world.** The admission row's kinds,
    the standard package's visitor template, the debug world's rows, namespace
    and visitor slots, and the boot world's pause.
+   *Built.* `WorldAdmissionEntry.Admits` (`Visitor` or `Session`, absent for
+   both) separates session windows from arriving bodies at `WorldAdmissionDoor`
+   and every disclosure lookup; `worlds/standard/visitors.puck` supplies the
+   visitor admission template; `worlds/debug` authors `host.authorityNamespace:
+   "debug"`, separate `Session` and `Visitor` rows, four local seats and eight
+   visitor slots; and a non-listening `--connect` host pauses its idle boot
+   world and withholds/closes its screen sessions once its party has crossed.
    *Check:* the pair boots `worlds/debug` unmodified but for the pair's own key
    row; the traveller is delivered the world; after the route turns remote the
    client's host loop reports no simulation step and its local machines report
