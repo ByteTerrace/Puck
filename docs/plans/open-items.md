@@ -835,10 +835,16 @@ wait behind them.
      on every tick and encodes six sections with no compare
      (`WorldPopulation.AppendContinuationHash`); the body state door's entry
      and reader step makes a parked slot encode nothing.
-   - **The step's restore snapshot.** `WorldBody.CaptureMotion` copies a body's
-     whole residue and transfer state on every advance so a refused sweep can
-     restore it; behind the body's section holders it becomes the sections the
-     step wrote.
+   - **The step's restore snapshot.** Built for the sections behind holders:
+     a step opens a restore point on the body's binding
+     (`SlotBinding.BeginRestore`), each holder keeps its value when the step
+     first writes it, and the step's unconditional writers compare first
+     (`physics.bodies.step-saves` and `step-saved-bytes` count what is still
+     copied). Left: `WorldBody.CaptureMotion` still copies the pose, motion,
+     clocks, program, tape and registers eagerly, until
+     [the body state door](body-state-door.md) moves them behind holders; and
+     the staged producer image is written and cleared once a step, so the
+     input images are saved on every producer-driven step.
    - **A sweep's unmoved bindings.** A row sweep whose bindings read a
      placement's pose is swept whole whenever any placement's inhabitant moves
      (`RuleDueList` keeps per-binding dues for body sweeps only), so each
@@ -971,9 +977,10 @@ built, and the design carries its review's answers.
 ### A multi-seat client
 
 Owner: the `cpu` campaign builds; another family reviews the memo · high, M2 ·
-Next: step 1 of [the design](multi-seat-client.md)'s
-[steps](multi-seat-client.md#the-steps), the party join, then the member's
-proof. The memo is written and owes its cross-family review, which runs
+Next: the rest of step 1 of [the design](multi-seat-client.md)'s
+[steps](multi-seat-client.md#the-steps): four seats join and are admitted, and
+their input does not yet move their bodies (the first finding below), then
+the member's proof. The memo is written and owes its cross-family review, which runs
 beside the build because [its second decision](multi-seat-client.md#decision-2-a-member-proves-its-own-identity)
 is a trust boundary.
 
@@ -1024,6 +1031,28 @@ each gap below; how each answer behaves in a town and when one seat moves to
 another server; and the delegate skill's requirements of a design (its
 invariant, what enforces it, a check per step).
 
+- [high] A joined seat's input carries nothing. On a headless pair (four
+  eager local seats over the Moth's world, one process listening and one
+  started with `--connect`) the four seats cross
+  (`WorldInstanceHost.FollowRemoteJoin`), the host's roster reads four
+  transferred peers, and each seat's batches arrive
+  (`world.tick.federated-batches` rises, none stale, none restarted). The
+  host's input owner for each traveller holds an empty source registry
+  (`body.channels` lists no source), so a stick held on the client moves no
+  body. Read which side loses the registry: whether the seat's bindings
+  resolve any source against the delivered projection
+  (`WorldSeatBindings.SyncRoute`), and whether the host applies the seat's
+  `WorldCommand.AdmitInput`. Whether one seat alone still moves its body on
+  this head was not re-run. Two defects on the way are fixed: a seat resent
+  its admission every step, since its retry pause was counted in engine ticks
+  (`WorldSeatInput.AdmissionRetryTicks`), which with four seats filled the
+  ordered lane until every submission timed out; and a seat that was
+  delivered another registry's publication never sent its own
+  (`WorldClient.SynchronizeInput`).
+- [medium] The seats active at boot cross one at a time as each is seated,
+  not as one party in one reservation: an eager seat becomes active on a
+  later step than the one before it. Decide whether the join waits for the
+  boot world's eager seats before it sends the first.
 - [high] Seats multiplexed on one connection, with the union of their
   interest disclosed once. It meets
   [replication](replication.md#decision-6-interest-and-priority-under-a-byte-budget)'s
@@ -1045,9 +1074,11 @@ invariant, what enforces it, a check per step).
   body needs the last answered input sequence per owner on the wire, which
   [replication](replication.md#decision-7-the-seats-own-body)'s continuation
   carries.
-- [medium · unconfirmed] In a seats scenario a second seat's `player.signal`
-  and `body.press` once had no effect. Reproduce it with two local seats
-  before the memo designs input routing per viewport, since M2 rests on it.
+- [medium] The operator's console can issue `player.signal` only as seat 1,
+  so a pair cannot script a stick on seats 2 to 4; a scenario's `seat2:` lines
+  can, and `body.press` with a body index moved a second local seat's body
+  alone in one process. Give the operator a way to issue a line as a seat it
+  names.
 - [Panes](#panes-split-screens-the-player-drives) holds the local split
   views' own open items.
 

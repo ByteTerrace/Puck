@@ -376,6 +376,10 @@ admission rows the step needs. No check is a timing.
    seat in turn moves that seat's body on the host and no other
    (`body.where` for the four); `world.tick.federated-batches` rises for four
    owners and `world.tick.federated-restarts` stays at zero.
+   *Built in part:* the party crosses and is admitted, and batches arrive for
+   four owners with no restart; no body moves yet, because each traveller's
+   input owner on the host holds no source
+   ([the packet](open-items.md#a-multi-seat-client) records what ran).
 2. **A member proves itself.** The nonce in the reply, the claim in the
    commit, the member path through `WorldAdmissionDoor.TryAdmit`, the seat
    credential source and its key-file implementation, the guest count.

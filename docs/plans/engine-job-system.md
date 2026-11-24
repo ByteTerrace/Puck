@@ -595,7 +595,13 @@ Open: the city's per-tick kit advance read in the lead's quiet window on the
 2060 against the 30 Hz authority target (`physics.bodies.local-advances` against
 `physics.bodies.advances` shows the share that runs in partitions).
 
-Open: the serial input pass, one `WorldInputRuntime.AdmitProgramSnapshot` per
+Built: the serial input pass admits by what changed. The runtime keeps what
+each program owner's last admission read and answered and reads those facts
+again on the next observation, so an unchanged observation runs no admission
+and a changed one skips the permission and selection steps
+(`world.tick.input-admissions`, `-standing` and `-steady` count the three). It
+is the skip described below, with exact reads in place of a version key. What
+follows is the analysis it rests on: one `WorldInputRuntime.AdmitProgramSnapshot` per
 moving local body (`physics.bodies.local-advances` counts them). Its steady case
 already short-circuits inside the producer (`WorldInputProducer.ObserveSnapshotAt`)
 and the owner (`WorldInputOwner.TryAdmit`); what remains is the checks whose
