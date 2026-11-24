@@ -59,6 +59,8 @@ public sealed class WorldSessionMirror : IClientSink {
         public readonly float[] Heading = new float[length];
         public readonly byte[] Kit = new byte[length];
         public readonly byte[] Look = new byte[length];
+        // One more than the index of the body ridden, so a slot never delivered reads as riding nothing.
+        public readonly int[] Rides = new int[length];
 
         public int Length => Heading.Length;
 
@@ -72,6 +74,7 @@ public sealed class WorldSessionMirror : IClientSink {
             Heading.CopyTo(array: grown.Heading, index: 0);
             Kit.CopyTo(array: grown.Kit, index: 0);
             Look.CopyTo(array: grown.Look, index: 0);
+            Rides.CopyTo(array: grown.Rides, index: 0);
 
             return grown;
         }
@@ -921,6 +924,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 );
                 extras.Heading[index] = entry.Heading;
                 extras.Facts[index] = entry.Facts;
+                extras.Rides[index] = (entry.Mount + 1);
                 // The pose table publishes the entry's active flag last, after every field above, so a reader on
                 // another thread (a federated observer delivers on its socket task) that acquires IsActive sees the
                 // completed record.
@@ -1167,6 +1171,13 @@ public sealed class WorldSessionMirror : IClientSink {
     /// interpolated; the facts are discrete authority answers.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public BodyFacts Facts(int index) => ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_extras).Facts, index: index);
+    /// <summary>Gets the kit row an entity runs in the latest snapshot (<see cref="EntitySnapshot.Kit"/>).</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public int Kit(int index) => ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_extras).Kit, index: index);
+    /// <summary>Gets the index of the body an entity rides in the latest snapshot (<see cref="EntitySnapshot.Mount"/>),
+    /// or -1 when it rides nothing or was never delivered.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public int Mount(int index) => (ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_extras).Rides, index: index) - 1);
     /// <summary>Gets an entity's latest authoritative heading in radians about world up (<see cref="EntitySnapshot.Heading"/>)
     /// — not interpolated; the composition seam that reads it wants the authority's current value.</summary>
     public float Heading(int index) => ArrayCapacity.ElementOr(array: Volatile.Read(location: ref m_extras).Heading, index: index);

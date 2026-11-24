@@ -55112,7 +55112,7 @@
             "null"
           ],
           "items": {
-            "description": "One named presentation clock: a tick clock, whose phase advances with the simulation\u0027s engine tick through a period, or a state clock, whose phase is the fractional part of a state row\u0027s presented value (an advancing row wraps once per unit). A projection carries a state clock as an anchored clock instead, whose phase its recipient predicts from the anchor at the tick it presents (WorldClockAnchor); a document never authors one.",
+            "description": "One named presentation clock: a tick clock, whose phase advances with the simulation\u0027s engine tick through a period; a state clock, whose phase is the fractional part of a state row\u0027s presented value (an advancing row wraps once per unit); or a view clock, whose phase is how far the viewer stands from a point (WorldClockView). A projection carries a state clock as an anchored clock instead, whose phase its recipient predicts from the anchor at the tick it presents (WorldClockAnchor); a document never authors one.",
             "type": [
               "object",
               "null"
@@ -55131,7 +55131,7 @@
                 "default": null
               },
               "spanSeconds": {
-                "description": "What one period reads as, in the units a key\u0027s time is authored in: a day that passes in twenty minutes and reads as twenty-four hours has a span of 24h. Absent reads as the period for a tick clock and as one for a state clock.",
+                "description": "What one period reads as, in the units a key\u0027s time is authored in: a day that passes in twenty minutes and reads as twenty-four hours has a span of 24h. Absent reads as the period for a tick clock, as one for a state clock, and as the distance a view clock covers, so its keys are authored in metres past its near end.",
                 "type": [
                   "number",
                   "null"
@@ -55187,6 +55187,70 @@
                 "additionalProperties": false,
                 "default": null,
                 "title": "WorldClockAnchor"
+              },
+              "view": {
+                "description": "A view clock\u0027s measure of where the viewer stands. Refused beside State and PeriodSeconds.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "to": {
+                    "description": "The distance from Origin at which the phase reaches the end of the span, in metres; greater than From.",
+                    "type": "number"
+                  },
+                  "from": {
+                    "description": "The distance at which the phase leaves zero, in metres. Absent is zero.",
+                    "type": "number",
+                    "default": 0
+                  },
+                  "origin": {
+                    "description": "The point distances are measured from. Absent is the world\u0027s origin.",
+                    "default": null,
+                    "title": "DocumentVector3",
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
+                  },
+                  "axis": {
+                    "description": "The direction distances are measured along, which need not be a unit vector: the viewer\u0027s offset from the origin projected on it, so a viewer behind the origin reads zero. Absent measures in every direction, the length of the offset.",
+                    "default": null,
+                    "title": "DocumentVector3",
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "to"
+                ],
+                "additionalProperties": false,
+                "default": null,
+                "title": "WorldClockView"
               }
             },
             "required": [

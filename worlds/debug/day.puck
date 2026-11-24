@@ -13,11 +13,56 @@ exports {
   reads [day]
 }
 
+// The air thins as the viewer climbs toward the sky seam (launch.puck's `altitude` clock, a view clock over the seam's
+// height): the day's gradient gives way to the void and stars the moon's own sky draws (moon.puck), and the clouds
+// drop out below, so the sky at the seam is the sky past it.
+let airFade = {
+  clock: altitude
+  keys [
+    { at: 0, value: 1 }
+    { at: 250, value: 1 }
+    { at: 1500, value: 0.25 }
+    { at: 2250, value: 0, ease: Step }
+  ]
+}
+let cloudFade = {
+  clock: altitude
+  keys [
+    { at: 0, value: 1 }
+    { at: 500, value: 1 }
+    { at: 1400, value: 0, ease: Step }
+  ]
+}
+let spaceStarsFade = {
+  clock: altitude
+  keys [
+    { at: 0, value: 0 }
+    { at: 700, value: 0 }
+    { at: 2250, value: 1, ease: Step }
+  ]
+}
+
 dayCycle(
-  daySeconds: 1440,
-  start: 10,
-  noonElevation: 46,
-  heading: 37,
+  daySeconds: sharedDaySeconds,
+  start: sharedDayStart,
+  noonElevation: sharedNoonElevation,
+  heading: sharedSunHeading,
+  airOpacity: airFade,
+  cloudOpacity: cloudFade,
+  space: [
+    gradient(name: "void", luminance: spaceLuminance, stops: [
+      { elevation: -1, color: spaceColor }
+      { elevation: 1, color: spaceColor }
+    ])
+    stars(
+      name: "space-stars",
+      luminance: spaceStarLuminance,
+      density: spaceStarDensity,
+      brightness: spaceStarBrightness,
+      seed: spaceStarSeed,
+      opacity: spaceStarsFade
+    )
+  ],
   cloudiness: 0.3,
   moonPeak: 6,
   moonColor: "#7088E8",

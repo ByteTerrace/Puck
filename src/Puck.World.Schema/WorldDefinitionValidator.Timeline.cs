@@ -38,11 +38,31 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (clock.Anchor is not null) {
-                errors.Add(item: $"{path}.anchor is what a projection carries for a state clock it discloses; a document authors a tick clock or a state clock.");
+                errors.Add(item: $"{path}.anchor is what a projection carries for a state clock it discloses; a document authors a tick clock, a state clock or a view clock.");
             }
 
             if ((clock.SpanSeconds is { } span) && (!double.IsFinite(d: span) || (span <= 0d))) {
                 errors.Add(item: $"{path}.spanSeconds must be finite and positive.");
+            }
+
+            if (clock.View is { } view) {
+                if ((clock.State is not null) || (clock.PeriodSeconds is not null) || (clock.StartSeconds is not null)) {
+                    errors.Add(item: $"{path} names a view beside a state row, a period or a start; a view clock reads where the viewer stands and nothing else.");
+                }
+
+                if (!double.IsFinite(d: view.From) || !double.IsFinite(d: view.To) || (view.To <= view.From)) {
+                    errors.Add(item: $"{path}.view must measure from a finite 'from' to a finite, greater 'to'.");
+                }
+
+                if ((view.Axis?.Value is { } axis) && !(float.IsFinite(f: axis.LengthSquared()) && (axis.LengthSquared() > 0f))) {
+                    errors.Add(item: $"{path}.view.axis must be a finite direction of some length; leave it out to measure in every direction.");
+                }
+
+                if ((view.Origin?.Value is { } origin) && !float.IsFinite(f: origin.LengthSquared())) {
+                    errors.Add(item: $"{path}.view.origin must be finite.");
+                }
+
+                continue;
             }
 
             if (clock.State is { } state) {
@@ -70,7 +90,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (clock.PeriodSeconds is not { } period) {
-                errors.Add(item: $"{path} names neither a period nor a state row.");
+                errors.Add(item: $"{path} names neither a period, a state row nor a view.");
 
                 continue;
             }

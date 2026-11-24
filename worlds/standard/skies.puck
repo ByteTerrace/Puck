@@ -149,10 +149,13 @@ function sunDirection(h, heading, noonElevation) = [
 // at `starLuminance`. Writing the row moves the time (`world.state.cell.set <clock> $value 0.5` is noon), and its
 // advance holds the sun (`world.row.set state <clock> advance {"perSecondNumerator":0,"perSecondDenominator":1}`) and
 // runs it again (the numerator back to one over `daySeconds`). `bodies` are layers of the world's own that hang in the
-// sky behind the clouds and before the stars and the sun's disc: a moon, a planet, another world seen from here. The
+// sky behind the clouds and before the stars and the sun's disc: a moon, a planet, another world seen from here.
+// `space` are layers under the air, what the sky shows where the air does not: the air's gradient draws over them at
+// `airOpacity` and the clouds at `cloudOpacity`, each one unless the world keys it, on a view clock of the viewer's
+// height for a sky that thins to space as she climbs (`timeline.clocks`' `view`). The
 // exposure is the world's to key on the same clock
 // (`render.exposure`'s `minimum`, `maximum`, `compensation` and `ev100` take `{ clock, keys }`).
-template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 60, heading = 0, peak = 100000, noonColor = "#FFF0DC", horizonColor = "#FFB278", cloudiness = 0.25, cloudTier = low, sunLight = 0, moonPeak = 0.25, moonColor = "#C8D4FF", moonAngularRadius = 0.11, nightLuminance = 2, starLuminance = 2, bodies = []) {
+template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 60, heading = 0, peak = 100000, noonColor = "#FFF0DC", horizonColor = "#FFB278", cloudiness = 0.25, cloudTier = low, sunLight = 0, moonPeak = 0.25, moonColor = "#C8D4FF", moonAngularRadius = 0.11, nightLuminance = 2, starLuminance = 2, bodies = [], space = [], airOpacity = 1, cloudOpacity = 1) {
   timeline {
     clocks [{ name: clock, state: clock, spanSeconds: 24h }]
   }
@@ -197,8 +200,9 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
     }
     sky {
       layers: concat(
+        space,
         [
-          gradient(name: "air", stops: [
+          gradient(name: "air", opacity: airOpacity, stops: [
             { elevation: -1, color: dayStops[0] }
             { elevation: 0, color: dayStops[1] }
             { elevation: 0.4, color: dayStops[2] }
@@ -208,7 +212,17 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
           sunDisc(name: "sun", light: sunLight, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
         ],
         bodies,
-        [clouds(name: "cumulus", coverage: cloudiness, scale: 2, softness: 0.3, drift: [0.02, 0.005], tier: cloudTier)]
+        [
+          clouds(
+            name: "cumulus",
+            opacity: cloudOpacity,
+            coverage: cloudiness,
+            scale: 2,
+            softness: 0.3,
+            drift: [0.02, 0.005],
+            tier: cloudTier
+          )
+        ]
       )
       clock: clock
       keys: map(daySkyHours, k => {

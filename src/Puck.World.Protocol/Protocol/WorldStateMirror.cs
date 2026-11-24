@@ -590,7 +590,19 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
     /// <inheritdoc/>
     public bool TryClockPhase(WorldClock clock, out double phase) => TryClockPhase(clock: clock, delivered: false, phase: out phase);
 
+    /// <summary>Gets or sets where the viewer this mirror presents for stands, in the world's coordinates: what a view
+    /// clock measures (<see cref="WorldClockView"/>). The presentation that resolves the world's environment writes it
+    /// from the frame's first view before it resolves; <see langword="null"/>, a mirror nothing has drawn from, reads
+    /// no view clock.</summary>
+    public System.Numerics.Vector3? ViewPoint { get; set; }
+
     private bool TryClockPhase(WorldClock clock, out double phase, bool delivered) {
+        if (clock.View is { } view) {
+            phase = ((ViewPoint is { } point) ? WorldClocks.Phase(view: view, point: point) : 0d);
+
+            return ViewPoint.HasValue;
+        }
+
         var slot = SlotOf(
             binding: WorldPresentationManifest.ClockBinding(clock: clock),
             conversion: WorldStateConversion.Number

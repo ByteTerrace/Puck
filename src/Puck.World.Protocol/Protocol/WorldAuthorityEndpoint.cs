@@ -243,6 +243,33 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
         orientation = Quaternion.Identity;
         return false;
     }
+    /// <summary>Reads the body an entity rides, when it rides one that is active in the latest snapshot
+    /// (<see cref="EntitySnapshot.Mount"/>): the body a seat riding it is framed through.</summary>
+    /// <param name="rider">The riding entity.</param>
+    /// <param name="mount">The ridden body's address, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when <paramref name="rider"/> is the active occupant of its slot and rides an
+    /// active body.</returns>
+    public bool TryMount(in WorldEntityAddress rider, out WorldEntityAddress mount) {
+        mount = default;
+
+        if (
+            (((uint)rider.Index) >= WorldBodiesLimits.IndexLimit) ||
+            !m_mirror.IsActive(index: rider.Index) ||
+            (m_mirror.Address(index: rider.Index) != rider) ||
+            (m_mirror.Mount(index: rider.Index) is not (var ridden and >= 0)) ||
+            !m_mirror.IsActive(index: ridden)
+        ) {
+            return false;
+        }
+
+        mount = m_mirror.Address(index: ridden);
+
+        return true;
+    }
+    /// <summary>Reads the kit row an entity runs in the latest snapshot (<see cref="EntitySnapshot.Kit"/>).</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    /// <returns>The kit's index into this authority's delivered definition.</returns>
+    public int EntityKit(int index) => m_mirror.Kit(index: index);
     /// <summary>Reads a pose only when the complete generation-addressed identity is still the active occupant.</summary>
     public bool TryEntityPose(in WorldEntityAddress entity, out Vector3 position, out Quaternion orientation) {
         if (

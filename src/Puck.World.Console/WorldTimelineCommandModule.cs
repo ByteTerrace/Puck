@@ -84,6 +84,15 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority,
                 continue;
             }
 
+            if (clock.View is { } view) {
+                echo = echo.Field(
+                    key: "view",
+                    value: $"{Number(value: view.From)}..{Number(value: view.To)} m{((view.Axis is null) ? " in every direction" : " along an axis")}"
+                );
+
+                continue;
+            }
+
             var phase = WorldClocks.Phase(
                 clock: clock,
                 tick: new PresentedTick(

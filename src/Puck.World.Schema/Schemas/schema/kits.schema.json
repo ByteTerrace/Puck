@@ -1104,6 +1104,14 @@
                 "additionalProperties": false,
                 "default": null,
                 "title": "WorldMountBoard"
+              },
+              "camera": {
+                "description": "The camera program a seat takes in place of views.seatRig while it rides or drives a body of this kit: a program of the views section, framed about the ridden body. Its orbit is the one the seat\u0027s look steers, so it reaches an orbit op as the seat rig does. Absent keeps the seat rig.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
               }
             },
             "required": [

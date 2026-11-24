@@ -192,6 +192,54 @@
                     "title": "WorldRouteStepCross"
                   },
                   {
+                    "description": "Flies to a point through the air, as a player flying a craft or a free-flight body does: the stick held toward the point over the ground with the camera turned onto the way, and the program\u0027s rise controls (Rise) held while the point stands above or below the body along the body\u0027s own up. No path is planned and no corridor checked. The step ends within Within of the point, on arriving in the world Enters names, when the way crosses a seam into it, or, with Lands, once the body stands on ground.",
+                    "properties": {
+                      "$type": {
+                        "const": "fly"
+                      },
+                      "point": {
+                        "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                        "description": "The point flown to, in the coordinates of the world the step starts in."
+                      },
+                      "pace": {
+                        "description": "The pace, a word the route\u0027s program reads (a held boost).",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "within": {
+                        "description": "The distance, in metres, at which the point is reached.",
+                        "type": "number",
+                        "default": 10
+                      },
+                      "world": {
+                        "description": "The documentId of the world the step starts in, or null for wherever the seat stands. The step fails when the seat starts it in another world.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "enters": {
+                        "description": "The documentId of the world whose arrival ends the step, or null for a flight that stays in one world. With it, reaching the point without arriving fails the step.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "lands": {
+                        "description": "Whether the step is a landing: it flies at the point, a point of the ground or under it, until the body, or the body it rides, is grounded, and Within ends nothing.",
+                        "type": "boolean",
+                        "default": false
+                      }
+                    },
+                    "required": [
+                      "point"
+                    ],
+                    "additionalProperties": false,
+                    "title": "WorldRouteStepFly"
+                  },
+                  {
                     "description": "Stands for a time, the camera turned onto a heading or toward a point; with neither it holds the facing it has.",
                     "properties": {
                       "$type": {
