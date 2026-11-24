@@ -23,6 +23,8 @@ public sealed class SdfMeshBakeClosureLawTests {
         Assert.Contains(collection: members, filter: static member => member.StartsWith(value: "Puck.SdfVm!Puck.SdfVm.SdfMeshGeometryBuilder..ctor", comparisonType: StringComparison.Ordinal));
         // A type only a parameter carries is named, never walked.
         Assert.DoesNotContain(collection: members, filter: static member => member.StartsWith(value: "Puck.SdfVm.Tests!Puck.SdfVm.Tests.SdfMeshBakeClosureFixture/Carried", comparisonType: StringComparison.Ordinal));
+        // An implementation of the called member that no walked code makes is never reached.
+        Assert.DoesNotContain(collection: members, filter: static member => member.StartsWith(value: "Puck.SdfVm.Tests!Puck.SdfVm.Tests.SdfMeshBakeClosureFixture/Halving", comparisonType: StringComparison.Ordinal));
         Assert.Equal(expected: "root", actual: closure.Reasons[members.First(predicate: static member => member.Contains(value: "SdfMeshBakeClosureFixture.Run`0(", comparisonType: StringComparison.Ordinal))]);
         // The same build walks to the same closure.
         Assert.Equal(expected: closure.Hash, actual: SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: FixtureRoot).Hash);
@@ -234,6 +236,11 @@ public static unsafe class SdfMeshBakeClosureFixture {
     public sealed class Doubling : Transform {
         /// <inheritdoc/>
         public override int Apply(int value) => (2 * value);
+    }
+    /// <summary>A transform no walk from <see cref="Run"/> makes, so the abstract call never runs it.</summary>
+    public sealed class Halving : Transform {
+        /// <inheritdoc/>
+        public override int Apply(int value) => (value / 2);
     }
     /// <summary>A table its static constructor fills.</summary>
     public static class Table {

@@ -122,6 +122,13 @@ public sealed partial class CodeClosure {
 
     private static string CanonicalTypeName(string name) => FileLocalChecksum().Replace(input: name, replacement: "__").Replace(oldChar: '+', newChar: '/');
 
+    // A compiler-generated name (a lambda, a local function, a closure class, a cached delegate or a state machine) carries
+    // the ordinal of the method that declares it among its type's members: <M>b__O_L, <M>g__F|O_L, <>c__DisplayClassO_L,
+    // <>9__O_L and <M>d__O. The ordinal moves whenever a member is added or removed above that method, though nothing the
+    // method does changed.
+    [System.Text.RegularExpressions.GeneratedRegex(pattern: @"^(?<pre><[^>]*>b__|<[^>]*>g__[^|]*\||<>c__DisplayClass|<>9__)(?<o>\d+)(?<post>_\d+(`\d+)?)$|^(?<pre><[^>]*>d__)(?<o>\d+)(?<post>(`\d+)?)$")]
+    private static partial System.Text.RegularExpressions.Regex GeneratedOrdinal();
+
     // One assembly the walk reads: its metadata, its image and its types by full name.
     private sealed class Module {
         public Module(string name, byte[] image) {
@@ -144,7 +151,86 @@ public sealed partial class CodeClosure {
             var declaring = type.GetDeclaringType();
             var space = Metadata.GetString(handle: type.Namespace);
 
-            return ((!declaring.IsNil) ? (FullName(handle: declaring) + "/" + name) : ((space.Length == 0) ? name : (space + "." + name)));
+            return ((!declaring.IsNil) ? (FullName(handle: declaring) + "/" + Canonical(declaring: declaring, name: name)) : ((space.Length == 0) ? name : (space + "." + name)));
+        }
+        public string NameOf(MethodDefinitionHandle method) {
+            var definition = Metadata.GetMethodDefinition(handle: method);
+
+            return Canonical(declaring: definition.GetDeclaringType(), name: Metadata.GetString(handle: definition.Name));
+        }
+        public string NameOf(FieldDefinitionHandle field) {
+            var definition = Metadata.GetFieldDefinition(handle: field);
+
+            return Canonical(declaring: definition.GetDeclaringType(), name: Metadata.GetString(handle: definition.Name));
+        }
+
+        // Each user type's generated ordinals, written as the name of the method that declares them.
+        private readonly Dictionary<TypeDefinitionHandle, Dictionary<string, string>> m_ordinals = [];
+
+        // A member or nested type's name with a generated ordinal written as its method's name (GeneratedOrdinal), so an
+        // edit elsewhere in the type renames nothing the closure runs. Overloads that each declare generated members keep
+        // apart by their order among themselves; an ordinal whose method no generated name shows stays as it is.
+        public string Canonical(TypeDefinitionHandle declaring, string name) {
+            var match = GeneratedOrdinal().Match(input: name);
+
+            if (!match.Success) { return name; }
+
+            var scope = declaring;
+
+            for (var type = Metadata.GetTypeDefinition(handle: scope); Metadata.GetString(handle: type.Name).StartsWith(value: '<') && !type.GetDeclaringType().IsNil; type = Metadata.GetTypeDefinition(handle: scope)) {
+                scope = type.GetDeclaringType();
+            }
+
+            return (OrdinalsOf(scope: scope).TryGetValue(key: match.Groups["o"].Value, value: out var method) ? (match.Groups["pre"].Value + method + match.Groups["post"].Value) : name);
+        }
+        private Dictionary<string, string> OrdinalsOf(TypeDefinitionHandle scope) {
+            if (m_ordinals.TryGetValue(key: scope, value: out var held)) { return held; }
+
+            var methods = new SortedDictionary<int, string>();
+            var pending = new Stack<TypeDefinitionHandle>(collection: [scope]);
+
+            while (pending.TryPop(result: out var handle)) {
+                var type = Metadata.GetTypeDefinition(handle: handle);
+
+                foreach (var method in type.GetMethods()) {
+                    var name = Metadata.GetString(handle: Metadata.GetMethodDefinition(handle: method).Name);
+
+                    if (GeneratedOrdinal().Match(input: name) is { Success: true } named && name.StartsWith(value: '<') && (name[1] != '>')) {
+                        _ = methods.TryAdd(key: int.Parse(s: named.Groups["o"].ValueSpan, provider: System.Globalization.CultureInfo.InvariantCulture), value: name[1..name.IndexOf(value: '>')]);
+                    }
+                }
+                foreach (var nested in type.GetNestedTypes()) {
+                    var name = Metadata.GetString(handle: Metadata.GetTypeDefinition(handle: nested).Name);
+
+                    if (!name.StartsWith(value: '<')) { continue; }
+                    pending.Push(item: nested);
+                    if (GeneratedOrdinal().Match(input: name) is not { Success: true } named) { continue; }
+
+                    var ordinal = int.Parse(s: named.Groups["o"].ValueSpan, provider: System.Globalization.CultureInfo.InvariantCulture);
+
+                    if (name[1] != '>') {
+                        _ = methods.TryAdd(key: ordinal, value: name[1..name.IndexOf(value: '>')]);
+                    } else if (Metadata.GetTypeDefinition(handle: nested).GetMethods().Select(selector: member => Metadata.GetString(handle: Metadata.GetMethodDefinition(handle: member).Name)).FirstOrDefault(predicate: member => member.StartsWith(value: '<') && (member.Length > 1) && (member[1] != '>')) is { } owned) {
+                        _ = methods.TryAdd(key: ordinal, value: owned[1..owned.IndexOf(value: '>')]);
+                    }
+                }
+            }
+
+            var ordinals = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+            foreach (var group in methods.GroupBy(keySelector: static pair => pair.Value, comparer: StringComparer.Ordinal)) {
+                var rank = 0;
+                var overloads = group.Count();
+
+                foreach (var (ordinal, method) in group) {
+                    ordinals[ordinal.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)] = ((overloads == 1) ? method : (method + "~" + rank));
+                    rank++;
+                }
+            }
+
+            m_ordinals[scope] = ordinals;
+
+            return ordinals;
         }
     }
 
@@ -326,7 +412,7 @@ public sealed partial class CodeClosure {
 
                 var field = reader.GetFieldDefinition(handle: handle);
 
-                text.Append(value: '\n').Append(value: (int)field.Attributes).Append(value: ' ').Append(value: reader.GetString(handle: field.Name)).Append(value: ' ').Append(value: Quiet(name: () => field.DecodeSignature(genericContext: null, provider: this))).Append(value: ' ').Append(value: field.GetOffset());
+                text.Append(value: '\n').Append(value: (int)field.Attributes).Append(value: ' ').Append(value: module.NameOf(field: handle)).Append(value: ' ').Append(value: Quiet(name: () => field.DecodeSignature(genericContext: null, provider: this))).Append(value: ' ').Append(value: field.GetOffset());
             }
 
             m_members[key] = XxHash128.HashToUInt128(source: Encoding.UTF8.GetBytes(s: text.ToString()));
@@ -349,7 +435,7 @@ public sealed partial class CodeClosure {
             var definition = reader.GetMethodDefinition(handle: method);
             var text = new StringBuilder();
             var signature = Quiet(name: () => MethodSignature(signature: definition.DecodeSignature(genericContext: null, provider: this)));
-            var key = (module.Name + "!" + module.FullName(handle: definition.GetDeclaringType()) + "." + reader.GetString(handle: definition.Name) + signature);
+            var key = (module.Name + "!" + module.FullName(handle: definition.GetDeclaringType()) + "." + module.NameOf(method: method) + signature);
 
             m_current = key;
             Reasons[key] = m_from[(module, method)];
@@ -443,12 +529,13 @@ public sealed partial class CodeClosure {
             if (handle.Kind == HandleKind.FieldDefinition) {
                 var field = reader.GetFieldDefinition(handle: (FieldDefinitionHandle)handle);
 
-                return ((TypeName(handle: field.GetDeclaringType(), module: module) + "." + reader.GetString(handle: field.Name) + " " + Quiet(name: () => field.DecodeSignature(genericContext: null, provider: this))), (FieldDefinitionHandle)handle, module);
+                return ((TypeName(handle: field.GetDeclaringType(), module: module) + "." + module.NameOf(field: (FieldDefinitionHandle)handle) + " " + Quiet(name: () => field.DecodeSignature(genericContext: null, provider: this))), (FieldDefinitionHandle)handle, module);
             }
 
             var member = reader.GetMemberReference(handle: (MemberReferenceHandle)handle);
-            var name = (TypeName(handle: member.Parent, module: module) + "." + reader.GetString(handle: member.Name) + " " + Quiet(name: () => member.DecodeFieldSignature(genericContext: null, provider: this)));
             var parent = Resolve(handle: member.Parent, module: module);
+            var fieldName = reader.GetString(handle: member.Name);
+            var name = (TypeName(handle: member.Parent, module: module) + "." + ((parent is { } declaring) ? declaring.Item1.Canonical(declaring: declaring.Item2, name: fieldName) : fieldName) + " " + Quiet(name: () => member.DecodeFieldSignature(genericContext: null, provider: this)));
             var match = ((parent is { } owner) ? owner.Item1.Metadata.GetTypeDefinition(handle: owner.Item2).GetFields().Where(predicate: field => owner.Item1.Metadata.StringComparer.Equals(handle: owner.Item1.Metadata.GetFieldDefinition(handle: field).Name, value: reader.GetString(handle: member.Name))).Cast<FieldDefinitionHandle?>().FirstOrDefault() : null);
 
             return (name, match, parent?.Item1);
@@ -475,7 +562,7 @@ public sealed partial class CodeClosure {
             if (handle.Kind == HandleKind.MethodDefinition) {
                 var definition = reader.GetMethodDefinition(handle: (MethodDefinitionHandle)handle);
 
-                return ((TypeName(handle: definition.GetDeclaringType(), module: module) + "." + reader.GetString(handle: definition.Name) + Quiet(name: () => MethodSignature(signature: definition.DecodeSignature(genericContext: null, provider: this)))), (module, (MethodDefinitionHandle)handle));
+                return ((TypeName(handle: definition.GetDeclaringType(), module: module) + "." + module.NameOf(method: (MethodDefinitionHandle)handle) + Quiet(name: () => MethodSignature(signature: definition.DecodeSignature(genericContext: null, provider: this)))), (module, (MethodDefinitionHandle)handle));
             }
             if (handle.Kind == HandleKind.MethodSpecification) {
                 var specification = reader.GetMethodSpecification(handle: (MethodSpecificationHandle)handle);
@@ -490,7 +577,7 @@ public sealed partial class CodeClosure {
             var parent = Resolve(handle: member.Parent, module: module);
             var match = ((parent is { } owner) ? owner.Item1.Metadata.GetTypeDefinition(handle: owner.Item2).GetMethods().Where(predicate: candidate => owner.Item1.Metadata.StringComparer.Equals(handle: owner.Item1.Metadata.GetMethodDefinition(handle: candidate).Name, value: name) && (Quiet(name: () => MethodSignature(signature: owner.Item1.Metadata.GetMethodDefinition(handle: candidate).DecodeSignature(genericContext: null, provider: this))) == signature)).Select(selector: candidate => ((Module, MethodDefinitionHandle)?)(owner.Item1, candidate)).FirstOrDefault() : null);
 
-            return ((TypeName(handle: member.Parent, module: module) + "." + name + signature), match);
+            return ((TypeName(handle: member.Parent, module: module) + "." + ((parent is { } declaring) ? declaring.Item1.Canonical(declaring: declaring.Item2, name: name) : name) + signature), match);
         }
         private string Quiet(Func<string> name) {
             var was = m_quiet;
