@@ -933,15 +933,14 @@ public static partial class WorldDefinitionFileSource {
 
         return NormalizeRelativeDocumentName(path: combined);
     }
-    // Each part contributes its 64-bit little-endian length followed by its bytes, in caller order.
     internal static string HashLengthPrefixedParts(IEnumerable<byte[]> parts) {
-        Span<byte> hash = stackalloc byte[32];
+        Span<byte> hash = stackalloc byte[Sha256Digest.SizeInBytes];
 
-        DigestLengthPrefixedParts(parts: parts, hash: hash);
+        HashLengthPrefixedParts(parts, hash);
         return AssetContentHash.FromDigest(digest: hash).ToString();
     }
-    // The whole SHA-256 of the parts HashLengthPrefixedParts pins, into a 32-byte destination.
-    internal static void DigestLengthPrefixedParts(IEnumerable<byte[]> parts, Span<byte> hash) {
+    // Each part contributes its 64-bit little-endian length followed by its bytes, in caller order.
+    internal static void HashLengthPrefixedParts(IEnumerable<byte[]> parts, Span<byte> hash) {
         using var sha = IncrementalHash.CreateHash(hashAlgorithm: HashAlgorithmName.SHA256);
 
         Span<byte> length = stackalloc byte[8];
