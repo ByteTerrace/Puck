@@ -203,8 +203,8 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
         var time = view.Time;
         var timeline = WorldProjection.ComposeTimeline(definition: source, anchors: m_anchors, arena: arena, time: in time);
 
-        var observationsChanged = !SameObservationList(left: held.Observations, right: observations);
-        var spacesChanged = !(((spaces is null) == (held.Spaces is null)) && (spaces ?? []).SequenceEqual(held.Spaces ?? []));
+        var observationsChanged = !Puck.Maths.SequenceEqualityComparer<WorldObservedRow>.Instance.Equals(x: held.Observations, y: observations);
+        var spacesChanged = !Puck.Maths.SequenceEqualityComparer<StateSpace>.Instance.Equals(x: held.Spaces, y: spaces);
         var timelineChanged = !(((timeline is null) == (held.Timeline is null)) && (timeline?.Clocks ?? []).SequenceEqual(held.Timeline?.Clocks ?? []));
 
         if (!observationsChanged && !spacesChanged && !timelineChanged) {
@@ -291,17 +291,6 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
         m_recipientIdentity = identity;
         m_held = nextProjection;
         delivery = Partial(nextProjection, delta, valuesOnly);
-        return true;
-    }
-
-    private static bool SameObservationList(IReadOnlyList<WorldObservedRow>? left, IReadOnlyList<WorldObservedRow>? right) {
-        if (ReferenceEquals(objA: left, objB: right)) { return true; }
-        if ((left is null) || (right is null) || (left.Count != right.Count)) { return false; }
-        for (var index = 0; (index < left.Count); index++) {
-            if (!ReferenceEquals(objA: left[index], objB: right[index]) && (left[index] != right[index])) {
-                return false;
-            }
-        }
         return true;
     }
 
