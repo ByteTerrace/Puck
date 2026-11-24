@@ -300,7 +300,7 @@
             "default": null
           },
           "nodes": {
-            "description": "The relocations judged per tick, at most what the work sheet leaves; absent derives that.",
+            "description": "The relocations judged per tick, at most what the job\u0027s step allowance admits; absent derives that.",
             "type": [
               "integer",
               "null"

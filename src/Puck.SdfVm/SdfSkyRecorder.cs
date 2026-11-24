@@ -296,7 +296,7 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
     // Writes each declared screen the frame's sky samples into the slot's pass set. The image is the one the views pass
     // binds, under the lease it already holds.
     private void BindScreens(SdfFrame frame, in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
-        _ = m_view.Residency.BindScreenImages(view: m_view.View, shown: (frame.Sky.Screens & m_view.Residency.DeclaredScreens), recording: in recording, bindings: m_context.Services.Bindings,
+        _ = m_view.Residency.BindScreenImages(view: m_view.View, shown: tables.SlotsOfSky(sky: frame.Sky), tables: tables, recording: in recording, bindings: m_context.Services.Bindings,
             binding: m_sets.BindingOf(member: SdfWorldPackage.ScreenSources), set: set, filler: tables.SampledFiller.ImageViewHandle,
             bound: m_screens[recording.Slot]);
     }

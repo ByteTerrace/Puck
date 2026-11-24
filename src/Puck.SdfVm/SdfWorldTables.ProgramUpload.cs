@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -45,21 +44,11 @@ public sealed partial class SdfWorldTables {
         } else {
             WriteProgramWords(program: program);
         }
-        // Seed the screen-surface table from the program's declared surfaces (the "program uploaded once" baseline);
-        // any SetScreenSurface call made before the next produced frame patches this same table before it goes out — a
-        // re-upload never resurrects the program's original frame over a live SetScreenSurface write made in between.
-        // Only the words that differ are owed.
-        _ = m_screenSurfaceRegion.Write(
-            bytes: MemoryMarshal.Cast<uint, byte>(span: program.Appearance.ScreenSurfaceWords),
-            offset: 0
-        );
-        // The program's words carry no range; each declared screen keeps the one its last frame sized
-        // (PackScreenReaches). An undeclared screen's row is never addressed.
-        m_screenDeclared = program.Appearance.Outline.Screens;
-        foreach (var screen in BitWords.Members(mask: m_screenDeclared)) { WriteScreenReach(screen: screen); }
-
         m_liveInstanceMaskWordCount = program.InstanceMaskWordCount;
         m_liveProgram = program;
+        // Each resident slot's row takes the new program's declaration of its screen, keeping the range its last frame
+        // sized (PackScreenReaches); a SetScreenSurface made before the next produced frame patches the row again.
+        WriteResidentSurfaces();
         m_wrapSignature = WrapSignatureOf(program: program);
         m_shadowDensitySignature = ShadowDensitySignatureOf(program: program);
         m_requiredDynamicTransformCapacity = program.RequiredDynamicTransformCapacity;
@@ -98,6 +87,6 @@ public sealed partial class SdfWorldTables {
     // field rebuild compares them.
     private static bool SameProgramGeometry(SdfProgram previous, SdfProgram current) =>
         (previous.ShadingWords.Length == current.ShadingWords.Length) &&
-        previous.Appearance.ScreenSurfaceWords.SequenceEqual(other: current.Appearance.ScreenSurfaceWords) &&
+        previous.Appearance.ScreenSurfaces.SequenceEqual(second: current.Appearance.ScreenSurfaces) &&
         (current.SharesField(other: previous) || current.FieldWords.SequenceEqual(other: previous.FieldWords));
 }

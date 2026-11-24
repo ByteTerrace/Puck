@@ -552,7 +552,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
 
         Span<System.Numerics.Vector4> windows = stackalloc System.Numerics.Vector4[SdfWorldPackage.ScreenSourceCount];
 
-        m_owner.ScreenWindowsOf(residency: residency, view: view, windows: windows);
+        m_owner.ScreenWindowsOf(residency: residency, tables: tables, view: view, windows: windows);
         SdfFrameBlock.WriteScreenWindows(block: recording.PassBlock, windows: windows);
         SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
         SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
@@ -685,7 +685,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     private void DecideCompute(in RenderGraphPackageRecording recording, SdfWorldTables tables) {
         var residency = m_view.Residency;
 
-        _ = residency.TakeScreenImages(images: m_screenImages, recording: in recording, shown: residency.DeclaredScreens, view: m_view.View);
+        _ = residency.TakeScreenImages(images: m_screenImages, recording: in recording, shown: tables.ResidentScreens, tables: tables, view: m_view.View);
         switch (m_part) {
             case SdfWorldPackage.Parts.Views: {
                     // The views kernels are the residency's shading selection, pinned for this recording's submission. A

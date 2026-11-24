@@ -59,7 +59,7 @@ public sealed partial class SdfWorldPasses {
         var hash = Fnv1aHash.Create();
 
         foreach (var screen in BitWords.Members(mask: screens)) {
-            if (!Fold(hash: ref hash, images: images, read: view.Residency.ScreenRead(reads: reads, screen: screen, view: view.View))) { return null; }
+            if (!Fold(hash: ref hash, images: images, read: view.Residency.ScreenRead(reads: reads, screen: tables.ScreenOfSlot(slot: screen), view: view.View))) { return null; }
         }
         if (sampled == ExternalReads.Sky) {
             foreach (var binding in (frame.Views[Math.Min(val1: view.View, val2: (frame.Views.Count - 1))].SkyViews ?? [])) {
@@ -80,7 +80,7 @@ public sealed partial class SdfWorldPasses {
     // face the mesh scope's cull keeps for the views pass, whose scope holds the cull its mesh pass draws this frame
     // (MotionOf, asked first).
     private static UInt128 MarkSampled(Entry entry, SdfWorldView view, SdfFrame frame, SdfWorldTables tables, bool sky, bool views) {
-        var screens = (view.Residency.DeclaredScreens & (sky ? frame.Sky.Screens : UInt128.MaxValue));
+        var screens = (sky ? tables.SlotsOfSky(sky: frame.Sky) : tables.ResidentScreens);
 
         if ((views ? entry.DrawnOf(scope: DrawScope.Mesh, tables: tables).Motion : null) is { } faces) {
             foreach (var screen in BitWords.Members(mask: screens)) {
@@ -100,7 +100,7 @@ public sealed partial class SdfWorldPasses {
             MarkSampled(entry: entry, frame: frame, sky: true, tables: tables, view: view, views: false));
 
         foreach (var screen in BitWords.Members(mask: sampled)) {
-            if ((view.Residency.ScreenProducerOf(screen: screen, view: view.View) is { } producer) && !Stands(producer: producer, stands: in stands)) { return false; }
+            if ((view.Residency.ScreenProducerOf(screen: tables.ScreenOfSlot(slot: screen), view: view.View) is { } producer) && !Stands(producer: producer, stands: in stands)) { return false; }
         }
         foreach (var binding in (frame.Views[Math.Min(val1: view.View, val2: (frame.Views.Count - 1))].SkyViews ?? [])) {
             if ((binding.Producer is { } producer) && !Stands(producer: producer, stands: in stands)) { return false; }

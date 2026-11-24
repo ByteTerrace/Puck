@@ -593,7 +593,7 @@ public sealed partial class SdfWorldTables {
     // every scope it lights moves, however often the staging met it.
     internal void NoteEmission(UInt128 screens) {
         if ((screens == UInt128.Zero) || (m_motionScopes.Count == 0)) { return; }
-        foreach (var screen in BitWords.Members(mask: (screens & m_screenDeclared))) {
+        foreach (var screen in BitWords.Members(mask: (screens & m_screenResident))) {
             var box = EmissionBoxOf(screen: screen);
 
             foreach (var scope in m_motionScopes) {

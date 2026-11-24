@@ -38,22 +38,21 @@ bool screenSourceBound(uint screenIndex) {
 uint screenLightLoopBound() {
     return passGroup.screenCount;
 }
+// The slot a screen material's hit shades through (sdfScreenSlot), or SdfNoScreenSlot for the plain sentinel or a screen
+// holding none this frame.
+uint sdfScreenSlotOfMaterial(int material) {
+    return ((material > SDF_SCREEN_MATERIAL) ? sdfScreenSlot(material - SDF_SCREEN_MATERIAL - 1) : SdfNoScreenSlot);
+}
 // Whether a hit on this material shades as a screen: a screen-instance id (above SDF_SCREEN_MATERIAL, from
 // SdfProgramBuilder's screen-surface ScreenSlab overload) whose slot carries a glyph decal, or a source bound this frame
 // and a mapping to draw it from.
 // sampleScreenSurface shades exactly these hits, and the surface pass leaves them without a normal.
 bool sdfScreenSurfaceShades(int material) {
-    if (material <= SDF_SCREEN_MATERIAL) {
-        return false; // the plain sentinel: no declared instance, so no screen table lookup.
-    }
+    // The plain sentinel names no screen, and a screen holding no slot this frame (not resident: out of view, shut, or
+    // past the slots the nearest screens hold) shades through the material-shaded fallback, as one with no source does.
+    uint screenIndex = sdfScreenSlotOfMaterial(material);
 
-    uint screenIndex = (uint)(material - SDF_SCREEN_MATERIAL - 1);
-
-    // An out-of-bounds structured-buffer read is zeroed on Direct3D 12 by spec but only defined under robustBufferAccess
-    // on Vulkan, so the bound makes both backends agree by construction rather than by driver luck. Falling back to the
-    // material-shaded path is the same answer a zeroed entry would produce here (no decal, no bound source), and the host
-    // refuses such an id, so no valid program reaches this branch and no composed pixel moves.
-    if (screenIndex >= SDF_MAX_SCREEN_SURFACES) {
+    if (screenIndex == SdfNoScreenSlot) {
         return false;
     }
 

@@ -10,11 +10,11 @@
 
 float4 sdfSkyPanoramaLayer(SdfSkyPanorama panorama, SdfSkyLayer layer, SdfSkySample sample) {
 #ifdef SDF_SKY_SCREENS
-    if ((panorama.Screen < 0) || (panorama.Screen >= (int)SDF_MAX_SCREEN_SURFACES)) {
+    if (sdfScreenSlot(panorama.Screen) == SdfNoScreenSlot) {
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 
-    uint screen = (uint)panorama.Screen;
+    uint screen = sdfScreenSlot(panorama.Screen);
     ScreenMappingData mapping = worldScreenMapping(screen);
 
     if (mapping.state.x == 0.0) {

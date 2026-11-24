@@ -9,14 +9,15 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldTables {
     /// <summary>Reverts screen slot <paramref name="screenIndex"/> to the image or unbound-glass path (clears its decal
     /// descriptor's gridCols to 0 — the shader's "no decal" gate). A no-op if the slot carried no decal.</summary>
-    /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1).</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
+    /// <param name="screenIndex">The screen's identity, a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>; a
+    /// screen holding no slot this frame (<see cref="SettleScreenSlots"/>) takes no write.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is negative or past <see cref="SdfProgramBuilder.MaxScreenIdentities"/>.</exception>
     public void ClearScreenDecal(int screenIndex) {
-        RequireScreenIndex(screenIndex: screenIndex);
-        ClearDecal(descriptor: screenIndex);
-        if (m_decalRuns[screenIndex].Length > 0) {
-            _ = m_decalPool.Free(start: (ulong)m_decalRuns[screenIndex].Start);
-            m_decalRuns[screenIndex] = default;
+        if (!TryScreenSlot(screen: screenIndex, slot: out var slot)) { return; }
+        ClearDecal(descriptor: slot);
+        if (m_decalRuns[slot].Length > 0) {
+            _ = m_decalPool.Free(start: (ulong)m_decalRuns[slot].Start);
+            m_decalRuns[slot] = default;
         }
     }
     /// <summary>Supplies the glyphs surface text slot <paramref name="slot"/> draws for the next produced frame: the
@@ -72,14 +73,14 @@ public sealed partial class SdfWorldTables {
     // The first cell of the pool run a screen's grid of `cells` cells writes into: the run it holds when that fits,
     // otherwise a new run claimed from the pool after its old one is returned. The pool is the one door that hands out
     // runs, so no two screens' grids share a cell.
-    private int DecalRunOf(int screenIndex, int cells) {
-        ref var run = ref m_decalRuns[screenIndex];
+    private int DecalRunOf(int slot, int cells) {
+        ref var run = ref m_decalRuns[slot];
 
         if (run.Length >= cells) { return run.Start; }
         if (run.Length > 0) { _ = m_decalPool.Free(start: (ulong)run.Start); }
         run = default;
         if (!m_decalPool.TryAllocate(count: (ulong)cells, start: out var start)) {
-            throw new InvalidOperationException(message: $"A decal grid of {cells} cells on screen {screenIndex} finds no free run in the screens' cell pool of {ScreenDecalPoolCells} (largest free {m_decalPool.LargestFree}).");
+            throw new InvalidOperationException(message: $"A decal grid of {cells} cells on screen slot {slot} finds no free run in the screens' cell pool of {ScreenDecalPoolCells} (largest free {m_decalPool.LargestFree}).");
         }
         run = ((int)start, cells);
 
@@ -195,7 +196,8 @@ public sealed partial class SdfWorldTables {
     /// by <see cref="SdfProgramBuilder.ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/>);
     /// a glyph atlas must be uploaded (<see cref="SetGlyphAtlas"/>) for the letters to resolve. Re-set every frame the
     /// text changes; <see cref="ClearScreenDecal"/> reverts the slot to the image or unbound-glass path.</summary>
-    /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1).</param>
+    /// <param name="screenIndex">The screen's identity, a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>; a
+    /// screen holding no slot this frame (<see cref="SettleScreenSlots"/>) takes no write.</param>
     /// <param name="columns">The grid column count (&gt; 0).</param>
     /// <param name="rows">The grid row count (&gt; 0).</param>
     /// <param name="distanceRange">The atlas's SDF distance range in texels (the AA source; 0 = a raw coverage atlas).</param>
@@ -204,7 +206,7 @@ public sealed partial class SdfWorldTables {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/>/<paramref name="columns"/>/<paramref name="rows"/> out of range, or the grid exceeds <see cref="MaxScreenDecalCells"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="cellWords"/> is not <c>rows × columns × 4</c> uints.</exception>
     public void SetScreenDecal(int screenIndex, int columns, int rows, float distanceRange, ReadOnlySpan<uint> cellWords) {
-        RequireScreenIndex(screenIndex: screenIndex);
+        if (!TryScreenSlot(screen: screenIndex, slot: out var slot)) { return; }
 
         if (
             (columns <= 0) ||
@@ -232,10 +234,10 @@ public sealed partial class SdfWorldTables {
             );
         }
 
-        var cellBase = (DecalDescriptorCount + DecalRunOf(screenIndex: screenIndex, cells: cellCount));
+        var cellBase = (DecalDescriptorCount + DecalRunOf(slot: slot, cells: cellCount));
 
         WriteDecal(
-            descriptor: screenIndex,
+            descriptor: slot,
             descriptorWords: [((uint)columns), ((uint)rows), ((uint)cellBase), BitConverter.SingleToUInt32Bits(value: distanceRange)],
             first: cellBase,
             run: cellWords
@@ -245,13 +247,14 @@ public sealed partial class SdfWorldTables {
     /// nits, which scales both its face and the light its GPU reduction casts into the room. A screen whose face is an
     /// opening (<see cref="SdfScreenFace.Opening"/>) shows the luminance of the world beyond it as it is, so it takes one
     /// whatever <paramref name="luminance"/> says. Call it after <see cref="SetScreenMapping"/>, whose face it reads.</summary>
-    /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1, matching a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>).</param>
+    /// <param name="screenIndex">The screen's identity, a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>; a
+    /// screen holding no slot this frame (<see cref="SettleScreenSlots"/>) takes no write.</param>
     /// <param name="luminance">The display's peak luminance, in nits; zero or less, or not finite, shows its default.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..<see cref="MaxScreenSurfaces"/>-1</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is negative or past <see cref="SdfProgramBuilder.MaxScreenIdentities"/>.</exception>
     public void SetScreenLuminance(int screenIndex, float luminance) {
-        RequireScreenIndex(screenIndex: screenIndex);
-        var row = (screenIndex * ScreenMappingStride);
-        var value = ((m_screenFaces[screenIndex] == SdfScreenFace.Opening) ? 1f : ((float.IsFinite(f: luminance) && (luminance > 0f)) ? luminance : SdfScreenEmission.DefaultLuminance));
+        if (!TryScreenSlot(screen: screenIndex, slot: out var slot)) { return; }
+        var row = (slot * ScreenMappingStride);
+        var value = ((m_screenFaces[slot] == SdfScreenFace.Opening) ? 1f : ((float.IsFinite(f: luminance) && (luminance > 0f)) ? luminance : SdfScreenEmission.DefaultLuminance));
 
         _ = m_screenMappingRegion.Write(bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in value)),
             offset: ((row + ScreenBoundOffset) + (sizeof(float) * 2)));
@@ -262,19 +265,19 @@ public sealed partial class SdfWorldTables {
     /// image into the screen-source array from the images its render graph hands it (<see cref="SdfWorldPasses"/>),
     /// rewriting a bound slot's descriptor every frame, since a host's image handle is unique only among live objects. An
     /// unbound screen shades as unbound glass.</summary>
-    /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1, matching a program's declared
-    /// <see cref="SdfScreenSurface.ScreenIndex"/>).</param>
+    /// <param name="screenIndex">The screen's identity, a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>; a
+    /// screen holding no slot this frame (<see cref="SettleScreenSlots"/>) takes no write.</param>
     /// <param name="bound">Whether the screen shows a source.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..<see cref="MaxScreenSurfaces"/>-1</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is negative or past <see cref="SdfProgramBuilder.MaxScreenIdentities"/>.</exception>
     public void SetScreenBound(int screenIndex, bool bound) {
-        RequireScreenIndex(screenIndex: screenIndex);
+        if (!TryScreenSlot(screen: screenIndex, slot: out var slot)) { return; }
 
         var flag = (bound ? 1f : 0f);
 
-        m_screenBound = (bound ? (m_screenBound | BitWords.Bit(index: screenIndex)) : (m_screenBound & ~BitWords.Bit(index: screenIndex)));
+        m_screenBound = (bound ? (m_screenBound | BitWords.Bit(index: slot)) : (m_screenBound & ~BitWords.Bit(index: slot)));
         _ = m_screenMappingRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in flag)),
-            offset: ((screenIndex * ScreenMappingStride) + ScreenBoundOffset)
+            offset: ((slot * ScreenMappingStride) + ScreenBoundOffset)
         );
     }
     /// <summary>Supplies (or clears) the mapping screen <paramref name="screenIndex"/> is drawn from for the next produced
@@ -283,25 +286,26 @@ public sealed partial class SdfWorldTables {
     /// draws the picture through. A screen shades its
     /// bound source only while it has a mapping; with none it shades as unbound glass. A call with the mapping and face
     /// already supplied packs nothing, and the region owes only the words a new mapping changes.</summary>
-    /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1).</param>
+    /// <param name="screenIndex">The screen's identity, a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>; a
+    /// screen holding no slot this frame (<see cref="SettleScreenSlots"/>) takes no write.</param>
     /// <param name="mapping">The screen's surface mapping, or <see langword="null"/> for none.</param>
     /// <param name="face">The screen's face, which decides its luminance. A screen drawing a glyph decal
     /// (<see cref="SetScreenDecal"/>) publishes no mapping and keeps its face, so it shows at its display's luminance.</param>
     /// <param name="treatment">The display treatment the face draws its picture through; read only for a
     /// <see cref="SdfScreenFace.Display"/>.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is negative or past <see cref="SdfProgramBuilder.MaxScreenIdentities"/>.</exception>
     /// <exception cref="InvalidOperationException"><paramref name="mapping"/> is not drawable: its placement is not a
     /// surface, its warp declares no inverse, or its shape is invalid.</exception>
     public void SetScreenMapping(int screenIndex, SourceMapping? mapping, SdfScreenFace face, SdfScreenTreatment treatment = default) {
-        RequireScreenIndex(screenIndex: screenIndex);
+        if (!TryScreenSlot(screen: screenIndex, slot: out var slot)) { return; }
 
         if (
             ReferenceEquals(
-                objA: m_screenMappings[screenIndex],
+                objA: m_screenMappings[slot],
                 objB: mapping
             ) &&
-            (m_screenFaces[screenIndex] == face) &&
-            (m_screenTreatments[screenIndex] == treatment)
+            (m_screenFaces[slot] == face) &&
+            (m_screenTreatments[slot] == treatment)
         ) {
             return;
         }
@@ -350,23 +354,23 @@ public sealed partial class SdfWorldTables {
 
         _ = m_screenMappingRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: floats),
-            offset: (screenIndex * ScreenMappingStride)
+            offset: (slot * ScreenMappingStride)
         );
         _ = m_screenMappingRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in sampler)),
-            offset: ((screenIndex * ScreenMappingStride) + ScreenSamplerOffset)
+            offset: ((slot * ScreenMappingStride) + ScreenSamplerOffset)
         );
         _ = m_screenMappingRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in faceValue)),
-            offset: ((screenIndex * ScreenMappingStride) + ScreenFaceOffset)
+            offset: ((slot * ScreenMappingStride) + ScreenFaceOffset)
         );
         _ = m_screenMappingRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: treatmentFloats),
-            offset: ((screenIndex * ScreenMappingStride) + ScreenTreatmentOffset)
+            offset: ((slot * ScreenMappingStride) + ScreenTreatmentOffset)
         );
-        m_screenMappings[screenIndex] = mapping;
-        m_screenFaces[screenIndex] = face;
-        m_screenTreatments[screenIndex] = treatment;
+        m_screenMappings[slot] = mapping;
+        m_screenFaces[slot] = face;
+        m_screenTreatments[slot] = treatment;
 
         // The face distance one unit of a warped coordinate spans: the reciprocal of its gradient's length, or zero for a
         // warp that collapses the axis.
@@ -379,28 +383,30 @@ public sealed partial class SdfWorldTables {
     /// <summary>Sets the update tier screen <paramref name="screenIndex"/> shows in a tier view
     /// (<see cref="DebugViewModes.ShowsRates"/>) for the next produced frame, which rides its ripple record. Pure host-side
     /// buffer state, so a call that reproduces the code already stored writes nothing.</summary>
-    /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1).</param>
+    /// <param name="screenIndex">The screen's identity, a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>; a
+    /// screen holding no slot this frame (<see cref="SettleScreenSlots"/>) takes no write.</param>
     /// <param name="code">The screen's code; <see cref="SdfUpdateRateCode.None"/> outside a tier view.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is negative or past <see cref="SdfProgramBuilder.MaxScreenIdentities"/>.</exception>
     public void SetScreenRate(int screenIndex, SdfUpdateRateCode code) {
-        RequireScreenIndex(screenIndex: screenIndex);
+        if (!TryScreenSlot(screen: screenIndex, slot: out var slot)) { return; }
 
         var value = ((float)code);
 
-        m_screenRates[screenIndex] = value;
+        m_screenRates[slot] = value;
         _ = m_screenMappingRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in value)),
-            offset: ((screenIndex * ScreenMappingStride) + ScreenRateOffset)
+            offset: ((slot * ScreenMappingStride) + ScreenRateOffset)
         );
     }
     /// <summary>Sets (or clears) the ripple screen <paramref name="screenIndex"/> shows for the next produced frame: the
     /// clock and contacts an opening that opts in refracts its image by. A screen with no ripple shades undistorted.
     /// Pure host-side buffer state, so a call that reproduces the record already stored writes nothing.</summary>
-    /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1).</param>
+    /// <param name="screenIndex">The screen's identity, a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>; a
+    /// screen holding no slot this frame (<see cref="SettleScreenSlots"/>) takes no write.</param>
     /// <param name="ripple">The screen's ripple, or <see langword="null"/> for none.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is negative or past <see cref="SdfProgramBuilder.MaxScreenIdentities"/>.</exception>
     public void SetScreenRipple(int screenIndex, SdfScreenRipple? ripple) {
-        RequireScreenIndex(screenIndex: screenIndex);
+        if (!TryScreenSlot(screen: screenIndex, slot: out var slot)) { return; }
 
         // The first row's x is whether the screen ripples and its y the clock; one row a contact follows (u, v, age,
         // strength). KEEP IN SYNC with ScreenRippleData in frame/sdf-screen-mapping.hlsli.
@@ -408,7 +414,7 @@ public sealed partial class SdfWorldTables {
 
         floats.Clear();
 
-        floats[2] = m_screenRates[screenIndex];
+        floats[2] = m_screenRates[slot];
 
         if (ripple is { } set) {
             floats[0] = 1f;
@@ -421,7 +427,7 @@ public sealed partial class SdfWorldTables {
 
         _ = m_screenMappingRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: floats),
-            offset: ((screenIndex * ScreenMappingStride) + ScreenRippleOffset)
+            offset: ((slot * ScreenMappingStride) + ScreenRippleOffset)
         );
 
         static void Pack(Vector4 contact, Span<float> destination) {
@@ -442,16 +448,17 @@ public sealed partial class SdfWorldTables {
     /// host-side table this call patches needed to become writable per frame. A call that reproduces the entry's
     /// current values (a static screen, or a rig sampled at an unchanged pose) is a no-op — it does not dirty the
     /// upload; the GPU table only re-uploads on an actual change.</summary>
-    /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1, matching a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>).</param>
+    /// <param name="screenIndex">The screen's identity, a program's declared <see cref="SdfScreenSurface.ScreenIndex"/>; a
+    /// screen holding no slot this frame (<see cref="SettleScreenSlots"/>) takes no write.</param>
     /// <param name="origin">The front face's world-space center this frame.</param>
     /// <param name="right">The unit world-space axis the UV's U increases along this frame (need not be pre-normalized —
     /// normalized here, matching <see cref="SdfProgramBuilder.ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/>'s contract).</param>
     /// <param name="up">The unit world-space axis the UV's V increases against this frame (V = 0 at the top; normalized here).</param>
     /// <param name="halfWidth">The half-extent along <paramref name="right"/> this frame.</param>
     /// <param name="halfHeight">The half-extent along <paramref name="up"/> this frame.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside <c>0..<see cref="MaxScreenSurfaces"/>-1</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is negative or past <see cref="SdfProgramBuilder.MaxScreenIdentities"/>.</exception>
     public void SetScreenSurface(int screenIndex, Vector3 origin, Vector3 right, Vector3 up, float halfWidth, float halfHeight) {
-        RequireScreenIndex(screenIndex: screenIndex);
+        if (!TryScreenSlot(screen: screenIndex, slot: out var slot)) { return; }
 
         var unitRight = Vector3.Normalize(value: right);
         var unitUp = Vector3.Normalize(value: up);
@@ -461,12 +468,12 @@ public sealed partial class SdfWorldTables {
 
         floats[0] = unitRight.X; floats[1] = unitRight.Y; floats[2] = unitRight.Z; floats[3] = halfWidth;
         floats[4] = unitUp.X; floats[5] = unitUp.Y; floats[6] = unitUp.Z; floats[7] = halfHeight;
-        floats[8] = origin.X; floats[9] = origin.Y; floats[10] = origin.Z; floats[11] = m_screenReach[screenIndex];
+        floats[8] = origin.X; floats[9] = origin.Y; floats[10] = origin.Z; floats[11] = m_screenReach[slot];
         // The residency polls this every frame via transform providers, often with an unchanged value (a static screen,
         // or a rig sampled at the same pose); the region owes only the words that actually changed.
         _ = m_screenSurfaceRegion.Write(
             bytes: MemoryMarshal.AsBytes(span: floats),
-            offset: (screenIndex * ScreenSurfaceByteLength)
+            offset: (slot * ScreenSurfaceByteLength)
         );
     }
 
@@ -476,17 +483,20 @@ public sealed partial class SdfWorldTables {
     // The decal table as the descriptor band + cell region's words.
     private ReadOnlySpan<uint> DecalWords => MemoryMarshal.Cast<byte, uint>(span: m_decalRegion.Contents);
 
-    /// <summary>Throws if <paramref name="screenIndex"/> falls outside <c>0..<see cref="MaxScreenSurfaces"/>-1</c>.</summary>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
-    private static void RequireScreenIndex(int screenIndex) {
+    // The slot a screen holds this frame (SettleScreenSlots), false for a screen holding none: a write to a screen that is
+    // not resident has nowhere to land and changes nothing, and the screen shades as one with no source.
+    private bool TryScreenSlot(int screen, out int slot) {
         if (
-            (screenIndex < 0) ||
-            (screenIndex >= MaxScreenSurfaces)
+            (screen < 0) ||
+            (screen >= SdfProgramBuilder.MaxScreenIdentities)
         ) {
             throw new ArgumentOutOfRangeException(
-                paramName: nameof(screenIndex),
-                message: $"A screen index must be 0..{(MaxScreenSurfaces - 1)}."
+                paramName: nameof(screen),
+                message: $"A screen index must be 0..{(SdfProgramBuilder.MaxScreenIdentities - 1)}."
             );
         }
+        slot = SlotOfScreen(screen: screen);
+
+        return (slot >= 0);
     }
 }

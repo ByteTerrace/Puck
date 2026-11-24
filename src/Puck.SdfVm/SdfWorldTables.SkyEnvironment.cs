@@ -159,21 +159,23 @@ public sealed partial class SdfWorldTables {
                 ref var layer = ref layers[index];
 
                 if ((layer.Kind != SdfSkyLayerKind.Panorama) || (layer.Opacity <= 0f) || !SdfSkyEnvironment.IsLit(layer: layer)) { continue; }
-                var screen = SdfSky.PayloadOf<SdfSkyPanorama>(layer: ref layer).Screen;
+                var slot = m_tables.SlotOfScreen(screen: SdfSky.PayloadOf<SdfSkyPanorama>(layer: ref layer).Screen);
 
-                if (((uint)screen) < MaxScreenSurfaces) { m_watch.Read(screen: screen); }
+                if (slot >= 0) { m_watch.Read(screen: slot); }
             }
-            foreach (var screen in BitWords.Members(mask: Screens)) {
+            foreach (var slot in BitWords.Members(mask: Screens)) {
+                var screen = m_tables.m_screenOfSlot[slot];
+
                 // A residency projects one canonical panorama, independent of the consuming camera's fit.
                 if ((residency.ScreenSources is { } sources) && sources.Screens.Contains(value: screen) &&
                     (residency.ScreenRead(reads: reads, screen: screen, view: view) is var read and >= 0) && (reads is not null)) {
                     var input = reads[read];
 
                     if (input.TryRead(latch: in latch, read: out var resolved) && (resolved.ImageViewHandle != 0)) {
-                        m_watch.Observe(publication: resolved.Publication, screen: screen, tainted: input.Label.External);
+                        m_watch.Observe(publication: resolved.Publication, screen: slot, tainted: input.Label.External);
                         if (!resolved.Publication.IsPublished()) { known = false; }
                     } else {
-                        m_watch.Observe(publication: default, screen: screen, tainted: false);
+                        m_watch.Observe(publication: default, screen: slot, tainted: false);
                     }
                 }
             }

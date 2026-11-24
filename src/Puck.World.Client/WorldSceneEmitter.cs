@@ -78,7 +78,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private int m_censusRevision;
     // The screens a body carried at the last revision watch, one bit per screen index, and the counter that moves when
     // the set does: a carried screen draws no slab of its own, so picking it up or putting it down rebuilds the program.
-    private UInt128 m_carriedScreens;
+    private ulong[] m_carriedScreens = [];
+    // The words CarriedScreens fills, which become m_carriedScreens when they differ.
+    private ulong[] m_carriedScratch = [];
     private int m_carriedRevision;
     private bool m_carriedEvaluated;
     private int m_carriedDefRevision = int.MinValue;
@@ -454,8 +456,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
             var carried = CarriedScreens();
 
-            if (carried != m_carriedScreens) {
-                m_carriedScreens = carried;
+            if (!carried.AsSpan().SequenceEqual(other: m_carriedScreens)) {
+                (m_carriedScreens, m_carriedScratch) = (carried, m_carriedScreens);
                 m_carriedRevision++;
             }
         }
@@ -472,7 +474,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         for (var row = 0; (row < screens.Count); row++) {
             var screen = screens[row];
 
-            if ((screen.Carry is not null) && (((uint)screen.Index) < SdfProgramBuilder.MaxScreenSurfaces)) {
+            if (screen.Carry is not null) {
                 count++;
             }
         }
@@ -489,34 +491,35 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         for (var row = 0; (row < screens.Count); row++) {
             var screen = screens[row];
 
-            if ((screen.Carry is not null) && (((uint)screen.Index) < SdfProgramBuilder.MaxScreenSurfaces)) {
+            if (screen.Carry is not null) {
                 carryable[write++] = screen;
             }
         }
 
         m_carryableScreens = carryable;
     }
-    // The screens a body carries this frame, one bit per screen index (WorldCreationInstances.IsCarriedScreen).
-    private UInt128 CarriedScreens() {
-        var carried = UInt128.Zero;
+    // The carryable screens a body carries this frame, one bit per carryable row (WorldCreationInstances.IsCarriedScreen),
+    // a word of bits each 64 rows (BitWords).
+    private ulong[] CarriedScreens() {
         var screens = m_carryableScreens;
+        var words = BitWords.WordsFor(members: screens.Length);
+        var carried = ((m_carriedScratch.Length == words) ? m_carriedScratch : new ulong[words]);
 
+        Array.Clear(array: carried);
         for (var row = 0; (row < screens.Length); row++) {
-            var screen = screens[row];
-
             if (m_animator.IsCarriedScreen(
                 client: m_client,
-                screen: screen
+                screen: screens[row]
             )) {
-                carried |= BitWords.Bit(index: screen.Index);
+                BitWords.Add(words: carried, index: row);
             }
         }
-
         return carried;
     }
     // A screen the latest revision found carried, at the frame its carrier holds it now; null for any other, which draws
     // its own slab.
-    private WorldScreen? CarriedRow(WorldScreen screen) => ((BitWords.Contains(mask: m_carriedScreens, index: screen.Index) &&
+    private WorldScreen? CarriedRow(WorldScreen screen) => (((Array.IndexOf(array: m_carryableScreens, value: screen) is var row and >= 0) &&
+        BitWords.Contains(words: m_carriedScreens, index: row) &&
         m_animator.TryCarriedScreen(
             carried: out var held,
             client: m_client,

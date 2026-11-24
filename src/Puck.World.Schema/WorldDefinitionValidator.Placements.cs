@@ -186,7 +186,7 @@ public static partial class WorldDefinitionValidator {
         RequireIntRange(
             value: authoring.AuthoringHeadroomScreens,
             min: 0,
-            max: SdfProgramBuilder.MaxScreenSurfaces,
+            max: SdfProgramBuilder.MaxScreenIdentities,
             name: "placements.policy.authoringHeadroomScreens",
             errors: errors
         );

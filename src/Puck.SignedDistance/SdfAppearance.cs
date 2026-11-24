@@ -36,9 +36,6 @@ public sealed class SdfAppearance {
     public const int FlowCoverageLaneShift = 16;
 
     private const int WordsPerVector = 4;
-    // Each packed screen-surface entry's uvec4 stride: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN
-    // SYNC with frame/sdf-environment.hlsli's ScreenSurfaceData).
-    private const int ScreenSurfaceVectorsPerEntry = 3;
     // The screen frame's admission tolerances. The skew bound is a cosine (~0.057 degrees); the unit bound admits the
     // rounding a quaternion-derived or fixed-point-derived axis carries. KEEP IN SYNC with SdfProgramBuilder's
     // BasisSkewTolerance — the builder refuses the same frame one layer earlier, naming the caller's argument.
@@ -47,7 +44,8 @@ public sealed class SdfAppearance {
 
     private readonly SdfMaterial[] m_materials;
     private readonly SdfScreenSurface[] m_screenSurfaces;
-    private readonly uint[] m_screenSurfaceWords;
+    // The declared surfaces ordered by index, which the declared indices (the outline's) parallel.
+    private readonly SdfScreenSurface[] m_screenSurfacesByIndex;
     private readonly SdfShadeProgram[] m_shadingPrograms;
     private readonly SdfShadeReads m_shadeReadsAll;
 
@@ -89,8 +87,8 @@ public sealed class SdfAppearance {
     /// <param name="materials">The material palette, in material-identifier order.</param>
     /// <param name="screenSurfaces">The screen-surface frames screen materials name; none when <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="materials"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The palette reaches the screen sentinels, more than
-    /// <see cref="SdfProgramBuilder.MaxScreenSurfaces"/> screen surfaces are declared, or two claim one index.</exception>
+    /// <exception cref="ArgumentException">The palette reaches the screen sentinels, or two screen surfaces claim one
+    /// index.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A material component is out of its domain, or a screen surface's
     /// index, origin, axes or half-extents are.</exception>
     public SdfAppearance(IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null) {
@@ -108,16 +106,15 @@ public sealed class SdfAppearance {
                 paramName: nameof(materials)
             );
         }
-        if (m_screenSurfaces.Length > SdfProgramBuilder.MaxScreenSurfaces) {
-            throw new ArgumentException(
-                message: $"A program may declare at most {SdfProgramBuilder.MaxScreenSurfaces} screen surfaces; got {m_screenSurfaces.Length}.",
-                paramName: nameof(screenSurfaces)
-            );
-        }
-
         RequirePackedMaterials(materials: m_materials, paramName: nameof(materials));
 
-        var screens = RequireScreenSurfaces(paramName: nameof(screenSurfaces));
+        m_screenSurfacesByIndex = RequireScreenSurfaces(paramName: nameof(screenSurfaces));
+
+        var screens = new int[m_screenSurfacesByIndex.Length];
+
+        for (var index = 0; (index < screens.Length); index++) {
+            screens[index] = m_screenSurfacesByIndex[index].ScreenIndex;
+        }
         var glass = new bool[m_materials.Length];
         var shadeCount = 0;
         var shadeReads = SdfShadeReads.None;
@@ -149,20 +146,25 @@ public sealed class SdfAppearance {
         ScreenSurfaces = Array.AsReadOnly(array: m_screenSurfaces);
         ShadingPrograms = Array.AsReadOnly(array: m_shadingPrograms);
         Outline = new SdfAppearanceOutline(glass: glass, screens: screens, vectors: VectorsOf(materials: m_materials));
-        m_screenSurfaceWords = PackScreenSurfaces();
     }
 
     /// <summary>Gets the immutable material values, in material-identifier order. Nested reveal and paint lists are
     /// snapshotted too; a later caller edit cannot change CPU reference sources.</summary>
     public IReadOnlyList<SdfMaterial> Materials { get; }
-    /// <summary>Gets the screen surfaces declared, in declaration order — the source <see cref="ScreenSurfaceWords"/> is
-    /// packed from (at each surface's <see cref="SdfScreenSurface.ScreenIndex"/> slot, not its position in this list).
-    /// Empty for none.</summary>
+    /// <summary>Gets the screen surfaces declared, in declaration order. Empty for none.</summary>
     public IReadOnlyList<SdfScreenSurface> ScreenSurfaces { get; }
-    /// <summary>Gets the packed screen-surface side table: always <see cref="SdfProgramBuilder.MaxScreenSurfaces"/>
-    /// 3-uvec4 (48-byte) entries, each at its declared screen index's slot; an undeclared slot is all-zero and never
-    /// addressed by a program-consistent material id.</summary>
-    public ReadOnlySpan<uint> ScreenSurfaceWords => m_screenSurfaceWords;
+
+    /// <summary>Returns the surface a screen index declares, which a residency writes into the slot it claims for the
+    /// screen.</summary>
+    /// <param name="screenIndex">The screen's identity.</param>
+    /// <param name="surface">The declared surface, or <see langword="default"/> when none declares the index.</param>
+    /// <returns><see langword="true"/> when a surface declares the index.</returns>
+    public bool TryGetScreenSurface(int screenIndex, out SdfScreenSurface surface) {
+        var position = Outline.Screens.BinarySearch(screenIndex);
+
+        surface = ((position >= 0) ? m_screenSurfacesByIndex[position] : default);
+        return (position >= 0);
+    }
     /// <summary>Gets what a field may know of this appearance (<see cref="SdfAppearanceOutline"/>).</summary>
     public SdfAppearanceOutline Outline { get; }
     /// <summary>Gets the aggregate authored-input reads, derived from admitted programs.</summary>
@@ -268,29 +270,27 @@ public sealed class SdfAppearance {
             }
         }
     }
-    // Refuses a screen surface the shader cannot project onto, or two claiming one index, and returns the declared
-    // indices as a mask.
-    private UInt128 RequireScreenSurfaces(string paramName) {
-        var declared = UInt128.Zero;
+    // Refuses a screen surface the shader cannot project onto, or two claiming one index, and returns the surfaces
+    // ordered by index.
+    private SdfScreenSurface[] RequireScreenSurfaces(string paramName) {
+        var ordered = m_screenSurfaces.ToArray();
 
-        foreach (var surface in m_screenSurfaces) {
-            if ((surface.ScreenIndex < 0) || (surface.ScreenIndex >= SdfProgramBuilder.MaxScreenSurfaces)) {
+        Array.Sort(array: ordered, comparison: static (left, right) => left.ScreenIndex.CompareTo(value: right.ScreenIndex));
+        for (var index = 0; (index < ordered.Length); index++) {
+            var surface = ordered[index];
+
+            if ((surface.ScreenIndex < 0) || (surface.ScreenIndex >= SdfProgramBuilder.MaxScreenIdentities)) {
                 throw new ArgumentOutOfRangeException(
                     paramName: paramName,
-                    message: $"A screen index must be 0..{(SdfProgramBuilder.MaxScreenSurfaces - 1)}; got {surface.ScreenIndex}."
+                    message: $"A screen index must be 0..{(SdfProgramBuilder.MaxScreenIdentities - 1)}; got {surface.ScreenIndex}."
                 );
             }
-
-            var bit = BitWords.Bit(index: surface.ScreenIndex);
-
-            if ((declared & bit) != UInt128.Zero) {
+            if ((index > 0) && (ordered[(index - 1)].ScreenIndex == surface.ScreenIndex)) {
                 throw new ArgumentException(
-                    message: $"Two screen surfaces declare index {surface.ScreenIndex}. The packed table is indexed BY screen index, so one would silently overwrite the other.",
+                    message: $"Two screen surfaces declare index {surface.ScreenIndex}. The screen tables are keyed by index, so one would silently overwrite the other.",
                     paramName: paramName
                 );
             }
-
-            declared |= bit;
 
             if (!VectorFunctions.IsFinite(vector: surface.Origin)) {
                 throw new ArgumentOutOfRangeException(
@@ -327,22 +327,7 @@ public sealed class SdfAppearance {
             }
         }
 
-        return declared;
-    }
-    // ALWAYS the full MaxScreenSurfaces capacity, indexed by ScreenIndex (not declaration order): the shader resolves a
-    // hit's surface with a direct index, no search, so an undeclared slot's all-zero entry is simply never addressed.
-    private uint[] PackScreenSurfaces() {
-        var words = new uint[((SdfProgramBuilder.MaxScreenSurfaces * ScreenSurfaceVectorsPerEntry) * WordsPerVector)];
-
-        foreach (var surface in m_screenSurfaces) {
-            var entryBase = ((surface.ScreenIndex * ScreenSurfaceVectorsPerEntry) * WordsPerVector);
-
-            SdfProgram.WriteVector4(words: words, baseIndex: entryBase, x: surface.Right.X, y: surface.Right.Y, z: surface.Right.Z, w: surface.HalfWidth);
-            SdfProgram.WriteVector4(words: words, baseIndex: (entryBase + WordsPerVector), x: surface.Up.X, y: surface.Up.Y, z: surface.Up.Z, w: surface.HalfHeight);
-            SdfProgram.WriteVector4(words: words, baseIndex: (entryBase + (2 * WordsPerVector)), x: surface.Origin.X, y: surface.Origin.Y, z: surface.Origin.Z, w: 0f);
-        }
-
-        return words;
+        return ordered;
     }
 
     // MaterialVectorsPerEntry float4 rows. KEEP IN SYNC with sdfMaterialLoad in shade/sdf-material.hlsli.
@@ -554,9 +539,11 @@ public sealed class SdfAppearance {
 public readonly struct SdfAppearanceOutline {
     private readonly bool[]? m_glass;
 
-    internal SdfAppearanceOutline(bool[] glass, UInt128 screens, int vectors) {
+    private readonly int[]? m_screens;
+
+    internal SdfAppearanceOutline(bool[] glass, int[] screens, int vectors) {
         m_glass = glass;
-        Screens = screens;
+        m_screens = screens;
         Vectors = vectors;
     }
 
@@ -564,8 +551,9 @@ public readonly struct SdfAppearanceOutline {
     public int Materials => (m_glass?.Length ?? 0);
     /// <summary>Gets the vectors the appearance section spans (<see cref="SdfAppearance.VectorsOf"/>).</summary>
     public int Vectors { get; }
-    /// <summary>Gets the declared screen indices, a bit an index (<see cref="BitWords"/>).</summary>
-    public UInt128 Screens { get; }
+    /// <summary>Gets the declared screen indices, ascending: any number of screens, each an identity below
+    /// <see cref="SdfProgramBuilder.MaxScreenIdentities"/>.</summary>
+    public ReadOnlySpan<int> Screens => m_screens;
 
     /// <summary>Returns whether a material id names a glass material; a screen sentinel or an id past the palette is
     /// opaque.</summary>
@@ -575,11 +563,11 @@ public readonly struct SdfAppearanceOutline {
     /// <summary>Returns whether a screen index is declared.</summary>
     /// <param name="screenIndex">The screen index.</param>
     /// <returns><see langword="true"/> when a screen surface declares it.</returns>
-    public bool DeclaresScreen(int screenIndex) => BitWords.Contains(mask: Screens, index: screenIndex);
+    public bool DeclaresScreen(int screenIndex) => (Screens.BinarySearch(screenIndex) >= 0);
     /// <summary>Returns whether another outline tells a field everything this one does alike: the same glass materials in
     /// the same palette length, the same declared screens and the same appearance section size.</summary>
     /// <param name="other">The other outline.</param>
     /// <returns><see langword="true"/> when the two are interchangeable to a field derivation.</returns>
     public bool Matches(in SdfAppearanceOutline other) =>
-        ((Screens == other.Screens) && (Vectors == other.Vectors) && (m_glass ?? []).AsSpan().SequenceEqual(other: (other.m_glass ?? [])));
+        (Screens.SequenceEqual(other: other.Screens) && (Vectors == other.Vectors) && (m_glass ?? []).AsSpan().SequenceEqual(other: (other.m_glass ?? [])));
 }

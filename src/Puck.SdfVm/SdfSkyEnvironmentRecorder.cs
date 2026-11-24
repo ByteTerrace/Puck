@@ -63,7 +63,7 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
 
         tables.BindSkyEnvironment(set: set, bindings: m_context.Services.Bindings);
         var emissionMask = m_built.Residency.BindScreenImages(view: m_built.View,
-            shown: (Reduces ? UInt128.Zero : (Screens ? tables.ScreenEmissionScreens : tables.SkyEnvironmentScreens)), recording: in recording,
+            shown: (Reduces ? UInt128.Zero : (Screens ? tables.ScreenEmissionScreens : tables.SkyEnvironmentScreens)), tables: tables, recording: in recording,
             bindings: m_context.Services.Bindings, binding: m_sets.BindingOf(member: SdfWorldPackage.ScreenSources), set: set,
             filler: tables.SampledFiller.ImageViewHandle, bound: default);
         SdfWorldInterfaces.EnvironmentParameters.WriteExtent(block: recording.PassBlock, width: SdfSkyEnvironment.Size, height: SdfSkyEnvironment.Size);
