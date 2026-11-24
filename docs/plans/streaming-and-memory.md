@@ -1851,41 +1851,82 @@ Built with it:
    neither follows the other's tiers, since the board leads only a second
    scene of the world the presentation draws (`SdfFrameContent.DemandWorld`).
    Check: `world.residency` lists one residency a content.
-3. **A window of the world the presentation draws.** The moon's session
-   screen of the valley (`routed$session$18$0$shared`, 7,163 groups) is a
-   shared scene of the boot world (`WorldSharedScene.Presented`), made at the
-   crossing, when a window in the moon's scene first shows it. It is a
-   second scene because its session is handed less than the whole scene: the
-   World narrates `[world.session: session:0:1 is handed less than its
-   world's whole scene (row 'sheddingCards', which its scene reads, withholds
-   from it)]`, the card faces of the shedding table
-   (`worlds/debug/shedding.puck`), which a reader not allowed to read a card
-   is dealt as its back. The world's own residency draws the authority's
-   whole state (a session draws from it only while it is handed everything,
-   `WorldInstanceHost.TryWindowEndpoint`), and the world's far product is
-   built from that residency's static draws (`SdfFarProduct.Take`), which
-   include the dealt cards, since a dealt card is a static placement. Either
-   source would show this viewer faces its session is not handed, so neither
-   can stand in for the window as the code stands. A window drawing its
-   world from the residency or far product that holds it needs the content
-   that reads a withheld row (a placement dealt from it, a creation whose rig
-   reads it, `WorldSceneInputs.Rows`) to be replaced by the session's own,
-   and two things are missing for that: a residency's draws name no
-   placement (a static bake group merges instances of several placements, and
-   `SdfMeshDraw.ObjectKey` names only a copy or a group's first instance), so
-   nothing can leave out the withheld content; and a residency renders one
-   frame for all its views, so a view of it cannot swap some instances for an
-   overlay's. The steps, each checked by `world.residency` showing the
-   shared scene at its overlay's groups alone and a capture of the window
-   showing backs where its session is dealt backs: attribute every draw to
-   the placements it merges, and keep a placement that reads a scene row out
-   of another placement's group; let the far product leave out every draw that
-   reads state, so a product is a function of content alone; draw the window
-   as that product while its glass is small, with an overlay emitter scoped to
-   the session's state-reading placements and its bodies
-   (`WorldSessionSceneEmitter`'s prototype scope, widened to keep avatars).
 
 **Settled with it.**
+
+- **A window of the world the presentation draws** (the former step 3). The
+  moon's session screens of the valley, the gallery's self paintings and the
+  routed worlds' paintings back to the valley each drew a second full
+  residency of the debug world (`routed$session$18$0$shared`, 7,163 to 7,343
+  groups), because the sessions are handed less than the whole scene: the
+  shedding table's card faces (`worlds/debug/shedding.puck`), which a reader
+  not allowed to read a card is dealt as a back. The lead's ruling kept
+  disclosure whole and funded the two gaps, so a window now draws its world
+  from the one residency that holds it.
+
+  **Where it stands.** The authority proves a second thing of each stream
+  (`WorldSceneProof.SharesContent`): it reads whole every row a scene reads
+  by name (`WorldRecipientView.ReadsSceneInputsWhole`) and its bodies are not
+  redacted, so its scene differs from a whole reader's only in the placements
+  the disclosure can vary (`WorldPlacementAudiences.Varies`: rows under a
+  deal template whose dealt or variant row can withhold, a card back dealt in
+  a withheld cell's place, a responding row whose condition reads such a
+  row). The run of such proofs continues across the identity changes every
+  deal makes (`WorldSceneProof.ContentFirst`), and the endpoint door admits
+  it (`WorldInstanceHost.TryWindowEndpoint`). The screen binder then films
+  the session as a view of the World's own residency with an audience of its
+  own (`SdfViewSnapshot.Audience`, allocated per session mirror in
+  `WorldScreenBinder.SettleSessionRoutes`), and hands the World's scene an
+  overlay for it (`WorldAudienceOverlay`): the session's own varying
+  placements, as its delivery deals them, which the rigid catalog places as
+  copies tagged for that audience alone (`WorldRigidAssets.ReconcileStatic`).
+  The presentation's own varying placements are tagged for its own viewers.
+
+  **The invariant and its door.** No view's draw list holds a draw disclosed
+  to another audience. Each draw carries its tag in its record's selection
+  flags (`SdfMeshDraw.Audience`, `SdfMeshRecord.AudienceShift`); each raster
+  pass's selection is staged with its view's audience
+  (`SdfMeshOcclusion.Stage`, whose audience argument has no default), and
+  the selection kernel filters a draw tagged for another audience as it
+  filters a motion filter's (`passes/sdf-mesh-occlusion.comp.hlsl`). A
+  tagged placement never merges into a bake group, since only a rigid copy
+  carries a tag: the binder homes a session only while every varying
+  placement of the World's document and of the session's delivery is a rigid
+  copy (`WorldRigidAssets.AudienceRefusal`), and narrates why it does not
+  otherwise. A tagged draw is never static (`SdfMeshDraw.IsStatic`), so the
+  irradiance volume, the distant shadow map and the far product
+  (`SdfFarProduct.Take`) hold nothing one viewer is withheld; the far product
+  is a function of disclosure-neutral content and needs no mask. An audience
+  is handed to another session only once no copy still carries it
+  (`WorldRigidAssets.CarriesAudience`).
+
+  **Where the guarantee stops.** The residency's shadow cascades draw for its
+  own viewers, so a session's view shows the shadows of the presentation's
+  own varying placements (a card's silhouette, never its face). An overlay's
+  copy brings no light or medium; the presentation's own copy lights every
+  view. A mirror or portal view the residency derives inside a home view
+  renders for the residency's own viewers. Overlays are kept per session mirror,
+  so sessions of one disclosure each place their own copies of the same
+  rows.
+
+  **Evidence.** **[capture]** On the RTX 2060, Direct3D 12, a self painting
+  of the gallery pointed live at a frame facing the shedding table: the
+  session's window shows the racks as backs where the direct view of the
+  same racks shows faces, from the south and from the north.
+  **[reading]** `world.benchmark run debug loops 2` then `world.benchmark
+  run moon` in one warm World each, the base head against this one, under
+  the `rtx2060` table at 1920 by 1080: `world.residency` listed
+  `routed$session$18$0$shared` at 7,343 groups in every base chapter from
+  the garden painting on and at the moon, and no such residency on this
+  head. The moon crossing's worst produce iterations fell from 555, 172 and
+  215 ms to 380 and 133 ms, and the return's from 878 and 560 ms to 183 and
+  158 ms; what remains is the moon scene's own capture and pack and a
+  collection. At the routes' ends the process held private bytes of 13.0 to
+  13.5 GB against 13.6 to 15.7 GB and a managed heap of 4.1 to 4.4 GB
+  against 4.7 to 6.3 GB; the working set was 8.4 to 8.6 GB against 8.3 to
+  8.9 GB. The device pool's peak did not fall (4.37 GB against 4.29 GB): the
+  shared scene parked while no window showed it, so its device storage was
+  never what set the peak. Vulkan's reading is in the commit that lands this.
 
 - **One grouping a content** (the former step 2). The census above found the
   programs group alike, and the board keyed by shape alone now leads them:
@@ -1977,9 +2018,14 @@ Built with it:
 **Closes.** A board that led a second scene by each copy's place; a trace
 scene sized by view detail; a relayout holding two hit caches and two
 feedback tables; shadow memory fixed for every device; the moon's sky layer
-resident once a session screen.
-**Leaves open.** The two steps above, and the display-sized storage of an
-infinity layer's views (`sky/sdf.world$visibility`, 66 MB at 1920 by 1080).
+resident once a session screen; a second residency of the presented world for
+every window whose session is withheld part of its placements.
+**Leaves open.** The two steps above; the display-sized storage of an
+infinity layer's views (`sky/sdf.world$visibility`, 66 MB at 1920 by 1080);
+one overlay for every session of one disclosure, keyed by what it is handed
+rather than by its mirror; and a window of a world other than the presented
+one (a routed scene) whose session is withheld part of its placements, which
+still draws a residency of its own.
 **Strongest case against.** B shares only what is keyed alike, so a content
 whose programs group differently pays twice. Sharing by content
 key is still the mechanism A needs, and every byte it keys alike is a byte A

@@ -23,10 +23,7 @@ public sealed partial class WorldRigidAssets {
     // (WorldPlacementStamp keeps one per row while its frame and inputs stand) places the same copies.
     // A static row as the roster meets it: the row instance, compared by reference, and the overlay's view audience it is
     // placed for, zero for the presentation's own.
-    private readonly record struct RowKey(WorldPlacement Placement, byte Overlay) {
-        public bool Equals(RowKey other) => (ReferenceEquals(objA: Placement, objB: other.Placement) && (Overlay == other.Overlay));
-        public override int GetHashCode() => HashCode.Combine(value1: System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o: Placement), value2: Overlay);
-    }
+    private readonly record struct RowKey(Puck.Abstractions.Collections.ByReference<WorldPlacement> Placement, byte Overlay);
     private sealed class StaticRow(WorldPrototype creation, string? refusal, byte audience) {
         public readonly WorldPrototype Creation = creation;
         public readonly string? Refusal = refusal;
