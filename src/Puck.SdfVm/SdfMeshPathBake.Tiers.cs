@@ -381,7 +381,7 @@ public sealed partial class SdfMeshPathBake {
             // The tier a frame draws is the replaced group's while a replacement is still to land.
             var resident = (group.Replaces ?? group).Tier;
             var leadTier = 0;
-            var led = ((board is not null) && board.TryGet(place: SdfMeshLibrary.TierBoard.PlaceOf(center: SdfMeshDemand.WorldBoxOf(group: group, transforms: frame.DynamicTransforms).Center), shape: group.Shape, tier: out leadTier));
+            var led = ((board is not null) && board.TryGet(place: SdfMeshLibrary.TierBoard.PlaceOf(center: SdfMeshDemand.PlannedCenterOf(group: group, transforms: frame.DynamicTransforms)), shape: group.Shape, tier: out leadTier));
 
             if (led) { demanded = leadTier; }
 
@@ -629,7 +629,7 @@ public sealed partial class SdfMeshPathBake {
                 if (group.HasDemandBox) { Attend(group: group); }
                 // What the board leads, as world.residency reads it: the groups the world's own residency draws, those it
                 // draws at another tier than this bake does now, and the groups and bytes it does not draw at all.
-                if (board.TryGet(place: SdfMeshLibrary.TierBoard.PlaceOf(center: SdfMeshDemand.WorldBoxOf(group: group, transforms: frame.DynamicTransforms).Center), shape: group.Shape, tier: out var tier)) {
+                if (board.TryGet(place: SdfMeshLibrary.TierBoard.PlaceOf(center: SdfMeshDemand.PlannedCenterOf(group: group, transforms: frame.DynamicTransforms)), shape: group.Shape, tier: out var tier)) {
                     led++;
                     if (tier != (group.Replaces ?? group).Tier) { apart++; }
                 } else {
@@ -651,7 +651,7 @@ public sealed partial class SdfMeshPathBake {
         Library.TiersOf(world: world).Publish(state: (Groups: m_groups, Transforms: frame.DynamicTransforms), list: static (state, add) => {
             foreach (var group in state.Groups) {
                 if (group.Retired || !group.Listed) { continue; }
-                add(arg1: group.Shape, arg2: SdfMeshLibrary.TierBoard.PlaceOf(center: SdfMeshDemand.WorldBoxOf(group: group, transforms: state.Transforms).Center), arg3: (group.Replaces ?? group).Tier);
+                add(arg1: group.Shape, arg2: SdfMeshLibrary.TierBoard.PlaceOf(center: SdfMeshDemand.PlannedCenterOf(group: group, transforms: state.Transforms)), arg3: (group.Replaces ?? group).Tier);
             }
         });
     }
