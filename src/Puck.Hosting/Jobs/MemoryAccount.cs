@@ -92,7 +92,10 @@ public readonly record struct MemoryReading(long Live, long Reserved, long Cache
 /// The rows are disjoint and are the only figures that add. Every charge names the row its storage lies in
 /// (<see cref="MemoryBacking"/>), and each row prints its residual, what it holds beyond the parts its owners name. A
 /// device family (<see cref="DeviceOwners"/>) names part of its segment's row and adds nothing; the measured rows are
-/// recorded samples (<see cref="Measure"/>), and nothing here calls the collector, the allocator or the driver.
+/// recorded samples (<see cref="Measure"/>), and no reading calls the collector, the allocator or the driver. The one
+/// place the account calls the collector is a reclaim (<see cref="Reclaims"/>): authoring work the machine's room
+/// refuses makes the process give back what it holds and no longer uses before it is refused, since that memory is
+/// the process's own and reads as memory the machine lacks until it is returned.
 /// </para>
 /// </summary>
 public sealed class MemoryAccount {
@@ -201,9 +204,13 @@ public sealed class MemoryAccount {
     /// <see cref="Stopwatch.GetTimestamp"/>.</param>
     /// <param name="lowMemorySignaled">Reads whether the system says its memory is running low, beside each free-memory
     /// reading; <see langword="null"/> reads <see cref="HostMemory.LowMemorySignaled"/>.</param>
-    public MemoryAccount(Func<long?>? availablePhysicalBytes = null, long? installedPhysicalBytes = null, Func<long>? clock = null, Func<bool>? lowMemorySignaled = null) {
+    /// <param name="reclaim">Gives back the memory the runtime holds and no longer uses, when authoring work finds the
+    /// machine without room (<see cref="Reclaims"/>); <see langword="null"/> runs a blocking, compacting collection that
+    /// decommits what it frees.</param>
+    public MemoryAccount(Func<long?>? availablePhysicalBytes = null, long? installedPhysicalBytes = null, Func<long>? clock = null, Func<bool>? lowMemorySignaled = null, Action? reclaim = null) {
         var installed = (installedPhysicalBytes ?? (HostMemory.InstalledPhysicalBytes() ?? GC.GetGCMemoryInfo().TotalAvailableMemoryBytes));
 
+        m_reclaim = (reclaim ?? (static () => GC.Collect(generation: GC.MaxGeneration, mode: GCCollectionMode.Aggressive, blocking: true, compacting: true)));
         m_clock = (clock ?? Stopwatch.GetTimestamp);
         m_readAvailable = (availablePhysicalBytes ?? HostMemory.AdmissibleBytes);
         m_readLowMemory = (lowMemorySignaled ?? HostMemory.LowMemorySignaled);
@@ -230,8 +237,61 @@ public sealed class MemoryAccount {
     /// (<see cref="Owner.TryReserveWithin"/>): a twentieth of a second.</summary>
     public static TimeSpan RoomSlice { get; } = TimeSpan.FromMilliseconds(milliseconds: 50);
 
+    /// <summary>Gets the shortest time between two reclaims (<see cref="Reclaims"/>), in <see cref="Stopwatch"/> ticks:
+    /// two seconds, so a machine that is short for another program's sake costs a bake one collection in that time and
+    /// no more.</summary>
+    public static long ReclaimInterval { get; } = (2L * Stopwatch.Frequency);
+    /// <summary>The managed bytes the process must have allocated since the last reclaim before another runs: 256 MiB.
+    /// A reclaim gives back what the process allocated and dropped, so one that follows no allocation frees
+    /// nothing.</summary>
+    public const long ReclaimAllocatedBytes = (256L << 20);
+
     /// <summary>Requests that cache owners detach idle claims. Active consumer claims are unaffected.</summary>
     public event Action? TrimRequested;
+    /// <summary>Raised by a reclaim (<see cref="Reclaims"/>) after the runtime's collection, outside the account's
+    /// lock: the host's native allocator gives its unused pages back here.</summary>
+    public event Action? ReclaimRequested;
+
+    private readonly Action m_reclaim;
+    private long m_reclaimAt;
+    private long m_reclaimAllocated;
+    private long m_reclaims;
+
+    /// <summary>Gets how many times authoring work that found the machine without room made the process give back what
+    /// it holds and no longer uses: the collector's dead and uncommitted heap and the native allocator's unused pages
+    /// (<see cref="ReclaimRequested"/>), with the caches' idle claims asked for at the frame's next pressure service
+    /// (<see cref="ServicePressure"/>).</summary>
+    public long Reclaims => Interlocked.Read(location: ref m_reclaims);
+
+    // Makes the process give back what it holds and no longer uses, for authoring work the machine's measured room
+    // refused, then reads the machine again. The room authoring draws on is the machine's free memory, and a bake's own
+    // garbage is not free until the collector has collected and decommitted it. A refused bake allocates little, so
+    // nothing else brings that collection on, and the garbage would otherwise count as memory the machine lacks for as
+    // long as the bake stands refused. Outside the account's lock, on the refused owner's thread, which holds whatever
+    // its caller holds: so it calls the collector and the allocator, which take no lock of ours, and leaves the caches
+    // to the frame thread. False when the last reclaim is too recent or the process has allocated too little since for
+    // another to free anything.
+    private bool ReclaimForAuthoring() {
+        var now = m_clock();
+        var allocated = GC.GetTotalAllocatedBytes(precise: false);
+
+        lock (m_gate) {
+            if (m_authoringOnPlayBar) { return false; }
+            if ((m_reclaimAt != 0L) && (((now - m_reclaimAt) < ReclaimInterval) || ((allocated - m_reclaimAllocated) < ReclaimAllocatedBytes))) { return false; }
+            m_reclaimAt = Math.Max(val1: 1L, val2: now);
+            m_reclaimAllocated = allocated;
+            m_pressure = 1;
+        }
+        _ = Interlocked.Increment(location: ref m_reclaims);
+        m_reclaim();
+        ReclaimRequested?.Invoke();
+        // The reading taken before the reclaim says nothing of the room it made.
+        Volatile.Write(location: ref m_availableAt, value: 0L);
+        RefreshAvailable();
+        SignalRoom();
+
+        return true;
+    }
 
     /// <summary>Asks participating caches to release their claims, outside the account lock. A cache whose claims belong
     /// to another thread defers the release to that thread (<see cref="DeferTrim"/>), so some storage can outlive the
@@ -265,7 +325,9 @@ public sealed class MemoryAccount {
     /// <summary>Gets the free physical memory, in bytes, authoring work leaves the machine when it reserves: an eighth of
     /// what is installed, and at least <see cref="Headroom"/>. It keeps the machine's memory load under the 90% at which
     /// the .NET collector turns to full compacting collections to avoid paging, with room for the quarter-second lag of
-    /// the free-memory reading and for the garbage a bake makes that no owner names.</summary>
+    /// the free-memory reading and for the garbage a bake makes that no owner names. Under that load the collector
+    /// leaves a bake's garbage standing, so the account collects it itself when the margin refuses authoring work
+    /// (<see cref="Reclaims"/>).</summary>
     public long AuthoringMargin { get; }
     /// <summary>Gets the default cache allowance, governed by the same authority as job admission.</summary>
     public long CacheBudget => Math.Clamp((DefaultBudget / 12), (16L << 20), (512L << 20));
@@ -1268,7 +1330,11 @@ public sealed class MemoryAccount {
         public bool TryReserve(long peak) => Reserve(peak: peak, progress: false);
         // The one door of TryReserve and TryReserveProgress: a reservation within the pool's room, or, for a progress
         // floor, within the host bar on what the owners hold and are promised, counted as an over-limit grant.
-        private bool Reserve(long peak, bool progress) {
+        // An authoring owner the machine's room refuses makes the process give back what it no longer uses and asks
+        // once more (ReclaimForAuthoring).
+        private bool Reserve(long peak, bool progress) => (ReserveOnce(peak: peak, progress: progress) ||
+            ((m_allowance == MemoryAllowance.Authoring) && m_account.ReclaimForAuthoring() && ReserveOnce(peak: peak, progress: progress)));
+        private bool ReserveOnce(long peak, bool progress) {
             ArgumentOutOfRangeException.ThrowIfNegative(peak);
             m_account.RefreshAvailable();
             lock (m_account.m_gate) {

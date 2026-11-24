@@ -125,6 +125,9 @@ public sealed partial class WorldPopulation {
         public int Count;
         public int Steered;
         public int Moved;
+        // The sections the partition's steps copied aside this tick, and their bytes (WorldBodyWork.StepSaves).
+        public long Saves;
+        public long SavedBytes;
     }
 
     // The work of one fork: which phase runs, what every partition of it reads, and the jobs the fork hands out. A job is
@@ -198,6 +201,8 @@ public sealed partial class WorldPopulation {
             partition.Count = 0;
             partition.Steered = 0;
             partition.Moved = 0;
+            partition.Saves = 0;
+            partition.SavedBytes = 0;
         }
         m_activeKitPartitions.Clear();
         m_kitSteers = 0;
@@ -280,6 +285,8 @@ public sealed partial class WorldPopulation {
 
         var steered = 0;
         var moved = 0;
+        var saves = 0L;
+        var savedBytes = 0L;
 
         foreach (var partition in m_activeKitPartitions) {
             foreach (var (index, woke) in partition.Log.Entries) {
@@ -290,7 +297,11 @@ public sealed partial class WorldPopulation {
             m_serialWork.AbsorbStatistics(other: partition.Work);
             steered += partition.Steered;
             moved += partition.Moved;
+            saves += partition.Saves;
+            savedBytes += partition.SavedBytes;
         }
+        WorldBodyWork.Process.Add(amount: saves, kind: WorldBodyWork.StepSaves);
+        WorldBodyWork.Process.Add(amount: savedBytes, kind: WorldBodyWork.StepSavedBytes);
         WorldBodyWork.Process.Add(amount: moved, kind: WorldBodyWork.Advances);
         WorldBodyWork.Process.Add(amount: moved, kind: WorldBodyWork.LocalAdvances);
         WorldBodyWork.Process.Add(amount: steered, kind: WorldBodyWork.LocalSteers);
@@ -352,6 +363,7 @@ public sealed partial class WorldPopulation {
             var body = entry.Body!;
             var stepTicks = partition.Steps[at].MotionTicks;
             var targets = ReadEffectTargets(entry: entry, selfIndex: index, self: body.FixedPosition);
+            var (savesBefore, bytesBefore) = body.RestoreSaves;
 
             body.BindStepLog(log: partition.Log);
             try {
@@ -362,6 +374,10 @@ public sealed partial class WorldPopulation {
             } finally {
                 body.BindStepLog(log: null);
             }
+            var (savesAfter, bytesAfter) = body.RestoreSaves;
+
+            partition.Saves += (savesAfter - savesBefore);
+            partition.SavedBytes += (bytesAfter - bytesBefore);
             RecordFlockMotion(body: body, work: partition.Work);
             partition.Moved++;
         }

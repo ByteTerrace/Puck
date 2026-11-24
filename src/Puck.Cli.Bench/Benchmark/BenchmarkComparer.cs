@@ -90,31 +90,35 @@ internal sealed class BenchmarkComparison {
     /// <returns>The comparison.</returns>
     public static BenchmarkComparison Of(JsonObject baseline, JsonObject candidate) {
         var runs = new List<BenchmarkRunComparison>();
-        var baseRoute = (baseline["route"]?.GetValue<string>() ?? string.Empty);
-        var candidateRoute = (candidate["route"]?.GetValue<string>() ?? string.Empty);
         var candidates = (candidate["runs"] as JsonArray ?? []).OfType<JsonObject>().ToArray();
         var matched = 0;
 
         foreach (var run in candidates) {
-            var backend = (run["backend"]?.GetValue<string>() ?? string.Empty);
-            var other = (baseline["runs"] as JsonArray ?? []).OfType<JsonObject>().FirstOrDefault(predicate: row => (row["backend"]?.GetValue<string>() == backend));
+            var key = KeyOf(run: run);
+            var other = (baseline["runs"] as JsonArray ?? []).OfType<JsonObject>().FirstOrDefault(predicate: row => (KeyOf(run: row) == key));
 
             if (other is null) {
                 continue;
             }
 
             matched++;
-            runs.Add(item: CompareRun(backend: backend, baseline: other, candidate: run, baseRoute: baseRoute, candidateRoute: candidateRoute));
+            runs.Add(item: CompareRun(backend: key, baseline: other, candidate: run, baseRoute: RouteOf(run: other, report: baseline), candidateRoute: RouteOf(run: run, report: candidate)));
         }
         if (matched == 0) {
-            var held = string.Join(separator: ", ", values: (baseline["runs"] as JsonArray ?? []).OfType<JsonObject>().Select(selector: static row => (row["backend"]?.GetValue<string>() ?? "?")));
-            var named = string.Join(separator: ", ", values: candidates.Select(selector: static row => (row["backend"]?.GetValue<string>() ?? "?")));
+            var held = string.Join(separator: ", ", values: (baseline["runs"] as JsonArray ?? []).OfType<JsonObject>().Select(selector: KeyOf));
+            var named = string.Join(separator: ", ", values: candidates.Select(selector: KeyOf));
 
-            runs.Add(item: new BenchmarkRunComparison(Backend: "-", Chapters: [], Refusals: [new(Code: UnlikeConditions, Message: $"the baseline holds runs on [{held}] and the candidate on [{named}]: no backend is in both")]));
+            runs.Add(item: new BenchmarkRunComparison(Backend: "-", Chapters: [], Refusals: [new(Code: UnlikeConditions, Message: $"the baseline holds runs [{held}] and the candidate [{named}]: no run of one name and backend is in both")]));
         }
 
         return new BenchmarkComparison(runs: runs);
     }
+
+    // A run's name in a comparison: the leg it was played as and its backend.
+    private static string KeyOf(JsonObject run) => $"{(run["leg"]?.GetValue<string>() ?? "route")}/{(run["backend"]?.GetValue<string>() ?? "?")}";
+
+    // The route a run played: its own, or the report's for a report whose runs name none.
+    private static string RouteOf(JsonObject run, JsonObject report) => (run["route"]?.GetValue<string>() ?? report["route"]?.GetValue<string>() ?? string.Empty);
 
     private static BenchmarkRunComparison CompareRun(string backend, JsonObject baseline, JsonObject candidate, string baseRoute, string candidateRoute) {
         var refusals = new List<BenchmarkRefusal>();

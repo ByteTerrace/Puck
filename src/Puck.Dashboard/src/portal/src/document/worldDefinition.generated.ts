@@ -7380,6 +7380,10 @@ export type WorldDeviceProfile = {
    * The device's own quality table: the levers it runs in place of the world's render preset of Quality, so each device meets its bar by the path it enables (its render scale, its distant shadow map's texels, its indirect tier, which sizes the irradiance volume and its caches). Absent runs the tier's preset.
    */
   table?: WorldQualityPreset | null;
+  /**
+   * The device's frame bar: the window size its frame time is judged at and the rate it must hold there. A host started with --frame-bar opens its window at this size, and a benchmark run judges its iterations against this rate's period. Absent where the world states no bar for the device.
+   */
+  frameBar?: WorldFrameBar | null;
 };
 
 export type WorldDisclosureTier = "Frames" | "Presentation" | "Replica";
@@ -8234,6 +8238,21 @@ export type WorldFlockProfile = {
 };
 
 export type WorldFlockSpace = "Tangent" | "Volume";
+
+export type WorldFrameBar = {
+  /**
+   * The window's client width in pixels.
+   */
+  width: number;
+  /**
+   * The window's client height in pixels.
+   */
+  height: number;
+  /**
+   * The presented frames a second the device must hold at that size.
+   */
+  hertz: number;
+};
 
 /**
  * The WorldScreenSource arms that produce a sampled frame — Producer, View and Probe — carrying its own JsonPolymorphicAttribute over the same three discriminators (producer/view/probe) their parent union uses, so a member declared as this narrower type round-trips the identical JSON a full WorldScreenSource screen row does. A WorldProbe socket is the driving consumer: it plugs one of these into each named input rather than the wider union, which would legally admit a decal, machine, text or none source no probe kernel can sample.
@@ -13127,6 +13146,10 @@ export type WorldRoute = {
    * The clearance, in metres, a straightened path keeps from the edge of the walkable ground on top of the walker's own radius the navigation domains already keep.
    */
   margin?: number;
+  /**
+   * The places the route's key views are taken at: after the timed run, a capture pass frames each named place's region from four sides once its bakes settle (world.benchmark marks). Absent takes none.
+   */
+  captures?: (string | null)[] | null;
 };
 
 export type WorldRouteChapter = {

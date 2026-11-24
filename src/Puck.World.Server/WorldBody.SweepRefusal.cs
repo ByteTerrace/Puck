@@ -34,6 +34,10 @@ public sealed partial class WorldBody {
         m_sweepRefusedThisTick = true;
     }
 
+    /// <summary>Gets the sections this body's steps have copied aside over its life, and their bytes: what its restore
+    /// points saved. A reader takes a step's share by reading before and after it.</summary>
+    internal (long Saves, long Bytes) RestoreSaves => (m_action.Binding.RestoreSaves, m_action.Binding.RestoreSavedBytes);
+
     /// <summary>Ends this body's tick for the sweep refusal: a body refused this tick may be moved again by the next
     /// tick's pair passes.</summary>
     internal void EndSweepTick() => m_sweepRefusedThisTick = false;
@@ -58,12 +62,23 @@ public sealed partial class WorldBody {
         internal FixedVector3 ObstructionWitness;
         internal ulong ObstructionWitnessGraceTicks;
         internal FixedVector3 ObstructionWitnessPosition;
+        // Whether the capture left the sections behind holders to the body's restore point (SlotBinding.BeginRestore)
+        // instead of copying them here: the scratch then holds no image of them, and a restore puts them back from
+        // what each holder saved when the step first wrote it.
+        internal bool HeldByRestorePoint;
     }
 
     // Captures this body into the scratch, overwriting whatever the last step left there. Every local is written before
     // it is read, so the frame skips the zero fill.
+    //
+    // A step's own capture (restorePoint) copies only what is not behind a holder: the pose, motion, clocks, program,
+    // tape and registers. The sections behind holders (the input images and read-backs, the action track, the lane
+    // clocks, the register writes, the durable input and the script actors) are left to a restore point on the body's
+    // binding, so each is copied when the step first writes it and a section the step leaves alone is never copied.
+    // Any other capture (a carry attempt, another body's kit transaction) copies everything: it may run inside a step
+    // whose restore point is open, and its own restore writes through the same doors.
     [System.Runtime.CompilerServices.SkipLocalsInit]
-    internal void CaptureMotion(StepScratch scratch) {
+    internal void CaptureMotion(StepScratch scratch, bool restorePoint = false) {
         ref var sections = ref scratch.Sections;
 
         CaptureCoreSections(clocks: out sections.Clocks, motion: out sections.Motion, pose: out sections.Pose, program: out sections.Program);
@@ -72,22 +87,27 @@ public sealed partial class WorldBody {
         m_motionRecency.AsSpan().CopyTo(destination: motionRecency);
         sections.MotionRecency = new(Clocks: motionRecency.AsMemory(length: motionRecencyLength, start: 0));
 
-        sections.InputImages = InputImages;
-        sections.InputReadbacks = InputReadbacks;
-        sections.Action = Action;
+        scratch.HeldByRestorePoint = restorePoint;
+        if (restorePoint) {
+            m_action.Binding.BeginRestore();
+        } else {
+            sections.InputImages = InputImages;
+            sections.InputReadbacks = InputReadbacks;
+            sections.Action = Action;
 
-        var laneRecencyLength = m_laneRecency.Count;
-        var laneRecency = ArrayCapacity.EnsureScratch(ref scratch.LaneRecency, laneRecencyLength);
-        m_laneRecency.Read.CopyTo(destination: laneRecency);
-        sections.LaneRecency = new(Clocks: laneRecency.AsMemory(length: laneRecencyLength, start: 0));
+            var laneRecencyLength = m_laneRecency.Count;
+            var laneRecency = ArrayCapacity.EnsureScratch(ref scratch.LaneRecency, laneRecencyLength);
+            m_laneRecency.Read.CopyTo(destination: laneRecency);
+            sections.LaneRecency = new(Clocks: laneRecency.AsMemory(length: laneRecencyLength, start: 0));
 
-        var registerWritesLength = m_registerWrites.Count;
-        var registerWrites = ArrayCapacity.EnsureScratch(ref scratch.RegisterWrites, registerWritesLength);
-        m_registerWrites.Read.CopyTo(destination: registerWrites);
-        sections.RegisterWrites = new(Rows: registerWrites.AsMemory(length: registerWritesLength, start: 0));
+            var registerWritesLength = m_registerWrites.Count;
+            var registerWrites = ArrayCapacity.EnsureScratch(ref scratch.RegisterWrites, registerWritesLength);
+            m_registerWrites.Read.CopyTo(destination: registerWrites);
+            sections.RegisterWrites = new(Rows: registerWrites.AsMemory(length: registerWritesLength, start: 0));
 
-        sections.DurableInput = DurableInput;
-        sections.ScriptActors = ScriptActors;
+            sections.DurableInput = DurableInput;
+            sections.ScriptActors = ScriptActors;
+        }
 
         var tape = ArrayCapacity.EnsureScratch(ref scratch.Tape, m_tapeCount);
         for (var offset = 0; (offset < m_tapeCount); offset++) {
@@ -120,6 +140,7 @@ public sealed partial class WorldBody {
         RestoreSections(
             contactFieldObservationCurrent: true,
             contactFieldVersion: scratch.LastContactFieldVersion,
+            heldByRestorePoint: scratch.HeldByRestorePoint,
             registers: (registers ? scratch.Registers.AsSpan(length: scratch.RegisterCount, start: 0) : []),
             sections: in scratch.Sections
         );

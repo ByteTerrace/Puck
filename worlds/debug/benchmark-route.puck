@@ -113,10 +113,13 @@ function liftSeam(name, pace) = {
 // the run with the dash on each cooldown.
 let seamPaces = ["walk", "run", "dash"]
 
+// The key views of the walk: after the timed run, `puck benchmark` frames each of these places from four sides once its
+// bakes settle, so the report carries what each place looks like beside how fast it ran.
 routes [
   {
     name: "debug"
     program: "walker"
+    captures ["place-stage", "place-hall-entrance", "place-lobby", "place-east-wing", "place-painting-room", "place-wonderland"]
     chapters: concat(
       [
         {

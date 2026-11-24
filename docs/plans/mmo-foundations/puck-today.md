@@ -408,7 +408,7 @@ and signs `SignsDirectly` claims valid for `MaximumClaimAge`, five minutes
 **[opened]** (`WorldSiloHost.TryBuildFederationIdentity`).
 
 The desktop does the same from `--federation-key-file` **[opened]**
-(`src/Puck.World/Program.cs:187-190`):
+(`src/Puck.World/Program.cs:196-199`):
 
 ```csharp
     var federationKeyFileOption = new Option<string?>(name: "--federation-key-file") {

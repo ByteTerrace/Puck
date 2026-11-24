@@ -699,13 +699,15 @@ public sealed partial class WorldBody {
             }
 
             if (binding.OnPress is { } press) {
-                ActionEdit.LaneLatch[ordinal] = (pressed
+                var latch = (pressed
                     ? press.LatchTicks
                     : SubtractSaturating(
                         amount: scratch.StepTicks,
                         value: Action.LaneLatch[ordinal]
                     )
                 );
+
+                if (Action.LaneLatch[ordinal] != latch) { ActionEdit.LaneLatch[ordinal] = latch; }
 
                 // LatchSeconds 0 means THIS TICK ONLY, which is what the field always documented. Demanding a
                 // strictly positive latch made zero structurally dead — a zero-latch press could never fire, however
@@ -756,10 +758,12 @@ public sealed partial class WorldBody {
                 ));
                 var wasHeld = ((Action.LaneFactHeld[ordinal] & (1UL << rule)) != 0UL);
 
-                ActionEdit.LaneFactHeld[ordinal] = (holds
-                    ? Action.LaneFactHeld[ordinal] | (1UL << rule)
-                    : Action.LaneFactHeld[ordinal] & ~(1UL << rule)
-                );
+                if (wasHeld != holds) {
+                    ActionEdit.LaneFactHeld[ordinal] = (holds
+                        ? Action.LaneFactHeld[ordinal] | (1UL << rule)
+                        : Action.LaneFactHeld[ordinal] & ~(1UL << rule)
+                    );
+                }
 
                 // ONE edge vocabulary, the same ActionTriggerMode a world rule reads: EDGE fires on the crossing
                 // alone and re-arms when the condition (fact AND gate together) stops holding; LEVEL fires every

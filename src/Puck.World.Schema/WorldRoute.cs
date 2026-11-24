@@ -15,6 +15,8 @@ namespace Puck.World;
 /// <param name="Seat">The 1-based seat that plays it.</param>
 /// <param name="Margin">The clearance, in metres, a straightened path keeps from the edge of the walkable ground on top
 /// of the walker's own radius the navigation domains already keep.</param>
+/// <param name="Captures">The places the route's key views are taken at: after the timed run, a capture pass frames each
+/// named place's region from four sides once its bakes settle (<c>world.benchmark marks</c>). Absent takes none.</param>
 public sealed record WorldRoute(
     [property: DocumentText("a route's name, which world.benchmark and puck benchmark take")]
     [property: JsonPropertyName("name")] string Name,
@@ -22,7 +24,9 @@ public sealed record WorldRoute(
     [property: JsonPropertyName("program")] string Program,
     [property: JsonPropertyName("chapters")] IReadOnlyList<WorldRouteChapter> Chapters,
     [property: JsonPropertyName("seat")] int Seat = 1,
-    [property: JsonPropertyName("margin")] float Margin = 0.25f
+    [property: JsonPropertyName("margin")] float Margin = 0.25f,
+    [property: DocumentText("a place name, as world.benchmark marks reads it")]
+    [property: JsonPropertyName("captures"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Captures = null
 );
 /// <summary>One chapter of a <see cref="WorldRoute"/>: its steps, played in order, and the time it may take.</summary>
 /// <param name="Name">The chapter's name, unique within its route; a report addresses the chapter by it.</param>

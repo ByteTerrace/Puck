@@ -373,11 +373,15 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 else if (m_volume.Time.GetElapsedTime(m_waitingSince) > AdmissionWait) {
                     m_pending.Dequeue();
                     m_waiting = null;
+                    // A scene that stayed unbound this long names a mesh the residency dropped, not one about to land:
+                    // the volume then builds the scene its draws now name rather than waiting on this one's traces.
+                    m_volume.NoteScenePlacement(scene: pending.Scene, placed: false);
                     Cancel(job: pending);
                 }
                 return false;
             }
             m_waiting = null;
+            m_volume.NoteScenePlacement(scene: pending.Scene, placed: true);
             AdoptLocked(scene: pending.Scene);
             // A changed mesh roster need not move any of this scene's addresses.
             if (ReferenceEquals(m_scene, pending.Scene) && m_placementVersion != version && pending.Scene.MatchesGpuPlacements(placements, m_scenePlacements)) {

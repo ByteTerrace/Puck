@@ -334,6 +334,20 @@
         "description": "The clearance, in metres, a straightened path keeps from the edge of the walkable ground on top of the walker\u0027s own radius the navigation domains already keep.",
         "type": "number",
         "default": 0.25
+      },
+      "captures": {
+        "description": "The places the route\u0027s key views are taken at: after the timed run, a capture pass frames each named place\u0027s region from four sides once its bakes settle (world.benchmark marks). Absent takes none.",
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "default": null
       }
     },
     "required": [

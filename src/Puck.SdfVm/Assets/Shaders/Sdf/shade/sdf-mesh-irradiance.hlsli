@@ -317,11 +317,12 @@ struct SdfMeshProbes {
     // only by the surfaces they measured.
     bool measured;
     bool remainderMeasured;
-    // The views probe slot the probe lookup resolved these probes into, for a views pixel (sdfViewsProbesAt), whose struct
-    // holds no cage and no weight: one more than the buffer index of the slot's first word, and the words between its
-    // successive words. Zero where the struct holds the gather itself.
-    uint record;
-    uint recordAt;
+    // The views probe slots the probe lookup resolved, for a views pixel (sdfViewsProbesAt), whose struct holds no cage
+    // and no corner weight: up to four slots, each one more than the buffer index of its first word (zero for none), the
+    // words between a slot's successive words, and each slot's share of the pixel's blend, which sum to one.
+    uint4 slots;
+    uint slotStride;
+    float4 slotWeights;
 };
 
 // The two stages' cages a reader of the gathered probes resolves once before its corners (sdfMeshProbeAt).
@@ -464,8 +465,9 @@ SdfMeshProbes sdfMeshProbesNone() {
     probes.share = 0.0;
     probes.measured = false;
     probes.remainderMeasured = false;
-    probes.record = 0u;
-    probes.recordAt = 0u;
+    probes.slots = uint4(0u, 0u, 0u, 0u);
+    probes.slotStride = 0u;
+    probes.slotWeights = float4(0.0, 0.0, 0.0, 0.0);
     [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
         probes.weight[corner] = 0.0;
     }
