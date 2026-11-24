@@ -129,6 +129,17 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         public Dictionary<WorldScreen, WorldScreen>? CarriedScreens;
 
         public readonly DynamicTransform[] ShapeTransforms = new DynamicTransform[rig.ShapeCount];
+        // Which shapes no driver term, part follower or driven parent moves (PackRegistration), and what their
+        // ShapeTransforms were last composed from: the root, the scale, the lanes and the frame's pose table. While all
+        // four stand, a still shape's composed pose stands too. Valid only while ShapeTransforms hold that composition:
+        // anything else that writes them (CarryPose) clears it.
+        public readonly bool[] PartStill = new bool[rig.ShapeCount];
+        public bool StillPoseValid;
+        public Vector3 StillRootPosition;
+        public Quaternion StillRootRotation;
+        public float StillScale;
+        public Vector4 StillLanes;
+        public object? StillPoses;
 
         public DynamicTransform? PackedRoot;
 
