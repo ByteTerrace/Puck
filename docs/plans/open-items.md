@@ -1574,7 +1574,7 @@ The frame thread's CPU work, largest first:
   (`SdfWorldResidency.EnsureTables`). Unmeasured; read
   it on an arrival before moving it.
 - [low] View placement (`WorldViewGraphHost.CompleteFootprints`) and screen
-  binding (`SdfWorldResidency.PrepareOnce`: `WorldScreenDecals.Resolve`,
+  binding (`SdfWorldResidency.Prepare`: `WorldScreenDecals.Resolve`,
   `WorldScreenBinder.TryRippleOf`) run each frame for every screen.
 - [low] Walks over every row or copy each frame that the arrival memo's row
   table does not absorb: the bake's copy layout (`SdfMeshPathBake`) and two
@@ -1818,7 +1818,7 @@ Remaining detailed findings and smaller cuts in this area:
   bound atlas texture apart from the program that names its new identity
   (`SdfProgram.GlyphAtlas`), so a bake taken between the two could store old
   pixels under the new key. Confirm whether the order inside
-  `SdfWorldResidency.PrepareOnce` rules it out; if not, bind both in one step.
+  `SdfWorldResidency.Prepare` rules it out; if not, bind both in one step.
   `WorldTextCatalog.Reconcile` also copies the whole packed image into
   `SdfGlyphAtlas`.
 - [high, iteration] An edit to `SdfMeshPathBake` that the bake's content never

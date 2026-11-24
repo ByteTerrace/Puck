@@ -25,6 +25,7 @@ public sealed record WorldRoute(
     [property: JsonPropertyName("chapters")] IReadOnlyList<WorldRouteChapter> Chapters,
     [property: JsonPropertyName("seat")] int Seat = 1,
     [property: JsonPropertyName("margin")] float Margin = 0.25f,
+    [property: DocumentText("a place name, as world.benchmark marks reads it")]
     [property: JsonPropertyName("captures"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Captures = null
 );
 /// <summary>One chapter of a <see cref="WorldRoute"/>: its steps, played in order, and the time it may take.</summary>

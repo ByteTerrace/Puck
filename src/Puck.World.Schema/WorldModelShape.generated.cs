@@ -5976,7 +5976,7 @@ public static partial class WorldModelShape {
                 M("chapters", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldRouteChapter>), typeof(global::Puck.World.WorldRoute), "Chapters", Read | Write | Required, static value => ((global::Puck.World.WorldRoute)value).Chapters),
                 M("seat", typeof(global::System.Int32), typeof(global::Puck.World.WorldRoute), "Seat", Read | Write, static value => ((global::Puck.World.WorldRoute)value).Seat),
                 M("margin", typeof(global::System.Single), typeof(global::Puck.World.WorldRoute), "Margin", Read | Write, static value => ((global::Puck.World.WorldRoute)value).Margin),
-                M("captures", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.WorldRoute), "Captures", Read | Write, static value => ((global::Puck.World.WorldRoute)value).Captures),
+                M("captures", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.WorldRoute), "Captures", Read | Write, static value => ((global::Puck.World.WorldRoute)value).Captures, text: "a place name, as world.benchmark marks reads it"),
             ],
             []),
         T(typeof(global::Puck.World.WorldRouteChapter), true, JsonTypeInfoKind.Object, null,
