@@ -113,6 +113,8 @@ scratch
 worlds/debug/flags/
 # The field slices that go with gallery.slice (world.slice.save): local, read back by agents, never committed.
 worlds/debug/slices/
+# The remote pair `puck benchmark --remote local` stages beside a world's entry for the length of a run.
+.benchmark-pair-*.puck
 
 # Cartridge documents are derived from authored sources.
 /worlds/**/*.cartridge.json

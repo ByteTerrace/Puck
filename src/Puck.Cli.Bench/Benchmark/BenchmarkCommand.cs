@@ -459,7 +459,7 @@ public static partial class BenchmarkCommand {
             }
             print($"{Verb}: {profile.Output}\n");
             if (connect is not null) {
-                WaitForRemote(authority: authority, budget: budget, live: live, print: print);
+                WaitForRemote(authority: authority, budget: budget, clientLog: Path.Combine(directory, "stderr.log"), live: live, print: print);
             }
 
             var paused = (connect is null);
@@ -478,6 +478,7 @@ public static partial class BenchmarkCommand {
             }
         } finally {
             authority?.Dispose();
+            pair?.Dispose();
         }
 
         return outcomes;
