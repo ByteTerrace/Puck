@@ -113,12 +113,14 @@ public sealed class WorldDefinitionMembers {
     /// <param name="basisTrees">The tree of each replaced member's value in <paramref name="basis"/>, as
     /// <see cref="Write"/> writes it, for a caller that already holds them; a member absent here is read from
     /// <paramref name="basis"/>'s slices, or written afresh when it has none.</param>
+    /// <param name="context">The reader each replaced value is read through: <see cref="WorldJsonContext.Untrusted"/>
+    /// for bytes another process sent; <see langword="null"/> reads an author's own bytes.</param>
     /// <returns>The replaced definition.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">A value does not read as its member's type, or a state reference in it
     /// does not resolve.</exception>
     public static WorldDefinition Replace(WorldDefinition basis, IReadOnlyList<(string Name, ReadOnlyMemory<byte>? Value)> replacements, string? documentDirectory,
-        IReadOnlyDictionary<string, JsonNode?>? basisTrees = null) {
+        IReadOnlyDictionary<string, JsonNode?>? basisTrees = null, WorldJsonContext? context = null) {
         ArgumentNullException.ThrowIfNull(argument: basis);
         ArgumentNullException.ThrowIfNull(argument: replacements);
 
@@ -154,7 +156,7 @@ public sealed class WorldDefinitionMembers {
                 continue;
             }
 
-            var read = Read(name: name, value: bytes.Span);
+            var read = Read(context: context, name: name, value: bytes.Span);
 
             var patch = ((before is null) ? null : WorldDocumentBasis.DiffValue(basis: before, target: tree));
 
@@ -404,9 +406,11 @@ public sealed class WorldDefinitionMembers {
     /// <summary>Reads one root member's value with its declared type.</summary>
     /// <param name="name">The member's JSON name.</param>
     /// <param name="value">The value's JSON bytes.</param>
+    /// <param name="context">The reader the value is read through, or <see langword="null"/> for an author's own
+    /// bytes.</param>
     /// <returns>The typed value.</returns>
     /// <exception cref="InvalidDataException">No root member has the name, or the value does not read as its type.</exception>
-    public static object? Read(string name, ReadOnlySpan<byte> value) {
+    public static object? Read(string name, ReadOnlySpan<byte> value, WorldJsonContext? context = null) {
         var type = WorldDocumentWalker.MemberType(name: name, owner: typeof(WorldDefinition));
 
         try {
@@ -415,7 +419,7 @@ public sealed class WorldDefinitionMembers {
                     ? JsonSerializer.Deserialize<JsonElement>(utf8Json: value)
                     : throw new InvalidDataException(message: $"a {WorldDefinition.SchemaVersion} document has no root member '{name}'"));
             }
-            return JsonSerializer.Deserialize(utf8Json: value, jsonTypeInfo: WorldJsonContext.Authored.Options.GetTypeInfo(type: type));
+            return JsonSerializer.Deserialize(utf8Json: value, jsonTypeInfo: (context ?? WorldJsonContext.Authored).Options.GetTypeInfo(type: type));
         } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
             throw new InvalidDataException(message: $"the document member '{name}' is not valid: {WorldJsonPayload.Reason(exception: exception)}", innerException: exception);
         }

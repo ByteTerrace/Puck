@@ -91,6 +91,14 @@ public sealed partial class WorldInputRuntime {
             (Engagement(body: body, principal: Principal.World) == standing.Engagement));
     }
 
+    // The same proof used by producer admission also covers synchronization after motion and speculative validation.
+    // Re-read the candidate registers, since either caller can see writes the last admission did not.
+    private bool ProgramSelectionStands(Owner owner) => (
+        (owner.Program is { Valid: true } standing) &&
+        (m_host.Body(index: owner.Body) is { } target) &&
+        ProgramFactsStand(owner: owner, standing: standing, target: target)
+    );
+
     // The body's program owner while every fact of its last admission stands, or null.
     private Owner? StandingProgramOwner(int body, WorldBody target) {
         if ((((uint)body) >= ((uint)m_programOwners.Length)) || (m_programOwners[body] is not { Removed: false, Program: { Valid: true } standing } owner)) { return null; }

@@ -17,10 +17,10 @@ metadata {
   description: "The standard package and its plain walker on a floor: the smallest world an author builds from."
 }
 
-// The local seat's body, and a slot for one player arriving from another process (a benchmark's remote pair raises
-// networkPlayers to admit them).
+// The local seat's body, with room for three more local seats and four players arriving from another process: a
+// benchmark's remote pair raises networkPlayers to admit them, and its four-seat run seats the other three.
 bodies {
-  capacity: 2
+  capacity: 8
   localSeats: 1
   networkPlayers: 0
   reconnectGraceSeconds: 0

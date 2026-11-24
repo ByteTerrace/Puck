@@ -364,7 +364,6 @@ public static class WorldProjection {
             );
         }
 
-        var audio = WorldAssetRowLoader.EmbedAudio(definition);
         var projection = new WorldProjectionDocument(
             Provenance: new WorldProjectionProvenance(
                 Authority: authority,
@@ -388,9 +387,9 @@ public static class WorldProjection {
             Creations: ReferencePrototypes(definition, arena, recipient, unrestricted, (content ?? WorldProjectionContent.Shared)),
             Placements: placements,
             Speakers: definition.Speakers,
-            Tunes: audio.Tunes,
-            Patches: audio.Patches,
-            Music: audio.Music,
+            Tunes: definition.Tunes,
+            Patches: definition.Patches,
+            Music: definition.Music,
             Audio: definition.Audio,
             Collision: definition.Collision,
             Views: definition.ViewsRaw,

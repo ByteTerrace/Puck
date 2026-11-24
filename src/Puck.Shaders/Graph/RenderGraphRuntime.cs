@@ -147,7 +147,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     // The nodes whose frame wrote an export this frame, which complete it once the batch has reached the queue.
     private readonly List<ShaderPipelineRenderNode> m_settlementsOwed = [];
     // Ordinal side tables rebuilt whenever m_set or m_graphs changes so steady frames index by ordinal, never by name.
-    private int[] m_orderPosition = [];
     private int[] m_uploadSourceIndices = [];
     private int[] m_activeUploadSourceIndices = [];
     private int[] m_sourceProducerIndices = [];
@@ -1311,8 +1310,6 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         PackagesBeginFrame(context: in context);
         PrepareReaders(context: in context, frame: in frame);
         using (HostFrameWork.Measure(HostFrameWorkPart.Pack)) { PackagesReadsPrepared(context: in context); }
-        // Preparation can rebuild a host's live footprints; capture and scheduling must read the same demand.
-        RefreshConvergenceDemand(captured: m_captureInstance);
         work.Next(HostFrameWorkPart.Schedule);
 
         var schedule = m_schedules[m_turn];

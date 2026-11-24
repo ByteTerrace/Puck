@@ -99,6 +99,10 @@ public static class WorldTickWork {
     public static WorkKind InputRefreshes { get; } = new(name: "world.tick.input-refreshes", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the owners a permission refresh passed over because their facts stood.</summary>
     public static WorkKind InputRefreshesStanding { get; } = new(name: "world.tick.input-refreshes-standing", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting owners checked for a new input mapping after motion.</summary>
+    public static WorkKind InputSynchronizations { get; } = new(name: "world.tick.input-synchronizations", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting producer owners whose previous admissions prove their mapping still stands.</summary>
+    public static WorkKind InputSynchronizationsStanding { get; } = new(name: "world.tick.input-synchronizations-standing", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the calls the host loop's thread makes into a host step: one for each place it
     /// begins, resumes or collects one. Read against <see cref="HostSteps"/>, it is how often the pump visits a
     /// step.</summary>
@@ -121,6 +125,7 @@ public static class WorldTickWork {
             InterestCandidates, InterestBodies, InterestBytes,
             FederatedBatches, FederatedRetimed, FederatedStale, FederatedRestarts,
             InputAdmissions, InputAdmissionsStanding, InputAdmissionsSteady, InputRefreshes, InputRefreshesStanding,
+            InputSynchronizations, InputSynchronizationsStanding,
             FactDerives, FactSlots, RegionSweepOverflow, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids, NearestCells, DealRedeals,
             ContinuationProfiles, ContinuationProfileBytes, ContinuationTailBytes, .. SectionEncodes, .. SectionBytes,
             .. SectionComparedBytes, .. SectionFilteredCompares, .. SectionUnchangedEncodes,

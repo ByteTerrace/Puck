@@ -457,13 +457,11 @@ one says so:
   each admitted to the same remote authority under its own identity, and the
   four views together hold the 4070's frame bar.
 
-**The bounds on the bars.** The frame-thread trace on the head
-([verification debts](#verification-debts), item 2) orders items 1 to 3.
+**The bounds on the bars.** The route's frame-thread trace
+([verification debts](#verification-debts), item 2) orders the remaining CPU work.
 
 1. [high] [The CPU frame](#the-cpu-frame): the authority's step leaves the
    frame thread. A design memo first, since it touches determinism.
-3. [high] [The CPU frame](#the-cpu-frame): a draw record reads its slot's
-   transform, so a moving body writes one row.
 4. [high] [The CPU frame](#the-cpu-frame): presentation queries stop
    interpreting the field on the CPU. A design memo first.
 5. [high] [The CPU frame](#the-cpu-frame): background garbage leaves the
@@ -778,17 +776,6 @@ wait behind them.
    lane. Check: `host.frames` shows the step outside the frame's interval on
    the route, and `world.counters world.tick` shows `pump-waits` near zero
    per `host-steps`.
-3. **A draw record reads its slot's transform.** A draw's record is
-   `SdfMeshRecord.DrawWords` words that hold its matrix, its normal matrix and
-   its world box (`SdfMesh`'s `WritePose`), and the CPU rewrites those words
-   whenever the body moves. `cpu-frame-2` cut that to the pose words alone.
-   The replacement stores the slot's index in the record and has the kernels
-   read the transform row the frame already uploads (`sdfDynamicTransformRow`)
-   and derive the normal matrix and the box on the GPU, so a moving body
-   writes one row. Check: `world.counters`' `sdf.instances.records.posed`
-   counts no record for a body that only moved, and the route's stills are
-   unchanged within the noise floor. At scale: hundreds of
-   moving bodies cost rows, not records.
 4. **Presentation queries stop interpreting the field on the CPU.** The
    creation effectors' surface probes (`WorldCreationInstances.ApplyEffectors`)
    and the chase camera's clearance march (`WorldCameraClearance.March`) walk
@@ -869,13 +856,15 @@ wait behind them.
    lighting settles owes a minimum and a day that turns never stops settling
    it. [The plan](frame-production.md) states the rule, the invariant the
    forks rest on and the options weighed, a pipeline across frames among them.
-   Built: the minimum is one residency a frame, and the captured residencies
-   pack, and their uploads record, as forks of the job pool with a residency a
-   partition. Left, in [its order](frame-production.md#the-steps): a rated
-   view's residency captured at the view's rate, routed scenes captured side
-   by side (the largest step left: every routed capture calls back into the
-   one binder), one fork for a frame's recordings, and a pump that visits what
-   completed. Check: `world.counters sdf.captures` across a benchmark chapter,
+   Built: a paced frame serves at most one residency minimum, readers request
+   captures at their scheduled cadence, and the captured residencies pack and
+   record their uploads as forks of the job pool with a residency a partition.
+   Routed compositions pack transforms and draw journals on the pool between
+   serial preparation and filming. Mesh compaction marks only rows that
+   reference moved meshes, using the same index for every residency.
+   Left, in [its order](frame-production.md#the-steps): one fork for a frame's
+   recordings and a pump that visits what completed. Check:
+   `world.counters sdf.captures` across a benchmark chapter,
    `run` a frame against `held`, with `packed-on-worker` and
    `uploaded-on-worker`, beside `host.frames`' capture and pack parts. At
    scale: a hub of a dozen worlds costs the frame the worlds on screen.
@@ -936,13 +925,33 @@ whose check boots did not settle with no tier missed.
 
 ### A hosted world on a client
 
-Owner: federation and presentation · high, M1 · Next: step 3 of
+Owner: federation and presentation · high, M1 · Next: step 5 of
 [the design](remote-content.md)'s
-[build order](remote-content.md#the-build-order), content by pin, then the
-manifest; the debug world's transfer does not commit until both land. Steps 1
-and 2 (the pair from `puck_world_start`, and the remote seat's input) are
-built, and the design carries its review's answers.
+[build order](remote-content.md#the-build-order), authored admission and the
+idle boot world, then machines (step 6) and windows (step 7), which the
+picture needs. Steps 1 to 4 are built: the debug world's transfer commits on
+a staged pair and its document arrives as a manifest. Voice sets and machine
+content are the part of step 3 still open.
 
+- [high] A client that is started again cannot join an authority it joined
+  before, and two clients that share a namespace cannot both join. A transfer
+  is keyed by its source authority's name and a transfer id, a client's ids
+  start at zero in every run (`WorldInstance.NextTransferId` is durable only
+  where the authority keeps a crossing log), and a key is leased at most once:
+  on a staged pair, a second client process started against a living
+  authority was refused with "transfer 0 was already leased or answered here".
+  The first run's traveller also stays at the authority after its client
+  exits, holding a visitor slot. Decide what names a client's authority (its
+  key's domain is unique where the document's namespace is not), give a source
+  with no crossing log ids it cannot reuse, and release a traveller whose
+  client's streams have been gone for the world's reconnect grace.
+- [medium] A manifest's member is fetched whole and the whole manifest is sent
+  each time ([decision 4](remote-content.md#decision-4-the-document-travels-as-a-manifest)).
+  A recipient with another version of the package fetches each differing
+  member in one answer, bounded by the fetch's size cap, and if the authority
+  changes a member between a manifest and the fetch for it the fetch is
+  refused and the stream starts again. Split a large member by row and keep,
+  for each recipient, what its last manifest named.
 - [medium] A remote seat's push is shorter than the same push in one process.
   On a headless pair on one machine, on a staged world that steps once for
   each delivery, ten pushes of ten ticks moved the remote body 15.83 units
@@ -952,8 +961,11 @@ built, and the design carries its review's answers.
   6.50. The cause is not shown. The likely one is that a seat's input waits
   for the next delivery before it is sent (`WorldClient.SubmitAuthorityIntents`
   submits once for each observed tick), so each stick movement lands up to one
-  delivery interval late. Read it after the design's step 4, with a counter of
-  the ticks between a stick movement and the tick that applies it.
+  delivery interval late. A seat of an authority in another process now sends
+  at once when its devices moved since its last batch
+  (`WorldSeatInput.HoldsUnpublished`, in `WorldClient.SubmitAuthorityIntents`).
+  The push lengths have not been read again: take the same two scripts, with a
+  counter of the ticks between a stick movement and the tick that applies it.
 
 - [high] A world delivered from another authority shows no text, no machines
   and no session screens on the client that presents it
@@ -973,21 +985,38 @@ built, and the design carries its review's answers.
   world admits no remote player, a replica travels as one capped message, a
   delivered document that names content by relative path fails validation, and
   the client still steps its whole boot world.
-- [medium] The debug world's transfer to a remote authority is refused at the
-  reservation, before any input: the answer embeds the whole document, which
-  the client refuses for its relative paths and for a rule that reads a
-  withheld cell. The design's steps 3 and 4 close it.
-- [low] `body.where` for a seat whose body is on a remote authority fails with
-  a null reference on the client. The design's step 5 checks it.
+- [high] A visitor's body does not stand on the ground in the debug world,
+  which stops the debug route against a remote authority at its first
+  chapter. On a staged headless pair the traveller is body 1 at the
+  authority. `body.where 1` there reads `pos=(190.00, -9.25, 0.00)
+  facts=airborne|falling`: it falls, the valley's recovery rule stands it at
+  the east sector's spot (`valley-east`, in `valley.puck`), and it falls
+  again. The authority's own seat, posed at the same spot
+  (`body.pose spawn:valley-east 0`), reads `grounded` there, and the two
+  bodies' registers read alike (`body.state`). In `worlds/minimal` four
+  visitors stand and walk. The cause is not shown. The lead is the kit: a
+  local seat is embodied in the world's seat kit whatever its own row says
+  (`WorldPopulation`'s seat kit, from `defaultSeatKit`), and a visitor in the
+  kit index its entry carries. The debug world also authors no admission for
+  a visitor, no namespace and no visitor slot of its own, so the staged pair
+  gives the visitor a body index (1) the world's own authoring never planned
+  for. Author what a visitor is embodied as, with the design's step 5.
+- [medium] A benchmark route's `pose` step is a teleport a visitor's Drive
+  grant allows on its own body (`WorldCommand.SnapPose` passes the same Drive
+  check as input). The debug route against a remote authority relies on it.
+  Decide whether a world's visitor row should be able to withhold it: a rule
+  of play is the author's, and today the grant vocabulary cannot say "drive,
+  but never pose".
 
 ### A multi-seat client
 
-Owner: the `cpu` campaign builds; another family reviews the memo · high, M2 ·
-Next: the rest of step 1 of [the design](multi-seat-client.md)'s
-[steps](multi-seat-client.md#the-steps): four seats join and are admitted, and
-their input does not yet move their bodies (the first finding below), then
-the member's proof. The memo is written and owes its cross-family review, which runs
-beside the build because [its second decision](multi-seat-client.md#decision-2-a-member-proves-its-own-identity)
+Owner: the `client` campaign builds; another family reviews the memo · high, M2 ·
+Next: step 2 of [the design](multi-seat-client.md)'s
+[steps](multi-seat-client.md#the-steps), the member's proof, then one stream
+for each world (step 3). Step 1 is built: four seats cross as one party, are
+admitted, and each moves its own body. The memo owes its cross-family review,
+which runs beside the build because
+[its second decision](multi-seat-client.md#decision-2-a-member-proves-its-own-identity)
 is a trust boundary.
 
 The owner's direction: "come up with an intelligent way to handle the four
@@ -1037,28 +1066,14 @@ each gap below; how each answer behaves in a town and when one seat moves to
 another server; and the delegate skill's requirements of a design (its
 invariant, what enforces it, a check per step).
 
-- [high] A joined seat's input carries nothing. On a headless pair (four
-  eager local seats over the Moth's world, one process listening and one
-  started with `--connect`) the four seats cross
-  (`WorldInstanceHost.FollowRemoteJoin`), the host's roster reads four
-  transferred peers, and each seat's batches arrive
-  (`world.tick.federated-batches` rises, none stale, none restarted). The
-  host's input owner for each traveller holds an empty source registry
-  (`body.channels` lists no source), so a stick held on the client moves no
-  body. Read which side loses the registry: whether the seat's bindings
-  resolve any source against the delivered projection
-  (`WorldSeatBindings.SyncRoute`), and whether the host applies the seat's
-  `WorldCommand.AdmitInput`. Whether one seat alone still moves its body on
-  this head was not re-run. Two defects on the way are fixed: a seat resent
-  its admission every step, since its retry pause was counted in engine ticks
-  (`WorldSeatInput.AdmissionRetryTicks`), which with four seats filled the
-  ordered lane until every submission timed out; and a seat that was
-  delivered another registry's publication never sent its own
-  (`WorldClient.SynchronizeInput`).
-- [medium] The seats active at boot cross one at a time as each is seated,
-  not as one party in one reservation: an eager seat becomes active on a
-  later step than the one before it. Decide whether the join waits for the
-  boot world's eager seats before it sends the first.
+- [high] The debug world has no room for four seats. A world staged with four
+  local seats needs `bodies.capacity` to hold them and their visitor slots,
+  and the staging cannot raise a capacity it does not know: `worlds/minimal`
+  now authors the room and the debug world does not, so
+  `puck benchmark --seats 4` on the debug world is refused at boot for its
+  capacity. Author the debug world's four local seats (seat 1 at boot, the
+  others on demand) and its visitor slots, and check what its population's
+  body indices assume about one local seat.
 - [high] Seats multiplexed on one connection, with the union of their
   interest disclosed once. It meets
   [replication](replication.md#decision-6-interest-and-priority-under-a-byte-budget)'s
@@ -1080,11 +1095,6 @@ invariant, what enforces it, a check per step).
   body needs the last answered input sequence per owner on the wire, which
   [replication](replication.md#decision-7-the-seats-own-body)'s continuation
   carries.
-- [medium] The operator's console can issue `player.signal` only as seat 1,
-  so a pair cannot script a stick on seats 2 to 4; a scenario's `seat2:` lines
-  can, and `body.press` with a body index moved a second local seat's body
-  alone in one process. Give the operator a way to issue a line as a seat it
-  names.
 - [Panes](#panes-split-screens-the-player-drives) holds the local split
   views' own open items.
 
@@ -3320,7 +3330,7 @@ grow:
 - [high] A shape change sends the whole document to every sink.
   `WorldDocument.DeliverPending` broadcasts the full definition
   (`WorldOutputHub.DeliverDefinition`); each `WorldDeliveryCursor` walks every
-  row, embeds audio inline (`WorldAssetRowLoader.EmbedAudio`) and, below the
+  row and, below the
   replica tier, serializes and hashes the presented document per sink, and the
   federation sink serializes the disclosed document per sink. Cost: sessions
   times document size, per shape change. Send row-level deltas through the
@@ -4659,12 +4669,13 @@ the stages; this packet holds what a stage does not.
   and plays it: on `worlds/minimal` (`--route walk`) the seat's body is handed
   to the listening authority and the chapter arrives, so the driver, the
   remote seat's input and the instrument are not what stops the debug world.
-  Its delivery is: the authority's reservation answer embeds the debug world's
-  definition, which the client refuses (below), and the instrument ends the
-  wait at once naming that refusal. The remaining defects were read from a
-  pair of headless Worlds, one listening and one started with `--connect`,
-  both on one staged document and one federation key; moon-trip's
-  [hosted world on a client](#a-hosted-world-on-a-client) closes them:
+  Its delivery now is: the seat's transfer commits, the document arrives as a
+  manifest and the route begins, and every chapter fails because the seat's
+  body does not stand on the ground at the authority
+  ([a hosted world on a client](#a-hosted-world-on-a-client) holds that
+  finding). The remaining defects were read from a pair of headless Worlds,
+  one listening and one started with `--connect`, both on one staged document
+  and one federation key:
   - `--connect` resolves its remote destination from the document the client
     booted and refuses one that authors no `host.authorityNamespace`
     (`WorldInstanceHost`'s remote destination resolution). The subject a run
@@ -4675,25 +4686,15 @@ the stages; this packet holds what a stage does not.
     door refuses for an arriving traveller ("observe must name a concrete
     body"). The benchmark's staged pair replaces the row with one whose
     `Observe` names no subject, which resolves to the arrival's own body.
-  - A replica travels as one message under `WireLimits.MaxDocumentBytes`. The
-    debug world's replica is 21.9 MB and the cap was 16 MiB; it is 64 MiB now,
-    which moves the limit and does not remove it. A replica's creations should
-    travel by content pin, as the presentation projection's prototypes do.
-  - A replica that names content by relative path fails the receiver's
-    validation, which has no directory to resolve it beside
-    (`patches[0].document.source` and a HUD element's `voice` on the debug
-    world): `WorldFederationCodec` deserializes a delivered definition with no
-    document directory, though the receiver holds its own copy of the document
-    the destination was resolved from.
   - A replica dealt to a recipient who may not read a cell still carries the
-    rules that read it, and the receiver's validation refuses the document
-    (`StateCellUndeclared` for the auction's `bid`): `WorldStateDisclosure.Disclose`
-    withholds the cell and the rule is sent whole.
-  - At the presentation tier the debug world's authority does not answer
-    `Reserve` inside the lane's deadline (`WorldRemoteAuthority.LaneRequestTimeout`),
-    on each of the client's retries. What composing its projection costs was
-    not measured, and the reading predates federated transfers moving onto
-    the row's mailbox at tick boundaries, so take it again first.
+    rules that read it (`WorldStateDisclosure.Disclose` withholds the cell and
+    the rule is sent whole). The receiver no longer refuses the document, since
+    it compiles no rule of a delivery; whether a disclosed replica should carry
+    such a rule is [the disclosure plan](disclosure.md)'s.
+  - At the presentation tier the debug world's authority did not answer
+    `Reserve` inside the lane's deadline (`WorldRemoteAuthority.LaneRequestTimeout`).
+    A reservation's answer composes no document now, so take the reading
+    again at that tier.
   - An observer that falls eight records behind is detached and reconnects
     (`WorldFederationProjectionSink.PendingDeliveryLimit`), which on a loaded
     machine happened twice in fifteen seconds; each detach is a quarter second
@@ -4755,10 +4756,13 @@ the stages; this packet holds what a stage does not.
   the overlay among a run's conditions, beside the operating system and the
   logical processors; it does not read the driver's version or the display's
   refresh. Add both to `run.json` when a platform probe names them.
-- [medium] The four-seat route waits for the multi-seat client:
-  `world.benchmark run <route> seats <n>` refuses naming it. Owner: cpu, which
-  gives each seat its own driver against one authority; the instrument needs
-  no change then.
+- [medium] The four-seat route plays on `worlds/minimal` and not yet on the
+  debug world ([a multi-seat client](#a-multi-seat-client) holds why). A run
+  on several seats gives each seat after the route's own a driver of its own
+  (`world.benchmark run <route> seats <n>`), every seat walks the route in one
+  world, and a chapter ends when every seat's driver has; the report reads
+  the route's seat and lists the others' arrivals. The standing set's
+  four-seat leg plays against a listening World on this machine.
 - [low] Each windowed World prepares its navigation before its first route
   (about 40 s on the debug world on a shared machine, outside its frames), so
   the standing set pays it once per leg. Bake the navigation once into the mesh

@@ -103,14 +103,16 @@ cue carries the seats whose own views admit it (`WorldGameplayCue.Audience`),
 the listener hears it only when its seat is among them, and a look plays it
 when any local seat may see it.
 
-A delivered document carries its patches, tunes and scores with their
-canonical content inline (`WorldAssetRowLoader.EmbedAudio`, cached by content
-pin), so a remote client or a routed view needs none of the authority's
-files. The authority leaves out a row whose file no longer loads or matches
-its pin and reports it once on standard error. A recipient hydrating a
-projection refuses the document, naming the row, when an audio row names a
-path, fails its family's validation or misses its pin
-(`WorldDefinitionValidator.TryValidateDeliveredAudio`). The client's audio
+A delivered document names its patches, tunes and scores by their content
+pins, and a recipient reads each row by its pin: from the file a world this
+process loaded names under it, then from its content store, then by a fetch
+from the authority (`WorldAssetRowLoader`, `WorldContentIndex`). A remote
+client or a routed view therefore opens none of the authority's paths, and a
+client that installed the world's package fetches nothing. A recipient
+refuses a delivered document, naming the row, when an audio row whose content
+it holds fails its family's validation or does not canonicalize to its pin
+(`WorldDefinitionValidator.TryValidateDeliveredAudio`); a row whose content it
+does not hold is not played, and is not a refusal. The client's audio
 director skips and reports a row that does not load rather than throwing on
 the frame thread.
 

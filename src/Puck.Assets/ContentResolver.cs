@@ -32,7 +32,7 @@ public sealed class ContentResolver(Func<ContentAddressedStore?>? store = null) 
     /// <summary>Gets the kind counting the bytes every answered read returned.</summary>
     public static WorkKind Bytes { get; } = Registry.Declare(name: "assets.content.bytes", unit: "bytes", workClass: WorkClass.Pacing);
 
-    private readonly ConcurrentDictionary<ContentPin, string> m_files = new();
+    private readonly ConcurrentDictionary<ContentPin, (string Path, Func<ReadOnlyMemory<byte>, byte[]?>? Canonical)> m_files = new();
     private const int MaxRemembered = 65_536;
     // How long a pin whose fetch failed waits before it is fetched again, in milliseconds.
     private const long FetchRetryMilliseconds = 5_000;
@@ -49,16 +49,19 @@ public sealed class ContentResolver(Func<ContentAddressedStore?>? store = null) 
     public IWorkCounterSource Work => m_work;
 
     /// <summary>Records the file a document this process loaded says holds a pin's bytes. Nothing is opened here: each
-    /// read hashes the file against the pin, and forgets a file whose bytes are not the pin's.</summary>
+    /// read hashes the bytes it answers against the pin, and forgets a file that no longer gives the pin's bytes.</summary>
     /// <param name="pin">The content pin.</param>
     /// <param name="path">The file's absolute path.</param>
+    /// <param name="canonical">Returns the bytes the pin names from the file's bytes, for a family whose pin names a
+    /// canonical form the file is not written in, or <see langword="null"/> when the file does not hold that family;
+    /// <see langword="null"/> for a pin that names the file's own bytes.</param>
     /// <exception cref="ArgumentException"><paramref name="path"/> is not fully qualified.</exception>
-    public void Register(ContentPin pin, string path) {
+    public void Register(ContentPin pin, string path, Func<ReadOnlyMemory<byte>, byte[]?>? canonical = null) {
         if (!Path.IsPathFullyQualified(path: path)) {
             throw new ArgumentException(message: "A registered content file names an absolute path.", paramName: nameof(path));
         }
 
-        m_files[pin] = path;
+        m_files[pin] = (path, canonical);
     }
     /// <summary>Returns whether a read of a pin has somewhere to look: a registered file, the store the caller reads,
     /// or a store an earlier read found the pin in. It opens no object, so the read that follows may still find the
@@ -95,10 +98,13 @@ public sealed class ContentResolver(Func<ContentAddressedStore?>? store = null) 
     /// <see langword="null"/> admits any bytes that hash to the pin.</param>
     /// <returns><see langword="true"/> when this process holds the content or fetched it.</returns>
     public bool TryRead(ContentPin pin, int maximumBytes, out ReadOnlyMemory<byte> content, ContentAddressedStore? held = null, Func<ContentPin, byte[]?>? fetch = null, Func<ReadOnlyMemory<byte>, bool>? admit = null) {
-        if (m_files.TryGetValue(key: pin, value: out var path)) {
+        if (m_files.TryGetValue(key: pin, value: out var registered)) {
             try {
-                var file = m_reader.Read(maximumBytes: maximumBytes, path: path);
+                var file = m_reader.Read(maximumBytes: maximumBytes, path: registered.Path);
 
+                if (registered.Canonical is { } canonical) {
+                    file = (canonical(arg: file) ?? ReadOnlyMemory<byte>.Empty);
+                }
                 if (ContentPin.Compute(content: file.Span) == pin) {
                     return Answer(bytes: file, content: out content, kind: FromFiles);
                 }

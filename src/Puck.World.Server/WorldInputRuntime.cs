@@ -396,17 +396,33 @@ public sealed partial class WorldInputRuntime {
     }
     /// <summary>Synchronizes each already-admitted owner after a committed authoritative state change.</summary>
     public bool TrySynchronize(ulong activation, out string reason) {
-        if (!TryValidate(reason: out reason)) { return false; }
-        foreach (var owner in m_ordered) {
-            if (!TrySynchronize(activation: activation, owner: owner, reason: out reason)) { return false; }
+        var changed = m_synchronizingOwners;
+
+        try {
+            // Validate the complete change before installing any barrier. A standing owner is the only owner of its
+            // body, so refreshing and synchronizing the others cannot change its routing or selection.
+            foreach (var owner in m_ordered) {
+                if (ProgramSelectionStands(owner: owner)) { continue; }
+                if (!TrySelect(owner, out _, out reason)) { return false; }
+                changed.Add(item: owner);
+            }
+            WorldTickWork.Process.Add(kind: WorldTickWork.InputSynchronizations, amount: changed.Count);
+            WorldTickWork.Process.Add(kind: WorldTickWork.InputSynchronizationsStanding, amount: (m_ordered.Count - changed.Count));
+            foreach (var owner in changed) {
+                if (!SynchronizeChanged(activation: activation, owner: owner, reason: out reason)) { return false; }
+            }
+            reason = string.Empty;
+            return true;
+        } finally {
+            changed.Clear();
         }
-        reason = string.Empty;
-        return true;
     }
+    private readonly List<Owner> m_synchronizingOwners = [];
+
     /// <summary>Checks all candidate selections while the state's journal can still rewind; changes no input state.</summary>
     public bool TryValidate(out string reason) {
         foreach (var owner in m_ordered) {
-            if (!TrySelect(owner, out _, out reason)) { return false; }
+            if (!ProgramSelectionStands(owner: owner) && !TrySelect(owner, out _, out reason)) { return false; }
         }
         reason = string.Empty;
         return true;
@@ -587,6 +603,11 @@ public sealed partial class WorldInputRuntime {
         InstallBodyMapping(owner, previous, reset: true);
     }
     private bool TrySynchronize(Owner owner, ulong activation, out string reason) {
+        if (!ProgramSelectionStands(owner: owner)) { return SynchronizeChanged(activation: activation, owner: owner, reason: out reason); }
+        reason = string.Empty;
+        return true;
+    }
+    private bool SynchronizeChanged(Owner owner, ulong activation, out string reason) {
         RefreshPermissions(owner: owner);
         if (!TrySelect(owner, out var mapping, out reason)) { return false; }
         SynchronizeTo(activation: activation, mapping: mapping!, owner: owner);

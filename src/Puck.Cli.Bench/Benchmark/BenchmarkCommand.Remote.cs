@@ -13,14 +13,16 @@ public static partial class BenchmarkCommand {
     // endpoint, and the authority's admission pins the pair's key under it.
     private const string PairNamespace = "benchmark-pair";
 
-    /// <summary>A remote authority and its client on one machine, staged from one world: a delta over the world's entry that
-    /// names the pair's namespace, admits remote players and pins the pair's own federation key, which both processes boot
-    /// with one key file. The authority listens on a free loopback port. The delta stands beside the entry, since a
-    /// delta resolves the documents its basis references (adjacencies, references) beside itself, and disposal removes
-    /// it.</summary>
-    /// <param name="Document">The staged delta both processes boot.</param>
-    /// <param name="KeyFile">The federation key both processes sign with.</param>
-    /// <param name="Endpoint">The loopback endpoint the authority listens on and the client connects to.</param>
+    /// <summary>A world staged for a leg: a delta over the world's entry. For a remote authority and its client on one
+    /// machine it names the pair's namespace, admits one remote player for each seat and pins the pair's own federation
+    /// key, which both processes boot with one key file; the authority listens on a free loopback port. For a leg on
+    /// several seats it seats that many local players at boot. The delta stands beside the entry, since a delta resolves
+    /// the documents its basis references (adjacencies, references) beside itself, and disposal removes it.</summary>
+    /// <param name="Document">The staged delta the leg's processes boot.</param>
+    /// <param name="KeyFile">The federation key both processes of a pair sign with, or empty for a leg with no
+    /// pair.</param>
+    /// <param name="Endpoint">The loopback endpoint a pair's authority listens on and its client connects to, or empty
+    /// for a leg with no pair.</param>
     private sealed record RemotePair(string Document, string KeyFile, string Endpoint) : IDisposable {
         /// <summary>Removes the staged delta.</summary>
         public void Dispose() {
@@ -31,12 +33,15 @@ public static partial class BenchmarkCommand {
             }
         }
 
-        /// <summary>Stages a pair from a world: its package folder, <c>.puck</c> source or document.</summary>
+        /// <summary>Stages a leg's world from a world: its package folder, <c>.puck</c> source or document.</summary>
         /// <param name="directory">The directory the key is written to.</param>
         /// <param name="world">The world.</param>
-        /// <returns>The staged pair, whose disposal removes the delta it wrote beside the world's entry.</returns>
+        /// <param name="seats">The local seats the staged world seats at boot; one stages none beyond the world's
+        /// own.</param>
+        /// <param name="pair">Whether the leg plays against a listening authority started on this machine.</param>
+        /// <returns>The staged world, whose disposal removes the delta it wrote beside the world's entry.</returns>
         /// <exception cref="InvalidOperationException">The world's package names no entry this verb can stage over.</exception>
-        public static RemotePair Stage(string directory, string world) {
+        public static RemotePair Stage(string directory, string world, int seats = 1, bool pair = true) {
             _ = Directory.CreateDirectory(path: directory);
 
             var entry = world;
@@ -56,19 +61,28 @@ public static partial class BenchmarkCommand {
             }
 
             var document = Path.Combine(path1: Path.GetDirectoryName(path: full)!, path2: $".benchmark-pair-{Guid.NewGuid():N}{WorldDocumentName.SourceSuffix}");
+            // A leg on several seats seats them all at boot: a World started with no devices joins none on demand.
+            var seated = ((seats > 1)
+                ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"localSeats: {seats}, seatActivation [{string.Join(separator: ", ", values: Enumerable.Repeat(element: "Eager", count: seats))}]")
+                : string.Empty);
             var source = new StringBuilder()
-                .Append(provider: CultureInfo.InvariantCulture, handler: $"// The benchmark's remote pair: the world as its authority and a client on one machine.\nbasis: {JsonValue.Create(value: basis).ToJsonString()}\n")
-                .Append(provider: CultureInfo.InvariantCulture, handler: $"host {{ authorityNamespace: \"{PairNamespace}\" }}\n")
-                .Append(value: "bodies { networkPlayers: 1 }\n")
-                .Append(value: "admission [\n")
-                .Append(value: "  { disclosure: Replica, domain: \"*\", grants [{ budget: 8, capability: Drive, exclusive: true }, { budget: 64, capability: Observe }], mode: FederatedAuthority }\n")
-                .Append(provider: CultureInfo.InvariantCulture, handler: $"  {{ domain: \"{identity.Domain}\", subject: \"{PairNamespace}\", mode: SignsDirectly, algorithm: \"ecdsa-p256-sha256\", publicKey: \"{identity.PublicKeyBase64}\", grants [] }}\n")
-                .Append(value: "]\n");
+                .Append(provider: CultureInfo.InvariantCulture, handler: $"// The benchmark's staged world: {(pair ? "the world as its authority and a client on one machine" : "the world")}{((seats > 1) ? $", with {seats} seats" : string.Empty)}.\nbasis: {JsonValue.Create(value: basis).ToJsonString()}\n");
 
-            File.WriteAllBytes(path: key, bytes: identity.Pkcs8);
+            if (pair) {
+                _ = source
+                    .Append(provider: CultureInfo.InvariantCulture, handler: $"host {{ authorityNamespace: \"{PairNamespace}\" }}\n")
+                    .Append(provider: CultureInfo.InvariantCulture, handler: $"bodies {{ networkPlayers: {seats}{((seated.Length > 0) ? $", {seated}" : string.Empty)} }}\n")
+                    .Append(value: "admission [\n")
+                    .Append(value: "  { disclosure: Replica, domain: \"*\", grants [{ budget: 8, capability: Drive, exclusive: true }, { budget: 64, capability: Observe }], mode: FederatedAuthority }\n")
+                    .Append(provider: CultureInfo.InvariantCulture, handler: $"  {{ domain: \"{identity.Domain}\", subject: \"{PairNamespace}\", mode: SignsDirectly, algorithm: \"ecdsa-p256-sha256\", publicKey: \"{identity.PublicKeyBase64}\", grants [] }}\n")
+                    .Append(value: "]\n");
+                File.WriteAllBytes(path: key, bytes: identity.Pkcs8);
+            } else {
+                _ = source.Append(provider: CultureInfo.InvariantCulture, handler: $"bodies {{ {seated} }}\n");
+            }
             File.WriteAllText(path: document, contents: source.ToString(), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
-            return new RemotePair(Document: document, Endpoint: endpoint, KeyFile: key);
+            return new RemotePair(Document: document, Endpoint: (pair ? endpoint : string.Empty), KeyFile: (pair ? key : string.Empty));
         }
     }
 

@@ -289,6 +289,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// <summary>The times the probe service found the installed scene naming a mesh its residency no longer places
     /// (<see cref="NoteScenePlacement"/>), each of which makes the next scene build due.</summary>
     public static readonly WorkKind SceneUnplaced = Registry.Declare(name: "sdf.mesh-gi.scene-unplaced", unit: "scenes", workClass: WorkClass.Pacing);
+    /// <summary>Counts background admission checks that walk a scene's mesh placements.</summary>
+    public static readonly WorkKind PlacementChecks = Registry.Declare(name: "sdf.mesh-gi.placement-checks", unit: "checks", workClass: WorkClass.Pacing);
+    /// <summary>Counts admissions that reuse a successful check of the scene's current placements and backing.</summary>
+    public static readonly WorkKind PlacementChecksReused = Registry.Declare(name: "sdf.mesh-gi.placement-checks-reused", unit: "checks", workClass: WorkClass.Pacing);
     /// <summary>Traversal stack or step-limit assertions; valid scenes must leave this at zero.</summary>
     public static readonly WorkKind TraversalFaults = Registry.Declare(name: "sdf.mesh-gi.traversal-faults", unit: "walks", workClass: WorkClass.Pacing);
     /// <summary>CPU sky captures for probe lighting: each renders the sky map and averages it over the hit texels.</summary>

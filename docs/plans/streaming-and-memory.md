@@ -1110,7 +1110,7 @@ frame that rates nothing
 (`RenderGraphFrame.Seal`, which `RenderGraphRuntimeNode` uses to rebuild its
 roots after the captures, closing step 2's stale filming-camera list) and
 prepares only what the frame reads (`RenderGraphRuntime.PrepareReaders` over
-`RenderGraphScheduler.Readers`, then `IRenderGraphPackageFactory.PrepareRead`),
+`RenderGraphScheduler.ReadersInto`, then `IRenderGraphPackageFactory.PrepareRead`),
 in rounds until a round prepares nothing new; the freshness question
 (`RenderGraphRuntime.CollectUnchanged`) is asked only of instances read. A residency
 read again after frames nothing read advances its source by those frames

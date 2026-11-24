@@ -1,8 +1,8 @@
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation = false) =>
-        ValidateCore(definition, neighbours, validateAdjacencyClaims, retainCompilation, throwOnErrors: true, errorSink: null, deferredSink: null);
+    private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation = false, bool delivered = false) =>
+        ValidateCore(definition, neighbours, validateAdjacencyClaims, retainCompilation, throwOnErrors: true, errorSink: null, deferredSink: null, delivered: delivered);
     // Expansion precedes every consumer of State (the state.expansion partition runs first and stops the run on a
     // refusal). Invalid declarations must become validation refusals, including on collecting APIs, rather than
     // escaping from the expanded-row property midway through a walk.

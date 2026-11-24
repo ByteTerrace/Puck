@@ -1805,12 +1805,9 @@ counts in `sdf.transforms`, never in `records.posed`.
   rates nothing (the views lever off, a locked tick, a converging capture, an unpaced host). A day that turns keeps
   lighting settling for good, so a minimum served every frame captures every held world every frame. The runtime
   then seals its roots and footprints (`RenderGraphFrame.Seal`) and captures only the instances
-  `RenderGraphScheduler.Readers` marks (`IRenderGraphPackageFactory.PrepareRead`), in rounds until none is new, and
-  asks `IsUnchanged` of those alone. A scheduled render is always among them, since `Readers` follows every edge
-  `Schedule` passes demand along; a new demand edge in the scheduler goes into `Readers` in the same change, or its
-  producer renders from a residency nobody captured this frame. `Readers` does not know a refresh holds an instance,
-  so a view rated to a reduced tier still captures its residency every frame
-  ([the plan](../../../docs/plans/frame-production.md#the-steps), step 1). A graph installed mid-frame still stages
+  `RenderGraphScheduler.ReadersInto` marks (`IRenderGraphPackageFactory.PrepareRead`), in rounds until none is new, and
+  asks `IsUnchanged` of those alone. The reader walk shares the scheduler's cadence and demand calculation. A rated
+  view only asks for its residency when it is due. A graph installed mid-frame still stages
   late (`SdfWorldResidency.Staged`, counted). `world.counters sdf.captures` reads residencies held against captures
   run, the minimums served and held, and the residencies packed and uploaded beside others.
 - **Residencies pack and upload on the pool.** A captured residency's frame is packed in

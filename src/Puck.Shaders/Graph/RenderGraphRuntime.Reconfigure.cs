@@ -455,11 +455,6 @@ public sealed partial class RenderGraphRuntime {
     private void RebuildSetTables() {
         var count = m_set.Instances.Count;
 
-        m_orderPosition = new int[count];
-        for (var position = 0; (position < count); position++) {
-            m_orderPosition[m_set.Order[position]] = position;
-        }
-
         var uploadSources = new List<int>();
         var activeUploadSources = new List<int>();
         var sourceProducers = new List<int>();

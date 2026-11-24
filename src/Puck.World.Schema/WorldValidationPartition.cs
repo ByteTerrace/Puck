@@ -103,6 +103,10 @@ internal sealed class WorldValidationRun {
     public bool ValidateAdjacencyClaims { get; init; }
     public bool RetainCompilation { get; init; }
     public bool ProveCensusOutcomes { get; init; } = true;
+    // The document came from another process: it is checked as what its recipient presents. Content it names by pin
+    // is checked when this process holds it and is otherwise left to its reader, no file it names is opened, and its
+    // rules, which a recipient never runs, are not compiled.
+    public bool Delivered { get; init; }
     // The programs the document partition compiled, when it ran and was asked to keep them.
     public WorldRuleCompilation? Compilation { get; set; }
     // Set by a partition whose refusal leaves nothing after it safe to read (the state expansion).

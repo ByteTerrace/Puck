@@ -133,12 +133,10 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.True(
             condition: WorldFederationCodec.TryDecodeRoute(
+                held: described.Definition,
                 body: WorldFederationCodec.EncodeRoute(
-                    authority: "machine-c/boot",
-                    revision: 0,
                     route: in described,
-                    tier: WorldDisclosureTier.Replica,
-                    time: ArenaTime.At(engineTick: 0UL, tick: 0UL)
+                    tier: WorldDisclosureTier.Replica
                 ),
                 failure: out var routeFailure,
                 route: out var route
@@ -250,12 +248,10 @@ public sealed partial class FederationTransferLawTests {
             var route = Route(travelTurn: turn);
 
             Assert.False(condition: WorldFederationCodec.TryDecodeRoute(
+                held: route.Definition,
                 body: WorldFederationCodec.EncodeRoute(
-                    authority: "world/onward",
-                    revision: 0,
                     route: in route,
-                    tier: WorldDisclosureTier.Replica,
-                    time: ArenaTime.At(engineTick: 0UL, tick: 0UL)
+                    tier: WorldDisclosureTier.Replica
                 ),
                 failure: out var routeFailure,
                 route: out _
@@ -297,12 +293,10 @@ public sealed partial class FederationTransferLawTests {
             var closed = Route(travelTurn: end);
 
             Assert.True(condition: WorldFederationCodec.TryDecodeRoute(
+                held: closed.Definition,
                 body: WorldFederationCodec.EncodeRoute(
-                    authority: "world/onward",
-                    revision: 0,
                     route: in closed,
-                    tier: WorldDisclosureTier.Replica,
-                    time: ArenaTime.At(engineTick: 0UL, tick: 0UL)
+                    tier: WorldDisclosureTier.Replica
                 ),
                 failure: out var closedFailure,
                 route: out var decoded
@@ -347,15 +341,13 @@ public sealed partial class FederationTransferLawTests {
         );
 
         var encoded = WorldFederationCodec.EncodeRoute(
-            authority: "world/corner-sw",
-            revision: 0,
             route: in expected,
-            tier: WorldDisclosureTier.Replica,
-            time: ArenaTime.At(engineTick: 0UL, tick: 0UL)
+            tier: WorldDisclosureTier.Replica
         );
 
         Assert.True(
             condition: WorldFederationCodec.TryDecodeRoute(
+                held: expected.Definition,
                 body: encoded,
                 failure: out var failure,
                 route: out var actual

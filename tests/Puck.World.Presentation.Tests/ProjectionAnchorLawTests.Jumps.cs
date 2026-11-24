@@ -32,7 +32,6 @@ public sealed partial class ProjectionAnchorLawTests {
 
         using var fixture = Fixtures.FreshServer(definition: definition);
         var sink = new WorldFederationProjectionSink(
-            authority: "boot",
             disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 1f)),
             server: fixture.Server,
             tier: WorldDisclosureTier.Presentation
