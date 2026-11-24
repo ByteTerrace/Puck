@@ -2323,10 +2323,9 @@ The volume's cost and convergence:
   `RecordCommit` records one buffer copy per probe where one scatter dispatch
   would do; `SdfMeshProbeGpuWork.Record` reads back
   `SdfMeshProbeRelight.ResultWords` while `SdfMeshIrradiance.RelightGpu`
-  decodes only the `SdfMeshProbeRelight.OutputWords` prefix, and
-  `SdfMeshProbeGpuWork.Complete` allocates the full readback and copies it
-  again to strip the assertion word. Carry an explicit logical length, and
-  keep the readback token's fence ownership through commit. Where hardware
+  decodes only the `SdfMeshProbeRelight.OutputWords` prefix. Pack the host
+  output separately from the feedback, keeping the readback token's fence
+  ownership through commit. Where hardware
   ray queries answer the trace, the device holds the acceleration structures
   and the software walk's copy of the scene both (`world.residency`'s
   `trace-structures` line), about a gigabyte together by the lane's reading:
