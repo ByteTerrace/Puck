@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
@@ -132,8 +133,9 @@ internal sealed class SdfWorldShadows : IDisposable {
     // Set by the memory account's trim request, on any thread; the next decision gives back what no view reads.
     private int m_trimRequested;
     private long m_trims;
-    // Where a caster last stood. Rigid rows share their slot's nonnegative key; a standalone row takes its complement.
-    private readonly Dictionary<int, SdfMeshBox> m_judged = [];
+    // Where a caster last stood, by StampedIndexTable.IndexOfSigned of its key. Rigid rows share their slot's
+    // nonnegative key; a standalone row takes its complement.
+    private readonly StampedIndexTable<SdfMeshBox> m_judged = new();
     private float m_finestTexel;
     // What the stagings reported, for the report: the changes reported, those no box bounds, and those handed to the
     // entries.
@@ -265,7 +267,10 @@ internal sealed class SdfWorldShadows : IDisposable {
     /// <param name="after">The box it is drawn by after, or <see langword="null"/> for a draw no box bounds.</param>
     /// <param name="glass">Whether the draw is glass on either side of the change, whose extinction the entries then draw
     /// again.</param>
-    internal void Moved(int key, bool wasLive, in SdfMeshBox? before, bool isLive, in SdfMeshBox? after, bool glass) {
+    /// <param name="rigid">Whether a slot's two boxes are one box its pose carries, every caster point moving with it, so
+    /// the box's displacement bounds the caster's as a standalone row's does; a slot that is not rigid is a union, which
+    /// can hide motion inside it, and owes both ends at every entry whenever it moves.</param>
+    internal void Moved(int key, bool wasLive, in SdfMeshBox? before, bool isLive, in SdfMeshBox? after, bool glass, bool rigid = false) {
         if ((wasLive && (before is null)) || (isLive && (after is null))) {
             MovedEverywhere();
             return;
@@ -273,22 +278,23 @@ internal sealed class SdfWorldShadows : IDisposable {
         m_movedChanges++;
         var was = wasLive ? before : null;
         var now = isLive ? after : null;
-        var held = m_judged.TryGetValue(key, out var previous);
-        var slot = key >= 0;
+        var index = StampedIndexTable<SdfMeshBox>.IndexOfSigned(key: key);
+        var held = m_judged.TryGetValue(index: index, value: out var previous);
+        // A union can conceal motion inside it, so a slot that is no rigid box owes both ends at every entry.
+        var bounded = ((key < 0) || rigid);
 
-        // A union can conceal motion inside it. Every changed slot owes both ends at every entry.
-        if (!slot && (m_finestTexel > 0f) && held && (was is not null) && (now is { } next) &&
+        if (bounded && (m_finestTexel > 0f) && held && (was is not null) && (now is { } next) &&
             (Displacement(in previous, in next) < (m_finestTexel * MoveTexels))) {
             return;
         }
-        var judged = ((was is not null) && held && !slot) ? previous : was;
+        var judged = ((was is not null) && held && bounded) ? previous : was;
 
-        if (now is { } box) { m_judged[key] = box; }
-        else { _ = m_judged.Remove(key); }
+        if (now is { } box) { m_judged.Set(index: index, value: box); }
+        else { m_judged.Remove(index: index); }
         m_movedJudged++;
         foreach (var anchor in m_anchors) {
             foreach (var entry in anchor.Entries) {
-                entry.Note(key: key, before: judged, after: now, glass: glass);
+                entry.Note(index: index, before: judged, after: now, glass: glass, conceals: !bounded);
             }
         }
     }
@@ -901,8 +907,8 @@ internal sealed class SdfWorldShadows : IDisposable {
     }
 
     // Where a caster lies in an entry's texels: the centre across the plane and along the light, the half extents across
-    // the plane, and the generation of the layer it was judged against.
-    private readonly record struct Footprint(float U, float V, float W, float HalfU, float HalfV, int Generation) {
+    // the plane.
+    private readonly record struct Footprint(float U, float V, float W, float HalfU, float HalfV) {
         // Where a box lies in a camera's texels, `texels` a side: its centre and half extents across the plane, and its
         // centre's depth along the light, in texels.
         public static Footprint Of(in SdfMeshBox box, in SdfMeshShadowCamera camera, int texels) {
@@ -914,8 +920,7 @@ internal sealed class SdfWorldShadows : IDisposable {
                 V: ((0.5f - ((Vector3.Dot(relative, camera.Up) / camera.HalfHeight) * 0.5f)) * texels),
                 W: (Vector3.Dot(relative, camera.Forward) * scale),
                 HalfU: (((MathF.Abs(Vector3.Dot(box.HalfX, camera.Right)) + MathF.Abs(Vector3.Dot(box.HalfY, camera.Right))) + MathF.Abs(Vector3.Dot(box.HalfZ, camera.Right))) * scale),
-                HalfV: (((MathF.Abs(Vector3.Dot(box.HalfX, camera.Up)) + MathF.Abs(Vector3.Dot(box.HalfY, camera.Up))) + MathF.Abs(Vector3.Dot(box.HalfZ, camera.Up))) * scale),
-                Generation: 0);
+                HalfV: (((MathF.Abs(Vector3.Dot(box.HalfX, camera.Up)) + MathF.Abs(Vector3.Dot(box.HalfY, camera.Up))) + MathF.Abs(Vector3.Dot(box.HalfZ, camera.Up))) * scale));
         }
         // Whether another footprint of the same caster lies MoveTexels or more away, across the plane, in extent or along
         // the light.
@@ -979,10 +984,9 @@ internal sealed class SdfWorldShadows : IDisposable {
         private readonly OwedRects m_pending = new();
         private bool m_owedOptical;
         private bool m_takenOptical;
-        // Where the entry last drew each staged row's caster (Note), valid while its generation is the layer's: every
-        // whole redraw moves the generation, after which a row's next change says where the redraw drew it.
-        private readonly Dictionary<int, Footprint> m_drawn = [];
-        private int m_drawnGeneration = 1;
+        // Where the entry last drew each staged row's caster (Note), by StampedIndexTable.IndexOfSigned of its key: every
+        // whole redraw clears it, after which a row's next change says where the redraw drew it.
+        private readonly StampedIndexTable<Footprint> m_drawn = new();
 
         private Pair? m_front;
         private bool m_opticalInitialized;
@@ -1329,31 +1333,31 @@ internal sealed class SdfWorldShadows : IDisposable {
         }
         // Judges one draw's change against where this entry last drew it, in the committed camera's texels: a draw that
         // appears or goes owes the rectangle it covers, and one that moves owes where it was drawn and where it is once it
-        // has moved MoveTexels across the plane or along the light since. A redraw under way owes its own layers where
-        // the caster was and is, since a share already drawn may hold it where it was.
-        public void Note(int key, in SdfMeshBox? before, in SdfMeshBox? after, bool glass) {
-            var slot = key >= 0;
-
-            if (m_redraw is { Started: true } redraw) { NotePending(in redraw, in before, in after, slot); }
+        // has moved MoveTexels across the plane or along the light since. A union that conceals motion inside it (a slot
+        // that is no rigid box) owes both ends whenever it moves, and also where it last stood when that differs from
+        // where it was drawn. A redraw under way owes its own layers where the caster was and is, since a share already
+        // drawn may hold it where it was.
+        public void Note(int index, in SdfMeshBox? before, in SdfMeshBox? after, bool glass, bool conceals) {
+            if (m_redraw is { Started: true } redraw) { NotePending(in redraw, in before, in after, conceals); }
             if (!m_stands || m_owed.All || (m_texels <= 0)) { return; }
 
             var camera = m_camera;
             var was = before is { } old ? Footprint.Of(in old, in camera, m_texels) : (Footprint?)null;
             var current = after is { } now ? Footprint.Of(in now, in camera, m_texels) : (Footprint?)null;
-            var held = m_drawn.TryGetValue(key, out var drawn) && (drawn.Generation == m_drawnGeneration);
+            var held = m_drawn.TryGetValue(index: index, value: out var drawn);
             var origin = held ? drawn : was;
 
-            if (slot || (origin is not { } prior) || (current is not { } to) || prior.Movable(in to)) {
+            if (conceals || (origin is not { } prior) || (current is not { } to) || prior.Movable(in to)) {
                 if (origin is { } previous) { Owe(in previous); }
-                if (slot && held && (was is { } immediate) && ((drawn with { Generation = 0 }) != immediate)) { Owe(in immediate); }
+                if (conceals && held && (was is { } immediate) && (drawn != immediate)) { Owe(in immediate); }
                 if (current is { } next) {
                     Owe(in next);
-                    m_drawn[key] = next with { Generation = m_drawnGeneration };
+                    m_drawn.Set(index: index, value: next);
                 } else {
-                    _ = m_drawn.Remove(key);
+                    m_drawn.Remove(index: index);
                 }
             } else if (!held) {
-                m_drawn[key] = prior with { Generation = m_drawnGeneration };
+                m_drawn.Set(index: index, value: prior);
             }
 
             void Owe(in Footprint footprint) {
@@ -1361,14 +1365,14 @@ internal sealed class SdfWorldShadows : IDisposable {
             }
         }
         // Owes a redraw under way the places a changed caster was and is, in its own camera's texels.
-        private void NotePending(in Redraw redraw, in SdfMeshBox? before, in SdfMeshBox? after, bool slot) {
+        private void NotePending(in Redraw redraw, in SdfMeshBox? before, in SdfMeshBox? after, bool conceals) {
             if (m_pending.All) { return; }
 
             var camera = redraw.Camera;
             var was = ((before is { } box) ? Footprint.Of(box: in box, camera: in camera, texels: redraw.Texels) : (Footprint?)null);
             var now = ((after is { } moved) ? Footprint.Of(box: in moved, camera: in camera, texels: redraw.Texels) : (Footprint?)null);
 
-            if (!slot && (was is { } from) && (now is { } to) && !from.Movable(in to)) { return; }
+            if (!conceals && (was is { } from) && (now is { } to) && !from.Movable(in to)) { return; }
             if (was is { } old) { _ = m_pending.Owe(in old, redraw.Texels); }
             if (now is { } current) { _ = m_pending.Owe(in current, redraw.Texels); }
         }
@@ -1718,7 +1722,7 @@ internal sealed class SdfWorldShadows : IDisposable {
                     m_owed.Merge(other: m_pending, texels: m_texels);
                     m_pending.Clear();
                     m_owedOptical = false;
-                    m_drawnGeneration++;
+                    m_drawn.Clear();
                 } else {
                     m_redraw = redraw with { Next = (redraw.Next + 1) };
                 }

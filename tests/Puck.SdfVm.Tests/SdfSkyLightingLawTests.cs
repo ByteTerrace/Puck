@@ -74,7 +74,13 @@ public sealed class SdfSkyLightingLawTests {
     public void SubCodeChangesAccumulateAgainstTheRenderedSkyAndCameraChangesDoNotProject() {
         var refresh = new SdfSkyEnvironmentRefresh();
 
-        bool Owes(SdfSky sky) { var layers = Pack(block: out var block, sky: sky); return refresh.Owes(block: block, layers: layers); }
+        bool Owes(SdfSky sky) {
+            var layers = Pack(block: out var block, sky: sky);
+
+            // A drift is projected once its frames pass (SdfSkyEnvironmentRefresh.DriftFrames).
+            for (var frame = 0; (frame < SdfSkyEnvironmentRefresh.DriftFrames); frame++) { refresh.Advance(); }
+            return refresh.Owes(block: block, layers: layers);
+        }
         var sky = Sky(new Vector3(value: .25f), new Vector3(value: .25f));
 
         Assert.True(condition: Owes(sky: sky));

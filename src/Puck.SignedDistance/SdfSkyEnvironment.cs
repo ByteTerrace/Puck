@@ -313,6 +313,37 @@ public static partial class SdfSkyEnvironment {
 
         return previous.Color;
     }
+    /// <summary>Returns whether two packed skies light by the same kinds of layers: the same quality tier and the same
+    /// layers the lighting sees, of the same kind and blend, in the same order, whatever their frame, colours, rotations
+    /// or masks. A sky that keeps its kinds only drifts (a turning day); one that changes them is an edit.</summary>
+    /// <param name="block">One sky block.</param>
+    /// <param name="layers">Its layer table.</param>
+    /// <param name="otherBlock">The other sky block.</param>
+    /// <param name="otherLayers">Its layer table.</param>
+    /// <returns><see langword="true"/> when both skies light by the same kinds of layers.</returns>
+    public static bool SameLayerKinds(in SdfSkyBlock block, ReadOnlySpan<SdfSkyLayer> layers, in SdfSkyBlock otherBlock, ReadOnlySpan<SdfSkyLayer> otherLayers) {
+        if (block.Quality != otherBlock.Quality) { return false; }
+
+        var count = Math.Min(val1: ((int)block.LayerCount), val2: layers.Length);
+        var otherCount = Math.Min(val1: ((int)otherBlock.LayerCount), val2: otherLayers.Length);
+        var other = 0;
+
+        for (var index = 0; (index <= count); index++) {
+            while ((index < count) && !IsLit(layer: in layers[index])) { index++; }
+            while ((other < otherCount) && !IsLit(layer: in otherLayers[other])) { other++; }
+
+            var done = (index >= count);
+            var otherDone = (other >= otherCount);
+
+            if (done || otherDone) { return (done && otherDone); }
+            if ((layers[index].Kind != otherLayers[other].Kind) || (layers[index].Blend != otherLayers[other].Blend) || (layers[index].Mask != otherLayers[other].Mask)) {
+                return false;
+            }
+            other++;
+        }
+
+        return true;
+    }
     /// <summary>Returns whether two packed skies draw the same map: the same frame, the same quality tier, and the same
     /// layers the lighting sees, but discs, in the same order. Everything else (the fog's density, every layer only the
     /// camera sees, a disc, the environment gains) leaves the map as it is.</summary>
