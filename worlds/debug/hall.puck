@@ -1515,6 +1515,11 @@ render {
   // scene, and the tone curve's shoulder (render.tone) keeps them from clipping flat; the key eases back to the meter's
   // own over dusk, so the night keeps its deep blue. The meter reads the picture as the basis's does (its band,
   // percentiles and centre weight restated, since this section replaces the basis's whole).
+  //
+  // As the viewer climbs toward the sky seam (launch.puck's `altitude` clock), the camera meets what the moon's own
+  // camera meets past the seam (moon.puck): the floor rises to the moon's EV 11 whatever the hour, the key eases back to
+  // the meter's own, and the meter leaves the darkest seven tenths of the picture out, so a black sky never pulls the
+  // exposure down and the sunlit ship and the moon hold their tone up to the seam and across it.
   exposure {
     mode: Auto
     minimum {
@@ -1526,6 +1531,15 @@ render {
         { at: 63000, value: 7 }
         { at: 67500, value: 2 }
       ]
+      with {
+        clock: altitude
+        combine: Maximum
+        keys [
+          { at: 0, value: 0 }
+          { at: 300, value: 0 }
+          { at: 2250, value: 11, ease: Step }
+        ]
+      }
     }
     compensation {
       clock: day
@@ -1536,12 +1550,28 @@ render {
         { at: 63000, value: 1.25 }
         { at: 67500, value: 0 }
       ]
+      with {
+        clock: altitude
+        combine: Multiply
+        keys [
+          { at: 0, value: 1 }
+          { at: 300, value: 1 }
+          { at: 2250, value: 0, ease: Step }
+        ]
+      }
     }
     maximum: 16
     adaptation: 0.75
     local: 0.5
     band: 0.75
-    low: 0.1
+    low {
+      clock: altitude
+      keys [
+        { at: 0, value: 0.1 }
+        { at: 300, value: 0.1 }
+        { at: 2250, value: 0.7, ease: Step }
+      ]
+    }
     high: 0.9
     center: 0.25
     hold: "state.galleryFill.hold"

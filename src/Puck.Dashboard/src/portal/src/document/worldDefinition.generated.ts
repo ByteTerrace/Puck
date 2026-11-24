@@ -898,15 +898,15 @@ export type ActionTrigger = {
  */
 export type ActionTriggerMode = "Level" | "Edge";
 
-export type BindableAngle = number | string | ShapeNonNullable5;
+export type BindableAngle = number | string | ShapeNonNullable7;
 
 export type BindableColor = string | ShapeNonNullable3;
 
 export type BindableDirection = [number, number, number] | ShapeNonNullable;
 
-export type BindableScalar = number | string | ShapeNonNullable5;
+export type BindableScalar = number | string | ShapeNonNullable7;
 
-export type BindableVector2 = [number, number] | ShapeNonNullable7;
+export type BindableVector2 = [number, number] | ShapeNonNullable9;
 
 export type BindableVector3 = [number, number, number] | ShapeNonNullable;
 
@@ -1976,11 +1976,11 @@ export type ExpressionProgram = {
   /**
    * The postfix instructions, in evaluation order.
    */
-  instructions: ShapeNonNullable28[];
+  instructions: ShapeNonNullable30[];
   /**
    * Gets the shared subprograms this program's Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.
    */
-  subprograms?: ShapeNonNullable29[];
+  subprograms?: ShapeNonNullable31[];
   [k: string]: unknown;
 };
 
@@ -1991,11 +1991,11 @@ export type ExpressionProgramNonNullable = {
   /**
    * The postfix instructions, in evaluation order.
    */
-  instructions: ShapeNonNullable38[];
+  instructions: ShapeNonNullable40[];
   /**
    * Gets the shared subprograms this program's Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.
    */
-  subprograms?: ShapeNonNullable39[];
+  subprograms?: ShapeNonNullable41[];
   [k: string]: unknown;
 };
 
@@ -2006,11 +2006,11 @@ export type ExpressionProgramNonNullable2 = {
   /**
    * The postfix instructions, in evaluation order.
    */
-  instructions: ShapeNonNullable48[];
+  instructions: ShapeNonNullable50[];
   /**
    * Gets the shared subprograms this program's Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.
    */
-  subprograms?: ShapeNonNullable49[];
+  subprograms?: ShapeNonNullable51[];
   [k: string]: unknown;
 };
 
@@ -2210,7 +2210,7 @@ export type Int32List = number[];
 
 export type Int64List = number[];
 
-export type IntentSource = "Live" | "Idle" | ShapeNonNullable8;
+export type IntentSource = "Live" | "Idle" | ShapeNonNullable10;
 
 export type LatticeTopology = LatticeTopologyGrid | LatticeTopologyRing | LatticeTopologyHex | LatticeTopologyBox | LatticeTopologyGraph | LatticeTopologyTiling | WorldFieldTopology | null;
 
@@ -4399,50 +4399,50 @@ export type ShapeNonNullable = {
 };
 
 export type ShapeNonNullable10 = {
-  op: ShapeNonNullable9;
+  $type: "producer";
+  name: string;
 };
 
-export type ShapeNonNullable11 = {
+export type ShapeNonNullable11 = "Add" | "Subtract" | "Multiply" | "Divide" | "Minimum" | "Maximum" | "Clamp" | "Remainder" | "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "ShiftLeft" | "ShiftRight" | "ShiftRightLogical" | "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Select" | "SetBitCount" | "LeadingZeroCount" | "TrailingZeroCount" | "LowestSetBit" | "ClearLowestSetBit" | "RotateLeft" | "RotateRight" | "ByteSwap" | "ReverseBits" | "Negate" | "Absolute" | "ParallelBitExtract" | "ParallelBitDeposit" | "BitField" | "BitInsert" | "Sign" | "Pair" | "PairX" | "PairY" | "PairSwap" | "PairMaximum" | "PairMinimum" | "PairSum" | "PairDifference" | "PairTranslate" | "PairScale" | "MortonIndex" | "MortonX" | "MortonY" | "HilbertIndex" | "HilbertX" | "HilbertY" | "HexIndex" | "HexQ" | "HexR" | "HexRadius" | "HexEuclideanSquared" | "HexDistance" | "HexNeighbor" | "HexRotate" | "HexMirror" | "HexSwap" | "HexAdd" | "HexSubtract" | "HexMultiply" | "HexScale" | "HexTranslate" | "Layer" | "LayerOffset" | "LayerStart" | "LayerSize" | "SquareRoot" | "Sine" | "Cosine" | "SquareIndex" | "SquareX" | "SquareY" | "SquareRadius" | "SquareLength" | "SquareEuclideanSquared" | "SquareDistance" | "SquareChebyshev" | "SquareNeighbor" | "SquareRotate" | "SquareMirror" | "SquareSwap" | "SquareAdd" | "SquareSubtract" | "SquareMultiply" | "SquareScale" | "SquareTranslate" | "GreatestCommonDivisor" | "LeastCommonMultiple" | "FloorModulo" | "FloorDivide" | "FloorDivideModulo" | "DivideRemainder" | "Power" | "ModularPower" | "ModularInverse" | "ExtendedGreatestCommonDivisor" | "CycleForward" | "CycleDistance" | "SmallestMissing" | "IsPrime" | "PrimeAt" | "BinomialCoefficient" | "Factorial" | "SubsetRank" | "SubsetAt" | "SubsetMember" | "ArrangementRank" | "ArrangementAt" | "ArrangementMember" | "Floor" | "Ceiling" | "Round" | "ReplicationMask" | "RepeatBits" | "IsAbsent" | "Coalesce" | "Member" | "And" | "Or" | "Not";
+
+export type ShapeNonNullable12 = {
+  op: ShapeNonNullable11;
+};
+
+export type ShapeNonNullable13 = {
   op: "Argument";
   index: number;
 };
 
-export type ShapeNonNullable12 = {
+export type ShapeNonNullable14 = {
   op: "BoardShift" | "BoardRay" | "BoardImage";
   topology: string;
   index: string;
 };
 
-export type ShapeNonNullable13 = {
+export type ShapeNonNullable15 = {
   op: "Call";
   subprogram: number;
 };
 
-export type ShapeNonNullable14 = {
+export type ShapeNonNullable16 = {
   op: "Constant";
   value: number;
 };
 
-export type ShapeNonNullable15 = {
+export type ShapeNonNullable17 = {
   op: "All" | "Any" | "Count" | "Sum";
   family: string;
   binder: string;
   subprogram: number;
 };
 
-export type ShapeNonNullable16 = {
+export type ShapeNonNullable18 = {
   zone: unknown;
 };
 
-export type ShapeNonNullable17 = {
-  expression: unknown;
-};
-
-export type ShapeNonNullable18 = string | number | ShapeNonNullable16 | ShapeNonNullable17;
-
 export type ShapeNonNullable19 = {
-  channel: string;
-  arguments?: ShapeNonNullable18[];
+  expression: unknown;
 };
 
 export type ShapeNonNullable2 = {
@@ -4451,54 +4451,53 @@ export type ShapeNonNullable2 = {
   ease?: "Linear" | "Smooth" | "Step";
 };
 
-export type ShapeNonNullable20 = {
+export type ShapeNonNullable20 = string | number | ShapeNonNullable18 | ShapeNonNullable19;
+
+export type ShapeNonNullable21 = {
+  channel: string;
+  arguments?: ShapeNonNullable20[];
+};
+
+export type ShapeNonNullable22 = {
   binding: string;
   field: string;
 };
 
-export type ShapeNonNullable21 = {
+export type ShapeNonNullable23 = {
   pool: string;
   slot: number;
   field: string;
 };
 
-export type ShapeNonNullable22 = {
+export type ShapeNonNullable24 = {
   op: "Operand";
   name: StateChannelRef;
   key?: StateChannelRef;
 };
 
-export type ShapeNonNullable23 = {
+export type ShapeNonNullable25 = {
   $type: "cell";
   name: StateChannelRef;
   key?: StateChannelRef;
 };
 
-export type ShapeNonNullable24 = {
+export type ShapeNonNullable26 = {
   $type: "literal";
   value: string;
 };
 
-export type ShapeNonNullable25 = {
+export type ShapeNonNullable27 = {
   $type: "embed";
   text: string;
   space?: string;
 };
 
-export type ShapeNonNullable26 = ShapeNonNullable23 | ShapeNonNullable24 | ShapeNonNullable25 | null;
-
-export type ShapeNonNullable27 = {
-  op: "Dot" | "Similarity" | "Identical";
-  left: ShapeNonNullable26;
-  right: ShapeNonNullable26;
-};
-
-export type ShapeNonNullable28 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable22 | ShapeNonNullable27 | null;
+export type ShapeNonNullable28 = ShapeNonNullable25 | ShapeNonNullable26 | ShapeNonNullable27 | null;
 
 export type ShapeNonNullable29 = {
-  name?: string;
-  arity?: number;
-  instructions: ShapeNonNullable28[];
+  op: "Dot" | "Similarity" | "Identical";
+  left: ShapeNonNullable28;
+  right: ShapeNonNullable28;
 };
 
 export type ShapeNonNullable3 = {
@@ -4506,47 +4505,47 @@ export type ShapeNonNullable3 = {
   keys: ShapeNonNullable2[];
 };
 
-export type ShapeNonNullable30 = {
+export type ShapeNonNullable30 = ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable16 | ShapeNonNullable17 | ShapeNonNullable24 | ShapeNonNullable29 | null;
+
+export type ShapeNonNullable31 = {
+  name?: string;
+  arity?: number;
+  instructions: ShapeNonNullable30[];
+};
+
+export type ShapeNonNullable32 = {
   zone: ExpressionProgram;
 };
 
-export type ShapeNonNullable31 = {
+export type ShapeNonNullable33 = {
   expression: ExpressionProgram;
 };
 
-export type ShapeNonNullable32 = string | number | ShapeNonNullable30 | ShapeNonNullable31;
+export type ShapeNonNullable34 = string | number | ShapeNonNullable32 | ShapeNonNullable33;
 
-export type ShapeNonNullable33 = {
+export type ShapeNonNullable35 = {
   channel: string;
-  arguments?: ShapeNonNullable32[];
+  arguments?: ShapeNonNullable34[];
 };
 
-export type ShapeNonNullable34 = {
+export type ShapeNonNullable36 = {
   op: "Operand";
   name: unknown;
   key?: unknown;
 };
 
-export type ShapeNonNullable35 = {
+export type ShapeNonNullable37 = {
   $type: "cell";
   name: unknown;
   key?: unknown;
 };
 
-export type ShapeNonNullable36 = ShapeNonNullable35 | ShapeNonNullable24 | ShapeNonNullable25 | null;
-
-export type ShapeNonNullable37 = {
-  op: "Dot" | "Similarity" | "Identical";
-  left: ShapeNonNullable36;
-  right: ShapeNonNullable36;
-};
-
-export type ShapeNonNullable38 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable34 | ShapeNonNullable37 | null;
+export type ShapeNonNullable38 = ShapeNonNullable37 | ShapeNonNullable26 | ShapeNonNullable27 | null;
 
 export type ShapeNonNullable39 = {
-  name?: string;
-  arity?: number;
-  instructions: ShapeNonNullable38[];
+  op: "Dot" | "Similarity" | "Identical";
+  left: ShapeNonNullable38;
+  right: ShapeNonNullable38;
 };
 
 export type ShapeNonNullable4 = {
@@ -4555,57 +4554,62 @@ export type ShapeNonNullable4 = {
   ease?: "Linear" | "Smooth" | "Step";
 };
 
-export type ShapeNonNullable40 = {
+export type ShapeNonNullable40 = ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable16 | ShapeNonNullable17 | ShapeNonNullable36 | ShapeNonNullable39 | null;
+
+export type ShapeNonNullable41 = {
+  name?: string;
+  arity?: number;
+  instructions: ShapeNonNullable40[];
+};
+
+export type ShapeNonNullable42 = {
   zone: ExpressionProgramNonNullable;
 };
 
-export type ShapeNonNullable41 = {
+export type ShapeNonNullable43 = {
   expression: ExpressionProgramNonNullable;
 };
 
-export type ShapeNonNullable42 = string | number | ShapeNonNullable40 | ShapeNonNullable41;
+export type ShapeNonNullable44 = string | number | ShapeNonNullable42 | ShapeNonNullable43;
 
-export type ShapeNonNullable43 = {
+export type ShapeNonNullable45 = {
   channel: string;
-  arguments?: ShapeNonNullable42[];
+  arguments?: ShapeNonNullable44[];
 };
 
-export type ShapeNonNullable44 = {
+export type ShapeNonNullable46 = {
   op: "Operand";
   name: StateChannelRefNonNullable2;
   key?: StateChannelRefNonNullable2;
 };
 
-export type ShapeNonNullable45 = {
+export type ShapeNonNullable47 = {
   $type: "cell";
   name: StateChannelRefNonNullable2;
   key?: StateChannelRefNonNullable2;
 };
 
-export type ShapeNonNullable46 = ShapeNonNullable45 | ShapeNonNullable24 | ShapeNonNullable25 | null;
-
-export type ShapeNonNullable47 = {
-  op: "Dot" | "Similarity" | "Identical";
-  left: ShapeNonNullable46;
-  right: ShapeNonNullable46;
-};
-
-export type ShapeNonNullable48 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable44 | ShapeNonNullable47 | null;
+export type ShapeNonNullable48 = ShapeNonNullable47 | ShapeNonNullable26 | ShapeNonNullable27 | null;
 
 export type ShapeNonNullable49 = {
-  name?: string;
-  arity?: number;
-  instructions: ShapeNonNullable48[];
+  op: "Dot" | "Similarity" | "Identical";
+  left: ShapeNonNullable48;
+  right: ShapeNonNullable48;
 };
 
-export type ShapeNonNullable5 = {
-  clock: string;
-  keys: ShapeNonNullable4[];
-};
+export type ShapeNonNullable5 = "Add" | "Multiply" | "Maximum" | "Minimum";
 
-export type ShapeNonNullable50 = number | string | boolean;
+export type ShapeNonNullable50 = ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable16 | ShapeNonNullable17 | ShapeNonNullable46 | ShapeNonNullable49 | null;
 
 export type ShapeNonNullable51 = {
+  name?: string;
+  arity?: number;
+  instructions: ShapeNonNullable50[];
+};
+
+export type ShapeNonNullable52 = number | string | boolean;
+
+export type ShapeNonNullable53 = {
   epochTick?: number;
   epochEngineTick?: number;
   y0?: string;
@@ -4614,22 +4618,28 @@ export type ShapeNonNullable51 = {
 };
 
 export type ShapeNonNullable6 = {
+  clock: string;
+  keys: ShapeNonNullable4[];
+  combine?: ShapeNonNullable5;
+};
+
+export type ShapeNonNullable7 = {
+  clock: string;
+  keys: ShapeNonNullable4[];
+  combine?: ShapeNonNullable5;
+  with?: ShapeNonNullable6;
+};
+
+export type ShapeNonNullable8 = {
   at: number;
   value: [number, number];
   ease?: "Linear" | "Smooth" | "Step";
 };
 
-export type ShapeNonNullable7 = {
+export type ShapeNonNullable9 = {
   clock: string;
-  keys: ShapeNonNullable6[];
+  keys: ShapeNonNullable8[];
 };
-
-export type ShapeNonNullable8 = {
-  $type: "producer";
-  name: string;
-};
-
-export type ShapeNonNullable9 = "Add" | "Subtract" | "Multiply" | "Divide" | "Minimum" | "Maximum" | "Clamp" | "Remainder" | "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "ShiftLeft" | "ShiftRight" | "ShiftRightLogical" | "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Select" | "SetBitCount" | "LeadingZeroCount" | "TrailingZeroCount" | "LowestSetBit" | "ClearLowestSetBit" | "RotateLeft" | "RotateRight" | "ByteSwap" | "ReverseBits" | "Negate" | "Absolute" | "ParallelBitExtract" | "ParallelBitDeposit" | "BitField" | "BitInsert" | "Sign" | "Pair" | "PairX" | "PairY" | "PairSwap" | "PairMaximum" | "PairMinimum" | "PairSum" | "PairDifference" | "PairTranslate" | "PairScale" | "MortonIndex" | "MortonX" | "MortonY" | "HilbertIndex" | "HilbertX" | "HilbertY" | "HexIndex" | "HexQ" | "HexR" | "HexRadius" | "HexEuclideanSquared" | "HexDistance" | "HexNeighbor" | "HexRotate" | "HexMirror" | "HexSwap" | "HexAdd" | "HexSubtract" | "HexMultiply" | "HexScale" | "HexTranslate" | "Layer" | "LayerOffset" | "LayerStart" | "LayerSize" | "SquareRoot" | "Sine" | "Cosine" | "SquareIndex" | "SquareX" | "SquareY" | "SquareRadius" | "SquareLength" | "SquareEuclideanSquared" | "SquareDistance" | "SquareChebyshev" | "SquareNeighbor" | "SquareRotate" | "SquareMirror" | "SquareSwap" | "SquareAdd" | "SquareSubtract" | "SquareMultiply" | "SquareScale" | "SquareTranslate" | "GreatestCommonDivisor" | "LeastCommonMultiple" | "FloorModulo" | "FloorDivide" | "FloorDivideModulo" | "DivideRemainder" | "Power" | "ModularPower" | "ModularInverse" | "ExtendedGreatestCommonDivisor" | "CycleForward" | "CycleDistance" | "SmallestMissing" | "IsPrime" | "PrimeAt" | "BinomialCoefficient" | "Factorial" | "SubsetRank" | "SubsetAt" | "SubsetMember" | "ArrangementRank" | "ArrangementAt" | "ArrangementMember" | "Floor" | "Ceiling" | "Round" | "ReplicationMask" | "RepeatBits" | "IsAbsent" | "Coalesce" | "Member" | "And" | "Or" | "Not";
 
 /**
  * A second-material inset face region carried by a ShapeDocument — one authored shape that reads as two: an eroded copy of the same primitive, offset along its own local face and composed with its own material, recessed into or raised proud of the plate. Authored as one shape that bakes two field operands; no budget admits or refuses them, StampShapeCount only reports that bake work (a panelled shape counts as 2).
@@ -4821,17 +4831,17 @@ export type StateCellClock = {
 /**
  * A document's one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[…]) is a call whose one argument is a Zone.
  */
-export type StateChannelRef = string | ShapeNonNullable19 | ShapeNonNullable20 | ShapeNonNullable21;
+export type StateChannelRef = string | ShapeNonNullable21 | ShapeNonNullable22 | ShapeNonNullable23;
 
 /**
  * A document's one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[…]) is a call whose one argument is a Zone.
  */
-export type StateChannelRefNonNullable = string | ShapeNonNullable33 | ShapeNonNullable20 | ShapeNonNullable21;
+export type StateChannelRefNonNullable = string | ShapeNonNullable35 | ShapeNonNullable22 | ShapeNonNullable23;
 
 /**
  * A document's one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[…]) is a call whose one argument is a Zone.
  */
-export type StateChannelRefNonNullable2 = string | ShapeNonNullable43 | ShapeNonNullable20 | ShapeNonNullable21;
+export type StateChannelRefNonNullable2 = string | ShapeNonNullable45 | ShapeNonNullable22 | ShapeNonNullable23;
 
 /**
  * A row's or cell's tick-indexed rotation trait: the value is a pure function of the server tick through a generator of the symmetry lattice's reflection group — Puck.Maths.SymmetryWord, the lattice's own thirty-step cycle when no Word is authored — raised to Power once per step. The generator's order is the loop's period, derived from the word rather than authored: a word of order twelve is a twelve-position dial, one of order twenty-four a day. Nothing accumulates and nothing is rebased: the mapping is tick-absolute for a fixed epoch/substep pair, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.
@@ -11726,9 +11736,9 @@ export type WorldRenderExposure = {
    */
   band?: number | null;
   /**
-   * The percentile, in [0, 1), below which the image meter leaves the darkest pixels out. Absent is zero.
+   * The percentile, in [0, 1), below which the image meter leaves the darkest pixels out. Bindable, so a world keys it on a view clock of the viewer's height: a camera climbing into a black sky leaves the void out of its meter and exposes what the sun lights. Absent is zero.
    */
-  low?: number | null;
+  low?: BindableScalar;
   /**
    * The percentile, above Low and at most one, above which the image meter leaves the brightest pixels out. Absent is one.
    */
@@ -14666,13 +14676,13 @@ export type WorldStateRow = {
    * The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int declaring min zero.
    */
   kind: "Int" | "Fixed" | "Bool" | "Text" | "Vector";
-  value?: ShapeNonNullable50;
+  value?: ShapeNonNullable52;
   /**
    * The row's current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name — unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.
    */
   cells?: {
     key: string;
-    value: ShapeNonNullable50;
+    value: ShapeNonNullable52;
     advance?: StateAdvance;
     dynamics?: StateDynamics;
     cycle?: StateCycle;
@@ -14680,7 +14690,7 @@ export type WorldStateRow = {
      * Whether a cell's effective value-over-time behavior is its carrying row's own default, or an explicit opt-out — see Behavior and Resolve.
      */
     behavior?: "Inherit" | "None";
-    clock?: ShapeNonNullable51;
+    clock?: ShapeNonNullable53;
     visibility?: StateVisibility;
     /**
      * When a stored token property was last seen and whether the latest observation still sees it.
@@ -14820,7 +14830,7 @@ export type WorldStateRow = {
   };
   dynamics?: StateDynamics;
   cycle?: StateCycle;
-  clock?: ShapeNonNullable51;
+  clock?: ShapeNonNullable53;
   /**
    * The vector space name.
    */

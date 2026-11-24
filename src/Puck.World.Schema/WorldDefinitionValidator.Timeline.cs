@@ -700,7 +700,9 @@ public static partial class WorldDefinitionValidator {
 
         RequireUnkeyed(
             errors: errors,
-            keyed: (own?.Keys is not null),
+            // Keys that say how they join (a combine) join over the section's track rather than compete with it
+            // (WorldRenderKeys).
+            keyed: (own?.Keys is { Combine: null }),
             path: path
         );
     }

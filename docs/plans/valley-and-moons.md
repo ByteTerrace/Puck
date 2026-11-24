@@ -170,17 +170,21 @@ Built by this feature:
 - An edge that is two places (`WorldAdjacencyPresentation.Apart`): a seat that crossed the sky seam is presented in
   the moon's own scene, so the ship and its pilot are drawn as they look, under the moon's light and exposure.
 
+- A value that follows two clocks (`WorldKeyTrack.With`, `WorldKeyCombine`): a keyed scalar joins a second track on
+  another clock by adding, multiplying, or taking the greater or lesser of the two, and keys with a combine join over a
+  section's keys on the same field rather than replace them (`WorldRenderKeys`). The valley's exposure floor is the
+  greater of the day's floor and a floor that rises with `altitude` to the moon's, its key fades with height, and its
+  meter's dark cut (`render.exposure.low`, now bindable) rises to the moon's seven tenths, so a black sky never pulls the
+  meter down (hall.puck). One star field answers both the night and the height (`day.puck`'s `starsByHeight`). The
+  invariant is that every reader resolves a chained track through one path, `WorldStateMirror`'s keyed read, and every
+  clock the chain names is noted for re-resolution (`WorldEnvironmentResolve.NoteKeys`, `WorldThemeResolve`); the
+  validator judges every link's clock and times as a keyed value of its own (`WorldKeyedValues`) and the chain's reach
+  against the field's domain (`WorldKeyResolver.Extremes`). A rate and an ordered set refuse a second track, since
+  neither has a sound reading of one.
+
 Left open, in the order they matter to the trip:
 
-1. **A keyed value reads one clock, so the valley's exposure cannot follow both the day and the
-   height.** Its exposure floor is keyed on the day, and above about 1,500 m the darkening sky
-   pulls the meter down to that floor: the ship and the moon blow out to white before the seam,
-   and the moon's own exposure takes over in one frame past it. The fix is a keyed scalar that
-   adds a second track on another clock (the day's floor plus a lift keyed on `altitude`), which
-   also lets one star layer answer both the night and the height. Until then the two stars layers
-   in `day.puck` stand in for the second. The check is the presented frames from 1,500 m to the
-   seam with the ship's hull holding its tone.
-2. **The valley is not in the moon's sky.** A view of the debug world from the
+1. **The valley is not in the moon's sky.** A view of the debug world from the
    moon draws that whole world again, every exhibit included, as one more
    residency. What a world shows of itself from far away has to be a product of
    its own (phase 4's scenery published for a far viewer) before the moon's sky

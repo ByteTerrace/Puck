@@ -36,6 +36,9 @@ public static partial class WorldDefinitionValidator {
             } else if ((value.Literal is null) && (value.Keys is null)) {
                 // A malformed binding is refused by its own field.
                 judged = false;
+            } else if (value.Keys?.With is not null) {
+                errors.Add(item: $"{valuePath} may not join a second track: {path} must stay ascending, and two clocks' keys meet at phases no document states.");
+                judged = false;
             }
         }
 

@@ -570,7 +570,7 @@ public static class WorldRenderKeys {
         literal: static value => value.Literal,
         parts: parts
     ) is { } track)
-        ? new BindableScalar(keys: track)
+        ? new BindableScalar(keys: Joined(authored: authored?.Keys, section: track))
         : authored
     );
     private static BindableAngle? Angle<TPart>(BindableAngle? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableAngle?> field) => ((Track(
@@ -579,8 +579,15 @@ public static class WorldRenderKeys {
         literal: static value => value.Value.Literal,
         parts: parts
     ) is { } track)
-        ? new BindableAngle(value: new BindableScalar(keys: track))
+        ? new BindableAngle(value: new BindableScalar(keys: Joined(authored: authored?.Value.Keys, section: track)))
         : authored
+    );
+    // A field the section's keys state replaces its authored value with the section's track, unless the authored value
+    // is keys that say how they join (a combine): those keys then join over the section's track, so one value follows
+    // the section's clock and its own (a star layer's opacity keyed by the hour and raised by the viewer's height).
+    private static WorldKeyTrack<float> Joined(WorldKeyTrack<float>? authored, WorldKeyTrack<float> section) => ((authored is { Combine: not null })
+        ? authored.Over(beneath: section)
+        : section
     );
     private static BindableDirection? Direction<TPart>(BindableDirection? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableDirection?> field) => ((Track(
         clock: clock,
