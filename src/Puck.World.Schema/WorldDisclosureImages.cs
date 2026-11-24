@@ -441,7 +441,8 @@ public sealed partial class WorldDisclosureImages {
                 var members = WorldDefinitionMembers.Of(basis, m_frameBaseOf, out var written);
 
                 m_work.Add(DefinitionBytes, written);
-                m_frameBase = Convert.FromHexString(members.Pin);
+                m_frameBase = new byte[SHA256.HashSizeInBytes];
+                members.WriteDigest(hash: m_frameBase);
                 m_frameBaseOf = basis;
             }
             Span<byte> parts = stackalloc byte[5 * SHA256.HashSizeInBytes];

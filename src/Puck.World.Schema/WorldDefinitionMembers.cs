@@ -520,7 +520,12 @@ public sealed class WorldDefinitionMembers {
     }
     // The digest over every member's name and digest, in ordinal name order, through the length-delimited chain pin a
     // composed source's content pin folds its files with.
-    private static string PinOf(IEnumerable<Member> members) => WorldDefinitionFileSource.HashLengthPrefixedParts(parts: members
+    private static string PinOf(IEnumerable<Member> members) => WorldDefinitionFileSource.HashLengthPrefixedParts(parts: PartsOf(members: members));
+    private static IEnumerable<byte[]> PartsOf(IEnumerable<Member> members) => members
         .OrderBy(keySelector: static member => member.Name, comparer: StringComparer.Ordinal)
-        .SelectMany(selector: static member => new[] { Encoding.UTF8.GetBytes(s: member.Name), Encoding.UTF8.GetBytes(s: member.Digest) }));
+        .SelectMany(selector: static member => new[] { Encoding.UTF8.GetBytes(s: member.Name), Encoding.UTF8.GetBytes(s: member.Digest) });
+    /// <summary>Writes the whole SHA-256 that <see cref="Pin"/> abbreviates: over every present member's name and digest,
+    /// in ordinal name order.</summary>
+    /// <param name="hash">The 32-byte destination.</param>
+    public void WriteDigest(Span<byte> hash) => WorldDefinitionFileSource.DigestLengthPrefixedParts(hash: hash, parts: PartsOf(members: m_members.Values));
 }
