@@ -462,7 +462,7 @@ public sealed partial class RenderGraphRuntime {
         var index = job.Index;
 
         node.DefersExportCompletion = false;
-        if (node.OwesSettlement) { m_settlementsOwed.Add(item: node); }
+        TrackHandOver(node: node);
         if (node.FrameCounter != job.Rendered) {
             rendering.LongestRecord = Math.Max(val1: rendering.LongestRecord, val2: node.LastLongestRecordTicks);
             m_historySucceeded[index] = true;
