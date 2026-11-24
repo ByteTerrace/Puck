@@ -190,6 +190,19 @@ public sealed class LockPinLawTests {
         Assert.Equal(expected: ["Floating.Transitive 2.0.1 (restored from 2.0.2)"], actual: outside);
     }
     [Fact]
+    public void APinBelowTheMinimumANewDependentDeclaresStandsAsRestored() {
+        var previous = Lock(requested: "[10.*, )", resolved: "10.0.14", hash: "AAAA", transitiveResolved: "2.0.1");
+        var current = Lock(requested: "[10.*, )", resolved: "10.0.14", hash: "AAAA", transitiveResolved: "2.0.3").Replace(
+            oldValue: "\"Floating.Transitive\": {",
+            newValue: "\"New.Dependent\": { \"type\": \"Transitive\", \"resolved\": \"1.0.0\", \"contentHash\": \"CCCC\", \"dependencies\": { \"Floating.Transitive\": \"2.0.3\" } },\n\"Floating.Transitive\": {",
+            comparisonType: StringComparison.Ordinal
+        );
+        var packages = new List<string>();
+
+        Assert.Null(@object: LockPins.Hold(current: current, packages: packages, previous: previous));
+        Assert.Empty(collection: packages);
+    }
+    [Fact]
     public void AChangedRequestIsTheReferenceChangeAndStandsAsRestored() {
         var previous = Lock(requested: "[10.*, )", resolved: "10.0.14", hash: "AAAA", transitiveResolved: "2.0.1");
         var current = Lock(requested: "[11.*, )", resolved: "11.0.1", hash: "BBBB", transitiveResolved: "2.0.1");

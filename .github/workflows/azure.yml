@@ -16,6 +16,10 @@ on:
         default: true
         description: Deploy the verified artifacts and infrastructure to Azure (false validates only)
         type: boolean
+      full-reconcile:
+        default: false
+        description: Plan and apply the platform even when its inputs are unchanged, repairing a change made in Azure by hand
+        type: boolean
 
 permissions:
   contents: read
@@ -200,7 +204,9 @@ jobs:
         run: az bicep install --version v0.48.1
       - if: steps.current.outputs.deploy == 'true'
         name: Reconcile the production platform
-        run: puck azure deploy-infrastructure --infrastructure-artifacts artifacts/source/azure-infrastructure
+        env:
+          FULL_RECONCILE: ${{ inputs.full-reconcile && 'true' || 'false' }}
+        run: puck azure deploy-infrastructure --infrastructure-artifacts artifacts/source/azure-infrastructure $([ "$FULL_RECONCILE" = true ] && echo --full)
         shell: bash
       - if: steps.current.outputs.deploy == 'true'
         name: Install QUIC for production verification
@@ -351,8 +357,8 @@ jobs:
         shell: bash
       - env:
           GH_TOKEN: ${{ github.token }}
-        name: Take the mesh cache sets whose bake identity matches this build, or hold the channel
-        run: puck world caches fetch artifacts/player --notes artifacts/player-notes.txt
+        name: Take the mesh cache sets whose bake identity matches this build, waiting for the GPU machine's, or hold the channel
+        run: puck world caches fetch artifacts/player --notes artifacts/player-notes.txt --wait 45
         shell: bash
       - name: Write the player release tree
         run: >-
@@ -381,7 +387,37 @@ jobs:
         name: Restore signing-key vault restrictions
         run: puck azure vault-access --restore
         shell: bash
-    timeout-minutes: 90
+    timeout-minutes: 135
+  # Reports, early and on every run, whether the GPU machine has produced this build's mesh cache sets, so the lead
+  # produces them before pushing main rather than learning from a held channel after the deploy. Holds nothing.
+  player-caches:
+    continue-on-error: true
+    name: Check the player channel's mesh cache sets
+    needs: artifacts
+    permissions:
+      contents: read
+    runs-on: windows-2025
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install the pinned .NET SDK
+        uses: ./.github/actions/setup-dotnet
+      - name: Install Puck CLI
+        uses: ./.github/actions/setup-puck
+        with:
+          artifact: nuget-packages
+      # The World build this commit's artifacts hold: the same bake code and kernels a player build of it carries.
+      - name: Download the World build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: world-windows-framework-dependent
+          path: artifacts/world
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        name: Look for a whole cache set for this build's bake identity and world
+        run: puck world caches status worlds/debug --build artifacts/world
+        shell: bash
+    timeout-minutes: 15
   applications:
     name: Assemble the application bundle
     needs: [artifacts, browser, docs]

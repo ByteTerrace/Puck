@@ -30,11 +30,14 @@ public static class WorldCachesCommand {
     public const string AssetName = "cache-set.zip";
     private const string Schema = "puck.player-cache-set.v1";
     private const string TagPrefix = "caches/";
+    private static readonly JsonSerializerOptions RecordFormat = new() { WriteIndented = true };
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(minutes: 1);
 
-    /// <summary>Creates the <c>caches</c> verb and its <c>produce</c> and <c>fetch</c> subverbs.</summary>
+    /// <summary>Creates the <c>caches</c> verb and its <c>produce</c>, <c>status</c> and <c>fetch</c> subverbs.</summary>
+    /// <param name="clock">The CLI host's clock, which a fetch's wait runs on.</param>
     /// <returns>The verb.</returns>
-    public static Command Create() => new(name: "caches", description: "Carry a player build's baked mesh store from a GPU machine to the release pipeline as identity-named cache sets.") {
-        ProduceCommand(), FetchCommand(),
+    public static Command Create(TimeProvider clock) => new(name: "caches", description: "Carry a player build's baked mesh store from a GPU machine to the release pipeline as identity-named cache sets.") {
+        ProduceCommand(), StatusCommand(), FetchCommand(clock: clock),
     };
 
     /// <summary>Returns the release tag a backend's cache set is published under.</summary>
@@ -57,15 +60,27 @@ public static class WorldCachesCommand {
         });
         return command;
     }
-    private static Command FetchCommand() {
+    private static Command StatusCommand() {
+        var world = new Argument<string>(name: "world") { Description = "The world a release would ship: an asset package folder, or a .puck source or .world.json document." };
+        var backends = new Option<string[]>(name: "--backend") { AllowMultipleArgumentsPerToken = true, DefaultValueFactory = static _ => ["directx", "vulkan"], Description = "The backends a release ships, each needing its own set: directx and vulkan by default, as a Windows player build bakes." };
+        var build = new Option<string?>(name: "--build") { Description = "The World build whose mesh bake identity names the sets (its Puck.SdfVm.dll's directory, with its bake kernels for each backend); absent, this tool's own build." };
+        var command = new Command(name: "status", description: "Report, with no device and without downloading a set, whether a whole mesh cache set exists for a build and the world: the set named by the build's mesh bake identity, recorded as produced for the groups the world plans. Exit 1 names each backend that lacks one and what to run.") { world, backends, build };
+
+        command.SetAction(action: async (parse, cancellationToken) =>
+            await StatusAsync(backends: parse.GetValue(option: backends)!, build: Path.GetFullPath(path: (parse.GetValue(option: build) ?? AppContext.BaseDirectory)), cancellationToken: cancellationToken,
+                world: Path.GetFullPath(path: parse.GetRequiredValue(argument: world))).ConfigureAwait(continueOnCapturedContext: false));
+        return command;
+    }
+    private static Command FetchCommand(TimeProvider clock) {
         var folder = new Argument<string>(name: "folder") { Description = "A player folder assembled without baking (`puck world player --no-bake`)." };
         var notes = new Option<string?>(name: "--notes") { Description = "A file to write the release-notes line into: each backend's cache set, or, when the publish is held, why and what to run." };
         var from = new Option<string?>(name: "--from") { Description = "Read the cache sets from a directory `produce` wrote (<from>/<backend>-<identity>/cache-set.zip) instead of downloading them with gh: a producer in the same job, or a local check." };
-        var command = new Command(name: "fetch", description: "Find the cache set whose mesh bake identity matches the folder's build for each backend, verify its content pins, unpack it into cache/meshes and check it was produced for the world's bake groups; a backend with no whole set holds the publish (exit 1) and the verb names it.") { folder, notes, from };
+        var wait = CliOptions.Count(defaultValue: 0, description: "Minutes to keep looking, once a minute, while a backend lacks a whole set, so a set the GPU machine is still producing for this build is taken when it lands; 0 looks once.", maximum: 720, minimum: 0, name: "--wait");
+        var command = new Command(name: "fetch", description: "Find the cache set whose mesh bake identity matches the folder's build for each backend, verify its content pins, unpack it into cache/meshes and check it was produced for the world's bake groups; a backend with no whole set holds the publish (exit 1) and the verb names it.") { folder, notes, from, wait };
 
         command.SetAction(action: async (parse, cancellationToken) =>
-            await FetchAsync(cancellationToken: cancellationToken, folder: Path.GetFullPath(path: parse.GetRequiredValue(argument: folder)), from: ((parse.GetValue(option: from) is { } directory) ? Path.GetFullPath(path: directory) : null),
-                notes: parse.GetValue(option: notes)).ConfigureAwait(continueOnCapturedContext: false));
+            await FetchAsync(cancellationToken: cancellationToken, clock: clock, folder: Path.GetFullPath(path: parse.GetRequiredValue(argument: folder)), from: ((parse.GetValue(option: from) is { } directory) ? Path.GetFullPath(path: directory) : null),
+                notes: parse.GetValue(option: notes), wait: TimeSpan.FromMinutes(minutes: parse.GetValue(option: wait))).ConfigureAwait(continueOnCapturedContext: false));
         return command;
     }
 
@@ -137,8 +152,12 @@ public static class WorldCachesCommand {
                     ["files"] = files,
                 };
 
-                await using var recordEntry = zip.CreateEntry(compressionLevel: CompressionLevel.Optimal, entryName: RecordName).Open();
-                await JsonSerializer.SerializeAsync(cancellationToken: cancellationToken, utf8Json: recordEntry, value: setRecord, options: new JsonSerializerOptions { WriteIndented = true }).ConfigureAwait(continueOnCapturedContext: false);
+                await using (var recordEntry = zip.CreateEntry(compressionLevel: CompressionLevel.Optimal, entryName: RecordName).Open()) {
+                    await JsonSerializer.SerializeAsync(cancellationToken: cancellationToken, utf8Json: recordEntry, value: setRecord, options: RecordFormat).ConfigureAwait(continueOnCapturedContext: false);
+                }
+                // The same record beside the archive, uploaded as its own small asset, so a check reads which world a set
+                // was produced for without downloading the set (status).
+                CliFiles.WriteJson(path: Path.Combine(path1: directory, path2: RecordName), value: setRecord);
             }
             Console.Out.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Verb}: {backend}: {meshes.Length} meshes under identity {identity:x32}, {new FileInfo(fileName: archive).Length} bytes, in {CliPaths.ToDisplay(fullPath: archive)} for {tag}."));
             produced.Add(item: (tag, archive, meshes.Length));
@@ -158,39 +177,117 @@ public static class WorldCachesCommand {
                     arguments: ["release", "create", tag, "--prerelease", "--title", $"Player mesh caches {tag[TagPrefix.Length..]}",
                         "--notes", $"A player build's baked mesh store for one backend, named by its mesh bake identity. Produced by `puck world caches produce --push` from commit {record["commit"]}; the release pipeline's `puck world caches fetch` unpacks it into a release whose build has the same identity. A cache: never the truth, never committed."]).ConfigureAwait(continueOnCapturedContext: false);
             }
+            // The archive first: a reader that finds the record finds the set it describes.
             _ = await CliProcess.RunCheckedAsync(arguments: ["release", "upload", tag, archive, "--clobber"], cancellationToken: cancellationToken, fileName: "gh").ConfigureAwait(continueOnCapturedContext: false);
+            _ = await CliProcess.RunCheckedAsync(arguments: ["release", "upload", tag, Path.Combine(path1: Path.GetDirectoryName(path: archive)!, path2: RecordName), "--clobber"], cancellationToken: cancellationToken, fileName: "gh").ConfigureAwait(continueOnCapturedContext: false);
             Console.Out.WriteLine(value: $"{Verb}: pushed {count} meshes as {tag}.");
         }
         return 0;
     }
 
-    private static async Task<int> FetchAsync(string folder, string? from, string? notes, CancellationToken cancellationToken) {
+    // Downloads one asset of a cache set's release into a directory; returns the downloaded file, null when the release or
+    // the asset does not exist, and throws on any other gh failure.
+    private static async Task<string?> DownloadAssetAsync(string tag, string asset, string directory, CancellationToken cancellationToken) {
+        var fetched = await CliProcess.RunAsync(arguments: ["release", "download", tag, "--pattern", asset, "--dir", directory, "--clobber"], cancellationToken: cancellationToken, fileName: "gh").ConfigureAwait(continueOnCapturedContext: false);
+        var path = Path.Combine(path1: directory, path2: asset);
+
+        if ((fetched.ExitCode != 0) && !fetched.Stderr.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "not found") && !fetched.Stderr.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "no assets")) {
+            throw new IOException(message: $"gh release download {tag} failed: {fetched.Stderr.Trim()}");
+        }
+        return File.Exists(path: path) ? path : null;
+    }
+    // Judges a set whose identity matches against the world's plan: null when the set was produced for exactly the groups
+    // the world plans, otherwise the line naming why it is not whole.
+    private static string? Lacks(string backend, string tag, JsonNode? recorded, IReadOnlyList<RestGroupKey> planned) =>
+        WorldCachePlan.Lacking(recorded: recorded, release: planned) switch {
+            null => $"{backend}: {tag} matches this build's identity but records no plan of the world's groups, so it cannot be known to cover this world; produce it again",
+            { Count: > 0 } lacking => $"{backend}: {tag} matches this build's identity but was produced for another world, so it lacks {WorldCachePlan.Describe(lacking: lacking, total: planned.Count)}",
+            _ => null,
+        };
+    private static string Missing(string backend, UInt128 identity, string tag) => $"{backend}: no mesh cache set matches this build's identity {identity:x32} (looked for {tag})";
+
+    private static async Task<int> StatusAsync(string world, string build, IReadOnlyList<string> backends, CancellationToken cancellationToken) {
+        if (!WorldCachePlan.TryRead(folder: Environment.CurrentDirectory, world: world, keys: out var planned, why: out var unplanned)) {
+            return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: world), why: $"cannot name the groups it plans, because {unplanned}.");
+        }
+        var held = new List<string>();
+
+        foreach (var backend in backends) {
+            if (!TryIdentity(backend: backend, folder: build, identity: out var identity, why: out var why)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: build), why: why!); }
+            var tag = Tag(backend: backend, identity: identity);
+            using var download = RunDirectory.Create(keepOnFailure: false, prefix: "puck-cache-set-");
+            var path = await DownloadAssetAsync(asset: RecordName, cancellationToken: cancellationToken, directory: download.Path, tag: tag).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (path is null) {
+                held.Add(item: Missing(backend: backend, identity: identity, tag: tag));
+                continue;
+            }
+            var record = JsonNode.Parse(json: await File.ReadAllTextAsync(cancellationToken: cancellationToken, path: path).ConfigureAwait(continueOnCapturedContext: false));
+
+            if (Lacks(backend: backend, planned: planned, recorded: record?["plan"], tag: tag) is { } lacks) {
+                held.Add(item: lacks);
+                continue;
+            }
+            Console.Out.WriteLine(value: $"{Verb}: {backend}: {tag} was produced for this world's {planned.Count} bake groups.");
+        }
+        if (held.Count == 0) { return 0; }
+
+        var text = MissingText(
+            closing: "\nA release of this build holds the player channel until they exist. Produce them on the GPU machine before pushing `main`; the release's player job also waits for them:\n\n",
+            headline: "## This build has no complete mesh cache set\n\n",
+            held: held
+        );
+
+        CliGitHub.Summarize(message: text);
+        // An annotation reaches the run's front page, where the lead sees it before pushing main.
+        if (CliGitHub.IsActions) {
+            foreach (var line in held) { Console.Out.WriteLine(value: $"::warning title=No complete mesh cache set::{line}"); }
+        }
+        return 1;
+    }
+    private static async Task<int> FetchAsync(string folder, string? from, string? notes, TimeSpan wait, TimeProvider clock, CancellationToken cancellationToken) {
         if (!PlayerBuildLayout.TryReadComplete(folder: folder, record: out var record, why: out var refusal)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: refusal!); }
 
+        var deadline = (clock.GetUtcNow() + wait);
+
+        while (true) {
+            var (exit, held, lines, outcomes) = await FetchOnceAsync(cancellationToken: cancellationToken, folder: folder, from: from, record: record).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (exit is { } failed) { return failed; }
+            if ((held.Count > 0) && (clock.GetUtcNow() < deadline)) {
+                Console.Out.WriteLine(value: $"{Verb}: {string.Join(separator: "; ", values: held)}; looking again each minute until {deadline:u}.");
+                await Task.Delay(delay: PollInterval, timeProvider: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                continue;
+            }
+            return await FinishFetchAsync(cancellationToken: cancellationToken, folder: folder, held: held, lines: lines, notes: notes, outcomes: outcomes, record: record).ConfigureAwait(continueOnCapturedContext: false);
+        }
+    }
+    // One look for every backend's set: the exit code of a failure that holds no matter how long it waits, or the held lines,
+    // the hit lines and each backend's outcome.
+    private static async Task<(int? Exit, List<string> Held, List<string> Lines, JsonObject Outcomes)> FetchOnceAsync(string folder, string? from, JsonNode record, CancellationToken cancellationToken) {
         var lines = new List<string>();
         var held = new List<string>();
         var outcomes = new JsonObject();
         IReadOnlyList<RestGroupKey>? planned = null;
 
         foreach (var backend in Backends(record: record)) {
-            if (!TryIdentity(backend: backend, folder: folder, identity: out var identity, why: out var why)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: why!); }
+            if (!TryIdentity(backend: backend, folder: folder, identity: out var identity, why: out var why)) { return (CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: why!), held, lines, outcomes); }
             var tag = Tag(backend: backend, identity: identity);
             using var download = RunDirectory.Create(keepOnFailure: false, prefix: "puck-cache-set-");
             string archive;
 
             if (from is null) {
-                var fetched = await CliProcess.RunAsync(arguments: ["release", "download", tag, "--pattern", AssetName, "--dir", download.Path, "--clobber"], cancellationToken: cancellationToken, fileName: "gh").ConfigureAwait(continueOnCapturedContext: false);
-
-                archive = Path.Combine(path1: download.Path, path2: AssetName);
-                if ((fetched.ExitCode != 0) && !fetched.Stderr.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "not found") && !fetched.Stderr.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "no assets")) {
-                    Console.Error.WriteLine(value: $"{Verb}: gh release download {tag} failed: {fetched.Stderr.Trim()}");
-                    return 1;
+                try {
+                    archive = (await DownloadAssetAsync(asset: AssetName, cancellationToken: cancellationToken, directory: download.Path, tag: tag).ConfigureAwait(continueOnCapturedContext: false)) ?? Path.Combine(path1: download.Path, path2: AssetName);
+                } catch (IOException failure) {
+                    Console.Error.WriteLine(value: $"{Verb}: {failure.Message}");
+                    return (1, held, lines, outcomes);
                 }
             } else {
                 archive = Path.Combine(path1: from, path2: $"{backend}-{identity:x32}", path3: AssetName);
             }
             if (!File.Exists(path: archive)) {
-                held.Add(item: $"{backend}: no mesh cache set matches this build's identity {identity:x32} (looked for {tag})");
+                held.Add(item: Missing(backend: backend, identity: identity, tag: tag));
                 outcomes[backend] = new JsonObject { ["identity"] = identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture), ["meshes"] = 0, ["held"] = "no set matches the identity" };
                 continue;
             }
@@ -199,24 +296,18 @@ public static class WorldCachesCommand {
 
             if (error is not null) {
                 Console.Error.WriteLine(value: $"{Verb}: {tag}: {error}; nothing of it was kept.");
-                return 1;
+                return (1, held, lines, outcomes);
             }
             if ((planned is null) && !WorldCachePlan.TryRead(folder: folder, world: ((string?)record["world"] ?? string.Empty), keys: out planned, why: out var unplanned)) {
                 Console.Error.WriteLine(value: $"{Verb}: {tag}: cannot tell whether the set was produced for this build's world, because {unplanned}; a set that is not known to be whole does not ship.");
-                return 1;
+                return (1, held, lines, outcomes);
             }
 
-            var lacking = WorldCachePlan.Lacking(recorded: recorded, release: planned);
             var identityText = identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture);
 
-            if (lacking is null) {
-                held.Add(item: $"{backend}: {tag} matches this build's identity but records no plan of the world's groups, so it cannot be known to cover this world; produce it again");
-                outcomes[backend] = new JsonObject { ["identity"] = identityText, ["meshes"] = count, ["tag"] = tag, ["held"] = "the set records no world plan" };
-                continue;
-            }
-            if (lacking.Count > 0) {
-                held.Add(item: $"{backend}: {tag} matches this build's identity but was produced for another world, so it lacks {WorldCachePlan.Describe(lacking: lacking, total: planned.Count)}");
-                outcomes[backend] = new JsonObject { ["identity"] = identityText, ["meshes"] = count, ["tag"] = tag, ["groups"] = planned.Count, ["missing"] = lacking.Count, ["held"] = "the set was produced for another world" };
+            if (Lacks(backend: backend, planned: planned, recorded: recorded, tag: tag) is { } lacks) {
+                held.Add(item: lacks);
+                outcomes[backend] = new JsonObject { ["identity"] = identityText, ["meshes"] = count, ["tag"] = tag, ["groups"] = planned.Count, ["held"] = "the set was not produced for this world's groups" };
                 continue;
             }
 
@@ -226,7 +317,9 @@ public static class WorldCachesCommand {
             lines.Add(item: hit);
             outcomes[backend] = new JsonObject { ["identity"] = identityText, ["meshes"] = count, ["tag"] = tag, ["targets"] = targets, ["groups"] = planned.Count, ["missing"] = 0 };
         }
-
+        return (null, held, lines, outcomes);
+    }
+    private static async Task<int> FinishFetchAsync(string folder, JsonNode record, List<string> held, List<string> lines, JsonObject outcomes, string? notes, CancellationToken cancellationToken) {
         record["caches"] = outcomes;
         CliFiles.WriteJson(path: Path.Combine(path1: folder, path2: PlayerBuildLayout.RecordName), value: record);
         if (held.Count == 0) {
@@ -236,7 +329,11 @@ public static class WorldCachesCommand {
             return 0;
         }
 
-        var hold = HoldText(held: held);
+        var hold = MissingText(
+            closing: "\nThe channel keeps its last complete release. To release this build, produce its sets on the GPU machine, then run the release again:\n\n",
+            headline: "## The player channel's publish is held for this build\n\n",
+            held: held
+        );
 
         if (notes is not null) { await File.WriteAllTextAsync(cancellationToken: cancellationToken, contents: hold, path: notes).ConfigureAwait(continueOnCapturedContext: false); }
         if (File.Exists(path: Path.Combine(path1: folder, path2: "README.md"))) {
@@ -246,13 +343,13 @@ public static class WorldCachesCommand {
         Console.Error.WriteLine(value: $"{Verb}: held, so the player channel publishes nothing for this build ({held.Count} of {outcomes.Count} backend(s) lack a complete cache set).");
         return 1;
     }
-    // The text a held build carries in its README, its notes file, the job's summary and the verb's error: what is missing
-    // and what the lead runs, since a player never cold-bakes and a consumer release therefore waits for a complete set.
-    private static string HoldText(IReadOnlyList<string> held) =>
-        "## The player channel's publish is held for this build\n\n" +
+    // The text a held build (its README, notes file, job summary and error) or a status check carries: what is missing and
+    // what the lead runs, since a player never cold-bakes and a consumer release therefore waits for a complete set.
+    private static string MissingText(string headline, IReadOnlyList<string> held, string closing) =>
+        headline +
         "A player never bakes meshes, so a release ships only with a mesh cache set produced for this build's bake identity and for the groups its world plans, for each backend it ships. This build has none for:\n\n" +
         string.Concat(values: held.Select(selector: static line => $"- {line}\n")) +
-        "\nThe channel keeps its last complete release. To release this build, produce its sets on the GPU machine, then run the release again:\n\n" +
+        closing +
         "```text\n" +
         "puck world player worlds/debug --output <folder> --target rtx2060@1920x1080 --target rtx4070@2560x1440\n" +
         "puck world caches produce <folder> --push\n" +

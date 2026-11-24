@@ -307,7 +307,8 @@ puck bundle verify <directory> <commit>
 puck world prepare <primary-world> --output <directory>
 puck world player <package> --output <directory> [--extension <project>...] [--backend directx vulkan] [--target [profile@]WIDTHxHEIGHT...] [--no-bake] [--bake-seconds <seconds>] [--channel-url <url> [--channel-name <name>]]
 puck world caches produce <player folder> [--output <directory>] [--push]
-puck world caches fetch <player folder> [--notes <file>]
+puck world caches status <world> [--backend directx vulkan] [--build <directory>]
+puck world caches fetch <player folder> [--notes <file>] [--from <directory>] [--wait <minutes>]
 puck channel push --tree <tree> --channel <name> --sequence <n> [--host <installed-host> | --to <directory> --signing-key <file>] [--validity-days <days>]
 puck world release prepare <package-directory> --silo <silo.json> [--output <manifest>] --label <label> --source-revision <sha> --engine-image-digest <sha256:digest> --persistence-contract <name> --peer-protocol-contract <name>
 puck world release status [group-file] [--json] [--host <installed-host>]
@@ -319,7 +320,7 @@ puck world release checkpoint [--request <guid>] [--host <installed-host>]
 puck world release restore <recovery-point> [--operation <guid>] [--discard-progress] [--host <installed-host>]
 puck azure prepare-world-release [--output <package-directory>]
 puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-image <image> --target-image <image> --output <evidence-directory> [--steps <count>] [--document-directory <asset-layout>]
-puck world release rehearse [<package-directory>] (--silo <path> | --image <reference>) [--extensions-dir <directory>] [--document-directory <directory>] [--output <directory>] [--timeout <seconds>]
+puck world release rehearse [<package-directory>] (--silo <path> | --image <reference>) [--extensions-dir <directory>] [--document-directory <directory>] [--mode scratch|durable] [--output <directory>] [--timeout <seconds>]
 puck world probe <host> <port> <public-key-file>
 puck wasm build
 ```
@@ -425,15 +426,24 @@ each backend's mesh bake identity from the folder's own build (as `mesh identity
 --build` does), and packs that identity's mesh set into
 `<output>/<backend>-<identity>/cache-set.zip` with a `cache-set.json` listing every
 file's content pin and the hashes of the groups the folder's world plans
-(`plan`); `--push` runs `gh` to create the prerelease
-`caches/<backend>-<identity>` when it is missing and replace its asset. `fetch`
+(`plan`), and writes the same record beside the archive; `--push` runs `gh` to
+create the prerelease `caches/<backend>-<identity>` when it is missing and
+replace its two assets, the archive first. `status` answers, with no device and
+without downloading a set, whether a release of a build would find whole sets:
+it computes each backend's identity from `--build` (absent, the tool's own
+build), plans the world argument offline, downloads only each matching
+release's `cache-set.json` and compares its plan. It names each backend that
+lacks a whole set and what to run in the job summary and as a warning
+annotation, and exits 1; CI runs it on every Azure run, holding nothing. `fetch`
 computes the same identities for a folder built with `--no-bake`, downloads each
 matching asset with `gh`, refuses an archive whose record names another backend
 or identity, lists an entry outside the set or holds a file whose bytes miss its
 pin, and unpacks a verified set into `cache/meshes/<identity>/`. It then plans
 the folder's own world offline and compares it with the set's recorded plan. A
 backend with no matching set, a set whose record holds no plan, or a set
-produced for other groups holds the channel's publish: the verb writes why and
+produced for other groups holds the channel's publish; `--wait <minutes>` first
+looks again each minute until that long has passed, so a set the GPU machine is
+still producing is taken when it lands. A held publish writes why and
 what to run into the job summary, `--notes` and the folder's `README.md`, and
 exits 1. It records each backend's outcome under `caches` in `player.json`;
 when every backend is whole, `--notes` writes a release-notes line naming each
@@ -621,16 +631,26 @@ Rollback and restore remain hosted maintenance operations
 until their coordinator can perform the corresponding guarded storage and
 admission transitions.
 
-`world release rehearse [<package-directory>] (--silo <path> | --image <reference>) [--extensions-dir <directory>] [--document-directory <directory>] [--output <directory>] [--timeout <seconds>]`
-rehearses a replace deployment on this machine, against a local directory store:
-the coordinator's bootstrap transaction from its Drain phase (the definitions
-published through unowned roots, their recovery roots, the group record in
-Activate), then the release's own silo started on a managed silo document as a
-worker starts it, reached through its loopback release-control routes. It passes
-once the silo opens admission, keeps answering public health across a progress
-window and drains with a success code; a failure prints the private health reason
-and the silo's own lines. The argument is a release package, or a
-`puck world prepare` output, which is packaged first under one generated owner.
+`world release rehearse [<package-directory>] (--silo <path> | --image <reference>) [--extensions-dir <directory>] [--document-directory <directory>] [--mode scratch|durable] [--output <directory>] [--timeout <seconds>]`
+rehearses a deployment on this machine, against a local directory store, in the
+path a deployment group's hosted-data policy selects. `scratch` (the default)
+rehearses the replace deployment: the coordinator's bootstrap transaction from
+its Drain phase (the definitions published through unowned roots, their
+recovery roots, the group record in Activate), then the release's own silo
+started on a managed silo document as a worker starts it, reached through its
+loopback release-control routes. It passes once the silo opens admission, keeps
+answering public health across a progress window and drains with a success code.
+`durable` runs that bootstrap, then a reset deployment to a second release built
+from the same documents under another label (the source drained and its roots
+captured through its own `/release/drain` route, the drained roots reset, the
+candidate started over them and admitted), then a third release whose candidate
+is started naming the source release, which the silo refuses at activation; it
+passes once pre-commit recovery restored the protected roots, restarted the
+source and readmitted it, and the group serves the source with no pending
+operation. Every silo of one rehearsal signs with the same keys. A failure prints
+the private health reason and the last silo's own lines. The argument is a
+release package, or a `puck world prepare` output, which is packaged first under
+one generated owner.
 `--silo` names a built `Puck.World.Silo.dll` or its executable; the release's
 machine providers must be installed where the silo looks (`--extensions-dir`).
 `--image` runs the same verb inside a world-silo image, with its CLI, silo,
