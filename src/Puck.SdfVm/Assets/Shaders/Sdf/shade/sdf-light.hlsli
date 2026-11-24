@@ -236,21 +236,21 @@ uint sdfScreenLightCount() {
 #endif
 
 // The lights a shading walk visits, in order: the lights table's, by the set bits of the light mask the walk starts with,
-// then each bound screen slot by the set bits of its screen mask (one bit a slot, below sdfScreenLightCount). The masks
+// then each bound screen slot by the set bits of its screen mask (one bit a slot in four words, below sdfScreenLightCount). The masks
 // are the view's (the pass block's lightMask, SdfLightSelection, and every screen) or subsets of them no wider than a
 // workgroup (views narrows them to each tile's lights, sdfViewsTileLights), so every lane of a wave takes the same steps,
 // and a light a mask leaves out costs nothing: the walk never visits it. A mask may leave out only a light that adds
 // nothing where the walk's lanes shade.
 struct SdfLightMasks {
     uint4 lights;
-    uint screens;
+    uint4 screens;
 };
 // The view's masks: every light the view shades and every bound screen.
 SdfLightMasks sdfViewLightMasks() {
     SdfLightMasks masks;
 
     masks.lights = passGroup.lightMask;
-    masks.screens = 0xFFFFFFFFu;
+    masks.screens = uint4(0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
 
     return masks;
 }
@@ -259,8 +259,11 @@ struct SdfLightWalk {
     // The mask word the walk is reading and its bits still to visit; past the last word, the table is done.
     uint word;
     uint bits;
-    // The screen slots still to visit.
-    uint screens;
+    // The screen mask, the screen word the walk is reading and its bits still to visit; past the last word, the screens
+    // are done.
+    uint4 screens;
+    uint screenWord;
+    uint screenBits;
 };
 SdfLightWalk sdfLightWalkStart(SdfLightMasks masks) {
     SdfLightWalk walk;
@@ -269,6 +272,8 @@ SdfLightWalk sdfLightWalkStart(SdfLightMasks masks) {
     walk.word = 0u;
     walk.bits = sdfComponent(masks.lights, 0u);
     walk.screens = masks.screens;
+    walk.screenWord = 0u;
+    walk.screenBits = masks.screens.x;
 
     return walk;
 }
@@ -317,14 +322,21 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 
 #ifdef SDF_SCREEN_SOURCES
     uint screens = sdfScreenLightCount();
+    uint screenWords = ((screens + 31u) / 32u);
 
     [loop]
-    while (walk.screens != 0u) {
-        uint screenIndex = firstbitlow(walk.screens);
+    while (walk.screenWord < screenWords) {
+        if (walk.screenBits == 0u) {
+            walk.screenWord++;
+            walk.screenBits = ((walk.screenWord < screenWords) ? sdfComponent(walk.screens, walk.screenWord) : 0u);
+            continue;
+        }
 
-        walk.screens &= (walk.screens - 1u);
+        uint screenIndex = ((walk.screenWord * 32u) + firstbitlow(walk.screenBits));
+
+        walk.screenBits &= (walk.screenBits - 1u);
         if (screenIndex >= screens) {
-            walk.screens = 0u;
+            walk.screenWord = screenWords;
             break;
         }
         if (!screenSourceBound(screenIndex)) {

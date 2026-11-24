@@ -270,8 +270,8 @@ public sealed class SdfAppearance {
     }
     // Refuses a screen surface the shader cannot project onto, or two claiming one index, and returns the declared
     // indices as a mask.
-    private uint RequireScreenSurfaces(string paramName) {
-        var declared = 0u;
+    private UInt128 RequireScreenSurfaces(string paramName) {
+        var declared = UInt128.Zero;
 
         foreach (var surface in m_screenSurfaces) {
             if ((surface.ScreenIndex < 0) || (surface.ScreenIndex >= SdfProgramBuilder.MaxScreenSurfaces)) {
@@ -281,9 +281,9 @@ public sealed class SdfAppearance {
                 );
             }
 
-            var bit = (1u << surface.ScreenIndex);
+            var bit = BitWords.Bit(index: surface.ScreenIndex);
 
-            if ((declared & bit) != 0u) {
+            if ((declared & bit) != UInt128.Zero) {
                 throw new ArgumentException(
                     message: $"Two screen surfaces declare index {surface.ScreenIndex}. The packed table is indexed BY screen index, so one would silently overwrite the other.",
                     paramName: paramName
@@ -554,7 +554,7 @@ public sealed class SdfAppearance {
 public readonly struct SdfAppearanceOutline {
     private readonly bool[]? m_glass;
 
-    internal SdfAppearanceOutline(bool[] glass, uint screens, int vectors) {
+    internal SdfAppearanceOutline(bool[] glass, UInt128 screens, int vectors) {
         m_glass = glass;
         Screens = screens;
         Vectors = vectors;
@@ -564,8 +564,8 @@ public readonly struct SdfAppearanceOutline {
     public int Materials => (m_glass?.Length ?? 0);
     /// <summary>Gets the vectors the appearance section spans (<see cref="SdfAppearance.VectorsOf"/>).</summary>
     public int Vectors { get; }
-    /// <summary>Gets the declared screen indices, a bit an index.</summary>
-    public uint Screens { get; }
+    /// <summary>Gets the declared screen indices, a bit an index (<see cref="BitWords"/>).</summary>
+    public UInt128 Screens { get; }
 
     /// <summary>Returns whether a material id names a glass material; a screen sentinel or an id past the palette is
     /// opaque.</summary>
@@ -575,7 +575,7 @@ public readonly struct SdfAppearanceOutline {
     /// <summary>Returns whether a screen index is declared.</summary>
     /// <param name="screenIndex">The screen index.</param>
     /// <returns><see langword="true"/> when a screen surface declares it.</returns>
-    public bool DeclaresScreen(int screenIndex) => ((screenIndex >= 0) && (screenIndex < SdfProgramBuilder.MaxScreenSurfaces) && ((Screens & (1u << screenIndex)) != 0u));
+    public bool DeclaresScreen(int screenIndex) => BitWords.Contains(mask: Screens, index: screenIndex);
     /// <summary>Returns whether another outline tells a field everything this one does alike: the same glass materials in
     /// the same palette length, the same declared screens and the same appearance section size.</summary>
     /// <param name="other">The other outline.</param>

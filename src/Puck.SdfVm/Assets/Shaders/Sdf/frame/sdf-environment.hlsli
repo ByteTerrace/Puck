@@ -7,7 +7,7 @@
 #include "sdf-screen-mapping.hlsli"
 // A declared ScreenSlab instance's world-space front-face frame (see Puck.SignedDistance.SdfScreenSurface). Indexed
 // DIRECTLY by screen index
-// (0..31, the same slot SetScreenSource/screenSources binds) — not by declaration order — so a hit resolves its
+// (below SDF_MAX_SCREEN_SURFACES, the same slot SetScreenSource/screenSources binds) — not by declaration order — so a hit resolves its
 // surface with no search; an unfilled slot's entry is never read (no material id can address it: the host packs an
 // entry only when SdfProgramBuilder registers that screen index).
 struct ScreenSurfaceData {

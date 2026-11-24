@@ -68,7 +68,7 @@
 #define SDF_SURFACE_TEXT_TINT          0x00000001u
 
 // The renderer's capacities, the photometry and the exposure (SdfPhotometry, SdfExposure).
-#define SDF_MAX_SCREEN_SURFACES          32u
+#define SDF_MAX_SCREEN_SURFACES          128u
 #define SDF_MAX_LIGHTS                   128u
 #define SDF_MAX_SHADOW_SLOTS             4u
 #define SDF_MAX_DISPATCH_GROUPS          65535u
@@ -118,7 +118,7 @@
 #define SDF_VISIBILITY_GROUP_EDGE     8u
 #define SDF_SHADE_BINS                2u
 #define SDF_SHADE_TILE_HEADER_WORDS   6u
-#define SDF_SHADE_TILE_LIGHT_WORDS    5u
+#define SDF_SHADE_TILE_LIGHT_WORDS    8u
 #define SDF_VIEWS_FILTER_WORDS        3u
 #define SDF_EDGE_REACH                4u
 #define SDF_VIEWS_PROBE_RATE          4u
@@ -195,8 +195,8 @@
 #define SDF_SIGHT_ROW                     16u
 #define SDF_SHADOW_CULLED_ENTRY_PHASE     5u
 #define SDF_SIGHT_COUNT_BASE              7u
-#define SDF_MESH_MARK_BASE                64u
-#define SDF_MESH_VERTEX_COUNT_BASE        57u
+#define SDF_MESH_MARK_BASE                142u
+#define SDF_MESH_VERTEX_COUNT_BASE        135u
 #define SDF_MESH_SHADOW_FILTER_TEXELS     14.0
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).

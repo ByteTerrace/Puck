@@ -96,7 +96,7 @@ as an explicit remainder; it does not re-emit prototypes or change state.
 
 ## The entity view
 
-Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screen bindings 32 and bounded volumes 64; representation overflow refuses explicitly.
+Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screen bindings `SdfProgramBuilder.MaxScreenSurfaces` (one `UInt128` mask) and bounded volumes 64; representation overflow refuses explicitly.
 
 - `WorldClient.cs`—consumes each tick's snapshot into a double-buffered
   entity view (previous/current pose per entity) and resolves per-frame

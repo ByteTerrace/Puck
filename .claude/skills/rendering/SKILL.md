@@ -295,8 +295,14 @@ a motion slot; the lattice frame and instance selector are independent. Use
 `boundInSlotFrame` for rest-pose offsets on a moving owner's slot; a world-axis
 offset would move the bake's box away from the geometry when that owner starts turned. A skin
 past 255 members throws before queuing, instead of attaching excess members
-to the root. Volume overflow is explicit. Scope depth is 4, screen bindings 32,
-and derived faces follow authored screen indices. `SDF_MAX_INSTANCES` bounds
+to the root. Volume overflow is explicit. Scope depth is 4, screen bindings
+`SdfProgramBuilder.MaxScreenSurfaces`, and derived faces follow authored screen
+indices. Every set of screens (declared, bound, emitting, sampled, carried, a
+tile's lit screens) is one `UInt128` mask walked by its set bits through
+`BitWords`, and the kernels read it as a `uint4`, as they read the light mask:
+never loop over every slot, and never add a `uint` screen mask. A screen's glyph
+grid claims its run from the shared cell pool (`SdfWorldTables.MaxScreenDecalScreens`),
+so the decal buffer does not grow with the screen count. `SDF_MAX_INSTANCES` bounds
 one bake program, not a per-world render budget.
 
 ## Moving blends

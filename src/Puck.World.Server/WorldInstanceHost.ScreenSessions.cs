@@ -81,8 +81,8 @@ public sealed class WorldObservationSession {
     internal WorldPortalInputProducer? Input { get; set; }
 }
 public sealed partial class WorldInstanceHost {
-    // Each owning instance's observations, and the definition they were reconciled against.
-    private readonly Dictionary<string, (WorldDefinition? Reconciled, SortedList<WorldObservationSite, WorldObservationSession> Rows)> m_screenSessions = new(comparer: StringComparer.Ordinal);
+    // Each owning instance's observations, and the definition and door closures they were reconciled against.
+    private readonly Dictionary<string, (WorldDefinition? Reconciled, long Closures, SortedList<WorldObservationSite, WorldObservationSession> Rows)> m_screenSessions = new(comparer: StringComparer.Ordinal);
 
     // Both indexes publish together. Presentation's per-frame lookups use value keys, so reading an existing session
     // does not construct another observation identity.
@@ -112,8 +112,10 @@ public sealed partial class WorldInstanceHost {
     public WorldObservationSession? InfinitySession(string instanceName, string layerName) => m_publishedScreenSessions.InfinityLayers.GetValueOrDefault(key: (instanceName, layerName));
 
     // Every authored observation: screens, placement faces and named infinity layers. Their destinations all use the
-    // same resolver and the owning authority's principal; presentation never opens an observation itself.
-    private static SortedList<WorldObservationSite, WorldScreenSource.Session> DeclaredSessions(WorldDefinition definition) {
+    // same resolver and the owning authority's principal; presentation never opens an observation itself. A face whose
+    // door stands closed (WorldPortalClosures) observes nothing: its session closes when the door shuts and opens again
+    // when it opens, so a shut door holds no session and its glass shows no picture.
+    private static SortedList<WorldObservationSite, WorldScreenSource.Session> DeclaredSessions(WorldDefinition definition, WorldPortalClosures? closures) {
         var declared = new SortedList<WorldObservationSite, WorldScreenSource.Session>();
 
         foreach (var screen in definition.Screens) {
@@ -125,7 +127,8 @@ public sealed partial class WorldInstanceHost {
         foreach (var row in WorldFaceCatalog.For(definition: definition).Rows) {
             if (
                 (row.ScreenIndex >= 0) &&
-                (row.Source is WorldScreenSource.Session session)
+                (row.Source is WorldScreenSource.Session session) &&
+                (closures?.IsClosed(placementId: row.PlacementId, face: row.FaceName) != true)
             ) {
                 declared[new WorldObservationSite.Screen(Index: row.ScreenIndex)] = session;
             }
@@ -549,14 +552,17 @@ public sealed partial class WorldInstanceHost {
             key: instance.Name,
             value: out var owned
         )) {
-            owned = (null, new SortedList<WorldObservationSite, WorldObservationSession>());
+            owned = (null, -1L, new SortedList<WorldObservationSite, WorldObservationSession>());
         }
 
         var definition = instance.Server.Configuration;
+        // The door scan is the closures' one writer, between ticks; a tick still pending keeps the closures it read.
+        var closures = ((instance.Server.Tick.PendingReason is null) ? instance.Server.Population.PortalClosures : null);
+        var closed = (closures?.Revision ?? owned.Closures);
         var changed = false;
 
-        if ((owned.Reconciled is null) || !SameSessionDeclarations(after: definition, before: owned.Reconciled)) {
-            var declared = DeclaredSessions(definition: definition);
+        if ((owned.Reconciled is null) || (closed != owned.Closures) || !SameSessionDeclarations(after: definition, before: owned.Reconciled)) {
+            var declared = DeclaredSessions(closures: closures, definition: definition);
 
             foreach (var screen in owned.Rows.Keys.ToList()) {
                 if (
@@ -589,10 +595,10 @@ public sealed partial class WorldInstanceHost {
                 }
             }
 
-            owned = (definition, owned.Rows);
+            owned = (definition, closed, owned.Rows);
             m_screenSessions[instance.Name] = owned;
         } else if (!ReferenceEquals(objA: definition, objB: owned.Reconciled)) {
-            owned = (definition, owned.Rows);
+            owned = (definition, closed, owned.Rows);
             m_screenSessions[instance.Name] = owned;
         }
 

@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
@@ -77,7 +78,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private int m_censusRevision;
     // The screens a body carried at the last revision watch, one bit per screen index, and the counter that moves when
     // the set does: a carried screen draws no slab of its own, so picking it up or putting it down rebuilds the program.
-    private uint m_carriedScreens;
+    private UInt128 m_carriedScreens;
     private int m_carriedRevision;
     private bool m_carriedEvaluated;
     private int m_carriedDefRevision = int.MinValue;
@@ -496,8 +497,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_carryableScreens = carryable;
     }
     // The screens a body carries this frame, one bit per screen index (WorldCreationInstances.IsCarriedScreen).
-    private uint CarriedScreens() {
-        var carried = 0u;
+    private UInt128 CarriedScreens() {
+        var carried = UInt128.Zero;
         var screens = m_carryableScreens;
 
         for (var row = 0; (row < screens.Length); row++) {
@@ -507,7 +508,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 client: m_client,
                 screen: screen
             )) {
-                carried |= (1u << screen.Index);
+                carried |= BitWords.Bit(index: screen.Index);
             }
         }
 
@@ -515,8 +516,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     }
     // A screen the latest revision found carried, at the frame its carrier holds it now; null for any other, which draws
     // its own slab.
-    private WorldScreen? CarriedRow(WorldScreen screen) => (((((uint)screen.Index) < SdfProgramBuilder.MaxScreenSurfaces) &&
-        ((m_carriedScreens & (1u << screen.Index)) != 0u) &&
+    private WorldScreen? CarriedRow(WorldScreen screen) => ((BitWords.Contains(mask: m_carriedScreens, index: screen.Index) &&
         m_animator.TryCarriedScreen(
             carried: out var held,
             client: m_client,

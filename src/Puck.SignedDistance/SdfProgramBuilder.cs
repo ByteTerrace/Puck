@@ -83,11 +83,12 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>The smallest exponent a <see cref="Superellipsoid"/> admits — the ellipsoid itself, the exponent every
     /// ellipsoid in the ISA is emitted at; see its own remarks for the 1-Lipschitz proof this interval is sized to.</summary>
     public const float MinSuperellipsoidExponent = 2f;
-    /// <summary>The most screen surfaces one program may declare: the length of the kernels' per-screen tables and of
-    /// their <c>screenSources</c> array, which <c>Puck.SdfVm.SdfWorldTables.MaxScreenSurfaces</c> reads and the kernels read
-    /// as the generated <c>SDF_MAX_SCREEN_SURFACES</c>. A contract separate from the engine's viewport
-    /// capacity.</summary>
-    public const int MaxScreenSurfaces = 32;
+    /// <summary>The most screen surfaces one program may declare, the members one screen mask holds: every set of screens
+    /// (declared, bound, emitting, shown) is one <see cref="UInt128"/> mask over <see cref="BitWords"/>, walked by its set
+    /// bits, and the kernels read it as a <c>uint4</c>. It is the length of the kernels' per-screen tables and of their
+    /// <c>screenSources</c> array, which <c>Puck.SdfVm.SdfWorldTables.MaxScreenSurfaces</c> reads and the kernels read as
+    /// the generated <c>SDF_MAX_SCREEN_SURFACES</c>. A contract separate from the engine's viewport capacity.</summary>
+    public const int MaxScreenSurfaces = BitWords.MaskBits;
     /// <summary>The reserved material identifier used by the plain screen material, unbound glass, which the kernels read
     /// as <c>SDF_SCREEN_MATERIAL</c>.</summary>
     public const int ScreenMaterialId = 65535;

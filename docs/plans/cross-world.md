@@ -44,7 +44,7 @@ own program, through the taped mutation door every submission uses
 | # | Interaction | State | Check |
 |---|---|---|---|
 | 1 | A world reads another's published value | Built: followed rows; the moon's `day` follows the debug world's | `world.state.cell.set day $value 0.75` on the debug world; `world.state day instance:<moon>` reads 0.75 within a tick; `follows-tests.puck --reproduce` passes |
-| 2 | A door onto another world opened in play | Built in part: `portal.open`, `portal.gate`, a door bound to its opener, the far world's socket and a lease on each side, all on followed rows; the door stands in the painting wing (the moon painting) | A press on the moon painting's step: `moonDoorOffer` 1, the moon's `moonSocket` 1, `moonDoorOpen` 1; walking in lands seat 1 at the moon's socket (`world.transfer` names `painting-moon/glass`, `body.where` on the moon reads grounded on the pad); a closed door holds the body at the wall |
+| 2 | A door onto another world opened in play | Built in part: `portal.open`, `portal.gate`, a door bound to its opener, the far world's socket and a lease on each side, all on followed rows; two doors share the rows, the moon painting in the painting wing and a standing frame on the launch field (`moon-door-valley`); a shut door holds no session | A press on either door's step: `moonDoorOffer` 1, the moon's `moonSocket` 1, `moonDoorOpen` 1; walking in lands the seat at the moon's socket (`body.where` names `instance:…moon`, grounded on the pad); a closed door holds the body at the wall |
 | 3 | A body across a joined seam keeps its own looks | Not built | A seat crossing a joined ground seam is drawn with its creation look in the boot scene (a capture), and the neighbour's bodies inside the band are drawn as themselves |
 | 4 | Crossing pre-start | Not built; the window's second residency is the RTX 2060 memory lane's | `world.residency` before and after a crossing names no residency created on the crossing frame; the crossing frames' produce in a quiet window |
 | 5 | Acting across worlds | Built: the moon beacon switch beside the moon painting lights the moon's beacon by the moon's own rule | A seat's press at the switch: debug `moonBeacon` 1, the moon's `moonBeacon` 1 and `beaconPower` 40000; a capture through the moon painting or on the moon's pad shows the lit lamp |
@@ -75,6 +75,10 @@ steps 1, 11 and 12, without the moving door frames step 1 also names:
 - `portal.gate` (`WorldPortalGate`): a keyed row read at the traveller's body
   index; a body it refuses passes the frame without crossing, narrated on
   `world.portal`.
+- A closed door holds no session (`WorldPortalClosures`, read by
+  `WorldInstanceHost.SettleScreenSessions`): the owner's observation through
+  its glass closes when the door shuts and opens again when it opens, so a shut
+  door keeps only its screen slot.
 - The pairing is authored in rows (moon-door.puck, moon.puck): the opener's
   press writes `moonDoorOffer`, the opener's `moonDoorPass` cell and the source's
   lease deadline; the moon follows the offer and its rule grants its socket
@@ -82,20 +86,28 @@ steps 1, 11 and 12, without the moving door frames step 1 also names:
   follows the socket back, and the door opens only while both stand. Each world
   owns the door that stands in it, and either lease lapses on its own clock.
 
+The screen slots a door's glass takes are one `UInt128` mask per set
+(`SdfProgramBuilder.MaxScreenSurfaces`, see the
+[rendering decision](../decisions/rendering.md#a-screen-set-is-one-wide-mask)),
+so the valley door is the debug world's thirty-third screen and many more fit.
+
 Left in this interaction, in order:
 
-1. **A valley-floor door.** The debug world uses all 32 screen slots
-   (`SdfProgramBuilder.MaxScreenSurfaces`), and a door's window needs one, so
-   the in-play door is the painting wing's moon painting rather than a new
-   frame on the launch field. Widening the ceiling is rendering work: the
-   screen masks are 32-bit in `SdfAppearanceOutline.Screens`, `SdfWorldResidency`,
-   `SdfWorldTables.ScreenSourceWatch`, `WorldSceneEmitter`'s carried screens
-   and the screen-emission pass's `screenEmissionMask`. Once it lands, a frame
-   on the launch field takes the same rows. *Check:* the valley door's crossing
-   reads as the painting's does.
-2. **A closed door still asks for its view.** The glass of a closed door keeps
-   rendering behind its curtain; a closed door should hold no images and no
-   session ([portals in play, section 6](portals-in-play.md#6-rendering-and-memory)).
+1. **The valley door's way home.** The moon's socket names the painting as its
+   counterpart (moon.puck), so walking back out of the socket lands before the
+   painting even when the traveller came in by the valley frame. A second socket
+   on the moon, or a counterpart chosen by the door the traveller came through,
+   gives each door its own way home; the socket is the moon's document, so the
+   change is the `crossworld` lane's. *Check:* walking back out of the socket
+   after entering by the valley frame lands before the valley frame.
+2. **Screens past the mask.** A world holds at most one mask of declared screens
+   at once. At MMO scale a zone shows thousands of screens, portals and windows,
+   most of them far or unseen, so the next step splits a screen's identity (its
+   authored index, which the material id carries) from its GPU slot, which a
+   residency claims through one allocator while the screen is near and open and
+   releases when it is not, with a slot table the kernels read. *Check:* a world
+   declaring more screens than the mask holds boots, and `world.faces` names
+   only the near and open ones bound.
 3. **Pooled doors on bodies** (live door frames), so a door is posed where a
    player aims rather than standing where an author put it.
 4. **The door lease across two processes**
@@ -151,7 +163,8 @@ waits for the interaction settlement the world model names as unbuilt.
 ## Readings owed
 
 - A windowed Direct3D 12 pass: the moon painting's curtain shut and drawn, the
-  crossing into the moon's socket in motion, the beacon lit through the
+  valley frame's glass blank while shut and showing the moon while open, the
+  crossing into the moon's socket in motion from both doors, the beacon lit through the
   painting and on the moon's pad, and the moon's sun after `day` is written in
   the valley.
 - The remote topology: `puck benchmark --route debug --remote local` with the

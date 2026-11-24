@@ -28,11 +28,14 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldTables : IDisposable {
     private const int DecalBufferCells = (SurfaceTextBase + ((SdfSurfaceTextLayout.MaxTexts * SdfSurfaceTextLayout.MaxGlyphs) * SdfSurfaceTextLayout.EntriesPerGlyph));
     // The decal buffer's leading DESCRIPTOR band (one uint4 per screen slot, then one per surface text slot) precedes the
-    // shared cell region; a screen's cell run starts at DecalDescriptorCount + screenIndex * MaxScreenDecalCells, and a
-    // surface text's glyph run at SurfaceTextBase + slot * MaxGlyphs * EntriesPerGlyph. Each descriptor carries its run's
-    // first entry, which is all the kernels read of this layout (sdfSampleGlyphDecal, sdfSurfaceTextInk).
+    // screens' cell pool, from which a screen holding a glyph grid claims a run of its grid's cells (m_decalRuns), and a
+    // surface text's glyph run starts at SurfaceTextBase + slot * MaxGlyphs * EntriesPerGlyph. Each descriptor carries its
+    // run's first entry, which is all the kernels read of this layout (sdfSampleGlyphDecal, sdfSurfaceTextInk).
     private const int DecalDescriptorCount = (MaxScreenSurfaces + SdfSurfaceTextLayout.MaxTexts);
-    private const int SurfaceTextBase = (DecalDescriptorCount + (MaxScreenSurfaces * MaxScreenDecalCells));
+    // The screens' cell pool: room for MaxScreenDecalScreens grids at the per-screen budget at once, whatever the screen
+    // count, so the pool's bytes do not grow with MaxScreenSurfaces.
+    private const int ScreenDecalPoolCells = (MaxScreenDecalScreens * MaxScreenDecalCells);
+    private const int SurfaceTextBase = (DecalDescriptorCount + ScreenDecalPoolCells);
     private const int DecalWordsPerCell = 4; // one uint4 per cell/descriptor (KEEP IN SYNC with shade/sdf-environment.hlsli's sdfDecalCells)
     private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = the slot's SdfUpdateRateCode while a tier view shows, zero otherwise) + float4 orientation quaternion + float4 anonymous Lanes (DynamicTransform.Lanes) (KEEP IN SYNC with isa/sdf-world.interface.hlsli sdfDynamicTransforms: position.w is read by sdfRateCode in debug/sdf-debug-views.hlsli, the third row by sdfFieldLane for erosion and morphs and by shading for slot-driven appearance)
     // The fillers' format: the views' color format, which the storage image they stand in for declares.
@@ -77,6 +80,9 @@ public sealed partial class SdfWorldTables : IDisposable {
     /// partitions its cell region into <see cref="MaxScreenSurfaces"/> equal per-screen runs of this size, so a decal
     /// on one screen never collides with another's cells.</summary>
     public const int MaxScreenDecalCells = SdfScreenDecalLayout.MaxScreenDecalCells;
+    /// <summary>The screens that may hold a glyph grid of <see cref="MaxScreenDecalCells"/> cells at once: the size of the
+    /// shared cell pool every screen's grid claims its run from, so smaller grids fit more screens.</summary>
+    public const int MaxScreenDecalScreens = 32;
     /// <summary>The kernels' screen count: the most screen surfaces one program may declare, the same ceiling as
     /// <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/>, which this reads. It is the length of the
     /// <see cref="SdfWorldPackage.ScreenSources"/> array of <see cref="SdfWorldInterfaces.World"/> and of every
@@ -158,9 +164,16 @@ public sealed partial class SdfWorldTables : IDisposable {
     private readonly SourceMapping?[] m_screenMappings = new SourceMapping?[MaxScreenSurfaces];
     private readonly SdfScreenFace[] m_screenFaces = new SdfScreenFace[MaxScreenSurfaces];
     private readonly SdfScreenTreatment[] m_screenTreatments = new SdfScreenTreatment[MaxScreenSurfaces];
-    private readonly bool[] m_screenBound = new bool[MaxScreenSurfaces];
+    // The screens whose source is bound (SetScreenBound) and the screens the live program declares, a bit a screen
+    // (BitWords): every per-frame walk over screens visits the members of one of these, never every slot.
+    private UInt128 m_screenBound;
+    private UInt128 m_screenDeclared;
     // Each screen's SdfUpdateRateCode as SetScreenRate wrote it, which SetScreenRipple's rewrite of the record keeps.
     private readonly float[] m_screenRates = new float[MaxScreenSurfaces];
+    // The screens' glyph-cell pool (ScreenDecalPoolCells) and the run each screen holds in it, in pool cells; a zero
+    // length holds none.
+    private readonly GpuRangeAllocator m_decalPool = new(size: ScreenDecalPoolCells);
+    private readonly (int Start, int Length)[] m_decalRuns = new (int Start, int Length)[MaxScreenSurfaces];
     // The bounded-volume table (views and sky), packed here every frame and written into its region.
     private readonly byte[] m_volumeScratch = new byte[(MaxVolumes * VolumeByteLength)];
     private SdfProgram m_liveProgram = null!;

@@ -31,6 +31,12 @@ world.state moonDoorOpen
 player.signal keyboard.w press
 ```
 
+The same door stands in the open on the launch field: a gilt frame east of the
+pad (`moon-door-valley`). A press on the ground before it makes the same offer,
+and while the door stands open walking through it arrives out of the same
+socket. Headless, `body.pose 100 0.3 78.9 0 0 0 0` stands a seat on its step.
+The socket's way back still leads to the painting.
+
 The frame at the moon's north pole is the moon's own way home: walking into it
 arrives before the painting whether or not the door is open.
 

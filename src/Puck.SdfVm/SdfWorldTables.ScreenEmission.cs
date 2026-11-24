@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -22,8 +23,8 @@ public sealed partial class SdfWorldTables {
     public SdfEnvironmentSubmission? SubmittedScreenEmission => m_screenEmission.Publication.Submitted;
 
     internal bool ScreenEmissionOwes => (m_screenEmission.Owes || m_screenEmission.Forced);
-    internal bool ScreenEmissionHasImages => m_screenBound.Any(predicate: static bound => bound);
-    internal ReadOnlySpan<bool> ScreenEmissionScreens => m_screenEmission.Screens;
+    internal bool ScreenEmissionHasImages => (m_screenBound != UInt128.Zero);
+    internal UInt128 ScreenEmissionScreens => m_screenEmission.Screens;
 
     internal ulong? ScreenEmissionSignature(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads, in DeliveryLatch latch) =>
         m_screenEmission.Observe(latch: in latch, reads: reads, residency: residency, view: view);
@@ -42,7 +43,7 @@ public sealed partial class SdfWorldTables {
         var surfaces = MemoryMarshal.Cast<byte, float>(span: m_screenSurfaceRegion.Contents);
         var mappings = m_screenMappingRegion.Contents;
 
-        for (var screen = 0; (screen < MaxScreenSurfaces); screen++) {
+        foreach (var screen in BitWords.Members(mask: m_screenDeclared)) {
             var row = (screen * (ScreenSurfaceByteLength / sizeof(float)));
             var area = ((4f * surfaces[(row + 3)]) * surfaces[(row + 7)]);
             var luminance = MemoryMarshal.Read<float>(source: mappings[(((screen * ScreenMappingStride) + ScreenBoundOffset) + (sizeof(float) * 2))..]);
@@ -72,8 +73,8 @@ public sealed partial class SdfWorldTables {
 
         public IGpuBuffer Buffer { get; }
 
-        // The emitting screens this observation read with a known image.
-        public bool[] Screens => m_watch.Screens;
+        // The emitting screens this observation read with a known image, a bit a screen.
+        public UInt128 Screens => m_watch.Screens;
         public bool Owes { get; private set; } = true;
         // Whether the next observation reduces again whatever its sources say (SdfWorldTables.ProjectTaintedSourcesAgain).
         public bool Forced { get; set; }
@@ -99,13 +100,13 @@ public sealed partial class SdfWorldTables {
                     m_watch.Observe(publication: resolved.Publication, screen: screen, tainted: input.Label.External);
                 }
             }
-            Owes = ((Publication.Submitted is null) || (m_watch.ChangedScreens() != 0u) || Forced);
+            Owes = ((Publication.Submitted is null) || (m_watch.ChangedScreens() != UInt128.Zero) || Forced);
             return unchecked((ulong)(Publication.Renders + (Owes ? 1 : 0)));
         }
         // Publishes the reduction and judges the screens whose emission it changed against the scopes that shade
         // (NoteEmission): every screen when no earlier reduction stands or the sources are read again whole.
         public long Publish() {
-            var screens = (((Publication.Submitted is null) || Forced) ? uint.MaxValue : m_watch.ChangedScreens());
+            var screens = (((Publication.Submitted is null) || Forced) ? UInt128.MaxValue : m_watch.ChangedScreens());
 
             m_watch.Commit();
             Owes = false;

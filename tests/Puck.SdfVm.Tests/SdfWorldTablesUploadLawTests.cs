@@ -513,8 +513,10 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             cells[index] = (0x01000000u + ((uint)index));
         }
 
-        var table = new uint[((SdfWorldTables.MaxScreenSurfaces + (SdfWorldTables.MaxScreenSurfaces * SdfWorldTables.MaxScreenDecalCells)) * 4)];
-        var cellBase = (SdfWorldTables.MaxScreenSurfaces + (Screen * SdfWorldTables.MaxScreenDecalCells));
+        // The descriptor band (a row a screen, then a row a surface text), then the screens' cell pool, whose first run the
+        // only grid claims.
+        var cellBase = (SdfWorldTables.MaxScreenSurfaces + SdfSurfaceTextLayout.MaxTexts);
+        var table = new uint[((cellBase + (SdfWorldTables.MaxScreenDecalScreens * SdfWorldTables.MaxScreenDecalCells)) * 4)];
 
         uint[] Table() => MemoryMarshal.Cast<byte, uint>(span: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(uint))))).ToArray();
 

@@ -510,7 +510,7 @@ The [Moth courtyard](../../../../experimental/src/Puck.World/Assets/worlds/moth-
 provides eight held poses and independent sky/cloud switches for repeatable GPU
 captures. Density controls live in the World.Authoring README.
 
-Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screen bindings 32 and bounded volumes 64; representation overflow refuses explicitly.
+Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screen bindings `SdfProgramBuilder.MaxScreenSurfaces` (one `UInt128` mask) and bounded volumes 64; representation overflow refuses explicitly.
 
 ### A kit's `rigid` facet
 

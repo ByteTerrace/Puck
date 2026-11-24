@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Puck.Maths;
 
 namespace Puck.SignedDistance;
 
@@ -288,12 +289,16 @@ public sealed class SdfSky {
             _ => -1,
         };
     }
-    /// <summary>Marks every screen a layer of the stack samples (<see cref="ScreenAt"/>), clearing the rest.</summary>
-    /// <param name="screens">The flags, one per screen index; a layer's screen outside them is not marked.</param>
-    public void MarkScreens(Span<bool> screens) {
-        screens.Clear();
-        for (var index = 0; (index < m_layerCount); index++) {
-            if ((ScreenAt(index: index) is var screen) && (((uint)screen) < ((uint)screens.Length))) { screens[screen] = true; }
+    /// <summary>Gets every screen a layer of the stack samples (<see cref="ScreenAt"/>), a bit a screen index
+    /// (<see cref="BitWords"/>); a layer's screen outside the mask is not marked.</summary>
+    public UInt128 Screens {
+        get {
+            var screens = UInt128.Zero;
+
+            for (var index = 0; (index < m_layerCount); index++) {
+                if (ScreenAt(index: index) is var screen && BitWords.Contains(mask: UInt128.MaxValue, index: screen)) { screens |= BitWords.Bit(index: screen); }
+            }
+            return screens;
         }
     }
     /// <summary>Returns a layer's kind parameters, by reference.</summary>

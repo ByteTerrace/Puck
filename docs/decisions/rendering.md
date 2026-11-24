@@ -64,8 +64,10 @@ price what the mesh pipeline costs instead:
   indices, 24-bit slot, draw and triangle indices, exact-float ranges, the
   material sentinel and region addresses. A guard is never exceeded silently;
   past it a document is refused by name.
-- **Kept as work bounds:** 64 volumes (still marched per pixel), the 32 screen
-  bindings with the derived-face band following the authored screens, lights,
+- **Kept as work bounds:** 64 volumes (still marched per pixel), the screen
+  bindings (`SdfProgramBuilder.MaxScreenSurfaces`, one `UInt128` mask that every
+  screen set and the kernels' `uint4` mask share) with the derived-face band
+  following the authored screens, lights,
   sky layers and nested views, 4,096 bodies, and 32,768 solid placement
   colliders per world. `SDF_MAX_INSTANCES` bounds one bake program, not a
   world.
@@ -2032,6 +2034,53 @@ which every sign, crate and counter may carry live words, the cost that matters
 is that a change touches no program and no mesh. What it does not yet reach is
 recorded with the open items: a text is the world's, not a body's, and the
 slots are a fixed band.
+
+### A screen set is one wide mask
+
+**Every set of screens is one `UInt128` mask, walked by its set bits.** The
+screens a program declares (`SdfAppearanceOutline.Screens`), the ones bound
+this frame, the ones whose images a pass samples or the emission reduction
+reads, the changed screens a publication lights scopes with, a body's carried
+screens and a light tile's lit screens are each one 128-bit mask over
+`BitWords`; the kernels read the same bits as a `uint4`, exactly as they read
+the light mask, and a tile holds four light words and four screen words
+(`SdfWorldPackage.ShadeTileLightWords`). The screen capacity is that mask's
+width (`SdfProgramBuilder.MaxScreenSurfaces`), so the representation and the
+bound are one statement. Per-frame work follows the members, not the slots:
+the change watch compares only the screens read now or at the last render, the
+emission reduction dispatches up to the highest bound screen, and a light walk
+or tile visits set bits.
+
+The options weighed, for a debug world that had used all 32 slots and an MMO
+zone that shows hundreds or thousands of screens:
+
+- *A wider `uint` (64).* Rejected: the next door refuses again, and every loop
+  stays a loop over every slot.
+- *Per-tile screen lists on the GPU.* Rejected for now: the tile already
+  carries light masks, and a screen list there is a second walk with its own
+  bound, where one more mask word set walks with the light code it shares.
+- *A sparse slot table with per-draw bit ranges.* Deferred to the step that
+  needs it: it is the shape for screens past one mask, where a screen's
+  identity (the index its material id carries) and the GPU slot a residency
+  binds it to come apart.
+- *One 128-bit mask (chosen).* `UInt128` has `PopCount`, `TrailingZeroCount`
+  and `LeadingZeroCount`, so a set's members, count and span are single
+  instructions, and the GPU's `uint4` is the light mask's own shape.
+
+**The glyph cells are a pool, not a run per slot.** A screen's glyph grid
+claims a run of its grid's size from one cell pool (`GpuRangeAllocator`, the
+one door that hands out runs), sized for `SdfWorldTables.MaxScreenDecalScreens`
+full grids, so the decal buffer's bytes do not grow with the screen count.
+
+**A closed door keeps its slot and nothing else.** A portal face's slot is
+assigned when its document composes (`WorldFaceCatalog`), as the derived-face
+band always was; while its door is shut (`WorldPortalClosures`) its owner holds
+no session through it, so it shows no picture and asks for no image
+([portals in play](../plans/portals-in-play.md#6-rendering-and-memory)).
+Splitting identity from slot, so a residency claims a slot only for a screen
+that is near and open, is the
+[cross-world plan](../plans/cross-world.md#2-a-door-opened-in-play)'s next
+screen step.
 
 ## What the state-of-the-art audit found ahead, and what stays rejected
 
