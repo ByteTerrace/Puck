@@ -4711,10 +4711,6 @@ the stages; this packet holds what a stage does not.
   the overlay among a run's conditions, beside the operating system and the
   logical processors; it does not read the driver's version or the display's
   refresh. Add both to `run.json` when a platform probe names them.
-- [medium] The moon round trip has no route yet: the standing set reports it
-  unrun until `worlds/debug/benchmark-route.puck` authors a `moon` route of
-  [the shape the memo gives](benchmark.md#the-moon-round-trip-and-the-four-seat-route).
-  Owner: moon-trip, once boost on a scripted tape makes a flight one line.
 - [medium] The four-seat route waits for the multi-seat client:
   `world.benchmark run <route> seats <n>` refuses naming it. Owner: cpu, which
   gives each seat its own driver against one authority; the instrument needs

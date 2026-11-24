@@ -44,7 +44,7 @@ Without `--route` the verb runs the standing set, one fresh World per leg:
 | Leg | What it plays | Until its dependency lands |
 |---|---|---|
 | `debug`, on Direct3D 12 and on Vulkan | The debug route, from a paused boot | Runs today |
-| `moon`, in the same World as `debug` | The world's `moon` route, the round trip below | Reported unrun, naming moon-trip's scripted boost tape |
+| `moon`, in the same World as `debug` | The world's `moon` route, the round trip below | Runs; a world that authors no `moon` route reports it unrun |
 | `remote` | The debug route against a listening World the verb starts on this machine (`--remote local`) | Runs; on the debug world the remote authority's delivery is refused, by name, until moon-trip's hosted-world work lands |
 | `four-seat` | The debug route on four seats of one client (`--seats 4`) | Reported unrun, naming the multi-seat client |
 
@@ -102,17 +102,13 @@ takes `frameBar: "auto"` (or a profile's name), which passes `--frame-bar`.
 
 ### The moon round trip and the four-seat route
 
-The moon route is the world's own `routes` row named `moon`, authored by the
-moon-trip campaign in `worlds/debug/benchmark-route.puck` once a flight can be
-played as one line. The instrument plays it as soon as the document authors it.
-Its shape is four chapters, each ending where the next begins:
-
-| Chapter | From | To | Arrival |
-|---|---|---|---|
-| Boarding | The `launch` spawn beside the pad | Seated in the ship | The seat drives the ship (`world.transfer` names the ship's kit) |
-| The pad to the sky seam | The pad | Across the adjacency into the moon's world | The seat stands in the moon's world (`world: "moon"`) |
-| The landing | The seam | The moon's ground | Grounded at the sphere's radius, up along the radius |
-| The way home | The moon | The pad | Grounded in the valley |
+The moon route is the debug world's own `routes` row named `moon`
+(`worlds/debug/moon-route.puck`), played by the standard's `pilot` seat
+program: its first chapter boards the ship at the pad, flies up through the sky
+seam into the moon's world and lands; its second flies back across the seam and
+lands on the pad. Its `fly` steps hold the program's rise and boost controls,
+so the flight loads the seam, the moon's residency and the sky as a player's
+does. The instrument plays it in the same World as the debug route.
 
 The four-seat route plays one route on four seats of one client against one
 authority. `world.benchmark run <route> seats <n>` names the slot today, and
