@@ -3207,12 +3207,16 @@ in order:
   reads as a screen, so a world whose glass the main view samples is never
   parked, and a wake rebuilds within the frame that reads it; a lead would
   build the tables and lighting before that frame;
-- the fixed storage of the residencies a frame reads, which is now the largest
-  holder: the lighting's trace scene and its hardware structures are built per
-  residency, so a second scene of the world the presentation draws (a
-  session's) traces the whole world again, beside the presentation's own
-  **[reading]**. One trace scene for one world, the way its meshes are placed
-  once, is what moves it ([step 9](#step-9-lighting-on-the-same-demand));
+- the fixed storage of the residencies a frame reads: a second scene of the
+  world the presentation draws (a session's) now shares the presentation's
+  trace geometries and bottom structures
+  ([step 9](#step-9-lighting-on-the-same-demand)), but still uploads its own
+  scene words and keeps its own volume, feedback and hit cache;
+- probe-cache blocks kept alive by a few probes: a batch's `ProbeBlock` and
+  `LightBlock` stand while any kept probe names them, so a cache relit many
+  times holds far more than its probes' payload (the boot world's cache read
+  188 MB during a cold bake against 78 MB for 31,004 probes warm); copying a
+  block's survivors out once few remain is what bounds it;
 - the first judging of a floor, which still takes a core about ten seconds a
   pair (`SdfMeshTraceJudge.Admits`); the verdict is kept afterwards
   (`SdfMeshLibrary.TraceVerdict`, an entry beside the meshes in the store);
@@ -3226,7 +3230,16 @@ in order:
 The irradiance volume stores the levels its frame measures alone
 (`SdfFrame.IndirectLevels`): a world behind a glass that reads its far level
 holds a quarter of the medium tier's slots, in its volume, its device tables and
-its hit cache.
+its hit cache. A residency parked for `SdfWorldResidency.ForgetLightingSeconds`
+gives its measured volume back too (its probe cache, volume words and trace
+scene, all host memory), and a wake after that lights the world from nothing.
+A bake group's admission still promises its refinement's whole bound
+(`SdfSampledLattice.FineSampleBound`, 384-490 MB for any large lattice) from
+the moment it starts sampling, frames before it holds any of it; promising
+only the sampled lattice and raising at the refinement starved the bake on the
+RTX 2060 (no group refined in four minutes of a cold boot), so the rise has to
+come with a refinement queue the workers never wait in, and admissions paced
+by it.
 
 The readings above are owed to a GPU leg, and they decide most on the RTX
 2060 machine, where the region refuses detail even warm.
@@ -3288,6 +3301,12 @@ on the one background budget by the glass's share of the display's pixels
 (`SdfGpuWorkBudget.Takes`); a seen volume's first light is owed work under
 the owed allowance (`SdfMeshIrradiance.OwesFirstLight`), though its debt is not
 yet counted apart from an arrival's geometry: both are the budget's `owed-jobs`.
+The scenes of one world share their geometry: a scene build takes the trace
+geometry another scene built over the same mesh buffers
+(`SdfMeshIrradianceScene.Geometry`'s shared table), and the probe clients of a
+device claim bottom-level structures from one table by that geometry
+(`SdfMeshTraceBottoms`), each keeping only its own top level; a device scene
+store for the uploaded scene words is the rest of one trace scene per world.
 The trace scene holds each static group's floor where `SdfMeshTraceJudge`
 admits it ([decision 9](#decision-9-lighting-reads-the-same-demand-and-pays-on-demand)),
 a scene built while a batch runs is installed when that batch ends, a probe's
