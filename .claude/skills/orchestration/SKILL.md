@@ -182,8 +182,13 @@ what the machine can verify. **At most two subagents run at once** (the
 owner's standing order, so that agents stay focused and cooperate instead of
 competing for the machine and the same files): the lead starts a third only
 when the owner explicitly asks for a fan-out, and a workflow's agents count
-toward the two. The partner session on another machine is a peer, not a
-subagent, and does not count. Within that cap the lead still judges from the
+toward the two. The partner session on the RTX 2060 machine is a peer with
+its own cap of one subagent, so the team is five actors: the lead, its two
+subagents, the partner and its one. The owner's intent is cooperation, not
+parallel effort: each actor's work enhances another's (the partner measures and
+judges what the lead's lanes build, the lanes fix what the partner's readings
+find), and the tools they share (the CLI, the `puck` MCP server, the
+benchmark) are improved by whoever needs them to work well together. Within that cap the lead still judges from the
 work in hand (concurrent builds, measuring lanes that load would skew, GPU
 legs, shared files, its own capacity to inspect and merge) whether a second
 lane pays. The owner's direction:
