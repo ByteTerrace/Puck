@@ -209,6 +209,7 @@ public sealed partial class WorldScreenBinder {
                     : ((session.Observation?.Disclose(arg: candidate) is { } disclosed) ? emitter.MeasureCandidate(candidate: disclosed) : default)));
         }
         m_feedsMoved = true;
+        m_infinityEntriesMoved = true;
         return entry;
     }
     private SdfWorldResidency? InfinityResidencyOf(InfinityEntry entry) {
@@ -249,6 +250,7 @@ public sealed partial class WorldScreenBinder {
             residency.Dispose();
         }
         m_feedsMoved = true;
+        m_infinityEntriesMoved = true;
     }
     private void ReleaseInfinityRoots() {
         foreach (var root in m_infinityRoots.Values) {
@@ -256,14 +258,22 @@ public sealed partial class WorldScreenBinder {
             m_renderProbe?.UnregisterInfinityPlan(owner: root);
         }
         m_infinityRoots.Clear();
+        m_infinityEntries.Clear();
+        m_infinityEntriesMoved = false;
         ClearInfinityOutputs();
     }
-    // Read several times a frame, so a world that plans no infinity layer walks its roots and allocates nothing.
-    private IEnumerable<InfinityEntry> InfinityEntries() {
+    private readonly List<InfinityEntry> m_infinityEntries = [];
+    private bool m_infinityEntriesMoved;
+
+    // Enumerated by many presentation queries. Entry creation and retirement invalidate the traversal in one place.
+    private List<InfinityEntry> InfinityEntries() {
+        if (!m_infinityEntriesMoved) { return m_infinityEntries; }
+        m_infinityEntries.Clear();
         foreach (var root in m_infinityRoots.Values) {
-            if (root.Entries.Count != 0) { return m_infinityRoots.Values.SelectMany(selector: static held => held.Entries.Values); }
+            m_infinityEntries.AddRange(collection: root.Entries.Values);
         }
-        return [];
+        m_infinityEntriesMoved = false;
+        return m_infinityEntries;
     }
 
     private sealed class InfinityRoot(WorldSessionMirror mirror, string instance, int depth, string name) {
