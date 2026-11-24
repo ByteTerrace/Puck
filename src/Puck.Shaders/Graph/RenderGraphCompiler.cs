@@ -146,7 +146,8 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 continue;
             }
             if (
-                (pass.InputReferences.Count != package.Inputs.Count) ||
+                (pass.InputReferences.Count > package.Inputs.Count) ||
+                (pass.InputReferences.Count < (package.Inputs.Count - package.OptionalInputs)) ||
                 (pass.OutputReferences.Count != package.Outputs.Count)
             ) {
                 Add(
@@ -349,7 +350,7 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
             packagePasses.Add(item: new ShaderPipelinePackagePass(
                 Config: config,
                 CountsKernelWork: package.CountsKernelWork,
-                InputAccesses: [.. package.Inputs.Select(selector: static port => port.Access)],
+                InputAccesses: [.. package.Inputs.Take(count: pass.InputReferences.Count).Select(selector: static port => port.Access)],
                 Inputs: pass.InputReferences,
                 Members: package.Members,
                 Name: pass.Name,

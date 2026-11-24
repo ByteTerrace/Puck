@@ -21,10 +21,10 @@ the way a `puck.render.graph.v1` document's `packages` row is, less its ports:
 
 The rows are passes of the root graph the engine synthesizes for the world
 ([the default root graph](#the-default-root-graph)): `main` runs them in
-document order after every view and pane `place` pass and before the overlay,
-and each reads the frame the pass before it wrote. `name` is a safe name,
-unique within the section and distinct from every `views.graphs` row's name,
-because the root names a pane's `place` pass after its row; it is the pass's
+document order after the pass that places the views and panes and before the
+overlay, and each reads the frame the pass before it wrote. `name` is a safe
+name, unique within the section and distinct from every `views.graphs` row's
+name, because the root names a pane's version after its row; it is the pass's
 name in the root graph and the name a probe's `post` parameter target uses.
 `package` names a post-process package, which the document load checks against
 the host's catalog. `config` binds against the package's schema in the graph
@@ -488,6 +488,7 @@ offers:
 | `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a native fragment (`SdfWorldPackage.NativeFragment`): the bake's mask and sampling passes while the residency's bake is pending, the shadow cascades and the mesh raster, then surface and views over the render grid, then the sky and the composite at the output extent, over retained counted scratch. Surface writes each pixel's visibility record from the mesh target, its occlusion and the cascades' shadows, and views shades its hits into the lit image, premultiplied by coverage and each hit's fog transmittance, every light answering through one interface and the stage adding each light's summed rim and specular totals once; neither queries the field. The sky evaluates its field runs only where the lit image leaves a pixel or a neighbour uncovered, and the composite adds the fog's in-scatter to the lit image (toward the gradient it reads from the residency's environment map), puts it over the sky's runs by its coverage, then integrates the bounded media over the surface and sky shares, each clipped at its own end, into the output. A view below a native render ceiling puts `resolve` between views and the sky (`SdfWorldPackage.Fragment`): it reconstructs the lit image and each output pixel's surface transport (the fog's in-scatter weight and the coverage over the ray distance, read from each sample's own record with the color's weights) from the render grid. A view whose quality asks for temporal reconstruction runs `SdfWorldPackage.TemporalFragment` at any ceiling: views also writes a render-extent reactivity buffer, and `resolve` reads it and the previous frame's history color and surface (each a history version at the output extent) and writes this frame's history beside the lit image, and updates the stationary sample window in place (one retained buffer at the output extent, a mutable input), so the history never holds the sky. The screens it shows are the instance's reads, not ports. |
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
 | `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Both are working images, so placing changes no value's meaning: a world's view arrives converted by its own display pass. Its config is `letterbox` (1 writes `letterboxColor` outside the rect instead of the base, 0 by default), `letterboxColor` (a working-image RGBA, `(0.015, 0.016, 0.02, 1)` by default; the matte around an engaged screen's framed picture writes the screen route's `display.fill` here), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpness` and `crop` (the part of the source the rect shows, left, top, width and height as fractions of the source, each edge rounded to a source pixel, the whole source by default; a crop of the rect's own pixel extent is an exact copy, which is how a seat view framing its engaged screen shows only its matte). A host that places panes per frame (`IRenderGraphPlacements`) overrides the rect, the sharpness, the letterbox color and the crop, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
+| `place.views` | a base and from one to sixteen sources, image inputs read by compute, one image output written by compute | `place` over several sources in one dispatch (the same kernel body, `place.hlsli`): each source reconstructed into its own rect, a later source over an earlier one, and the base or the letterbox color outside every rect, so each output pixel is written once whatever number of sources is shown. A host places each source by the name of the version bound to its port; one it does not place is not shown, and a pass none of whose sources is shown draws nothing. The world's root places its views and panes through it. Its config is `place`'s; the rect, crop and sharpness in it apply to a pass no host places. |
 | `sdf.film-grain` | one fragment-sampled image input, one color-attachment image output | Film grain over the input: the engine's [post-process package](#post-process-packages), a per-pixel integer-hashed offset keyed on the engine tick. Its stages, `fullscreen.vert` and `sdf-film-grain.frag` in `Assets/Shaders/Sdf/passes`, compile at build, and `PostProcessPackage` records it. |
 | `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float working values for `source-transfer`, relative to the paper white the pass block carries. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
 
@@ -761,7 +762,7 @@ publishes that input's image with no copy, in its own layout
 (`ShaderPipelineRenderNode.PublishedLayout`), and a root capture reads it. A
 later package pass that reads such an output is handed the input it stands for,
 so a chain of passes that draw nothing resolves to the first input it stands
-for: a root whose place passes all show nothing publishes the world's image
+for: a root whose placement pass shows nothing publishes the world's image
 itself. A history buffer no other pass writes stands for nothing: its pass's
 reservation of a new instance is withdrawn, so the history keeps its last write,
 as it does through a frame its pass stands
@@ -1014,10 +1015,12 @@ any other:
   residency, when the world's layouts or player roster can compose more than
   one view.
 - `main`: the scene graph reading `world`'s output over the whole display and
-  every pane's output. With more than one view it first runs one `place` pass
-  per view. Then it runs one `place` package pass per
-  `views.graphs` instance any layout slot names, each pass named after its
-  instance, then one pass per `views.post` row in document order, named by the
+  every pane's output. It first runs one `place.views` package pass
+  (`main$place$1`) that places every view, when the world composes more than
+  one, and over them every `views.graphs` instance any layout slot names, each
+  by the name of its version (`main$view$<n>` for a view, the instance's name
+  for a pane), and one more such pass for every sixteen past the first. Then
+  it runs one pass per `views.post` row in document order, named by the
   row and running its [post-process package](#post-process-packages), each
   reading the frame the pass before it wrote. Its output is the scene.
 - `main$overlay`: in a windowed World that loaded its glyph atlas, one
@@ -1112,9 +1115,9 @@ one axis and shrinks it on the other, retained through interruptions until the c
 then its own rect subject to scheduler quantization and shrink hysteresis) so easing its rect never
 resizes a node, advances the pane's clock, and feeds its
 pointer and time. A pane the active layout does not show is not shown:
-its place pass draws nothing and its instance is not scheduled. Once every
+the placement pass leaves it out and its instance is not scheduled. Once every
 slot is placed, the host publishes the mapping of each view and pane the
-`place` passes draw (`WorldViewGraphHost.PublishPanes`): the instance's whole
+placement pass draws (`WorldViewGraphHost.PublishPanes`): the instance's whole
 image over its rect, at the extent the runtime's latest schedule
 (`IRenderGraphInstances.Latest`) renders it at. A pane's pointer maps through
 that mapping, which a steady frame publishes without allocating;
@@ -1151,11 +1154,11 @@ view that reconstructs over time (`world.temporal`) resolves at any ceiling, and
 its own display pass sharpens it by `world.upscale-sharpness`. A view is shown
 only once the engine has rendered it, and a single view covering the whole
 display with no matte is not placed, so `main` passes `world` through unchanged.
-The first view's place pass sets the `place` config's `letterbox`, so outside
-its rect it writes the letterbox color, `(0.015, 0.016, 0.02)` unless the host
+The pass that places the views sets the `place` config's `letterbox`, so outside
+every rect it writes the letterbox color, `(0.015, 0.016, 0.02)` unless the host
 places another (`RenderGraphPlacement.LetterboxColor`: the route's
-`display.fill` while a seat frames an engaged screen), rather than its base; every later place pass keeps its base
-there. Pixels no view or pane covers show that color, and a layout that covers
+`display.fill` while a seat frames an engaged screen), rather than its base.
+Pixels no view or pane covers show that color, and a layout that covers
 the whole display pays no pass for it. The letterbox does not wait for the
 first view: while it is not shown and part of the display lies outside every
 rect the root shows (`RenderGraphPlacement.Uncovered`), its pass writes the
