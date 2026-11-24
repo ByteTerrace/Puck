@@ -76,7 +76,7 @@ public sealed partial class WorldBody {
         return new(
             ScriptActors: new(CopyInto(buffers: buffers, source: ScriptActors.Timers.AsSpan()), CopyInto(buffers: buffers, source: ScriptActors.Pending.AsSpan()), tapeActors),
             PlanarVelocity: m_planarVelocity,
-            VerticalVelocity: m_verticalVelocity,
+            VerticalVelocity: (m_verticalVelocity + m_directVerticalVelocity),
             Orientation: m_orientation,
             DrivePitch: m_drivePitch,
             OverlayVelocity: m_overlayVelocity,

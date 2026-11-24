@@ -207,6 +207,10 @@ public sealed partial class WorldBody {
     // teleport that resets vertical state — Warp/Pose/Reconcile — but NOT by Face (resetVertical: false, the jump arc
     // keeps running), and by SetBodyMotionProgram only when the new program integrates vertical gravity.
     private FixedQ4816 m_verticalVelocity;
+    // The vertical velocity the last step's own thrust drove directly (BodyMotionScratch.DirectVerticalVelocity), which
+    // owns the vertical channel while thrust is held and is no ballistic state of the source world. A transfer carries it
+    // with the ballistic velocity (CaptureTransferState), so a body climbing on thrust arrives moving as it left.
+    private FixedQ4816 m_directVerticalVelocity;
     // Sampled fresh every tick, before this body's own Advance, from the population's field lattice at this body's
     // coupled cell — never captured/restored (see WorldBody.Transfer.cs's own remarks): a pure function of this
     // body's position and the live lattice, re-derived identically the very next tick regardless of any teleport.
