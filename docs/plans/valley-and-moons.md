@@ -170,7 +170,7 @@ Left open, in the order they matter to the trip:
 3. **A refused device allocation ends the World.** With the moon's two
    residencies (the painting's window and the sky view) beside the debug world's
    own, the device's memory account refused a mesh region's growth and the
-   frame threw (`SdfWorldTables.EnsureMeshRegionCapacity`). A refusal has to
+   frame threw (`SdfMeshRegionStore.EnsureCapacity`). A refusal has to
    shed detail, not end the run.
 4. **The pilot has no camera of her own.** The context button boards and
    leaves the ship, but the camera is the Moth's chase rig on the ship: a

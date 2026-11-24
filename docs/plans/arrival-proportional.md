@@ -359,17 +359,17 @@ residency` read.
 `SdfMeshRegionArena.Plan` does four things beyond counting names **[opened]**:
 it places a mesh no row named before (`SdfMeshRegionArena.TryPlace`, after the
 unnamed meshes give up their words), refuses one no free run holds
-(`SdfMeshRegionArena.Refused`), grows the draw reserve
-(`SdfMeshRegionArena.GrowReserve`, which moves the meshes lying in the words the
-reserve takes), and applies the slack and packing rules.
-`SdfMeshRegionArena.Rename` does none of them: it requires a placement. The
-row operations carry all four:
+(`SdfMeshRegionArena.Refused`), and applies the slack and packing rules. The
+draw records no longer lie in the arena's region (they are a region of the
+residency's tables, grown by `SdfWorldTables.EnsureMeshDrawCapacity`), so the
+arena holds no reserve and a grown draw list moves no mesh. The row operations
+carry the rest:
 
 | Operation | The arena | The tables then |
 |---|---|---|
 | A row names a mesh (a row gained, or renamed) | Counts the name. A mesh it does not hold takes the lowest free run, the unnamed meshes giving up their words first, or is refused | Placed: the mesh is owed and lands through the background work, its chain absent until it stands. Refused: its chain is absent. Held and standing: the row is staged live |
 | A row stops naming a mesh (a row lost) | Uncounts it. A mesh no row names is retained slack | Nothing more |
-| The extent passes the reserve | Grows the reserve. Each named mesh in the words it takes is placed again (`SdfMeshRegionArena.Moved`) or refused | A moved mesh that is resident is written in this frame's upload (`SdfWorldTables.WriteMeshWords`), and every row on its chain is staged again in the same staging call. One still restoring from the store, or refused, has its chain staged absent |
+| The extent passes the draw records the tables hold | Nothing: the records are the tables' own region | The draw region grows (`SdfWorldTables.EnsureMeshDrawCapacity`), and the next upload carries the records it held |
 | The end of a staging | Applies the slack and packing rules from running totals of placed, named and free words, which the operations above keep | A relocation owes every mesh, so every chain is staged absent |
 
 A row staged through a mesh's chain takes its placement from the arena, never
@@ -509,7 +509,7 @@ is a new interpretation of a row index, and each holder of one is covered:
   **[opened]**. With rows reused, a second queue would let a freed row's
   record be rewritten while a submitted frame still reads it. The precondition
   is checked where a landing's copy is recorded
-  (`SdfWorldTables.RecordLanding`): the recording states the queue its job is
+  (`SdfMeshRegionStore.RecordLanding`): the recording states the queue its job is
   submitted on, and a queue other than the tables' own is refused by name.
   Moving background work to another queue then fails at its first landing, and
   would need a fence between a row's free and its reuse, which this design does
@@ -818,14 +818,14 @@ is in `sdf.rows.check` unless the table names another reading.
 |---|---|---|---|
 | A hit rejected by the door | `force hit-bound`: one frame's readers are given a draw count of zero while the targets hold hits | `gpu.mesh-hits.rejected` under the lever, and zero without it | R1h |
 | Refusal under the region's limit | `force limit <bytes>`: an admission cap the arena's one placing function checks, below what the rows name | Rows staged absent for a refused mesh; after `force limit auto`, refused rows returned live | R1a |
-| Arena relocation, and the region shrinking to fit | `force relocate`: the next staging packs the arena as though `SdfMeshRegionArena.PackedShare` were passed; after a forced limit and a trim the region holds more than half again its need, so `SdfWorldTables.FitMeshRegion` shrinks it | The landing report's relocations (`SdfWorldTables.DescribeLanding`); rows that went absent and returned live, each seeded; region shrinks | R1a |
+| Arena relocation, and the region shrinking to fit | `force relocate`: the next staging packs the arena as though `SdfMeshRegionArena.PackedShare` were passed; after a forced limit and a trim the region holds more than half again its need, so `SdfMeshRegionStore.Fit` shrinks it | The landing report's relocations (`SdfWorldTables.DescribeLanding`); rows that went absent and returned live, each seeded; region shrinks | R1a |
 | A memory trim | `host.memory collect`, which exists and raises the account's trim (`MemoryAccount.TrimCaches`) | Trims the tables serviced; with refused rows standing, refused meshes named again | R1a |
 | A consumer skipping past the journal's history (F2) | `force skip <consumer>`: the tables, the scene's key or the dresser's host cursor leave their cursor uncommitted for more frames than the journal keeps (`SdfMovedTransforms.History`) | Whole-table answers the cursor gave that consumer | R1a for the tables; R1b for the rest |
 | New tables after a lost device | `gpu.faults lose`, which exists (`GpuCreationFaults.ArmLoss`) | Whole-table answers given to new tables, and a non-zero compared count on the frames after | R1a |
 | A replaced producer, and a view following other tables | The tour's crossing into another world through the gallery portal, with a hover pick held across it; the seat's view then follows another residency **[inference]** | Whole-table answers given for another reader; picks discarded for another table | R1b |
 | Free-row packing | `force pack`: the next dress starts over whatever the free share | Start overs for a pack, and rows they moved | R1b |
 | A failed publication's retry (F7) | `force dress-fault [n]`: the nth dress throws after its first row write, as `gpu.faults record` fails a recording | Start overs after a failure; live rows equal to the sum of the owners' runs after each | R1b |
-| Reserve growth with meshes placed | A cold boot, whose groups finish over many frames while the reserve doubles from `SdfMeshRegionArena.MinimumDrawCapacity` **[inference]**; the law covers it device-free | Meshes moved (the landing report's moved count); rows staged again through a moved mesh's chain | R1b |
+| Reserve growth with meshes placed | A cold boot, whose groups finish over many frames while the reserve doubles from `SdfWorldTables.MinimumDrawCapacity` **[inference]**; the law covers it device-free | Meshes moved (the landing report's moved count); rows staged again through a moved mesh's chain | R1b |
 | Lockstep packing | `world.lockstep on`, which exists, across a hand-over that changes a count | Start overs on locked frames; and a locked frame with no allocation or free adds none | R1b |
 | A straddle by a host-drawn body and by a rigid copy | A tour stop that holds one of each across the gallery glass and then withdraws it | Clipped rows by owner kind (host, copy, in place), each non-zero; rows whose clip ended and that stage their base draw again | R1c |
 

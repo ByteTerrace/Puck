@@ -109,24 +109,23 @@ All paths are under `src/` unless stated.
   (:203) **[opened]**. The arena places through one `GpuRangeAllocator` sized to that limit
   (SdfMeshRegionArena.cs:81) **[opened]**. Growth is need + an eighth in 16 MiB granules (`MeshRegionGrownBytes`,
   MeshRegion.cs:255-261) **[opened]**.
-- **Landing order:** owed meshes land through background work in `MeshDemand` priority (`RankLanding`,
-  SdfWorldTables.MeshLanding.cs:59-76) **[opened]**. A draw whose mesh is owed or refused is filtered out of the
+- **Landing order:** owed meshes land through background work in `MeshDemand` priority
+  (`SdfMeshRegionStore.RankLanding`) **[opened]**. A draw whose mesh is owed or refused is filtered out of the
   staged list (MeshRegion.cs:488-498) **[opened]**.
 - **Kept:** each placed mesh holds a cached claim on its CPU mesh (`mesh.Acquire(cached: true);`,
-  SdfMeshRegionArena.cs:351) because the region re-reads a mesh's words from the mesh when it flushes
-  (`MeshSection : IGpuRegionSource`, MeshRegion.cs:845-848; `MeshWordsOf` through `mesh.Hold()`, :752-780)
-  **[opened]**. Unnamed meshes are retained up to `RetainedSlackWords = (1 << 23)` (32 MB) (src/Puck.SdfVm/SdfMeshRegionArena.cs:42, 194-196)
+  SdfMeshRegionArena.cs:351) because a landing packs a mesh's words from the mesh itself
+  (`SdfMeshRegionStore.MeshWords`, through `mesh.Hold()`) **[opened]**. Unnamed meshes are retained up to `RetainedSlackWords = (1 << 23)` (32 MB) (src/Puck.SdfVm/SdfMeshRegionArena.cs:42, 194-196)
   **[opened]**.
 - **Under pressure:** unnamed meshes forgotten first (`ForgetUnnamed`, src/Puck.SdfVm/SdfMeshRegionArena.cs:206-212, 364-378); a named mesh with
   no run is refused (`_ = m_refused.Add(item: mesh);`, :211) and its draws wait out of the frame; a compaction
   (`SdfMeshRegionArena.Compact`) moves the highest meshes into lower runs on the GPU when refused meshes would fit packed,
   or, for an unmapped region, when free words pass `PackedShare = 3` times named; an account trim
   forgets unnamed meshes on the frame thread (`ServiceMemoryTrim`, MeshRegion.cs:53-66) **[opened]**.
-- **Device refusal:** `SdfWorldTables.EnsureMeshRegionCapacity` catches a refused
+- **Device refusal:** `SdfMeshRegionStore.EnsureCapacity` catches a refused
   growth, clips placements to the buffer it holds and leaves those rows absent.
   Only refusal of the draw-record floor itself throws. Reserve-displaced chains
   still stage in that transaction, including a mesh the clip refuses.
-- **Shrink:** `SdfWorldTables.FitMeshRegion` considers both relocation and
+- **Shrink:** `SdfMeshRegionStore.Fit` considers both relocation and
   forgotten slack, so freeing an unused tail can shrink without relocating
   standing geometry.
 
@@ -220,7 +219,7 @@ All paths are under `src/` unless stated.
 |---|---|---|---|
 | `MemoryAccount.Shared` | Puck.Hosting/Jobs/MemoryAccount.cs:29 | `DefaultBudget` = 3/4 installed RAM (:58), `Headroom` 1/32 clamped 16..512 MiB (:60), settable via `host.memory budget` (HostMemoryCommandModule.cs:95-100) | Admission budget only; `Change` never refuses (`MemoryAccount.Owner.Change`) |
 | Account owners actually created | `"mesh"`, `"mesh-materials"` (SdfMesh.Storage.cs:190-209, 377-399); `"mesh-bake-group"` (SdfMeshPathBake.cs:2396); `"mesh-bake-sampled"`, `"mesh-bake-readback"` (SdfMeshBakeGpuWork.cs:149, 193); `"mesh-entry"` (SdfMeshStore.cs:188, 250); `"mesh-decode"` (SdfMeshStoreCodec.cs:93) | Only the bake group reserves (`TryReserve`); payloads only report | Payloads: high-water. Bake: bounded by admission |
-| Account trim subscribers | `SdfMeshLibrary.Trim` (SdfMeshLibrary.cs:322), `SdfWorldTables.RequestMeshTrim` (MeshRegion.cs:307), `SdfMeshIrradiance.TrimRetained` (SdfMeshIrradiance.cs:1359) | Fired by `SetBudget` lowering or `host.memory collect` (MemoryAccount.cs:80; HostMemoryCommandModule.cs:106) | Nothing fires a trim from a reading of pressure **[opened: only those two callers of `TrimCaches`]** |
+| Account trim subscribers | `SdfMeshLibrary.Trim` (SdfMeshLibrary.cs:322), `SdfMeshRegionStore.RequestTrim` (MeshRegion.cs:307), `SdfMeshIrradiance.TrimRetained` (SdfMeshIrradiance.cs:1359) | Fired by `SetBudget` lowering or `host.memory collect` (MemoryAccount.cs:80; HostMemoryCommandModule.cs:106) | Nothing fires a trim from a reading of pressure **[opened: only those two callers of `TrimCaches`]** |
 | `ShaderPipelineMemoryBudget` | the pipeline's budget file, since replaced by a reservation in the account | `DeviceLocalShare = 4UL` of `GpuMemoryProfile.DeviceLocalBytes` per pipeline instance; 512 MiB when unreported | Bounded per instance; refuses a replacement (`SHADERPIPE_BUDGET`); not a reservation from anything |
 | Mesh region (per residency) | SdfWorldTables.MeshRegion.cs:217-229 | Quarter of device-local, ≤ ~4 GiB | Bounded per residency, not across residencies |
 | Every other `GpuRegion` (program tables, probe tables, probe scene, ...) | GpuRegion.cs | `MaxByteCount` only | High-water; grows, shrinks only where an owner calls `Shrink` |
@@ -256,7 +255,7 @@ the same physical RAM `MemoryAccount.DefaultBudget` takes 3/4 of **[inference]**
 |---|---|---|
 | **Device budget readings** | A live reading beside the static profile on `IGpuDeviceContext` (`GpuMemoryProfile MemoryProfile { get; }`, Puck.Abstractions/Gpu/Device/IGpuDeviceContext.cs:34); Direct3D 12 in `DirectXNativeDeviceApi.ReadMemoryProfile(IDXGIAdapter1* adapter, ...)` (DirectXNativeDeviceApi.cs:231; `IDXGIAdapter3` needed for `QueryVideoMemoryInfo` **[inference]**); Vulkan beside `VulkanNativePhysicalDeviceApi.GetMemoryProfile` (VulkanNativePhysicalDeviceApi.cs:319; needs the extension enabled at device creation **[inference]**); fields in `HostMemoryCommandModule.Describe` (:54-75) | The static shares: `MeshRegionLimitOf` (MeshRegion.cs:225), `ShaderPipelineMemoryBudget.For` (:22), and the bake's `HostMemory.AvailablePhysicalBytes` pacing (SdfMeshPathBake.cs:766-774) on unified memory |
 | **One byte authority** | `MemoryAccount` (Puck.Hosting). `GpuRegion` lives in Puck.Abstractions, below Puck.Hosting, so it can only report through `IAllocationObserver` (Puck.Abstractions/Memory/OwnedBuffer.cs:6-10), the interface `MemoryAccount.Owner` already implements (MemoryAccount.cs:106). Puck.Shaders references Puck.Hosting (Puck.Shaders.csproj:14), so the pipeline budget can reserve directly. `GpuDeviceMemoryWork` would become an owner feed or the account would read it | `ShaderPipelineMemoryBudget`'s separate quarter; each residency's own region limit (SdfWorldTables.cs:205); per-residency `SdfGpuWork` budgets (SdfWorldTables.cs:400); `RegionBudgetBytes` read from one residency's tables (Tiers.cs:65) |
-| **Eviction by priority** | `SdfMeshPathBake.Retier` spare/bias logic (Tiers.cs:232-408) reading one cross-residency reservation; `SdfMeshRegionArena.Plan` refusal (src/Puck.SdfVm/SdfMeshRegionArena.cs:197-213) and `ForgetUnnamed`; `SdfWorldTables.EnsureMeshRegionCapacity` (the same region growth door) catching a device refusal and lowering the limit; the library's weight (SdfMeshLibrary.cs:315, 321-330) charging only cache-only payloads | Arena refusal that leaves draws out (a hole), the throw on refused growth, "coarsen every demand evenly" bias as the only response |
+| **Eviction by priority** | `SdfMeshPathBake.Retier` spare/bias logic (Tiers.cs:232-408) reading one cross-residency reservation; `SdfMeshRegionArena.Plan` refusal (src/Puck.SdfVm/SdfMeshRegionArena.cs:197-213) and `ForgetUnnamed`; `SdfMeshRegionStore.EnsureCapacity` (the same region growth door) catching a device refusal and lowering the limit; the library's weight (SdfMeshLibrary.cs:315, 321-330) charging only cache-only payloads | Arena refusal that leaves draws out (a hole), the throw on refused growth, "coarsen every demand evenly" bias as the only response |
 | **Mapped demand through portal faces** | `SdfMeshDemand` gains points not from `frame.Views` (`Place` exists for offline use, SdfMeshDemand.cs:81-94); the producer is the fitted window camera already computed in `WorldScreenBinder.SharedViewOf` (Device.Session.cs:117-138) and `WorldSessionSceneEmitter` (WorldSessionSceneEmitter.cs:494-497); a residency must pack and upload its tables with no view rendered so `BindsBackgroundWork` (src/Puck.SdfVm/SdfWorldTables.Bindings.cs:61) holds | `ReserveArrivals`/`ReachForArrival`/`RendersForArrival` (`WorldViewGraphHost`), the `ArrivalShare` cases (in `CompleteFootprints`' footprint pass, `DecideFootprint` and `RootFilmedViews`), `WorldPortalVisibility.ArrivalShare`, and the arriving-world reads (`WorldScreenBinder.Nesting.cs:389`) |
 | **Lighting on the demand points** | `SdfMeshIrradiance.WindowCamera`/`WindowAnchor`/`WindowLow`/`CaptureViewCameras` (:573-575, :925-985, :1225-1235) reading the residency's `SdfMeshDemand` instead of re-deriving from `frame.Views`; `StaticKey`/`StartSceneBuild` (:1290-1374) filtering to the window's reach; `ProbeCache.Retain` (:2890) by bytes from the account; `ScenePendingDue` (:1267) | The second demand derivation; the whole-frame trace scene; cell-count retention |
 | **Authored areas** | Candidates for "an existing volume vocabulary": `WorldPlacementSpatialVolume` with `WorldPlacementSpatialRole` `Occupation`/`Clearance`/`Influence` (Puck.World.Schema/WorldPlacementSpatial.cs:13-20, 51-57), whose influence channel "is opaque to the engine and is never interpreted" (:44); and `WorldGravityArea` bounds (WorldGravity.cs:69-75). Neither has openings. Consumption point: `SdfMeshPathBake.Prioritize`/`MeasureDemand` (src/Puck.SdfVm/SdfMeshPathBake.Residency.cs:90-106, 324-336) | Nothing (new) |
@@ -302,7 +301,7 @@ the same physical RAM `MemoryAccount.DefaultBudget` takes 3/4 of **[inference]**
 6. **Relocation re-lands every mesh from the host** (`m_meshesOwed.ReplaceWith(meshes: m_meshArena.Placements.Keys);`,
    MeshRegion.cs:448-450) **[opened]**.
 7. **CPU payload kept for the region's re-flush:** the arena's cached claim per placed mesh (src/Puck.SdfVm/SdfMeshRegionArena.cs:351) and
-   `MeshWordsOf` re-reading through `Hold` (MeshRegion.cs:752-780); restore covers only normals and coarser indices.
+   `SdfMeshRegionStore.MeshWords` re-reading through `Hold`; restore covers only normals and coarser indices.
 8. **Unified-memory pacing by host free RAM:** the bake's admission reads `HostMemory.AvailablePhysicalBytes`
    (SdfMeshPathBake.cs:706-709), a stand-in for a device/unified budget.
 9. **Library forgets claimed meshes** (1.5): reload of a second copy instead of finding the live one.

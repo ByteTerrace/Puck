@@ -396,21 +396,35 @@ profile constructor so it chooses ring, in place or staged by `GpuResidency.Sele
 replace a region in the owner. A fixed policy (the always-staged mesh region, uniform frame blocks) uses the policy
 constructor. Round a constant-buffer block with `IGpuBindings.ConstantBufferBytes`. What `Grow` returns retires
 after the submissions that read the old buffers (`SdfWorldTables.Retire`).
+The mesh region is the presentation's, never a residency's: every residency on a device names its meshes in one
+`SdfMeshRegionStore` (`SdfResidencySelector.AttachStore`), where a mesh any number of them name is placed, landed and
+held once, and keeps only its draw records, in a staged region of its own tables bound at `sdfMeshDraws`
+(`SdfWorldPackage.MeshDrawRecords`); a record's word offsets address the store's region at `sdfMeshRegion`. A kernel
+reads a record through `sdfMeshRecordWord` (`frame/sdf-mesh-records.hlsli`) and a mesh word through `sdfMeshWord`
+(`frame/sdf-mesh-words.hlsli`), and a reader that keeps both in one buffer binds it at both members. The store's gate
+is held across a residency's staging (its names, the plan and the records it packs), so residencies packed side by side
+never interleave; never read another residency's rows or draws from a store callback, only what that residency last
+told the store (its landing priority). A mesh the store lands, moves or takes back has its rows staged again in every
+residency that names it (`SdfWorldTables.NoteStoreChange`), and the copies no landing job carries (a compaction's
+moves, a grown region's carry) ride whichever upload records next (`SdfMeshRegionStore.RecordOwed`), which relies on
+every residency's upload of a frame reaching the queue before a view of that frame records.
 A staged region created `mapped` (the mesh region, the probe scene) asks `IGpuBufferFactory.TryCreateMapped` for a
 destination that reserves `GpuRegion.MaxByteCount` and backs 1 MiB chunks on demand (`IGpuMappedBuffer`; Direct3D 12's
 `DirectXGpuMappedBuffer` at reserved resources tier 2, tile runs from `DirectXHeapArena.PlaceTiles`; Vulkan answers
 none and keeps a contiguous destination). It grows and shrinks in place, with no carry and no second buffer, and the
 selector leaves no replacement room for it (`SdfResidencyGrant.Mapped`). Its buffer's length is the reserved range, so
-never map a region a kernel sizes with `GetDimensions` (the irradiance feedback). `SdfWorldTables.CoverMeshRegion` is
-the one place the mesh region's interior backing follows the arena: a chunk no placement or draw record covers is
+never map a region a kernel sizes with `GetDimensions` (the irradiance feedback). `SdfMeshRegionStore.Cover` is
+the one place the mesh region's interior backing follows the arena: a chunk no placement covers is
 unmapped behind its readers, and one a placement needs again is mapped before any landing leases it.
-It gives chunks back before it backs any, and a chunk the device refuses makes it forget the meshes no draw names
-and try again every prepared frame (`SdfWorldTables.CoverRefusedBacking`) as the given-back chunks retire. A mesh named ahead that lies in a
-refused chunk is refused ahead (`SdfWorldTables.RefusesAhead`), so it takes the draws and the mesh it replaces gives
+It gives chunks back before it backs any, and a chunk the device refuses makes it forget the meshes no name holds
+and try again at every residency's service (`SdfMeshRegionStore.Service`) as the given-back chunks retire. A mesh named ahead that lies in a
+refused chunk is refused ahead (`SdfMeshRegionStore.RefusesAhead`), so it takes the draws and the mesh it replaces gives
 up its memory; a product waiting on words the device will not back would otherwise hold the bake pending for good.
 A region has two limits, both from `SdfResidencyGrant.ReserveGrowth`: the bytes the arena places in (`LimitBytes`,
 what the pool has room for) and the device bytes the region may hold while it places storage the draws can do without
-(`HeldLimitBytes`), which is the residency's share of the elastic budget (`SdfResidencySelector.ShareOf`). The pool's
+(`HeldLimitBytes`), which is the whole of what the pool's limit leaves the region (`SdfResidencySelector.ShareOf`; the
+selector keeps one region grant, which holds the reservation, and a detail grant per residency, which budgets its bake
+by its share of the bytes its draws name, a mesh several residencies name counted in equal parts). The pool's
 room at boot is the fixed storage of views that open later, so a product that waits beside the mesh it replaces must
 not fill it: the fixed class then passes the pool's limit and nothing gives the room back. The arena's one placing door
 (`TryPlace`) refuses a waiting product that would take the region past the held limit (for a mapped region, the chunks
@@ -1473,10 +1487,8 @@ paired arithmetic. Carry author-facing parameters through
   records alone (`GpuRegion.Shadow`). A landing job's words are packed from the
   `SdfMesh` buffers on a worker into a buffer of the landing's own and gathered into
   the region (`GpuRegion.TryOweGather`); a mesh moved on the GPU
-  (`GpuRegion.TryOweMove`) passes through no host buffer; the few words a frame's
-  flush still owes without a compare (`GpuRegion.OweSourced`) come from the
-  `SdfMesh` buffers (`SdfWorldTables.WriteSourcedMeshWords`, an
-  `IGpuRegionSource`). A region's moves record first, then its gathers, then its
+  (`GpuRegion.TryOweMove`) passes through no host buffer, and the mesh region
+  stages no word from the host at all (`SdfMeshRegionStore`). A region's moves record first, then its gathers, then its
   staged words, in one recording door (`GpuRegion.RecordCopy`), so a word written
   after a move never races it. The irradiance scene likewise reads its triangles through
   each mesh's positions and indices, never a copy. A new consumer of baked

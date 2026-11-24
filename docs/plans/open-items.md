@@ -95,8 +95,12 @@ lanes, [the release](#the-release), the
     tier ladder continued past the floor, then memory step 2 (the bias stops
     at the floor, so near detail and the plaques hold) gave some of that
     back. The rtx2060 bars fail (device 6.4 GB against 4.3, host 10 GB
-    against 6 GiB); the fixed class is 4.1 to 4.4 GB; the debug world is
-    resident twice (`routed$session$18$0$shared`, about 1 GiB) and every
+    against 6 GiB); the fixed class is the largest holder (the lighting's
+    hit cache, bottom levels, irradiance volume, feedback volume and trace
+    scene, and the programs, once per residency); every residency's meshes
+    now lie in one region (`SdfMeshRegionStore`), but the boot world's
+    second scene (`routed$session$18$0$shared`) still plans its own tiers,
+    so most of its meshes are placed beside the boot world's; every
     sky-layer session is its own residency; host private is 16 to 20 GB.
     The budgets by class and the ordered steps are in
     [streaming and memory](streaming-and-memory.md).
@@ -1406,7 +1410,7 @@ manifest parts it met (`world.boot.manifest.parts-walked` +275, `.replayed`
   rebuild of something derivable from what changed: an install that keeps what
   the resize did not change is the graph's fix.
 - [medium] A mesh region whose growth is refused holds its limit to what it
-  holds (`SdfWorldTables.HoldsRefusedGrowth`, `sdf.rows.check.region.refusal-holds`)
+  holds (`SdfMeshRegionStore.HoldsRefusedGrowth`, `sdf.rows.check.region.refusal-holds`)
   until the region's size, a release, the pool's room or a trim moves, or a
   fixed number of plans pass: the grant reserves growth in the
   `MemoryAccount` that the device admission (`GpuDeviceMemoryWork.TryAdmit`)
@@ -2129,7 +2133,7 @@ check; this packet holds the defects beside it.
   them whatever the pool holds (`SdfResidencyGrant.ReserveFloorGrowth`), and
   the meshes the old buffer could not hold are refused until a later plan. If
   the device itself refuses that growth the region throws
-  (`SdfWorldTables.EnsureMeshRegionCapacity`): the draw records are the floor
+  (`SdfMeshRegionStore.EnsureCapacity`): the draw records are the floor
   and have no smaller form.
 - [medium] A fixed reservation (a shader pipeline's replacement) is refused
   when its pool is full, and elastic storage does not yet give way for it: a

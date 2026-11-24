@@ -410,7 +410,7 @@ laws exercise that boundary.
   (`GroupTally.Offered`, into two heaps), at the ranks `Prioritize` last
   measured, the work queue runs store loads and
   lattice answers ahead of its stages (`Enqueue`, urgent) and every CPU stage of
-  the bake (`Schedule`), and `SdfWorldTables.RankLanding`
+  the bake (`Schedule`), and `SdfMeshRegionStore.RankLanding`
   orders owed meshes for landing in that order, the plan's or the list's order among
   equals and a draw no host box bounds first. The landing order is kept, never
   rebuilt a staging: a staged owed mesh is ranked when it joins or one of its rows
@@ -1142,7 +1142,7 @@ laws exercise that boundary.
   compositor throttles to a few frames a second would take many times
   longer to land the debug world's mesh region. Jobs take the meshes nearest the views first. A worker packs a job's
   words from the meshes' own arrays into a host-visible buffer of the landing's own before the job is taken
-  (`SdfWorldTables.TryTakePackedLanding`, one job packing while the one before it records), so the frame thread writes
+  (`SdfMeshRegionStore.TryTakePackedLanding`, one job packing while the one before it records), so the frame thread writes
   no mesh word; the job's recording gathers them into the region (`GpuRegion.TryOweGather`) in the job's slot
   (`MeshLandingSlot`, past the upload ring's), after any move the region owes. A packed buffer is free again only once
   the job that read it completed. A mesh leaves `m_meshesOwed` only when every job carrying
@@ -1158,18 +1158,18 @@ laws exercise that boundary.
   reserve takes (`SdfMeshRegionArena.Moved`): relocating
   every mesh for it rewrote and compared the whole region in one frame. A moved
   mesh that stood is copied from its old words on the GPU (`GpuRegion.TryOweMove`,
-  `SdfWorldTables.MoveMesh`) in the next recorded copy, before any staged or
+  `SdfMeshRegionStore.MoveMesh`) in the next recorded copy, before any staged or
   gathered word, so it never leaves the frame; one the region cannot move is
   written that frame from its arrays. A refused mesh that would fit packed
   compacts the arena instead of relocating it (`SdfMeshRegionArena.Compact`): the
   highest meshes take lower free runs, at most `MostCompactionWords` a plan, and
   their old words stay counted as held until the copies are submitted
   (`ReleaseMoveSources`), so no later move takes them and a mapped region keeps
-  them backed. A relocation (every mesh owed again) is left for the first plan,
-  `force relocate` and a compaction that can move nothing. The
-  region's host copy holds the draw reserve alone: a placed mesh's words are
-  owed and the flush writes them from the mesh's own arrays
-  (`SdfWorldTables.WriteSourcedMeshWords`), zeros in words no placed mesh holds.
+  them backed. The arena never relocates whole: a compaction that can move nothing leaves
+  the refused meshes refused until names change. The presentation's region
+  (`SdfMeshRegionStore`) keeps no host copy: a placed mesh's words are owed and
+  land through a gather from the mesh's own arrays, and a residency's draw
+  records lie in a region of its own tables.
   A placement names absolute words (`SdfMeshRegionMesh`); a new per-draw field
   belongs in the record, never in a mesh's words. The record's layout is
   `SdfMeshRegion`'s, a sync pair with `frame/sdf-mesh.hlsli`
@@ -1183,7 +1183,7 @@ laws exercise that boundary.
   replaces a drawn mesh waits ahead of the draws: the bake names its pieces
   to the tables (`SdfMeshPathBake.ObserveResidency` into
   `SdfWorldTables.NameMeshesAhead`), the arena places them beside the
-  meshes the draws read (`SdfMeshRegionArena.PlanAhead`) and keeps them like
+  meshes the draws read (`SdfMeshRegionArena.NameAhead`) and keeps them like
   a named mesh, they land after the meshes a draw waits on, and the group
   takes the draws only once the tables say every piece stands
   (`SdfWorldTables.MeshStands`). So a swap holds no draw out of a frame, and
@@ -1219,13 +1219,13 @@ laws exercise that boundary.
   Before a plan the tables reserve the standing buffer and a replacement
   together in the process account (`SdfResidencyGrant.ReserveGrowth`,
   `SdfWorldTables.MeshRegionLimitBytes`), never past
-  `SdfWorldTables.MostMeshRegionBytes` (`GpuRegion.MaxByteCount`, just under
+  `SdfMeshRegionStore.MostBytes` (`GpuRegion.MaxByteCount`, just under
   4 GiB), and the arena places nothing past it (`SdfMeshRegionArena.SetLimit`),
   so the region, the copy a growth holds until its upload completes and
   everything else the device holds fit together. A growth the account or the
   device refuses leaves the region as it is (`SdfMeshRegionArena.Clip`). It grows to its need plus an eighth, rounded up to a
   16 MiB granule and capped at the limit
-  (`SdfWorldTables.MeshRegionGrownBytes`, a pure function), so it reads
+  (`SdfMeshRegionStore.GrownBytes`, a pure function), so it reads
   fuller than a doubling would; `world.budget` prints the bytes the staged
   draws use (`MeshRegionUsedBytes`) beside the bytes held and the limit.
   The arena places each mesh in the lowest free run under the limit
