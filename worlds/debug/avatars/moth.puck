@@ -10,6 +10,7 @@ import "../../standard/mirror"
 import "../../standard/rig"
 import "moth-head"
 import "moth-dash"
+import "moth-jetpack"
 import "moth-camera"
 
 walkMotion()
@@ -2247,22 +2248,6 @@ host {
   width: 1280
 }
 
-// Her flight holds spend flightFuel at one rate: the ground hold that thrusts as well, and the lift that carries her in
-// the air at her running pace (running in the air doubles it).
-let flightSpend = { state: "flightFuel", ratePerSecond: 0.001 }
-let groundFlightHold = groundHold with { name: "groundFlight", thrust: 1, spend: flightSpend }
-let flightHold = {
-  name: "flight"
-  bond: Free
-  hold: Lift
-  forward: Heading
-  lift: 1
-  speed: 5
-  gravity: standardGravity
-  thrust: 1
-  spend: flightSpend
-}
-
 kits [
   {
     bodyContact: Solid
@@ -2272,17 +2257,14 @@ kits [
     mass: 0
     // Water leads: where the world has a medium at her cell (water.puck's pool) she swims, floating with her feet 1.25 m
     // under the surface, which leaves her shoulders at it, and wading at half her walking pace; the MoveUp channel dives and
-    // surfaces her. A world with no medium never offers it.
-    // Flight mode's rows spend flightFuel, so they are offered only while it is switched on: on the
-    // ground the rise channel lifts her off, and in the air she hovers and thrusts. Out of flight mode she walks and
-    // falls with no hover and no thrust, and jumps instead. She walks at 5 m/s and runs at 10 while the run channel is
+    // surfaces her. A world with no medium never offers it. Flight mode is the standard's jetpack (moth-jetpack.puck),
+    // whose rows lead hers while it is on: on the ground the rise channel lifts her off, and in the air she hovers and
+    // thrusts. Out of flight mode she walks and falls with no hover and no thrust, and jumps instead. She walks at 5 m/s and runs at 10 while the run channel is
     // held, and steps up to knee height: a kerb or the test room's raised floor, and nothing taller.
     motion: walkerMotion with {
       holds [
         swimHold(equilibriumOffset: 1.25, settleRate: 2.5, speed: 2.5)
-        groundFlightHold
         groundHold
-        flightHold
         fallHold
       ]
       speed: walkerMotion.speed with { value: 5 }
@@ -2322,65 +2304,6 @@ kits [
             gate: compareState(state: jumps, comparison: Equal, value: 2)
             effects [
               addState(state: jumps, value: -1)
-            ]
-          }
-        ]
-      }
-      // A press is counted, then flipped on the next tick whether she stands or flies: on to 1000, or off to 0.
-      flight {
-        onPress {
-          latchSeconds: 0
-          effects [
-            setState(state: flightPress, value: 1)
-          ]
-        }
-        onFact [
-          {
-            fact: "Grounded"
-            mode: "Level"
-            gate: all(predicates: [
-              compareState(state: flightPress, comparison: Greater, value: 0)
-              compareState(state: flightFuel, comparison: Equal, value: 0)
-            ])
-            effects [
-              setState(state: flightFuel, value: 1000)
-              setState(state: flightPress, value: 0)
-            ]
-          }
-          {
-            fact: "Airborne"
-            mode: "Level"
-            gate: all(predicates: [
-              compareState(state: flightPress, comparison: Greater, value: 0)
-              compareState(state: flightFuel, comparison: Equal, value: 0)
-            ])
-            effects [
-              setState(state: flightFuel, value: 1000)
-              setState(state: flightPress, value: 0)
-            ]
-          }
-          {
-            fact: "Grounded"
-            mode: "Level"
-            gate: all(predicates: [
-              compareState(state: flightPress, comparison: Greater, value: 0)
-              compareState(state: flightFuel, comparison: Greater, value: 0)
-            ])
-            effects [
-              setState(state: flightFuel, value: 0)
-              setState(state: flightPress, value: 0)
-            ]
-          }
-          {
-            fact: "Airborne"
-            mode: "Level"
-            gate: all(predicates: [
-              compareState(state: flightPress, comparison: Greater, value: 0)
-              compareState(state: flightFuel, comparison: Greater, value: 0)
-            ])
-            effects [
-              setState(state: flightFuel, value: 0)
-              setState(state: flightPress, value: 0)
             ]
           }
         ]
@@ -4161,22 +4084,11 @@ spawnPoints [
 ]
 
 state {
-  // Flight mode is fuel the flight holds spend: 1000 while switched on (it drains a thousandth a second), 0 off, so the
-  // hover and thrust rows are offered only in flight mode. Jumps counts the jumps left before landing.
+  // Flight mode is the jetpack's fuel (moth-jetpack.puck declares it): 1000 while switched on, 0 off. Jumps counts the
+  // jumps left before landing.
   body [
     { name: "dashCooldown", kind: "Timer", initial: 0 }
     { name: "dashActive", kind: "Timer", initial: 0 }
-    {
-      name: "flightFuel"
-      kind: "Counter"
-      initial: 0
-      envelope { $type: "range", minimum: 0, maximum: 1000 }
-    }
-    {
-      name: "flightPress"
-      kind: "Counter"
-      initial: 0
-    }
     {
       name: "jumps"
       kind: "Counter"

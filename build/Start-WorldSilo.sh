@@ -238,7 +238,7 @@ done
 # no access lines) and the TLS front's errors go to stdout, and the verdict of each wait goes last, to stderr.
 journalctl -u puck-world.service --no-pager -o cat -n 40 --since "@$pass_started" || true
 if [ '__MCP_ENABLED__' = 1 ]; then
-    { journalctl -u puck-tls.service --no-pager -o cat -n 400 --since "@$pass_started" | grep -e error -e fail | tail -n 6; } || true
+    { journalctl -u puck-tls.service --no-pager -o cat -n 400 --since "@$pass_started" | grep -e error -e fail | tail -n 6 | cut -c1-200; } || true
 fi
 {
     printf 'World worker readiness timed out after __READY_SECONDS__ s.\n'
@@ -251,5 +251,9 @@ fi
     fi
     printf 'public health (opens only after the release commits): %s\n' "$(curl --silent --show-error --max-time 10 --write-out ' (HTTP %{http_code})' http://127.0.0.1:__HEALTH_PORT__/healthz 2>&1)"
     printf 'container: %s\n' "$(docker inspect -f '{{.State.Status}} restarts={{.RestartCount}} exit={{.State.ExitCode}}' puck-world 2>&1)"
+    # The silo's own last lines, kept short and last: the stdout above can fill Azure's kept tail with the front's
+    # request logs, and a silo that exits at start says why only here.
+    printf 'silo (last lines):\n'
+    { docker logs --tail 25 puck-world 2>&1 || journalctl -u puck-world.service --no-pager -o cat -n 25 --since "@$pass_started"; } | cut -c1-240 || true
 } >&2
 exit 1

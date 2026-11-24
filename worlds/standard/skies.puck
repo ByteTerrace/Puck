@@ -146,7 +146,9 @@ function sunDirection(h, heading, noonElevation) = [
 // slot once the sun has set; a world restyles it with `moonPeak`, `moonColor` and `moonAngularRadius` (the soft edge of
 // its shadows, in radians: a light with no size is a point source), or overrides the row by its name. It
 // stands opposite the sun, at `moonPeak` lux times the cosine of its hour angle, in `moonColor`. The night sky's gradient shows at `nightLuminance` nits and its stars
-// at `starLuminance`. Writing the row moves the time (`world.state.cell.set <clock> $value 0.5` is noon), and its
+// at `starLuminance`, `starDensity` cells to an axis, `starBrightness` at their peak, hashed from `starSeed`; their
+// opacity follows the hour, and a world that keys `starOpacity` with a combine (`{ clock, combine, keys }`) joins it
+// over the hour's, so one star field answers both the night and the viewer's height. Writing the row moves the time (`world.state.cell.set <clock> $value 0.5` is noon), and its
 // advance holds the sun (`world.row.set state <clock> advance {"perSecondNumerator":0,"perSecondDenominator":1}`) and
 // runs it again (the numerator back to one over `daySeconds`). `bodies` are layers of the world's own that hang in the
 // sky behind the clouds and before the stars and the sun's disc: a moon, a planet, another world seen from here.
@@ -155,7 +157,7 @@ function sunDirection(h, heading, noonElevation) = [
 // height for a sky that thins to space as she climbs (`timeline.clocks`' `view`). The
 // exposure is the world's to key on the same clock
 // (`render.exposure`'s `minimum`, `maximum`, `compensation` and `ev100` take `{ clock, keys }`).
-template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 60, heading = 0, peak = 100000, noonColor = "#FFF0DC", horizonColor = "#FFB278", cloudiness = 0.25, cloudTier = low, sunLight = 0, moonPeak = 0.25, moonColor = "#C8D4FF", moonAngularRadius = 0.11, nightLuminance = 2, starLuminance = 2, bodies = [], space = [], airOpacity = 1, cloudOpacity = 1) {
+template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 60, heading = 0, peak = 100000, noonColor = "#FFF0DC", horizonColor = "#FFB278", cloudiness = 0.25, cloudTier = low, sunLight = 0, moonPeak = 0.25, moonColor = "#C8D4FF", moonAngularRadius = 0.11, nightLuminance = 2, starLuminance = 2, starDensity = 48, starBrightness = 1.2, starSeed = 7, starOpacity = 0, bodies = [], space = [], airOpacity = 1, cloudOpacity = 1) {
   timeline {
     clocks [{ name: clock, state: clock, spanSeconds: 24h }]
   }
@@ -208,7 +210,7 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
             { elevation: 0.4, color: dayStops[2] }
             { elevation: 1, color: dayStops[3] }
           ])
-          stars(name: "stars", luminance: starLuminance, density: 48, brightness: 1.2, seed: 7, opacity: 0)
+          stars(name: "stars", luminance: starLuminance, density: starDensity, brightness: starBrightness, seed: starSeed, opacity: starOpacity)
           sunDisc(name: "sun", light: sunLight, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
         ],
         bodies,

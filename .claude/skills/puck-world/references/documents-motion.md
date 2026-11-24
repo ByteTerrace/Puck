@@ -618,8 +618,8 @@ publishes each body's per-tick fact set on `EntitySnapshot.Facts` — one bit
 per body-state `ActionFact` (`grounded`, `airborne`, `rising`, `falling`,
 `inmedium`, `atmediumband`, `holdingunwalkable` — holding a surface row whose face is
 outside the world's own walkable cone — `unsupported` — holding a free row with
-lift — and `resting`, written only by the rigid solver once a rigid body's
-linear and angular velocity latch to zero; `AffectedBy` has no bit, being a relationship rather than a state). The mask is derived through the SAME
+lift — `resting`, written only by the rigid solver once a rigid body's
+linear and angular velocity latch to zero, and `weightless`, where the world's gravity field pulls under one metre a second squared; `AffectedBy` has no bit, being a relationship rather than a state). The mask is derived through the SAME
 predicate the kit's action gates read, so the snapshot, the gates, and the
 `body.where` echo cannot disagree; a decoder refuses an undeclared bit by
 name. `WorldSessionMirror.Facts(int)` and `WorldClient.Facts(int)` front it

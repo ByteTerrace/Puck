@@ -45,6 +45,12 @@ public enum ActionFact : byte {
     /// <summary>A rigid body's linear and angular velocity have latched to zero after settling — written by the
     /// rigid solver, never by a locomotion program.</summary>
     Resting,
+
+    /// <summary>The world authors a gravity field and the body stands where its pull is too weak to give it an up
+    /// (under one metre a second squared): in space, or in a pocket a field cancels. A world with no field has the
+    /// ambient pull everywhere, so no body in it is weightless. A kit reads it to change its motion in vacuum (a
+    /// ship's space mode).</summary>
+    Weightless,
 }
 /// <summary>The publishable per-body fact set — one bit per body-state <see cref="ActionFact"/>, so the simulation's
 /// predicates and the wire share one vocabulary rather than a parallel enum. <see cref="ActionFact.AffectedBy"/> has
@@ -84,8 +90,11 @@ public enum BodyFacts : ushort {
     /// <inheritdoc cref="ActionFact.Resting"/>
     Resting = (1 << 8),
 
+    /// <inheritdoc cref="ActionFact.Weightless"/>
+    Weightless = (1 << 9),
+
     /// <summary>Every declared bit — the decoder's admission mask.</summary>
-    All = Grounded | Airborne | Rising | Falling | InMedium | AtMediumBand | HoldingUnwalkable | Unsupported | Resting,
+    All = Grounded | Airborne | Rising | Falling | InMedium | AtMediumBand | HoldingUnwalkable | Unsupported | Resting | Weightless,
 }
 /// <summary>The one mapping between the predicate vocabulary, its publishable bit, and the wire spelling every
 /// read-back echoes — a single ordered table, so a new fact is added in exactly one place.</summary>
@@ -102,6 +111,7 @@ public static class BodyFactVocabulary {
         (ActionFact.HoldingUnwalkable, BodyFacts.HoldingUnwalkable, "holdingunwalkable"),
         (ActionFact.Unsupported, BodyFacts.Unsupported, "unsupported"),
         (ActionFact.Resting, BodyFacts.Resting, "resting"),
+        (ActionFact.Weightless, BodyFacts.Weightless, "weightless"),
     ];
     private static readonly ActionFact[] PublishableValue = Array.ConvertAll(
         array: Rows,

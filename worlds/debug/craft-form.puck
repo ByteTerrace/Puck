@@ -1,5 +1,6 @@
 // What a body arrives as in a world the debug world's ship flies to: the kit and look selectors read `form`, the
-// Moth's suit register on everything but a craft and 4 on a craft (../standard/ship.puck's `craft` register), so a
+// Moth's suit register on everything but a craft, 4 on a craft and 5 on a craft in space (../standard/ship.puck's
+// `craft` and `space` registers, the space kit's camera and motion taking over where nothing pulls), so a
 // ship that crosses the sky seam is a ship here and the Moth steps out of a painting in the form she left in. The
 // debug world's own `form` also counts noclip (noclip.puck); a world that imports this file imports suit.puck for the
 // suit register and the pilot's kit and look, and replaces its selectors with these.
@@ -16,7 +17,7 @@ state {
       name: "form"
       kind: "Counter"
       initial: 1
-      envelope { $type: "set", values [0, 1, 4] }
+      envelope { $type: "set", values [0, 1, 4, 5] }
     }
   ]
 }
@@ -28,6 +29,7 @@ kits {
       cases [
         { value: 0, row: "pilot" }
         { value: 4, row: "ship" }
+        { value: 5, row: "ship-space" }
       ]
     }
   }
@@ -40,6 +42,7 @@ looks {
       cases [
         { value: 0, row: "moth-pilot" }
         { value: 4, row: "ship" }
+        { value: 5, row: "ship" }
       ]
     }
   }
@@ -47,8 +50,8 @@ looks {
 
 // Rules run before the tick's kit selection, so a body's form moves its kit the tick it lands.
 rule "craft-form" {
-  when bodyState(each, form) != ((bodyState(each, craft) * 4) + ((1 - bodyState(each, craft)) * bodyState(each, suit)))
+  when bodyState(each, form) != ((bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * bodyState(each, suit)))
   mode: Level
   forEach: $bodies
-  setBodyState(key: $each, state: "form", expression: (bodyState(each, craft) * 4) + ((1 - bodyState(each, craft)) * bodyState(each, suit)))
+  setBodyState(key: $each, state: "form", expression: (bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * bodyState(each, suit)))
 }

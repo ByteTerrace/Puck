@@ -433,14 +433,14 @@ public static partial class WorldDefinitionValidator {
         if (exposure.Band is { } band) {
             RequireRange(value: band, min: 0f, max: WorldRenderExposure.MaxBand, name: "render.exposure.band", errors: errors);
         }
-        if (exposure.Low is { } low) {
-            RequireRange(value: low, min: 0f, max: 1f, name: "render.exposure.low", errors: errors);
-        }
+        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.ExposureLow, path: "render.exposure.low", scalar: exposure.Low);
         if (exposure.High is { } high) {
             RequireRange(value: high, min: 0f, max: 1f, name: "render.exposure.high", errors: errors);
         }
-        if ((exposure.Low ?? 0f) >= (exposure.High ?? 1f)) {
-            errors.Add(item: $"render.exposure.low {exposure.Low ?? 0f} is not below its high {exposure.High ?? 1f}; the meter averages the pixels between the two percentiles.");
+        // A bound low promises no value, so only its authored values (a literal, or what its keys reach) are judged.
+        var lowest = (exposure.Low?.AuthoredValues().DefaultIfEmpty(defaultValue: 0f).Max() ?? 0f);
+        if (lowest >= (exposure.High ?? 1f)) {
+            errors.Add(item: $"render.exposure.low {lowest} is not below its high {exposure.High ?? 1f}; the meter averages the pixels between the two percentiles.");
         }
         if (exposure.Center is { } center) {
             RequireRange(value: center, min: 0f, max: 1f, name: "render.exposure.center", errors: errors);
@@ -969,10 +969,23 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (value.Keys is { } keys) {
-            for (var index = 0; (index < keys.Keys.Length); index++) {
-                if (!field.Domain.Contains(value: keys.Keys[index].Value)) {
-                    errors.Add(item: $"{path}.keys[{index}].value {keys.Keys[index].Value} must be finite and within {field.Domain}{Because(field: field)}.");
+            var link = keys;
+            var linkPath = path;
+
+            for (; (link is not null); link = link.With, linkPath = $"{linkPath}.with") {
+                for (var index = 0; (index < link.Keys.Length); index++) {
+                    if (!float.IsFinite(f: link.Keys[index].Value)) {
+                        errors.Add(item: $"{linkPath}.keys[{index}].value {link.Keys[index].Value} must be finite.");
+                    } else if ((link == keys) && !field.Domain.Contains(value: link.Keys[index].Value)) {
+                        errors.Add(item: $"{linkPath}.keys[{index}].value {link.Keys[index].Value} must be finite and within {field.Domain}{Because(field: field)}.");
+                    }
                 }
+            }
+
+            // Joined tracks are judged by what their combination reaches, not key by key: a lift's keys may sit
+            // outside the field's domain while every sum stays inside it.
+            if ((keys.With is not null) && value.AuthoredValues().ToArray() is [var low, var high] && (!field.Domain.Contains(value: low) || !field.Domain.Contains(value: high))) {
+                errors.Add(item: $"{path} combines tracks that reach {low} to {high}, which must stay within {field.Domain}{Because(field: field)}.");
             }
         }
     }
@@ -1062,6 +1075,10 @@ public static partial class WorldDefinitionValidator {
     private static void JudgeRate(BindableScalar? rate, WorldDefinition definition, string path, List<string> errors) {
         if (rate?.Binding is not null) {
             errors.Add(item: $"{path} is a rate the tick integrates and may not bind a state row: a row's value can move by any amount between two ticks, so the offset would jump; key it on a tick clock instead.");
+        }
+
+        if (rate?.Keys?.With is not null) {
+            errors.Add(item: $"{path} is a rate the tick integrates in closed form over one track's keys and may not join a second track.");
         }
 
         JudgeRate(

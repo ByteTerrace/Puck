@@ -294,7 +294,8 @@ public sealed record WorldRenderDefaults(
 /// meter reads within this far of the reading it last settled on, and follows the meter once a reading leaves the band.
 /// Absent is zero, which follows every change.</param>
 /// <param name="Low">The percentile, in <c>[0, 1)</c>, below which the image meter leaves the darkest pixels out.
-/// Absent is zero.</param>
+/// Bindable, so a world keys it on a view clock of the viewer's height: a camera climbing into a black sky leaves the
+/// void out of its meter and exposes what the sun lights. Absent is zero.</param>
 /// <param name="High">The percentile, above <paramref name="Low"/> and at most one, above which the image meter leaves
 /// the brightest pixels out. Absent is one.</param>
 /// <param name="Center">How far the image meter weights the image toward its centre, in <c>[0, 1]</c>: a pixel counts
@@ -310,7 +311,7 @@ public sealed record WorldRenderExposure(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Local = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Hold = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Band = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Low = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Low = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? High = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Center = null
 ) {
@@ -377,7 +378,7 @@ public sealed record WorldRenderExposure(
     private static SdfExposure ResolveSection<TState>(WorldRenderExposure exposure, TState state, Func<TState, BindableScalar, WorldValueField, bool, float> value) {
         var automatic = (exposure.Mode == SdfExposureMode.Auto);
         float? ev100 = ((exposure.Ev100 is { } ev) ? value(state, ev, WorldValueFields.ExposureEv100, true) : null);
-        var minimum = ((exposure.Minimum is { } low) ? value(state, low, WorldValueFields.ExposureMinimum, true) : (automatic ? SdfPhotometry.MinimumEv100 : (ev100 ?? SdfExposure.DefaultEv100)));
+        var minimum = ((exposure.Minimum is { } floor) ? value(state, floor, WorldValueFields.ExposureMinimum, true) : (automatic ? SdfPhotometry.MinimumEv100 : (ev100 ?? SdfExposure.DefaultEv100)));
         var maximum = ((exposure.Maximum is { } high) ? value(state, high, WorldValueFields.ExposureMaximum, false) : (automatic ? SdfPhotometry.MaximumEv100 : (ev100 ?? SdfExposure.DefaultEv100)));
 
         return new SdfExposure(
@@ -385,7 +386,7 @@ public sealed record WorldRenderExposure(
             Band: (automatic ? (exposure.Band ?? 0f) : 0f),
             Center: (automatic ? (exposure.Center ?? 0f) : 0f),
             High: (automatic ? (exposure.High ?? 1f) : 1f),
-            Low: (automatic ? (exposure.Low ?? 0f) : 0f),
+            Low: ((automatic && (exposure.Low is { } low)) ? value(state, low, WorldValueFields.ExposureLow, false) : 0f),
             Compensation: ((exposure.Compensation is { } compensation) ? value(state, compensation, WorldValueFields.ExposureCompensation, false) : 0f),
             Ev100: (ev100 ?? (automatic ? ((minimum + maximum) / 2f) : SdfExposure.DefaultEv100)),
             Local: (automatic ? (exposure.Local ?? 0f) : 0f),

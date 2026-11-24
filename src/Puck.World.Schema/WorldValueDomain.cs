@@ -143,6 +143,8 @@ public static class WorldValueFields {
         Maximum: WorldRenderExposure.MaxCompensation,
         Minimum: WorldRenderExposure.MinCompensation
     ));
+    /// <summary>The automatic exposure meter's dark percentile: the share of the darkest pixels it leaves out.</summary>
+    public static WorldValueField ExposureLow { get; } = new(typeof(WorldRenderExposure), nameof(WorldRenderExposure.Low), WorldValueDomain.Unit);
     /// <summary>The sky's reflection gain.</summary>
     public static WorldValueField EnvironmentReflection { get; } = new(typeof(WorldRenderEnvironment), nameof(WorldRenderEnvironment.Reflection), WorldValueDomain.NonNegative);
     /// <summary>A sky panel's intensity.</summary>
@@ -366,6 +368,7 @@ public static class WorldValueFields {
         ExposureMinimum,
         ExposureMaximum,
         ExposureCompensation,
+        ExposureLow,
         RimLuminance,
         RimPower,
         PointIntensity,

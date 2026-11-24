@@ -1,3 +1,5 @@
+import "kits"
+
 // Reusable wall and ceiling crawl: a Pull hold the named kit takes by driving into a face whose normal lies inside `cone`
 // (degrees from gravity-up: 90 a wall, 180 a ceiling), spending its `stamina` body Counter at `spendRate` a second.
 // `upLean` 0 keeps the body upright on a wall, 1 lays it on the face. Expand it in a document of its own that the kit's
@@ -29,6 +31,94 @@ template crawlHold(kit, name = "crawl", cone = [60, 180], speed = 2, reach = 0.8
             }
           }
         ]
+      }
+    }
+  ]
+}
+
+// Jetpack flight, authored into the named kit: thrust, hover and boost. The `flight` action switches it on and off from
+// the ground or the air; while it is on, the rise channel lifts the body off the ground and climbs, letting go hovers
+// where it is, the movement channels fly it where it faces at `speed` metres a second, and the kit's held pace (the run
+// channel) boosts both its travel and its climb. Off, the body walks and falls as the kit's own holds say. The jetpack is
+// fuel its two holds spend: `flightFuel` holds `capacity` while it is on and drains `spendRate` a second, so the holds are
+// offered only while it is on, and an author who wants a jetpack that runs dry raises the rate and refuels by a rule.
+// Expand it in a document of its own that the kit's document imports, so its holds compose ahead of the kit's own (a
+// ground row and a fall row), and bind the `flight` channel (the standard's controls do).
+template jetpack(kit, speed = 10, spendRate = 0.001, capacity = 1000) {
+  state {
+    body [
+      {
+        name: "flightFuel"
+        kind: "Counter"
+        initial: 0
+        envelope { $type: "range", minimum: 0, maximum: capacity }
+      }
+      {
+        name: "flightPress"
+        kind: "Counter"
+        initial: 0
+      }
+    ]
+  }
+
+  kits [
+    {
+      name: kit
+      motion {
+        holds [
+          // On the ground the rise channel thrusts it up and away at the kit's own pace.
+          groundHold with { name: "groundFlight", thrust: 1, spend { state: "flightFuel", ratePerSecond: spendRate } }
+          // In the air it hovers where it is left and thrusts up and down on the rise channel.
+          {
+            name: "flight"
+            bond: Free
+            hold: Lift
+            forward: Heading
+            lift: 1
+            speed: speed
+            gravity: standardGravity
+            thrust: 1
+            spend { state: "flightFuel", ratePerSecond: spendRate }
+          }
+        ]
+      }
+      // A press is counted, then flipped on the next tick whether the body stands or flies: on to `capacity`, or off
+      // to 0.
+      actions {
+        flight {
+          onPress {
+            latchSeconds: 0
+            effects [
+              setState(state: flightPress, value: 1)
+            ]
+          }
+          onFact: concat(
+            map(["Grounded", "Airborne"], fact => {
+              fact: fact
+              mode: "Level"
+              gate: all(predicates: [
+                compareState(state: flightPress, comparison: Greater, value: 0)
+                compareState(state: flightFuel, comparison: Equal, value: 0)
+              ])
+              effects [
+                setState(state: flightFuel, value: capacity)
+                setState(state: flightPress, value: 0)
+              ]
+            }),
+            map(["Grounded", "Airborne"], fact => {
+              fact: fact
+              mode: "Level"
+              gate: all(predicates: [
+                compareState(state: flightPress, comparison: Greater, value: 0)
+                compareState(state: flightFuel, comparison: Greater, value: 0)
+              ])
+              effects [
+                setState(state: flightFuel, value: 0)
+                setState(state: flightPress, value: 0)
+              ]
+            })
+          )
+        }
       }
     }
   ]
