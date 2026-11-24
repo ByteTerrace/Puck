@@ -120,12 +120,10 @@ lanes, [the release](#the-release), the
     time as the moon's neighbour), the sky snaps from blue to black at the
     seam, and the pilot camera is the Moth's boom
     ([the trip to the moon](valley-and-moons.md#the-trip-to-the-moon)).
-  - **Parked, unmerged, never run:** `origin/wip/gpu-architecture` (coarse
-    probe lookup with interpolation, resolve once per sample, the object key
-    in the visibility record; its last commit unbuilt) and
-    `origin/wip/frame-production` (one owed capture a frame, residencies
-    packed and their uploads recorded side by side). Each campaign below
-    decides whether to build on its branch or rewrite.
+  - **Parked, unmerged, never run:** `origin/wip/frame-production` (one owed
+    capture a frame, residencies packed and their uploads recorded side by
+    side), which the `cpu` campaign builds on or rewrites. The `gpu-frame`
+    campaign merged `origin/wip/gpu-architecture`.
 
 ### The first lanes
 
@@ -299,17 +297,23 @@ backend in the one World, and hold new builds while it runs
 ([tooling caveats](#tooling-caveats)). A packet's own checks stay in the
 packet; these are the ones owed now, most valuable first.
 
-1. **Two defects to diagnose, on both backends.**
-   - The gallery's exhibits render near-black in daylight
-     ([lighting](#lighting-and-gi)). At a shape exhibit
-     (`gallery.go shape-superellipsoid-8`), capture beauty, then
-     `world.debug-view indirect`, `world.shadows off` and `world.indirect off`
-     in turn, and read `world.probe` at the subject.
-   - A still view shimmers on an 8-frame cycle
-     ([temporal](#temporal-shimmer-and-cadence-flicker)). After
-     `world.wait bakes 300` at the stage, with nothing moving:
-     `world.screenshot <path>.png presented 16`, then `world.wait captures 30`.
-     The report's changed-pixel count per frame shows the cycle or its absence.
+1. **The two defects, read again on Vulkan and at the bar's size.** Both were
+   read on Direct3D 12 in a window of 1280 by 900 on the RTX 4070.
+   - The gallery's wrong exhibit lighting was the irradiance volume stopped
+     for good ([lighting](#lighting-and-gi) has what is left of it). After two
+     `gallery.go` teleports and three minutes, `world.counters sdf.mesh-gi`
+     read twice a few seconds apart shows `gpu-jobs.trace` and `.relight`
+     rising and `world.exposure` reads `camera=probes` at
+     `gallery.go shape-blend-subtraction`; a volume that stops again reads
+     the same job counts twice.
+   - The still shimmer did not reproduce
+     ([temporal](#temporal-shimmer-and-cadence-flicker)). The recipe: a
+     camera that frames no moving body
+     (`view.override camera look 27.8 6.3 21.5 25.6 5.6 25.0 55` in the hall's
+     level 0), then `world.screenshot <path>.png presented 24` and
+     `world.wait captures 30`; the still region's largest per-pixel luma range
+     over the burst is the reading, since the report's changed-pixel counts
+     include every moving body in frame.
 2. **The readings that rank [Next](#next).** On a quiet machine, with no lane
    building:
    - The frame bar:
@@ -2325,19 +2329,31 @@ The volume's cost and convergence:
 
 What the light gets wrong:
 
-- [high] The gallery's shape exhibits render near-black in daylight while the
-  floor beside them is lit, on both backends: the subjects, whose material is
-  the pale grey of `worlds/debug/shapes.puck`'s subject palette. The gallery
-  is the engine's self-test, so this is diagnosed before any look work reads
-  an exhibit. No cause is named. A lane with a granted window splits it first:
-  whether the subject is dark in direct light, in indirect light or both
-  (`world.debug-view indirect`, `world.shadows off`, `world.indirect off`),
-  what `world.probe` at the subject answers, whether `gallery.inspect` lights
-  it, and whether it follows the day (`day` at noon and dusk). Changes that
-  reached that path since the exhibits last read right: each pass signing on
-  its own motion scope, the views pass reading a blended probe cube per cell,
-  and screens lighting only the scopes their range reaches. Those are leads,
-  not findings.
+- [high] The trace scene goes stale as views retier. A group whose floor the
+  trace judge has not admitted traces the tier it draws (`SdfMeshDraw.Trace`),
+  so the scene names a mesh the region forgets when the view retiers the
+  group, and no query of that scene can be bound
+  (`SdfWorldTables.TryProbeScene`). The volume now builds the scene its draws
+  name once the probe service finds the installed one unplaced
+  (`SdfMeshIrradiance.NoteScenePlacement`, counted as
+  `sdf.mesh-gi.scene-unplaced`), where before it stopped for good, which is
+  what drew the gallery's exhibits wrongly. Each occurrence still costs the
+  service's admission wait and a scene build with no probe work between: five
+  in the two minutes after two `gallery.go` teleports. Two causes remain.
+  The judge is slow: `world.residency`'s `trace-judging` read 488 groups
+  three minutes after a warm boot and fell by about one every ten seconds,
+  two threads in `SdfMeshTraceJudge.Within`, so hundreds of groups trace what
+  they draw for minutes; its verdict is a function of two stored meshes and
+  belongs in the mesh store beside them. And a declined or unjudged group
+  needs the plan's [stable trace mesh](illumination.md#after-the-gpu-trace),
+  which the next item's (a) already asks for.
+- [medium] Raising the indirect tier from off draws every shaded side black
+  until the volume lights again: `world.indirect off`, then
+  `world.indirect high`, then a walk past the hall's east wall shows the wall
+  and the bushes' shaded sides at zero indirect light for seconds, against
+  the rule that nothing a camera sees reads an unmeasured surface as black
+  (`sdfMeshAnswers`). Find which of the restaged volume's states answers with
+  an empty cube.
 - [high] Emissive faces light the world only where a probe's fixed rays
   happen to meet them. The gallery hall is lit mostly by its 0.4 m ceiling
   strips (`hallStrips`), which subtend less than a probe texel, so
@@ -2622,23 +2638,25 @@ and the standard's ink are built ([what is built](ink.md#what-is-built)).
 
 ### Temporal shimmer and cadence flicker
 
-Owner: integration rendering follow-up · high · Next: the still-view burst on
-the integration head ([verification debts](#verification-debts), item 1);
-then the reconstruction's two changes below.
+Owner: integration rendering follow-up · medium · Next: the still-view burst
+on Vulkan and at 2560 by 1440 ([verification debts](#verification-debts),
+item 1).
 
-- [high] A still view shimmers on an 8-frame cycle. A presented burst of a
-  settled view on Direct3D 12 showed a small share of pixels, on edges,
-  changing with a period of eight frames, which is the jitter's period
-  (`SdfWorldPackage.TemporalPeriod`): the history is not converging over the
-  cycle. That burst predates passes standing on their motion scopes, so read
-  it again first. If it holds, the fix is the reconstruction's, not a filter
-  over it ([rendering P15](rendering.md#p15--temporal-reconstruction)): a
-  jitter period that follows the render scale, and history clipped by
+- [medium] The still shimmer on an 8-frame cycle did not reproduce on
+  Direct3D 12. Over 25 presented frames of a still part of the hall at 1280
+  by 900, no pixel's luma ranged past two levels of 255 at render scale 1,
+  and at render scale 0.75 at most 21 pixels a frame changed, by under one
+  level. The burst that showed it predates passes standing on their motion
+  scopes. A capture's changed-pixel counts include every moving body in
+  frame (the Moth's idle, the companion's hover, the grass), which reads as
+  a shimmer of half a percent of the frame: judge the still region alone. If
+  Vulkan or the bar's size shows it, the fix is the reconstruction's, not a
+  filter over it ([rendering P15](rendering.md#p15--temporal-reconstruction)):
+  a jitter period that follows the render scale, and history clipped by
   variance where a min and max box rejects it on every phase. The press's
-  shaken words smear for the same reason, moving glyphs averaged by the
-  history ([the press](../game/press.md#what-it-does-not-do-yet)). Check: a
-  16-frame presented burst of a still view changes no pixel beyond the noise
-  floor, at render scales 1 and 0.75.
+  shaken words smear because moving glyphs are averaged by the history
+  ([the press](../game/press.md#what-it-does-not-do-yet)), which is its own
+  item whatever the still view does.
 
 - [medium] The off-mode sill burst once showed two paired flashes about 11
   presentations apart, and has not reproduced since the shaft lintels were

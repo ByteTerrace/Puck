@@ -102,6 +102,26 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     internal bool KeepsGpuPublication(SdfMeshIrradianceScene scene, int geometry, int window) {
         lock (m_gate) { return (!m_disposed && SdfMeshIrradianceScene.SameGpuContent(first: m_scene, second: scene) && (m_geometry == geometry) && (m_windowVersion == window)); }
     }
+    // Whether the installed scene names a mesh its residency no longer places, so no query of it can be admitted
+    // (SdfWorldTables.TryProbeScene): a group that traces the tier it draws leaves the scene when the view retiers it and
+    // the region forgets the tier it drew. The probe service is the one writer (NoteScenePlacement), since only an
+    // admission reads the placements; Install clears it with the scene. ScenePendingDue is the one reader: the trace's
+    // progress paces a rebuild only while the installed scene can be traced, so a scene that cannot never holds back
+    // the build that replaces it.
+    private volatile bool m_sceneUnplaced;
+    /// <summary>Records whether a query's scene could be bound when the probe service last tried to admit it, for the
+    /// scene the volume holds installed: a scene that stayed unbound past the service's admission wait makes the next
+    /// scene build due whatever the trace still owes (<see cref="ScenePendingDue"/>).</summary>
+    /// <param name="scene">The scene the query asked for.</param>
+    /// <param name="placed">Whether the residency places every mesh the scene names.</param>
+    internal void NoteScenePlacement(SdfMeshIrradianceScene scene, bool placed) {
+        if (m_sceneUnplaced == !placed) { return; }
+        lock (m_gate) {
+            if (m_disposed || !SdfMeshIrradianceScene.SameGpuContent(first: m_scene, second: scene)) { return; }
+            m_sceneUnplaced = !placed;
+        }
+        if (!placed) { Counters.Add(SceneUnplaced, 1); }
+    }
 
     private bool m_disposed;
     private bool m_trimListening;
@@ -266,6 +286,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public static readonly WorkKind GpuSelectNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-select-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Queued trace jobs cancelled because their scene was replaced before admission.</summary>
     public static readonly WorkKind GpuCancelled = Registry.Declare(name: "sdf.mesh-gi.gpu-cancelled", unit: "jobs", workClass: WorkClass.Pacing);
+    /// <summary>The times the probe service found the installed scene naming a mesh its residency no longer places
+    /// (<see cref="NoteScenePlacement"/>), each of which makes the next scene build due.</summary>
+    public static readonly WorkKind SceneUnplaced = Registry.Declare(name: "sdf.mesh-gi.scene-unplaced", unit: "scenes", workClass: WorkClass.Pacing);
     /// <summary>Traversal stack or step-limit assertions; valid scenes must leave this at zero.</summary>
     public static readonly WorkKind TraversalFaults = Registry.Declare(name: "sdf.mesh-gi.traversal-faults", unit: "walks", workClass: WorkClass.Pacing);
     /// <summary>CPU sky captures for probe lighting: each renders the sky map and averages it over the hit texels.</summary>
@@ -1626,13 +1649,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         : string.Create(provider: CultureInfo.InvariantCulture, handler: $"{spacing.X:0.##}x{spacing.Y:0.##}x{spacing.Z:0.##}"));
     // Whether a frame that does not converge lighting may build a scene from its static draws: once no build runs, the
     // installed scene's traces are paid (none owed, or as many traced since it was installed as the windows hold, so a
-    // camera that keeps the windows moving never holds a real change back), and PendingSceneInterval has passed since
-    // the last build began. The trace's progress paces every rebuild, so the probes finish measuring one scene before the
-    // next replaces it; a lighting-converged frame builds its own scene (AwaitScene), and a build that faulted is always
-    // due, so RefreshScene reports it.
+    // camera that keeps the windows moving never holds a real change back) or cannot be paid at all (m_sceneUnplaced: the
+    // residency no longer places a mesh the scene names, so the trace would wait on the rebuild that waits on it), and
+    // PendingSceneInterval has passed since the last build began. The trace's progress paces every rebuild, so the probes
+    // finish measuring one scene before the next replaces it; a lighting-converged frame builds its own scene
+    // (AwaitScene), and a build that faulted is always due, so RefreshScene reports it.
     private bool ScenePendingDue(SdfFrame frame) =>
         ((m_build is { IsFaulted: true }) ||
-        (!frame.ConvergesLighting && (m_build is null or { IsCompleted: true }) && ((m_scene is null) || !m_traceOwed || (m_tracedSinceScene >= m_layout.TotalCount)) &&
+        (!frame.ConvergesLighting && (m_build is null or { IsCompleted: true }) && ((m_scene is null) || !m_traceOwed || m_sceneUnplaced || (m_tracedSinceScene >= m_layout.TotalCount)) &&
         ((m_sceneStartedAt == 0L) || (Time.GetElapsedTime(startingTimestamp: m_sceneStartedAt) >= PendingSceneInterval))));
     // The probes traced since the installed scene was (Install, Batch).
     private long m_tracedSinceScene;
@@ -1856,6 +1880,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_sceneRefusedAt = null;
         m_buildingKey = null;
         m_tracedSinceScene = 0L;
+        m_sceneUnplaced = false;
         AdvanceGeometry(changed: install.Changed);
     }
 
