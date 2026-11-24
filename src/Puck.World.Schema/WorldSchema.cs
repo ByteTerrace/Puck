@@ -527,6 +527,12 @@ public static partial class WorldSchema {
             index: XmlDocIndex.Value,
             nested: null
         );
+
+        return (ExportIdentified(run: run, schemaId: SchemaId, title: "Puck world definition (puck.world.definition.v1)", type: typeof(WorldDefinition)), run);
+    }
+    // Exports a type's schema through the world schema's transform, identity first: $schema, $id and title, then the
+    // generated shape.
+    private static JsonObject ExportIdentified(Type type, string schemaId, string title, ExportRun run, JsonSerializerOptions? options = null) {
         var exporterOptions = new JsonSchemaExporterOptions {
             TransformSchemaNode = (context, node) => Transform(
             context: context,
@@ -534,9 +540,9 @@ public static partial class WorldSchema {
             run: run
         ),
         };
-        var schema = WorldJsonContext.Authored.Options.GetJsonSchemaAsNode(
+        var schema = (options ?? WorldJsonContext.Authored.Options).GetJsonSchemaAsNode(
             exporterOptions: exporterOptions,
-            type: typeof(WorldDefinition)
+            type: type
         );
         var root = schema.AsObject();
         var generated = root.ToList();
@@ -548,11 +554,11 @@ public static partial class WorldSchema {
         );
         root.Add(
             propertyName: "$id",
-            value: SchemaId
+            value: schemaId
         );
         root.Add(
             propertyName: "title",
-            value: "Puck world definition (puck.world.definition.v1)"
+            value: title
         );
 
         foreach (var (propertyName, value) in generated) {
@@ -562,7 +568,7 @@ public static partial class WorldSchema {
             );
         }
 
-        return (root, run);
+        return root;
     }
     // Turns the internal "$defs/Name" placeholder every hoist produces into its final, file-aware form: a bare
     // same-document pointer for a reference that itself lives inside common.schema.json, a relative cross-file
@@ -1992,40 +1998,7 @@ public static partial class WorldSchema {
             index: XmlDocIndex.Value,
             nested: null
         );
-        var exporterOptions = new JsonSchemaExporterOptions {
-            TransformSchemaNode = (context, node) => Transform(
-            context: context,
-            node: node,
-            run: run
-        ),
-        };
-        var schema = WorldJsonContext.Authored.Options.GetJsonSchemaAsNode(
-            exporterOptions: exporterOptions,
-            type: typeof(WorldProjectionDocument)
-        );
-        var root = schema.AsObject();
-        var generated = root.ToList();
-
-        root.Clear();
-        root.Add(
-            propertyName: "$schema",
-            value: DraftUri
-        );
-        root.Add(
-            propertyName: "$id",
-            value: ProjectionSchemaId
-        );
-        root.Add(
-            propertyName: "title",
-            value: "Puck world projection (puck.world.projection.v1)"
-        );
-
-        foreach (var (propertyName, value) in generated) {
-            root.Add(
-                propertyName: propertyName,
-                value: value
-            );
-        }
+        var root = ExportIdentified(run: run, schemaId: ProjectionSchemaId, title: "Puck world projection (puck.world.projection.v1)", type: typeof(WorldProjectionDocument));
 
         ResolveTitleCollisions(typesByNode: run.TypesByNode);
         ResolveDiscriminatorSplits(run: run);
@@ -2075,40 +2048,7 @@ public static partial class WorldSchema {
             index: (index ?? XmlDocIndex.Value),
             nested: nested
         );
-        var exporterOptions = new JsonSchemaExporterOptions {
-            TransformSchemaNode = (context, node) => Transform(
-            context: context,
-            node: node,
-            run: run
-        ),
-        };
-        var schema = (options ?? WorldJsonContext.Authored.Options).GetJsonSchemaAsNode(
-            exporterOptions: exporterOptions,
-            type: type
-        );
-        var root = schema.AsObject();
-        var generated = root.ToList();
-
-        root.Clear();
-        root.Add(
-            propertyName: "$schema",
-            value: DraftUri
-        );
-        root.Add(
-            propertyName: "$id",
-            value: schemaId
-        );
-        root.Add(
-            propertyName: "title",
-            value: title
-        );
-
-        foreach (var (propertyName, value) in generated) {
-            root.Add(
-                propertyName: propertyName,
-                value: value
-            );
-        }
+        var root = ExportIdentified(options: options, run: run, schemaId: schemaId, title: title, type: type);
 
         RestoreSkippedPropertyAnnotations(
             node: root,

@@ -384,23 +384,36 @@ public sealed partial class WorldPopulation {
     private void PrepareGoalField(Entry entry, CompiledBodyProducer producer, in FixedVector3 self) {
         entry.PreparedGoalField = null;
         entry.PreparedGoal = (-1, -1, null);
+        if (!TryRequestGoalField(entry: entry, producer: producer, self: in self, ahead: false, from: out var from)) {
+            return;
+        }
+        entry.PreparedGoalFrom = from;
+        m_goalReads.Add(item: entry);
+    }
+    // Locates a body's shared navigated producer's goal in its target domain's network and requests that goal's field
+    // (NavigationRuntime.RequestGoalField), noting the goal on the entry (PreparedGoal, PrefetchedGoal). Ahead of the
+    // read, a goal already requested for the body is not located again. False when the producer navigates no shared
+    // domain, has no goal, or the body or its goal stands outside the network.
+    private bool TryRequestGoalField(Entry entry, CompiledBodyProducer producer, in FixedVector3 self, bool ahead, out (int Domain, int Cell) from) {
+        from = (-1, -1);
         if (
             (producer.Target is not { Source: BodyTargetSource.Navigated } target) ||
             (((uint)target.NavigationDomainIndex) >= ((uint)m_navigation.Count)) ||
             !m_navigation[target.NavigationDomainIndex].Tuning.Shared ||
             !TryNavigationGoal(entry: entry, goal: out var goal, target: in target, targetIndex: out _) ||
+            (ahead && (entry.PrefetchedGoal == goal)) ||
             !TryLocateGoalRead(cell: out var cell, domain: out var domain, domainIndex: target.NavigationDomainIndex, goal: in goal, goalCell: out var goalCell, goalDomain: out var goalDomain, self: in self)
         ) {
-            return;
+            return false;
         }
 
         var profile = NavigationProfile(index: target.NavigationProfileIndex);
 
         m_navigation.RequestGoalField(goalCell: goalCell, goalDomain: goalDomain, profile: profile);
-        entry.PreparedGoal = (goalDomain, goalCell, profile);
-        entry.PreparedGoalFrom = (domain, cell);
+        entry.PreparedGoal = (ahead ? entry.PreparedGoal : (goalDomain, goalCell, profile));
         entry.PrefetchedGoal = goal;
-        m_goalReads.Add(item: entry);
+        from = (domain, cell);
+        return true;
     }
     // The bodies whose goal field this tick's plan requested (PrepareGoalField), resolved once all have asked.
     private readonly List<Entry> m_goalReads = [];
@@ -417,20 +430,8 @@ public sealed partial class WorldPopulation {
     }
     // Requests ahead the goal field a body not due to steer this tick will read when it is, once a goal, so its
     // derivation runs off the step between now and that read.
-    private void PrefetchGoalField(Entry entry, CompiledBodyProducer producer, in FixedVector3 self) {
-        if (
-            (producer.Target is not { Source: BodyTargetSource.Navigated } target) ||
-            (((uint)target.NavigationDomainIndex) >= ((uint)m_navigation.Count)) ||
-            !m_navigation[target.NavigationDomainIndex].Tuning.Shared ||
-            !TryNavigationGoal(entry: entry, goal: out var goal, target: in target, targetIndex: out _) ||
-            (entry.PrefetchedGoal == goal) ||
-            !TryLocateGoalRead(cell: out _, domain: out _, domainIndex: target.NavigationDomainIndex, goal: in goal, goalCell: out var goalCell, goalDomain: out var goalDomain, self: in self)
-        ) {
-            return;
-        }
-        entry.PrefetchedGoal = goal;
-        m_navigation.RequestGoalField(goalCell: goalCell, goalDomain: goalDomain, profile: NavigationProfile(index: target.NavigationProfileIndex));
-    }
+    private void PrefetchGoalField(Entry entry, CompiledBodyProducer producer, in FixedVector3 self) =>
+        _ = TryRequestGoalField(entry: entry, producer: producer, self: in self, ahead: true, from: out _);
     // The walkable cell a position stands on in a domain's network: the domain's own cell first, else the nearest of its
     // network's.
     private bool TryLocateInNetwork(int network, in FixedVector3 position, out int domain, out int cell) {

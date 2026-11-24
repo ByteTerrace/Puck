@@ -68,8 +68,7 @@ public sealed partial class NavigationRuntime {
     private readonly Dictionary<(int Node, NavigationCostProfile Profile), GoalFieldJob> m_requestedGoalFields = [];
     private readonly List<(int Node, NavigationCostProfile Profile)> m_landedGoalFields = [];
     // Idle derivation scratch, taken by a derivation on whatever thread runs it and given back when it ends.
-    private readonly Stack<GoalFieldWorkspace> m_goalWorkspaces = new();
-    private readonly Lock m_goalWorkspaceGate = new();
+    private SharedPool<GoalFieldWorkspace>? m_goalWorkspaces;
     private long m_goalFieldBytes;
     private long m_goalFieldReads;
 
@@ -376,20 +375,20 @@ public sealed partial class NavigationRuntime {
     // a junction's coincident ends, which settled first, so the field is a function of the frozen graph. It reads only its
     // job and its own workspace, so it runs on any thread.
     private NavigationGoalField Derive(GoalFieldJob job) {
-        var workspace = TakeGoalWorkspace();
+        var pool = Volatile.Read(location: ref m_goalWorkspaces) ?? CreateGoalWorkspaces();
+        var workspace = pool.Rent();
 
         try {
             return Derive(job: job, workspace: workspace);
         } finally {
-            lock (m_goalWorkspaceGate) { m_goalWorkspaces.Push(item: workspace); }
+            pool.Return(item: workspace);
         }
     }
-    private GoalFieldWorkspace TakeGoalWorkspace() {
-        lock (m_goalWorkspaceGate) {
-            if (m_goalWorkspaces.TryPop(result: out var idle)) { return idle; }
-        }
+    private SharedPool<GoalFieldWorkspace> CreateGoalWorkspaces() {
+        var cells = checked((int)CellCount);
 
-        return new GoalFieldWorkspace(cells: checked((int)CellCount));
+        _ = Interlocked.CompareExchange(location1: ref m_goalWorkspaces, value: new SharedPool<GoalFieldWorkspace>(create: () => new GoalFieldWorkspace(cells: cells)), comparand: null);
+        return m_goalWorkspaces!;
     }
     private NavigationGoalField Derive(GoalFieldJob job, GoalFieldWorkspace workspace) {
         var offsets = m_offsets;
