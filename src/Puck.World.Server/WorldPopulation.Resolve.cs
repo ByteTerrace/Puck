@@ -511,6 +511,17 @@ public sealed partial class WorldPopulation {
     // kit can differ from a seat entry's assigned row on a multi-kit world — else the entry's KitIndex. Every
     // seat-vs-peer kit read (recompile, producer-support checks, kit-replace safety, and the runtime coherence door)
     // shares this ONE resolver so they can never disagree.
+    /// <summary>Returns everything a slot's kit resolves from, packed: its selected kit, its assigned kit, the seat
+    /// kit when it is a seat and whether it is active. Two equal answers under one definition resolve the same kit,
+    /// committed (<see cref="ResolveKitIndex"/>) and candidate (<see cref="CandidateKitName"/>, given the selector
+    /// register's value).</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    /// <returns>The packed answer.</returns>
+    internal long KitSignature(int index) {
+        var entry = m_entries[index];
+
+        return ((((long)(entry.SelectedKit + 1)) << 32) | (((long)entry.KitIndex) << 16) | (((long)((index < LocalSeatCount) ? (m_seatKit + 1) : 0)) << 1) | (entry.Active ? 1L : 0L));
+    }
     private byte ResolveKitIndex(int index) => ((m_entries[index].SelectedKit >= 0)
         ? (byte)m_entries[index].SelectedKit
         : ((index < LocalSeatCount)

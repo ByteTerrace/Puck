@@ -831,7 +831,8 @@ public static class WorldBootComposition {
             return new WorldSourceWatch(
                 sourcePaths: () => (instances ??= sp.GetRequiredService<WorldInstanceHost>()).SourcePaths,
                 catalogFingerprint: MachineCatalogFingerprint(machineCatalog: catalog),
-                catalog: catalog);
+                catalog: catalog,
+                notified: true);
         });
         // The edit loops' clock: the reload verbs begin loops on it, and a composed renderer attaches and advances it.
         services.AddSingleton<WorldIterationClock>();

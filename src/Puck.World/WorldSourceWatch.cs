@@ -14,11 +14,13 @@ namespace Puck.World;
 /// The sources are those of every world running in the process (the boot world and each instance started beside it), so
 /// a saved edit to any of them, or to anything their compiles read, requests one reload, which reloads every running
 /// world from its own source (<see cref="WorldReload"/>).
-/// A poll asks <see cref="CompileInputs.Current"/> for each input, which stats it (existence, length and last write) and
+/// A read asks <see cref="CompileInputs.Current"/> for each input, which stats it (existence, length and last write) and
 /// re-reads only an input whose stamp moved or was too recent to vouch for its last answer
-/// (<see cref="CompileInputs.RacyStampWindow"/>), so a poll's cost over an unchanged tree is one stat per input and no
+/// (<see cref="CompileInputs.RacyStampWindow"/>), so a read's cost over an unchanged tree is one stat per input and no
 /// content read. The stats run on a pool thread (<see cref="DependencyWatch{TKey, TStamp}"/>), so the host pump that
-/// calls <see cref="Poll"/> only adopts their answers.</remarks>
+/// calls <see cref="Poll"/> only adopts their answers. A notified watch reads when the host reports a change in a
+/// directory an input lives in, so an untouched tree is never read; one that is not notified reads on every poll
+/// interval.</remarks>
 public sealed class WorldSourceWatch {
     private readonly Func<IReadOnlyList<string>> m_sourcePaths;
     private readonly string m_catalogFingerprint;
@@ -40,13 +42,22 @@ public sealed class WorldSourceWatch {
     /// first. A host answers the same list instance while the set is unchanged, so a poll compares nothing.</param>
     /// <param name="catalogFingerprint">The machine catalog's fingerprint the composer checks documents against.</param>
     /// <param name="catalog">The machine validation catalog, or <see langword="null"/> for none.</param>
-    public WorldSourceWatch(Func<IReadOnlyList<string>> sourcePaths, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
+    /// <param name="notified">Whether the watch reads its inputs when the host notifies a change in their
+    /// directories, as a running World does, or on every poll interval, as a caller that polls right after it writes
+    /// a file needs.</param>
+    public WorldSourceWatch(Func<IReadOnlyList<string>> sourcePaths, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, bool notified = false) {
         ArgumentNullException.ThrowIfNull(sourcePaths);
         m_sourcePaths = sourcePaths;
         m_catalogFingerprint = catalogFingerprint;
         m_catalog = catalog;
-        m_watch = new DependencyWatch<CompileInput, CompileInput?>(read: Read, comparer: InputComparer.Instance);
+        m_watch = new DependencyWatch<CompileInput, CompileInput?>(read: Read, comparer: InputComparer.Instance, directory: (notified ? DirectoryOf : null));
     }
+
+    // The directory whose entries decide an input's answer: the directory itself for a listing or its claims, the
+    // containing one for a file.
+    private static string? DirectoryOf(CompileInput input) => ((input.Kind is CompileInputKind.Listing or CompileInputKind.Claims)
+        ? input.Path
+        : Path.GetDirectoryName(path: input.Path));
 
     /// <summary>Gets whether source changes may request reloads.</summary>
     public bool Enabled => (m_reload is not null);

@@ -277,14 +277,19 @@ public sealed partial class ShaderPipelineRenderNode {
         );
     }
     // Fills a pass block with the pass's bound config and its extent, or, with sentinels on, every member's echo sentinel.
+    // It writes every byte of the block, so a caller hands it one that holds anything (ReserveEmitBlock).
     private void FillPassBlock(RuntimePass pass, Span<byte> block) {
         if (Sentinels) {
+            block.Clear();
             ShaderInterfaceEcho.WriteSentinels(
                 block: block,
                 group: pass.ParametersLayout.Layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass))
             );
         } else {
-            pass.Parameters.Bytes.Span.CopyTo(destination: block);
+            var parameters = pass.Parameters.Bytes.Span;
+
+            parameters.CopyTo(destination: block);
+            block[parameters.Length..].Clear();
             pass.ParametersLayout.WriteExtent(
                 block: block,
                 height: pass.Height,
