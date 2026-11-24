@@ -134,6 +134,31 @@ public sealed class WorldDocumentNavigation : IWorldSeatNavigation {
     }
     /// <inheritdoc/>
     public void Prepare() => m_runtime.BeginBakes();
+    /// <inheritdoc/>
+    /// <remarks>The start and the probe each take the walkable cell they stand on or the nearest within two cells
+    /// (<see cref="NavigationRuntime.TryLocateNear"/>), with no body's sweep: what is measured is the ground's reach,
+    /// not one body's.</remarks>
+    public WorldSeatReach Reach(in FixedVector3 from, INavigationRouteGoal goal, in FixedVector3 goalProbe, FixedQ4816 limit) {
+        ArgumentNullException.ThrowIfNull(argument: goal);
+        if (!m_runtime.IsBaked
+            || !m_runtime.TryLocateNear(cell: out var cell, domain: out var domain, position: in from, reach: 2, connects: static (_, _) => true)
+            || !m_runtime.TryLocateNear(cell: out _, domain: out _, position: in goalProbe, reach: 2, connects: static (_, _) => true)) {
+            return new WorldSeatReach(Kind: WorldSeatReachKind.Uncovered, Metres: 0f);
+        }
+
+        var status = m_runtime.MeasureRoute(
+            cost: out var millimetres,
+            fromCell: cell,
+            fromDomain: domain,
+            goal: goal,
+            maxCost: (long)Math.Ceiling(a: (((double)limit) * 1000d)),
+            work: out _
+        );
+
+        return ((status is NavigationStatus.Active or NavigationStatus.Arrived)
+            ? new WorldSeatReach(Kind: WorldSeatReachKind.Within, Metres: (float)(millimetres / 1000d))
+            : new WorldSeatReach(Kind: WorldSeatReachKind.Beyond, Metres: 0f));
+    }
 
     // Finds a cell joined to a point by a clear sweep of the walker's volume, raised a step so a tread it climbs passes
     // under it: from the point to the cell for the body's own foot, from the cell to the point for a goal.

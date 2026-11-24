@@ -85,9 +85,7 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
     /// seat between authorities has no body to read until its new route's first delivery.</returns>
     public bool TryRead(int slot, out Reading reading) {
         reading = default;
-        if ((routes.TryRoute(slot: slot) is not { } route) ||
-            !route.Endpoint.Mirror.TryReadBody(body: out var body, index: route.EntityIndex) ||
-            (body.Generation != route.Entity.Generation) ||
+        if (!TryBody(body: out var body, route: out var route, slot: slot) ||
             !client.TrySeatLook(slot: slot, yaw: out var yaw, yawPerTick: out var perTick)) {
             return false;
         }
@@ -104,6 +102,16 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
             YawPerTick: FixedQ4816.FromDouble(value: perTick)
         );
         return true;
+    }
+    /// <summary>Reads a seat's body from its route, without the places it stands in or its camera's look.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="body">The body's latest complete delivery, when this returns <see langword="true"/>.</param>
+    /// <param name="route">The seat's route, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the seat is routed to an authority whose latest delivery holds its body.</returns>
+    public bool TryBody(int slot, out WorldDeliveredBody body, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldAuthorityRoute? route) {
+        body = default;
+        route = routes.TryRoute(slot: slot);
+        return ((route is not null) && route.Endpoint.Mirror.TryReadBody(body: out body, index: route.EntityIndex) && (body.Generation == route.Entity.Generation));
     }
     /// <summary>Gets a place's volume in the endpoint's delivered document.</summary>
     /// <param name="endpoint">The authority.</param>

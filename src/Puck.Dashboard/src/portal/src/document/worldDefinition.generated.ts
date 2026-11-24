@@ -15488,6 +15488,10 @@ export type WorldViewDefaults = {
    */
   framings?: (WorldSeatFraming | null)[] | null;
   /**
+   * How early the world's portals warm the worlds behind them, in metres of walk, or null for DefaultPortalLead; PortalLead is what a reader resolves through. Finite and non-negative.
+   */
+  portalLead?: number | null;
+  /**
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
   layouts?: (WorldViewLayout | null)[] | null;

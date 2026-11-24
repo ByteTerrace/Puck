@@ -7070,6 +7070,7 @@ public static partial class WorldModelShape {
                 M("programs", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldCameraProgram>), typeof(global::Puck.World.WorldViewDefaults), "ProgramsRaw", Read | Write, static value => ((global::Puck.World.WorldViewDefaults)value).ProgramsRaw),
                 M("builtinTransition", typeof(global::Puck.World.WorldViewTransition), typeof(global::Puck.World.WorldViewDefaults), "BuiltinTransition", Read | Write, static value => ((global::Puck.World.WorldViewDefaults)value).BuiltinTransition),
                 M("framings", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldSeatFraming>), typeof(global::Puck.World.WorldViewDefaults), "Framings", Read | Write, static value => ((global::Puck.World.WorldViewDefaults)value).Framings),
+                M("portalLead", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldViewDefaults), "PortalLeadRaw", Read | Write, static value => ((global::Puck.World.WorldViewDefaults)value).PortalLeadRaw),
                 M("layouts", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldViewLayout>), typeof(global::Puck.World.WorldViewDefaults), "Layouts", Read | Write, static value => ((global::Puck.World.WorldViewDefaults)value).Layouts),
             ],
             []),

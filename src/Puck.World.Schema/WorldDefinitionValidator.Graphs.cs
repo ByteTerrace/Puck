@@ -154,6 +154,9 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"views.nestingDepth {nesting} is outside 0 through {RenderGraphInstanceSet.MaxNestingDepth}: a portal seen through a portal nests at most {RenderGraphInstanceSet.MaxNestingDepth} screens deep.");
         }
+        if ((views.PortalLeadRaw is { } lead) && !(float.IsFinite(f: lead) && (lead >= 0f))) {
+            errors.Add(item: $"views.portalLead {lead} must be a finite, non-negative number of metres.");
+        }
         if (views.BuiltinTransition is { } builtinTransition) {
             RequireViewTransition(
                 errors: errors,

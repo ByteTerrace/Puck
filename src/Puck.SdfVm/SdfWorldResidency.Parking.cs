@@ -67,6 +67,10 @@ public sealed partial class SdfWorldResidency {
     private bool m_sighted;
     private long m_wantedAt;
     private bool m_wakeOwed;
+    // Who last wanted the world and why (Want), which world.residency prints.
+    private string? m_wantedBy;
+    private string? m_wantedWhy;
+    private float m_wantedMetres = float.NaN;
 
     /// <summary>Gets whether the presentation's sight judges the residency (<see cref="Want"/>): its views' images may be
     /// read while it is parked, standing on the images they last rendered, and only a render or the sight wakes it.</summary>
@@ -80,8 +84,15 @@ public sealed partial class SdfWorldResidency {
     /// parked one builds its tables at its next preparation, which <see cref="SdfWorldPasses.BeginFrame"/> serves
     /// whether or not anything reads it, so its world and lighting stand before its glass is seen. Called on the frame
     /// thread.</summary>
-    public void Want() {
+    /// <param name="consumer">The instance whose sight wants the world, which <c>world.residency</c> names.</param>
+    /// <param name="why">Why it is wanted, a constant word (the glass is seen, small, of unknown sight, or leads), which
+    /// <c>world.residency</c> names.</param>
+    /// <param name="metres">The distance the glass leads by, or <see cref="float.NaN"/> where the sight wants it.</param>
+    public void Want(string consumer, string why, float metres = float.NaN) {
         m_sighted = true;
+        m_wantedBy = consumer;
+        m_wantedWhy = why;
+        m_wantedMetres = metres;
         if (m_clock is { } clock) { m_wantedAt = clock.GetTimestamp(); }
         if (m_parked) { m_wakeOwed = true; }
     }
@@ -99,6 +110,8 @@ public sealed partial class SdfWorldResidency {
     internal double UnobservedSeconds() => ((m_clock is { } clock) && (m_observedAt != 0L))
         ? clock.GetElapsedTime(startingTimestamp: Math.Max(val1: m_observedAt, val2: m_wantedAt)).TotalSeconds
         : 0d;
+    // The seconds since a timestamp on the residency's clock, or -1 for none.
+    private double SecondsSince(long at) => ((m_clock is { } clock) && (at != 0L)) ? clock.GetElapsedTime(startingTimestamp: at).TotalSeconds : -1d;
     /// <summary>Gets the device bytes parking would give back: the tables' regions and buffers and their background
     /// work's slots and clients (the lighting's stores and caches among them); zero without tables.</summary>
     internal long ParkableBytes => ((m_tables is { } tables)
@@ -179,5 +192,5 @@ public sealed partial class SdfWorldResidency {
     }
     /// <summary>Describes the residency's parking for <c>world.residency</c>.</summary>
     /// <returns>One line.</returns>
-    public string DescribeParking() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"parking parked={(m_parked ? "yes" : "no")} sighted={(m_sighted ? "yes" : "no")} wake-owed={(m_wakeOwed ? "yes" : "no")} parks={m_parks} wakes={m_wakes} unobserved={UnobservedSeconds():0.0}s pressed-after={PressedParkAfter:0.0}s lighting-drops={m_lightingDrops} parkable-device-bytes={ParkableBytes} waking={(Waking is null ? "no" : "yes")}");
+    public string DescribeParking() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"parking parked={(m_parked ? "yes" : "no")} sighted={(m_sighted ? "yes" : "no")} wake-owed={(m_wakeOwed ? "yes" : "no")} parks={m_parks} wakes={m_wakes} unobserved={UnobservedSeconds():0.0}s read-ago={SecondsSince(at: m_observedAt):0.0}s wanted={m_wantedWhy ?? "never"}{(float.IsNaN(f: m_wantedMetres) ? string.Empty : $"@{m_wantedMetres:0.0}m")} by={m_wantedBy ?? "none"} wanted-ago={SecondsSince(at: m_wantedAt):0.0}s pressed-after={PressedParkAfter:0.0}s lighting-drops={m_lightingDrops} parkable-device-bytes={ParkableBytes} waking={(Waking is null ? "no" : "yes")}");
 }

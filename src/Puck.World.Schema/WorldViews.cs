@@ -295,6 +295,9 @@ public static class WorldSeatFramingCapacity {
 /// brings its own envelope.</param>
 /// <param name="Framings">The framings a seat's camera eases to while their conditions hold
 /// (<see cref="WorldSeatFraming"/>), or <see langword="null"/> for none.</param>
+/// <param name="PortalLeadRaw">How early the world's portals warm the worlds behind them, in metres of walk, or
+/// <see langword="null"/> for <see cref="DefaultPortalLead"/>; <see cref="PortalLead"/> is what a reader resolves
+/// through. Finite and non-negative.</param>
 public sealed record WorldViewDefaults(
     IReadOnlyList<WorldViewLayout>? Layouts = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatRig"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraProgram? SeatRigRaw = null,
@@ -311,8 +314,19 @@ public sealed record WorldViewDefaults(
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewQuality>? Quality = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("programs"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCameraProgram>? ProgramsRaw = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewTransition? BuiltinTransition = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatFraming>? Framings = null
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatFraming>? Framings = null,
+    [property: System.Text.Json.Serialization.JsonPropertyName("portalLead"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] float? PortalLeadRaw = null
 ) {
+    /// <summary>The walk, in metres, within which a portal's glass out of sight keeps the world behind it resident when
+    /// a document authors no <c>portalLead</c>.</summary>
+    public const float DefaultPortalLead = 16f;
+
+    /// <summary>Gets how early this world's portals warm the worlds behind them: a glass out of its viewer's sight keeps
+    /// its world resident while the viewer's walk to the glass's facing side, plus the glass's own reach, is no longer
+    /// than this many metres. The authored <c>portalLead</c>, or <see cref="DefaultPortalLead"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public float PortalLead => (PortalLeadRaw ?? DefaultPortalLead);
+
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
 
     /// <summary>Gets the named camera programs the section declares for selects and blends to name, or an empty list

@@ -465,7 +465,19 @@ system's budget less the usage the ledgers do not hold): `m_tables` is cleared b
 device's retirement, keeping the bake, the lighting's measured words (for `SdfWorldResidency.ForgetLightingSeconds`, after which the residency's upkeep disposes the volume and a wake lights the world from nothing), the frame and the leased pipeline set. Every
 path that reaches the tables goes through `m_tables`, so a reader that comes for a parked residency prepares it, which
 builds new tables, and its views keep their last images while `SdfWorldResidency.Waking` stands. A park while
-`OwesPreparation` would rebuild at once, so a parked residency owes nothing and has nothing arriving. Never add a `TryWaitIdle` to a release
+`OwesPreparation` would rebuild at once, so a parked residency owes nothing and has nothing arriving.
+A world behind glass is observed by the presentation's sight, not by being read (`WorldViewGraphHost.WantSightedWorlds`
+through `SdfWorldResidency.Want`): only a consumer whose image renders this frame judges its world's glasses, so the
+walk passes on through a window only when its glass is seen or of unknown sight, never through one out of sight, held
+small or merely leading (a window's camera stands where its viewer looks through it, and judging from there kept every
+world behind every painting wanted). A glass out of sight leads by the walk from its consumer's seat to its facing side,
+over the navigation of the seat's delivered world (`WorldPortalReach`, `IWorldSeatNavigation.Reach`, a bounded
+`NavigationRuntime.MeasureRoute`), within the glass's world's `views.portalLead` plus the glass's reach, and by the
+straight line on its facing side where no domain covers the walk or the consumer is a window. `world.residency`'s
+parking line names who last wanted a residency and why (`wanted=seen|unknown|walk@…|line@…|rendered by=`) beside
+`read-ago` and `wanted-ago`, so a world that never parks names its holder. An infinity layer's residency is released
+once no output names it (`WorldScreenBinder.ReleaseUnreadInfinityResidencies`): a consumer whose target has not fitted
+its sky for `InfinityConsumerRetireSeconds` retires. Never add a `TryWaitIdle` to a release
 path; `SdfWorldTables.Dispose` and `IGpuSurfaceUpload.DisposeCompleted` wait for nothing. A render node's build in
 flight retires into its runtime's `GpuImageLeases.RetiredBuilds`, which `DrainDisposals` waits out before the device
 goes. A package recorder never sees a fence: a result its recording captured (a readback, a publication, a
@@ -1777,7 +1789,7 @@ counts in `sdf.transforms`, never in `records.posed`.
   frame; moving occluders carry that delay. Settled captures and non-occlusion cull modes bypass it.
 - **A hidden window renders until its world is resident.** `WorldViewGraphHost.ReserveArrivals` keeps one window,
   and the windows on the way to it, at `WorldPortalVisibility.ArrivalShare` for each world a rendered view leads to
-  whose `SdfWorldResidency.MeshesArriving` holds: its bake pending, or its region owing words or their upload. A
+  whose `SdfWorldResidency.MeshesFirstArriving` holds: a group owing its first mesh or the first detail over its floor (`SdfMeshPathBake.OwedGroups`), or a staged draw waiting for its mesh; a retier or another residency's landing is no arrival. A
   residency's bake samples and its meshes land only in frames that render one of its views: a frame that renders none
   still prepares it while it owes its minimum (`SdfWorldResidency.OwesPreparation`) and may pack, which moves what its
   background work binds. In `world.residency`, a residency
