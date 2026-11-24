@@ -28,8 +28,19 @@ public static class AllocationTrace {
         // GC at verbose raises the allocation ticks; Loader and JIT name the code that loads or tiers up during the
         // window, and the rundown at its end names the rest (precompiled code included).
         var keywords = (long)(ClrTraceEventParser.Keywords.GC | ClrTraceEventParser.Keywords.Loader | ClrTraceEventParser.Keywords.Jit);
+        await RecordAsync(cancellationToken: cancellationToken, duration: duration, path: path, processId: processId, providers: [new EventPipeProvider(eventLevel: EventLevel.Verbose, keywords: keywords, name: RuntimeProvider)]);
+    }
+    /// <summary>Records a window of a process's events from the given providers, with the rundown that names its code at
+    /// the window's end, to an EventPipe trace file.</summary>
+    /// <param name="processId">The target process, which must expose its diagnostics port.</param>
+    /// <param name="providers">The providers the session enables.</param>
+    /// <param name="duration">How long to record.</param>
+    /// <param name="path">The <c>.nettrace</c> file to write.</param>
+    /// <param name="cancellationToken">Ends the recording early.</param>
+    /// <exception cref="ServerNotAvailableException">The process exposes no diagnostics port.</exception>
+    internal static async Task RecordAsync(int processId, IReadOnlyList<EventPipeProvider> providers, TimeSpan duration, string path, CancellationToken cancellationToken) {
         var client = new DiagnosticsClient(processId: processId);
-        using var session = client.StartEventPipeSession(providers: [new EventPipeProvider(eventLevel: EventLevel.Verbose, keywords: keywords, name: RuntimeProvider)], requestRundown: true, circularBufferMB: 512);
+        using var session = client.StartEventPipeSession(providers: providers, requestRundown: true, circularBufferMB: 512);
         await using var file = File.Create(path: path);
         var copy = session.EventStream.CopyToAsync(destination: file, cancellationToken: CancellationToken.None);
 
@@ -137,7 +148,7 @@ public static class AllocationTrace {
         [.. totals.OrderByDescending(static pair => pair.Value).ThenBy(static pair => pair.Key, StringComparer.Ordinal)];
 
     // Whether a frame is the engine's or the program's own code, rather than the runtime's or the libraries'.
-    private static bool Engine(string method) => method.Length > 0 && !method.StartsWith(value: "System.", comparisonType: StringComparison.Ordinal) &&
+    internal static bool Engine(string method) => method.Length > 0 && !method.StartsWith(value: "System.", comparisonType: StringComparison.Ordinal) &&
         !method.StartsWith(value: "Microsoft.", comparisonType: StringComparison.Ordinal) && !method.StartsWith(value: "Interop", comparisonType: StringComparison.Ordinal) &&
         !method.StartsWith(value: "?", comparisonType: StringComparison.Ordinal) && !method.StartsWith(value: "ROOT", comparisonType: StringComparison.Ordinal) &&
         !method.StartsWith(value: "Thread (", comparisonType: StringComparison.Ordinal) && !method.StartsWith(value: "Process", comparisonType: StringComparison.Ordinal);
@@ -170,7 +181,7 @@ public static class AllocationTrace {
         return (stack?.CodeAddress.FullMethodName is { Length: > 0 } leaf ? leaf : "?");
     }
     // The outermost engine frame, which names what a thread is for (the host loop, a bake worker).
-    private static string? Root(TraceCallStack? stack) {
+    internal static string? Root(TraceCallStack? stack) {
         string? outer = null;
 
         for (var frame = stack; frame is not null; frame = frame.Caller) {

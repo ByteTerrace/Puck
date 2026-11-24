@@ -8,6 +8,7 @@ public static class HostCommand {
     private const string AllocationsVerb = "host allocations";
     private const string HeapVerb = "host heap";
     private const string LoadVerb = "host load";
+    private const string SamplesVerb = "host samples";
 
     // What a reading reports a start's demand for: each kind, and the windowed World whose mesh store is cold, whose peak is
     // measured apart from the warm one's.
@@ -318,11 +319,78 @@ public static class HostCommand {
         return command;
     }
 
+    private static async Task<int> Samples(int? processId, int seconds, string? trace, string? output, int? thread, string? focus, int depth, int top, double fromSeconds, double toSeconds, CancellationToken cancellationToken) {
+        if ((processId is null) == (trace is null)) { return CliExit.Refuse(verb: SamplesVerb, what: "the trace", why: "name exactly one of --pid and --trace."); }
+
+        var path = trace ?? Path.GetFullPath(path: (output ?? Path.Combine(path1: Path.GetTempPath(), path2: FormattableString.Invariant($"puck-samples-{processId}-{Environment.TickCount64}.nettrace"))));
+        SampleReport report;
+
+        try {
+            if (processId is { } pid) { await SampleTrace.CollectAsync(cancellationToken: cancellationToken, duration: TimeSpan.FromSeconds(seconds: seconds), path: path, processId: pid); }
+            report = SampleTrace.Read(depth: depth, focus: focus, fromMs: (fromSeconds * 1000), path: path, thread: thread, toMs: (toSeconds * 1000));
+        } catch (Exception exception) when (exception is Microsoft.Diagnostics.NETCore.Client.ServerNotAvailableException or InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException) {
+            return CliExit.Refuse(verb: SamplesVerb, what: (processId is { } id ? FormattableString.Invariant($"--pid {id}") : path), why: exception.Message);
+        }
+
+        static string Quote(string text) => string.Concat(str0: "\"", str1: text, str2: "\"");
+        static string Share(long part, long whole) => FormattableString.Invariant($"{((whole == 0) ? 0 : ((100.0 * part) / whole)):0.0}%");
+
+        Console.Out.WriteLine(value: FormattableString.Invariant($"[host samples: trace={Quote(path)} focus={Quote(focus ?? "")} thread={(thread is { } t ? t.ToString(System.Globalization.CultureInfo.InvariantCulture) : "all")} samples={report.Samples} focused={report.Focused} seconds={report.Seconds:0.0}"));
+        foreach (var (id, samples, root) in report.Threads.Take(count: top)) { Console.Out.WriteLine(value: FormattableString.Invariant($"thread {id} {samples} root={Quote(root)}")); }
+        foreach (var (callee, samples) in report.Callees.Take(count: top)) { Console.Out.WriteLine(value: FormattableString.Invariant($"callee {samples} {Share(samples, report.Focused)} {Quote(callee)}")); }
+        Console.Out.WriteLine(value: "The sample profiler records each managed thread's stack about every millisecond, running or waiting; a callee's share is of the samples beneath the focus frame.]");
+
+        return CliExit.Success;
+    }
+    private static Command CreateSamples() {
+        var pidOption = new Option<int?>(name: "--pid") { Description = "The .NET process to record, such as a World's process id from puck_world_start." };
+        var traceOption = new Option<string?>(name: "--trace") { Description = "Read this .nettrace instead of recording one (a dotnet-trace cpu-sampling or thread-time trace, or one --output kept)." };
+        var secondsOption = CliOptions.Count(defaultValue: 6, description: "Seconds to record with --pid.", minimum: 1, name: "--seconds");
+        var outputOption = new Option<string?>(name: "--output") { Description = "Where to keep the recorded .nettrace; a temporary file by default." };
+        var threadOption = new Option<int?>(name: "--thread") { Description = "Read only this thread's samples (an id the report's thread lines name)." };
+        var focusOption = new Option<string?>(name: "--focus") { Description = "Keep only the samples beneath a frame naming this text, such as WorldViewGraphHost.CompleteFootprints." };
+        var depthOption = CliOptions.Count(defaultValue: 1, description: "How many callee frames beneath the focus name each path.", minimum: 1, name: "--depth");
+        var topOption = CliOptions.Count(defaultValue: 25, description: "How many threads and callee paths to list.", minimum: 1, name: "--top");
+        var fromOption = CliOptions.Amount(defaultValue: 0, description: "Read the trace from this second.", minimum: 0, name: "--from");
+        var toOption = CliOptions.Amount(defaultValue: double.MaxValue, description: "Read the trace up to this second.", minimum: 0, name: "--to");
+        var command = new Command(
+            description: "Attribute another .NET process's thread time beneath a frame to its callees by the runtime's sample profiler.",
+            name: "samples"
+        ) { pidOption, traceOption, secondsOption, outputOption, threadOption, focusOption, depthOption, topOption, fromOption, toOption };
+
+        command.Detail(detail: """
+            Records an EventPipe session on the process's diagnostics port with the runtime's sample profiler (and
+            loader, JIT and rundown events to name the code), or reads a trace already taken. The profiler records
+            each managed thread's stack about every millisecond, running or waiting, so a thread's samples beneath a
+            frame are its share of wall time there. The report lists each thread's samples (named by its outermost
+            engine frame), then, of the samples whose stack holds a frame naming --focus (its outermost such frame),
+            the paths of --depth callees beneath it, with self for samples in the frame itself. Samples are counts: on
+            a machine others share, read them as attribution, not timing.
+
+            Exit codes: 0 done; 2 refused (no diagnostics port, or the trace could not be read).
+            """);
+        command.SetAction(action: (parseResult, cancellationToken) => Samples(
+            cancellationToken: cancellationToken,
+            depth: parseResult.GetValue(option: depthOption),
+            focus: parseResult.GetValue(option: focusOption),
+            fromSeconds: parseResult.GetValue(option: fromOption) ?? 0,
+            output: parseResult.GetValue(option: outputOption),
+            processId: parseResult.GetValue(option: pidOption),
+            seconds: parseResult.GetValue(option: secondsOption),
+            thread: parseResult.GetValue(option: threadOption),
+            toSeconds: parseResult.GetValue(option: toOption) ?? double.MaxValue,
+            top: parseResult.GetValue(option: topOption),
+            trace: parseResult.GetValue(option: traceOption)
+        ));
+
+        return command;
+    }
+
     /// <summary>Creates <c>puck host</c>.</summary>
     /// <returns>The command.</returns>
     public static Command Create() =>
         new(
             description: "Verbs about the machine an agent runs on.",
             name: "host"
-        ) { CreateLoad(), CreateHeap(), CreateAllocations() };
+        ) { CreateLoad(), CreateHeap(), CreateAllocations(), CreateSamples() };
 }

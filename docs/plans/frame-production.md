@@ -479,11 +479,70 @@ across a benchmark chapter and divided by the frames.
       (`WorldCreationInstances.PackTransforms`, already forked) and the view
       graph's footprint walk (`WorldViewGraphHost.CompleteFootprints`).
 
-    The next steps, in order: make the footprint walk cost what moved (it walks
-    every window from string-keyed sets each frame, `ReserveArrivals` and
-    `DecideScreenFootprints`); then, if the chain still misses, the pipeline
-    with the camera late-latched and the three products above double-buffered
-    through the residency's two capture writers.
+12. **The footprint walk reads dense ids.** Built. `ReserveArrivals` and
+    `WantSightedWorlds` walked every screen footprint and filming camera once
+    a level, testing string-keyed sets, and `DecideScreenFootprints` tested
+    string sets on every pass of its fixed point. The host now derives a
+    topology once per set of screen footprints
+    (`WorldViewGraphHost.FootprintTopology`): view names to dense ids, each
+    edge's consumer and producer, portals by id, each consumer's edges and
+    each view's consuming portal. The walks visit only the edges out of the
+    views the last pass reached, in edge order, so their choices stand as
+    they were; a sight, its coverage and its occlusion answer are read once
+    an edge a frame (`EdgeSight`). Decision: the topology is derived, never
+    kept in step by hand. Invariant: it describes the current screen
+    footprints, filmed views and portals. Door: `Topology`, which compares
+    the screen list's identity, the portal version and the filmed count; the
+    host replaces the screen list whenever it changes any of the three.
+
+13. **The pipeline with a camera late-latch.** Decided, not built. Capture
+    frame N+1 on the frame thread while frame N's recordings run on the pool,
+    and place the camera the recording renders at submission. The order of
+    work:
+
+    - Double-buffer what a capture writes and a recording reads, indexed by
+      the frame's parity through the residency's two capture writers
+      (`SdfFrame.Writer`): the graph host's placements, footprints and
+      roots, the package's resolved views, and the composition's transform table, which
+      `SdfFrame.Writer.CopyFrom` borrows by reference today and must copy or
+      own per parity.
+    - Late-latch the camera: the host's capture places the cameras
+      (`WorldFramePresenter.PlaceComposedFrame`); the recording instead reads
+      a camera slot the presenter writes from the latest look input just
+      before `RenderGraphRuntime.RenderWaves` submits, as
+      [the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation)
+      requires (look input stays present-time).
+    - Invariant: a recording reads only its own frame's buffers, and the
+      camera it renders is the latest at submission. Door: the parity a
+      prepared frame carries (`RenderGraphRuntime.ReserveOutput` already
+      writes per-frame reservations), so a reader given another parity's
+      buffer is a type error, not a review finding.
+    - Latency: input to display stays one frame for look (the late-latched
+      camera) and becomes two frames for world state (a capture a frame
+      ahead), which the foundation allows.
+    - What shows it: `host.frames` produce falls to the larger of capture
+      plus pack and prepare plus record, rather than their sum.
+
+14. **Smaller cuts beside the chain.** Not built, each with what was read:
+
+    - `SdfWorldTables.JudgeMotionSlot` places every moved slot's carried boxes
+      (`CarriedBound.At`) before `SdfWorldShadows.Moved` decides the motion was
+      under a texel. With every motion scope met (`m_motionOpen == 0`) and a
+      rigid slot, a bound on the box's displacement from the pose change alone
+      (translation plus rotation times the carried box's radius about the
+      slot) would skip the placement; the drift still gathers, since `Moved`
+      measures against the box it last handed the entries (`m_judged`), not
+      against the slot's previous placement. The carry's order against the
+      pose (applied after it) has to be read before writing the bound.
+    - `WorldCreationInstances.PackTransforms` already visits only what woke,
+      forks the full poses and writes only changed slots
+      (`SdfMovedTransforms.Write`); the slots an idle animation moves change
+      every frame, so what remains is the rig's own evaluation
+      (`WorldGaitDrivers.ComposeDelta` for every shape, including shapes no
+      driver term moves). Precomputing each registration's driven shapes and
+      skipping the rest while the root holds still is the next CPU cut; moving
+      the drivers' evaluation to the GPU is the structural one, since the bake
+      and the draws already read each slot's transform.
 
 ## Systems considered
 
