@@ -113,12 +113,14 @@ lanes, [the release](#the-release), the
     `CaptureMotion` 8%. The source watch's polling costs a fifth of a core.
     Rules are now evaluated by change (the city's sheet 3.25M → 0.5M of
     4.25M), collision events only for listeners, kit bodies in partitions.
-  - **The moon:** a ship flies from the launch pad through the sky seam to a
-    landing on the moon and back, and the painting reaches the pole. The
-    look is not continuous: the moon in the valley's sky is unlit, the
-    pilot's view past the seam is broken (the debug world baked a second
-    time as the moon's neighbour), the sky snaps from blue to black at the
-    seam, and the pilot camera is the Moth's boom
+  - **The moon:** `world.benchmark run moon` flies the round trip from the
+    launch pad through the sky seam to a landing at the moon's pole and
+    back, on the ship's own camera, and the painting reaches the pole. The
+    moon is lit in the valley's sky by the day both worlds run, the sky
+    fades to space with height, and past the seam the seat sees the moon's
+    own scene with the ship drawn as it looks. Not continuous yet: the
+    valley's exposure blows out above about 1,500 m, the valley drops out
+    of view below at the seam, and the crossing stalls
     ([the trip to the moon](valley-and-moons.md#the-trip-to-the-moon)).
   - **Parked, unmerged, never run:** `origin/wip/frame-production` (one owed
     capture a frame, residencies packed and their uploads recorded side by

@@ -5836,6 +5836,10 @@ export type WorldAdjacency = {
    * An authored non-negative minimum ownership deadband in world units. The runtime still derives its contact/vertical safety threshold and uses the larger value; authoring this can widen a seam but never weaken its safety floor. Reciprocal rows must agree.
    */
   hysteresis?: number;
+  /**
+   * How a presentation of this world shows a seat that crossed the edge. Absent is Joined.
+   */
+  presentation?: WorldAdjacencyPresentation;
 };
 
 export type WorldAdjacencyBoundary = {
@@ -5860,6 +5864,8 @@ export type WorldAdjacencyBoundary = {
    */
   height: number;
 };
+
+export type WorldAdjacencyPresentation = "Joined" | "Apart";
 
 export type WorldAdjacencyUnavailable = "Closed";
 

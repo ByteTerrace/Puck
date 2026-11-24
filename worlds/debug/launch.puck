@@ -38,6 +38,8 @@ adjacencies [
     name: "sky"
     destination: "moon"
     counterpart: "sky"
+    // The moon is another place: past the seam a seat sees the moon's own scene, not this world's with a band of it.
+    presentation: Apart
     boundary {
       center [0, skySeamAltitude, 0]
       outwardYawDegrees: 0

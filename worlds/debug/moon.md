@@ -58,10 +58,30 @@ Headless, a seat's forward is world -Z whatever the ship's heading, so a
 scripted flight steers with `body.fly`'s forward and strafe as world axes and
 its rise along the ship's own up, which is away from the moon inside its reach.
 
+## The whole trip in one line
+
+`world.benchmark run moon` flies the round trip ([moon-route.puck](moon-route.puck)):
+the standard's `pilot` seat program works seat 1's own controls, so the seat
+boards on the pad with the context button, climbs through the seam with the
+boost held, crosses over the moon's pole above its reach, lands beside the
+arrival frame, and comes home the same way and steps out. The controls are the
+seat's, so they follow it across the seam. Each leg is a route `fly` step: a
+point to fly to, the world it is in, and for a seam the world it enters; a
+landing flies at the ground until the ship stands on it. `world.benchmark`
+reads the chapter it is on and, at the end, each chapter's report.
+
+While the seat rides the ship its camera is the ship's own
+(`shipCamera` in [ship.puck](../standard/ship.puck)), on either side of the
+seam. The sky thins as it climbs: the `altitude` clock
+([launch.puck](launch.puck)) reads how high the viewer stands, and
+[day.puck](day.puck) keys the air, the clouds and the stars of space on it.
+Past the seam the seat sees the moon's own scene.
+
 ## What it does not do yet
 
 The plan's [engine gaps](../../docs/plans/valley-and-moons.md#engine-gaps-on-the-path)
-lists them: the moon in the valley's sky is unlit, the sky changes in one frame
-at the seam and the pilot's view past it is not the moon's yet, the arrival
-frame stands on the side away from the valley, and the valley is not drawn in
-the moon's sky.
+lists them: above about 1,500 m the valley's exposure opens up and the ship
+blows out until the moon's exposure takes over at the seam, the valley is not
+drawn in the moon's sky and so drops out of view below at the seam, the
+arrival frame stands on the side away from the valley, and the crossing
+stalls for a moment.

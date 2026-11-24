@@ -64,6 +64,15 @@ row, the `camera.clearance` command, the `camera-boom` row and
 [chase-camera decision](../../../../docs/decisions/play.md#the-chase-camera)'s
 table. An absent `autoFirstPerson` makes automatic pull-in unavailable.
 
+A kit's `mount.camera` names the camera program a seat takes in place of
+`views.seatRig` while it rides or drives a body of that kit
+(`WorldMount.Camera`, `WorldSeatViewState.Ride`): the standard's ship authors
+one (`shipCamera` in `worlds/standard/ship.puck`). The presenter reads the
+perception anchor while the seat is routed to the boot authority and the
+delivered mount (`EntitySnapshot.Mount`) on any other, so the rig holds across
+a seam. Taking or leaving a rider camera drops the seat's requested boom
+distance.
+
 `views.programs` holds named camera programs no camera or seat resolves through
 directly: the cases a `selectProgram` or `blend` names. It joins the program
 namespace beside `views.seatRig`, `views.cameraRig` and every `cameras[].rig`.

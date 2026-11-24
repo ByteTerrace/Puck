@@ -59,6 +59,7 @@ public sealed class WorldSeatViewState {
             if (!string.Equals(a: camera, b: m_riderCamera, comparisonType: StringComparison.Ordinal)) {
                 m_riderCamera = camera;
                 m_riderSource = null;
+                m_riderViews = null;
                 m_distance = null;
             }
 
