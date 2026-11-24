@@ -1,4 +1,4 @@
-// Generated from shader interface 'place' (sha256/29dc8b51aa7fff89d515e7364d5e9efbd7382e1bf8f926e0d41fafa685d99da6). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'place' (sha256/4f37b3ef65e469c22329f2db05f595931a511d7974c88cf9e1a76443a804dffc). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_PLACE
 #define PUCK_SHADER_INTERFACE_PLACE
 
@@ -20,24 +20,31 @@ struct PlacePass {
     [[vk::offset(8)]] uint compareMode;
     [[vk::offset(12)]] uint _pad12;
     [[vk::offset(16)]] float4 crop;
-    [[vk::offset(32)]] uint letterbox;
-    [[vk::offset(36)]] uint _pad36;
-    [[vk::offset(40)]] uint _pad40;
-    [[vk::offset(44)]] uint _pad44;
-    [[vk::offset(48)]] float4 letterboxColor;
-    [[vk::offset(64)]] float4 rect;
-    [[vk::offset(80)]] float sharpness;
-    [[vk::offset(84)]] float wipe;
-    [[vk::offset(88)]] uint workCounterRow;
-    [[vk::offset(92)]] uint workCounterRowDetail;
+    [[vk::offset(32)]] float4 crops[16];
+    [[vk::offset(288)]] uint letterbox;
+    [[vk::offset(292)]] uint _pad292;
+    [[vk::offset(296)]] uint _pad296;
+    [[vk::offset(300)]] uint _pad300;
+    [[vk::offset(304)]] float4 letterboxColor;
+    [[vk::offset(320)]] float4 rect;
+    [[vk::offset(336)]] float4 rects[16];
+    [[vk::offset(592)]] float sharpness;
+    [[vk::offset(596)]] uint _pad596;
+    [[vk::offset(600)]] uint _pad600;
+    [[vk::offset(604)]] uint _pad604;
+    [[vk::offset(608)]] float4 sharpnesses[4];
+    [[vk::offset(672)]] uint sources;
+    [[vk::offset(676)]] float wipe;
+    [[vk::offset(680)]] uint workCounterRow;
+    [[vk::offset(684)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<PlacePass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] Texture2D<float4> base : register(t1, space3);
 [[vk::binding(2, 3)]] SamplerState baseSampler : register(s2, space3);
-[[vk::binding(3, 3)]] Texture2D<float4> source : register(t3, space3);
-[[vk::binding(4, 3)]] SamplerState sourceSampler : register(s4, space3);
-[[vk::binding(5, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> destination : register(u5, space3);
-[[vk::binding(6, 3)]] RWStructuredBuffer<uint> workCounters : register(u6, space3);
+[[vk::binding(3, 3)]] Texture2D<float4> source[16] : register(t3, space3);
+[[vk::binding(19, 3)]] SamplerState sourceSampler : register(s19, space3);
+[[vk::binding(20, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> destination : register(u20, space3);
+[[vk::binding(21, 3)]] RWStructuredBuffer<uint> workCounters : register(u21, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

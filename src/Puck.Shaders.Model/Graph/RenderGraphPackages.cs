@@ -164,6 +164,10 @@ public sealed record RenderGraphPackagePort(
 public sealed record RenderGraphPackage(string Id, IReadOnlyList<RenderGraphPackagePort> Inputs, IReadOnlyList<RenderGraphPackagePort> Outputs, IReadOnlyList<ShaderInterfaceMember> Members, string Summary, IReadOnlyDictionary<string, ShaderConfigField>? Config = null, RenderGraphPackageStages? Stages = null, bool PushesIndex = false, RenderGraphPackageFragment? Fragment = null) {
     /// <summary>Gets whether the package is a post-process package: one with <see cref="Stages"/>.</summary>
     public bool IsPostProcess => (Stages is not null);
+    /// <summary>Gets the input ports, counted from the last, that a pass naming the package may leave unbound: a pass
+    /// binds its inputs to the ports in order and may stop that many short of them. Zero for a package whose every
+    /// port a pass binds.</summary>
+    public int OptionalInputs { get; init; }
     /// <summary>Gets whether the package's shaders count their own work into the node's kernel counters: whether its
     /// <see cref="Members"/> declare <see cref="ShaderWorkCounters.Members"/>. A package that runs as the one pass naming
     /// it counts as that pass; a fragment's passes state each whether it counts
@@ -242,6 +246,31 @@ public sealed class RenderGraphPackageCatalog {
     /// part of the source shown (<see cref="PlaceCrop"/>). <see cref="PlaceCompareMode"/> selects a held/current
     /// comparison instead of normal placement, with <see cref="PlaceWipe"/> controlling its divider.</summary>
     public const string Place = "place";
+    /// <summary>The id of the placement pass that places several sources at once: <see cref="Place"/>'s kernel and
+    /// interface over one base and <see cref="PlaceSourceCount"/> sources, each reconstructed into its own rect, a later
+    /// source over an earlier one, in one dispatch whatever number of them is shown. The world's root places its views
+    /// and panes through it, so one no layout shows costs nothing and those shown cost one write of each output pixel.
+    /// A host places each source by the name of the version bound to its port (<c>IRenderGraphPlacements</c>); a source
+    /// the host does not place is not shown. A pass binds from one source to all of them
+    /// (<see cref="RenderGraphPackage.OptionalInputs"/>).</summary>
+    public const string PlaceViews = "place.views";
+    /// <summary>The sources one <see cref="Place"/> kernel places: the length of its source array and of the pass
+    /// block's per-source rects, crops and sharpnesses. A <see cref="Place"/> pass places one and binds its base at the
+    /// rest; a <see cref="PlaceViews"/> pass places this many.</summary>
+    public const int PlaceSourceCount = 16;
+    /// <summary>The <see cref="Place"/> pass-block value holding the sources the recording places, from one to
+    /// <see cref="PlaceSourceCount"/>, which its recorder writes each frame (<c>uint</c>).</summary>
+    public const string PlaceSources = "sources";
+    /// <summary>The <see cref="Place"/> pass-block rows holding each source's destination rect, as
+    /// <see cref="PlaceRect"/> states one; a source not shown holds an empty rect. The recorder writes them each frame:
+    /// the host's placement, or the config's rect for a pass no host places.</summary>
+    public const string PlaceRects = "rects";
+    /// <summary>The <see cref="Place"/> pass-block rows holding the part of each source its rect shows, as
+    /// <see cref="PlaceCrop"/> states one.</summary>
+    public const string PlaceCrops = "crops";
+    /// <summary>The <see cref="Place"/> pass-block rows holding each source's sharpness, four a row, as
+    /// <see cref="PlaceSharpness"/> states one.</summary>
+    public const string PlaceSharpnesses = "sharpnesses";
     /// <summary>The <see cref="Place"/> comparison mode: 0 places normally, 1 wipes, 2 splits and 3 shows absolute
     /// RGB difference. In comparison modes the source is the held rect and the base is the current whole image.</summary>
     public const string PlaceCompareMode = "compareMode";
@@ -272,7 +301,8 @@ public sealed class RenderGraphPackageCatalog {
     public const string PlaceSharpness = "sharpness";
     /// <summary>The name of <see cref="Place"/>'s base image in its pass group, the first input.</summary>
     public const string PlaceBase = "base";
-    /// <summary>The name of <see cref="Place"/>'s source image in its pass group, the second input.</summary>
+    /// <summary>The name of <see cref="Place"/>'s source images in its pass group, the inputs after the base:
+    /// <see cref="PlaceSourceCount"/> of them, of which a recording reads the first <see cref="PlaceSources"/>.</summary>
     public const string PlaceSource = "source";
     /// <summary>The name of <see cref="Place"/>'s destination storage image in its pass group, the output.</summary>
     public const string PlaceDestination = "destination";
@@ -446,9 +476,13 @@ public sealed class RenderGraphPackageCatalog {
     /// document pass compiling the same kernel derives from ports named for them. The kernel loads every texel, so it
     /// never samples through either sampler.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> PlaceMembers { get; } = [
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: PlaceSources, type: ShaderValueType.Uint),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: PlaceSourceCount, name: PlaceRects, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: PlaceSourceCount, name: PlaceCrops, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: ((PlaceSourceCount + 3) / 4), name: PlaceSharpnesses, type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: PlaceBase, type: ShaderValueType.Float4),
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: (PlaceBase + ShaderPipelinePassPorts.SamplerSuffix)),
-        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: PlaceSource, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, length: PlaceSourceCount, name: PlaceSource, type: ShaderValueType.Float4),
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: (PlaceSource + ShaderPipelinePassPorts.SamplerSuffix)),
         ShaderInterfaceMember.StorageImage(format: WorkingFormat, group: ShaderInterfaceGroup.Pass, name: PlaceDestination, type: ShaderValueType.Float4),
         .. ShaderWorkCounters.Members,
@@ -610,6 +644,14 @@ public sealed class RenderGraphPackageCatalog {
             Members: PlaceMembers,
             Summary: "The base image with the source reconstructed into a rect over it, bilinear to clamped Catmull-Rom by sharpness."
         ),
+        new RenderGraphPackage(
+            Config: PlaceConfig,
+            Id: PlaceViews,
+            Inputs: [.. Enumerable.Repeat(count: (1 + PlaceSourceCount), element: RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead))],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
+            Members: PlaceMembers,
+            Summary: "The base image with each of up to sixteen sources reconstructed into its own rect over it, a later source over an earlier one, in one dispatch."
+        ) { OptionalInputs = (PlaceSourceCount - 1) },
         .. SourceConversions.Select(selector: static id => new RenderGraphPackage(
             Id: id,
             Inputs: [
