@@ -1764,7 +1764,7 @@ public static partial class WorldDefinitionValidator {
             }
             if (errors.Count > 0) { return null; }
 
-            ValidateSearch(definition: definition, errors: errors, recurringWork: work.Budget.WorkUnitsPerTick, rules: rules);
+            ValidateSearch(definition: definition, errors: errors, rules: rules);
             if ((errors.Count > 0) || !run.RetainCompilation) { return null; }
 
             tables = WorldRuleCompilation.CompileTables(definition, context);

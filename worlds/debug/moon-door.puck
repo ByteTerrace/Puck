@@ -36,9 +36,8 @@ state {
   ]
 }
 
-// A press on the step offers the pairing, binds the door to the presser and starts the lease. A seat opens it; a visitor
-// walks through a door its host opened.
-for b in range(0, seatPopulation) {
+// A press on the step offers the pairing, binds the door to the presser and starts the lease, a seat's or a visitor's.
+for b in range(0, (seatPopulation + visitorPopulation)) {
   let suffix = ((b == 0) ? "" : $"-{b}")
   rule $"moon-door-offer{suffix}" {
     when (channel(body, b, interact) >= 1 and
@@ -60,7 +59,7 @@ rule "moon-door-lapse" {
   when moonDoorOffer == 1 and $tick >= moonDoorUntil
   mode: Edge
   moonDoorOffer = 0
-  for b in range(0, seatPopulation) {
+  for b in range(0, (seatPopulation + visitorPopulation)) {
     moonDoorPass[$"{b}"] = 0
   }
 }
