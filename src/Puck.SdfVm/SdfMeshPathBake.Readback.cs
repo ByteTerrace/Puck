@@ -15,72 +15,81 @@ public sealed partial class SdfMeshPathBake {
     public const long ReadbackBytes = ((((long)SdfGpuWork.SlotCount) * SdfWorldPackage.MeshBakeMaxSamples) * 2L * sizeof(uint));
 
     // Invariant: every host byte the bake holds for an answer it has not finished with (a batch's copy of its samples, a
-    // sample set read in place of a dispatch) is charged to m_readback, whose reservation is ReadbackBytes, so the charge
-    // never asks the account for room and is never refused. The one door that grants those bytes is the take: it adds a
-    // batch's or a probe's output bytes to m_readbackPending, under the gate, only while they fit what is left of
-    // ReadbackBytes, and takes nothing at all until the reservation is held. The bytes leave m_readbackPending only when
-    // their storage is freed (AnsweredSamples.Release, or a batch that never copied, ReleaseReadback). The reservation is taken
-    // before any group of the bake is admitted and is held while any group is still baking or any answer is held, so the
-    // groups the account admitted can always be answered: a readback never waits on room the groups it answers hold.
+    // sample set read in place of a dispatch) is charged to m_readback within its reservation, so the charge never asks
+    // the account for room and is never refused. The reservation is promised as it is used: it covers the output bytes
+    // granted and not yet freed (m_readbackPending) and what the take in progress has promised and not yet granted
+    // (m_readbackTaking), at the charge their storage makes (ChargeOf), and nothing more. The one door that raises it is
+    // the take (PromiseReadback), which takes a lattice only once its answer is promised and only while the granted bytes
+    // fit ReadbackBytes; the bytes leave m_readbackPending only when their storage is freed (AnsweredSamples.Release, or a
+    // batch that never copied), and every change of either sum settles the reservation to them under m_readbackGate. A
+    // promise is a progress floor (Owner.TryReserveProgress): the groups the account admitted can be answered past the
+    // room they hold themselves, within the host bar.
     private readonly MemoryAccount.Owner m_readback = MemoryAccount.Shared.CreateOwner(allowance: MemoryAllowance.Authoring, memoryClass: MemoryClass.Workspace, name: "mesh-bake-readback");
-    // The output bytes of the batches and probes taken whose storage is not yet freed; written with Interlocked.
+    // Under m_readbackGate: the output bytes of the batches and probes taken whose storage is not yet freed; the bytes the
+    // take in progress promised and has not granted yet; the reservation m_readback holds; and whether a refused promise
+    // has been reported since one was last made.
     private long m_readbackPending;
-    // Under m_readbackGate: whether m_readback holds its reservation; whether the latest take found nothing to take (no
-    // group still baking and no slice), or the bake's residency was released, so the reservation goes once no answer
-    // holds any of it; and whether the wait for the reservation has been reported since it was last held.
-    private bool m_readbackReserved;
-    private bool m_readbackIdle;
-    private bool m_readbackRetired;
+    private long m_readbackTaking;
+    private long m_readbackPromised;
     private bool m_readbackReported;
     private readonly Lock m_readbackGate = new();
 
-    // Takes the readback reservation for a take that has lattices to take, or keeps it; false when the account has no
-    // room for it (or the residency was released), and the take then takes nothing, so no group of the bake is admitted
-    // without it. Under the gate.
-    private bool HoldReadback() {
+    // Promises the readback a take's lattices answer with: the bytes granted, and `taking`, everything the take has taken
+    // or is about to take that is not granted yet. False when the account has no room for the rise, and the take then takes
+    // no lattice past those already promised. Under the gate, on the take.
+    private bool PromiseReadback(long taking) {
         lock (m_readbackGate) {
-            m_readbackIdle = false;
-            if (m_readbackReserved) { return true; }
-            if (m_readbackRetired) { return false; }
-            if (!m_readback.TryReserveProgress(peak: ReadbackBytes)) {
-                if (!m_readbackReported) { SdfMeshBakeReport.ReadbackDeferred(residency: Residency, bytes: ReadbackBytes); m_readbackReported = true; }
+            var promise = ChargeOf(bytes: (m_readbackPending + taking));
+
+            if ((promise > m_readbackPromised) && !m_readback.TryReserveProgress(peak: promise)) {
+                if (!m_readbackReported) { SdfMeshBakeReport.ReadbackDeferred(residency: Residency, bytes: promise); m_readbackReported = true; }
                 m_accounts.ReadbackWaits++;
                 return false;
             }
             m_readbackReported = false;
-            m_readbackReserved = true;
+            m_readbackPromised = Math.Max(val1: m_readbackPromised, val2: promise);
+            m_readbackTaking = taking;
             return true;
         }
     }
-    // Records that a take found nothing to take, and lets the reservation go if no answer holds any of it. Under the gate.
-    private void IdleReadback() {
+    // Ends a take: what it promised and did not grant is promised no longer. Under the gate, on the take, after its grants.
+    private void EndReadbackTake() {
         lock (m_readbackGate) {
-            m_readbackIdle = true;
-            ReleaseUnheldReadback();
+            m_readbackTaking = 0L;
+            SettleReadback();
         }
     }
-    // Under m_readbackGate: lets the reservation go when the bake needs none (idle or retired) and no answer holds any.
-    private void ReleaseUnheldReadback() {
-        if (!m_readbackReserved || !(m_readbackIdle || m_readbackRetired) || (Interlocked.Read(location: ref m_readbackPending) != 0L)) { return; }
-        m_readback.ReleaseReservation();
-        m_readbackReserved = false;
-    }
-    // The readback bytes the take may still grant: what is left of ReadbackBytes.
-    private long ReadbackRoom => (ReadbackBytes - Interlocked.Read(location: ref m_readbackPending));
+    // Under m_readbackGate: lowers the reservation to the bytes granted and being taken.
+    private void SettleReadback() {
+        var promise = ChargeOf(bytes: (m_readbackPending + m_readbackTaking));
 
-    // Grants a batch or probe its output bytes, which the take found within ReadbackRoom.
-    private void GrantReadback(long bytes) => _ = Interlocked.Add(location1: ref m_readbackPending, value: bytes);
+        if (promise >= m_readbackPromised) { return; }
+        _ = m_readback.TryReserve(peak: promise);
+        m_readbackPromised = promise;
+    }
+    // The bytes an answer's storage charges for `bytes` of output: the same bytes from a native allocator, and at most
+    // twice them from the rented arrays a bake with none uses, which round a length up to their bucket.
+    private long ChargeOf(long bytes) => ((Library.Allocator is null) ? (2L * bytes) : bytes);
+    // The readback bytes the take may still grant: what is left of ReadbackBytes.
+    private long ReadbackRoom {
+        get {
+            lock (m_readbackGate) { return (ReadbackBytes - m_readbackPending); }
+        }
+    }
+
+    // Grants a batch or probe its output bytes, which the take promised (PromiseReadback).
+    private void GrantReadback(long bytes) {
+        lock (m_readbackGate) {
+            m_readbackPending += bytes;
+            m_readbackTaking = Math.Max(val1: 0L, val2: (m_readbackTaking - bytes));
+        }
+    }
     // Gives back the output bytes a batch or probe was granted, once their storage is freed or was never made.
     internal void ReleaseReadback(long bytes) {
         if (bytes == 0L) { return; }
-        if (Interlocked.Add(location1: ref m_readbackPending, value: -bytes) != 0L) { return; }
-        lock (m_readbackGate) { ReleaseUnheldReadback(); }
-    }
-    // Marks the residency released: the reservation goes with the last answer, or now when none is held.
-    private void RetireReadback() {
         lock (m_readbackGate) {
-            m_readbackRetired = true;
-            ReleaseUnheldReadback();
+            m_readbackPending -= bytes;
+            SettleReadback();
         }
     }
 

@@ -421,7 +421,7 @@ public sealed partial class SdfMeshPathBake {
     private bool Schedule(Group group, Action work) {
         if (!group.QueueWork()) { return false; }
         // The first stage queued after a group's admission ends its lead.
-        if (group.TakeAdmittedAt() is var admittedAt and not 0L) { PoolBacklog.ObserveLead(seconds: Stopwatch.GetElapsedTime(startingTimestamp: admittedAt).TotalSeconds); }
+        EndLead(group: group);
         Enqueue(group: group, urgent: false, work: work);
         return true;
     }
@@ -452,6 +452,9 @@ public sealed partial class SdfMeshPathBake {
             } finally {
                 group.EndWork();
                 Offer();
+                // A stage that ended may have given room back (a group done lets its reservation go), which the
+                // refinement queue's head may be waiting for.
+                Refinement.Start();
             }
         }
         lock (WorkGate) {
@@ -553,11 +556,14 @@ public sealed partial class SdfMeshPathBake {
             m_parked.Clear();
         }
         lock (WorkGate) { _ = WorkQueue.RemoveAll(match: item => { if (!item.Group.Retired) { return false; } item.Group.EndWork(); return true; }); }
-        RetireReadback();
+        Refinement.Drop(bake: this);
     }
 
     // A worker: runs the queued work, answers first, then the highest priority, and waits for more once none is queued.
+    // It never waits on the memory account: work the account has no room for waits in a queue holding no worker (the
+    // refinement queue, a parked copy, a declined load's reload), so the account's one waiting door answers at once here.
     private static void Work() {
+        Puck.Hosting.Jobs.MemoryAccount.NeverWaitOnThisThread();
         while (true) {
             if (TakeWork(stage: out var stage) is not { } work) {
                 // Idle only with nothing queued, under the gate the queuing side wakes idle workers under, so no work

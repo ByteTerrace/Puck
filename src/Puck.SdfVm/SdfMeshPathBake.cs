@@ -940,6 +940,9 @@ public sealed partial class SdfMeshPathBake {
         batch = null;
         heldTaps = 0L;
         mostTaps = Math.Clamp(value: mostTaps, min: (firstFits ? 0L : 1L), max: BatchTaps);
+        // Room the account gave back since a worker last ran the refinement queue's door (a residency's tables let go, the
+        // caches trimmed) starts its head here, off the gate.
+        Refinement.Start();
         using (EnterFrameGate(site: BakeGate.Take)) {
             if ((field is null) || !ReferenceEquals(objA: field, objB: m_program)) { return false; }
             // Work that finishes from here on offers the next take.
@@ -968,12 +971,6 @@ public sealed partial class SdfMeshPathBake {
             // taken, whether or not an owed take could take it.
             var pending = (from < m_groups.Count);
 
-            // No lattice is taken, and no group admitted, without the readback reservation that answers it.
-            if (!pending && (m_slice is null)) {
-                IdleReadback();
-            } else if (!HoldReadback()) {
-                return false;
-            }
             // A slice's lattices come first, within the same batch, so a long bake never holds a diagnostic back; it owes
             // the frame no hole, so an owed take leaves it to the next.
             while (!owedOnly && (m_slice is { } slice) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)) {
@@ -983,7 +980,7 @@ public sealed partial class SdfMeshPathBake {
                     slice.Return(ticket: lattice);
                     break;
                 }
-                if ((readback + next.OutputBytes) > ReadbackRoom) {
+                if (((readback + next.OutputBytes) > ReadbackRoom) || !PromiseReadback(taking: (readback + next.OutputBytes))) {
                     slice.Return(ticket: lattice);
                     break;
                 }
@@ -1015,9 +1012,13 @@ public sealed partial class SdfMeshPathBake {
             var wanting = m_wantingHeap;
 
             if (waiting > 0) {
-                // While the pool holds the stages an admission's lead would only wait behind, no group can begin its final
-                // lattice, so the groups wanting an admission are not read at all.
-                if (admitted > 0) {
+                // While the pool holds the stages an admission's lead would only wait behind, or the refinement queue holds
+                // as many sampled lattices waiting for room as the pool has workers to refine them, no group can begin its
+                // final lattice, so the groups wanting an admission are not read at all: a group admitted then would only
+                // wait in one queue or the other holding its lattice.
+                if (Refinement.Waiting >= Workers) {
+                    admissionWaits = true;
+                } else if (admitted > 0) {
                     queued = QueuedStages();
                     admissionWaits = Backlogged(awaiting: awaiting, queued: queued);
                 }
@@ -1058,15 +1059,16 @@ public sealed partial class SdfMeshPathBake {
                     stop = 1;
                     break;
                 }
-                // A lattice whose answer the readback reservation has no room left for waits until earlier answers end
-                // (ReadbackBytes), and a smaller one behind it may fit; it is not admitted before then.
-                if ((readback + next.OutputBytes) > ReadbackRoom) {
+                // A lattice whose answer the readback has no room left for, under ReadbackBytes or in the account, waits
+                // until earlier answers end, and a smaller one behind it may fit; it is not admitted before then.
+                if (((readback + next.OutputBytes) > ReadbackRoom) || !PromiseReadback(taking: (readback + next.OutputBytes))) {
                     stop = 4;
                     continue;
                 }
-                // A group starting its final lattice holds that lattice and everything meshed from it until it lands,
-                // so the process account admits its simultaneous peak; the rest keep their small refining lattices.
-                // A first slab returned unanswered keeps the admission it took.
+                // A group starting its final lattice holds that lattice while its slabs are sampled, so the process
+                // account admits what the lattice holds then (SampledPeakOf); its refinement reserves the rest once it
+                // leaves the refinement queue (Refinement). The rest keep their small refining lattices. A first slab
+                // returned unanswered keeps the admission it took.
                 if ((next.Slab == 0) && !group.Admitted) {
                     if (admissionWaits) { continue; }
                     // A group admitted while the pool already holds the stages its workers drain in an admission's
@@ -1077,7 +1079,7 @@ public sealed partial class SdfMeshPathBake {
                         continue;
                     }
 
-                    var peak = Math.Max(val1: PeakOf(final: group.Final!), val2: group.PeakFloor);
+                    var peak = SampledPeakOf(final: group.Final!);
 
                     // The account's host pool paces admission: its budget, and the machine's free memory as the
                     // account reads it.
@@ -1116,6 +1118,8 @@ public sealed partial class SdfMeshPathBake {
             // The heaps hold no group between takes, so none outlives the list that held it.
             ready.Clear();
             wanting.Clear();
+            if (lattices.Count > 0) { GrantReadback(bytes: readback); }
+            EndReadbackTake();
             if (pending) {
                 if (lattices.Count == 0) { m_accounts.IdleTakes++; }
                 switch (stop) {
@@ -1132,7 +1136,6 @@ public sealed partial class SdfMeshPathBake {
             var sampledAt = 0;
 
             foreach (var (handle, snapshot) in m_takenSampled) { sampled[sampledAt++] = (handle, snapshot); }
-            GrantReadback(bytes: readback);
             batch = new SdfMeshBakeBatch(Lattices: [.. lattices], Tickets: [.. tickets]) {
                 Bake = this,
                 Readback = readback,
@@ -2179,6 +2182,7 @@ public sealed partial class SdfMeshPathBake {
         }
 
         FinalLattice? emptied = null;
+        var refines = false;
 
         using (EnterGate(site: BakeGate.Slab)) {
             group.InFlight = false;
@@ -2199,14 +2203,22 @@ public sealed partial class SdfMeshPathBake {
             } else {
                 group.Next = null;
                 group.Contouring = true;
-                SchedulePrepare(final: final, group: group);
+                EndLead(group: group);
+                refines = true;
             }
         }
         emptied?.Dispose();
+        // The refinement waits in the queue for room for its peak, holding the lattice and no worker (Refinement).
+        if (refines) { Refinement.Enqueue(bake: this, final: final, group: group); }
     }
     // Builds a group's sampled lattice from its final lattice and chooses the cells it refines: their fine samples are
-    // measured next, or, with none, the gradients the contour reads.
-    private void Prepare(Group group, FinalLattice final) {
+    // measured next, or, with none, the gradients the contour reads. Runs only as a refinement the queue's door started,
+    // which reserved the refinement's peak (Refinement.Start).
+    private void Prepare(Refinement refinement) {
+        if (!refinement.Started) { throw new InvalidOperationException(message: "A refinement runs only once the refinement queue has reserved its peak."); }
+
+        var group = refinement.Group;
+        var final = refinement.Final;
         ReadOnlyMemory<Vector4> points = default;
         string? refusal = null;
         var started = Stopwatch.GetTimestamp();
@@ -2246,7 +2258,8 @@ public sealed partial class SdfMeshPathBake {
         if (empty) {
             if (refusal is not null) { SdfMeshBakeReport.Refused(refusal: refusal, selector: group.Selector); } else { StoreEmpty(group); }
         } else {
-            // The refinement now names its fine samples, so the admission narrows from their bound to their count.
+            // The refinement now names its fine samples, so the reservation the queue's door took narrows from their bound
+            // to their count.
             _ = group.Memory.TryReserve(peak: Math.Max(val1: PeakOf(final: final, fineSamples: ((final.Stage == FinalStage.Refinement) ? points.Length : 0)), val2: group.PeakFloor));
             final.Points = points;
         }
@@ -2519,7 +2532,6 @@ public sealed partial class SdfMeshPathBake {
     // A stage's scheduling is a method of its own: a lambda that captures a parameter makes its method allocate the
     // closure on entry, before any early return, and the answer methods return early on every chunk but a round's last.
     private void ScheduleLoad(Group group) => Schedule(group: group, work: () => Load(group: group));
-    private void SchedulePrepare(Group group, FinalLattice final) => Schedule(group: group, work: () => Prepare(final: final, group: group));
     private void ScheduleChooseCrossings(Group group, FinalLattice final) => Schedule(group: group, work: () => ChooseCrossings(final: final, group: group));
     private void ScheduleContour(Group group, SdfSampledLattice lattice) => Schedule(group: group, work: () => Contour(group: group, lattice: lattice));
     private void ScheduleSplit(Group group) => Schedule(group: group, work: () => Split(group: group));
@@ -2711,10 +2723,11 @@ public sealed partial class SdfMeshPathBake {
     private void Load(Group group) {
         var loaded = Library.TryLoad(declined: out var declined, form: (group.Dynamic ? group.Form : null), geometry: (group.LoadsForm ? SdfMeshLibrary.FormGeometry(form: group.Form) : group.Sealed), identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refusal: out var refusal);
 
-        // A bake that draws stored rungs alone never bakes what the store holds because the account had no room to
-        // read it: a tier's replacement gives its place back, so the group keeps drawing the tier it has room for, and
-        // a group with nothing of its own to draw reads its entry again later.
-        if (!loaded && declined && (Library.Policy == SdfMeshCachePolicy.Stored)) {
+        // A bake never bakes what the store holds because the account had no room to read it at once (a worker never
+        // waits for room, MemoryAccount.NeverWaitOnThisThread), since the bake would need more room than the read: a
+        // tier's replacement gives its place back, so the group keeps drawing the tier it has room for, and a group with
+        // nothing of its own to draw reads its entry again later.
+        if (!loaded && declined) {
             Library.Cache.Count(kind: SdfMeshCache.LoadsDeclined);
             if (!Decline(group: group)) { Reload(group: group); }
             return;

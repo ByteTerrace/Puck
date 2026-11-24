@@ -3233,13 +3233,16 @@ holds a quarter of the medium tier's slots, in its volume, its device tables and
 its hit cache. A residency parked for `SdfWorldResidency.ForgetLightingSeconds`
 gives its measured volume back too (its probe cache, volume words and trace
 scene, all host memory), and a wake after that lights the world from nothing.
-A bake group's admission still promises its refinement's whole bound
-(`SdfSampledLattice.FineSampleBound`, 384-490 MB for any large lattice) from
-the moment it starts sampling, frames before it holds any of it; promising
-only the sampled lattice and raising at the refinement starved the bake on the
-RTX 2060 (no group refined in four minutes of a cold boot), so the rise has to
-come with a refinement queue the workers never wait in, and admissions paced
-by it.
+A bake group's admission promises only what its sampled lattice holds; its
+refinement waits in one queue for every bake in the process, holding its
+lattice and no worker, and takes its whole bound
+(`SdfSampledLattice.FineSampleBound`) only as the queue's door starts it
+(`SdfMeshPathBake.Refinement`), narrowing to the fine samples it measured
+once it has them. Admissions stop while the queue holds as many lattices as
+the pool has workers, and no bake worker waits on the account
+(`MemoryAccount.NeverWaitOnThisThread`): a store read it has no room for is
+read again later. A bake's readback is promised as its lattices are taken,
+not whole.
 
 The readings above are owed to a GPU leg, and they decide most on the RTX
 2060 machine, where the region refuses detail even warm.
