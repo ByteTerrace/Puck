@@ -778,17 +778,6 @@ wait behind them.
    lane. Check: `host.frames` shows the step outside the frame's interval on
    the route, and `world.counters world.tick` shows `pump-waits` near zero
    per `host-steps`.
-3. **A draw record reads its slot's transform.** A draw's record is
-   `SdfMeshRecord.DrawWords` words that hold its matrix, its normal matrix and
-   its world box (`SdfMesh`'s `WritePose`), and the CPU rewrites those words
-   whenever the body moves. `cpu-frame-2` cut that to the pose words alone.
-   The replacement stores the slot's index in the record and has the kernels
-   read the transform row the frame already uploads (`sdfDynamicTransformRow`)
-   and derive the normal matrix and the box on the GPU, so a moving body
-   writes one row. Check: `world.counters`' `sdf.instances.records.posed`
-   counts no record for a body that only moved, and the route's stills are
-   unchanged within the noise floor. At scale: hundreds of
-   moving bodies cost rows, not records.
 4. **Presentation queries stop interpreting the field on the CPU.** The
    creation effectors' surface probes (`WorldCreationInstances.ApplyEffectors`)
    and the chase camera's clearance march (`WorldCameraClearance.March`) walk
@@ -872,7 +861,8 @@ wait behind them.
    Built: a paced frame serves at most one residency minimum, readers request
    captures at their scheduled cadence, and the captured residencies pack and
    record their uploads as forks of the job pool with a residency a partition.
-   Left, in [its order](frame-production.md#the-steps): routed scenes captured side
+   Mesh compaction marks only rows that reference moved meshes, using the same
+   index for every residency. Left, in [its order](frame-production.md#the-steps): routed scenes captured side
    by side (the largest step left: every routed capture calls back into the
    one binder), one fork for a frame's recordings, and a pump that visits what
    completed. Check: `world.counters sdf.captures` across a benchmark chapter,

@@ -36,6 +36,19 @@ public struct TickClock {
 
         return quotient;
     }
+
+    /// <summary>Returns the first timestamp after the last sample that accrues the given whole engine ticks.</summary>
+    /// <param name="ticks">The engine ticks to accrue. Zero gives the last sample's timestamp.</param>
+    /// <returns>The deadline in the clock's timestamps.</returns>
+    /// <exception cref="OverflowException">The deadline is outside the timestamp range.</exception>
+    public long DeadlineAfter(ulong ticks) {
+        if (ticks == 0UL) { return m_previousTimestamp; }
+
+        var remaining = (((UInt128)ticks * m_frequency) - m_remainder);
+        var duration = FixedTickConversion.StepsCovering(engineTicks: remaining, stepTicks: FixedTickConversion.TicksPerSecond);
+
+        return checked(m_previousTimestamp + (long)duration);
+    }
     /// <summary>Starts a clock over <paramref name="time"/> whose first sample measures from now.</summary>
     /// <param name="time">The host's clock: <see cref="TimeProvider.System"/> outside a law.</param>
     /// <returns>The started clock.</returns>

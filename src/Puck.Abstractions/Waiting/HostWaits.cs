@@ -261,8 +261,10 @@ public static class HostWaits {
     /// <param name="deadlineTimestamp">The deadline, as a <paramref name="time"/> timestamp.</param>
     /// <param name="time">The host loop's clock.</param>
     /// <param name="precisionWaiter">The platform's high-resolution waiter, or <see langword="null"/>.</param>
+    /// <param name="ready">Whether the host should return early after a service ran. The service must wake this
+    /// thread when its work is ready to run.</param>
     /// <exception cref="ArgumentNullException"><paramref name="time"/> is <see langword="null"/>.</exception>
-    public static void Pace(long deadlineTimestamp, TimeProvider time, IPrecisionWaiter? precisionWaiter) {
+    public static void Pace(long deadlineTimestamp, TimeProvider time, IPrecisionWaiter? precisionWaiter, Func<bool>? ready = null) {
         ArgumentNullException.ThrowIfNull(argument: time);
 
         if ((CurrentSlot?.Served is not { } served) || (served.Count == 0)) {
@@ -287,6 +289,7 @@ public static class HostWaits {
 
             if (serve) {
                 due = served.Run(deadlineTimestamp: deadlineTimestamp, time: time);
+                if (ready?.Invoke() == true) { return; }
                 serve = false;
 
                 continue;

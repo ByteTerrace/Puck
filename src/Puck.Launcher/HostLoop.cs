@@ -155,6 +155,9 @@ public sealed class HostLoop(
         // Set on the simulation's thread when a pending step can make progress, and taken by the service below.
         var progressed = 0;
         System.Runtime.ExceptionServices.ExceptionDispatchInfo? resumeFault = null;
+        Func<bool>? stepCollected = ((produce is null) && (pump is not null))
+            ? () => !pump.StepPending || (resumeFault is not null)
+            : null;
         // Resumes the open step beside the frame: it collects what finished and hands over what follows in the same
         // step. After produce it also continues the burst (continueBurst, with the iteration's step width): each step
         // still due from the iteration's own interval begins after a control phase, from the iteration's own input
@@ -277,6 +280,19 @@ public sealed class HostLoop(
                 if (wait is not null) {
                     wait();
                     resumeFault?.Throw();
+                } else if ((produce is null) && beside && !pacing.IsUnpaced && (pump is not null)) {
+                    // Headless has no presentation deadline. Sleep only to the next due tick, or, if it is
+                    // already due behind an open step, start a fresh control phase as soon as collection finishes.
+                    var debt = pump.UnbegunTicks;
+                    var blocked = (debt >= stepTicks) && pump.StepPending;
+                    var headlessDeadline = (blocked
+                        ? time.GetTimestamp() + (frequency / (long)m_ratePerSecond)
+                        : clock.DeadlineAfter(ticks: stepTicks - Math.Min(val1: debt, val2: stepTicks)));
+
+                    HostWaits.Pace(deadlineTimestamp: headlessDeadline, precisionWaiter: m_waiter, ready: (blocked ? stepCollected : null), time: time);
+                    resumeFault?.Throw();
+                    timeline.NoteLate(ticks: Math.Max(val1: 0L, val2: (time.GetTimestamp() - headlessDeadline)));
+                    timeline.Mark(phase: HostFramePhase.Wait);
                 } else if (!pacing.IsUnpaced || pump?.StepPending == true) {
                     var period = (frequency / ((long)m_ratePerSecond));
 
