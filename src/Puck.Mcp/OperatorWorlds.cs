@@ -48,9 +48,11 @@ public sealed record OperatorWorldLaunch(
 /// <see langword="null"/> for none.</param>
 /// <param name="Width">The window's client width in pixels, or <see langword="null"/> for the document's.</param>
 /// <param name="Height">The window's client height in pixels, or <see langword="null"/> for the document's.</param>
+/// <param name="FrameBar">The device profile whose frame bar sizes the window (<c>--frame-bar</c>): a profile's name, or
+/// <c>auto</c> for the adapter's own; <see langword="null"/> for none.</param>
 public sealed record OperatorWorldRequest(string Checkout, string Document, Puck.World.WorldBackendPreference? Backend, string? CacheDirectory, string? CaptureTool, string Holder, string? Lane,
     bool Windowed, bool OwnerPlay, bool Paused, bool Lockstep, string StateDirectory, string TemporaryDirectory, TimeSpan Wait,
-    string? Listen = null, string? Connect = null, string? FederationKeyFile = null, int? Width = null, int? Height = null);
+    string? Listen = null, string? Connect = null, string? FederationKeyFile = null, int? Width = null, int? Height = null, string? FrameBar = null);
 /// <summary>A started World, or why none started.</summary>
 /// <param name="Process">The started World, its streams redirected and unread, or <see langword="null"/> when none started.</param>
 /// <param name="Build">The full path of the <c>Puck.World.dll</c> it runs, or <see langword="null"/>.</param>
@@ -167,6 +169,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         string? federationKeyFile = null;
         int? width = null;
         int? height = null;
+        string? frameBar = null;
 
         foreach (var (key, value) in (arguments ?? new Dictionary<string, JsonElement>())) {
             if ((key == "document") && (value.ValueKind == JsonValueKind.String) && !string.IsNullOrWhiteSpace(value: value.GetString())) {
@@ -197,6 +200,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 federationKeyFile = Path.GetFullPath(path: value.GetString()!);
             } else if ((key is "width" or "height") && (value.ValueKind == JsonValueKind.Number) && value.TryGetInt32(value: out var pixels) && (pixels is >= 64 and <= 16384)) {
                 if (key == "width") { width = pixels; } else { height = pixels; }
+            } else if ((key == "frameBar") && (value.ValueKind == JsonValueKind.String) && (value.GetString() is { Length: > 0 } named) && named.All(predicate: static character => (char.IsAsciiLetterOrDigit(c: character) || (character is '-' or '_' or '.')))) {
+                frameBar = named;
             } else if ((key == "timeoutSeconds") &&(value.ValueKind == JsonValueKind.Number) && value.TryGetInt32(value: out var parsed) && (parsed is >= 1 and <= MaxStartSeconds)) {
                 seconds = parsed;
             } else {
@@ -204,8 +209,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             }
         }
 
-        if (((width is not null) || (height is not null)) && !windowed) {
-            return Refuse(output: "A width or height requires windowed: true.");
+        if (((width is not null) || (height is not null) || (frameBar is not null)) && !windowed) {
+            return Refuse(output: "A width, height or frameBar requires windowed: true.");
         }
         if ((captureTool is not null) && !windowed) {
             return Refuse(output: "A captureTool requires windowed: true.");
@@ -257,7 +262,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 CallToolResult result;
 
                 try {
-                    result = await StartWorldAsync(checkout, path, backend, cacheDirectory, captureTool, holder, lane, windowed, ownerPlay, paused, lockstep, listen, connect, federationKeyFile, width, height, seconds, attachment, progress, deadline.Token).ConfigureAwait(continueOnCapturedContext: false);
+                    result = await StartWorldAsync(checkout, path, backend, cacheDirectory, captureTool, holder, lane, windowed, ownerPlay, paused, lockstep, listen, connect, federationKeyFile, width, height, frameBar, seconds, attachment, progress, deadline.Token).ConfigureAwait(continueOnCapturedContext: false);
                 } catch (OperationCanceledException) {
                     result = Refuse($"Start {id} was cancelled or reached its {seconds}-second deadline; any World it launched was stopped.");
                 } catch (Exception error) {
@@ -299,7 +304,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         return Result(metadata: metadata);
     }
     private async Task<CallToolResult> StartWorldAsync(string checkout, string path, Puck.World.WorldBackendPreference? backend, string? cacheDirectory, string? captureTool, string holder, string? lane,
-        bool windowed, bool ownerPlay, bool paused, bool lockstep, string? listen, string? connect, string? federationKeyFile, int? width, int? height, int seconds, OperatorAttachment attachment, StartProgress progress, CancellationToken cancellationToken) {
+        bool windowed, bool ownerPlay, bool paused, bool lockstep, string? listen, string? connect, string? federationKeyFile, int? width, int? height, string? frameBar, int seconds, OperatorAttachment attachment, StartProgress progress, CancellationToken cancellationToken) {
         var budget = TimeSpan.FromSeconds(seconds: seconds);
         var runDirectory = Path.Combine(
             path1: attachment.Target,
@@ -318,7 +323,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             start = await launch!.Start(
                 new OperatorWorldRequest(Backend: backend, CacheDirectory: cacheDirectory, CaptureTool: captureTool, Checkout: checkout, Document: path, Holder: holder, Lane: lane,
                     Lockstep: lockstep, OwnerPlay: ownerPlay, Paused: paused, StateDirectory: state, TemporaryDirectory: attachment.Target, Wait: budget, Windowed: windowed,
-                    Listen: listen, Connect: connect, FederationKeyFile: federationKeyFile, Width: width, Height: height),
+                    Listen: listen, Connect: connect, FederationKeyFile: federationKeyFile, Width: width, Height: height, FrameBar: frameBar),
                 text => progress.Stage = text,
                 cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false);
