@@ -30,8 +30,12 @@ public static partial class AzureCommand {
         // reset's target may change (a world added starts fresh; a world removed keeps its protected root).
         private readonly WorldAuthorityIdentity[] m_sourceIdentities = (source ?? target).Manifest.Definitions.Keys.Select(selector: WorldAuthorityIdentity.ParseRootKey).ToArray();
 
-        private async Task CheckWorkerAsync(string worker, AzureWorldReleaseDeployment deployment) {
-            var process = await InspectAsync(worker: worker).ConfigureAwait(continueOnCapturedContext: false);
+        // Checks a worker in one guest round trip: its container runs the exact image, its release status names the
+        // retained release and group, and private health answers. Each Run Command costs tens of seconds, which a release's
+        // repeated checks across its phases once multiplied into most of its post-boot time.
+        private async Task CheckWorkerAsync(string worker, AzureWorldReleaseDeployment deployment, JsonNode? probe = null) {
+            probe ??= await ProbeWorkerAsync(deployment: deployment, worker: worker).ConfigureAwait(continueOnCapturedContext: false);
+            var process = probe["process"]!;
 
             if (
                 (process["running"]?.GetValue<bool>() != true) ||
@@ -39,25 +43,23 @@ public static partial class AzureCommand {
             ) {
                 throw new InvalidDataException(message: $"the container on {worker} does not match the retained exact image {deployment.Image}: {process.ToJsonString()}");
             }
-            var response = await RequestAsync(
-                worker,
-                deployment,
-                "GET",
-                "/release/status"
-            ).ConfigureAwait(continueOnCapturedContext: false);
-            var status = response.Deserialize<WorldReleaseWorkerStatus>(options: Json);
+            WorldReleaseWorkerStatus? status = null;
 
+            try { status = JsonSerializer.Deserialize<WorldReleaseWorkerStatus>(json: Text(value: probe["status"]!["body"]), options: Json); } catch (JsonException) { }
             if (
                 (status?.Release != deployment.Manifest.Identity) ||
                 (status.Group != scaleSet)
-            ) { throw new InvalidDataException(message: $"the worker on {worker} does not match the retained release {deployment.Manifest.Identity} in {scaleSet}: {response.ToJsonString()}"); }
-            await WorldHealthAsync(
-                group: resourceGroup,
-                port: deployment.HealthPort,
-                route: "/private-healthz",
-                worker: worker
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            ) { throw new InvalidDataException(message: $"the worker on {worker} does not match the retained release {deployment.Manifest.Identity} in {scaleSet}: {probe["status"]!.ToJsonString()}"); }
+            if (probe["health"]!["code"]!.GetValue<int>() != 200) {
+                throw new InvalidOperationException(message: $"the worker on {worker} is not privately healthy: {Text(value: probe["health"]!["body"])}");
+            }
         }
+        // One Run Command reading the container's image and state, the release status and private health.
+        private Task<JsonNode> ProbeWorkerAsync(string worker, AzureWorldReleaseDeployment deployment) => WorldGuestJsonAsync(
+            group: resourceGroup,
+            script: WorldProbeScript.Replace(oldValue: "__PORT__", newValue: deployment.HealthPort.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), comparisonType: StringComparison.Ordinal),
+            worker: worker
+        );
         // Runs the deployment's retained bootstrap under the operation's current phase. A worker already running the exact
         // image is only checked; any other worker is replaced with fresh compute, never reconfigured in place. Azure
         // re-runs a VM extension only when its configuration changes, so applying the model a worker already carries (a
@@ -76,7 +78,8 @@ public static partial class AzureCommand {
             if (workers.Length > 1) { throw new InvalidOperationException(message: "release requires one authoritative worker"); }
             if (workers.Length == 1) {
                 var worker = Text(value: workers[0]!["name"]);
-                var process = await InspectAsync(worker: worker).ConfigureAwait(continueOnCapturedContext: false);
+                var probe = await ProbeWorkerAsync(deployment: deployment, worker: worker).ConfigureAwait(continueOnCapturedContext: false);
+                var process = probe["process"]!;
 
                 if (
                     (process["running"]?.GetValue<bool>() == true) &&
@@ -84,6 +87,7 @@ public static partial class AzureCommand {
                 ) {
                     await CheckWorkerAsync(
                         deployment: deployment,
+                        probe: probe,
                         worker: worker
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     return;
@@ -629,6 +633,26 @@ public static partial class AzureCommand {
           if systemctl is-active --quiet puck-world.service; then echo 'puck-world.service is still active after its stop' >&2; exit 1; fi
         fi
         if docker inspect puck-world >/dev/null 2>&1; then docker rm -f puck-world >/dev/null; fi
+        """;
+    // Reads, in one Run Command, the world container's image and state, then (when it runs) the release status and
+    // private health from the lifecycle listener on loopback, as one JSON object: {process, status:{code, body},
+    // health:{code, body}}; a route that does not answer has code 0 and the error as its body.
+    private const string WorldProbeScript = """
+        python3 - <<'PROBE'
+        import json, subprocess, urllib.error, urllib.request
+        def get(path):
+            try:
+                with urllib.request.urlopen('http://127.0.0.1:__PORT__' + path, timeout=30) as response:
+                    return {'code': response.status, 'body': response.read().decode('utf-8', 'replace')}
+            except urllib.error.HTTPError as error:
+                return {'code': error.code, 'body': error.read().decode('utf-8', 'replace')}
+            except Exception as error:
+                return {'code': 0, 'body': str(error)}
+        inspected = subprocess.run(['docker', 'inspect', '--format', '{"image":{{json .Config.Image}},"running":{{.State.Running}}}', 'puck-world'], capture_output=True, text=True)
+        process = json.loads(inspected.stdout) if inspected.returncode == 0 else {'image': None, 'running': False}
+        idle = {'code': 0, 'body': 'the container is not running'}
+        print(json.dumps({'process': process, 'status': get('/release/status') if process['running'] else idle, 'health': get('/private-healthz') if process['running'] else idle}))
+        PROBE
         """;
     // The worker's loopback release-control request, bounded by the deployment's shutdown allowance. --fail-with-body keeps
     // the worker's refusal reason, the 409 body WorldSiloReleaseControl writes, in a failed request's output.

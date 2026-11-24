@@ -70,6 +70,8 @@ public sealed record WorldSiloReleaseManagement(string Group, Guid Owner, string
 /// <param name="CheckpointTimeoutSeconds">Longest time, on the silo's clock, a row may hold state its landed checkpoint does not cover before readiness fails.</param>
 /// <param name="JournalTimeoutSeconds">Maximum interval, on the silo's clock, without journal progress while appends are pending.</param>
 /// <param name="JournalBacklogLimit">Maximum external mutations waiting for durable journal publication, per row.</param>
+/// <param name="Telemetry">Optional installed extension the silo's logs and narration are also written to, so a host
+/// that is deleted after it fails leaves its evidence behind; absent means only the process's own output.</param>
 public sealed record WorldSiloLifecycle(
     int ShutdownSeconds,
     int HealthPort,
@@ -78,7 +80,8 @@ public sealed record WorldSiloLifecycle(
     int ProgressTimeoutSeconds = 30,
     int CheckpointTimeoutSeconds = 180,
     int JournalTimeoutSeconds = 30,
-    int JournalBacklogLimit = WorldSiloLifecycle.DefaultJournalBacklogLimit
+    int JournalBacklogLimit = WorldSiloLifecycle.DefaultJournalBacklogLimit,
+    WorldSiloExtension? Telemetry = null
 ) {
     /// <summary>The outstanding external mutation limit when the deployment omits it.</summary>
     public const int DefaultJournalBacklogLimit = 1024;

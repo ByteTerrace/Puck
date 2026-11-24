@@ -214,6 +214,10 @@ public static class WorldReleaseRehearsal {
             runtime.Report(headline: $"Rehearsal failed: the silo did not drain cleanly ({drained}).");
             return CliExit.Failed;
         }
+        if (runtime.ProveTelemetry() is { } telemetry) {
+            runtime.Report(headline: $"Rehearsal failed: {telemetry}.");
+            return CliExit.Failed;
+        }
         Console.WriteLine(value: $"Rehearsal passed: the silo activated {manifest.Definitions.Count} worlds from a first deployment's roots, opened admission, answered public health while stepping for {SteppingWindow.TotalSeconds:0} s, and drained.");
         return CliExit.Success;
     }
@@ -299,6 +303,16 @@ public static class WorldReleaseRehearsal {
         private string m_lastHealth = "private health has not answered";
 
         private Uri Endpoint(string path) => new(uriString: $"http://127.0.0.1:{m_healthPort}{path}");
+        private string TelemetryPath => Path.Combine(path1: directory, path2: "telemetry.jsonl");
+
+        // The silo's telemetry sink must have received its activation narration, which proves the seam a deployment's
+        // provider is selected through carries the evidence a deleted worker would otherwise lose.
+        public string? ProveTelemetry() {
+            var lines = File.Exists(path: TelemetryPath) ? File.ReadAllLines(path: TelemetryPath) : [];
+            var narration = lines.Count(predicate: static line => line.Contains(value: "silo.activate.timing", comparisonType: StringComparison.Ordinal));
+
+            return (narration > 0) ? null : $"its telemetry sink received {lines.Length} records and no activation narration ({TelemetryPath})";
+        }
 
         public async Task<WorldReleaseRuntimeResult> DrainSourceAndCaptureAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default) {
             await WorldReleaseBootstrap.PublishAsync(
@@ -456,6 +470,8 @@ public static class WorldReleaseRehearsal {
                 ["checkpointTimeoutSeconds"] = 180,
                 ["journalTimeoutSeconds"] = 30,
                 ["journalBacklogLimit"] = 1024,
+                // The provider seam a deployment's telemetry goes through, with the built-in local sink.
+                ["telemetry"] = new JsonObject { ["type"] = WorldFileTelemetrySink.Type, ["settings"] = new JsonObject { ["path"] = PuckPaths.Slashed(path: TelemetryPath) } },
             };
             document["release"] = new JsonObject {
                 ["group"] = Group,

@@ -12,7 +12,7 @@ namespace Puck.World.Silo;
 /// </summary>
 /// <remarks>Only the whole-line write path (<see cref="WriteLine(string?)"/>/<see cref="WriteLine()"/>) is tagged —
 /// every engine narration call in this codebase writes one complete line per call.</remarks>
-internal sealed class SiloNarrationWriter(TextWriter inner) : TextWriter {
+internal sealed class SiloNarrationWriter(TextWriter inner, Action<string>? forward = null) : TextWriter {
     private static string Prefix => ((WorldNarrationScope.Current is { Length: > 0 } scope)
         ? $"[{scope}] "
         : "[silo] "
@@ -28,5 +28,10 @@ internal sealed class SiloNarrationWriter(TextWriter inner) : TextWriter {
     /// <inheritdoc/>
     public override void WriteLine() => inner.WriteLine(value: Prefix);
     /// <inheritdoc/>
-    public override void WriteLine(string? value) => inner.WriteLine(value: (Prefix + (value ?? string.Empty)));
+    public override void WriteLine(string? value) {
+        var line = (Prefix + (value ?? string.Empty));
+
+        inner.WriteLine(value: line);
+        forward?.Invoke(obj: line);
+    }
 }

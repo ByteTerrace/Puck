@@ -211,10 +211,40 @@ public static partial class AzureCommand {
         );
 
         parameters["parameters"]!["actorsImage"] = new JsonObject { ["value"] = image };
+        // The deployment is a function of its compiled template and parameters (the live actors image among them). When
+        // the latest successful deployment carries this exact input identity, applying again changes nothing, so its
+        // outputs are reused; any change, a failed or missing deployment, or one deployed by hand applies in full.
+        _ = parameters["parameters"]!.AsObject().Remove(propertyName: "inputIdentity");
+        var identity = Puck.Abstractions.ContentDigest.HexOfText(text: (File.ReadAllText(path: "artifacts/production-infrastructure.json") + "\n" + parameters.ToJsonString()));
+
+        parameters["parameters"]!["inputIdentity"] = new JsonObject { ["value"] = identity };
         CliFiles.WriteJson(
             path: "artifacts/production-parameters.json",
             value: parameters
         );
+        var deployed = await AzJsonAsync(
+            "deployment",
+            "group",
+            "list",
+            "-g",
+            group,
+            "--query",
+            "[?name=='puck-production-platform'] | [0].{state:properties.provisioningState, outputs:properties.outputs} || `{}`",
+            "-o",
+            "json"
+        );
+
+        if (
+            (deployed["state"]?.GetValue<string>() == "Succeeded") &&
+            (deployed["outputs"]?["deploymentInputIdentity"]?["value"]?.GetValue<string>() == identity)
+        ) {
+            Console.WriteLine(value: $"Infrastructure inputs are unchanged (identity {identity}); the deployed platform's outputs are reused without a plan or apply.");
+            CliFiles.WriteJson(
+                path: "artifacts/production-outputs.json",
+                value: deployed["outputs"]!.DeepClone()
+            );
+            return;
+        }
         var plan = await AzJsonAsync(
             "deployment",
             "group",
