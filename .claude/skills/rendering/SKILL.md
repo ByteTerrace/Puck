@@ -479,7 +479,9 @@ over the navigation of the seat's delivered world (`WorldPortalReach`, `IWorldSe
 `NavigationRuntime.MeasureRoute`), within the glass's world's `views.portalLead` plus the glass's reach, and by the
 straight line on its facing side where no domain covers the walk or the consumer is a window. `world.residency`'s
 parking line names who last wanted a residency and why (`wanted=seen|unknown|walk@…|line@…|rendered by=`) beside
-`read-ago` and `wanted-ago`, so a world that never parks names its holder. An infinity layer's residency is released
+`read-ago`, `read-by` (the instance whose render or read last observed it) and `wanted-ago`, so a world that never
+parks names its holder. A world the seat stands in is read by the seat's own view (`read-by=world`) whatever its
+`wanted-ago` says: check `body.where 0`'s `instance:` before calling such a read unwanted. An infinity layer's residency is released
 once no output names it (`WorldScreenBinder.ReleaseUnreadInfinityResidencies`): a consumer whose target has not fitted
 its sky for `InfinityConsumerRetireSeconds` retires. Never add a `TryWaitIdle` to a release
 path; `SdfWorldTables.Dispose` and `IGpuSurfaceUpload.DisposeCompleted` wait for nothing. A render node's build in
@@ -1272,6 +1274,14 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   the walk, never one wrapper; a hit's normal and material stay `sdfProbeSurface`'s in both. The client takes the
   variant per job (`SdfMeshProbeGpuWork.TopFor`), and the structures' lifetime rule is the header of
   `SdfMeshProbeGpuWork.Rays.cs`: a structure is disposed only through `Retire` and `DrainRetired`.
+- **Every residency's probe scene shares one buffer.** `SdfMeshProbeScenes` (one per mesh region store,
+  `SdfMeshRegionStore.ProbeScenes`) places each trace geometry once, claimed by every probe client whose scene names it,
+  beside each client's prefix, whose first two words are its root words. A traced dispatch pushes the published
+  export's root word base, and the kernels read the root through `sdfProbeRootWord`, never `sdfProbeScene[0]`. Chunks
+  ride whichever residency's upload opens next (`SdfWorldTables.OpenUpload`, after the mesh region's owed copies), and a
+  client publishes only once the upload carrying its root words has completed (`SdfMeshProbeScenes.Upload.Rooted`). The
+  region unmaps every chunk no live allocation touches (`SdfMeshProbeScenes.Cover`). `world.residency`'s mesh-store line
+  ends with the `probe-scenes` reading (`live-bytes`, `geometries-shared`, `unmapped-bytes`).
 - **Mesh words go through one door.** `frame/sdf-mesh-words.hlsli` reads a draw's record through
   `sdfMeshRecordWord` and a mesh's own words (vertices, triangle materials, indices, level table, members) through
   `sdfMeshWord`, and then makes `sdfMeshRegion` an undeclared name, so a read around it does not compile.

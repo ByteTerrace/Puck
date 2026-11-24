@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-probe-relight' (sha256/4fec0ce5f3c832eab990e7f1f888677cc23ef023e6960c4d3e07d37c012278dc). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-probe-relight' (sha256/a670bc274ff3d5f2fa3334e07daa77ca693adf8efb4b2d0e60c733b622936327). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_PROBE_RELIGHT
 #define PUCK_SHADER_INTERFACE_SDF_PROBE_RELIGHT
 
@@ -15,6 +15,12 @@
 [[vk::binding(9, 3)]] StructuredBuffer<uint> sdfProbeWork : register(t9, space3);
 [[vk::binding(10, 3)]] RWStructuredBuffer<uint> sdfProbeCacheRW : register(u10, space3);
 [[vk::binding(11, 3)]] StructuredBuffer<uint> sdfProbeCache : register(t11, space3);
+
+// The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
+struct SdfProbeRelightPushedIndex {
+    [[vk::offset(0)]] uint index;
+};
+[[vk::push_constant]] ConstantBuffer<SdfProbeRelightPushedIndex> pushedIndex : register(b0, space4);
 
 // This interface declares no work counters, so its passes count nothing: the counting functions a kernel calls
 // are declared empty, and a kernel written for a counting package compiles here unchanged.

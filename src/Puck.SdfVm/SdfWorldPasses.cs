@@ -643,7 +643,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         Begin(residency: residency);
         // A world behind glass is observed by the sight (SdfWorldResidency.Want), since its image is read every frame a
         // consumer binds it, and a parked one stands on its views' last images until a render or the sight wakes it.
-        if (!residency.Sighted) { residency.Observe(); }
+        if (!residency.Sighted) { residency.Observe(reader: instance); }
         if (residency.StandsParked) { return; }
         CaptureForReader(residency: residency, context: in context);
         if (residency.CapturePackingDomain is not null) { m_captureReaders.Add(item: entry); }
@@ -768,7 +768,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// them.</remarks>
     public void PrepareRender(string instance, in FrameContext context) {
         if (BegunResidencyOf(instance: instance) is not { } residency) { return; }
-        residency.Observe();
+        residency.Observe(reader: instance);
         _ = residency.Stage(context: in context);
         NoteImageWindow(instance: instance, residency: residency);
     }

@@ -54,6 +54,7 @@ public sealed partial class SdfWorldTables {
         ServiceRetirements();
         m_shadows?.Upkeep();
         m_meshStore.Service();
+        m_meshStore.ProbeScenesIfCreated?.Service();
         BindMeshStore();
     }
 

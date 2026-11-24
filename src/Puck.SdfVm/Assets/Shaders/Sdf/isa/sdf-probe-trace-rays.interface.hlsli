@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-probe-trace-rays' (sha256/9610ca2064e2e4bfe66f3938fa4b0f42da00a80c1f32592418d46c7e4655ee3f). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-probe-trace-rays' (sha256/edb73ab4c16fd04cd299bd6f5185651a6660754aac8a02edd01f49b5f15a3be5). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_PROBE_TRACE_RAYS
 #define PUCK_SHADER_INTERFACE_SDF_PROBE_TRACE_RAYS
 
@@ -10,6 +10,12 @@
 [[vk::binding(4, 3)]] RWStructuredBuffer<uint> sdfProbeHitsRW : register(u4, space3);
 [[vk::binding(5, 3)]] RWStructuredBuffer<uint2> sdfProbeIdentitiesRW : register(u5, space3);
 [[vk::binding(6, 3)]] RaytracingAccelerationStructure sdfProbeStructure : register(t6, space3);
+
+// The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
+struct SdfProbeTraceRaysPushedIndex {
+    [[vk::offset(0)]] uint index;
+};
+[[vk::push_constant]] ConstantBuffer<SdfProbeTraceRaysPushedIndex> pushedIndex : register(b0, space4);
 
 // This interface declares no work counters, so its passes count nothing: the counting functions a kernel calls
 // are declared empty, and a kernel written for a counting package compiles here unchanged.

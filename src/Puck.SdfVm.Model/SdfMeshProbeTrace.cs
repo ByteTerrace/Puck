@@ -37,11 +37,12 @@ public static class SdfMeshProbeTrace {
     /// (<c>SdfMeshDraw.EnclosesSolid</c>): a ray toward a point light is blocked only where it leaves such a solid, so the
     /// solid that holds a light (its fixture) never hides it; any other instance blocks wherever a ray meets it.</summary>
     public const int SolidWord = 31;
-    /// <summary>The words an uploaded scene starts with, written last as one: the top root's address, then
-    /// <see cref="InstanceBaseWord"/>.</summary>
+    /// <summary>The words an uploaded scene's prefix starts with, its root words, written last as one: the top root's
+    /// address, then <see cref="InstanceBaseWord"/>. A probe kernel reads them at the address its pipeline pushes
+    /// (the scene's root word base), since every residency's scene shares one buffer.</summary>
     public const int RootWords = 2;
-    /// <summary>The scene word holding the first instance record's address, from which a ray query reaches a hit
-    /// instance's record by its index.</summary>
+    /// <summary>The root word, past the root word base, holding the first instance record's address, from which a ray
+    /// query reaches a hit instance's record by its index.</summary>
     public const int InstanceBaseWord = 1;
     /// <summary>Traversal stack capacity shared with the CPU walk.</summary>
     public const int StackDepth = 64;
