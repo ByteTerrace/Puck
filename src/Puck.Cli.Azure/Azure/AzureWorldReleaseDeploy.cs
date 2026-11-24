@@ -18,7 +18,7 @@ public static partial class AzureCommand {
 
         return await WithManagedWorldReleaseAsync(
             action: async (context, token) => {
-                var policy = WorldHostedDataPolicyOf(outputs: context.Outputs);
+                var policy = await ReadWorldHostedDataPolicyAsync(resourceGroup: context.ResourceGroup).ConfigureAwait(continueOnCapturedContext: false);
 
                 Console.WriteLine(value: $"Hosted data policy: {policy}");
                 if (policy == WorldHostedDataPolicy.Scratch) {
@@ -27,7 +27,6 @@ public static partial class AzureCommand {
                         manifest: manifest,
                         operationId: operationId,
                         packageDirectory: packageDirectory,
-                        policy: policy,
                         token: token
                     ).ConfigureAwait(continueOnCapturedContext: false);
                 }
