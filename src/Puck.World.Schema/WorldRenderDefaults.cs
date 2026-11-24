@@ -434,11 +434,12 @@ public sealed record WorldRenderShadowCoverage(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Far = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Casters = null);
 /// <summary>What a world shows of itself to a far viewer: its settled static scene, each mesh at the coarsest level it
-/// carries, merged and levelled again at <paramref name="Cell"/>, without the parts smaller than
+/// carries, its vertices gathered into cells of <paramref name="Cell"/>, without the parts smaller than
 /// <paramref name="MinimumSize"/>. A sky view of the world that asks for its far product draws it. Presentation
 /// only.</summary>
-/// <param name="Cell">The error, in metres, the product's finest level is levelled against; its coarser levels, which a
-/// far view's draws choose between by the pixels they cover, stay within multiples of it. Within [0.01, 1024]. Absent
+/// <param name="Cell">The side, in metres, of the cells the product gathers its vertices into, so its finest level holds
+/// about two triangles a cell of surface; its coarser levels, which a far view's draws choose between by the pixels they
+/// cover, stay within multiples of it. Within [0.01, 1024]. Absent
 /// is one metre.</param>
 /// <param name="MinimumSize">The least size, in metres, a static part's longest side reaches to enter the product: what
 /// the nearest far viewer resolves. Within [0, 8192]. Absent keeps every static part.</param>
@@ -1187,8 +1188,8 @@ public abstract record WorldRenderSkyLayer {
     /// <param name="Bound">The sphere that bounds what the view shows, in the destination's coordinates. Absent is none.</param>
     /// <param name="Coverage">Whether the view draws only the destination's geometry, so this world's sky shows around
     /// it. Absent is not: the destination's own sky fills the view.</param>
-    /// <param name="FarProduct">Whether the view draws the destination's far product (its settled static scene, merged
-    /// at the coarse levels its own <c>render.farProduct</c> asks for) rather than a residency of the whole destination:
+    /// <param name="FarProduct">Whether the view draws the destination's far product (its settled static scene, gathered
+    /// at the cell its own <c>render.farProduct</c> asks for) rather than a residency of the whole destination:
     /// no bake, none of its bodies, creations or screens, and only the product's triangles held. A view that asks for it
     /// and has no product yet draws the destination whole until one is built from that residency. Absent is not.</param>
     public sealed record View(

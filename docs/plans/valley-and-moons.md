@@ -20,7 +20,7 @@ work in the debug world; quarantined worlds stay quarantined.
 | Draw distance | Partial | `farDistance` is capped at 8192 m (`WorldRenderDefaults.MaxFarDistance`); haze extinction is `-log(1 - haze) / farDistance`, which couples haze to draw distance. |
 | Shadows | Partial | Key-light receiver splits at 16 and 120 m, second light at 40 m, casters reaching 200 m beyond each cascade toward the light (`SdfMeshShadowCascades`, authored as `render.shadowCoverage`); macro terrain shadowing is missing, and stretching the far cascade to the walls costs 25 times its vertices ([illumination step 1](illumination.md#the-build-order)). |
 | Depth transport | Exists, to qualify | Reconstruction packs coverage-weighted inverse distance in half lanes for harmonic-mean filtering; single samples already carry float `t`. Longer ranges are qualified, and lanes widened together only if precision runs out. |
-| Sky | Exists | `Disc` and `View` layers, stars, clouds, panorama. A `View` of another world stays at infinity and fills its region unless it asks to follow the viewer and to draw geometry alone (`InfinityViewSpec.Follows`, `GeometryCoverage`); a far view always uses geometry coverage. |
+| Sky | Exists | `Disc` and `View` layers, stars, clouds, panorama. A `View` of another world stays at infinity and fills its region unless it asks to follow the viewer and to draw geometry alone (`InfinityViewSpec.Follows`, `GeometryCoverage`), or to draw the world's far product rather than the world (`InfinityViewSpec.FarProduct`). |
 | Atmosphere | Partial | A dome seen from the ground (`SdfAtmosphere`, `sdf-atmosphere.hlsli`) whose fog and haze thin with height (`WorldRenderAirHeight`); a keyed look reads how high the viewer stands through a view clock (`WorldClockView`), so a sky fades to space as she climbs. No spherical shell. |
 | Worlds and portals | Partial | Portals are planes; adjacency seams are planar, and the debug world's `sky` seam to the moon is the first live one. A crossing maps a body by a turn about up and carries its yaw and velocity; a body's whole frame (pitch, roll, up, angular velocity) is not carried. A rider crosses behind the body it rides (`WorldMount`). An edge authors whether its two worlds are one place drawn together or two places (`WorldAdjacencyPresentation`). |
 | Regions | Partial | One physical field topology per world today (the combat and weather decisions widen it). |
@@ -170,6 +170,17 @@ Built by this feature:
 - An edge that is two places (`WorldAdjacencyPresentation.Apart`): a seat that crossed the sky seam is presented in
   the moon's own scene, so the ship and its pilot are drawn as they look, under the moon's light and exposure.
 
+- What a world shows of itself from far away (`SdfFarProduct`, [decision](../decisions/rendering.md#a-far-viewer-draws-a-worlds-far-product)):
+  a sky `view` layer with `farProduct: true` draws the destination's far product, never a residency of the whole
+  world. The product is the world's settled static scene, each mesh at its coarsest level, gathered into the cells
+  the world authors (`render.farProduct`, `SdfMeshCluster`), built once per document version of the world on a worker
+  from a residency that already drew it, and shared by every view of that world. The moon's sky shows the valley
+  through it (moon.puck's `debug` layer; the debug world asks four-metre cells and leaves out parts under two
+  metres): 4,031 static draws and 5.1 million source triangles became 585,568 triangles in 20 MB, and its residency
+  bakes nothing. The seam is the hand-over: below it the debug world draws itself, above it the moon's sky draws the
+  product, both from the same meshes. A view of a world no residency here holds draws it whole until a product is
+  built from that view's own residency, then swaps to it.
+
 - A value that follows two clocks (`WorldKeyTrack.With`, `WorldKeyCombine`): a keyed scalar joins a second track on
   another clock by adding, multiplying, or taking the greater or lesser of the two, and keys with a combine join over a
   section's keys on the same field rather than replace them (`WorldRenderKeys`). The valley's exposure floor is the
@@ -196,21 +207,17 @@ Built by this feature:
 
 Left open, in the order they matter to the trip:
 
-1. **The valley is not in the moon's sky.** A `view` layer of the debug world
-   in the moon's sky (anchored at `moonCentre`, following the viewer, geometry
-   alone inside a 1,500 m bound round the caldera) was built and measured on a
-   windowed Direct3D 12 round trip, and taken out again. The shared mesh store
-   shared 4,196 of its groups, but the view still started a residency of the
-   whole debug world (7,163 groups, 8,386 instances, 6,751 of them dynamic) and
-   baked 360 groups the store did not hold (coarser tiers for the far view).
-   Its start held the frame thread for about half a second on the tick the
-   ship crossed, and its bakes took the bake room the moon's own routed
-   residency needed (refinements deferred with no room left), so the ship drew
-   as its proxy box for most of the outbound chapter. What a world shows of
-   itself from far away has to be a product of its own: phase 4's scenery
-   published for a far viewer, a residency of the far product rather than of
-   the world. The check is the same view drawn from it: no new bakes in the
-   view's residency and no frame-thread hold at the crossing.
+1. **The crossing still holds the frame thread, and not for the sky view.** The valley now hangs in the moon's sky
+   from the debug world's far product (built, below). On a windowed Direct3D 12 trip
+   (`world.benchmark run moon`) the far view's residency (`routed$<moon>$sky$debug`) was planned at boot, held zero
+   bake groups and handed zero meshes, and named 11.9 MB of the shared mesh region, against 398 MB for the debug
+   world's own residency (`world.residency`'s `groups`, `handed` and `region-named`). The frames around the crossing
+   still ran long produce iterations, and two other residencies start there: the moon's routed residency (gap 9) and
+   `routed$session$18$0$shared`, a second scene of the whole debug world (7,163 groups, the count the reverted sky
+   view was charged with) that a window in the moon's scene shows. That window's world should be drawn from the
+   residency already holding it, or from its far product while its glass is small; the window plumbing is the next
+   step, with the same check (`world.residency` before and after the crossing, and the crossing frames' produce in a
+   quiet window).
 2. **A refused device allocation ends the World.** With the moon's two
    residencies (the painting's window and the sky view) beside the debug world's
    own, the device's memory account refused a mesh region's growth and the

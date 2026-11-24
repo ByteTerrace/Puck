@@ -154,8 +154,12 @@ public sealed partial class WorldScreenBinder {
             // A view asking for its world's far product draws the product once it is built. Until then it draws the world
             // whole, which is the product's source, unless the presentation holds a residency of that world anyway, whose
             // product is on its way: then it draws its fallback for the moments the build takes.
-            var far = ((ready && planned.Spec.FarProduct) ? FarProductOf(instance: source.Instance!, mirror: source.Mirror!) : null);
-            var waits = (ready && planned.Spec.FarProduct && (far is null) && FarSourceResident(instance: source.Instance!, mirror: source.Mirror!));
+            var far = ((ready && planned.Spec.FarProduct) ? FarProductOf(instance: source.Instance!) : null);
+            var waits = (ready && planned.Spec.FarProduct && (far is null) && FarSourceResident(instance: source.Instance!));
+
+            if (ready && planned.Spec.FarProduct) {
+                Console.Out.WriteLine(value: $"[world.far: {root.Name}/{planned.Name} shows '{source.Instance}' {((far is not null) ? "from its far product" : (waits ? "once its far product is built" : "whole until its far product is built"))}]");
+            }
 
             if (root.Entries.TryGetValue(key: planned.Name, value: out var held)
                 && (!ready || waits || !ReferenceEquals(objA: held.Mirror, objB: source.Mirror) || !ReferenceEquals(objA: held.Hosted?.Token, objB: source.Hosted?.Token)
@@ -228,6 +232,9 @@ public sealed partial class WorldScreenBinder {
             Session = Settings,
         };
         var entry = new InfinityEntry(current: Current, emitter: emitter, hosted: hosted, instance: instance, mirror: mirror, name: name, planned: planned, prototypes: (prototypes ?? []), root: root);
+
+        // The shown world's air and keyed looks read the height of the cameras the layer is fitted to, not its default camera.
+        emitter.ViewPointOf = entry.FirstViewPoint;
         var scene = new WorldInfinityViewScene(emitter, () => entry.Views, planned.Spec) {
             FitSkyViews = (views, sky, width, height) => FilmInfinity(entry: entry, height: height, sky: sky, views: views, width: width),
         };
@@ -266,6 +273,8 @@ public sealed partial class WorldScreenBinder {
         var entry = new InfinityEntry(current: Current, emitter: dresser, hosted: hosted, instance: instance, mirror: mirror, name: name, planned: planned, prototypes: [], root: root) {
             Far = product,
         };
+
+        dresser.ViewPointOf = entry.FirstViewPoint;
         var scene = new WorldInfinityViewScene(dresser, () => entry.Views, planned.Spec) {
             FitSkyViews = (views, sky, width, height) => FilmInfinity(entry: entry, height: height, sky: sky, views: views, width: width),
         };
@@ -384,6 +393,8 @@ public sealed partial class WorldScreenBinder {
         public WorldSessionSceneEmitter Emitter { get; } = emitter;
         public IReadOnlyList<string> Prototypes { get; } = prototypes;
         public List<SdfViewSnapshot> Views { get; } = [];
+        // Where the first consuming camera stands in the shown world, or null before a consumer fits the layer.
+        public System.Numerics.Vector3? FirstViewPoint() => ((Views.Count > 0) ? Views[0].Camera.Position : null);
         public Dictionary<string, int> Indices { get; } = new(comparer: StringComparer.Ordinal);
 
         public IDisposable? Envelope { get; set; }
