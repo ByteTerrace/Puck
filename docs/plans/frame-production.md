@@ -327,6 +327,14 @@ across a benchmark chapter and divided by the frames.
    superset, at a fraction of the work. The shadow entries' drawn state
    (`m_drawn`, `m_judged`) is kept by row today and would be kept by slot.
 
+   The slot judgement owns both the previous and current bounds of its rigid
+   rows. It reduces the boxes in the slot's frame when a draw record changes,
+   grouping by carry transform so a moved slot can project the union without
+   visiting its rows. A fixed world box stays fixed, and an unbounded member
+   makes the slot unbounded. `SdfWorldShadows.Moved` owes both projected bounds
+   for a moved slot because its union can hide motion inside it. Draws with no
+   slot and skins with multiple pose dependencies keep separate identities.
+
 ## Systems considered
 
 - `JobPool.Fork` and its `JobClass.Frame` carry the pack fork, as they carry
