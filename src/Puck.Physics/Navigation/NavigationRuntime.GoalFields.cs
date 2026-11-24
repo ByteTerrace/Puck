@@ -63,7 +63,13 @@ public sealed class NavigationGoalField {
 public sealed partial class NavigationRuntime {
     // Keyed by the goal's runtime node and the profile, which compares by its costs.
     private readonly Dictionary<(int Node, NavigationCostProfile Profile), NavigationGoalField> m_goalFields = [];
-    private GoalFieldWorkspace? m_goalWorkspace;
+    // The derivations requested ahead of their read (RequestGoalField), running off the thread that owns the runtime
+    // until a read joins them (GoalField) or a step's start finds them done (BeginStep).
+    private readonly Dictionary<(int Node, NavigationCostProfile Profile), GoalFieldJob> m_requestedGoalFields = [];
+    private readonly List<(int Node, NavigationCostProfile Profile)> m_landedGoalFields = [];
+    // Idle derivation scratch, taken by a derivation on whatever thread runs it and given back when it ends.
+    private readonly Stack<GoalFieldWorkspace> m_goalWorkspaces = new();
+    private readonly Lock m_goalWorkspaceGate = new();
     private long m_goalFieldBytes;
     private long m_goalFieldReads;
 
@@ -72,10 +78,15 @@ public sealed partial class NavigationRuntime {
     /// <summary>Gets the bytes the resident goal fields hold together, at most <see cref="NavigationCapacity.GoalFieldBytes"/>
     /// unless one field alone is larger.</summary>
     public long GoalFieldBytes => m_goalFieldBytes;
-    /// <summary>Gets the goal fields derived since the last <see cref="BeginStep"/>.</summary>
+    /// <summary>Gets the goal fields derived and made resident since the last <see cref="BeginStep"/>.</summary>
     public int GoalFieldBuildsLast { get; private set; }
-    /// <summary>Gets the cells goal-field derivations settled since the last <see cref="BeginStep"/>.</summary>
+    /// <summary>Gets the cells those derivations settled.</summary>
     public long GoalFieldCellsLast { get; private set; }
+    /// <summary>Gets the goal-field derivations requested ahead of their read since the last <see cref="BeginStep"/>.</summary>
+    public int GoalFieldRequestsLast { get; private set; }
+    /// <summary>Gets the goal-field reads since the last <see cref="BeginStep"/> that waited for a derivation: one still
+    /// running when its read came, or none requested ahead, which the read then derived itself.</summary>
+    public int GoalFieldWaitsLast { get; private set; }
     /// <summary>Gets the goal-field steps read since the last <see cref="BeginStep"/>.</summary>
     public long GoalFieldStepsLast => Interlocked.Read(location: ref m_goalFieldStepsLast);
     // Counted with an interlock: GoalStep reads a resident field and may run on several threads at once.
@@ -83,15 +94,57 @@ public sealed partial class NavigationRuntime {
     /// <summary>Gets the goal fields dropped from a full cache over the runtime's life.</summary>
     public long GoalFieldEvictions { get; private set; }
 
-    /// <summary>Starts a simulation tick's navigation work: clears the per-tick goal-field counts.</summary>
+    /// <summary>Starts a simulation tick's navigation work: clears the per-tick goal-field counts and makes resident every
+    /// derivation requested ahead that has finished. What is resident decides only work: a read of a field not resident
+    /// derives it or joins its derivation (<see cref="GoalField"/>), so no step's outcome depends on when a derivation
+    /// finished.</summary>
     public void BeginStep() {
         GoalFieldBuildsLast = 0;
         GoalFieldCellsLast = 0;
+        GoalFieldRequestsLast = 0;
+        GoalFieldWaitsLast = 0;
         m_goalFieldStepsLast = 0;
+        if (m_requestedGoalFields.Count == 0) {
+            return;
+        }
+        foreach (var (key, job) in m_requestedGoalFields) {
+            if (job.Task!.IsCompleted) { m_landedGoalFields.Add(item: key); }
+        }
+        foreach (var key in m_landedGoalFields) {
+            _ = m_requestedGoalFields.Remove(key: key, value: out var job);
+            Install(field: job!.Task!.GetAwaiter().GetResult());
+        }
+        m_landedGoalFields.Clear();
     }
 
-    /// <summary>Returns the goal field toward a walkable cell under a cost profile, deriving it when it is not resident or
-    /// a live medium it reads has changed since it was derived. Bakes every domain of the goal's network and joins them.</summary>
+    /// <summary>Starts deriving the goal field toward a walkable cell under a cost profile off the calling thread, unless
+    /// it is resident and current or already requested, so the read that needs it (<see cref="GoalField"/>) finds it done
+    /// or joins it. The request bakes every domain of the goal's network and joins them on the calling thread; the
+    /// derivation reads only what the request froze.</summary>
+    /// <param name="goalDomain">The goal cell's domain index.</param>
+    /// <param name="goalCell">The goal cell; must be walkable.</param>
+    /// <param name="profile">What the field's routes pay for each area type and which they never enter;
+    /// <see langword="null"/> is <see cref="NavigationCostProfile.Neutral"/>. Equal profiles share one field.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="goalDomain"/> is not a domain index, or
+    /// <paramref name="goalCell"/> is not a walkable cell of it.</exception>
+    /// <exception cref="InvalidOperationException">The runtime is read-only (<see cref="EnterReadOnly"/>).</exception>
+    public void RequestGoalField(int goalDomain, int goalCell, NavigationCostProfile? profile = null) {
+        var key = GoalKey(goalDomain: goalDomain, goalCell: goalCell, profile: ref profile);
+
+        if (m_requestedGoalFields.ContainsKey(key: key) || (m_goalFields.TryGetValue(key: key, value: out var resident) && IsCurrent(field: resident))) {
+            return;
+        }
+
+        var job = Freeze(goalDomain: goalDomain, goalCell: goalCell, profile: key.Profile);
+
+        job.Task = Task.Run(function: () => Derive(job: job));
+        m_requestedGoalFields[key] = job;
+        GoalFieldRequestsLast++;
+        m_work.Add(amount: 1, kind: NavigationSearchWork.FieldRequests);
+    }
+    /// <summary>Returns the goal field toward a walkable cell under a cost profile: the resident one while every live medium
+    /// it read stands, else the derivation requested ahead (<see cref="RequestGoalField"/>), joined, else one derived on the
+    /// calling thread. Bakes every domain of the goal's network and joins them.</summary>
     /// <param name="goalDomain">The goal cell's domain index.</param>
     /// <param name="goalCell">The goal cell; must be walkable.</param>
     /// <param name="profile">What the field's routes pay for each area type and which they never enter;
@@ -101,46 +154,26 @@ public sealed partial class NavigationRuntime {
     /// <paramref name="goalCell"/> is not a walkable cell of it.</exception>
     /// <exception cref="InvalidOperationException">The runtime is read-only (<see cref="EnterReadOnly"/>).</exception>
     public NavigationGoalField GoalField(int goalDomain, int goalCell, NavigationCostProfile? profile = null) {
-        ThrowIfReadOnly(operation: "a goal field read");
-        profile ??= NavigationCostProfile.Neutral;
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: ((uint)goalDomain), other: ((uint)m_domains.Length), paramName: nameof(goalDomain));
-        if (!m_domains[goalDomain].IsWalkable(node: goalCell)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(goalCell), actualValue: goalCell, message: "a goal field needs a walkable goal cell.");
-        }
+        var key = GoalKey(goalDomain: goalDomain, goalCell: goalCell, profile: ref profile);
 
-        var key = ((m_offsets[goalDomain] + goalCell), profile);
-
-        if (m_goalFields.TryGetValue(key: key, value: out var field) && IsCurrent(field: field)) {
-            // A field kept from a prior runtime reads junctions this runtime has not joined yet.
-            if (!field.NetworkJoined) {
-                JoinNetwork(members: field.Members);
-                field.NetworkJoined = true;
-            }
-            field.LastRead = ++m_goalFieldReads;
+        if (TryResident(key: key, field: out var field)) {
             return field;
         }
-        if (field is not null) {
-            Drop(key: key, field: field);
-        }
-
-        field = BuildGoalField(goalDomain: goalDomain, goalCell: goalCell, profile: profile);
-        field.LastRead = ++m_goalFieldReads;
-        m_goalFields[key] = field;
-        m_goalFieldBytes += field.Bytes;
-        while ((m_goalFieldBytes > m_capacity.GoalFieldBytes) && (m_goalFields.Count > 1)) {
-            var oldest = default((int, NavigationCostProfile));
-            var oldestRead = long.MaxValue;
-
-            foreach (var (candidateKey, candidate) in m_goalFields) {
-                if ((candidate != field) && (candidate.LastRead < oldestRead)) {
-                    oldest = candidateKey;
-                    oldestRead = candidate.LastRead;
-                }
+        if (m_requestedGoalFields.Remove(key: key, value: out var requested)) {
+            if (!requested.Task!.IsCompleted) {
+                GoalFieldWaitsLast++;
+                m_work.Add(amount: 1, kind: NavigationSearchWork.FieldWaits);
             }
-            Drop(key: oldest, field: m_goalFields[oldest]);
-            GoalFieldEvictions++;
-            m_work.Add(amount: 1, kind: NavigationSearchWork.FieldEvictions);
+            field = requested.Task.GetAwaiter().GetResult();
+            // A medium that moved while the derivation ran leaves it describing water that is gone.
+            if (!IsCurrent(field: field)) { field = null; }
         }
+        if (field is null) {
+            GoalFieldWaitsLast++;
+            m_work.Add(amount: 1, kind: NavigationSearchWork.FieldWaits);
+            field = Derive(job: Freeze(goalDomain: goalDomain, goalCell: goalCell, profile: key.Profile));
+        }
+        Install(field: field);
 
         return field;
     }
@@ -190,6 +223,65 @@ public sealed partial class NavigationRuntime {
         return NavigationStatus.Active;
     }
 
+    // Validates a goal and returns its cache key, the profile defaulted to Neutral.
+    private (int Node, NavigationCostProfile Profile) GoalKey(int goalDomain, int goalCell, ref NavigationCostProfile? profile) {
+        ThrowIfReadOnly(operation: "a goal field read");
+        profile ??= NavigationCostProfile.Neutral;
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: ((uint)goalDomain), other: ((uint)m_domains.Length), paramName: nameof(goalDomain));
+        if (!m_domains[goalDomain].IsWalkable(node: goalCell)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(goalCell), actualValue: goalCell, message: "a goal field needs a walkable goal cell.");
+        }
+
+        return ((m_offsets[goalDomain] + goalCell), profile);
+    }
+    // The resident field for a key while every live medium it read stands; a stale one is dropped.
+    private bool TryResident((int Node, NavigationCostProfile Profile) key, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out NavigationGoalField? field) {
+        if (m_goalFields.TryGetValue(key: key, value: out field) && IsCurrent(field: field)) {
+            // A field kept from a prior runtime reads junctions this runtime has not joined yet.
+            if (!field.NetworkJoined) {
+                JoinNetwork(members: field.Members);
+                field.NetworkJoined = true;
+            }
+            field.LastRead = ++m_goalFieldReads;
+            return true;
+        }
+        if (field is not null) {
+            Drop(key: (key.Node, key.Profile), field: field);
+            field = null;
+        }
+
+        return false;
+    }
+    // Makes a derived field resident, then drops the least recently read fields while the cache is past its bytes.
+    private void Install(NavigationGoalField field) {
+        var key = ((m_offsets[field.GoalDomain] + field.GoalCell), field.Profile);
+
+        if (m_goalFields.Remove(key: key, value: out var replaced)) {
+            m_goalFieldBytes -= replaced.Bytes;
+        }
+        field.LastRead = ++m_goalFieldReads;
+        m_goalFields[key] = field;
+        m_goalFieldBytes += field.Bytes;
+        GoalFieldBuildsLast++;
+        GoalFieldCellsLast += field.ReachedCells;
+        m_work.Add(amount: 1, kind: NavigationSearchWork.FieldBuilds);
+        m_work.Add(amount: field.ReachedCells, kind: NavigationSearchWork.FieldCells);
+        while ((m_goalFieldBytes > m_capacity.GoalFieldBytes) && (m_goalFields.Count > 1)) {
+            var oldest = default((int, NavigationCostProfile));
+            var oldestRead = long.MaxValue;
+
+            foreach (var (candidateKey, candidate) in m_goalFields) {
+                if ((candidate != field) && (candidate.LastRead < oldestRead)) {
+                    oldest = candidateKey;
+                    oldestRead = candidate.LastRead;
+                }
+            }
+            Drop(key: oldest, field: m_goalFields[oldest]);
+            GoalFieldEvictions++;
+            m_work.Add(amount: 1, kind: NavigationSearchWork.FieldEvictions);
+        }
+    }
+
     private bool IsCurrent(NavigationGoalField field) {
         for (var member = 0; (member < field.Members.Length); member++) {
             if (field.Members[member].MediumValueRevision != field.MediumRevisions[member]) {
@@ -209,105 +301,194 @@ public sealed partial class NavigationRuntime {
 
         return m_domains.Where(predicate: domain => ((domain == goal) || Joins(left: domain, right: goal))).ToArray();
     }
-    // A reverse Dijkstra over the network's cells and junctions from the goal, each step costed as the route search costs
-    // it (its length in millimetres plus the clearance surcharge of the cell stepped onto, times the profile's multiplier
-    // for that cell's area; a junction free; no step onto an area the profile excludes), then each
-    // reached cell's step chosen from the settled costs alone: the first of its forward steps, in neighbour order and then
-    // its junctions in ascending order, whose cost plus the cell it reaches equals the cell's own. The choice reads only
-    // final costs, never the order the search settled ties in, so the field is a function of the graph.
-    private NavigationGoalField BuildGoalField(int goalDomain, int goalCell, NavigationCostProfile profile) {
+
+    // What one derivation reads, frozen on the thread that owns the runtime: the network's route graphs and area codes, the
+    // junctions among its cells, and the live media's revisions. Nothing a later step changes reaches a derivation.
+    private sealed class GoalFieldJob {
+        public required int GoalDomain { get; init; }
+        public required int GoalCell { get; init; }
+        public required int GoalNode { get; init; }
+        public required NavigationCostProfile Profile { get; init; }
+        public required Domain[] Members { get; init; }
+        public required int[] MemberOf { get; init; }
+        public required RouteGraph[] Graphs { get; init; }
+        public required byte[]?[] Areas { get; init; }
+        // Each junction cell of the network and its partners in the network, ascending, in the order the runtime keeps.
+        public required Dictionary<int, int[]> Junctions { get; init; }
+        public required ulong[] MediumRevisions { get; init; }
+        public Task<NavigationGoalField>? Task { get; set; }
+    }
+
+    // Freezes one derivation's inputs: bakes and joins the goal's network, and takes each member's route graph.
+    private GoalFieldJob Freeze(int goalDomain, int goalCell, NavigationCostProfile profile) {
         var members = NetworkOf(goalDomain: goalDomain);
 
         JoinNetwork(members: members);
 
-        var workspace = (m_goalWorkspace ??= new GoalFieldWorkspace(cells: checked((int)CellCount)));
         var memberOf = new int[m_domains.Length];
-        Span<int> from = stackalloc int[MaxRouteSteps];
-        Span<long> cost = stackalloc long[MaxRouteSteps];
-        Span<byte> slots = stackalloc byte[MaxRouteSteps];
+        var graphs = new RouteGraph[members.Length];
+        var areas = new byte[]?[members.Length];
 
         Array.Fill(array: memberOf, value: -1);
         for (var member = 0; (member < members.Length); member++) {
             memberOf[Array.IndexOf(array: m_domains, value: members[member])] = member;
+            graphs[member] = members[member].GoalGraph();
+            areas[member] = (profile.IsNeutral ? null : members[member].GoalAreas());
         }
+
+        var junctions = new Dictionary<int, int[]>();
+
+        foreach (var (node, partners) in m_junctions) {
+            if (memberOf[DomainOf(node: node)] < 0) { continue; }
+
+            var count = 0;
+
+            foreach (var partner in partners) { count += ((memberOf[DomainOf(node: partner)] >= 0) ? 1 : 0); }
+            if (count == 0) { continue; }
+
+            var kept = new int[partners.Count];
+
+            // The rank a step names is the partner's rank in the runtime's whole list, so the list is kept whole and a
+            // partner outside the network is marked by its own domain (MemberOf) when the derivation reads it.
+            partners.CopyTo(array: kept);
+            junctions[node] = kept;
+        }
+
+        return new GoalFieldJob {
+            Areas = areas,
+            GoalCell = goalCell,
+            GoalDomain = goalDomain,
+            GoalNode = (m_offsets[goalDomain] + goalCell),
+            Graphs = graphs,
+            Junctions = junctions,
+            MediumRevisions = members.Select(selector: static domain => domain.MediumValueRevision).ToArray(),
+            MemberOf = memberOf,
+            Members = members,
+            Profile = profile,
+        };
+    }
+
+    // A reverse Dijkstra over the network's cells and junctions from the goal, each step costed as the route search costs
+    // it (its length in millimetres plus the clearance surcharge of the cell stepped onto, times the profile's multiplier
+    // for that cell's area; a junction free; no step onto an area the profile excludes), then each reached cell's step
+    // chosen from the settled costs alone: the first of its forward steps, in neighbour order and then its junctions in
+    // ascending order, whose cost plus the cell it reaches equals the cell's own. The choice reads final costs and, between
+    // a junction's coincident ends, which settled first, so the field is a function of the frozen graph. It reads only its
+    // job and its own workspace, so it runs on any thread.
+    private NavigationGoalField Derive(GoalFieldJob job) {
+        var workspace = TakeGoalWorkspace();
+
+        try {
+            return Derive(job: job, workspace: workspace);
+        } finally {
+            lock (m_goalWorkspaceGate) { m_goalWorkspaces.Push(item: workspace); }
+        }
+    }
+    private GoalFieldWorkspace TakeGoalWorkspace() {
+        lock (m_goalWorkspaceGate) {
+            if (m_goalWorkspaces.TryPop(result: out var idle)) { return idle; }
+        }
+
+        return new GoalFieldWorkspace(cells: checked((int)CellCount));
+    }
+    private NavigationGoalField Derive(GoalFieldJob job, GoalFieldWorkspace workspace) {
+        var offsets = m_offsets;
+        var domains = m_domains.Length;
+        var memberOf = job.MemberOf;
+        var profile = job.Profile;
+        Span<long> axisCost = stackalloc long[4];
+
         workspace.Begin();
-        workspace.Relax(node: (m_offsets[goalDomain] + goalCell), cost: 0L);
+        workspace.Relax(node: job.GoalNode, cost: 0L);
         while (workspace.Open.Count != 0) {
             var node = workspace.Open.Pop(order: workspace.Order);
-            var domainIndex = DomainOf(node: node);
-            var domain = m_domains[domainIndex];
-            var offset = m_offsets[domainIndex];
-            var count = domain.RoutePredecessors(node: (node - offset), from: from, cost: cost, profile: profile);
+            var domainIndex = DomainOf(offsets: offsets, domains: domains, node: node);
+            var member = memberOf[domainIndex];
+            var graph = job.Graphs[member];
+            var areas = job.Areas[member];
+            var offset = offsets[domainIndex];
+            var cell = (node - offset);
+            var area = ((areas is null) ? (byte)0 : areas[cell]);
 
             workspace.Settle(node: node);
-            for (var index = 0; (index < count); index++) {
-                workspace.Relax(node: (offset + from[index]), cost: (workspace.Cost[node] + cost[index]));
+            // A cell whose area the profile excludes is stepped onto by no route, and a junction hop onto it is no step
+            // either.
+            if (profile.Scale(area: area, cost: 0L) < 0L) {
+                continue;
             }
-            // A junction hop onto a cell the profile excludes is no step either.
-            if (domain.Admits(node: (node - offset), profile: profile) && m_junctions.TryGetValue(key: node, value: out var partners)) {
+            graph.StepCosts(cell: cell, area: area, profile: profile, costs: axisCost);
+
+            var cost = workspace.Cost[node];
+
+            for (var bits = graph.Reverse[cell]; (bits != 0U); bits &= (bits - 1U)) {
+                var slot = System.Numerics.BitOperations.TrailingZeroCount(value: bits);
+
+                workspace.Relax(node: (node + graph.SlotDelta[slot]), cost: (cost + axisCost[RouteGraph.SlotAxes[slot]]));
+            }
+            if (job.Junctions.TryGetValue(key: node, value: out var partners)) {
                 foreach (var partner in partners) {
-                    if (memberOf[DomainOf(node: partner)] >= 0) {
-                        workspace.Relax(node: partner, cost: workspace.Cost[node]);
+                    if (memberOf[DomainOf(offsets: offsets, domains: domains, node: partner)] >= 0) {
+                        workspace.Relax(node: partner, cost: cost);
                     }
                 }
             }
         }
 
-        var steps = new byte[members.Length][];
-        var goalNode = (m_offsets[goalDomain] + goalCell);
+        var steps = new byte[job.Members.Length][];
         var settled = workspace.Settled.Length;
 
         for (var ordinal = 0; (ordinal < settled); ordinal++) {
             var node = workspace.Settled[ordinal];
-            var domainIndex = DomainOf(node: node);
+            var domainIndex = DomainOf(offsets: offsets, domains: domains, node: node);
             var member = memberOf[domainIndex];
-            var domain = m_domains[domainIndex];
-            var offset = m_offsets[domainIndex];
+            var graph = job.Graphs[member];
+            var areas = job.Areas[member];
+            var offset = offsets[domainIndex];
+            var cell = (node - offset);
             var chunk = steps[member];
 
             if (chunk is null) {
-                chunk = new byte[domain.CellCount];
+                chunk = new byte[graph.Forward.Length];
                 Array.Fill(array: chunk, value: NavigationGoalField.NoRoute);
                 steps[member] = chunk;
             }
-            if (node == goalNode) {
-                chunk[(node - offset)] = NavigationGoalField.Goal;
+            if (node == job.GoalNode) {
+                chunk[cell] = NavigationGoalField.Goal;
                 continue;
             }
 
             var target = workspace.Cost[node];
             var step = NavigationGoalField.NoRoute;
-            var count = domain.RouteSteps(node: (node - offset), next: from, cost: cost, profile: profile, slot: slots);
 
-            for (var index = 0; (index < count); index++) {
-                if (workspace.IsSettled(node: (offset + from[index])) && ((workspace.Cost[(offset + from[index])] + cost[index]) == target)) {
-                    step = slots[index];
+            for (var bits = graph.Forward[cell]; (bits != 0U); bits &= (bits - 1U)) {
+                var slot = System.Numerics.BitOperations.TrailingZeroCount(value: bits);
+                var next = (cell + graph.SlotDelta[slot]);
+                var stepCost = graph.StepCost(next: next, axes: RouteGraph.SlotAxes[slot], area: ((areas is null) ? (byte)0 : areas[next]), profile: profile);
+
+                if ((stepCost >= 0L) && workspace.IsSettled(node: (offset + next)) && ((workspace.Cost[(offset + next)] + stepCost) == target)) {
+                    step = ((byte)slot);
                     break;
                 }
             }
             // A junction is free, so its two ends share a cost; only the end settled first can be the step, which keeps
             // two coincident cells from each pointing at the other.
-            if ((step == NavigationGoalField.NoRoute) && m_junctions.TryGetValue(key: node, value: out var partners)) {
-                for (var rank = 0; (rank < partners.Count); rank++) {
-                    var partnerDomain = DomainOf(node: partners[rank]);
+            if ((step == NavigationGoalField.NoRoute) && job.Junctions.TryGetValue(key: node, value: out var partners)) {
+                for (var rank = 0; (rank < partners.Length); rank++) {
+                    var partner = partners[rank];
+                    var partnerDomain = DomainOf(offsets: offsets, domains: domains, node: partner);
+                    var partnerMember = memberOf[partnerDomain];
 
-                    if ((memberOf[partnerDomain] >= 0) && workspace.SettledBefore(node: partners[rank], ordinal: ordinal) && (workspace.Cost[partners[rank]] == target) &&
-                        m_domains[partnerDomain].Admits(node: (partners[rank] - m_offsets[partnerDomain]), profile: profile)) {
+                    if ((partnerMember >= 0) && workspace.SettledBefore(node: partner, ordinal: ordinal) && (workspace.Cost[partner] == target) &&
+                        (job.Areas[partnerMember] is not { } partnerAreas || (profile.Scale(area: partnerAreas[(partner - offsets[partnerDomain])], cost: 0L) >= 0L))) {
                         step = checked((byte)(NavigationGoalField.FirstJunction + rank));
                         break;
                     }
                 }
             }
-            chunk[(node - offset)] = step;
+            chunk[cell] = step;
         }
 
-        var revisions = members.Select(selector: static domain => domain.MediumValueRevision).ToArray();
-
-        GoalFieldBuildsLast++;
-        GoalFieldCellsLast += settled;
-        m_work.Add(amount: 1, kind: NavigationSearchWork.FieldBuilds);
-        m_work.Add(amount: settled, kind: NavigationSearchWork.FieldCells);
-        return new NavigationGoalField(goalCell: goalCell, goalDomain: goalDomain, mediumRevisions: revisions, memberOf: memberOf, members: members, profile: profile, reachedCells: settled, steps: steps);
+        return new NavigationGoalField(goalCell: job.GoalCell, goalDomain: job.GoalDomain, mediumRevisions: job.MediumRevisions, memberOf: memberOf, members: job.Members, profile: profile, reachedCells: settled, steps: steps);
     }
     // Keeps a prior runtime's goal fields whose network is the same domain objects in the same order here, under the same
     // area set: equal baked domains, so equal junctions in the same ascending order, equal area costs, and so every step

@@ -377,11 +377,13 @@ public sealed partial class WorldPopulation {
         return new BodySensorTarget(DistanceSquared: distanceSquared, Index: targetIndex, Position: goal);
     }
     // Locates, serially and before a kit partition steers the body, its shared navigated producer's cell and goal
-    // from the pose and goal the partition will read, and resolves the goal field, so the partition reads a resident
-    // field and locates nothing. No field means the body or its goal stands outside the network. Locating reads and
-    // bakes the network domains the partition's steps will read.
+    // from the pose and goal the partition will read, and requests the goal field, so every due body's missing field
+    // derives side by side; ResolveGoalFields then hands each body its field, and the partition reads a resident field
+    // and locates nothing. No field means the body or its goal stands outside the network. Locating reads and bakes the
+    // network domains the partition's steps will read.
     private void PrepareGoalField(Entry entry, CompiledBodyProducer producer, in FixedVector3 self) {
         entry.PreparedGoalField = null;
+        entry.PreparedGoal = (-1, -1, null);
         if (
             (producer.Target is not { Source: BodyTargetSource.Navigated } target) ||
             (((uint)target.NavigationDomainIndex) >= ((uint)m_navigation.Count)) ||
@@ -391,8 +393,43 @@ public sealed partial class WorldPopulation {
         ) {
             return;
         }
-        entry.PreparedGoalField = m_navigation.GoalField(goalCell: goalCell, goalDomain: goalDomain, profile: NavigationProfile(index: target.NavigationProfileIndex));
+
+        var profile = NavigationProfile(index: target.NavigationProfileIndex);
+
+        m_navigation.RequestGoalField(goalCell: goalCell, goalDomain: goalDomain, profile: profile);
+        entry.PreparedGoal = (goalDomain, goalCell, profile);
         entry.PreparedGoalFrom = (domain, cell);
+        entry.PrefetchedGoal = goal;
+        m_goalReads.Add(item: entry);
+    }
+    // The bodies whose goal field this tick's plan requested (PrepareGoalField), resolved once all have asked.
+    private readonly List<Entry> m_goalReads = [];
+
+    // Hands every body the plan located its goal for the field it requested, joining each derivation: a read is the same
+    // whether its field was resident, derived ahead or derived now, so no tick's outcome depends on when a derivation ran.
+    private void ResolveGoalFields() {
+        foreach (var entry in m_goalReads) {
+            var (domain, cell, profile) = entry.PreparedGoal;
+
+            entry.PreparedGoalField = m_navigation.GoalField(goalCell: cell, goalDomain: domain, profile: profile);
+        }
+        m_goalReads.Clear();
+    }
+    // Requests ahead the goal field a body not due to steer this tick will read when it is, once a goal, so its
+    // derivation runs off the step between now and that read.
+    private void PrefetchGoalField(Entry entry, CompiledBodyProducer producer, in FixedVector3 self) {
+        if (
+            (producer.Target is not { Source: BodyTargetSource.Navigated } target) ||
+            (((uint)target.NavigationDomainIndex) >= ((uint)m_navigation.Count)) ||
+            !m_navigation[target.NavigationDomainIndex].Tuning.Shared ||
+            !TryNavigationGoal(entry: entry, goal: out var goal, target: in target, targetIndex: out _) ||
+            (entry.PrefetchedGoal == goal) ||
+            !TryLocateGoalRead(cell: out _, domain: out _, domainIndex: target.NavigationDomainIndex, goal: in goal, goalCell: out var goalCell, goalDomain: out var goalDomain, self: in self)
+        ) {
+            return;
+        }
+        entry.PrefetchedGoal = goal;
+        m_navigation.RequestGoalField(goalCell: goalCell, goalDomain: goalDomain, profile: NavigationProfile(index: target.NavigationProfileIndex));
     }
     // The walkable cell a position stands on in a domain's network: the domain's own cell first, else the nearest of its
     // network's.
