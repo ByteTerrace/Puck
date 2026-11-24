@@ -119,7 +119,7 @@ public sealed partial class WorldInspectorText {
             var available = (mirror?.TryReadPhase(clock.Name, out _, out phase) ?? false);
 
             _ = (scratch.TryWrite(CultureInfo.InvariantCulture,
-                $"clock={clock.Name} source={(clock.State ?? (clock.IsTickClock ? "tick" : "anchor"))} held={held} rate={rate:0.######} tick={tick.Whole}+{tick.Fraction:0.######} phase={(available ? phase : double.NaN):0.######}", out written) && Line(scratch[..written], lines: NameLines));
+                $"clock={clock.Name} source={(clock.State ?? (clock.IsTickClock ? "tick" : (clock.IsViewClock ? "view" : "anchor")))} held={held} rate={rate:0.######} tick={tick.Whole}+{tick.Fraction:0.######} phase={(available ? phase : double.NaN):0.######}", out written) && Line(scratch[..written], lines: NameLines));
         }
     }
 

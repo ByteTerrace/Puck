@@ -120,6 +120,7 @@ public sealed class SdfReactivityDeviceLawTests {
 
         public void BeginFrame(in FrameContext context) => inner.BeginFrame(context: in context);
         public void PrepareRead(string instance, in FrameContext context) => inner.PrepareRead(context: in context, instance: instance);
+        public void ReadsPrepared(in FrameContext context, Puck.Hosting.Jobs.JobPool? jobs) => inner.ReadsPrepared(context: in context, jobs: jobs);
         public IShaderPipelineStorageCounter? CounterOf(string instance) => inner.CounterOf(instance: instance);
         public IShaderPipelineRenderExtent? RenderExtentOf(string instance) => inner.RenderExtentOf(instance: instance);
         public RenderGraphPackageFragment? FragmentOf(string instance) => inner.FragmentOf(instance: instance);

@@ -204,6 +204,52 @@
               ],
               "additionalProperties": false,
               "title": "WorldSeatProgramOpTap"
+            },
+            {
+              "description": "Holds a button while the point a flight flies to (Fly) stands farther than Band above the body along the body\u0027s own up, or below it: a craft\u0027s climb and sink controls. A program authors one for each direction it has a button for.",
+              "properties": {
+                "$type": {
+                  "const": "rise"
+                },
+                "source": {
+                  "description": "The button source.",
+                  "type": "string"
+                },
+                "toward": {
+                  "description": "Which way the button carries the body.",
+                  "enum": [
+                    "Up",
+                    "Down"
+                  ],
+                  "title": "WorldSeatRiseDirection",
+                  "x-enumDescriptions": {
+                    "Up": "Along the body\u0027s up: a climb.",
+                    "Down": "Against the body\u0027s up: a sink."
+                  }
+                },
+                "band": {
+                  "description": "The height, in metres, inside which the button is let go.",
+                  "type": "number",
+                  "default": 2
+                },
+                "brake": {
+                  "description": "The deceleration, in metres per second squared, the body is taken to coast at once the button is let go: the button is let go early enough to stop at the band\u0027s edge from the speed the body was delivered at.",
+                  "type": "number",
+                  "default": 10
+                },
+                "driven": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "source",
+                "toward"
+              ],
+              "additionalProperties": false,
+              "title": "WorldSeatProgramOpRise"
             }
           ],
           "title": "WorldSeatProgramOp"

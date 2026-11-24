@@ -41,7 +41,9 @@ render {
   // against its bars: the device pool's limit is the lower of `deviceMemoryMiB` and the adapter's own budget less a
   // tenth. On a discrete GPU the host and device have separate bars. The Steam Deck shares one host bar between the
   // process and GPU. A device runs its tier's preset unless it authors a `table` of its own, the highest quality that device
-  // reaches its bar by.
+  // reaches its bar by. Its `frameBar` is the window size its frame time is read at and the rate it holds there: a World
+  // started with `--frame-bar` opens at that size, and a benchmark judges each iteration against that rate's period. The
+  // Steam Deck's is its own panel in its native configuration.
   //
   // The RTX 2060's table is the `high` look along the 2060's own path, at 1920 by 1080: its views shade three quarters
   // of the display's width and height and reconstruct the rest over time (the jittered temporal resolve the high preset
@@ -61,13 +63,14 @@ render {
   // cascades, one up to a third quarter-size cascades, and one smaller than a postcard draws none and renders at half
   // its size, where the fixed cost of a view dominates its pixels.
   devices [
-    { name: "rtx4070", match: "RTX 4070", quality: high, deviceMemoryMiB: 8192, hostMemoryMiB: 8192 }
+    { name: "rtx4070", match: "RTX 4070", quality: high, deviceMemoryMiB: 8192, hostMemoryMiB: 8192, frameBar { width: 2560, height: 1440, hertz: 60 } }
     {
       name: "rtx2060"
       match: "RTX 2060"
       quality: high
       deviceMemoryMiB: 4608
       hostMemoryMiB: 6144
+      frameBar { width: 1920, height: 1080, hertz: 60 }
       table {
         viewsRate { maxRate: 2, tileSize: 4 }
         distantShadows { reach: 1200, texels: 1024, frames: 4 }
@@ -95,7 +98,7 @@ render {
         ]
       }
     }
-    { name: "steamdeck", match: "VANGOGH", quality: high, hostMemoryMiB: 10240 }
+    { name: "steamdeck", match: "VANGOGH", quality: high, hostMemoryMiB: 10240, frameBar { width: 1280, height: 800, hertz: 45 } }
   ]
   // What a nested view (a window, a portal, a filmed camera's screen, a session's screen) gives up at each share of the
   // display's height it is presented at, at every tier and on every device whose table (`nested`) chooses none. A view

@@ -329,7 +329,7 @@ public sealed partial class WorldRigidAssets {
         }
         m_volumesDirty = true;
         WorldCreationWork.ProcessWork.Add(WorldCreationWork.StaticCopies, m_staticCopies.Count);
-        m_copiesRevision++;
+        CopiesChanged();
     }
     // The static copies that ride a body, by their index in m_staticCopies, as the latest placement found them.
     private readonly List<int> m_ridingCopies = [];

@@ -57,6 +57,8 @@ public abstract class VersionedHolder {
     private ulong m_digest;
     // The version the cached digest was taken at or last confirmed under; zero while there is none.
     private ulong m_digestVersion;
+    // The restore point the holder last saved its value under (SlotBinding.BeginRestore); zero while it never has.
+    private ulong m_savedEpoch;
 
     private protected VersionedHolder(SlotBinding binding) {
         ArgumentNullException.ThrowIfNull(argument: binding);
@@ -70,8 +72,22 @@ public abstract class VersionedHolder {
     /// <summary>Gets the binding the holder notes its writes through.</summary>
     public SlotBinding Binding => m_binding;
 
-    // The write side's first act: the version moves and the slot is noted before the writable reference exists.
+    // The write side's first act: under an open restore point the holder keeps the value it is about to hand out for
+    // writing, then the version moves and the slot is noted, all before the writable reference exists.
     private protected void Touch() {
+        if (m_binding.OwesSave(holder: this, savedEpoch: ref m_savedEpoch, bytes: SavedBytes)) { Save(); }
+        m_version++;
+        m_binding.Note();
+    }
+
+    // The bytes one save copies.
+    private protected abstract long SavedBytes { get; }
+    // Copies the current value aside, over whatever the last save left.
+    private protected abstract void Save();
+    // Puts the saved value back as a write: the version moves and the slot is noted.
+    internal abstract void RestoreSaved();
+    // The write a restore makes: it never saves, since what it writes is the saved value.
+    private protected void TouchRestored() {
         m_version++;
         m_binding.Note();
     }
@@ -125,6 +141,15 @@ public sealed class Versioned<T> : VersionedHolder where T : unmanaged, IVersion
     private T m_value;
     // The value the cached digest was taken from, kept from the second encode on.
     private T[]? m_kept;
+    // The value an open restore point saved, kept from the first save on.
+    private T[]? m_saved;
+
+    private protected override long SavedBytes => Unsafe.SizeOf<T>();
+    private protected override void Save() => (m_saved ??= new T[1])[0] = m_value;
+    internal override void RestoreSaved() {
+        TouchRestored();
+        m_value = m_saved![0];
+    }
 
     /// <summary>Initializes a new instance of the <see cref="Versioned{T}"/> class.</summary>
     /// <param name="binding">The binding the holder notes its writes through.</param>
@@ -187,6 +212,22 @@ public sealed class VersionedArray<T> : VersionedHolder where T : unmanaged {
     // The elements the cached digest was taken from, kept from the second encode on.
     private T[]? m_kept;
     private int m_keptCount;
+    // The elements an open restore point saved, and how many.
+    private T[] m_saved = [];
+    private int m_savedCount;
+
+    private protected override long SavedBytes => (((long)m_count) * Unsafe.SizeOf<T>());
+    private protected override void Save() {
+        ArrayCapacity.EnsureLength(ref m_saved, m_count);
+        m_items.AsSpan(length: m_count, start: 0).CopyTo(destination: m_saved);
+        m_savedCount = m_count;
+    }
+    internal override void RestoreSaved() {
+        TouchRestored();
+        ArrayCapacity.EnsureLength(ref m_items, m_savedCount);
+        m_saved.AsSpan(length: m_savedCount, start: 0).CopyTo(destination: m_items);
+        m_count = m_savedCount;
+    }
 
     /// <summary>Initializes a new instance of the <see cref="VersionedArray{T}"/> class, empty.</summary>
     /// <param name="binding">The binding the holder notes its writes through.</param>
@@ -269,6 +310,15 @@ public sealed class VersionedRecord<T> : VersionedHolder where T : struct, IVers
     private T m_value;
     // The value the cached digest was taken from, kept from the second encode on.
     private T[]? m_kept;
+    // The value an open restore point saved, kept from the first save on.
+    private T[]? m_saved;
+
+    private protected override long SavedBytes => Unsafe.SizeOf<T>();
+    private protected override void Save() => (m_saved ??= new T[1])[0] = m_value;
+    internal override void RestoreSaved() {
+        TouchRestored();
+        m_value = m_saved![0];
+    }
 
     /// <summary>Initializes a new instance of the <see cref="VersionedRecord{T}"/> class.</summary>
     /// <param name="binding">The binding the holder notes its writes through.</param>

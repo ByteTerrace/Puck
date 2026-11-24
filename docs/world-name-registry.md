@@ -4191,6 +4191,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `editor.bar.visible[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `timeline.clocks[].name` | Clock | Declares |  | `WorldClock.Name` |
 | `timeline.clocks[].state` | State | Names | Read | `WorldClock.State` |
+| `timeline.clocks[].view.origin` | State | Binding | Binding | `WorldClockView.Origin` |
+| `timeline.clocks[].view.axis` | State | Binding | Binding | `WorldClockView.Axis` |
 | `replays[].rows` | State | Names | Read | `WorldScopedReplay.Rows` |
 | `replays[].control` | State | Names | Action | `WorldScopedReplay.Control` |
 | `replays[].inputs[].cells[].row` | State | Names | Action | `WorldScopedReplayCell.Row` |
@@ -4198,6 +4200,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `routes[].chapters[].steps[][pose].spawn` | SpawnPoint | Names | Read | `WorldRouteStep.PoseBody.Spawn` |
 | `routes[].chapters[].steps[][pose].point` | State | Binding | Binding | `WorldRouteStep.PoseBody.Point` |
 | `routes[].chapters[].steps[][go].point` | State | Binding | Binding | `WorldRouteStep.Go.Point` |
+| `routes[].chapters[].steps[][fly].point` | State | Binding | Binding | `WorldRouteStep.Fly.Point` |
 | `routes[].chapters[].steps[][rest].lookAt` | State | Binding | Binding | `WorldRouteStep.Rest.LookAt` |
 | `shades{*}.outputs[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
 | `shades{*}.values[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
@@ -5304,6 +5307,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].tether.reelChannel` | `WorldTether.ReelChannel` | logical input channels |
 | `kits.rows[].tether.modeState` | `WorldTether.ModeState` | a per-body slot name |
 | `kits.rows[].mount.board.channel` | `WorldMountBoard.Channel` | logical input channels |
+| `kits.rows[].mount.camera` | `WorldMount.Camera` | a camera program name |
 | `kits.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
 | `kits.assignment.select.bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
 | `kits.assignment.select.cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
@@ -6953,6 +6957,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `seatPrograms[].operations[][pulse].paces` | `WorldSeatProgramOp.Pulse.Paces` | a route pace |
 | `seatPrograms[].operations[][tap].action` | `WorldSeatProgramOp.Tap.Action` | a seat program action |
 | `seatPrograms[].operations[][tap].source` | `WorldSeatProgramOp.Tap.Source` | an input-source id, in the input vocabulary |
+| `seatPrograms[].operations[][rise].source` | `WorldSeatProgramOp.Rise.Source` | an input-source id, in the input vocabulary |
 | `routes[].name` | `WorldRoute.Name` | a route's name, which world.benchmark and puck benchmark take |
 | `routes[].program` | `WorldRoute.Program` | a seat program name |
 | `routes[].chapters[].name` | `WorldRouteChapter.Name` | a chapter's name, local to its route |
@@ -6963,9 +6968,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `routes[].chapters[].steps[][go].world` | `WorldRouteStep.Go.World` | a route world |
 | `routes[].chapters[].steps[][cross].until` | `WorldRouteStep.Cross.Until` | a route place or corridor |
 | `routes[].chapters[].steps[][cross].pace` | `WorldRouteStep.Cross.Pace` | a route pace |
+| `routes[].chapters[].steps[][fly].pace` | `WorldRouteStep.Fly.Pace` | a route pace |
+| `routes[].chapters[].steps[][fly].world` | `WorldRouteStep.Fly.World` | a route world |
+| `routes[].chapters[].steps[][fly].enters` | `WorldRouteStep.Fly.Enters` | a route world |
 | `routes[].chapters[].steps[][press].action` | `WorldRouteStep.PressAction.Action` | a seat program action |
 | `routes[].chapters[].steps[][press].until` | `WorldRouteStep.PressAction.Until` | a route place or corridor |
 | `routes[].chapters[].steps[][press].world` | `WorldRouteStep.PressAction.World` | a route world |
+| `routes[].captures` | `WorldRoute.Captures` | a place name, as world.benchmark marks reads it |
 | `shades{*}.name` | `SdfShadeDefinition.Name` | a shade program's label, local to the material that carries it |
 | `shades{*}.parameters[].name` | `SdfShadeParameter.Name` | a parameter local to its shade program |
 | `shades{*}.outputs[].name` | `SdfShadeOutput.Name` | a stage output in the shading vocabulary |

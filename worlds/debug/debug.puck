@@ -22,6 +22,8 @@ import "../standard/free-camera"
 import "../standard/benchmark"
 // The benchmark's route through this world (`world.benchmark run debug`).
 import "benchmark-route"
+// The trip to the moon as a route (`world.benchmark run moon`).
+import "moon-route"
 import "shapes"
 import "studio"
 import "controls"
@@ -414,7 +416,15 @@ render {
     texels: 2048
     frames: 4
   }
+  // A clear day's air (the standard's `clearDayAir` density), thinning with height as air does, so a ship climbing to
+  // the sky seam looks down on the valley through less and less of it.
   atmosphere {
-    clearDayAir()
+    fog {
+      density: 0.0006
+      height {
+        base: 0
+        falloff: 900
+      }
+    }
   }
 }

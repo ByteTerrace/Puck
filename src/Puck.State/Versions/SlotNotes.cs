@@ -11,6 +11,11 @@ public sealed class SlotBinding {
     private SlotNotes? m_notes;
     // Set by the first write since the notes were last published; later writes see it and append nothing.
     private bool m_noted;
+    // The open restore point: its epoch, which a holder compares with the epoch it last saved under, and the holders
+    // that saved. Zero names no point, so a holder that never saved matches none.
+    private ulong m_restoreEpoch;
+    private bool m_restoreOpen;
+    private List<VersionedHolder>? m_restoreSaved;
 
     /// <summary>Gets the slot the owner occupies; meaningful only while bound.</summary>
     public int Slot { get; private set; }
@@ -32,6 +37,46 @@ public sealed class SlotBinding {
         m_notes = notes;
         m_noted = false;
         Slot = slot;
+    }
+
+    /// <summary>Gets the number of holders that saved their value under a restore point over the binding's
+    /// life.</summary>
+    public long RestoreSaves { get; private set; }
+    /// <summary>Gets the bytes those holders saved.</summary>
+    public long RestoreSavedBytes { get; private set; }
+
+    /// <summary>Opens a restore point: from now until <see cref="EndRestore"/>, each of the owner's holders keeps the
+    /// value it held when its write side is first reached, so <see cref="Restore"/> can put every written holder back
+    /// and a holder nothing wrote costs nothing. A point left open is replaced: the owner has one at a time.</summary>
+    /// <remarks>The owner's thread calls this, as it calls every holder's write side.</remarks>
+    public void BeginRestore() {
+        m_restoreEpoch++;
+        m_restoreOpen = true;
+        m_restoreSaved?.Clear();
+    }
+    /// <summary>Puts back every holder written since <see cref="BeginRestore"/> to the value it held then. The point
+    /// stays open, so writes made after this call are put back by the next.</summary>
+    /// <exception cref="InvalidOperationException">No restore point is open.</exception>
+    public void Restore() {
+        if (!m_restoreOpen) { throw new InvalidOperationException(message: "No restore point is open on this binding."); }
+        if (m_restoreSaved is not { } saved) { return; }
+        foreach (var holder in saved) { holder.RestoreSaved(); }
+    }
+    /// <summary>Closes the restore point, keeping every holder as it stands.</summary>
+    public void EndRestore() {
+        m_restoreOpen = false;
+        m_restoreSaved?.Clear();
+    }
+
+    // Answers whether a holder that last saved under savedEpoch owes a save, and takes it as saved under the open
+    // point. Called by a holder's write side before it hands out a writable reference.
+    internal bool OwesSave(VersionedHolder holder, ref ulong savedEpoch, long bytes) {
+        if (!m_restoreOpen || (savedEpoch == m_restoreEpoch)) { return false; }
+        savedEpoch = m_restoreEpoch;
+        (m_restoreSaved ??= []).Add(item: holder);
+        RestoreSaves++;
+        RestoreSavedBytes += bytes;
+        return true;
     }
 
     // Notes the slot once per publish. Called by a holder's write side, on the thread that owns the slot's partition.

@@ -127,7 +127,7 @@ lanes, [the release](#the-release), the
 
 ### The first lanes
 
-Four campaigns, started together in the first hour, one principal each, with
+From here on at most two subagents run at once (the owner's standing order, AGENTS.md); the five lanes below started before it and finish as briefed, and any continuation runs two at a time. Four campaigns, started together in the first hour, one principal each, with
 the two milestones folded into them rather than queued behind them (the
 owner's ruling). How they run:
 
@@ -850,6 +850,23 @@ wait behind them.
 
    At scale: a zone's rule cost follows what its players touched this tick,
    not how many rules and tables it holds.
+7. **A world is produced by its own job, and only for a frame that shows
+   it.** A client holds a residency for every world a painting, a screen or
+   its sky shows, and the frame thread captured, packed and uploaded each of
+   them in turn on every frame, shown or not, because a residency whose
+   lighting settles owes a minimum and a day that turns never stops settling
+   it. [The plan](frame-production.md) states the rule, the invariant the
+   forks rest on and the options weighed, a pipeline across frames among them.
+   Built: the minimum is one residency a frame, and the captured residencies
+   pack, and their uploads record, as forks of the job pool with a residency a
+   partition. Left, in [its order](frame-production.md#the-steps): a rated
+   view's residency captured at the view's rate, routed scenes captured side
+   by side (the largest step left: every routed capture calls back into the
+   one binder), one fork for a frame's recordings, and a pump that visits what
+   completed. Check: `world.counters sdf.captures` across a benchmark chapter,
+   `run` a frame against `held`, with `packed-on-worker` and
+   `uploaded-on-worker`, beside `host.frames`' capture and pack parts. At
+   scale: a hub of a dozen worlds costs the frame the worlds on screen.
 
 ### The player build never bakes
 
@@ -1557,7 +1574,7 @@ The frame thread's CPU work, largest first:
   (`SdfWorldResidency.EnsureTables`). Unmeasured; read
   it on an arrival before moving it.
 - [low] View placement (`WorldViewGraphHost.CompleteFootprints`) and screen
-  binding (`SdfWorldResidency.PrepareOnce`: `WorldScreenDecals.Resolve`,
+  binding (`SdfWorldResidency.Prepare`: `WorldScreenDecals.Resolve`,
   `WorldScreenBinder.TryRippleOf`) run each frame for every screen.
 - [low] Walks over every row or copy each frame that the arrival memo's row
   table does not absorb: the bake's copy layout (`SdfMeshPathBake`) and two
@@ -1801,7 +1818,7 @@ Remaining detailed findings and smaller cuts in this area:
   bound atlas texture apart from the program that names its new identity
   (`SdfProgram.GlyphAtlas`), so a bake taken between the two could store old
   pixels under the new key. Confirm whether the order inside
-  `SdfWorldResidency.PrepareOnce` rules it out; if not, bind both in one step.
+  `SdfWorldResidency.Prepare` rules it out; if not, bind both in one step.
   `WorldTextCatalog.Reconcile` also copies the whole packed image into
   `SdfGlyphAtlas`.
 - [high, iteration] An edit to `SdfMeshPathBake` that the bake's content never

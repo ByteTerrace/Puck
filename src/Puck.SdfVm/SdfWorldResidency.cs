@@ -79,7 +79,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // it and submitted its upload yet.
     private SdfFrame? m_frame;
     private bool m_captured;
-    private bool m_packed;
     private bool m_submitted;
     // The capture extent: the largest extent a view asked for, which a frame source composes its regions at.
     private uint m_width;
@@ -514,9 +513,16 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_tables?.BeginShadowFrame();
         m_frameSeconds = Math.Max(val1: frameSeconds, val2: 0);
         m_captured = false;
-        m_packed = false;
+        m_pack = PackStage.None;
+        m_packFrame = null;
+        m_packDevice = null;
         m_submitted = false;
     }
+
+    /// <summary>Gets the presentation time, in seconds, from the frame the residency last captured to the frame it has
+    /// started: the started frame's span and the spans of the frames before it that captured nothing. The minimum of a
+    /// residency nothing reads is rated by it (<see cref="SdfWorldPasses.BeginFrame"/>).</summary>
+    internal double SecondsSinceCapture => (m_skippedSeconds + m_frameSeconds);
 
     // Whether a frame has started, the interval the current frame spans, and the intervals of the frames since the last
     // capture that captured nothing (BeginFrame), which the next capture's source advances by beside its own.
@@ -558,24 +564,88 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <exception cref="ObjectDisposedException">The residency is released.</exception>
     public bool Prepare(in FrameContext context) {
         _ = HostFrame(context: in context);
-
-        if (!m_packed) {
-            m_packed = true;
-            // The ledger publishes an upload once a frame finds its fence signaled, standing frames included, so the one
-            // upload a still view renders from is read back even though no later upload follows it.
-            m_work.Poll();
-            m_renders = PrepareOnce(context: in context);
-            // The background work draws on the presentation's budget by the share of the display the frame is shown over.
-            if ((m_tables is { } weighed) && (m_frame is { } shown)) { weighed.GpuWork.Weigh(share: shown.DisplayShare); }
-            // Tables whose frame waits on a pipeline still serve their background work: the upload is what lets the bake
-            // bind the program the construction uploaded, so it samples while the driver compiles the rest.
-            if (!m_renders && (m_tables is { } tables) && (m_pipelineWaiting is not null)) { SubmitOnce(tables: tables); }
-        }
+        _ = BeginPack(context: in context);
+        RunPack();
+        EndPack();
 
         return m_renders;
     }
 
-    // The frame's one preparation, whose answer Prepare repeats for the rest of the frame.
+    // The frame's one preparation in three steps, whose answer Prepare repeats for the rest of the frame. BeginPack and
+    // EndPack run on the frame thread; RunPack runs on whichever thread holds the residency between them, the frame
+    // thread or one partition of a fork the frame thread joins before it ends the pack (SdfWorldPasses.ReadsPrepared).
+    //
+    // Invariant: RunPack reads and writes only this residency, its tables, bake, lighting and exposures, the frame it
+    // packs and the device, never another residency or the host that filmed the frame. It holds because everything of
+    // the preparation that asks the host (the screens' sources, surfaces, decals and texts) or changes the device's
+    // programs is done in BeginPack, and the upload is submitted in EndPack; a step added to the preparation that reads
+    // outside the residency belongs in BeginPack. Nothing checks it but SubmitOnce's refusal inside a partition.
+    private enum PackStage : byte {
+        None,
+        Begun,
+        Ran,
+        Ended,
+    }
+
+    private PackStage m_pack;
+    // What BeginPack resolved for RunPack: the frame the tables take and the device they are on.
+    private SdfFrame? m_packFrame;
+    private IGpuDeviceContext? m_packDevice;
+    private FrameContext m_packContext;
+
+    /// <summary>Gets whether the frame's packing may run beside other residencies' as a partition of a fork: it has
+    /// begun, and the frame neither locks presentation to a tick nor converges its lighting, both of which settle
+    /// their work inside the preparation and wait for it there.</summary>
+    internal bool PacksBeside => ((m_pack == PackStage.Begun) && (m_packFrame is { TickLocked: false, ConvergesLighting: false }) && !HoldsFrame);
+
+    /// <summary>Begins the frame's preparation on the frame thread, once a frame: publishes the uploads whose fences
+    /// signaled, builds the tables once their pipelines are ready, applies a pending reload and the glyph atlas, binds
+    /// the screens, and uploads a changed program.</summary>
+    /// <param name="context">The host's frame context, which resolves the device.</param>
+    /// <returns><see langword="true"/> when the frame is left to <see cref="RunPack"/>; <see langword="false"/> when the
+    /// preparation has already begun this frame or settled its answer here (no frame, no tables, or a frame held while
+    /// a pipeline builds).</returns>
+    internal bool BeginPack(in FrameContext context) {
+        if (m_pack != PackStage.None) { return false; }
+        // The ledger publishes an upload once a frame finds its fence signaled, standing frames included, so the one
+        // upload a still view renders from is read back even though no later upload follows it.
+        m_work.Poll();
+        if (!PrepareTables(context: in context, device: out var device, frame: out var frame)) {
+            m_renders = false;
+            m_pack = PackStage.Ran;
+            return false;
+        }
+        m_packDevice = device;
+        m_packFrame = frame;
+        m_packContext = context;
+        m_pack = PackStage.Begun;
+        return true;
+    }
+    /// <summary>Packs the frame <see cref="BeginPack"/> left into the tables and stages its meshes, shading, lighting
+    /// and exposure. It runs on one thread, which need not be the frame thread, and touches only the residency's own
+    /// state.</summary>
+    internal void RunPack() {
+        if (m_pack != PackStage.Begun) { return; }
+        try {
+            m_renders = PackPrepared(context: in m_packContext, device: m_packDevice!, frame: m_packFrame!);
+        } finally {
+            m_packFrame = null;
+            m_packDevice = null;
+            m_pack = PackStage.Ran;
+        }
+    }
+    /// <summary>Ends the frame's preparation on the frame thread: weighs the background work by the share of the display
+    /// the frame is shown over, and submits the upload of tables whose frame waits on a pipeline.</summary>
+    internal void EndPack() {
+        if (m_pack != PackStage.Ran) { return; }
+        m_pack = PackStage.Ended;
+        // The background work draws on the presentation's budget by the share of the display the frame is shown over.
+        if ((m_tables is { } weighed) && (m_frame is { } shown)) { weighed.GpuWork.Weigh(share: shown.DisplayShare); }
+        // Tables whose frame waits on a pipeline still serve their background work: the upload is what lets the bake
+        // bind the program the construction uploaded, so it samples while the driver compiles the rest.
+        if (!m_renders && (m_tables is { } tables) && (m_pipelineWaiting is not null)) { SubmitOnce(tables: tables); }
+    }
+
     // Binds one screen slot's glyph-cell grid, or clears the slot when its provider shows no dense text this frame.
     private static void BindScreenDecal(SdfWorldTables tables, int screenIndex, Func<SdfScreenDecalFrame?> provider) {
         if (provider() is { } decal) {
@@ -590,17 +660,23 @@ public sealed partial class SdfWorldResidency : IDisposable {
             tables.ClearScreenDecal(screenIndex: screenIndex);
         }
     }
-    private bool PrepareOnce(in FrameContext context) {
+    // The preparation's first half (BeginPack): everything that asks the host or changes what the device holds beside the
+    // tables' own regions. Returns false when the residency has no frame, device or tables, or holds its packed frame
+    // while a pipeline builds.
+    private bool PrepareTables(in FrameContext context, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out IGpuDeviceContext? device, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfFrame? frame) {
+        frame = (m_pendingFrame ?? m_frame);
+        device = null;
         if (
-            ((m_pendingFrame ?? m_frame) is not { } frame) ||
-            !context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var device) ||
+            (frame is null) ||
+            !context.Host.TryResolveCapability<IGpuDeviceContext>(capability: out var resolved) ||
             !EnsureTables(
-                device: device,
+                device: resolved,
                 frame: frame
             )
         ) {
             return false;
         }
+        device = resolved;
 
         var tables = m_tables!;
 
@@ -651,7 +727,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
             }
         }
 
-        // A frame the tables packed already, as when the frame source filmed nothing this frame, stands as it was.
         if (!ReferenceEquals(
             objA: frame,
             objB: m_packedFrame
@@ -674,7 +749,21 @@ public sealed partial class SdfWorldResidency : IDisposable {
                     tables: tables
                 );
             }
+        }
 
+        return true;
+    }
+    // The preparation's second half (RunPack), which keeps to the residency's own state: packs the frame, or stages the
+    // meshes that landed for a frame that stands, then stages shading, the bake's view of the tables, lighting and
+    // exposure. Returns whether the tables hold a frame the views can render.
+    private bool PackPrepared(in FrameContext context, IGpuDeviceContext device, SdfFrame frame) {
+        var tables = m_tables!;
+
+        // A frame the tables packed already, as when the frame source filmed nothing this frame, stands as it was.
+        if (!ReferenceEquals(
+            objA: frame,
+            objB: m_packedFrame
+        )) {
             using (HostFrameWork.Measure(HostFrameWorkPart.Pack)) { tables.Pack(frame: frame); }
             m_packedFrame = frame;
             m_frame = frame;
@@ -769,16 +858,49 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // frame's upload is submitted, which only the frame thread may reach. A recording forked onto the job pool finds it
     // done (SdfWorldPasses.PrepareResidency) and refuses rather than submit from another thread.
     private void SubmitOnce(SdfWorldTables tables) {
-        if (m_submitted) { return; }
+        if (!OpenSubmit(tables: tables)) { return; }
+        tables.RecordUpload();
+        CloseSubmit(tables: tables);
+    }
+    // Opens the frame's one submission on the frame thread (SdfWorldTables.OpenUpload); false when the frame's upload is
+    // already submitted. The upload's recording then runs on whichever thread holds the tables
+    // (SdfWorldTables.RecordUpload), and CloseSubmit ends it on the frame thread.
+    private bool OpenSubmit(SdfWorldTables tables) {
+        if (m_submitted) { return false; }
         if (JobPool.InPartition) {
             throw new InvalidOperationException(message: $"Residency '{Name}' was asked to stage its frame from a forked recording; only the frame thread's preparation may.");
         }
         m_submitted = true;
         tables.HoldsFrame = HoldsFrame;
-        tables.SubmitUpload();
+        tables.OpenUpload();
+        return true;
+    }
+    private void CloseSubmit(SdfWorldTables tables) {
+        tables.CloseUpload();
         // A withheld frame presents nothing, so the work it waits on, its meshes or its lighting, runs at the GPU's pace.
         if (FrameWithheld) { tables.GpuWork.Drive(tables: tables); } else { tables.GpuWork.Pump(tables: tables); }
     }
+
+    /// <summary>Opens the frame's staging for a caller that records several residencies' uploads side by side
+    /// (<see cref="SdfWorldPasses.RendersScheduled"/>): prepares the frame, then opens its upload on the frame thread.
+    /// The caller then runs <see cref="RecordStage"/> on any one thread and <see cref="EndStage"/> on the frame
+    /// thread.</summary>
+    /// <param name="context">The host's frame context.</param>
+    /// <returns><see langword="true"/> when the upload is open and waits to be recorded; <see langword="false"/> when the
+    /// residency has no tables, its frame is already staged, or the frame is one whose staging keeps to the frame thread
+    /// (a locked tick, a converging capture or a withheld frame), which <see cref="Stage"/> stages.</returns>
+    /// <exception cref="ObjectDisposedException">The residency is released.</exception>
+    internal bool BeginStage(in FrameContext context) {
+        _ = Prepare(context: in context);
+        if ((m_tables is not { } tables) || m_submitted || FrameWithheld || HoldsFrame || (m_frame is not { TickLocked: false, ConvergesLighting: false })) { return false; }
+        return OpenSubmit(tables: tables);
+    }
+    /// <summary>Records the upload <see cref="BeginStage"/> opened (<see cref="SdfWorldTables.RecordUpload"/>), touching
+    /// only the residency's tables.</summary>
+    internal void RecordStage() => m_tables!.RecordUpload();
+    /// <summary>Submits the upload <see cref="RecordStage"/> recorded and pumps the tables' background work, on the frame
+    /// thread.</summary>
+    internal void EndStage() => CloseSubmit(tables: m_tables!);
     /// <summary>Returns the tables the frame is staged in (<see cref="Stage"/>), for a pass that records against them,
     /// staging it late (<see cref="StageLate"/>) when nothing has yet.</summary>
     /// <param name="context">The host's frame context.</param>

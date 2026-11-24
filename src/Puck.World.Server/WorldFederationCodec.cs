@@ -245,6 +245,16 @@ public static partial class WorldFederationCodec {
             );
         }
         var generation = reader.ReadInt32();
+        var mount = reader.ReadInt32();
+
+        // A body rides another body of the same table or nothing; an index outside it would be read as a slot.
+        if ((mount < -1) || (mount >= WorldBodiesLimits.IndexLimit) || (mount == index)) {
+            reader.Fail(
+                detail: $"snapshot entity {ordinal} rides body {mount}, which is neither -1 nor another body's index",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
         var placementId = reader.ReadNullableString(field: $"snapshot entity {ordinal} placement id");
         // Read wide and test wide: narrowing to the enum first would drop the very bits the admission test exists to
         // catch.
@@ -299,7 +309,8 @@ public static partial class WorldFederationCodec {
             placementId,
             heading,
             facts,
-            state
+            state,
+            mount
         );
     }
     private static bool TryDeserializeDefinition(byte[] bytes, string field, out WorldDefinition? definition, out WireFailure failure) {
@@ -996,6 +1007,7 @@ public static partial class WorldFederationCodec {
             writer.WriteSingle(value: carried.Scale);
         }
         writer.WriteInt32(value: entry.Generation);
+        writer.WriteInt32(value: entry.Mount);
         writer.WriteNullableString(value: entry.PlacementId);
         writer.WriteUInt32(value: ((uint)entry.Facts));
         writer.WriteInt32(value: entry.State.Length);
