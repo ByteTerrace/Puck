@@ -52,13 +52,13 @@ test "door open after door close brings the doors back and the lamp goes out" {
 }
 
 // `hallBlinds` holds each level's blinds (Up 0, Down 1), and every level's start down. Each scenario poses body 0 at
-// (27.5, 0.05, 14) in the lobby level's hall and body 8, a chess piece, out on the ground at (27.5, 0.05, 6), so the
+// (27.5, 0.05, 14) in the lobby level's hall and body 18, a chess piece, out on the ground at (27.5, 0.05, 6), so the
 // line of sight between them runs through the south window at x = 26 to 29 and reads whether that window's blind is
 // down.
 test "raising the lobby's blinds, as gallery.blinds does, opens the sight line" {
   when {
     seat1: body.pose 27.5 0.05 14 0 0 0 0
-    seat1: body.pose 27.5 0.05 6 0 0 0 8
+    seat1: body.pose 27.5 0.05 6 0 0 0 18
     seat1: world.state.cell.set hallBlinds level0 0
     ticks 30
   }
@@ -72,7 +72,7 @@ test "raising the lobby's blinds, as gallery.blinds does, opens the sight line" 
 test "lowering them again stops it" {
   when {
     seat1: body.pose 27.5 0.05 14 0 0 0 0
-    seat1: body.pose 27.5 0.05 6 0 0 0 8
+    seat1: body.pose 27.5 0.05 6 0 0 0 18
     seat1: world.state.cell.set hallBlinds level0 0
     ticks 30
     seat1: world.state.cell.set hallBlinds level0 1

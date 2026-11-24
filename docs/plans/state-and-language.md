@@ -360,7 +360,7 @@ basis authors 8 with no inhabitants; chess 41 = those 8, 32 pieces and a
 cursor; the debug world sums its gallery, board-room, card, free-camera and
 portal-witness inhabitants with its seat slots in `worlds/debug/debug.puck`), and every game addresses its pieces by body
 index computed from the same hand sum (`goTop`, `reversiTop`, `cardsTop`,
-chess's "bodies 8 to 39") through grants such as `body:{goTop - 1 - i}`.
+chess's "bodies 18 to 49") through grants such as `body:{goTop - 1 - i}`.
 Deriving the total therefore moves the drift into those grants, where it
 fails silently. The fix at the cause addresses a piece by its placement (a
 grant or a rule naming `goStones`' body `i`, resolved at load) so no source

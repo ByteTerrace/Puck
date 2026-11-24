@@ -69,13 +69,13 @@ to move takes nothing, so a put-down there is refused and the piece stays up.
 Seat 1 plays every side the computer does not (`aiSide`).
 
 `world.state play` reads the seated seat's cursor, the piece it holds
-(`held`, a piece ordinal or -1) and the square it left. Body 40 is the cursor
+(`held`, a piece ordinal or -1) and the square it left. Body 50 is the cursor
 outline; it rests inside the tabletop while nobody sits at the table.
 
 ## Moving a piece from the console
 
 A piece is a body: piece `n` (the `piece<n>` keys of `pieceCell`) is body
-`39 - n`, so White's pieces are bodies 24 to 39 and Black's 8 to 23; piece `n`
+`49 - n`, so White's pieces are bodies 34 to 49 and Black's 18 to 33; piece `n`
 starts on file `n % 8` (piece 4 is the white king, piece 12 the e2 pawn).
 Square (file, rank), counting from a1 = (0, 0), is centred at
 x = 57.2 - 0.2 × file, z = 21.9 + 0.2 × rank: the files run toward -X, so a1

@@ -15,10 +15,11 @@ bodies {
   capacity: 41
 }
 
-// The pieces are bodies 8 to 39, piece n body 39 - n, and the seat drives each of them: a seat's `body.pose <x> <y>
+// The pieces are bodies 18 to 49, piece n body 49 - n, above the four seats, eight visitors and six range walkers
+// (debug.puck), and the seat drives each of them: a seat's `body.pose <x> <y>
 // <z> 0 0 0 <body>` lifts a piece onto a square (chess.md).
 grants: concat(
-  map(range(8, 32), body => { budget: 64, capability: Drive, grantee: "seat1", subject: $"body:{body}" }),
+  map(range(18, 32), body => { budget: 64, capability: Drive, grantee: "seat1", subject: $"body:{body}" }),
   [{ capability: Edit, grantee: "seat1", subject: "state:chessInput" }]
 )
 
@@ -187,7 +188,7 @@ placements {
     solid
   }
 
-  // The square cursor a seated player moves (body 40 in the debug world, before the pieces so they keep 8 to 39): the
+  // The square cursor a seated player moves (body 50 in the debug world, above the pieces at 18 to 49): the
   // rules pose it on the cursor's square while the seat sits at the table and park it inside the tabletop otherwise.
   placement "boardCursor" {
     prototype: "boardCursor"
@@ -760,7 +761,7 @@ replays [
       shapeLegal, castleLegal, castleRights, castleTransitAttacked,
       boardMismatch, boardChanged, boardCollisions, chessInput
     ]
-    bodies: range(8, 33)
+    bodies: range(18, 33)
     seats ["seat1"]
     durationTicks: 37 * chessDemoPlyTicks
     inputs: map(
