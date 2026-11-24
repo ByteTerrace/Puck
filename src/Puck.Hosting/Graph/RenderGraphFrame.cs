@@ -69,8 +69,8 @@ public readonly record struct RenderGraphSourceState(string Instance, ImageSourc
 /// <param name="Unchanged">The instances whose host declares that nothing they render from has changed since their
 /// latest completed render, so that render stands for this frame, or <see langword="null"/> for none: an SDF view whose
 /// inputs are byte-identical to its last rendered frame's. Such an instance is not due by its refresh; it renders only
-/// when it never has, when <paramref name="Rerender"/> names it, or when the extent it is demanded at moves, since a new
-/// image holds nothing. A source is never named, since its producer declares its own cadence.</param>
+/// when it never has, when <paramref name="Rerender"/> names it, or when its cadence is due and the demanded extent
+/// moves. A source is never named, since its producer declares its own cadence.</param>
 /// <param name="Named">The instances the host still names, whether or not it shows them this frame, or
 /// <see langword="null"/>, which names every instance: a view a screen or a HUD frame is bound to, parked or not. The
 /// roots, and whatever a named instance shows or reads at any extent, are named with them. An instance the display does
