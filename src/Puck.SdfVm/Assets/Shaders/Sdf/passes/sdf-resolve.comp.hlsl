@@ -53,8 +53,7 @@
 // (SdfWorldPackage.TemporalPeriod), or at SDF_HISTORY_FEATURE_WEIGHT_CAP while the pixel carries a feature.
 // The stationary window (historyWindowRW, SDF_HISTORY_WINDOW_WORDS a pixel in the same planar layout) is one buffer the
 // resolve updates in place, not history in two copies: word zero is the phase mask, and from SDF_HISTORY_WINDOW_OFFSET
-// each phase holds four words: its color as a shared-exponent word (Shared/shared-exponent.hlsli), its coverage as UNORM16
-// under its Gaussian weight as a half, then its transport as four halves. A completed window replaces each phase with that phase's new samples. Its fixed-order sum is invariant when the
+// each phase holds three words (sdfPackWindowSample). A completed window replaces each phase with that phase's new samples. Its fixed-order sum is invariant when the
 // jitter repeats; an exponential mean capped at one period instead keeps favoring the latest phase, and clipping to its
 // neighborhood destroys unsighted features. Every window access names the invocation's own pixel (sdfHistoryWindowWord
 // takes no other), and a pixel keeps its window only while its history comes from that same pixel, so no invocation
@@ -72,6 +71,41 @@ static const float SdfResolveFeatureContrast = 0.5;
 // feature moves with its surface through the reprojection, but one that moves over a surface, a glint under a turning
 // camera, must be clipped like any change.
 static const float SdfResolveFeatureTravel = 0.05;
+
+// One phase of the stationary window, SDF_HISTORY_SAMPLE_WORDS words: its color as a shared-exponent word
+// (Shared/shared-exponent.hlsli); its coverage as UNORM10 in bits 0 to 9, which holds full coverage exactly, its Gaussian
+// weight over [0, 2) as UNORM10 in bits 10 to 19, never zero for a sample that is kept, and the high twelve bits of its
+// transport's inverse distance above them; then the transport's fog, haze and medium weights, each a share in [0, 1], as
+// UNORM10, and the inverse distance's low two bits. The inverse distance is its half float's fifteen bits (sdfPackTransport)
+// less the lowest, a relative 2^-9. A phase is read back as it was written every frame, so the rounding is the same
+// each time the window sums and nothing in it follows the jitter.
+#if SDF_HISTORY_SAMPLE_WORDS != 3
+#error A stationary phase packs into three words.
+#endif
+uint3 sdfPackWindowSample(float4 color, float weight, float4 transport) {
+    uint distance = ((f32tof16(min(transport.y, 65504.0)) & 0x7FFFu) >> 1u);
+    uint3 air = (uint3)round(saturate(transport.xzw) * 1023.0);
+    uint coverage = (uint)round(saturate(color.a) * 1023.0);
+    uint weighed = max((uint)round(saturate(weight * 0.5) * 1023.0), 1u);
+
+    return uint3(
+        puckPackSharedExponent(color.rgb),
+        (coverage | (weighed << 10u) | ((distance >> 2u) << 20u)),
+        (air.x | (air.y << 10u) | (air.z << 20u) | ((distance & 3u) << 30u))
+    );
+}
+void sdfUnpackWindowSample(uint3 packed, out float4 color, out float weight, out float4 transport) {
+    uint distance = (((packed.y >> 20u) << 2u) | (packed.z >> 30u));
+
+    color = float4(puckUnpackSharedExponent(packed.x), (float(packed.y & 0x3FFu) / 1023.0));
+    weight = ((float((packed.y >> 10u) & 0x3FFu) / 1023.0) * 2.0);
+    transport = float4(
+        (float(packed.z & 0x3FFu) / 1023.0),
+        f16tof32(distance << 1u),
+        (float((packed.z >> 10u) & 0x3FFu) / 1023.0),
+        (float((packed.z >> 20u) & 0x3FFu) / 1023.0)
+    );
+}
 
 uint2 sdfResolveClamp(int2 pixel, uint2 dims) {
     return (uint2)clamp(pixel, int2(0, 0), (int2(dims) - 1));
@@ -613,33 +647,33 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
 
     [unroll] for (uint sample = 0u; sample < SDF_TEMPORAL_PERIOD; sample++) {
         uint offset = (SDF_HISTORY_WINDOW_OFFSET + (sample * SDF_HISTORY_SAMPLE_WORDS));
-        uint packed[SDF_HISTORY_SAMPLE_WORDS] = { 0u, 0u, 0u, 0u };
+        uint3 packed = uint3(0u, 0u, 0u);
         bool present = ((mask & (1u << sample)) != 0u);
 
         if (present && (sample == phase)) {
             float4 color = (sum / weightSum);
             color.a = clamp(color.a, coverageMin, coverageMax);
-            uint2 transport = sdfPackTransport(transportSum / weightSum);
-            packed[0] = puckPackSharedExponent(color.rgb);
-            packed[1] = ((uint)round(saturate(color.a) * 65535.0) | (f32tof16(weightSum) << 16u));
-            packed[2] = transport.x;
-            packed[3] = transport.y;
-            [unroll] for (uint component = 0u; component < SDF_HISTORY_SAMPLE_WORDS; component++) {
-                historyWindowRW[sdfHistoryWindowWord(id, (offset + component), extent)] = packed[component];
-            }
+            packed = sdfPackWindowSample(color, weightSum, (transportSum / weightSum));
+            historyWindowRW[sdfHistoryWindowWord(id, offset, extent)] = packed.x;
+            historyWindowRW[sdfHistoryWindowWord(id, (offset + 1u), extent)] = packed.y;
+            historyWindowRW[sdfHistoryWindowWord(id, (offset + 2u), extent)] = packed.z;
         } else if (present) {
-            [unroll] for (uint component = 0u; component < SDF_HISTORY_SAMPLE_WORDS; component++) {
-                packed[component] = historyWindowRW[sdfHistoryWindowWord(id, (offset + component), extent)];
-            }
+            packed = uint3(historyWindowRW[sdfHistoryWindowWord(id, offset, extent)],
+                historyWindowRW[sdfHistoryWindowWord(id, (offset + 1u), extent)],
+                historyWindowRW[sdfHistoryWindowWord(id, (offset + 2u), extent)]);
         }
-        // Decode the new phase too: using its unrounded sum while the other phases use halves would itself pulse.
+        // Decode the new phase too: using its unrounded sum while the other phases use their packed words would itself
+        // pulse.
         if (present) {
-            float4 color = float4(puckUnpackSharedExponent(packed[0]), (float(packed[1] & 0xFFFFu) / 65535.0));
-            float weight = f16tof32(packed[1] >> 16u);
+            float4 color;
+            float weight;
+            float4 transport;
+
+            sdfUnpackWindowSample(packed, color, weight, transport);
             windowMin = min(windowMin, color);
             windowMax = max(windowMax, color);
             windowColor += (weight * color);
-            windowTransport += (weight * sdfUnpackTransport(uint2(packed[2], packed[3])));
+            windowTransport += (weight * transport);
             windowWeight += weight;
         }
     }
