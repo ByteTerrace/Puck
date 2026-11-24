@@ -1792,12 +1792,14 @@ public sealed class WorldPeerHost : IDisposable {
                 }
 
                 if (!accepted) {
+                    var dropReason = ((reason.Length > 0)
+                        ? reason
+                        : "the intent names no live or forwarded transfer body");
+                    m_server.NoteFederatedDrop(bodyIndex: stamped.EntityIndex, reason: dropReason);
                     await WriteFederationRefusal(
                         stream: stream,
                         refusal: WorldFederationRefusal.IntentRefused,
-                        detail: ((reason.Length > 0)
-                        ? reason
-                        : "the intent names no live or forwarded transfer body"),
+                        detail: dropReason,
                         ct: ct
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     return;

@@ -128,12 +128,19 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
 
         // Never hold one authority's operation gate while calling the next authority.
         if (stamped is { } onward && m_server.TransferForwarder is { } forwarder) {
-            return forwarder.TryForwardIntent(source: m_server, mobility: in m_mobility, submission: in onward, reason: out reason);
+            if (forwarder.TryForwardIntent(source: m_server, mobility: in m_mobility, submission: in onward, reason: out reason)) {
+                return true;
+            }
+            m_server.NoteFederatedDrop(bodyIndex: onward.EntityIndex, reason: reason);
+            return false;
         }
 
         reason = (closed || stamped.HasValue)
             ? "the forwarding lease is closed or the traveler is no longer live at this authority"
             : $"traveler {m_mobility.Incarnation} has no committed credential at this authority";
+        if (!closed && stamped is { } unrouted) {
+            m_server.NoteFederatedDrop(bodyIndex: unrouted.EntityIndex, reason: reason);
+        }
         return false;
     }
     private bool TryResolvePrincipal(out Principal principal, out string reason) {
@@ -280,7 +287,6 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
 
         var stamped = intent with { EntityIndex = principal.Index, Principal = principal };
         if (!IsLiveTransferredPrincipal(server, principal)) {
-            server.NoteFederatedDrop(bodyIndex: principal.Index, reason: $"{principal.Describe()} no longer owns a live body here; the input follows its onward route");
             return (stamped, false);
         }
 

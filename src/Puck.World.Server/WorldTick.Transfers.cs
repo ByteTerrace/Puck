@@ -386,6 +386,16 @@ public sealed partial class WorldTick {
             }
         }
     }
+    // Clears any held federated input image for a transferred peer departing its slot under the authority gate, so
+    // neither replay hashes nor per-tick federated admission keep scanning an onward-departed slot.
+    internal void ClearDepartedFederatedIntent(int index, Principal principal) {
+        System.Diagnostics.Debug.Assert(Host.AuthorityGate.IsHeldByCurrentThread);
+        NoteFederatedDrop(bodyIndex: index, reason: null);
+        if ((((uint)index) < ((uint)m_federatedIntents.Length)) && m_federatedIntents[index].Active && (m_federatedIntents[index].Principal == principal)) {
+            Host.Input.Reset(principal: principal);
+            m_federatedIntents[index] = default;
+        }
+    }
     /// <summary>Reserves destination body indices under a binding transfer lease. The same method backs loopback
     /// colocation and the QUIC authority door; callers never reserve population capacity by inspecting it directly.</summary>
     /// <param name="request">The source-tick deadline, border policy, and prospective travelers.</param>

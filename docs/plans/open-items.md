@@ -4680,47 +4680,22 @@ the stages; this packet holds what a stage does not.
 - [medium] `host.frames` reads the host loop's interval and never the time a
   frame was displayed, so judder that an even interval hides is not read
   (`HostFrameTimeline`). Stage 8 adds the displayed interval.
-- [high] The debug route does not arrive against a remote authority; the
-  remote route itself does. `puck benchmark --remote local` stages the pair
-  and plays it: on `worlds/minimal` (`--route walk`) the seat's body is handed
-  to the listening authority and the chapter arrives, so the driver, the
-  remote seat's input and the instrument are not what stops the debug world.
-  Its delivery now is: the seat's transfer commits, the document arrives as a
-  manifest and the route begins, and every chapter fails because the seat's
-  body does not stand on the ground at the authority
-  ([a hosted world on a client](#a-hosted-world-on-a-client) holds that
-  finding). The remaining defects were read from a pair of headless Worlds,
-  one listening and one started with `--connect`, both on one staged document
-  and one federation key:
-  - `--connect` resolves its remote destination from the document the client
-    booted and refuses one that authors no `host.authorityNamespace`
-    (`WorldInstanceHost`'s remote destination resolution). The subject a run
-    expects at its remote authority is a run input, like the endpoint
-    `--connect` already takes; the benchmark's staged pair authors one.
-  - The debug world admits no remote player of its own: `bodies.networkPlayers`
-    is 0 and its admission row grants `Observe` over `all`, which the admission
-    door refuses for an arriving traveller ("observe must name a concrete
-    body"). The benchmark's staged pair replaces the row with one whose
-    `Observe` names no subject, which resolves to the arrival's own body.
-  - A replica dealt to a recipient who may not read a cell still carries the
-    rules that read it (`WorldStateDisclosure.Disclose` withholds the cell and
-    the rule is sent whole). The receiver no longer refuses the document, since
-    it compiles no rule of a delivery; whether a disclosed replica should carry
-    such a rule is [the disclosure plan](disclosure.md)'s.
-  - At the presentation tier the debug world's authority did not answer
-    `Reserve` inside the lane's deadline (`WorldRemoteAuthority.LaneRequestTimeout`).
-    A reservation's answer composes no document now, so take the reading
-    again at that tier.
-  - An observer that falls eight records behind is detached and reconnects
-    (`WorldFederationProjectionSink.PendingDeliveryLimit`), which on a loaded
-    machine happened twice in fifteen seconds; each detach is a quarter second
-    and a whole document again. A route's report shows it as a delivery gap.
-    It also happens on a small world: a headless pair on one machine, on a
-    staged document of one avatar and a floor, detached once in two of seven
-    runs, each within the first seconds of the stream. After each detach the
-    traveller's input profile was admitted again (its revision went from 1 to
-    3), and the input batches sent meanwhile named a past epoch and were
-    dropped: 35 in one such run against 2 in a run with no detach.
+- [medium] On a remote authority (`puck benchmark --route debug --remote local
+  --headless`, which now arrives in all seven chapters at `Presentation`
+  disclosure over `worlds/debug`'s authored `authorityNamespace` and
+  `visitorAdmissionRow`), an observer that falls eight records behind is
+  detached and reconnects (`WorldFederationProjectionSink.PendingDeliveryLimit`).
+  Each detach withdraws the mirror to `Undisclosed` until the projection
+  re-arrives and re-admits the traveller's input profile, dropping batches that
+  named the prior input epoch.
+- [medium] `--connect` resolves the expected remote `authorityNamespace` from
+  the booted document (`WorldInstanceHost`'s remote destination resolution)
+  rather than taking the remote subject as a CLI run input beside the endpoint.
+- [medium] A replica dealt to a recipient who may not read a cell still carries
+  the rules that read it (`WorldStateDisclosure.Disclose` withholds the cell and
+  the rule is sent whole). The receiver no longer refuses the document, since it
+  compiles no rule of a delivery; whether a disclosed replica should carry such
+  a rule is [the disclosure plan](disclosure.md)'s.
 - [medium] A delta resolves the documents its basis references (adjacency
   neighbours, references) beside the delta, not beside the basis, so a delta
   over the debug world written anywhere but the debug world's own folder is
@@ -4747,10 +4722,6 @@ the stages; this packet holds what a stage does not.
   witness as a body fact (`ActionFact`, `BodyFacts`) so a client reads the
   authority's own answer; the latch then travels in the body's checkpoint and
   transfer sections, since an action gate can read it.
-- [medium] A run started with `--connect` still steps its whole boot world
-  locally: the seat's body leaves and nothing else stops, so a remote
-  reading's `simulateMs` is a world no one is in. A client of a remote
-  authority should simulate nothing it does not present.
 - [medium] A fresh run's first chapter opens on the boot's settling, not on
   its pose: on a headless World armed `at 10` after a `--paused` boot, the
   chapter's first two iterations (ticks 10 and 11) still simulate for
