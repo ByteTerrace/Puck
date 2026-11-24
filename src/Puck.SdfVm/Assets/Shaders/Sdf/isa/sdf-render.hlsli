@@ -138,6 +138,10 @@
 #define SDF_VISIBILITY_NORMAL_SCALE 32767.0
 #define SDF_VISIBILITY_ZERO_NORMAL  0x80008000u
 
+// The visibility record's material and frame slot words (SdfVisibility): the bits each field fills below the object key's.
+#define SDF_VISIBILITY_MATERIAL_BITS   17u
+#define SDF_VISIBILITY_FRAME_SLOT_BITS 25u
+
 // The mesh region's draw record (SdfMeshRecord) and the level shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshLevelShift).
 #define SDF_MESH_DRAW_WORDS             58u
 #define SDF_MESH_POSE_WORDS             12u
