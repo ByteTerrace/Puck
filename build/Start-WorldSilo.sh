@@ -218,9 +218,13 @@ fi
 # checkpointed) and, with MCP, the TLS front. Public /healthz answers 503 until the coordinator commits and opens
 # admission, which happens only after this script succeeds, so waiting on it here would deadlock the bootstrap.
 # The silo activates its rows one after another, so the deadline grows with the row count (rendered by the deploy).
+# A silo that exits during the wait has failed: its start is deterministic over the stored roots and the release, so
+# systemd's restart would only repeat the refusal under a fresh fence until the deadline. The wait ends at the first
+# exit, stops the unit so it stops retrying, and reports that run's own lines.
 ready_deadline=$(( $(date +%s) + __READY_SECONDS__ ))
 private_state='private health has not answered'
 mcp_state='not reached: private health is not ready'
+verdict="World worker readiness timed out after __READY_SECONDS__ s."
 while [ "$(date +%s)" -lt "$ready_deadline" ]; do
     if private_state="$(curl --fail-with-body --silent --show-error --max-time 30 http://127.0.0.1:__HEALTH_PORT__/private-healthz 2>&1)"; then
         if [ '__MCP_ENABLED__' = 1 ] && ! mcp_state="$(curl --fail --silent --show-error --max-time 10 --connect-to '__MCP_HOST__:443:127.0.0.1:8443' 'https://__MCP_HOST__/.well-known/oauth-protected-resource/mcp' 2>&1 >/dev/null)"; then
@@ -232,6 +236,15 @@ while [ "$(date +%s)" -lt "$ready_deadline" ]; do
         # release from local image ordering or prune retained images during startup.
         exit 0
     fi
+    # One property per call: systemctl show prints several in its own order, not the order asked.
+    restarts="$(systemctl show -p NRestarts --value puck-world.service)"
+    active="$(systemctl show -p ActiveState --value puck-world.service)"
+    sub="$(systemctl show -p SubState --value puck-world.service)"
+    if [ "${restarts:-0}" -gt 0 ] || [ "$active" = failed ] || [ "$sub" = auto-restart ]; then
+        verdict="World worker silo exited (status $(systemctl show -p ExecMainStatus --value puck-world.service)) after $(( $(date +%s) - pass_started )) s, before private health answered; its restart was stopped."
+        systemctl stop puck-world.service || true
+        break
+    fi
     sleep 2
 done
 # Only the tail of the extension's output survives in Azure's error, so the silo's own lines (the health listener logs
@@ -241,7 +254,7 @@ if [ '__MCP_ENABLED__' = 1 ]; then
     { journalctl -u puck-tls.service --no-pager -o cat -n 400 --since "@$pass_started" | grep -e error -e fail | tail -n 6 | cut -c1-200; } || true
 fi
 {
-    printf 'World worker readiness timed out after __READY_SECONDS__ s.\n'
+    printf '%s\n' "$verdict"
     printf 'private health (what this wait needs): %s\n' "$private_state"
     if [ '__MCP_ENABLED__' = 1 ]; then
         printf 'MCP TLS front (what this wait needs): %s\n' "$mcp_state"
@@ -251,9 +264,13 @@ fi
     fi
     printf 'public health (opens only after the release commits): %s\n' "$(curl --silent --show-error --max-time 10 --write-out ' (HTTP %{http_code})' http://127.0.0.1:__HEALTH_PORT__/healthz 2>&1)"
     printf 'container: %s\n' "$(docker inspect -f '{{.State.Status}} restarts={{.RestartCount}} exit={{.State.ExitCode}}' puck-world 2>&1)"
-    # The silo's own last lines, kept short and last: the stdout above can fill Azure's kept tail with the front's
-    # request logs, and a silo that exits at start says why only here.
+    # The silo's own lines, kept short and last: the stdout above can fill Azure's kept tail with the front's request
+    # logs, and a silo that exits at start says why only here. Its tagged narration ([silo.activate: ... refused],
+    # [silo.host: stopped by ...]) comes first, since a stack trace can be longer than the tail.
+    silo_log="$(docker logs puck-world 2>&1 || journalctl -u puck-world.service --no-pager -o cat --since "@$pass_started" 2>&1 || true)"
+    printf 'silo (its tagged lines):\n'
+    { printf '%s\n' "$silo_log" | grep -e '\[silo' -e '\[world' | tail -n 15 | cut -c1-240; } || true
     printf 'silo (last lines):\n'
-    { docker logs --tail 25 puck-world 2>&1 || journalctl -u puck-world.service --no-pager -o cat -n 25 --since "@$pass_started"; } | cut -c1-240 || true
+    { printf '%s\n' "$silo_log" | tail -n 12 | cut -c1-240; } || true
 } >&2
 exit 1

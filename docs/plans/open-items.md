@@ -2512,6 +2512,19 @@ Owner: rendering (GPU leg, the lead scheduling the GPU) · medium · Next: one
 draw identity, which visibility's V1 and V2 build on; then Vulkan's crossing
 frame and the pixel-pass gap at locked clocks.
 
+- [high] **A split of the open submission batch mid-frame can re-arm an
+  outstanding fence.** A shadow entry built during a residency's upload created
+  a timestamp heap through `DirectXDeviceContext.CommandQueueHandle`, whose read
+  splits the open batch; the split's owner fence (`GpuSubmissionBatch.Split`,
+  the last deferred fence) threw "A submission is already outstanding on this
+  fence" in `GpuBatchedSubmissionFence.ArmBehind`, and the D3D12 World stopped
+  (`gallery.go shape-superellipsoid-8` after a cold bake on 144b1dd5fc). The
+  heap path now reads `SubmissionQueueHandle`, which submits nothing, but every
+  other `CommandQueueHandle` reader that can run while a frame's batch is open
+  (mapped buffers, exportable images) can still reach the same throw. Find why
+  the owner was already armed or aliased, and make a mid-batch split safe or
+  have the door refuse it while recording. GPU lifetimes are a review-only
+  hazard class.
 - [high] **One screen row of the main view is unwritten at some window
   sizes.** At 1600 by 900 on Direct3D 12 (RTX 4070), a one-pixel row at about
   y 488 across the left 77% of the frame reads no hit in the visibility buffer
@@ -3948,26 +3961,46 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
-- [high, M1] **While hosted data is scratch, a deploy replaces the hosted
-  world with a fresh bootstrap.** Three releases in a row failed after their
-  qualification passed: the inventory refusal and the drain (both fixed), then
-  the new worker either exiting at start or, with its silo up and listening,
-  answering private health with "simulation is not progressing" until the
-  readiness wait ran out. The silo heartbeats on every step even with admission
-  closed (`WorldSiloSimulation.TryStep`), so its pump stopped stepping; the
-  activation of the reset roots the in-place reset writes (an empty root with
-  its epoch and sequence raised, no journal or checkpoint behind it) runs on
-  the pump at a tick boundary and is the prime suspect, unconfirmed. The
-  in-place reset has never run anywhere, while the bootstrap path is what CI's
-  qualification exercises. Hosted data is scratch until the owner says
-  otherwise (AGENTS.md rule 5), so the structural answer is a replace deploy:
-  stop the source compute, discard the group's hosted roots and record, and
-  start the target as a first deployment's bootstrap; the preservation path
-  (drain, protected roots, reset, recovery) stays for when the owner declares
-  hosted data durable, off the critical path. Separately, a pump that stops
-  stepping is silent today: private health should name what the pump is
-  blocked in. Next: one lane, with a findings-only review of the deletion of
-  hosted roots by another family.
+- [high, M1] **The first replace deploy, and a review of the discard.** A
+  deploy over scratch hosted data replaces the hosted world
+  ([the decision](../decisions/runtime-and-delivery.md#releases)), and CI's
+  container verification rehearses the image's managed start
+  (`puck world release rehearse --image`). Next: the release from `main`
+  exercises the replace path; a findings-only review by another family of
+  `WorldHostedData.DiscardAsync` and its caller
+  (`AzureCommand.ReplaceWorldReleaseAsync`), the review-only class of deleting
+  persisted data: the policy door, the stop before deletion, the root-first
+  order, and the two conditions the code does not enforce (one deployment
+  group per owner container, the controller lease held).
+- [medium] **Release time.** The failed release of run 45422220920 spent 92
+  minutes: about 21 on the .NET artifacts, 8.5 on the infrastructure
+  reconcile (it plans and applies on every push, changed or not), and 54 in
+  the world release, of which 3.6 went to four qualification legs of one image
+  for a bootstrap, 5.5 to a graceful worker delete, about 10 to provisioning
+  the new worker's disk, and 23 to a readiness wait over a silo that had exited
+  at its first start. The wait now ends at the first exit, a replace deploy
+  skips the export, drain and source recovery, and the worker is
+  force-deleted. Left: skip the infrastructure apply when the compiled
+  template and parameters equal the last deployment's; weigh whether a
+  bootstrap needs both of its qualification pairs, which for one image are two
+  determinism checks (two imports of the seed, then two imports of the state
+  the first continuation wrote); and measure whether reusing
+  the worker VM (stop the container, rerun the extension) beats a fresh one,
+  which costs a delete and a create on every deploy.
+- [medium] **Silo telemetry.** A failed worker is deleted after its attempt,
+  and the silo sends nothing to the deployment's Log Analytics, so only the
+  start script's printed tail survives. Give the silo a provider-neutral
+  telemetry selection (a `telemetry` type and settings in the silo document,
+  contributed by an installed extension, as `lifecycle.observer` is), let
+  `Puck.World.Azure` contribute the Azure Monitor exporter
+  (`AzureMonitorTelemetryExtensions`, Entra authentication with the silo
+  identity), and grant the silo identity Monitoring Metrics Publisher on the
+  environment's Application Insights in `main.bicep`; the deployment's silo
+  document names its connection string from an output.
+- [low] The rehearsal covers a first deployment. A rehearsal of the durable
+  path (a source silo, its drain and capture, then a reset or metadata
+  transition) would run that path before the owner declares hosted data
+  durable, which no deploy runs today.
 
 - [high] No release has passed its public probe, and no player build has
   reached the RTX 2060 through the hosted channel: its one run was a local

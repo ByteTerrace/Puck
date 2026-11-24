@@ -13,7 +13,10 @@ public sealed unsafe class DirectXGpuTimestampFactory(DirectXDeviceContext devic
     /// <inheritdoc/>
     public IGpuTimestampPool? Create(uint count, in GpuObjectName name) {
         ArgumentOutOfRangeException.ThrowIfZero(value: count);
-        var queue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
+        // The queue is read for its timestamp frequency alone, which submits nothing, so it must not split the frame's open
+        // batch: a heap made while the batch is open (a shadow entry built during a residency's upload) would otherwise
+        // re-arm the batch's fence behind its own outstanding submission.
+        var queue = ((ID3D12CommandQueue*)deviceContext.SubmissionQueueHandle);
         var heap = DirectXCommandCalls.CreateTimestampHeap(calls: DirectXDeviceCommandCalls.Of(deviceContext: deviceContext),
             queue: queue, count: count, frequency: out var frequency);
 

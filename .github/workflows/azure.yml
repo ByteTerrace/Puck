@@ -524,6 +524,12 @@ jobs:
         name: Verify primary Puck activation, QUIC, checkpoint recovery, and the MCP entry point
         run: puck azure test-world-container --image "puck/world-silo:$GITHUB_SHA"
         shell: bash
+      # The worker's managed start (a release section, the bootstrap transaction's roots and group record, release
+      # control, admission and drain) runs nowhere else before a deployment's fresh compute boots it.
+      - if: matrix.image == 'world-silo'
+        name: Rehearse a first deployment of the image's worlds inside the image
+        run: puck world release rehearse --image "puck/world-silo:$GITHUB_SHA" --output artifacts/world-release-rehearsal
+        shell: bash
     strategy:
       fail-fast: false
       matrix:

@@ -49,7 +49,9 @@ internal sealed class WorldSiloActivations(WorldSiloDefinition definition, IGrai
                 Environment.ExitCode = 1;
                 throw new InvalidOperationException(message: "Managed release admission could not be published after private candidate verification.");
             }
-        } catch (Exception) when (!stoppingToken.IsCancellationRequested) {
+        } catch (Exception error) when (!stoppingToken.IsCancellationRequested) {
+            // Private health names this until the host stops, so a readiness wait reports the cause, not a stalled pump.
+            silo.NoteActivationFailure(reason: error.Message.ReplaceLineEndings(replacementText: " "));
             Environment.ExitCode = 1;
             throw;
         }

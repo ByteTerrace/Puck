@@ -15,6 +15,10 @@ public sealed record WorldReleaseManifest {
     public const string CurrentCoordinatorContract = "puck.world.release.restore.v1";
     /// <summary>The release manifest schema.</summary>
     public const string CurrentSchema = "puck.world.release.v1";
+    /// <summary>The persistence contract this build's hosted worlds read and write, which a release it prepares carries.</summary>
+    public const string CurrentPersistenceContract = "puck.world.persistence.v1";
+    /// <summary>The peer protocol contract this build's hosted worlds speak, which a release it prepares carries.</summary>
+    public const string CurrentPeerProtocolContract = "puck.world.peer.v1";
 
     /// <summary>The manifest schema.</summary>
     [JsonPropertyName("schema")] public string Schema { get; init; } = CurrentSchema;
@@ -250,6 +254,21 @@ public sealed record WorldReleaseManifest {
         }
         reason = string.Empty;
         return true;
+    }
+    /// <summary>Reads a package directory's <c>release.json</c> and verifies it and every file it names
+    /// (<see cref="TryVerify"/>).</summary>
+    /// <param name="packageDirectory">The release package directory.</param>
+    /// <returns>The verified manifest.</returns>
+    /// <exception cref="InvalidDataException">The manifest is missing, empty, over a mebibyte, or fails verification.</exception>
+    public static WorldReleaseManifest ReadVerified(string packageDirectory) {
+        var manifest = (System.Text.Json.JsonSerializer.Deserialize<WorldReleaseManifest>(Puck.Storage.ConfinedFile.ReadAllBytes(
+            Path.Combine(path1: packageDirectory, path2: "release.json"),
+            (1024 * 1024)
+        )) ?? throw new InvalidDataException(message: "release package contains no manifest"));
+
+        return (TryVerify(manifest: manifest, packageDirectory: packageDirectory, reason: out var reason)
+            ? manifest
+            : throw new InvalidDataException(message: reason));
     }
     /// <summary>Validates a manifest and every referenced file's full hash in a package directory.</summary>
     public static bool TryVerify(WorldReleaseManifest manifest, string packageDirectory, out string reason) {

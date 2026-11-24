@@ -204,11 +204,49 @@ deployment, and the preservation rules are written to that boundary. The
 authored delta is computed apart from live state, applied only as admitted
 changes, and reversed by rollback with the same conflict checks; rollback never
 installs the old definition wholesale. Only a metadata change has a preservation
-rule today. While deployed data is scratch (AGENTS.md rule 5), a deployment that
-changes a definition outside its metadata resets that group's hosted state and
-starts the new release fresh, as a first deployment does, rather than refusing;
-the preservation rules for other edits remain open work, and once the owner
-declares hosted data durable such a deployment refuses until a rule carries it.
+rule today. Under a durable declaration, a deployment that changes a definition
+outside its metadata resets that group's hosted state over the drained roots
+rather than refusing, until the preservation rules for other edits exist; a reset
+root carries the target's definition, no gameplay and no rewind boundary, since
+the boundary pins the source's closed inventory, which a reset may change.
+
+**While hosted data is scratch, a deployment replaces the hosted world.** A
+deployment group declares whether its hosted data (every world authority under its
+owner's private hosted namespace, and its release record) outlives a deployment:
+`scratch` or `durable`, in its deployment's configuration. Azure's is
+`worldSiloHostedData` in `main.bicepparam`, a required parameter with no default,
+set to `scratch` until the owner declares hosted data durable (AGENTS.md rule 5);
+the deploy reads it from the deployment outputs, and an absent output is durable,
+so data is discarded only on a positive declaration. Under `scratch` a deployment
+qualifies its candidate alone from a fresh bootstrap fixture while the serving world
+still runs, then stops the group's compute, discards its hosted data and starts the
+release as a first deployment's bootstrap, the path CI's qualification and the
+release rehearsal (`puck world release rehearse`) exercise. The drain, protected
+roots, in-place reset, pre-commit recovery and rollback run only under `durable`.
+
+The preservation transaction had never run where its defects could be seen before
+a deployment found them: four consecutive releases failed in it, each after about
+two hours, the last on the reset root's stale rewind boundary. Replacing the world
+costs nothing that scratch data is owed and runs the path that is exercised on
+every push. It trades availability on failure: a deployment that fails after its
+discard leaves the group without a world until a later one succeeds, where the
+preservation path would recover the source. A qualification failure still leaves
+the serving world untouched, because qualification runs before the discard.
+
+The invariant is that hosted data is deleted only through one door,
+`WorldHostedData.DiscardAsync`. It refuses unless the policy it is handed is
+`Scratch`; it runs the caller's writer stop before deleting anything, so no live
+host writes over the discard; it deletes each world's root before the objects the
+root names, so an interrupted discard leaves unreferenced objects and never a root
+pointing at deleted ones; and it deletes the group record last, so a retry finds
+the record and repeats the whole discard. The key layouts it deletes by are
+internal to `Puck.World.Server`. Two conditions are not enforced by code: one
+owner's private container holds exactly one deployment group's worlds (the world
+platform names the container for the group's own silo identity), and the caller
+holds the group's release controller lease (the deploy acquires it before reading
+the policy). Release content, fixtures, the TLS state and the controller lease are
+outside the discarded keys. When the owner declares hosted data durable, the
+declaration changes to `durable` and nothing else does.
 
 **Uncapturable machine state is not captured.** A pair carrying machines
 qualifies by boot-anchored reproduction, so addon guest state, applied screen

@@ -50,7 +50,7 @@ public sealed partial class WorldSiloHost {
     /// <see cref="Puck.Hosting.IFixedStepSimulation.Step"/> call must do before stepping.</summary>
     public void DrainActivationMailbox() {
         while (m_mailbox.Reader.TryRead(item: out var action)) {
-            action();
+            RunMailboxItem(action: action);
         }
 
         if (IsDraining) { return; }
