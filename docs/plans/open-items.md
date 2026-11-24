@@ -3979,19 +3979,14 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
-- [high, M1] **A reset whose world inventory changes fails at the drain.** A
-  deploy now resets hosted state when the pair cannot carry it
-  (`WorldReleaseCoordinator.FindDefinitionResetAsync`), and the reset's
-  qualification passes, but the Azure runtime takes its worlds from the target
-  manifest alone (`AzureWorldReleaseRuntime`'s identities) and checks the
-  source's drained roots against them (`ValidateRoots`): "protected source
-  roots do not match the release inventory". Source-side steps (drain,
-  protect, recover) need the source's worlds, target-side steps (fence census,
-  activation) the target's, and a world only the target names starts fresh as
-  a bootstrap does, while `WorldAuthorityBlobStore.PrepareReleaseResetAsync`
-  requires a protected source root for every target world. The release of the
-  pushed `main` failed here; the source host may be left frozen by its drain.
-  Next: one lane, reviewed by another family (persisted data, recovery).
+- [high, M1] **A reset across a changed world inventory needs its first
+  deploy and a review.** The Azure runtime drains, protects and recovers the
+  source's own worlds, activation resets each target world over its drained
+  root, and a world only the target names starts from a fresh root
+  (`WorldAuthorityBlobStore.PrepareReleaseResetFreshAsync`, under the same
+  activation ownership with no protected root for it). Next: the release from
+  `main` exercises it; a findings-only review of the activation-ownership
+  check by another family (persisted data).
 
 The RTX 2060 machine is a consumer release target (the owner's ruling,
 AGENTS.md): it installs and updates through the launcher from the hosted
