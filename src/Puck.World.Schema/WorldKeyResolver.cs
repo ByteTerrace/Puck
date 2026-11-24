@@ -218,6 +218,55 @@ public static class WorldKeyResolver {
     // opposite sign and near-maximal magnitude cannot overflow it, so the result never leaves [from, to].
     private static float Lerp(float from, double t, float to) => ((float)(from + ((to - ((double)from)) * t)));
 
+    /// <summary>Joins a track's value to the value beneath it by the track's combine; an absent combine adds.</summary>
+    /// <param name="combine">The joining track's combine.</param>
+    /// <param name="below">The value beneath.</param>
+    /// <param name="value">The joining track's value.</param>
+    /// <returns>The joined value.</returns>
+    public static float Combine(WorldKeyCombine? combine, float below, float value) => (combine switch {
+        WorldKeyCombine.Multiply => (below * value),
+        WorldKeyCombine.Maximum => MathF.Max(x: below, y: value),
+        WorldKeyCombine.Minimum => MathF.Min(x: below, y: value),
+        _ => (below + value),
+    });
+    /// <summary>Returns the least and greatest value a chained scalar track reaches over every phase of its clocks:
+    /// each link's least and greatest key, joined link by link at the four corners, since every combine is monotone in
+    /// each argument (a product's extremes over a box lie at its corners).</summary>
+    /// <param name="track">The track; every link carries at least one key.</param>
+    /// <returns>The least and greatest value.</returns>
+    public static (float Low, float High) Extremes(WorldKeyTrack<float> track) {
+        ArgumentNullException.ThrowIfNull(argument: track);
+
+        var (low, high) = KeyExtremes(track: track);
+
+        for (var link = track.With; (link is not null); link = link.With) {
+            if (link.Keys.IsEmpty) {
+                continue;
+            }
+
+            var (linkLow, linkHigh) = KeyExtremes(track: link);
+            var a = Combine(combine: link.Combine, below: low, value: linkLow);
+            var b = Combine(combine: link.Combine, below: low, value: linkHigh);
+            var c = Combine(combine: link.Combine, below: high, value: linkLow);
+            var d = Combine(combine: link.Combine, below: high, value: linkHigh);
+
+            low = MathF.Min(x: MathF.Min(x: a, y: b), y: MathF.Min(x: c, y: d));
+            high = MathF.Max(x: MathF.Max(x: a, y: b), y: MathF.Max(x: c, y: d));
+        }
+
+        return (low, high);
+    }
+    private static (float Low, float High) KeyExtremes(WorldKeyTrack<float> track) {
+        var low = float.PositiveInfinity;
+        var high = float.NegativeInfinity;
+
+        foreach (var key in track.Keys) {
+            low = MathF.Min(x: low, y: key.Value);
+            high = MathF.Max(x: high, y: key.Value);
+        }
+
+        return (low, high);
+    }
     /// <summary>Returns a keyed scalar at a phase, blended linearly.</summary>
     /// <param name="track">The track.</param>
     /// <param name="span">The clock's span.</param>

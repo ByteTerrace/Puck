@@ -33,12 +33,23 @@ let cloudFade = {
     { at: 1400, value: 0, ease: Step }
   ]
 }
-let spaceStarsFade = {
+// One star field answers the night and the height: the hour brings it out at night, and the climb brings it out by day,
+// the greater of the two, at the night sky's luminance on the ground and space's at the seam.
+let starsByHeight = {
   clock: altitude
+  combine: Maximum
   keys [
     { at: 0, value: 0 }
     { at: 700, value: 0 }
     { at: 2250, value: 1, ease: Step }
+  ]
+}
+let starLuminanceByHeight = {
+  clock: altitude
+  keys [
+    { at: 0, value: 3 }
+    { at: 700, value: 3 }
+    { at: 2250, value: spaceStarLuminance, ease: Step }
   ]
 }
 
@@ -54,20 +65,16 @@ dayCycle(
       { elevation: -1, color: spaceColor }
       { elevation: 1, color: spaceColor }
     ])
-    stars(
-      name: "space-stars",
-      luminance: spaceStarLuminance,
-      density: spaceStarDensity,
-      brightness: spaceStarBrightness,
-      seed: spaceStarSeed,
-      opacity: spaceStarsFade
-    )
   ],
   cloudiness: 0.3,
   moonPeak: 6,
   moonColor: "#7088E8",
   nightLuminance: 1,
-  starLuminance: 3,
+  starLuminance: starLuminanceByHeight,
+  starDensity: spaceStarDensity,
+  starBrightness: spaceStarBrightness,
+  starSeed: spaceStarSeed,
+  starOpacity: starsByHeight,
   // The moon: the moon's own world, seen from where the viewer stands in the frame the two worlds share, so it hangs
   // where the sky seam will put a ship and grows as the ship climbs toward it. Only its ground is drawn, so the
   // valley's air, stars and sun show round it and the clouds drift across it.

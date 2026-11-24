@@ -10,7 +10,8 @@
 // (the body's own producer, if it has one, stands down for as long as a seat drives it), the kit's `mount` carries that
 // seat's own body in the cockpit so the pilot goes where the ship goes, and the `fly` program moves it under the kit's
 // holds. Flying it is walking's controls: the movement channels fly it where the camera looks, climbing and diving
-// with the look, the rise channel climbs and sinks, and the run channel is the boost. Three holds assist the pilot:
+// with the look, the rise channel climbs and sinks, and the run channel is the boost, which climbs as fast as it flies
+// (a hold's thrust reads the held pace as its travel does). Three holds assist the pilot:
 //
 //   landed      on the ground it stands, taxis slowly and lifts off on the rise channel
 //   touchdown   within `flare` metres of ground it flies slowly and settles at `settle` metres a second unless the
@@ -31,8 +32,9 @@
 
 import "kits"
 
-// The body register a ship is known by in every world it flies through: 1 on a ship, 0 on everything else. A world's
-// kit and look selectors read it (through whatever register its selector reads), and it crosses with the body.
+// The body registers a ship is known by in every world it flies through: `craft`, 1 on a ship and 0 on everything else,
+// and `space`, 1 while the ship flies where no gravity pulls. A world's kit and look selectors read them (through
+// whatever register its selector reads), and they cross with the body.
 template shipCraft() {
   state {
     body [
@@ -42,9 +44,59 @@ template shipCraft() {
         initial: 0
         envelope { $type: "set", values [0, 1] }
       }
+      {
+        name: "space"
+        kind: "Counter"
+        initial: 0
+        envelope { $type: "set", values [0, 1] }
+      }
     ]
   }
 }
+
+// What tells a ship it is in space: where the world's gravity field no longer pulls (the body's `Weightless` fact) the
+// `space` register goes to 1, and back to 0 the moment it pulls again or the ship stands. A world selects the ship's
+// space kit (`shipSpace`) by it, so the motion and the pilot's camera change with the medium, never by engine code.
+function shipSpaceActions() = {
+  run {
+    onFact [
+      {
+        fact: "Grounded"
+        mode: "Level"
+        gate: compareState(state: craft, comparison: Equal, value: 0)
+        effects [setState(state: craft, value: 1)]
+      }
+      {
+        fact: "Airborne"
+        mode: "Level"
+        gate: compareState(state: craft, comparison: Equal, value: 0)
+        effects [setState(state: craft, value: 1)]
+      }
+      {
+        fact: "Weightless"
+        mode: "Level"
+        gate: compareState(state: space, comparison: Equal, value: 0)
+        effects [setState(state: space, value: 1)]
+      }
+      {
+        fact: "Airborne"
+        mode: "Level"
+        gate: all(predicates: [
+          compareState(state: space, comparison: Equal, value: 1)
+          `not`(predicate: now(fact: Weightless))
+        ])
+        effects [setState(state: space, value: 0)]
+      }
+      {
+        fact: "Grounded"
+        mode: "Level"
+        gate: compareState(state: space, comparison: Equal, value: 1)
+        effects [setState(state: space, value: 0)]
+      }
+    ]
+  }
+}
+
 
 // The `fly` motion program and the `ship` kit. `cruise` is the flying speed in metres a second and `boost` what the
 // run channel multiplies it by; `taxi` is the speed on the ground, `approach` the speed inside the flare. `seat` is
@@ -99,25 +151,8 @@ template shipFlight(kit = "ship", cruise = 60, boost = 4, taxi = 4, approach = 2
         camera: camera
       }
       // A body of this kit marks itself a craft the first tick it stands or flies, so the register that selects the
-      // kit wherever it lands needs no rule of the world it starts in.
-      actions {
-        run {
-          onFact [
-            {
-              fact: "Grounded"
-              mode: "Level"
-              gate: compareState(state: craft, comparison: Equal, value: 0)
-              effects [setState(state: craft, value: 1)]
-            }
-            {
-              fact: "Airborne"
-              mode: "Level"
-              gate: compareState(state: craft, comparison: Equal, value: 0)
-              effects [setState(state: craft, value: 1)]
-            }
-          ]
-        }
-      }
+      // kit wherever it lands needs no rule of the world it starts in, and marks itself in space where nothing pulls.
+      actions: shipSpaceActions()
       motion {
         facingSnap: false
         holds [
@@ -168,13 +203,66 @@ template shipFlight(kit = "ship", cruise = 60, boost = 4, taxi = 4, approach = 2
   ]
 }
 
-// The pilot's camera: a chase rig sized to the hull, which a seat takes while it rides the ship (the kit's
-// `mount.camera`). The boom is `distance` metres at `pitch` radians about the hull's middle and looks over the hull
-// at `target`, so the ship sits low in the frame and where it is flying shows above it; it follows on its own, looser
-// response (`ship-boom`) than a walker's, since a ship moves fast and turns wide. Near ground the boom shortens to
-// `minimumBoom` before it rises, and the first-person eye is the cockpit's. Distances are full-size metres in the
-// ship's own axes, angles radians.
-template shipCamera(rig = "ship-camera", distance = 12, pitch = 0.2, pivot = [0, 1.6, 0], target = [0, 3.4, 0], fieldOfView = 1.05, minimumBoom = 5.5, maxRise = 0.5, eyePoint = [0, 2.0, -0.9], frequency = 2.6) {
+// A ship in space: the space kit a world selects by the `space` register (`shipCraft`). Nothing pulls, so nothing levels
+// it: it flies where the camera looks at `cruise` metres a second, `boost` times that on the run channel, climbs and
+// dives on the rise channel at the same pace, and coasts on when the stick lets go, losing speed only at `drift` metres a
+// second squared, as a craft in vacuum does. It pitches further than it may in air (`maxPitch` radians) and keeps the up
+// it had. The pilot's camera is `camera` (a wider, longer `shipCamera` rig), so the view opens out as the ship leaves the
+// air. `seat` and `exit` are the ship's own (`shipFlight`).
+template shipSpace(kit = "ship-space", cruise = 120, boost = 4, drift = 2, turn = 1.4, maxPitch = 1.5, seat = [
+  0
+  0.7
+  0.2
+], exit = [3, 0.4, 0], camera = "ship-space-camera") {
+  let middle = 1.5
+
+  kits [
+    {
+      name: kit
+      bodyContact: Solid
+      bodyMotionProgram: "fly"
+      collider: capsule(endpoint: [0, 0.2, 0], radius: 1.4)
+      mass: 0
+      mount {
+        seat: seat
+        exit: exit
+        board { channel: "interact", radius: 5 }
+        camera: camera
+      }
+      actions: shipSpaceActions()
+      motion {
+        facingSnap: false
+        holds [
+          {
+            name: "space"
+            bond: Free
+            hold: Lift
+            forward: Heading
+            lift: 1
+            speed: cruise
+            gravity: standardGravity
+            thrust: 1
+          }
+        ]
+        moveFrame: World
+        // It gathers speed in two seconds and coasts once the stick lets go.
+        shaping [{ along { engage: (cruise / 2), release: drift }, turnScale: 1 }]
+        speed { value: cruise, held { channel: "run", multiplier: boost } }
+        stepHeight: 0
+        turn { falloff: 1, maxPitch: maxPitch, pitchRate: 0, rate: turn }
+      }
+    }
+  ]
+}
+
+// The pilot's cameras: chase rigs sized to the hull, which a seat takes while it rides the ship (the kit's
+// `mount.camera`): `rig` in the air and `spaceRig` in space (the space kit's). The boom is `distance` metres at `pitch`
+// radians about the hull's middle and looks over the hull at `target`, so the ship sits low in the frame and where it is
+// flying shows above it; in space it opens out to `spaceDistance` at `spacePitch` behind a wider lens
+// (`spaceFieldOfView`). Both follow on one looser response (`ship-boom`) than a walker's, since a ship moves fast and
+// turns wide. Near ground the boom shortens to `minimumBoom` before it rises, and the first-person eye is the
+// cockpit's. Distances are full-size metres in the ship's own axes, angles radians.
+template shipCamera(rig = "ship-camera", distance = 12, pitch = 0.2, pivot = [0, 1.6, 0], target = [0, 3.4, 0], fieldOfView = 1.05, minimumBoom = 5.5, maxRise = 0.5, eyePoint = [0, 2.0, -0.9], frequency = 2.6, spaceRig = "ship-space-camera", spaceDistance = 20, spacePitch = 0.15, spaceFieldOfView = 1.2) {
   export binding `ship-boom`
 
   dynamics [
@@ -182,34 +270,35 @@ template shipCamera(rig = "ship-camera", distance = 12, pitch = 0.2, pivot = [0,
   ]
 
   views {
-    programs [
-      {
-        name: rig
-        version: "puck.camera.program.v1"
-        operations [
-          orbit(distance: distance, pitch: pitch, pivotOffset: pivot, yaw: 0)
-          lookAt(focusDistance: distance, subject: reference(), targetOffset: target, worldAxes: true)
-          clearance(
-            cutaway: 0,
-            eyeRadius: 0.4,
-            surfaceSkin: 0.15,
-            maxRise: maxRise,
-            minimumBoom: minimumBoom,
-            fadeStart: 0,
-            fadeEnd: 0,
-            closeTargetOffset: target,
-            closeTargetStartFraction: 0.6,
-            closeTargetFullFraction: 0.3,
-            nearMargin: 0.05,
-            retractionSkin: 0.05,
-            obstructedTargetSkin: 0
-          )
-          fieldOfView(fieldOfViewRadians: fieldOfView)
-          dynamics(row: `ship-boom`)
-          firstPerson(eyePoint: eyePoint, active: 0, transitionSeconds: 0.5, hideRadius: 3)
-        ]
-      }
-    ]
+    programs: map([
+      { name: rig, distance: distance, pitch: pitch, fieldOfView: fieldOfView }
+      { name: spaceRig, distance: spaceDistance, pitch: spacePitch, fieldOfView: spaceFieldOfView }
+    ], view => {
+      name: view["name"]
+      version: "puck.camera.program.v1"
+      operations [
+        orbit(distance: view["distance"], pitch: view["pitch"], pivotOffset: pivot, yaw: 0)
+        lookAt(focusDistance: view["distance"], subject: reference(), targetOffset: target, worldAxes: true)
+        clearance(
+          cutaway: 0,
+          eyeRadius: 0.4,
+          surfaceSkin: 0.15,
+          maxRise: maxRise,
+          minimumBoom: minimumBoom,
+          fadeStart: 0,
+          fadeEnd: 0,
+          closeTargetOffset: target,
+          closeTargetStartFraction: 0.6,
+          closeTargetFullFraction: 0.3,
+          nearMargin: 0.05,
+          retractionSkin: 0.05,
+          obstructedTargetSkin: 0
+        )
+        fieldOfView(fieldOfViewRadians: view["fieldOfView"])
+        dynamics(row: `ship-boom`)
+        firstPerson(eyePoint: eyePoint, active: 0, transitionSeconds: 0.5, hideRadius: 3)
+      ]
+    })
   }
 }
 

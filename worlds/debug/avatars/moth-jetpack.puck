@@ -1,0 +1,4 @@
+// Her flight mode is the standard's jetpack: the back pods hover her where she is left, the rise channel climbs and
+// sinks, she flies at 10 m/s where she faces, and running in the air boosts both to 20.
+import "../../standard/abilities"
+jetpack(kit: "walker", speed: 10)

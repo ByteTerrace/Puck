@@ -2412,6 +2412,7 @@ public static partial class WorldModelShape {
             [
                 M("clock", typeof(global::System.String), typeof(global::Puck.World.IWorldKeyTrack), "Clock", Read, static value => ((global::Puck.World.IWorldKeyTrack)value).Clock, kind: WorldNameKind.Clock, role: WorldNameRole.Names, facet: WorldExportFacet.Read),
                 M("count", typeof(global::System.Int32), typeof(global::Puck.World.IWorldKeyTrack), "Count", Read, static value => ((global::Puck.World.IWorldKeyTrack)value).Count),
+                M("with", typeof(global::Puck.World.IWorldKeyTrack), typeof(global::Puck.World.IWorldKeyTrack), "With", Read, static value => ((global::Puck.World.IWorldKeyTrack)value).With),
             ]),
         T(typeof(global::Puck.World.MotionScalarEnvelope), true, JsonTypeInfoKind.Object, null,
             [],
@@ -5445,7 +5446,7 @@ public static partial class WorldModelShape {
                 M("local", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldRenderExposure), "Local", Read | Write, static value => ((global::Puck.World.WorldRenderExposure)value).Local),
                 M("hold", typeof(global::System.Nullable<global::Puck.World.BindableScalar>), typeof(global::Puck.World.WorldRenderExposure), "Hold", Read | Write, static value => ((global::Puck.World.WorldRenderExposure)value).Hold, kind: WorldNameKind.State, role: WorldNameRole.Binding, facet: WorldExportFacet.Binding),
                 M("band", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldRenderExposure), "Band", Read | Write, static value => ((global::Puck.World.WorldRenderExposure)value).Band),
-                M("low", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldRenderExposure), "Low", Read | Write, static value => ((global::Puck.World.WorldRenderExposure)value).Low),
+                M("low", typeof(global::System.Nullable<global::Puck.World.BindableScalar>), typeof(global::Puck.World.WorldRenderExposure), "Low", Read | Write, static value => ((global::Puck.World.WorldRenderExposure)value).Low, kind: WorldNameKind.State, role: WorldNameRole.Binding, facet: WorldExportFacet.Binding),
                 M("high", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldRenderExposure), "High", Read | Write, static value => ((global::Puck.World.WorldRenderExposure)value).High),
                 M("center", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldRenderExposure), "Center", Read | Write, static value => ((global::Puck.World.WorldRenderExposure)value).Center),
             ],

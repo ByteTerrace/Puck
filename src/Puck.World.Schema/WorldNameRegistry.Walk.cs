@@ -183,6 +183,12 @@ public static partial class WorldNameRegistry {
             // shape, so both lists are recorded.
             if (WorldKeyedValues.IsKeyable(type)) {
                 Record($"{path}.clock", KeyClock);
+
+                // A scalar's keys may join a second track, which names a clock of its own.
+                if ((type == typeof(BindableScalar)) || (type == typeof(BindableAngle))) {
+                    Record($"{path}.with.clock", KeyClock);
+                }
+
                 return;
             }
             if (type == typeof(ExpressionProgram)) {
