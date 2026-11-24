@@ -28,7 +28,9 @@ public sealed class SdfWorldPicker {
     private SdfWorldPickReadback? m_flight;
     private bool m_surface;
     private long m_cut;
-    private SdfProgram? m_program;
+    // The program the copies were recorded against, held weakly: a picker a view keeps while its residency moves on must
+    // not keep a replaced program's words alive, and a program no longer alive is never the frame's.
+    private readonly WeakReference<SdfProgram?> m_program = new(target: null);
     private ISdfPickMap? m_map;
     private float m_x;
     private float m_y;
@@ -133,16 +135,18 @@ public sealed class SdfWorldPicker {
         var frame = view?.Residency.Frame;
         var cut = ((frame is not null) ? frame.Views[Math.Min(val1: view!.Value.View, val2: (frame.Views.Count - 1))].CutRevision : 0);
 
-        if ((m_cut != cut) || !ReferenceEquals(objA: m_program, objB: frame?.Program) || !ReferenceEquals(objA: m_map, objB: frame?.PickMap)) {
+        if ((m_cut != cut) || !Follows(program: frame?.Program) || !ReferenceEquals(objA: m_map, objB: frame?.PickMap)) {
             // A copy recorded against the earlier program, map or cut is never published; the latest request, if
             // unanswered, records again against the new frame.
             Result = null;
             m_queued |= m_awaiting;
             m_cut = cut;
-            m_program = frame?.Program;
+            m_program.SetTarget(target: frame?.Program);
             m_map = frame?.PickMap;
         }
     }
+    // Whether the copies were recorded against this program; a collected one is never a live frame's.
+    private bool Follows(SdfProgram? program) => (m_program.TryGetTarget(target: out var held) ? ReferenceEquals(objA: held, objB: program) : (program is null));
     internal void Attach(SdfWorldPickReadback readback) => m_readbacks.Add(item: readback);
     // A retired recorder takes its copy in flight with it: the latest request, if unanswered, records again through
     // the readback that replaces it, which attaches before the retired one detaches. Only the last one clears.
