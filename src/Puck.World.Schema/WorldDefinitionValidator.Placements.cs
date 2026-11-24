@@ -1596,7 +1596,7 @@ public static partial class WorldDefinitionValidator {
             } else if (placement.DealSlot is not null) {
                 errors.Add(item: $"{path}.dealSlot is reserved for a child of a deal template.");
             }
-            if (DealtAncestor(placement: placement, placementsById: placementsById) is { } dealtAncestor) {
+            if (WorldPlacementAudiences.DealtAncestor(placement: placement, placementsById: placementsById) is { } dealtAncestor) {
                 RefuseUndisclosingMembers(definition: definition, errors: errors, path: path, placement: placement, template: dealtAncestor);
             }
 

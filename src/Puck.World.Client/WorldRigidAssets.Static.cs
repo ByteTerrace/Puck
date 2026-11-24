@@ -14,14 +14,20 @@ public sealed partial class WorldRigidAssets {
         public float BakeScale;
         public SdfMeshTemplateRange Range;
     }
-    private sealed record StaticCopy(StaticAsset Asset, WorldPlacement Placement, WorldPickTarget Target, object MotionKey, Vector3 Position, Quaternion Orientation);
-    // One static row as the latest reconcile admitted it: the creation it showed, whether it was admitted, and the
-    // copies its stamp placed (empty for a refused row or an empty stamp). A row is immutable, so the same instance
-    // showing the same creation instance is admitted alike, and the same compiled stamp (WorldPlacementStamp keeps one
-    // per row while its frame and inputs stand) places the same copies.
-    private sealed class StaticRow(WorldPrototype creation, string? refusal) {
+    // Audience is the draw tag every draw of the copy carries (SdfMeshAudience): neutral for a row every reader is shown
+    // alike, the residency's own for a row the disclosure varies, an overlay's for that overlay's row.
+    private sealed record StaticCopy(StaticAsset Asset, WorldPlacement Placement, WorldPickTarget Target, object MotionKey, Vector3 Position, Quaternion Orientation, byte Audience);
+    // One static row as the latest reconcile admitted it: the creation it showed, the audience its copies are drawn for,
+    // whether it was admitted, and the copies its stamp placed (empty for a refused row or an empty stamp). A row is
+    // immutable, so the same instance showing the same creation instance is admitted alike, and the same compiled stamp
+    // (WorldPlacementStamp keeps one per row while its frame and inputs stand) places the same copies.
+    // A static row as the roster meets it: the row instance, compared by reference, and the overlay's view audience it is
+    // placed for, zero for the presentation's own.
+    private readonly record struct RowKey(Puck.Abstractions.Collections.ByReference<WorldPlacement> Placement, byte Overlay);
+    private sealed class StaticRow(WorldPrototype creation, string? refusal, byte audience) {
         public readonly WorldPrototype Creation = creation;
         public readonly string? Refusal = refusal;
+        public readonly byte Audience = audience;
         public CompiledPlacementStamp? Stamp;
         public StaticAsset? Asset;
         public StaticCopy[] Copies = [];
@@ -29,8 +35,8 @@ public sealed partial class WorldRigidAssets {
     private readonly List<StaticAsset> m_staticAssets = [];
     private readonly List<StaticCopy> m_staticCopies = [];
     // The rows the latest reconcile met, by instance, and the scratch the next reconcile fills before the two swap.
-    private Dictionary<WorldPlacement, StaticRow> m_staticRowsMet = new(comparer: ReferenceEqualityComparer.Instance);
-    private Dictionary<WorldPlacement, StaticRow> m_staticRowsNext = new(comparer: ReferenceEqualityComparer.Instance);
+    private Dictionary<RowKey, StaticRow> m_staticRowsMet = [];
+    private Dictionary<RowKey, StaticRow> m_staticRowsNext = [];
     private readonly Dictionary<string, StaticAsset> m_staticVariants = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, StaticAsset> m_staticVariantsNext = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, int> m_staticUnsupported = new(comparer: StringComparer.Ordinal);
@@ -44,17 +50,18 @@ public sealed partial class WorldRigidAssets {
     /// <summary>Gets the last emission's occurrences with at least one shape left visible by isolation.</summary>
     public int StaticVisibleCopies { get; private set; }
     /// <summary>Returns whether this exact row is owned by the retained static-copy roster.</summary>
-    public bool ContainsPlacement(WorldPlacement placement) => (m_staticRowsMet.TryGetValue(key: placement, value: out var row) && (row.Refusal is null));
+    public bool ContainsPlacement(WorldPlacement placement) => (m_staticRowsMet.TryGetValue(key: new RowKey(Placement: placement, Overlay: 0), value: out var row) && (row.Refusal is null));
 
     /// <summary>Prepares static occurrences from the same definition and rows the visual scene will emit. This is the
     /// sole admission door: visual emission skips exactly these rows; query emission never passes this catalog. A
     /// definition that replaces some rows costs those rows: a row instance met before, showing the same creation
     /// instance under the same seed and scope, keeps its verdict, and keeps its copies while its compiled stamp
     /// stands.</summary>
-    public void ReconcileStatic(WorldDefinition definition, IReadOnlyList<WorldPlacement> placements, string? scope = null, bool riding = false) {
+    public void ReconcileStatic(WorldDefinition definition, IReadOnlyList<WorldPlacement> placements, string? scope = null, bool riding = false, IReadOnlyList<WorldAudienceOverlay>? overlays = null) {
         m_staticRiding = riding;
+        overlays ??= [];
         var seed = (definition.Generation?.WorldSeed ?? 0UL);
-        if (ReferenceEquals(m_staticDefinition, definition) && ReferenceEquals(m_staticRows, placements) && ReferenceEquals(m_staticCreations, definition.Creations) && (m_staticSeed == seed) && (m_staticScope == scope)) { return; }
+        if (ReferenceEquals(m_staticDefinition, definition) && ReferenceEquals(m_staticRows, placements) && ReferenceEquals(m_staticCreations, definition.Creations) && (m_staticSeed == seed) && (m_staticScope == scope) && SameOverlays(overlays: overlays)) { return; }
         // Copies carry the scope and the seed places them, so a change of either starts every row again.
         var keeps = ((m_staticSeed == seed) && (m_staticScope == scope));
         m_staticDefinition = definition;
@@ -62,6 +69,7 @@ public sealed partial class WorldRigidAssets {
         m_staticCreations = definition.Creations;
         m_staticSeed = seed;
         m_staticScope = scope;
+        m_staticOverlays = [.. overlays];
         if (!keeps) { m_staticRowsMet.Clear(); }
         var met = m_staticRowsMet;
         var next = m_staticRowsNext;
@@ -73,40 +81,9 @@ public sealed partial class WorldRigidAssets {
         m_staticAssets.Clear();
         m_staticCopies.Clear();
         m_staticUnsupported.Clear();
-        foreach (var placement in placements) {
-            var creation = WorldDefinitionRows.FindCreation(definition.Creations, placement.ShownPrototypeId);
-            if ((creation is null) || !CopiesRow(placement: placement, creation: creation)) { continue; }
-            if (!met.TryGetValue(key: placement, value: out var row) || !ReferenceEquals(objA: row.Creation, objB: creation)) {
-                row = new StaticRow(creation: creation, refusal: Refusal(creation: creation, placement: placement));
-            }
-            // A row listed twice is one occurrence set, as the instance it is.
-            if (!next.TryAdd(key: placement, value: row)) { continue; }
-            if (row.Refusal is { } reason) {
-                m_staticUnsupported[reason] = (m_staticUnsupported.GetValueOrDefault(reason) + 1);
-                continue;
-            }
-            var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: seed);
-            if (stamp.Count == 0) { row.Stamp = stamp; row.Copies = []; continue; }
-            // A riding row is one copy rooted on its body; a pattern of occurrences stays with the stamp pool.
-            if ((placement.Attach is not null) && (stamp.Count != 1)) { next.Remove(key: placement); m_staticUnsupported["riding-pattern"] = (m_staticUnsupported.GetValueOrDefault("riding-pattern") + 1); continue; }
-            // A responding row holds a template for every creation it can show, in its authored order, so a sweep that
-            // moves its holding swaps the copies' template and leaves the template set, and the program, standing.
-            if (placement.Respond is { Count: > 0 } responses) {
-                AdmitVariant(definition: definition, placement: placement, prototypeId: placement.PrototypeId, variants: variants);
-                foreach (var response in responses) { AdmitVariant(definition: definition, placement: placement, prototypeId: response.PrototypeId, variants: variants); }
-            }
-            var asset = AdmitAsset(creation: creation, scale: placement.Scale, variants: variants);
-            if (!ReferenceEquals(objA: row.Stamp, objB: stamp) || !ReferenceEquals(objA: row.Asset, objB: asset)) {
-                var copies = new StaticCopy[stamp.Count];
-                var visitor = new StaticCopyVisitor(copies, asset, placement, stamp, scope);
-
-                stamp.ForEach(ref visitor);
-                row.Stamp = stamp;
-                row.Asset = asset;
-                row.Copies = copies;
-                rebuilt += copies.Length;
-            }
-            m_staticCopies.AddRange(collection: row.Copies);
+        rebuilt += ReconcileRows(creations: definition, met: met, next: next, overlay: null, rows: definition, placements: placements, scope: scope, seed: seed, variants: variants);
+        foreach (var overlay in overlays) {
+            rebuilt += ReconcileRows(creations: definition, met: met, next: next, overlay: overlay.Audience, rows: overlay.Definition, placements: overlay.Definition.Placements, scope: scope, seed: seed, variants: variants);
         }
         m_staticRowsMet = next;
         m_staticRowsNext = met;
@@ -116,6 +93,108 @@ public sealed partial class WorldRigidAssets {
         WorldCreationWork.ProcessWork.Count(WorldCreationWork.StaticReconciles);
         WorldCreationWork.ProcessWork.Add(WorldCreationWork.StaticCopiesRebuilt, rebuilt);
     }
+    // The overlays the latest reconcile placed copies for.
+    private WorldAudienceOverlay[] m_staticOverlays = [];
+    // Whether the overlays are the ones the latest reconcile placed, audience by audience and document by instance.
+    private bool SameOverlays(IReadOnlyList<WorldAudienceOverlay> overlays) {
+        if (overlays.Count != m_staticOverlays.Length) { return false; }
+        for (var index = 0; (index < overlays.Count); index++) {
+            if ((overlays[index].Audience != m_staticOverlays[index].Audience) || !ReferenceEquals(objA: overlays[index].Definition, objB: m_staticOverlays[index].Definition)) { return false; }
+        }
+        return true;
+    }
+    // Reconciles one document's static rows into the roster: the presentation's own rows (overlay null), each tagged for
+    // every view when no reader is shown it otherwise and for the residency's own views when the disclosure varies it
+    // (WorldPlacementAudiences.Varies); or an overlay's rows, of which only those the disclosure varies are placed, each
+    // tagged for that overlay's views alone, since every other row is the presentation's own. Creations always resolve
+    // in the presentation's document, whose templates every copy draws. Returns the copies placed anew.
+    private int ReconcileRows(WorldDefinition creations, WorldDefinition rows, IReadOnlyList<WorldPlacement> placements, byte? overlay, Dictionary<RowKey, StaticRow> met, Dictionary<RowKey, StaticRow> next, Dictionary<string, StaticAsset> variants, string? scope, ulong seed) {
+        IReadOnlyDictionary<string, WorldPlacement>? byId = null;
+        var rebuilt = 0;
+
+        foreach (var placement in placements) {
+            var varies = (MayVary(placement: placement) && WorldPlacementAudiences.Varies(definition: creations, placement: placement, placementsById: (byId ??= WorldPlacementIndex.ById(placements: placements))));
+            if ((overlay is not null) && !varies) { continue; }
+            var audience = ((overlay is { } own) ? SdfMeshAudience.DrawTagOf(viewAudience: own) : (varies ? SdfMeshAudience.Own : SdfMeshAudience.Neutral));
+            var creation = WorldDefinitionRows.FindCreation(creations.Creations, placement.ShownPrototypeId);
+            if ((creation is null) || !CopiesRow(placement: placement, creation: creation)) { continue; }
+            var key = new RowKey(Placement: placement, Overlay: (overlay ?? 0));
+            if (!met.TryGetValue(key: key, value: out var row) || !ReferenceEquals(objA: row.Creation, objB: creation) || (row.Audience != audience)) {
+                row = new StaticRow(audience: audience, creation: creation, refusal: Refusal(creation: creation, placement: placement));
+            }
+            // A row listed twice is one occurrence set, as the instance it is. Sessions of one disclosure share their
+            // delivered row instances, with the presentation's too where a row stands as authored, so a row is met once
+            // for the presentation and once for each overlay that holds it.
+            if (!next.TryAdd(key: key, value: row)) { continue; }
+            if (row.Refusal is { } reason) {
+                m_staticUnsupported[reason] = (m_staticUnsupported.GetValueOrDefault(reason) + 1);
+                continue;
+            }
+            var stamp = WorldPlacementStamp.Resolve(rows, placement, worldSeed: seed);
+            if (stamp.Count == 0) { row.Stamp = stamp; row.Copies = []; continue; }
+            // A riding row is one copy rooted on its body; a pattern of occurrences stays with the stamp pool.
+            if ((placement.Attach is not null) && (stamp.Count != 1)) { next.Remove(key: key); m_staticUnsupported["riding-pattern"] = (m_staticUnsupported.GetValueOrDefault("riding-pattern") + 1); continue; }
+            // A responding row holds a template for every creation it can show, in its authored order, so a sweep that
+            // moves its holding swaps the copies' template and leaves the template set, and the program, standing.
+            if (placement.Respond is { Count: > 0 } responses) {
+                AdmitVariant(definition: creations, placement: placement, prototypeId: placement.PrototypeId, variants: variants);
+                foreach (var response in responses) { AdmitVariant(definition: creations, placement: placement, prototypeId: response.PrototypeId, variants: variants); }
+            }
+            var asset = AdmitAsset(creation: creation, scale: placement.Scale, variants: variants);
+            if (!ReferenceEquals(objA: row.Stamp, objB: stamp) || !ReferenceEquals(objA: row.Asset, objB: asset)) {
+                var copies = new StaticCopy[stamp.Count];
+                var visitor = new StaticCopyVisitor(copies, asset, placement, stamp, scope, audience);
+
+                stamp.ForEach(ref visitor);
+                row.Stamp = stamp;
+                row.Asset = asset;
+                row.Copies = copies;
+                rebuilt += copies.Length;
+            }
+            m_staticCopies.AddRange(collection: row.Copies);
+        }
+        return rebuilt;
+    }
+    // Whether a row can be one the disclosure varies at all: under a parent, or responding. Every other row is shown
+    // alike to every reader, so the parent walk is never taken for it.
+    private static bool MayVary(WorldPlacement placement) => ((placement.Parent is not null) || (placement.Respond is { Count: > 0 }));
+    /// <summary>Returns why one residency of a world could not draw a document's varying placements as rigid copies for
+    /// their audience alone, or <see langword="null"/> when it can: every placement the disclosure varies
+    /// (<see cref="WorldPlacementAudiences.Varies"/>) shows a creation of the presentation's document that this catalog
+    /// copies (a rigid static stamp, or with <paramref name="riding"/> a responding row riding a body). A varying row
+    /// anything else drew would enter a merged bake group or the stamp pool, whose draws every view of the residency
+    /// draws, so a viewer of another disclosure would be shown it.</summary>
+    /// <param name="rows">The document whose placements are judged: the presentation's own, or a session's delivery.</param>
+    /// <param name="creations">The presentation's document, whose creations the copies draw.</param>
+    /// <param name="riding">Whether the catalog roots riding responding rows on their bodies.</param>
+    /// <returns>The first refusal, naming the placement and why, or <see langword="null"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="rows"/> or <paramref name="creations"/> is <see langword="null"/>.</exception>
+    public static string? AudienceRefusal(WorldDefinition rows, WorldDefinition creations, bool riding) {
+        ArgumentNullException.ThrowIfNull(argument: rows);
+        ArgumentNullException.ThrowIfNull(argument: creations);
+
+        var placements = rows.Placements;
+        IReadOnlyDictionary<string, WorldPlacement>? byId = null;
+
+        foreach (var placement in placements) {
+            if (!MayVary(placement: placement) || !WorldPlacementAudiences.Varies(definition: creations, placement: placement, placementsById: (byId ??= WorldPlacementIndex.ById(placements: placements)))) { continue; }
+            // A deal template renders nothing itself; its dealt children are the rows.
+            if (placement.Deal is not null) { continue; }
+            if (WorldDefinitionRows.FindCreation(creations.Creations, placement.ShownPrototypeId) is not { } creation) { return $"placement '{placement.Id}' shows '{placement.ShownPrototypeId}', which the presentation's document does not hold"; }
+            var copies = (WorldPlacementStamper.IsStaticStamp(placement, creation) || (riding && Rides(placement: placement, creation: creation)));
+            if (!copies) { return $"placement '{placement.Id}' is no rigid static copy (animated, inhabited or riding)"; }
+            if (Refusal(creation: creation, placement: placement) is { } reason) { return $"placement '{placement.Id}' is no rigid copy ({reason})"; }
+        }
+        return null;
+    }
+    /// <summary>Gets whether any copy the latest placement placed is drawn for an audience
+    /// (<see cref="SdfMeshAudience.DrawTagOf"/> of <paramref name="viewAudience"/>), so a view of that audience could
+    /// draw it: an audience is handed to another viewer only once no copy carries it.</summary>
+    /// <param name="viewAudience">The view audience, one or more.</param>
+    /// <returns>Whether a copy carries it.</returns>
+    public bool CarriesAudience(byte viewAudience) => m_carriedAudiences[SdfMeshAudience.DrawTagOf(viewAudience: viewAudience)];
+    // Which draw tags the latest placement's copies carry.
+    private readonly bool[] m_carriedAudiences = new bool[(byte.MaxValue + 1)];
     // The template a creation's copies share, admitted once a reconcile and scaled to the largest row showing it.
     private StaticAsset AdmitAsset(WorldPrototype creation, float scale, Dictionary<string, StaticAsset> variants) {
         var key = creation.Id.Value;
@@ -183,7 +262,7 @@ public sealed partial class WorldRigidAssets {
         var placements = definition.Placements;
         var copies = m_staticCopies.Count;
 
-        ReconcileStatic(definition: definition, placements: placements, riding: m_staticRiding, scope: m_staticScope);
+        ReconcileStatic(definition: definition, overlays: m_staticOverlays, placements: placements, riding: m_staticRiding, scope: m_staticScope);
         if ((m_staticCopies.Count != copies) || !StaticTemplatesStand) { return false; }
         for (var index = 0; (index < placements.Count); index++) {
             var placement = placements[index];
@@ -239,13 +318,15 @@ public sealed partial class WorldRigidAssets {
             ((document.Shapes is not { Count: > 0 }) ? "no-shapes" :
             (((placement.Attach is not null) && (document.Volumes is { Count: > 0 })) ? "riding-volumes" : null))))))));
     }
-    private struct StaticCopyVisitor(StaticCopy[] copies, StaticAsset asset, WorldPlacement placement, CompiledPlacementStamp stamp, string? scope) : ICreationStampVisitor {
+    private struct StaticCopyVisitor(StaticCopy[] copies, StaticAsset asset, WorldPlacement placement, CompiledPlacementStamp stamp, string? scope, byte audience) : ICreationStampVisitor {
         private int m_ordinal;
         public void Visit(CreationStampInstance instance) {
             var index = m_ordinal++;
             var ordinal = stamp.OccurrenceAt(index);
             var target = new WorldPickTarget(placement.Id, null) { Prototype = asset.Creation.Id, Occurrence = ordinal };
-            copies[index] = new StaticCopy(asset, placement, target, (scope, placement.Id, ordinal), instance.Origin, stamp.Rotation);
+            // An overlay's copy of a row keeps a motion history apart from the presentation's copy of the same id.
+            var motion = ((audience > SdfMeshAudience.Own) ? (object)(scope, audience, placement.Id, ordinal) : (scope, placement.Id, ordinal));
+            copies[index] = new StaticCopy(asset, placement, target, motion, instance.Origin, stamp.Rotation, audience);
         }
     }
     // Only body assets need template transform slots. Static templates retain the ordinary instance partitions.
@@ -304,6 +385,7 @@ public sealed partial class WorldRigidAssets {
 
         m_staticVolumes.Clear();
         m_ridingCopies.Clear();
+        Array.Clear(array: m_carriedAudiences);
         StaticVisibleCopies = 0;
         for (var index = 0; index < m_staticCopies.Count; index++) {
             var occurrence = m_staticCopies[index];
@@ -312,16 +394,21 @@ public sealed partial class WorldRigidAssets {
             var previous = m_copies[copyIndex];
             var scale = (occurrence.Placement.Scale / asset.BakeScale);
 
+            m_carriedAudiences[occurrence.Audience] = true;
             if (occurrence.Placement.Attach is not null) {
                 // A riding copy keeps the pose its body last gave it; the next pack reads the body again (PackRiding).
-                _ = previous.Update(-1, occurrence.Target, occurrence.MotionKey, previous.Transform, scale, true, null, null, 0, [], usesRootMaterialFrame: false, templateRange: asset.Range);
+                _ = previous.Update(-1, occurrence.Target, occurrence.MotionKey, previous.Transform, scale, true, null, null, 0, [], usesRootMaterialFrame: false, templateRange: asset.Range, audience: occurrence.Audience);
                 m_ridingCopies.Add(item: index);
                 if (asset.Range.InstanceCount > 0) { StaticVisibleCopies++; }
                 continue;
             }
             var transform = new DynamicTransform(occurrence.Position, occurrence.Orientation);
-            _ = previous.Update(-1, occurrence.Target, occurrence.MotionKey, transform, scale, false, null, null, 0, [], usesRootMaterialFrame: false, templateRange: asset.Range);
-            if (asset.Range.InstanceCount > 0) {
+            _ = previous.Update(-1, occurrence.Target, occurrence.MotionKey, transform, scale, false, null, null, 0, [], usesRootMaterialFrame: false, templateRange: asset.Range, audience: occurrence.Audience);
+            // A light or medium is no draw a view's audience filters, so an overlay's copy brings none: the
+            // presentation's own copy of the row lights every view.
+            if ((asset.Range.InstanceCount > 0) && (occurrence.Audience > SdfMeshAudience.Own)) {
+                StaticVisibleCopies++;
+            } else if (asset.Range.InstanceCount > 0) {
                 var hidden = isolation?.HiddenFor(asset.Creation.Id, asset.Creation.EngineDocument);
                 StaticVisibleCopies++;
                 WorldPlacementStamper.AppendStaticVolumes(asset.Creation.EngineDocument, occurrence.Position, occurrence.Orientation, occurrence.Placement.Scale, m_staticVolumes, hidden);

@@ -64,15 +64,21 @@ public sealed class WorldSessionObservation : IDisposable {
             CloseSceneProof(end: tick);
             return;
         }
-        var shares = (RedactsNoBody(server: m_server) && (identity == m_server.WholeSceneIdentity()));
-        if ((m_sceneProof is { } held) && (held.Scene == identity) && (held.SharesAuthority == shares)) { return; }
+        var whole = RedactsNoBody(server: m_server);
+        var shares = (whole && (identity == m_server.WholeSceneIdentity()));
+        var content = (shares || (whole && View.ReadsSceneInputsWhole));
+        if ((m_sceneProof is { } held) && (held.Scene == identity) && (held.SharesAuthority == shares) && (held.SharesContent == content)) { return; }
         var previous = m_sceneProof;
         m_sceneProof?.Close(end: tick);
-        m_sceneProof = new WorldSceneProof(first: tick, scene: identity, server: m_server, sharesAuthority: shares);
-        if ((previous?.SharesAuthority ?? !shares) != shares) {
+        // A run of content-sharing proofs continues across the identity changes its varying placements make.
+        var contentFirst = ((content && (previous is { SharesContent: true } run)) ? run.ContentFirst : tick);
+        m_sceneProof = new WorldSceneProof(contentFirst: contentFirst, first: tick, scene: identity, server: m_server, sharesAuthority: shares, sharesContent: content);
+        if (((previous?.SharesAuthority ?? !shares) != shares) || ((previous?.SharesContent ?? !content) != content)) {
             m_server.Output.Narrate(channel: "world.session", text: (shares
                 ? $"[world.session: {Session.Describe()} is handed its world's whole scene; a window may draw it from that world's residency]"
-                : $"[world.session: {Session.Describe()} is handed less than its world's whole scene ({WhyNotWhole()}); a window draws it from the residency of the sessions handed scene {identity.Hex[..12]}]"));
+                : (content
+                    ? $"[world.session: {Session.Describe()} is handed its world's whole scene but the placements its disclosure varies ({WhyNotWhole()}); a window draws it from that world's residency with those placements as its session is dealt them]"
+                    : $"[world.session: {Session.Describe()} is handed less than its world's whole scene ({WhyNotWhole()}); a window draws it from the residency of the sessions handed scene {identity.Hex[..12]}]")));
         }
     }
     // Ends the stream's proof: it stops observing, so nothing it was handed may be shared from now.

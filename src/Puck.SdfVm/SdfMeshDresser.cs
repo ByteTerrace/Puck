@@ -541,6 +541,7 @@ public sealed class SdfMeshDresser : IDisposable {
                 matrices++;
                 m_draw = new SdfMeshDraw(identity: m_pickIdentity, material: ((m_group is null) ? copy.Material : 0),
                     mesh: ((m_group is null) ? copy.Mesh! : m_mesh), objectToWorld: copy.Matrix) {
+                    Audience = copy.Audience,
                     FrameSlot = copy.FrameSlot,
                     Glass = (m_group?.Glass ?? false),
                     IsDynamic = copy.IsDynamic,

@@ -509,6 +509,10 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
     // draws whose index leaves its remainder, so the shares draw each draw exactly once.
     uint slices = ((header.w >> 8u) & 0xFFu) + 1u;
     uint slice = ((header.w >> 16u) & 0xFFu);
+    // The draw tag this pass's view draws besides the neutral one (SdfMeshAudience.DrawTagOf of its audience): a draw
+    // disclosed to another audience is filtered as a motion filter's draw is, so no view selects what its viewer is
+    // withheld.
+    uint audience = ((header.w >> SDF_MESH_AUDIENCE_CONTROL_SHIFT) & 0xFFu) + 1u;
 
     if (id.x < header.x) {
         uint draw = id.x;
@@ -516,7 +520,9 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         uint4 a = sdfSelectionRow(record, 0u);
         bool absent = (a.w & SDF_MESH_ABSENT_FLAG) != 0u;
         bool dynamicDraw = (a.w & SDF_MESH_DYNAMIC_FLAG) != 0u;
-        bool filtered = (staticOnly && dynamicDraw) || (dynamicOnly && !dynamicDraw && ((a.w & 2u) == 0u));
+        uint drawAudience = ((a.w >> SDF_MESH_AUDIENCE_SHIFT) & 0xFFu);
+        bool filtered = (staticOnly && dynamicDraw) || (dynamicOnly && !dynamicDraw && ((a.w & 2u) == 0u)) ||
+            ((drawAudience != 0u) && (drawAudience != audience));
         if (absent || filtered) {
             if (absent) { sdfMeshOcclusionVisibleRW[draw] = uint4(0u, 0u, 0u, 0u); }
             sdfOcclusionEmit(entryPhase, draw, draw, 0u, false);

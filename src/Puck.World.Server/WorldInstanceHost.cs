@@ -893,7 +893,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <summary>Looks up the endpoint a portal window may render in place of its session: the endpoint of the local
     /// instance its session observes, while the instance's proof says the session is handed the scene inputs a whole
     /// reader is handed (<see cref="WorldSceneProof.SharesAuthority"/>) and covers the delivery the endpoint's mirror last
-    /// took, so the frame bound draws nothing the session's own stream would not show it. An instance running under the
+    /// took, so the frame bound draws nothing the session's own stream would not show it; or while it proves the session
+    /// shares a whole reader's scene but the placements its disclosure varies (<see cref="WorldSceneProof.SharesContent"/>)
+    /// over a run covering that delivery, when the caller must draw those placements from the session's own delivery
+    /// (the proof's <see cref="WorldSceneProof.SharesAuthority"/> tells which). An instance running under the
     /// name that the session does not observe (a replacement started under a stopped instance's name) yields none, since
     /// the session was never admitted to it and its endpoint's mirror is that instance's whole replica.</summary>
     /// <param name="observation">The window's session.</param>
@@ -912,13 +915,13 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 value: out var instance
             ) &&
             observation.Observes(server: instance.Server) &&
-            (observation.SceneProof is { SharesAuthority: true } proof) &&
+            (observation.SceneProof is { SharesContent: true } proof) &&
             proof.IssuedBy(server: instance.Server) &&
             TryEndpoint(
                 endpoint: out endpoint,
                 name: name
             ) &&
-            proof.Covers(tick: endpoint.Mirror.Tick)
+            (proof.SharesAuthority ? proof.Covers(tick: endpoint.Mirror.Tick) : proof.CoversContent(tick: endpoint.Mirror.Tick))
         );
     }
     /// <summary>Looks up a running instance by name.</summary>

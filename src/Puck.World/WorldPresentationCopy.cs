@@ -121,7 +121,7 @@ public static class WorldPresentationCopy {
         }
 
         var proof = observation.SceneProof;
-        var share = ((proof is null) ? (WorldSceneShare?)null : new WorldSceneShare(End: proof.End, First: proof.First, Scene: proof.Scene, SharesAuthority: proof.SharesAuthority));
+        var share = ((proof is null) ? (WorldSceneShare?)null : new WorldSceneShare(End: proof.End, First: proof.First, Scene: proof.Scene, SharesAuthority: proof.SharesAuthority, SharesContent: proof.SharesContent));
         var holds = ((proof is not null) && (instanceName is not null) && instances.TryGet(instance: out var instance, name: instanceName) &&
             (instance is not null) && observation.Observes(server: instance.Server) && proof.IssuedBy(server: instance.Server));
         var window = (((instanceName is not null) && instances.TryWindowEndpoint(endpoint: out var endpoint, name: instanceName, observation: observation)) ? endpoint : null);
