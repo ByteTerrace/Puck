@@ -554,10 +554,26 @@ public sealed class SdfMeshDemand {
     // group's as planned, in metres.
     internal static (Vector3 Center, Vector3 Half, float Units) WorldBoxOf(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) {
         ArgumentNullException.ThrowIfNull(argument: group);
+
+        return WorldBoxOf(group: group, high: group.High, low: group.Low, transforms: transforms);
+    }
+    /// <summary>Returns the centre, in world space, of the box a group was planned with (<see cref="SdfMeshBakeGroup.PlannedLow"/>
+    /// and <see cref="SdfMeshBakeGroup.PlannedHigh"/>), carried as <see cref="WorldBoxOf(SdfMeshBakeGroup, IReadOnlyList{DynamicTransform})"/>
+    /// carries its box: where the group stands whatever a bake narrowed its box to, alike for one placement in two scenes
+    /// of a world whichever tier each baked or loaded.</summary>
+    /// <param name="group">The group.</param>
+    /// <param name="transforms">The frame's dynamic transforms.</param>
+    /// <returns>The planned box's centre.</returns>
+    internal static Vector3 PlannedCenterOf(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) {
+        ArgumentNullException.ThrowIfNull(argument: group);
+
+        return WorldBoxOf(group: group, high: group.PlannedHigh, low: group.PlannedLow, transforms: transforms).Center;
+    }
+    private static (Vector3 Center, Vector3 Half, float Units) WorldBoxOf(SdfMeshBakeGroup group, Vector3 low, Vector3 high, IReadOnlyList<DynamicTransform> transforms) {
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
-        var center = ((group.Low + group.High) * 0.5f);
-        var half = Vector3.Abs(value: ((group.High - group.Low) * 0.5f));
+        var center = ((low + high) * 0.5f);
+        var half = Vector3.Abs(value: ((high - low) * 0.5f));
 
         if (!group.Dynamic || (group.Slot >= transforms.Count)) { return (center, half, 1f); }
 

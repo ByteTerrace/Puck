@@ -201,7 +201,8 @@ public sealed partial record SdfMesh {
     public ReadOnlyMemory<SdfMeshInfluence> Influences { get; }
     /// <summary>Gets the mesh's coarser levels of detail, finest first, each a triangle list over this mesh's own vertices
     /// (<see cref="SdfMeshCollapse"/>); none for a mesh drawn at its own triangles alone. The mesh's own triangles are
-    /// its level zero, which the irradiance trace and every query read.</summary>
+    /// its level zero, which every query reads; the irradiance trace reads the coarsest level within
+    /// <see cref="SdfMeshIrradiance.TraceError"/>.</summary>
     /// <exception cref="ArgumentException">A level's triangles name no vertex, its triangle materials are not one per
     /// triangle when the mesh carries them (or present when it does not), its error is negative, not finite or smaller
     /// than a finer level's, or the levels and the mesh together hold more than <see cref="MaxTriangles"/>

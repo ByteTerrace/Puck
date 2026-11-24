@@ -2594,6 +2594,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: m_settings.DistantShadows),
                 ViewsRate = m_settings.ViewsRate,
                 FarShadows = WorldRenderFarDistance.ResolveFarShadows(authored: m_settings.FarShadows),
+                ShadowTexels = WorldRenderSettings.ResolveShadowTexels(row: m_settings.ShadowTexels),
                 Toon = m_settings.ResolveToon(render: m_client.Definition.Render),
                 Tone = WorldRenderSettings.ToneOf(render: m_client.Definition.Render),
                 ShadePrograms = m_settings.ShadePrograms,

@@ -56,6 +56,8 @@ public static partial class WorldSessionLevers {
     /// <summary>The far shadow cascade's rate: its refreshes a second in lane A (zero for every frame, the unauthored
     /// default) and the light turn a held cascade tolerates, in degrees, in lane B.</summary>
     public const string FarShadows = "far-shadows";
+    /// <summary>The texels a side of a full-resolution shadow cascade in lane A (zero for the engine's default).</summary>
+    public const string ShadowTexels = "shadow-texels";
     /// <summary>The irradiance work each presented frame grants the volume: the probes relit in lane A and traced in lane B
     /// (zero for unbounded), the lighting age in seconds in lane C (zero for none), and in lane D whether a device row
     /// authors it (zero runs each world's own budget).</summary>
@@ -117,6 +119,12 @@ public static partial class WorldSessionLevers {
     public static WorldSessionLever FarShadowPolicy(WorldQualityPreset preset) => new(
         Section: WorldSection.Render, Name: FarShadows,
         A: (preset.FarShadows?.Hertz ?? 0), B: (preset.FarShadows?.TurnDegrees ?? 0f));
+    /// <summary>Creates the one lever that installs a preset's cascade texels, or restores the engine's default for a preset
+    /// that authors none.</summary>
+    /// <param name="preset">The authored quality row.</param>
+    /// <returns>The texels a side in one accepted settings write.</returns>
+    public static WorldSessionLever ShadowTexelsPolicy(WorldQualityPreset preset) => new(
+        Section: WorldSection.Render, Name: ShadowTexels, A: (preset.ShadowTexels ?? 0));
     /// <summary>Creates the one lever that installs a preset's irradiance budget, or hands the volume back to each world's own
     /// for a preset that authors none.</summary>
     /// <param name="preset">The authored quality row.</param>
@@ -282,6 +290,18 @@ public static partial class WorldSessionLevers {
                 return;
             }
             settings.FarShadows = rate;
+        });
+        sink.Register(name: ShadowTexels, setter: lever => {
+            if (lever.A <= 0d) {
+                settings.ShadowTexels = null;
+                return;
+            }
+            // The value arrives off the wire, so it is judged here as the document validator judges an authored row.
+            if (WorldQualityPreset.ShadowTexelsRefusal(path: "shadow-texels", texels: ((int)lever.A)) is { } refusal) {
+                WorldClientDiagnostics.Report(channel: "world.quality", text: $"{refusal} — lever dropped");
+                return;
+            }
+            settings.ShadowTexels = ((int)lever.A);
         });
         sink.Register(name: IndirectBudget, setter: lever => {
             if (lever.D == 0d) {
