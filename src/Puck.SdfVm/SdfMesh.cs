@@ -432,7 +432,12 @@ public readonly record struct SdfMeshDraw {
     /// (<see cref="Displacement"/>), which reads the frame's sampled heights, are never static, whatever
     /// <see cref="IsDynamic"/> says. Glass neither blocks nor bounces the probes' rays, and a draw without a mesh draws
     /// nothing.</summary>
-    public bool IsStatic => ((Mesh is { } mesh) && mesh.VertexMembers.IsEmpty && (Displacement is null) && !IsDynamic && !Glass);
+    public bool IsStatic => ((Mesh is { } mesh) && mesh.VertexMembers.IsEmpty && (Displacement is null) && !IsDynamic && !Glass && (Audience == SdfMeshAudience.Neutral));
+    /// <summary>Gets the draw tag naming the views that may select the draw (<see cref="SdfMeshAudience"/>): neutral, the
+    /// default, for every view. A draw disclosed to one audience is never <see cref="IsStatic"/>, since what every
+    /// viewer reads alike (the irradiance volume, the distant shadow map, the far product) must hold nothing one viewer
+    /// is withheld.</summary>
+    public byte Audience { get; init; }
     /// <summary>Gets the detail tier the drawn mesh was baked at (<see cref="SdfMeshTier"/>), or -1 for a mesh no bake
     /// tiered (an authored mesh). It reports only, in the selection counts
     /// (<see cref="SdfWorldTables.DescribeSelection"/>): no staged record or pass reads it.</summary>
@@ -553,6 +558,7 @@ public readonly record struct SdfMeshDraw {
             (this.FrameSlot != other.FrameSlot) ||
             (this.UsesRootMaterialFrame != other.UsesRootMaterialFrame) ||
             (this.ObjectKey != other.ObjectKey) ||
+            (this.Audience != other.Audience) ||
             !Equals(objA: this.MotionIdentity, objB: other.MotionIdentity) ||
             (BitConverter.SingleToInt32Bits(value: this.CarryScale) != BitConverter.SingleToInt32Bits(value: other.CarryScale)) ||
             (this.Displacement != other.Displacement) ||
@@ -1113,7 +1119,7 @@ public static class SdfMeshRegion {
         var slotBox = (rides && boxed && draw.Mesh.Members.IsEmpty);
 
         writer[(SdfMeshRecord.SelectionWord + 3)] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (enclosed ? 4u : 0u) |
-            (draw.IsStatic ? 0u : SdfMeshRecord.DynamicFlag) | (slotBox ? SdfMeshRecord.SlotBoxFlag : 0u);
+            (draw.IsStatic ? 0u : SdfMeshRecord.DynamicFlag) | (slotBox ? SdfMeshRecord.SlotBoxFlag : 0u) | (((uint)draw.Audience) << SdfMeshRecord.AudienceShift);
 
         return boxChanged;
     }

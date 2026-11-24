@@ -1610,7 +1610,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: tables.DummyBuffer, member: SdfWorldPackage.GlassSumsWritten, set: set);
             SdfMeshOcclusion.Unbind(bound: m_meshSetOcclusion[kind][slot], boundTarget: ref m_meshSetTargets[kind][slot], first: 0, set: set, tables: tables);
             selection.Stage(tables: tables, count: count, width: (uint)m_texels, height: (uint)m_texels, slot: slot, cull: in cull, detail: in detail, held: tables.HoldsFrame,
-                glass: false, occlude: false, splitExit: true, motion: motion, slice: share, slices: slices, tag: tag);
+                glass: false, occlude: false, audience: 0, splitExit: true, motion: motion, slice: share, slices: slices, tag: tag);
             selection.BindDraws(tables: tables, set: set, bound: m_meshSetOcclusion[kind][slot]);
             for (var phase = 0; (phase < OcclusionSets); phase++) {
                 var at = OcclusionSetOf(kind: kind, slot: slot, phase: phase);
