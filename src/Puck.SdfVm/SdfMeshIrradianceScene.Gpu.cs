@@ -9,9 +9,9 @@ public sealed partial class SdfMeshIrradianceScene {
     // The draws the scene keeps, as many as it counts of its rented array.
     private ReadOnlySpan<Instance> Draws => m_content.Instances.AsSpan(start: 0, length: m_content.InstanceCount);
 
-    internal bool HasGpuPlacements(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, IReadOnlySet<SdfMesh> owed) {
+    internal bool HasGpuPlacements(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, Func<SdfMesh, bool> stands) {
         foreach (ref readonly var instance in Draws) {
-            if (!placements.ContainsKey(instance.Mesh) || owed.Contains(instance.Mesh)) { return false; }
+            if (!placements.ContainsKey(instance.Mesh) || !stands(instance.Mesh)) { return false; }
         }
         return true;
     }

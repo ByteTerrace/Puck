@@ -118,7 +118,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         m_coveredChunks = 0L;
         m_chunkCounts = ((chunkWords == 0L) ? [] : new int[(int)(((long)m_ranges.Size).CeilingDivide(divisor: chunkWords))]);
         if (chunkWords == 0L) { return; }
-        foreach (var (mesh, word) in m_placements) { CountChunks(count: 1, word: word, words: SdfMeshRegion.WordsOf(mesh: mesh)); }
+        foreach (var (mesh, word) in m_placements) { CountChunks(count: 1, word: word, words: SdfMeshRegion.PlacedWordsOf(mesh: mesh)); }
         foreach (var (word, words) in m_moveSources) { CountChunks(count: 1, word: word, words: words); }
         m_crossedChunks.Clear();
         ChunksRecounted = true;
@@ -273,7 +273,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         if (HeldWords > target) {
             m_shedOrder.Clear();
             foreach (var mesh in m_ahead.Keys) {
-                if (m_placements.ContainsKey(key: mesh) && IsProduct(mesh: mesh)) { m_shedOrder.Add(item: (SdfMeshRegion.WordsOf(mesh: mesh), mesh)); }
+                if (m_placements.ContainsKey(key: mesh) && IsProduct(mesh: mesh)) { m_shedOrder.Add(item: (SdfMeshRegion.PlacedWordsOf(mesh: mesh), mesh)); }
             }
             m_shedOrder.Sort(comparison: static (left, right) => right.Words.CompareTo(value: left.Words));
             foreach (var (words, mesh) in m_shedOrder) {
@@ -302,7 +302,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
     private void TakeBackPast(long words) {
         m_scratch.Clear();
         foreach (var (mesh, word) in m_placements) {
-            if ((word + Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh))) > words) { m_scratch.Add(item: mesh); }
+            if ((word + Math.Max(val1: 1, val2: SdfMeshRegion.PlacedWordsOf(mesh: mesh))) > words) { m_scratch.Add(item: mesh); }
         }
         foreach (var mesh in m_scratch) {
             _ = Forget(mesh: mesh);
@@ -372,7 +372,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
 
         names++;
         if (named) { return; }
-        NamedWords += SdfMeshRegion.WordsOf(mesh: mesh);
+        NamedWords += SdfMeshRegion.PlacedWordsOf(mesh: mesh);
         RefreshUnused(mesh: mesh);
         if (!m_placements.ContainsKey(key: mesh)) { _ = m_toPlace.Add(item: mesh); }
     }
@@ -384,7 +384,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         if (left != 0) { m_named[mesh] = left; return; }
         _ = m_named.Remove(key: mesh);
         _ = m_refused.Remove(item: mesh);
-        NamedWords -= SdfMeshRegion.WordsOf(mesh: mesh);
+        NamedWords -= SdfMeshRegion.PlacedWordsOf(mesh: mesh);
         RefreshUnused(mesh: mesh);
     }
     /// <summary>Names a mesh ahead of the draws for one more residency: it is placed and kept like a mesh a draw names,
@@ -472,7 +472,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
     private bool Compact(bool fitRefused) {
         var need = 0L;
 
-        if (fitRefused) { foreach (var mesh in m_refused) { need += Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh)); } }
+        if (fitRefused) { foreach (var mesh in m_refused) { need += Math.Max(val1: 1, val2: SdfMeshRegion.PlacedWordsOf(mesh: mesh)); } }
         m_compactOrder.Clear();
         foreach (var (mesh, word) in m_placements) { m_compactOrder.Add(item: (word, mesh)); }
         m_compactOrder.Sort(comparison: static (left, right) => right.Word.CompareTo(value: left.Word));
@@ -484,8 +484,8 @@ public sealed class SdfMeshRegionArena : IDisposable {
 
         for (var index = 0; (index < m_compactOrder.Count); index++) {
             var (word, mesh) = m_compactOrder[index];
-            var words = Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh));
-            var below = (((index + 1) < m_compactOrder.Count) ? (((long)m_compactOrder[index + 1].Word) + Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: m_compactOrder[index + 1].Mesh))) : 0L);
+            var words = Math.Max(val1: 1, val2: SdfMeshRegion.PlacedWordsOf(mesh: mesh));
+            var below = (((index + 1) < m_compactOrder.Count) ? (((long)m_compactOrder[index + 1].Word) + Math.Max(val1: 1, val2: SdfMeshRegion.PlacedWordsOf(mesh: m_compactOrder[index + 1].Mesh))) : 0L);
             var end = Math.Max(val1: highest, val2: below);
             // The words under the highest placement left standing, were this mesh to stay where it lies.
             var standing = Math.Max(val1: end, val2: (((long)word) + words));
@@ -526,8 +526,8 @@ public sealed class SdfMeshRegionArena : IDisposable {
     }
     private void RefreshUnused(SdfMesh mesh) {
         if (m_placements.ContainsKey(key: mesh) && !Names(mesh: mesh)) {
-            if (m_unused.Add(item: mesh)) { m_unusedWords += SdfMeshRegion.WordsOf(mesh: mesh); }
-        } else if (m_unused.Remove(item: mesh)) { m_unusedWords -= SdfMeshRegion.WordsOf(mesh: mesh); }
+            if (m_unused.Add(item: mesh)) { m_unusedWords += SdfMeshRegion.PlacedWordsOf(mesh: mesh); }
+        } else if (m_unused.Remove(item: mesh)) { m_unusedWords -= SdfMeshRegion.PlacedWordsOf(mesh: mesh); }
     }
 
     // Places each mesh named ahead that holds no words.
@@ -551,7 +551,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
     // placed it, and a refusal is recorded only after a TryPlace that failed or a Forget.
     private bool TryPlace(SdfMesh mesh, bool product = false) {
         // A range is at least one word, so a mesh without words still has a place of its own.
-        var words = ((ulong)Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh)));
+        var words = ((ulong)Math.Max(val1: 1, val2: SdfMeshRegion.PlacedWordsOf(mesh: mesh)));
 
         if (!m_ranges.TryAllocate(count: words, start: out var start)) { return false; }
         // The grant's address and held limits and the diagnostic cap constrain the same lowest-run admission.
@@ -572,8 +572,8 @@ public sealed class SdfMeshRegionArena : IDisposable {
         _ = m_aheadRefused.Remove(item: mesh);
         m_placed.Add(item: mesh);
         m_placementChanges++;
-        m_placedWords += SdfMeshRegion.WordsOf(mesh: mesh);
-        CountChunks(count: 1, word: ((long)start), words: SdfMeshRegion.WordsOf(mesh: mesh));
+        m_placedWords += SdfMeshRegion.PlacedWordsOf(mesh: mesh);
+        CountChunks(count: 1, word: ((long)start), words: SdfMeshRegion.PlacedWordsOf(mesh: mesh));
         RefreshUnused(mesh: mesh);
 
         return true;
@@ -582,8 +582,8 @@ public sealed class SdfMeshRegionArena : IDisposable {
     private long Forget(SdfMesh mesh) {
         _ = m_placements.Remove(key: mesh, value: out var word);
         m_placementChanges++;
-        m_placedWords -= SdfMeshRegion.WordsOf(mesh: mesh);
-        CountChunks(count: -1, word: word, words: SdfMeshRegion.WordsOf(mesh: mesh));
+        m_placedWords -= SdfMeshRegion.PlacedWordsOf(mesh: mesh);
+        CountChunks(count: -1, word: word, words: SdfMeshRegion.PlacedWordsOf(mesh: mesh));
         RefreshUnused(mesh: mesh);
         mesh.Release(cached: true);
 

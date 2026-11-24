@@ -381,7 +381,7 @@ public sealed partial class SdfMeshPathBake {
             // The tier a frame draws is the replaced group's while a replacement is still to land.
             var resident = (group.Replaces ?? group).Tier;
             var leadTier = 0;
-            var led = ((board is not null) && board.TryGet(shape: group.Shape, tier: out leadTier));
+            var led = ((board is not null) && board.TryGet(place: SdfMeshLibrary.TierBoard.PlaceOf(center: SdfMeshDemand.WorldBoxOf(group: group, transforms: frame.DynamicTransforms).Center), shape: group.Shape, tier: out leadTier));
 
             if (led) { demanded = leadTier; }
 
@@ -631,9 +631,10 @@ public sealed partial class SdfMeshPathBake {
         if ((m_publishedRevision == m_productRevision) && ReferenceEquals(objA: world, objB: m_publishedWorld)) { return; }
         m_publishedRevision = m_productRevision;
         m_publishedWorld = world;
-        Library.TiersOf(world: world).Publish(state: m_groups, list: static (groups, add) => {
-            foreach (var group in groups) {
-                if (!group.Retired && group.Listed) { add(arg1: group.Shape, arg2: (group.Replaces ?? group).Tier); }
+        Library.TiersOf(world: world).Publish(state: (Groups: m_groups, Transforms: frame.DynamicTransforms), list: static (state, add) => {
+            foreach (var group in state.Groups) {
+                if (group.Retired || !group.Listed) { continue; }
+                add(arg1: group.Shape, arg2: SdfMeshLibrary.TierBoard.PlaceOf(center: SdfMeshDemand.WorldBoxOf(group: group, transforms: state.Transforms).Center), arg3: (group.Replaces ?? group).Tier);
             }
         });
     }

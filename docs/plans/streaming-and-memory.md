@@ -3139,6 +3139,33 @@ trim, and an unseen world submits none. A trim also keeps an anchor a rated
 view read within the last few uploads, which it used to give back and take
 again a frame later, past the pool's limit.
 
+A world is resident once however many residencies draw it. Four mechanisms
+make it so, each closing a way the same mesh was held twice:
+
+- **One region.** Every residency on a device names its meshes in one mesh
+  region (`SdfMeshRegionStore`,
+  [decision 3](#decision-3-one-reservation-across-residencies-with-floors-and-classes)'s
+  option C) and keeps only its draw records, so a mesh several of them name
+  is placed, landed and held once.
+- **One demand and one tier for one world.** A second scene of the world the
+  presentation's own frame draws (the debug world's own sessions are handed
+  a scene that differs from a whole reader's by one row a card game
+  withholds, `WorldSessionRoute`) carries that frame's views as demand points
+  (`SdfFrameContent.DemandViews`) and draws each group at the tier the
+  presentation's own residency draws it at (`SdfMeshLibrary.TiersOf`, by the
+  group's shape and where it stands), with no hold and whatever its own
+  budget says: the mesh is already placed, and a tier of its own choosing
+  would be placed beside it.
+- **A renumbered mesh is its materials.** A mesh taken into a program that
+  numbers its materials otherwise shares the first mesh's geometry
+  (`SdfMesh.GeometrySource`) and is placed as its triangle materials alone
+  (`SdfMeshRegion.PlacedWordsOf`); its draws read the first mesh's vertices
+  and indices.
+- **The library knows what it let go of.** The library's budget bounds what
+  it keeps alive, never what it knows: a take of a geometry its cache let go
+  of finds the mesh a residency still holds (`SdfMeshLibrary.Revived`)
+  instead of decoding the store's entry into a second one.
+
 Detail is also given back by time and by a backlog, where it used to wait for
 pressure and then for its last spare tier. A group keeps a tier finer than its
 demand asks for `SdfMeshTier.SpareKeptFrames` while the budget has room and is
@@ -3184,25 +3211,15 @@ in order:
 - the irradiance volume holding only the levels its frame measures
   (`SdfFrame.IndirectLevels`): every level keeps its slots today, so a world
   behind a small glass measures one level and stores them all;
-- a second scene of one world planned at that world's demand. The mesh store
-  for a presentation
-  ([decision 3](#decision-3-one-reservation-across-residencies-with-floors-and-classes)'s
-  option C) is built: every residency on a device names its meshes in one
-  region (`SdfMeshRegionStore`), where a mesh any number of them name is
-  placed, landed and held once, and keeps only its draw records in a region
-  of its own. The debug world's own sessions are handed a scene that differs
-  from a whole reader's by one row a card game withholds, which is a
-  different scene and rightly a second residency (`WorldSessionRoute`). That
-  scene still measures its tiers from its own windows, so most of its meshes
-  are other tiers of the boot world's groups and are placed beside them: on
-  the route about a thousand of its meshes coincided with the boot world's.
-  Its demand has to join the boot world's (the same world, in the same
-  coordinates) for the rest to coincide, and its meshes then cost nothing;
-- a material variant placed as its materials alone. A mesh taken into a
-  program that numbers its materials otherwise is a variant that shares the
-  first mesh's geometry on the host (`SdfMesh.RenumberNative`) and is placed
-  whole in the region, since the store keys by mesh. Whether two scenes of
-  one world carry the same ids is unread;
+- the fixed storage of every residency, which is now the largest holder by
+  far: with a world resident once, a walk into the gallery with four
+  residencies held the mesh region at under two gigabytes and the fixed class
+  at about five, most of it the lighting's stores and the shadows, once per
+  residency **[reading]**. The item above (a residency's tables given back)
+  is what moves it;
+- the first judging of a floor, which still takes a core about ten seconds a
+  pair (`SdfMeshTraceJudge.Admits`); the verdict is kept afterwards
+  (`SdfMeshLibrary.TraceVerdict`, an entry beside the meshes in the store);
 - draw rows shed when the device refuses a region's draw records. Today that
   refusal is raised as a lost device (`SdfWorldTables`' mesh region), which
   rebuilds the presentation under the limit the refusal left and does not end

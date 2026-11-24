@@ -552,7 +552,7 @@ public sealed class SdfMeshDemand {
     // A planned group's box in world space, and the units its lattice is in: a dynamic group's carried out of its slot's
     // frame by the slot's transform among the plan's, in the slot's units (SdfMeshGeometryBuilder.UnitsOf); any other
     // group's as planned, in metres.
-    private static (Vector3 Center, Vector3 Half, float Units) WorldBoxOf(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) {
+    internal static (Vector3 Center, Vector3 Half, float Units) WorldBoxOf(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) {
         ArgumentNullException.ThrowIfNull(argument: group);
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
