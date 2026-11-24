@@ -13,7 +13,7 @@
     {
       "name": "traversal-studio",
       "note": "The traversal bot's studio pass (route entries 0..14): steps, ramps, stairs and the round dais.",
-      "lines": ["body.stop 43", "body.pose 60 0.05 -30 0 0 0 43", "world.state.cell.set traversal start 0", "world.state.cell.set traversal count 15", "world.state.cell.set traversal run 1"],
+      "lines": ["body.stop 53", "body.pose 60 0.05 -30 0 0 0 53", "world.state.cell.set traversal start 0", "world.state.cell.set traversal count 15", "world.state.cell.set traversal run 1"],
       "until": { "line": "world.state traversal", "metric": "run", "in": ["0"] },
       "everyTicks": 150,
       "maxTicks": 9000
@@ -21,7 +21,7 @@
     {
       "name": "traversal-gallery",
       "note": "The traversal bot's gallery pass (route entries 15..22): both flights of the stairwell and the lift.",
-      "lines": ["body.stop 43", "body.pose 11.2 0.05 32.5 0 0 0 43", "world.state.cell.set traversal start 15", "world.state.cell.set traversal count 23", "world.state.cell.set traversal run 1"],
+      "lines": ["body.stop 53", "body.pose 11.2 0.05 32.5 0 0 0 53", "world.state.cell.set traversal start 15", "world.state.cell.set traversal count 23", "world.state.cell.set traversal run 1"],
       "until": { "line": "world.state traversal", "metric": "run", "in": ["0"] },
       "everyTicks": 150,
       "maxTicks": 6000

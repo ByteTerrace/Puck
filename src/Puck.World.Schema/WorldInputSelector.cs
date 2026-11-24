@@ -14,6 +14,13 @@ public sealed class WorldInputSelector {
     private WorldInputSelector(WorldInputModeFamily family, WorldDefinition definition) {
         Kind = family.Selector.Kind;
         Name = family.Selector.Name;
+        if (family.Selector.AuthoritySelected) {
+            for (var state = 0; (state < family.States.Count); state++) {
+                if (family.States[state].Name == family.Default) { Default = ((ushort)state); }
+            }
+            m_ranges = [];
+            return;
+        }
         var ranges = new List<(long Minimum, long Maximum, ushort State)>();
 
         for (var state = 0; (state < family.States.Count); state++) {

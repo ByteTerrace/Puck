@@ -191,6 +191,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     // prove reports IsConfigured for the host's sake, so the client side learns it cannot sign from the exchange
     // itself. Final for the run, exactly as an unconfigured authenticator is.
     private int m_cannotProve;
+    private readonly WorldDefinition m_initialDefinition;
     private WorldDefinition m_definition;
     private long m_lastObservedTickBits;
 
@@ -224,6 +225,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         }
 
         m_route = new PublishedRoute(endpoint: parsed);
+        m_initialDefinition = placeholder;
         m_definition = placeholder;
         m_security = (security ?? throw new ArgumentNullException(paramName: nameof(security)));
         // One peer network per host: a routed observer dials through its transaction authority's, and a root authority
@@ -678,7 +680,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         // generation of this one, starts from a whole projection again.
         byte[]? Fetch(ContentPin pin) => upstream.FetchPrototype(pin: pin, traveler: ((m_submissionCredential is { } credential)
             ? new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility) : null));
-        var hold = new WorldProjectionHold(basis: () => Definition, content: upstream.FetchedContent, fetch: Fetch);
+        var seedDefinition = upstream.m_initialDefinition;
+        var hold = new WorldProjectionHold(basis: () => Definition, content: upstream.FetchedContent, fetch: Fetch, seed: seedDefinition);
         WorldDefinition? replica = null;
         WorldDocumentVersion replicaVersion = default;
         // The session's one door: every record it reads, a route included, passes this ingress on its stamp before
@@ -746,7 +749,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         }
                         // The ended span's projection goes with it: the generation the cut opens starts from its whole
                         // projection, which nothing of the ended span can complete.
-                        hold = new WorldProjectionHold(basis: () => Definition, content: upstream.FetchedContent, fetch: Fetch);
+                        hold = new WorldProjectionHold(basis: () => Definition, content: upstream.FetchedContent, fetch: Fetch, seed: seedDefinition);
                         bodies = new WorldSnapshotReceiver();
                         replica = null;
                         replicaVersion = default;

@@ -659,14 +659,12 @@ public sealed partial class WorldPopulation {
     /// <param name="index">The population index (0-based, <c>0..</c><see cref="Capacity"/>).</param>
     /// <returns><see langword="true"/> when the entry is active.</returns>
     public bool IsActive(int index) => m_entries[index].Active;
-    /// <summary>The deterministic kit row index assigned to a stable population slot: the row its own selector cell
-    /// picks (<see cref="WorldRowAssignment.Select"/>), else the row the kit assignment's sequence gives it.</summary>
+    /// <summary>The deterministic kit row index a population slot runs: the row its own selector cell picks
+    /// (<see cref="WorldRowAssignment.Select"/>), else <c>defaultSeatKit</c> for a local seat or remote human, else the
+    /// row the kit assignment's sequence gives it.</summary>
     /// <param name="index">The population index (0-based).</param>
-    /// <returns>The slot's assigned kit row index.</returns>
-    public byte KitIndex(int index) => ((m_entries[index].SelectedKit >= 0)
-        ? (byte)m_entries[index].SelectedKit
-        : m_entries[index].KitIndex
-    );
+    /// <returns>The slot's resolved kit row index.</returns>
+    public byte KitIndex(int index) => ResolveKitIndex(index: index);
     /// <summary>The declared motion tuning of the kit assigned to a stable population slot — the runtime
     /// <c>body.motion</c> door's read of the same fact <see cref="WorldDefinitionValidator.TryValidateProgramCoherence"/>
     /// checks at boot, so a document-legal kit cannot runtime-switch into a program its tuning cannot back.</summary>

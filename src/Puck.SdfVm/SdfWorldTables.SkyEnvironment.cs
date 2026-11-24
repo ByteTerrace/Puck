@@ -143,6 +143,7 @@ public sealed partial class SdfWorldTables {
             m_physical = physical;
             Demand = (physical || (sky.Ambient > 0f) || (sky.Reflection > 0f) || (sky.HazeExtinction > 0f) ||
                 ((sky.FogExtinction > 0f) && ((sky.AirFlags & SdfAir.FogColorAuthored) == 0)));
+            m_refresh.Advance();
             Owes = m_refresh.Owes(block: sky, layers: m_tables.m_skyLayerRecords, physical: physical);
             if (m_refresh.Projected) { Projected = true; Skipped = m_refresh.Skipped; }
         }

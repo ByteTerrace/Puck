@@ -183,7 +183,9 @@ what the machine can verify. **At most two subagents run at once** (the
 owner's standing order, so that agents stay focused and cooperate instead of
 competing for the machine and the same files): the lead starts a third only
 when the owner explicitly asks for a fan-out, and a workflow's agents count
-toward the two. The partner session on the RTX 2060 machine is a peer with
+toward the two, except a lane on the Azure release and the silo, which runs
+beside them on the lead machine (the owner's ruling: the release process is
+relied on heavily and is worth the time to design well). The partner session on the RTX 2060 machine is a peer with
 its own cap of one subagent, so the team is five actors: the lead, its two
 subagents, the partner and its one. The owner's intent is cooperation, not
 parallel effort: each actor's work enhances another's (the partner measures and

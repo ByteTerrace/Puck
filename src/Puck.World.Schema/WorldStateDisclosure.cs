@@ -749,10 +749,14 @@ public static class WorldStateDisclosure {
     /// <param name="unrestricted">Whether to disclose as a reader every restriction admits — the most any recipient could
     /// be handed, which a measurement sizing for every possible recipient reads — instead of as <paramref name="recipient"/>.</param>
     public static void ValidateBindings(WorldDefinition definition, StateArena arena, object graph, Principal? recipient, bool unrestricted = false) {
+        if (unrestricted || !WorldStateDocumentValues.HasReference(graph: graph)) {
+            return;
+        }
+
         var observer = new Observer(
             arena: arena,
             recipient: recipient,
-            unrestricted: unrestricted
+            unrestricted: false
         );
 
         foreach (var row in arena.Rows) {

@@ -50,7 +50,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
         if ((seat.Input is null) || !ReferenceEquals(objA: m_inputProfiles[slot], objB: sources) || !ReferenceEquals(objA: m_inputRoutes[slot], objB: route) ||
             !ReferenceEquals(objA: m_inputDefinitions[slot], objB: route.Endpoint.Definition)) {
-            var freshAttachment = ((seat.Input is null) || !ReferenceEquals(objA: m_inputRoutes[slot], objB: route));
+            var freshAttachment = ((seat.Input is null) || (m_inputRoutes[slot] is not { } priorRoute) ||
+                !ReferenceEquals(objA: priorRoute.Endpoint, objB: route.Endpoint) || (priorRoute.Entity != route.Entity));
             var sameProfile = ((m_inputProfiles[slot] is { } previous) && previous.SequenceEqual(second: sources));
             var sameContract = ((m_inputDefinitions[slot] is { } definition) && WorldInputCatalog.SameContract(left: definition, right: route.Endpoint.Definition));
             var replace = (freshAttachment || !sameProfile || !sameContract);
@@ -74,6 +75,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     // traveler as its peer, a principal this client never names).
     private static bool TryRouteInput(WorldAuthorityRoute route, Principal principal, out WorldInputPublication publication) =>
         (route.Endpoint.Mirror.TryInput(owner: principal, publication: out publication) || route.Endpoint.Mirror.TryInputOf(entity: route.Entity, publication: out publication));
+
+    /// <summary>Reports whether the seat's input source registry is currently admitted by its routed authority.</summary>
+    public bool IsSeatInputAdmitted(int slot) => (!m_roster.IsPending(slot: slot) && (m_roster.Seat(slot: slot)?.Input is { Admitted: true }));
 
     private readonly SeatGuessView m_seatGuess = new();
 

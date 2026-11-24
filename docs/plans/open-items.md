@@ -519,9 +519,7 @@ measured.**
 17. [high] [Bake proportional to change](#bake-proportional-to-change): the
     bake samples a dense lattice in about twenty round trips a group. Its
     replacement is sampling in one round trip a stage from one root-search
-    source, with coarse-to-fine pruning; the CPU-stage cuts follow it. First,
-    though, the defect that an edit the bake never reads moved its identity
-    and forced a cold set: it taxes every engine edit and every release.
+    source, with coarse-to-fine pruning; the CPU-stage cuts follow it.
 18. [high, before the hosted world admits players] [Security review](#security-review):
     the write door's remaining leaks, then
     [disclosure](disclosure.md#the-build-order)'s next steps and what
@@ -1736,8 +1734,7 @@ Stalls and hitches to attribute:
 
 ### Bake proportional to change
 
-Owner: specialist (rendering) · high · Next: the identity defect below, which
-taxes every engine edit and every release; a quiet cold bake per backend on
+Owner: specialist (rendering) · high · Next: a quiet cold bake per backend on
 the integration head, which the cache sets need anyway
 ([verification debts](#verification-debts)); then
 [the cold bake's steps](iteration.md#the-cold-bakes-steps), whose step 3
@@ -1828,27 +1825,18 @@ Remaining detailed findings and smaller cuts in this area:
   `SdfWorldResidency.Prepare` rules it out; if not, bind both in one step.
   `WorldTextCatalog.Reconcile` also copies the whole packed image into
   `SdfGlyphAtlas`.
-- [high, iteration] An edit to `SdfMeshPathBake` that the bake's content never
-  reads still moved the mesh bake identity and forced a cold set: the lane
-  that built the cache policy added state only its own `Driven` reads and
-  every stored mesh missed. The mesh-bake reference says a field the closure
-  never reads leaves the identity alone
-  ([the closure](../../.claude/skills/rendering/references/mesh-bake.md#the-library-and-the-store)),
-  so either the closure counts that type whole or the reference is wrong.
-  Reproduce with a scratch field on `SdfMeshPathBake` and
-  `puck mesh identity --against`, then fix whichever is wrong. An engine edit
-  that rebakes the world breaks the edit loop the iteration plan protects, and
-  costs the lead a cold set per backend before every release. Unconfirmed
-  beside it: a kernel reload may move the identity, so the next restart
-  rebakes.
+- [medium, iteration] Unconfirmed: a kernel reload may move the bake identity,
+  so the next restart rebakes. Check with `puck mesh identity --against` across
+  a reload's build.
 - [low] Two leads from the bake's lanes, neither reproduced: a change in a
   group's material order discards an identical bake in flight
   (`SdfMeshPathBake`'s `Keeps` and `Place`), and the landing stage may judge
   its error in clamped units, several times more lenient than the field's.
 - [medium] The bake closure reaches code that decides no content, so editing it
-  moves the store identity: `WorkCounterSet`, `WorkCount` and `WorkKind`,
-  `CameraSnapshot` and `SweptBox`, `CodeDerivedTable`, and a group's `Outcome`
-  text literals, which only the done line reads. Make them stop types or
+  moves the store identity: `CameraSnapshot` and `SweptBox`,
+  `CodeDerivedTable`, and a group's `Outcome` text literals, which only the
+  done line reads. A field the bake's code only writes (a counter set in the
+  constructor) still moves the constructor's IL. Make them stop types or
   values the report words (`SdfMeshBakeReport`), with a scratch-edit check
   that each no longer moves the identity; the `m_restarts`, `m_loads*` and
   `m_planMilliseconds` counters belong in `SdfMeshBakeReport.Accounts` too.
@@ -3960,21 +3948,26 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
-- [high, M1] **A reset across a changed world inventory needs its first
-  deploy and a review.** The Azure runtime drains, protects and recovers the
-  source's own worlds, activation resets each target world over its drained
-  root, and a world only the target names starts from a fresh root
-  (`WorldAuthorityBlobStore.PrepareReleaseResetFreshAsync`, under the same
-  activation ownership with no protected root for it). Next: the release from
-  `main` exercises it; a findings-only review of the activation-ownership
-  check by another family (persisted data).
-
-The RTX 2060 machine is a consumer release target (the owner's ruling,
-AGENTS.md): it installs and updates through the launcher from the hosted
-`player` channel and runs only what a player runs. It never builds from
-source, compiles a cartridge or cold-bakes. The lead machine bakes each
-backend's mesh cache set and pushes it as a prerelease, and CI releases what
-is pushed to `main` ([the player channel](../development/ci.md#the-player-channel)).
+- [high, M1] **While hosted data is scratch, a deploy replaces the hosted
+  world with a fresh bootstrap.** Three releases in a row failed after their
+  qualification passed: the inventory refusal and the drain (both fixed), then
+  the new worker either exiting at start or, with its silo up and listening,
+  answering private health with "simulation is not progressing" until the
+  readiness wait ran out. The silo heartbeats on every step even with admission
+  closed (`WorldSiloSimulation.TryStep`), so its pump stopped stepping; the
+  activation of the reset roots the in-place reset writes (an empty root with
+  its epoch and sequence raised, no journal or checkpoint behind it) runs on
+  the pump at a tick boundary and is the prime suspect, unconfirmed. The
+  in-place reset has never run anywhere, while the bootstrap path is what CI's
+  qualification exercises. Hosted data is scratch until the owner says
+  otherwise (AGENTS.md rule 5), so the structural answer is a replace deploy:
+  stop the source compute, discard the group's hosted roots and record, and
+  start the target as a first deployment's bootstrap; the preservation path
+  (drain, protected roots, reset, recovery) stays for when the owner declares
+  hosted data durable, off the critical path. Separately, a pump that stops
+  stepping is silent today: private health should name what the pump is
+  blocked in. Next: one lane, with a findings-only review of the deletion of
+  hosted roots by another family.
 
 - [high] No release has passed its public probe, and no player build has
   reached the RTX 2060 through the hosted channel: its one run was a local

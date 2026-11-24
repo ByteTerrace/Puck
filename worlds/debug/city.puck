@@ -33,6 +33,7 @@ import "../standard/citizen"
 import "../standard/vehicle"
 import "../standard/market"
 import "../standard/styles"
+import "../standard/visitors"
 
 // The city draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -44,9 +45,10 @@ metadata {
   description: "A destination of the debug world painting wing: a town on a river bend, with a market square, terraces, works and a quay, and a frame back to the debug world."
 }
 
-// A traveller from the debug world arrives here, and the debug world's window onto the city observes it whole.
+// The debug world's window onto the city observes it whole as a session; arriving visitors receive the standard visitor row.
 admission [
   {
+    admits: Session
     disclosure: Replica
     domain: "*"
     grants [
@@ -63,6 +65,7 @@ admission [
     ]
     mode: FederatedAuthority
   }
+  visitorAdmissionRow(domain: "*")
 ]
 
 references [
@@ -341,6 +344,9 @@ let citizenPeople = map(range(0, citizenCount), i => {
 
 bodies {
   capacity: 8 + citizenCount + vehicleCount
+  localSeats: 4
+  networkPlayers: 4
+  reconnectGraceSeconds: 3
 }
 
 citizenDesign(domain: "city-square", profile: "citizen")

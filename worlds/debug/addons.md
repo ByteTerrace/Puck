@@ -11,9 +11,9 @@ are in [the addons reference](../../.claude/skills/puck-world/references/addons.
 |---|---|---|---|
 | Watchdog | [watchdog.puck](watchdog.puck) | [addons/watchdog.wat](addons/watchdog.wat) | Checks invariants every tick and records each violation with its tick |
 | Gallery guide | [guide.puck](guide.puck) | [addons/guide.wat](addons/guide.wat) | Names the exhibit the Moth stands at on a HUD panel |
-| Companion | [companion.puck](companion.puck) | [addons/companion.wat](addons/companion.wat) | A stand-in body, body 42, that follows the Moth |
-| Fuzzer | [fuzzer.puck](fuzzer.puck) | [addons/fuzzer.wat](addons/fuzzer.wat) | Seeded bounded driving of body 44; off by default |
-| Traversal bot | [traversal.puck](traversal.puck) | [addons/traversal.wat](addons/traversal.wat) | Runs body 43 through authored waypoints and marks misses/falls; off by default |
+| Companion | [companion.puck](companion.puck) | [addons/companion.wat](addons/companion.wat) | A stand-in body, body 52, that follows the Moth |
+| Fuzzer | [fuzzer.puck](fuzzer.puck) | [addons/fuzzer.wat](addons/fuzzer.wat) | Seeded bounded driving of body 54; off by default |
+| Traversal bot | [traversal.puck](traversal.puck) | [addons/traversal.wat](addons/traversal.wat) | Runs body 53 through authored waypoints and marks misses/falls; off by default |
 | Machine debugger | [machine-debugger.puck](machine-debugger.puck) | [addons/machine-debugger.wat](addons/machine-debugger.wat) | Generic input, probes and machine health checks; off by default |
 | Kinematics scope | [kinematics-scope.puck](kinematics-scope.puck) | [addons/kinematics-scope.wat](addons/kinematics-scope.wat) | Samples a selected body into a 128-tick history; off by default |
 
@@ -68,8 +68,8 @@ the old connecting goals crossed its continuous front wall. To run the gallery
 pass separately, issue these lines after the studio pass stops:
 
 ```text
-body.stop 43
-body.pose 11.2 0.05 32.5 0 0 0 43
+body.stop 53
+body.pose 11.2 0.05 32.5 0 0 0 53
 world.state.cell.set traversal start 15
 world.state.cell.set traversal count 23
 world.state.cell.set traversal run 1
@@ -81,7 +81,7 @@ afterward: both passes together reach 23 goals with `done=1`, `missed=0` and
 `falls=0`. Restore `start=0` and `count=15` and initialize the body at
 (60, 0.05, -30) before another studio pass.
 
-**Scope.** Set `scope[body]` to a body index (0–44), then `scope[enabled]` to
+**Scope.** Set `scope[body]` to a body index (0–54), then `scope[enabled]` to
 1. It queries settled kinematics each tick and records `scopeHeight`,
 `scopeVelocity`, `scopeFacts`, `scopeContacts`, `scopeTicks` and `scopeEvents`
 at `samples & 127`. Heights and velocities are fixed-point raw bits; the
@@ -138,7 +138,7 @@ bulk query, and listens for collision begins. It records:
 | `below-floor` | A body more than 1 m under y = 0, the lowest floor anything stands on; `fall-recovery` only catches a body at y = -40 |
 | `unnormalised-orientation` | A body's orientation quaternion more than 1/64 from unit length |
 | `piece-overlap` | Two chess pieces (bodies 18 to 49) begin to overlap |
-| `companion-overlap` | The Moth (body 0) and the companion (body 42) begin to overlap |
+| `companion-overlap` | The Moth (body 0) and the companion (body 52) begin to overlap |
 
 The pieces, the Moth and the flying companion are `Solid` kits, whose contact solve separates two
 of them within the tick, and the event feed reads the settled tick, so the two
@@ -248,7 +248,7 @@ world's existing irradiance and exposure. Four connected sweeps share one motion
 owner, so banking keeps every attachment intact. The separate neutral `standIn`
 creation still draws the fuzzer and traversal walkers.
 
-Body 42 starts at (-1.2, 1.52, 1). The `companion-flight` kit uses the engine's
+Body 52 starts at (-1.2, 1.52, 1). The `companion-flight` kit uses the engine's
 existing colliding free-flight Lift hold and the ordinary forward, strafe and
 rise channels. The guest reads its pose and the Moth's once per tick and follows
 her half-metre breadcrumbs at about shoulder height. It preserves the approach
@@ -279,7 +279,7 @@ flits clear with a seeded lateral choice, pauses startled, then comes back.
 A future tracked hand supplies this same authoritative input; camera pixels or
 wall-clock probe values never enter the guest's decisions directly.
 
-The guest retains Drive only over body 42 and Observe over the two poses. One
+The guest retains Drive only over body 52 and Observe over the two poses. One
 additional Observe grant discloses the sensory row (21 reads/tick, budget 24).
 It has no Edit, Mutate, pose or teleport grant. All choices and movement are
 integer simulation work; replay reconstructs its seeded guest memory under the

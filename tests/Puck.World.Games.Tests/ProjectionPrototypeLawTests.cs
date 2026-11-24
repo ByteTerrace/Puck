@@ -25,7 +25,10 @@ public sealed class ProjectionPrototypeLawTests {
         using var directory = new TemporaryDirectory(prefix: "puck-protoref-change-");
         var source = new ContentAddressedStore(root: Path.Join(path1: directory.RootPath, path2: "source"));
         var cache = new ContentAddressedStore(root: Path.Join(path1: directory.RootPath, path2: "recipient"));
-        var document = Fixtures.BuildDocument() with { CreationsRaw = [CreationFixtures.Sphere(id: "one", scale: 1f), CreationFixtures.Sphere(id: "two", scale: 2f)] };
+        var document = Fixtures.BuildDocument() with {
+            Admission = [Fixtures.AnyAuthorityArrivals()],
+            CreationsRaw = [CreationFixtures.Sphere(id: "one", scale: 1f), CreationFixtures.Sphere(id: "two", scale: 2f)],
+        };
         using var fixture = Fixtures.FreshServer(definition: document);
 
         byte[]? Fetch(ContentPin pin) => WorldProjectionPrototypeFetch.FetchAsync(server: fixture.Server, pin: pin,

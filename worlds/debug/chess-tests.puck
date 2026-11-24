@@ -32,7 +32,7 @@ test "the idle demo records all 19 moves then replays with matching scope hashes
     ticks 3500
     seat1: world.state chessDemo
     // Keep a different table active during playback; its airborne disc must not affect this verdict.
-    seat1: body.pose 65 30 22.6 0 0 0 108
+    seat1: body.pose 65 30 22.6 0 0 0 118
     ticks 3400
   }
   expect {

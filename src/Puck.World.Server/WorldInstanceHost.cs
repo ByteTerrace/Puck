@@ -826,8 +826,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// flight and answers <see cref="WorldStepThread.ExecuteWait"/>; <see langword="null"/> waits for the tick.</param>
     public ulong TryStepAuthority(WorldServer server, WorldReplayTape? tape, Action<ulong> publishTick, in FixedStepContext context, HostPacing pacing,
         WaitDeadline deadline, out WaitReason? pending, WaitDeadline? collectBy = null) {
-        // No authority holds a tick here, this one included, so it may read its neighbours.
-        if (NoTickPending()) {
+        // No authority holds a tick here, this one included, so it may read its neighbours. A non-listening client
+        // launchpad withholds resolving boot neighbours while its local seats are crossing to or already on the remote
+        // authority, so the temporary boot step never spawns unused local adjacency worlds.
+        if (NoTickPending() && (!ReferenceEquals(objA: server, objB: Boot?.Server) || !SuppressesClientBootScreens(boot: Boot!))) {
             server.ResolveAdjacencyNeighbours();
         }
         var completed = WorldServerStepShell.TryStep(server, tape, publishTick, in context, pacing, deadline, out pending, m_stepThread, collectBy);

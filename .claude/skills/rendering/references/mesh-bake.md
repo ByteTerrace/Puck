@@ -1509,22 +1509,25 @@ laws exercise that boundary.
   The closure starts from production entry methods. The contour walk stops at
   `SdfMeshPathBake.SimplificationStage.Run` and the simplification walk starts
   there. The sampling walk starts from the batch methods that pack the dispatch inputs. The final closure reaches group/geometry planning, lattice refinement,
-  contours, material cuts, skin and levels. It follows every call, delegate, override of a type the bake constructs
-  and implementation of an abstract member it calls across the `Puck` assemblies `Puck.SdfVm`
-  references, and hashes each method's IL with its tokens written as the
-  members they name, its locals, exception regions and loaded field data, and
-  each named type's layout. A value type's layout counts whole (the bytes its
+  contours, material cuts, skin and levels. It follows every call, delegate and override of a type the bake constructs
+  across the `Puck` assemblies `Puck.SdfVm` references; a call through an abstract or interface member reaches only the
+  implementations the walk constructs, since the call runs on an instance some code made (a lane the bake posts its
+  demand measure to does not bring in the residency's pack unit posted to the same kind of lane). It hashes each
+  method's IL with its tokens written as the members they name, its locals, exception regions and loaded field data,
+  and each named type's layout. A compiler-generated name (a lambda, a local function, a closure class, a cached
+  delegate, a state machine) is written with the name of the method that declares it in place of that method's
+  ordinal in its type (`CodeClosure`'s `Module.Canonical`), so adding or removing a member elsewhere in a type renames
+  nothing the bake runs. A value type's layout counts whole (the bytes its
   code moves); any other type's counts only the fields the closure's code loads,
   stores or takes the address of, so a field the bake never reads (a
   presentation-only flag on `SdfFrame`) leaves the identity as it was, and a
   record the code merely copies with `with` has its synthesized clone and copy
   constructor hashed by signature (they read no field). A record the bake
   constructs counts its whole layout, since its synthesized equality and
-  printing read every field. `SdfMeshBakeClosureLawTests` pins both ways. One
-  observation contradicts this and is open: an edit to `SdfMeshPathBake` that
-  the bake's content never reads moved the identity
-  ([open items](../../../../docs/plans/open-items.md#bake-proportional-to-change)),
-  so check with `puck mesh identity --against` before relying on it. It
+  printing read every field. `SdfMeshBakeClosureLawTests` pins both ways. A
+  field and a method added to `SdfMeshPathBake` that nothing in the bake reaches
+  leave the identity as it was (`puck mesh identity --against`); check that way
+  before relying on any edit being outside it. It
   stops at `SdfMeshLibrary` and `SdfMeshStore`,
   which hold meshes, at a mesh's claims and restorable parts (the stop types `SdfMesh/Payload` and
   `SdfMesh/Restorable`: `CodeClosure` stops a nested type named by its full name), and at `GpuRegion` and

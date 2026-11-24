@@ -140,7 +140,7 @@ public sealed partial class WorldColliderSet : IContactField {
     // what it nears.
     private WorldColliderBox m_attachedMoves;
 
-    private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] holdableColliders, bool[] holdableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<MovingSolidRow> attachedRows, bool movingOnly, bool defaultGrip) {
+    private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] holdableColliders, bool[] holdableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<MovingSolidRow> attachedRows, bool movingOnly, bool defaultGrip, FixedStaticContactField? previousStatic = null) {
         m_defaultGrip = defaultGrip;
         m_colliders = colliders;
         m_holdableColliders = holdableColliders;
@@ -176,7 +176,9 @@ public sealed partial class WorldColliderSet : IContactField {
             GroundedThreshold: tuning.GroundedThreshold,
             MaxIterations: tuning.MaxIterations
         );
-        m_static = new FixedStaticContactField(colliders: colliders, solver: m_solver);
+        m_static = (((previousStatic is not null) && (previousStatic.Solver == m_solver))
+            ? previousStatic
+            : new FixedStaticContactField(colliders: colliders, solver: m_solver));
         ContactReach = tuning.ContactReach;
     }
 
@@ -634,12 +636,19 @@ public sealed partial class WorldColliderSet : IContactField {
             fields += compiled.Fields;
         }
 
+        var reuseStatic = (((previous is not null) &&
+            (colliders.Count == previous.m_colliders.Length) &&
+            System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: colliders).SequenceEqual(other: previous.m_colliders))
+                ? previous.m_static
+                : null);
+
         return new WorldColliderSet(
             holdableColliders: holdableColliders.ToArray(),
             holdableGrantedByOverride: holdableGrantedByOverride.ToArray(),
             colliders: colliders.ToArray(),
             tuning: tuning,
-            attachedRows: attachedRows, movingOnly: movingOnly, defaultGrip: worldDefaultGrip
+            attachedRows: attachedRows, movingOnly: movingOnly, defaultGrip: worldDefaultGrip,
+            previousStatic: reuseStatic
         ) {
             DiagnosticColliders = diagnosticColliders.ToArray(),
             BoxCount = boxes,

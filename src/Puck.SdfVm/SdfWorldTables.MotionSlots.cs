@@ -6,7 +6,8 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldTables {
     private readonly GpuRowIndex<int> m_rowsByFrameSlot = new();
-    private readonly Dictionary<int, SlotMotion> m_slotMotion = [];
+    // Each slot a live draw rides, by slot; null for a slot no draw rides.
+    private SlotMotion?[] m_slotMotion = [];
     private readonly List<int> m_dirtyMotionSlots = [];
     private int m_lastMotionSlotCount;
 
@@ -52,10 +53,9 @@ public sealed partial class SdfWorldTables {
         ((draw.Mesh is { Members.IsEmpty: true }) && (draw.FrameSlot is >= 0 and { } slot)) ? slot : -1;
 
     private void DirtyMotionSlot(int slot) {
-        if (!m_slotMotion.TryGetValue(slot, out var motion)) {
-            motion = new SlotMotion();
-            m_slotMotion.Add(slot, motion);
-        }
+        Puck.Abstractions.Memory.ArrayCapacity.EnsureLength(array: ref m_slotMotion, required: (slot + 1));
+        var motion = (m_slotMotion[slot] ??= new SlotMotion());
+
         if (motion.Dirty) { return; }
         motion.Dirty = true;
         m_dirtyMotionSlots.Add(slot);
@@ -111,13 +111,17 @@ public sealed partial class SdfWorldTables {
 
             after.Include(in box, motion.Glass);
         }
+        // Both sides are one box carried by the slot's pose alone, with no member added or gone between them: every caster
+        // point then moves with the box, so the box's displacement bounds the shadow's, as it does a standalone row's.
+        var rigid = !dirty && motion.HasPose && hasPose && !motion.Fixed.Live && (motion.Carried.Count == 1);
+
         (motion.Dirty, motion.Previous, motion.Pose, motion.HasPose) = (false, after, pose, hasPose);
-        if (!after.Live) { _ = m_slotMotion.Remove(slot); }
+        if (!after.Live) { m_slotMotion[slot] = null; }
         if (!before.Live && !after.Live) { return; }
 
         SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.MotionRows);
         NoteMotion(cause: SdfMotionCause.Slot, row: slot, wasLive: before.Live, before: in before.Box, wasGlass: before.Glass,
-            isLive: after.Live, after: in after.Box, isGlass: after.Glass, affectsShadows: dirty || poseChanged);
+            isLive: after.Live, after: in after.Box, isGlass: after.Glass, affectsShadows: dirty || poseChanged, rigid: rigid);
     }
 
     private void NoteSlotMotion() {
@@ -127,15 +131,17 @@ public sealed partial class SdfWorldTables {
             var first = Math.Min(count, m_lastMotionSlotCount);
             var end = Math.Max(count, m_lastMotionSlotCount);
 
-            foreach (var (slot, motion) in m_slotMotion) {
-                if ((slot >= first) && (slot < end) && !motion.Dirty) {
+            for (var slot = first; (slot < Math.Min(val1: end, val2: m_slotMotion.Length)); slot++) {
+                if (m_slotMotion[slot] is { Dirty: false } motion) {
                     motion.Dirty = true;
                     m_dirtyMotionSlots.Add(slot);
                 }
             }
             m_lastMotionSlotCount = count;
         }
-        foreach (var slot in m_dirtyMotionSlots) { JudgeMotionSlot(slot, m_slotMotion[slot]); }
+        foreach (var slot in m_dirtyMotionSlots) {
+            if (m_slotMotion[slot] is { } dirty) { JudgeMotionSlot(slot, dirty); }
+        }
         m_dirtyMotionSlots.Clear();
         NoteMovedSlots(m_changedTransforms);
         NoteMovedSlots(m_reseatedTransforms);
@@ -154,7 +160,7 @@ public sealed partial class SdfWorldTables {
                         }
                     }
                 }
-                if (m_slotMotion.TryGetValue(slot, out var motion)) { JudgeMotionSlot(slot, motion); }
+                if ((slot < m_slotMotion.Length) && (m_slotMotion[slot] is { } motion)) { JudgeMotionSlot(slot, motion); }
             }
         }
     }

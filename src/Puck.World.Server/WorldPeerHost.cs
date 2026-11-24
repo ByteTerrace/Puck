@@ -1195,9 +1195,14 @@ public sealed class WorldPeerHost : IDisposable {
                     await WriteFederationRefusal(ct: ct, detail: "invalid prototype request", refusal: WorldFederationRefusal.FrameMalformed, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
                     return true;
                 }
-                var fetch = await ExecuteAuthenticatedAsync(credential, () => WorldProjectionPrototypeFetch.FetchAsync(m_server, pin,
-                    sourceAuthority, DisclosureFor(sourceAuthority, (traveler is null) ? WorldAdmissionArrival.Session : WorldAdmissionArrival.Visitor), traveler)).ConfigureAwait(false);
-                var prototype = await fetch.ConfigureAwait(false);
+                var prototype = await WorldProjectionPrototypeFetch.FetchAsync(
+                    server: m_server,
+                    pin: pin,
+                    sourceAuthority: sourceAuthority,
+                    ceiling: DisclosureFor(sourceAuthority: sourceAuthority, kind: ((traveler is null) ? WorldAdmissionArrival.Session : WorldAdmissionArrival.Visitor)),
+                    traveler: traveler,
+                    requireValid: credential.RequireValid
+                ).ConfigureAwait(false);
                 if (prototype is null) {
                     await WriteFederationRefusal(ct: ct, detail: "the current projection does not disclose this prototype", refusal: WorldFederationRefusal.PrototypeUndisclosed, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
                 } else {
@@ -1895,6 +1900,15 @@ public sealed class WorldPeerHost : IDisposable {
         }
     }
 
+    private bool HasFederationConnectionFrom(string sourceAuthority) {
+        foreach (var credential in m_federationConnections.Values) {
+            if (string.Equals(a: credential.Authority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void EndTravelerStream(string sourceAuthority, WorldMobilityIdentity mobility, bool handoff) {
         if (!m_travelerLiveness.TryGetValue(key: (sourceAuthority, mobility.Incarnation), value: out var entry)) {
             return;
@@ -1909,16 +1923,14 @@ public sealed class WorldPeerHost : IDisposable {
             latest = entry.Mobility;
             becameIdle = (!handoff && (entry.ActiveStreams == 0));
         }
-        if (becameIdle) {
+        if (becameIdle && !HasFederationConnectionFrom(sourceAuthority: sourceAuthority)) {
             ScheduleIdleTravelerPark(sourceAuthority: sourceAuthority, entry: entry, fallback: latest);
         }
     }
 
     private void SweepDisconnectedAuthorityTravelers(string sourceAuthority) {
-        foreach (var credential in m_federationConnections.Values) {
-            if (string.Equals(a: credential.Authority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
-                return;
-            }
+        if (HasFederationConnectionFrom(sourceAuthority: sourceAuthority)) {
+            return;
         }
         foreach (var (key, entry) in m_travelerLiveness) {
             if (!string.Equals(a: key.SourceAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
@@ -1935,10 +1947,8 @@ public sealed class WorldPeerHost : IDisposable {
             }
         }
         _ = m_server.RunOnTickThreadAsync(work: () => {
-            foreach (var credential in m_federationConnections.Values) {
-                if (string.Equals(a: credential.Authority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
-                    return false;
-                }
+            if (HasFederationConnectionFrom(sourceAuthority: sourceAuthority)) {
+                return false;
             }
             m_server.GrantTable.ParkUnattachedTransferredPeers(
                 sourceAuthority: sourceAuthority,
@@ -1957,6 +1967,9 @@ public sealed class WorldPeerHost : IDisposable {
 
     private void ScheduleIdleTravelerPark(string sourceAuthority, TravelerLiveness entry, WorldMobilityIdentity fallback) {
         _ = m_server.RunOnTickThreadAsync(work: () => {
+            if (HasFederationConnectionFrom(sourceAuthority: sourceAuthority)) {
+                return false;
+            }
             WorldMobilityIdentity mobility;
             lock (entry.Gate) {
                 if (entry.ActiveStreams > 0) {

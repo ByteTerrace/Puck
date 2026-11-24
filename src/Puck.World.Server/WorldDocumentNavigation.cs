@@ -49,28 +49,49 @@ public sealed class WorldDocumentNavigation : IWorldSeatNavigation {
         var areas = WorldNavigationAreas.Compile(definition: definition);
 
         if (!WorldContactSelection.RequiresField(collision: definition.Collision)) {
-            colliders = WorldColliderSet.Build(definition: definition, previous: previous?.m_colliders);
+            colliders = WorldColliderSet.Build(definition: definition, previous: previous?.m_colliders, previousDefinition: previous?.Definition);
             geometry = colliders.StaticField;
         } else if (WorldSolidField.TryBuild(built: out var solids, definition: definition, reason: out _)) {
             geometry = solids!.StaticField;
         }
 
+        var domains = WorldPopulation.CompileNavigationDomains(areas: areas, definition: definition);
+        var runtime = (((previous is not null) &&
+            (geometry is not null) &&
+            ReferenceEquals(objA: geometry, objB: previous.m_colliders?.StaticField) &&
+            previous.m_runtime.Areas.Equals(other: areas.Set) &&
+            SameDomains(runtime: previous.m_runtime, domains: domains))
+                ? previous.m_runtime
+                : new NavigationRuntime(
+                    capacity: new NavigationCapacity(
+                        GoalFieldBytes: WorldNavigationCapacity.MaxGoalFieldBytes,
+                        MaxMediumSegmentSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions
+                    ),
+                    areas: areas.Set,
+                    domains: domains,
+                    fields: null,
+                    geometry: geometry,
+                    previous: previous?.m_runtime
+                ));
+
         return new WorldDocumentNavigation(
             colliders: colliders,
             definition: definition,
             field: ((geometry is null) ? null : WorldPortalHoleContactField.Wrap(definition: definition, inner: geometry)),
-            runtime: new NavigationRuntime(
-                capacity: new NavigationCapacity(
-                    GoalFieldBytes: WorldNavigationCapacity.MaxGoalFieldBytes,
-                    MaxMediumSegmentSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions
-                ),
-                areas: areas.Set,
-                domains: WorldPopulation.CompileNavigationDomains(areas: areas, definition: definition),
-                fields: null,
-                geometry: geometry,
-                previous: previous?.m_runtime
-            )
+            runtime: runtime
         );
+    }
+
+    private static bool SameDomains(NavigationRuntime runtime, IReadOnlyList<NavigationDomainInput> domains) {
+        if (runtime.Count != domains.Count) {
+            return false;
+        }
+        for (var index = 0; (index < domains.Count); index++) {
+            if (runtime[index].Tuning != domains[index]) {
+                return false;
+            }
+        }
+        return true;
     }
     /// <inheritdoc/>
     public WorldSeatPlan Plan(in WorldSeatWalker walker, in WorldSeatGoal goal, FixedQ4816 margin, List<FixedVector3> corners, List<FixedVector3> route) {

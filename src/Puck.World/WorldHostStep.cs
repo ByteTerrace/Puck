@@ -20,9 +20,11 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     // Test exports publish LAST, before world.at drains this tick's lines: captures and exports both describe
     // the completed state, never a half-applied mixture of this tick's submissions.
     private readonly Action<ulong> m_publishStep = tick => {
+        var scriptTick = instances.HostScriptTick(bootServer: server);
+
         waitGate.PublishTick(tick: tick);
-        captureScheduler.PublishTick(tick: (server.NextInputTick - 1UL));
-        tickScript.PublishTick(tick: (server.NextInputTick - 1UL));
+        captureScheduler.PublishTick(tick: scriptTick);
+        tickScript.PublishTick(tick: scriptTick);
         scheduleRunner.PublishTick(tick: (server.NextInputTick - 1UL));
     };
 
@@ -71,7 +73,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     }
     /// <summary>Gets whether the next step's tick arms a scheduled capture, which only a frame produced once the tick
     /// is collected can serve: the host waits for that tick instead of producing beside it.</summary>
-    public bool NextStepOwesFrame => m_captureScheduler.ArmsAt(tick: m_server.NextInputTick);
+    public bool NextStepOwesFrame => m_captureScheduler.ArmsAt(tick: (m_instances.HostScriptTick(bootServer: m_server) + 1UL));
     /// <summary>The number of fixed ticks completed on the current authority timeline.</summary>
     public ulong Tick => (m_server.NextInputTick - 1UL);
 
@@ -112,12 +114,18 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
             _ = m_server.DrainAdministrative();
             m_instances.SettleBootScreenSessions(stepped: false);
 
-            // A world.wait armed before this pause landed can never see its release tick now that boot's own clock
-            // is frozen (WorldConsoleWaitGate.PublishTick only ever fires from a step that actually ran) — release
-            // it here rather than leave the held console stream, including the very world.rate resume that would
-            // lift the pause, wedged behind a hold that will never clear on its own. A no-op (returns false) on
-            // every ordinary paused/stopped tick once already released, so this costs nothing beyond one flag check.
-            if (m_waitGate.ReleaseStalled()) {
+            if (m_instances.TryAdvanceIdleClientBoot(stepTicks: context.StepTicks, scriptTick: out var scriptTick)) {
+                m_completedHostEngineTicks += context.StepTicks;
+                m_completedHostSteps++;
+                m_waitGate.PublishTick(tick: m_completedHostSteps);
+                m_captureScheduler.PublishTick(tick: scriptTick);
+                tickScript.PublishTick(tick: scriptTick);
+            } else if (m_waitGate.ReleaseStalled()) {
+                // A world.wait armed before this pause landed can never see its release tick now that boot's own clock
+                // is frozen (WorldConsoleWaitGate.PublishTick only ever fires from a step that actually ran) — release
+                // it here rather than leave the held console stream, including the very world.rate resume that would
+                // lift the pause, wedged behind a hold that will never clear on its own. A no-op (returns false) on
+                // every ordinary paused/stopped tick once already released, so this costs nothing beyond one flag check.
                 Console.Error.WriteLine(value: "[world.wait: released — the boot world stopped stepping (paused, rateHz 0, or a rate change the fixed-step pump has not caught up to yet) before its requested tick count was reached; resume it (world.rate resume) before arming a new wait]");
             }
         }

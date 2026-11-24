@@ -1767,63 +1767,75 @@ for k in range(0, 4) {
   }
 }
 
-// The context button on a landing's CALL plate calls the car there; only seat 1's body (the Moth) presses.
+// The context button on a landing's CALL plate calls the car there; any seated or visiting human presses.
 for pad in liftPads {
-  rule $"lift-pad-{pad.level}" {
-    when (channel(1, interact) >= 1 and
-      bodyPosition(body, 0, x) > pad.x0 and
-      bodyPosition(body, 0, x) < pad.x1 and
-      bodyPosition(body, 0, z) > pad.z0 and
-      bodyPosition(body, 0, z) < pad.z1 and
-      bodyPosition(body, 0, y) > pad.y0 and
-      bodyPosition(body, 0, y) < pad.y1)
-    mode: Edge
-    liftHall[$"level{pad.level}"] = 1
+  for b in range(0, (seatPopulation + visitorPopulation)) {
+    let suffix = ((b == 0) ? "" : $"-{b}")
+    rule $"lift-pad-{pad.level}{suffix}" {
+      when (channel(body, b, interact) >= 1 and
+        bodyPosition(body, b, x) > pad.x0 and
+        bodyPosition(body, b, x) < pad.x1 and
+        bodyPosition(body, b, z) > pad.z0 and
+        bodyPosition(body, b, z) < pad.z1 and
+        bodyPosition(body, b, y) > pad.y0 and
+        bodyPosition(body, b, y) < pad.y1)
+      mode: Edge
+      liftHall[$"level{pad.level}"] = 1
+    }
   }
 }
 
 // The same press in the car, at the button the body stands before: only a body on the car's floor counts.
 for pad in filter(carPads, p => p.slot < 4) {
-  rule $"lift-car-pad-{pad.slot}" {
-    when (channel(1, interact) >= 1 and
-      bodyPosition(body, 0, x) > pad.x0 and
-      bodyPosition(body, 0, x) < pad.x1 and
-      bodyPosition(body, 0, z) > pad.z0 and
-      bodyPosition(body, 0, z) < pad.z1 and
-      bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
-      bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
-    mode: Edge
-    liftCarCall[$"level{pad.slot}"] = 1
+  for b in range(0, (seatPopulation + visitorPopulation)) {
+    let suffix = ((b == 0) ? "" : $"-{b}")
+    rule $"lift-car-pad-{pad.slot}{suffix}" {
+      when (channel(body, b, interact) >= 1 and
+        bodyPosition(body, b, x) > pad.x0 and
+        bodyPosition(body, b, x) < pad.x1 and
+        bodyPosition(body, b, z) > pad.z0 and
+        bodyPosition(body, b, z) < pad.z1 and
+        bodyPosition(body, b, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
+        bodyPosition(body, b, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
+      mode: Edge
+      liftCarCall[$"level{pad.slot}"] = 1
+    }
   }
 }
 for pad in filter(carPads, p => p.slot == 4) {
-  rule "lift-car-pad-open" {
-    when (channel(1, interact) >= 1 and
-      bodyPosition(body, 0, x) > pad.x0 and
-      bodyPosition(body, 0, x) < pad.x1 and
-      bodyPosition(body, 0, z) > pad.z0 and
-      bodyPosition(body, 0, z) < pad.z1 and
-      bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
-      bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
-    mode: Edge
-    liftLamp.open = 1
-    schedule liftClock.pulse in 0.4s
-    liftOpenReq = 1
+  for b in range(0, (seatPopulation + visitorPopulation)) {
+    let suffix = ((b == 0) ? "" : $"-{b}")
+    rule $"lift-car-pad-open{suffix}" {
+      when (channel(body, b, interact) >= 1 and
+        bodyPosition(body, b, x) > pad.x0 and
+        bodyPosition(body, b, x) < pad.x1 and
+        bodyPosition(body, b, z) > pad.z0 and
+        bodyPosition(body, b, z) < pad.z1 and
+        bodyPosition(body, b, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
+        bodyPosition(body, b, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
+      mode: Edge
+      liftLamp.open = 1
+      schedule liftClock.pulse in 0.4s
+      liftOpenReq = 1
+    }
   }
 }
 for pad in filter(carPads, p => p.slot == 5) {
-  rule "lift-car-pad-close" {
-    when (channel(1, interact) >= 1 and
-      bodyPosition(body, 0, x) > pad.x0 and
-      bodyPosition(body, 0, x) < pad.x1 and
-      bodyPosition(body, 0, z) > pad.z0 and
-      bodyPosition(body, 0, z) < pad.z1 and
-      bodyPosition(body, 0, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
-      bodyPosition(body, 0, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
-    mode: Edge
-    liftLamp.close = 1
-    schedule liftClock.pulse in 0.4s
-    liftCloseReq = 1
+  for b in range(0, (seatPopulation + visitorPopulation)) {
+    let suffix = ((b == 0) ? "" : $"-{b}")
+    rule $"lift-car-pad-close{suffix}" {
+      when (channel(body, b, interact) >= 1 and
+        bodyPosition(body, b, x) > pad.x0 and
+        bodyPosition(body, b, x) < pad.x1 and
+        bodyPosition(body, b, z) > pad.z0 and
+        bodyPosition(body, b, z) < pad.z1 and
+        bodyPosition(body, b, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
+        bodyPosition(body, b, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
+      mode: Edge
+      liftLamp.close = 1
+      schedule liftClock.pulse in 0.4s
+      liftCloseReq = 1
+    }
   }
 }
 
@@ -1996,16 +2008,19 @@ rule "lift-arrow-down" {
 // A press of the context button inside a switch's reach box flips that level's lights; the reach box stands before the
 // plate, so standing there puts the plate ahead of the body. The edge fires once a press.
 for reach in switchReach {
-  rule $"{reach.rule}" {
-    when (channel(1, interact) >= 1 and
-      bodyPosition(body, 0, x) > reach.x0 and
-      bodyPosition(body, 0, x) < reach.x1 and
-      bodyPosition(body, 0, z) > reach.z0 and
-      bodyPosition(body, 0, z) < reach.z1 and
-      bodyPosition(body, 0, y) > reach.y0 and
-      bodyPosition(body, 0, y) < reach.y1)
-    mode: Edge
-    hallLights[$"level{reach.level}"] = 1 - hallLights[$"level{reach.level}"]
+  for b in range(0, (seatPopulation + visitorPopulation)) {
+    let suffix = ((b == 0) ? "" : $"-{b}")
+    rule $"{reach.rule}{suffix}" {
+      when (channel(body, b, interact) >= 1 and
+        bodyPosition(body, b, x) > reach.x0 and
+        bodyPosition(body, b, x) < reach.x1 and
+        bodyPosition(body, b, z) > reach.z0 and
+        bodyPosition(body, b, z) < reach.z1 and
+        bodyPosition(body, b, y) > reach.y0 and
+        bodyPosition(body, b, y) < reach.y1)
+      mode: Edge
+      hallLights[$"level{reach.level}"] = 1 - hallLights[$"level{reach.level}"]
+    }
   }
 }
 
