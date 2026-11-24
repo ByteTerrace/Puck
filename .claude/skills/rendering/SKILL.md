@@ -520,9 +520,13 @@ records the options weighed.
 - **The schedule.** `Want` names each entry's redraw, `Schedule` admits shares under `UploadVertices` in `Priority`
   order (under way, unseen, anchor, far/near/second/distant), `Finish` fixes the work. A share's cost is the entry's
   measured whole (`SdfMeshOcclusion.Measured`, the vertex words at `SdfKernelInterfaces.MeshVertexCountBase`) over its
-  shares; the authored far period and distant `frames` are minimums. A standing entry's redraw borrows a pair from the
-  spares (`Lend`, at most two pairs) and swaps it in on its last share (`Submitted`); an unseen entry draws into its own.
-  A redraw that loses its texels or allocation ends and returns its pair (`EndRedraw`).
+  shares; the authored far period and distant `frames` are minimums. A standing entry's redraw of several shares borrows
+  a pair from the spares (`Lend`, at most two pairs) and swaps it in on its last share (`Submitted`); a redraw of one share
+  lands in the upload that draws it, so it draws over the entry's own pair as an unseen entry does. Spares no redraw used
+  for `AnchorKeptUploads` uploads are given back, and the spares with the pairs lent never pass two (`KeepSpares`). A redraw that loses its
+  texels or allocation ends and returns its pair (`EndRedraw`). Every drawing of one entry (shares, rectangles, glass)
+  selects into one `SdfMeshOcclusion.Storage`, which is safe only because an upload records each drawing's stage, select
+  and draw before the next stages.
 - **Moved rectangles.** `SdfWorldTables.NoteMotion` hands every non-shading change's before and after boxes to
   `SdfWorldShadows.Moved` before the scopes' early return; keep that call first, or a staging whose scopes are all met
   drops the change. `Moved` skips a change whose box lies within the finest judged texel of the box the entries last
@@ -1824,7 +1828,10 @@ counts in `sdf.transforms`, never in `records.posed`.
   (`host.memory`'s `pool device` `peak`, plus `usage-beyond-ledger`) passes what the system budgets it (`segment local`
   `budget`), passes that touch moved memory wait for it, and `world.gpu-timing` charges the wait to whichever pass
   touched it: a nested view's `surface` once read 21 ms where the kernel shades the display in under 2. Read
-  `host.memory` and `host.memory families 0` beside any such reading before reading the kernel
+  `host.memory` and `host.memory families 0` beside any such reading before reading the kernel; `host.memory peak`
+  orders the families by what each held when the device last stood at the most it ever held (`at-peak`), which names
+  the holders of a benchmark chapter's `deviceMemory.peakBytes`, where each family's own `peak` is taken at a moment of
+  its own
   ([the frame budget](../../../docs/plans/frame-budget.md#where-the-memory-goes)).
 - **A frame captures only what it reads.** `SdfWorldPasses.BeginFrame` serves every held residency's upkeep
   (`SdfWorldResidency.Upkeep`), captures the host residency, which places the cameras, and serves the minimum of the
