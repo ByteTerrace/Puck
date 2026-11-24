@@ -407,7 +407,11 @@ never interleave; never read another residency's rows or draws from a store call
 told the store (its landing priority). A mesh the store lands, moves or takes back has its rows staged again in every
 residency that names it (`SdfWorldTables.NoteStoreChange`), and the copies no landing job carries (a compaction's
 moves, a grown region's carry) ride whichever upload records next (`SdfMeshRegionStore.RecordOwed`), which relies on
-every residency's upload of a frame reaching the queue before a view of that frame records.
+every residency's upload of a frame reaching the queue before a view of that frame records. A residency's World sets
+bind the buffer its own plan left (`BindMeshStore` runs after `SdfMeshRegionStore.Plan` in the staging, since the
+records it packs address that plan's placements), and a buffer the region replaced is held while any residency's sets
+may still name it (`SdfWorldTables.NamesReplacedStoreBuffer`, in the replacement's pending use). A set bound before
+the plan reads a grown region's records through the smaller buffer, past its end.
 A world is resident once: a mesh renumbered for another program's materials (`SdfMesh.GeometrySource`) is placed as
 its triangle materials alone and draws the first mesh's vertices and indices (`SdfMeshRegion.PlacedWordsOf`), so use
 `PlacedWordsOf`, never `WordsOf`, for anything the region places or lands; the library finds a living mesh its cache
@@ -440,7 +444,7 @@ its placements cover), and a held limit that falls under what the region holds t
 (`RefusesAhead`). A drawn mesh and a kept floor are placed and kept whatever the held limit says, since refusing either
 leaves a hole; the bake's budget (`SdfResidencyGrant.Budget`, `SdfMeshTier.BudgetEighths` of the same share) coarsens
 the drawn meshes, so a region stands over its share until it has. `world.residency` prints `region-held-limit`, `arena-held`, `arena-placed` and
-`shed`. A mapped region's chunks come from 64 MiB heaps kept for tiles, which are freed only when empty, so chunks
+`shed`. A mapped region's chunks come from small heaps kept for tiles (`DirectXHeapArena.TileHeapBytes`, a few chunks each), which are freed only when empty, so chunks
 given back leave spare memory only a mapped region can take (`IGpuMappedBuffer.SpareBytes`): the selector counts it as
 the regions' and a region grows into it without a promise. A refused mesh presses `Retier` on its own, so pressure
 raises the detail bias before it leaves a hole.
@@ -458,7 +462,28 @@ after each frame's batch, which queues a timeline checkpoint behind it, and the 
 (`SdfWorldResidency.ReleaseDeviceObjects`, final or on a loss) retires every build it still leases, a kernel reload's
 included, into `SdfWorldPipelineCatalog.RetiredBuilds` and waits for none; a loss alone then drains that table. So
 `WorldRenderRoot` drains the device's retirement
-itself before that table, in its holdings and in its loss. Never add a `TryWaitIdle` to a release
+itself before that table, in its holdings and in its loss.
+A residency no reader asked for parks on a live device (`SdfWorldResidency.Park`, decided once a frame by
+`SdfWorldPasses.ParkUnobserved` from `SdfResidencySelector.Excess`, the device pool past its limit, which follows the
+system's budget less the usage the ledgers do not hold): `m_tables` is cleared between frames and the tables go to the
+device's retirement, keeping the bake, the lighting's measured words (for `SdfWorldResidency.ForgetLightingSeconds`, after which the residency's upkeep disposes the volume and a wake lights the world from nothing), the frame and the leased pipeline set. Every
+path that reaches the tables goes through `m_tables`, so a reader that comes for a parked residency prepares it, which
+builds new tables, and its views keep their last images while `SdfWorldResidency.Waking` stands. A park while
+`OwesPreparation` would rebuild at once, so a parked residency owes nothing and has nothing arriving.
+A world behind glass is observed by the presentation's sight, not by being read (`WorldViewGraphHost.WantSightedWorlds`
+through `SdfWorldResidency.Want`): only a consumer whose image renders this frame judges its world's glasses, so the
+walk passes on through a window only when its glass is seen or of unknown sight, never through one out of sight, held
+small or merely leading (a window's camera stands where its viewer looks through it, and judging from there kept every
+world behind every painting wanted). A glass out of sight leads by the walk from its consumer's seat to its facing side,
+over the navigation of the seat's delivered world (`WorldPortalReach`, `IWorldSeatNavigation.Reach`, a bounded
+`NavigationRuntime.MeasureRoute`), within the glass's world's `views.portalLead` plus the glass's reach, and by the
+straight line on its facing side where no domain covers the walk or the consumer is a window. `world.residency`'s
+parking line names who last wanted a residency and why (`wanted=seen|unknown|walk@…|line@…|rendered by=`) beside
+`read-ago`, `read-by` (the instance whose render or read last observed it) and `wanted-ago`, so a world that never
+parks names its holder. A world the seat stands in is read by the seat's own view (`read-by=world`) whatever its
+`wanted-ago` says: check `body.where 0`'s `instance:` before calling such a read unwanted. An infinity layer's residency is released
+once no output names it (`WorldScreenBinder.ReleaseUnreadInfinityResidencies`): a consumer whose target has not fitted
+its sky for `InfinityConsumerRetireSeconds` retires. Never add a `TryWaitIdle` to a release
 path; `SdfWorldTables.Dispose` and `IGpuSurfaceUpload.DisposeCompleted` wait for nothing. A render node's build in
 flight retires into its runtime's `GpuImageLeases.RetiredBuilds`, which `DrainDisposals` waits out before the device
 goes. A package recorder never sees a fence: a result its recording captured (a readback, a publication, a
@@ -495,9 +520,13 @@ records the options weighed.
 - **The schedule.** `Want` names each entry's redraw, `Schedule` admits shares under `UploadVertices` in `Priority`
   order (under way, unseen, anchor, far/near/second/distant), `Finish` fixes the work. A share's cost is the entry's
   measured whole (`SdfMeshOcclusion.Measured`, the vertex words at `SdfKernelInterfaces.MeshVertexCountBase`) over its
-  shares; the authored far period and distant `frames` are minimums. A standing entry's redraw borrows a pair from the
-  spares (`Lend`, at most two pairs) and swaps it in on its last share (`Submitted`); an unseen entry draws into its own.
-  A redraw that loses its texels or allocation ends and returns its pair (`EndRedraw`).
+  shares; the authored far period and distant `frames` are minimums. A standing entry's redraw of several shares borrows
+  a pair from the spares (`Lend`, at most two pairs) and swaps it in on its last share (`Submitted`); a redraw of one share
+  lands in the upload that draws it, so it draws over the entry's own pair as an unseen entry does. Spares no redraw used
+  for `AnchorKeptUploads` uploads are given back, and the spares with the pairs lent never pass two (`KeepSpares`). A redraw that loses its
+  texels or allocation ends and returns its pair (`EndRedraw`). Every drawing of one entry (shares, rectangles, glass)
+  selects into one `SdfMeshOcclusion.Storage`, which is safe only because an upload records each drawing's stage, select
+  and draw before the next stages.
 - **Moved rectangles.** `SdfWorldTables.NoteMotion` hands every non-shading change's before and after boxes to
   `SdfWorldShadows.Moved` before the scopes' early return; keep that call first, or a staging whose scopes are all met
   drops the change. `Moved` skips a change whose box lies within the finest judged texel of the box the entries last
@@ -1249,6 +1278,14 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   the walk, never one wrapper; a hit's normal and material stay `sdfProbeSurface`'s in both. The client takes the
   variant per job (`SdfMeshProbeGpuWork.TopFor`), and the structures' lifetime rule is the header of
   `SdfMeshProbeGpuWork.Rays.cs`: a structure is disposed only through `Retire` and `DrainRetired`.
+- **Every residency's probe scene shares one buffer.** `SdfMeshProbeScenes` (one per mesh region store,
+  `SdfMeshRegionStore.ProbeScenes`) places each trace geometry once, claimed by every probe client whose scene names it,
+  beside each client's prefix, whose first two words are its root words. A traced dispatch pushes the published
+  export's root word base, and the kernels read the root through `sdfProbeRootWord`, never `sdfProbeScene[0]`. Chunks
+  ride whichever residency's upload opens next (`SdfWorldTables.OpenUpload`, after the mesh region's owed copies), and a
+  client publishes only once the upload carrying its root words has completed (`SdfMeshProbeScenes.Upload.Rooted`). The
+  region unmaps every chunk no live allocation touches (`SdfMeshProbeScenes.Cover`). `world.residency`'s mesh-store line
+  ends with the `probe-scenes` reading (`live-bytes`, `geometries-shared`, `unmapped-bytes`).
 - **Mesh words go through one door.** `frame/sdf-mesh-words.hlsli` reads a draw's record through
   `sdfMeshRecordWord` and a mesh's own words (vertices, triangle materials, indices, level table, members) through
   `sdfMeshWord`, and then makes `sdfMeshRegion` an undeclared name, so a read around it does not compile.
@@ -1770,7 +1807,9 @@ counts in `sdf.transforms`, never in `records.posed`.
   frame; moving occluders carry that delay. Settled captures and non-occlusion cull modes bypass it.
 - **A hidden window renders until its world is resident.** `WorldViewGraphHost.ReserveArrivals` keeps one window,
   and the windows on the way to it, at `WorldPortalVisibility.ArrivalShare` for each world a rendered view leads to
-  whose `SdfWorldResidency.MeshesArriving` holds: its bake pending, or its region owing words or their upload. A
+  whose `SdfWorldResidency.MeshesFirstArriving` holds: a group owing its first mesh or the first detail over its floor (`SdfMeshPathBake.OwedGroups`), or a staged draw waiting for its mesh; a retier or another residency's landing is no arrival. A
+  world the sight has not wanted for `SdfWorldResidency.PressedParkSeconds` (`SightLetGo`) takes no window: the render
+  observes its residency, so a kept window would hold a world nobody approaches from parking for good. A
   residency's bake samples and its meshes land only in frames that render one of its views: a frame that renders none
   still prepares it while it owes its minimum (`SdfWorldResidency.OwesPreparation`) and may pack, which moves what its
   background work binds. In `world.residency`, a residency
@@ -1789,7 +1828,10 @@ counts in `sdf.transforms`, never in `records.posed`.
   (`host.memory`'s `pool device` `peak`, plus `usage-beyond-ledger`) passes what the system budgets it (`segment local`
   `budget`), passes that touch moved memory wait for it, and `world.gpu-timing` charges the wait to whichever pass
   touched it: a nested view's `surface` once read 21 ms where the kernel shades the display in under 2. Read
-  `host.memory` and `host.memory families 0` beside any such reading before reading the kernel
+  `host.memory` and `host.memory families 0` beside any such reading before reading the kernel; `host.memory peak`
+  orders the families by what each held when the device last stood at the most it ever held (`at-peak`), which names
+  the holders of a benchmark chapter's `deviceMemory.peakBytes`, where each family's own `peak` is taken at a moment of
+  its own
   ([the frame budget](../../../docs/plans/frame-budget.md#where-the-memory-goes)).
 - **A frame captures only what it reads.** `SdfWorldPasses.BeginFrame` serves every held residency's upkeep
   (`SdfWorldResidency.Upkeep`), captures the host residency, which places the cameras, and serves the minimum of the

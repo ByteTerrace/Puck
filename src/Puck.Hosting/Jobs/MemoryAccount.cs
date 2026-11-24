@@ -82,7 +82,8 @@ public readonly record struct MemoryReading(long Live, long Reserved, long Cache
 /// host pool's play limit is the budget, or the machine's free physical memory with what the pool already holds, less
 /// authoring's bytes, when that is smaller, less <see cref="Headroom"/>; the account reads the free memory itself, at most every
 /// <see cref="AvailableInterval"/>. A discrete adapter's pool is limited by its segments: each segment's limit is its
-/// recorded budget less the larger of a tenth of it and the headroom (<see cref="Record"/>), lowered to what the segment
+/// recorded budget less the larger of a tenth of it and the headroom and less the usage the ledgers do not hold
+/// (<see cref="Record"/>), lowered to what the segment
 /// holds when the device refuses an allocation there until the budget next changes.
 /// </para>
 /// <para>
@@ -205,12 +206,13 @@ public sealed class MemoryAccount {
     /// <param name="lowMemorySignaled">Reads whether the system says its memory is running low, beside each free-memory
     /// reading; <see langword="null"/> reads <see cref="HostMemory.LowMemorySignaled"/>.</param>
     /// <param name="reclaim">Gives back the memory the runtime holds and no longer uses, when authoring work finds the
-    /// machine without room (<see cref="Reclaims"/>); <see langword="null"/> runs a blocking, compacting collection that
-    /// decommits what it frees.</param>
+    /// machine without room (<see cref="Reclaims"/>); <see langword="null"/> starts a background collection of every
+    /// generation, which frees the heap's garbage while every other thread runs on, so the frame a player sees never
+    /// stops for authoring's sake.</param>
     public MemoryAccount(Func<long?>? availablePhysicalBytes = null, long? installedPhysicalBytes = null, Func<long>? clock = null, Func<bool>? lowMemorySignaled = null, Action? reclaim = null) {
         var installed = (installedPhysicalBytes ?? (HostMemory.InstalledPhysicalBytes() ?? GC.GetGCMemoryInfo().TotalAvailableMemoryBytes));
 
-        m_reclaim = (reclaim ?? (static () => GC.Collect(generation: GC.MaxGeneration, mode: GCCollectionMode.Aggressive, blocking: true, compacting: true)));
+        m_reclaim = (reclaim ?? (static () => GC.Collect(generation: GC.MaxGeneration, mode: GCCollectionMode.Forced, blocking: false, compacting: false)));
         m_clock = (clock ?? Stopwatch.GetTimestamp);
         m_readAvailable = (availablePhysicalBytes ?? HostMemory.AdmissibleBytes);
         m_readLowMemory = (lowMemorySignaled ?? HostMemory.LowMemorySignaled);
@@ -236,6 +238,17 @@ public sealed class MemoryAccount {
     /// <summary>Gets the longest an owner waiting for room sleeps before it asks again
     /// (<see cref="Owner.TryReserveWithin"/>): a twentieth of a second.</summary>
     public static TimeSpan RoomSlice { get; } = TimeSpan.FromMilliseconds(milliseconds: 50);
+
+    // Whether the calling thread is one that never waits for room (NeverWaitOnThisThread): the one waiting door
+    // (Owner.TryReserveWithin) answers such a thread at once, so no caller on it can wait whatever patience it passes.
+    [ThreadStatic]
+    private static bool NeverWaits;
+
+    /// <summary>Marks the calling thread, for its life, as one that never waits for room: an owner asking on it to wait
+    /// (<see cref="Owner.TryReserveWithin"/>) is answered at once, as if its patience were zero. A pool whose work the
+    /// account paces by queues of its own (a mesh bake's workers) marks its threads, so no work on them holds a thread the
+    /// work that would give room back needs.</summary>
+    public static void NeverWaitOnThisThread() => NeverWaits = true;
 
     /// <summary>Gets the shortest time between two reclaims (<see cref="Reclaims"/>), in <see cref="Stopwatch"/> ticks:
     /// two seconds, so a machine that is short for another program's sake costs a bake one collection in that time and
@@ -518,7 +531,9 @@ public sealed class MemoryAccount {
     /// <returns>The owners.</returns>
     public IGpuMemoryOwners DeviceOwners(string backend) => new LedgerOwners(account: this, backend: backend);
     /// <summary>Records a device's memory reading: the reading itself and each segment's budget and spend limit, the
-    /// budget less the larger of a tenth of it and <see cref="Headroom"/>. A segment's limit lowered by a device refusal
+    /// budget less the larger of a tenth of it and <see cref="Headroom"/> and less what the reading says the process uses
+    /// in the segment beyond what the ledgers hold there (presentation and driver memory, which no grant admits), so the
+    /// ledgers' bytes under the limit keep the process's usage under the system's budget. A segment's limit lowered by a device refusal
     /// stands until its budget changes. A limit that falls under what its pool holds and has promised marks pressure
     /// (<see cref="ServicePressure"/>). Recording the reading already held does nothing.</summary>
     /// <param name="reading">The device's reading (<see cref="IGpuDeviceContext.MemoryReading"/>).</param>
@@ -532,8 +547,13 @@ public sealed class MemoryAccount {
             for (var index = 0; (index < limits.Length); index++) {
                 var segment = reading.Segments[index];
                 var budget = ((long)Math.Min(val1: segment.Budget, val2: ((ulong)long.MaxValue)));
+                // What the API says the process uses in the segment past what the ledger holds there (the swapchain, the
+                // driver's own memory, anything allocated without counting) is spent of the budget before any admission:
+                // the budget bounds the process's usage, and the ledger's held bytes are only part of it. Usage moves
+                // with every allocation and the reading is a second old at most, so a skew is at most one interval's.
+                var beyond = ((segment.Usage is { } usage) ? Math.Max(val1: 0L, val2: (((long)Math.Min(val1: usage, val2: ((ulong)long.MaxValue))) - LedgerHeldLocked(segment: segment.Segment))) : 0L);
 
-                limits[index] = new(Segment: segment.Segment, Budget: budget, SpendLimit: SpendLimitOf(budget: budget));
+                limits[index] = new(Segment: segment.Segment, Budget: budget, SpendLimit: Math.Max(val1: 0L, val2: (SpendLimitOf(budget: budget) - beyond)));
             }
             m_device = reading;
             m_segmentLimits = limits;
@@ -712,6 +732,15 @@ public sealed class MemoryAccount {
     }
     // The budget less the larger of a tenth of it and the headroom: what may be spent of a segment's budget.
     private long SpendLimitOf(long budget) => Math.Max(val1: 0L, val2: (budget - Math.Max(val1: (budget / 10), val2: Headroom)));
+    // Under m_gate: what every backend's ledger holds in a segment now.
+    private long LedgerHeldLocked(GpuMemorySegment segment) {
+        var held = 0L;
+
+        foreach (var ((_, index, pool), state) in m_segments) {
+            if ((index == segment.Index) && (pool == segment.Pool)) { held += state.Owner.HeldLocked; }
+        }
+        return held;
+    }
     // Reads the machine's free physical memory again once the last reading is AvailableInterval old, outside the
     // account's lock, so the host pool's limit follows the machine without an admission calling the host each time.
     private void RefreshAvailable() {
@@ -1421,7 +1450,8 @@ public sealed class MemoryAccount {
         /// host until a pool gains room or <paramref name="patience"/> runs out, asking again at least every
         /// <see cref="RoomSlice"/>. A caller that is refused does without: its work is a cache's, and a miss is derived
         /// again by work that is admitted on its own terms. The wait is bounded because a waiter can hold a worker the
-        /// forced job needs.</summary>
+        /// forced job needs, and a thread marked never to wait (<see cref="NeverWaitOnThisThread"/>) does not wait at
+        /// all.</summary>
         /// <param name="peak">The most bytes the owner's storage holds at once while the work runs.</param>
         /// <param name="patience">How long the owner waits for room before it does without.</param>
         /// <param name="reason">Why the calling thread waits, for the host's wait records.</param>
@@ -1432,6 +1462,7 @@ public sealed class MemoryAccount {
         /// <exception cref="InvalidOperationException">The owner is a device family or a segment's row.</exception>
         public bool TryReserveWithin(long peak, TimeSpan patience, in WaitReason reason) {
             if (TryReserve(peak: peak) || TryReserveForced(peak: peak)) { return true; }
+            if (NeverWaits) { return false; }
 
             var deadline = WaitDeadline.Synchronous(budget: patience);
 

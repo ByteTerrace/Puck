@@ -89,7 +89,9 @@ public sealed partial class ShaderPipelineRenderNode {
         m_frame--;
         Unpublish();
         m_publicationLost = true;
+        PublicationAbandoned?.Invoke(this);
     }
+    internal Action<ShaderPipelineRenderNode>? PublicationAbandoned { get; set; }
     // Whether the fence's submission has completed, settling an abandoned slot of this node first. An abandoned fence the
     // node does not own (another node's latest submission a borrowed publication waits on) reads not signaled, and is left
     // for its owner to drain.

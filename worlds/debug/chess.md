@@ -69,7 +69,7 @@ to move takes nothing, so a put-down there is refused and the piece stays up.
 Seat 1 plays every side the computer does not (`aiSide`).
 
 `world.state play` reads the seated seat's cursor, the piece it holds
-(`held`, a piece ordinal or -1) and the square it left. Body 40 is the cursor
+(`held`, a piece ordinal or -1) and the square it left. Body 50 is the cursor
 outline; it rests inside the tabletop while nobody sits at the table.
 
 ## Moving a piece from the console

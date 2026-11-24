@@ -48,11 +48,14 @@ public sealed partial class SdfWorldTables {
     private SdfMeshClaims? m_meshClaims;
 
     /// <summary>Polls retired device objects on the frame thread, including for hidden residencies, and serves what the
-    /// presentation's mesh region owes outside a plan (<see cref="SdfMeshRegionStore.Service"/>).</summary>
+    /// presentation's mesh region owes outside a plan (<see cref="SdfMeshRegionStore.Service"/>), then brings the sets to
+    /// a region buffer another residency replaced, so a residency nothing prepares lets the old one go.</summary>
     internal void ServiceMemoryTrim() {
         ServiceRetirements();
         m_shadows?.Upkeep();
         m_meshStore.Service();
+        m_meshStore.ProbeScenesIfCreated?.Service();
+        BindMeshStore();
     }
 
     /// <summary>Gets whether the latest staged draws name a mesh whose words the store still owes: the mesh lands through
@@ -140,14 +143,20 @@ public sealed partial class SdfWorldTables {
     internal void NoteStoreBuffer() => Interlocked.Increment(location: ref m_meshStoreBuffers);
     private long m_meshStoreBuffers;
     private long m_meshStoreBuffersBound;
+    /// <summary>Gets whether a set of these tables may still name a region buffer the store replaced: the store has
+    /// replaced it since the tables last moved their binding revision for it. The store holds a replaced buffer while any
+    /// residency answers true (<see cref="SdfMeshRegionStore"/>'s retirement), since a view recorded with such a set reads
+    /// the old buffer. Read by the store under its gate.</summary>
+    internal bool NamesReplacedStoreBuffer => (Interlocked.Read(location: ref m_meshStoreBuffers) != Volatile.Read(location: ref m_meshStoreBuffersBound));
 
-    // Brings the sets to the store's buffer where it was replaced since they were last written.
+    // Brings the sets to the store's buffer where it was replaced since they were last written. The revision moves before
+    // the bound count, so the store never finds these tables bound to the new buffer while their sets still stand.
     private void BindMeshStore() {
         var buffers = Interlocked.Read(location: ref m_meshStoreBuffers);
 
         if (buffers == m_meshStoreBuffersBound) { return; }
-        m_meshStoreBuffersBound = buffers;
         m_bindingRevision++;
+        Volatile.Write(location: ref m_meshStoreBuffersBound, value: buffers);
     }
     /// <summary>Adds to the words of the staged draws' meshes the store owes. Called by the store under its gate.</summary>
     /// <param name="delta">The words to add; negative as a mesh lands or a row stops naming it.</param>
@@ -394,12 +403,13 @@ public sealed partial class SdfWorldTables {
 
     // Grows the draw region to hold a list's records: doubled, at least the list and MinimumDrawCapacity, at most
     // SdfMeshRegion.MaxDraws. The next upload carries the records the old buffer held on the GPU, and every set that
-    // binds the region is written again. The draw records are what a residency cannot draw without and have no smaller
-    // form, so a device that refuses them can no longer hold the presentation it was given, which is what a lost device
-    // is: the refusal is raised as one (DeviceLostException), and the host rebuilds the presentation under the limit the
-    // refusal left. The World does not end on it.
-    private void EnsureMeshDrawCapacity(int count) {
-        if (count <= m_meshDrawCapacity) { return; }
+    // binds the region is written again. Returns the rows the region holds records for: the whole list, or, when the
+    // account or the device refuses the growth, the rows the standing region fits, the first rows of the list. The rest
+    // are shed for the staging (StageMeshRegion stages, names and draws none of them) and owed to the next staging,
+    // which asks for the growth again, so the refusal costs the presentation the tail of its draw list for as long as it
+    // stands, never the presentation. Decided before the store's transaction opens, so no name is taken for a shed row.
+    private int EnsureMeshDrawCapacity(int count) {
+        if (count <= m_meshDrawCapacity) { return count; }
 
         var capacity = ((int)GpuCapacity.Grown(ceiling: SdfMeshRegion.MaxDraws, current: m_meshDrawCapacity, divisor: 1, minimum: MinimumDrawCapacity, required: count));
         var bytes = (((long)capacity) * SdfMeshRegion.DrawBytes);
@@ -408,15 +418,24 @@ public sealed partial class SdfWorldTables {
             m_retired.Reserve();
             try {
                 Retire(replaced: m_meshRegion.Grow(byteCount: bytes), carryingRegion: m_meshRegion);
-            } catch (GpuMemoryRefusedException refusal) {
-                throw new DeviceLostException(innerException: refusal, message: $"The draw region holds {m_meshRegion.ByteCount} bytes and the device refused the {bytes} its {count} draw records need; the presentation rebuilds under what the device still grants.");
+            } catch (GpuMemoryRefusedException) {
+                m_drawShedStagings++;
+                m_drawsShed = (count - m_meshDrawCapacity);
+                return m_meshDrawCapacity;
             }
             m_seedMeshHistory = true;
             m_bindingRevision++;
         }
         m_meshDrawCapacity = capacity;
+        m_drawsShed = 0;
         m_meshGrant.Floor(bytes: bytes);
+        return count;
     }
+
+    // The rows the latest staging shed because the draw region could not grow to hold them, and the stagings that shed
+    // any (EnsureMeshDrawCapacity).
+    private int m_drawsShed;
+    private long m_drawShedStagings;
 
     // Packs new draws or a new revision: names the meshes its rows draw in the store, has the store place them, and
     // packs the records that changed from the store's placements; the upload sends the slot what it owes. The store's
@@ -427,26 +446,26 @@ public sealed partial class SdfWorldTables {
         ServiceMemoryTrim();
         SdfMeshHistory.ProcessWork.Raise(kind: SdfMeshHistory.PeakRowsExtent, value: draws.Count);
         PrepareMeshTransformCuts(frame: frame);
-        EnsureMeshDrawCapacity(count: draws.Count);
+        // The rows the draw region holds records for: the list, or its first rows when a growth was refused.
+        var count = EnsureMeshDrawCapacity(count: draws.Count);
         lock (m_meshStore.Gate) {
             m_currentDrawRows = draws;
-            BindMeshStore();
             var whole = m_drawCursor.Collect(draws.Changes, draws.Serial, draws.Roster, draws.Count,
                 draws.Revision, m_owedDraws, force: !m_meshStaged);
 
             if (whole) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.TablesWhole); }
             m_owedDraws.Append(source: m_reseatedDraws);
-            if (draws.Count > m_stagedCount) { m_owedDraws.Add(m_stagedCount, (draws.Count - m_stagedCount)); }
+            if (count > m_stagedCount) { m_owedDraws.Add(m_stagedCount, (count - m_stagedCount)); }
             m_meshClaims ??= new SdfMeshClaims();
-            if (m_stagedDraws.Length < draws.Count) {
-                var capacity = ArrayCapacity.Grown(m_stagedDraws.Length, draws.Count);
+            if (m_stagedDraws.Length < count) {
+                var capacity = ArrayCapacity.Grown(m_stagedDraws.Length, count);
 
                 Array.Resize(array: ref m_stagedDraws, newSize: capacity); Array.Resize(array: ref m_stagedOccupancies, newSize: capacity);
                 Array.Resize(array: ref m_stagedCasterState, newSize: capacity);
             }
-            for (var row = draws.Count; (row < m_stagedCount); row++) { NoteUnnamedRow(row: row); Unname(row: row); }
+            for (var row = count; (row < m_stagedCount); row++) { NoteUnnamedRow(row: row); Unname(row: row); }
             for (var run = 0; (run < m_owedDraws.Count); run++) {
-                var end = Math.Min(val1: draws.Count, val2: (m_owedDraws.Start(index: run) + m_owedDraws.Length(index: run)));
+                var end = Math.Min(val1: count, val2: (m_owedDraws.Start(index: run) + m_owedDraws.Length(index: run)));
 
                 for (var row = m_owedDraws.Start(index: run); (row < end); row++) {
                     var old = m_stagedDraws[row].Mesh;
@@ -464,19 +483,22 @@ public sealed partial class SdfWorldTables {
                 }
             }
             m_meshStore.Plan(planner: this);
+            // The plan may replace the region's buffer, and the records below are packed from its placements: the sets
+            // these records are read through bind the buffer the plan left, never the one before it.
+            BindMeshStore();
             m_owedDraws.Append(source: m_landedRows);
-            var words = (draws.Count * SdfMeshRecord.DrawWords);
+            var words = (count * SdfMeshRecord.DrawWords);
 
             ArrayCapacity.EnsureLength(ref m_meshDrawWords, words);
             m_stagingCause = (((draws.Serial != m_meshSourceSerial) || !ReferenceEquals(objA: m_meshCauseSource, objB: draws.Roster))
                 ? draws.Cause : null);
-            _ = StageChangedDraws(candidates: m_owedDraws, draws: draws);
-            if (m_meshDrawCount != ((uint)draws.Count)) { m_meshRevision++; }
-            m_meshDrawCount = ((uint)draws.Count);
+            _ = StageChangedDraws(candidates: m_owedDraws, count: count, draws: draws);
+            if (m_meshDrawCount != ((uint)count)) { m_meshRevision++; }
+            m_meshDrawCount = ((uint)count);
             m_glassDrawCount = ((uint)m_glassIndices.Count);
-            m_stagedCount = draws.Count;
-            m_meshHistory.RetireAfter(count: draws.Count);
-            EnsurePreviousMeshCapacity(count: draws.Count);
+            m_stagedCount = count;
+            m_meshHistory.RetireAfter(count: count);
+            EnsurePreviousMeshCapacity(count: count);
             m_meshSource = draws.Roster; m_meshCauseSource = draws.Roster; m_meshSourceRevision = draws.Revision; m_meshSourceSerial = draws.Serial; m_meshStaged = true;
             m_meshStore.RankLanding(client: this, sweep: true);
             EndMotionStaging();
@@ -514,14 +536,10 @@ public sealed partial class SdfWorldTables {
         StageMeshRegion(frame: frame);
     }
 
-    private int StageChangedDraws(SdfMeshDraws draws, GpuUploadRuns? candidates = null) {
-        var records = m_meshDrawWords.AsSpan(length: (draws.Count * SdfMeshRecord.DrawWords), start: 0);
-        // The records as the region last held them, which a moved matrix is compared against before it is written.
-        var old = m_meshRegion.ContentsAt(
-            length: ((int)Math.Min(val1: m_meshRegion.ByteCount, val2: (((long)draws.Count) * SdfMeshRegion.DrawBytes))),
-            offset: 0
-        );
-
+    // Stages the records of the draws among the first count rows the candidates name (every one of them without
+    // candidates); count is the rows the draw region holds records for (EnsureMeshDrawCapacity).
+    private int StageChangedDraws(SdfMeshDraws draws, int count, GpuUploadRuns? candidates = null) {
+        var records = m_meshDrawWords.AsSpan(length: (count * SdfMeshRecord.DrawWords), start: 0);
         m_meshDrawDifferences.Clear();
         var changedRecords = 0;
         var changedWords = 0L;
@@ -530,7 +548,7 @@ public sealed partial class SdfWorldTables {
 
         for (var run = 0; (run < (candidates?.Count ?? 1)); run++) {
             var start = (candidates?.Start(index: run) ?? 0);
-            var end = ((candidates is null) ? draws.Count : Math.Min(val1: draws.Count, val2: checked((start + candidates.Length(index: run)))));
+            var end = ((candidates is null) ? count : Math.Min(val1: count, val2: checked((start + candidates.Length(index: run)))));
 
             for (var index = start; (index < end); index++) {
                 var draw = draws[index];
@@ -574,13 +592,9 @@ public sealed partial class SdfWorldTables {
 
                     var wasLive = ReadStagedSelection(row: index, record: record, box: out var before, glass: out var wasGlass);
                     var posed = (sameRoster && (difference == SdfMeshDrawDifference.Matrix) && (index < m_stagedCount));
-                    var mask = StageMeshDraw(draw: in draw, incremental: true, index: index, old: old, posed: ref posed, record: record, tally: ref tally);
+                    var mask = StageMeshDraw(draw: in draw, index: index, posed: posed, record: record, tally: ref tally);
 
-                    if (posed) {
-                        NotePosedRow(row: index, wasLive: wasLive, before: in before, wasGlass: wasGlass, draw: in draw, record: record);
-                    } else {
-                        NoteStagedRow(row: index, wasLive: wasLive, before: in before, wasGlass: wasGlass, draw: in draw, record: record);
-                    }
+                    NoteStagedRow(row: index, wasLive: wasLive, before: in before, wasGlass: wasGlass, draw: in draw, record: record);
                     // A grown region's new bytes are unknown to its host copy, so its zeros are not evidence of device
                     // zeros: initialize every word of a newly exposed record, including zero placement words.
                     if (index >= m_stagedCount) { mask = (ulong.MaxValue >> (64 - SdfMeshRecord.DrawWords)); }
@@ -697,7 +711,8 @@ public sealed partial class SdfWorldTables {
     /// <summary>Describes the residency's landing: this residency's part of the bytes its draws name, the bytes of its
     /// draws' meshes the store still owes, the frames and seconds it spent owing them, the draw-record bytes the frame
     /// uploads staged (the latest, the most one staged and at which upload, and their sum), the uploads submitted and the
-    /// one at which a staging last stopped owing, the draw records it holds room for and the meshes of its draws the
+    /// one at which a staging last stopped owing, the draw records it holds room for, the rows the latest staging shed
+    /// because the draw region could not grow and the stagings that shed any, and the meshes of its draws the
     /// store refuses; then the presentation's store (<see cref="SdfMeshRegionStore.Describe"/>), which every residency
     /// prints alike. Safe to read from any thread, the counts being a frame's.</summary>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
@@ -706,6 +721,6 @@ public sealed partial class SdfWorldTables {
         var ticks = (Volatile.Read(location: ref m_owedTicks) + ((since == 0) ? 0 : (System.Diagnostics.Stopwatch.GetTimestamp() - since)));
         var seconds = (((double)ticks) / System.Diagnostics.Stopwatch.Frequency);
 
-        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-named={MeshRegionNamedBytes}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s owed-clock={((since == 0) ? "settled" : "running")} frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)} draw-capacity={m_meshDrawCapacity} | {m_meshStore.Describe()}");
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-named={MeshRegionNamedBytes}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s owed-clock={((since == 0) ? "settled" : "running")} frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)} draw-capacity={m_meshDrawCapacity} draws-shed={m_drawsShed} shed-stagings={m_drawShedStagings} | {m_meshStore.Describe()}");
     }
 }

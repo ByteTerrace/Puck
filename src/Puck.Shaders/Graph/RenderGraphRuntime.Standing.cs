@@ -1,4 +1,5 @@
 using Puck.Abstractions.Collections;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 
@@ -45,15 +46,53 @@ public sealed partial class RenderGraphRuntime {
     // The instances the frame's release forgot, reused from frame to frame.
     private readonly List<int> m_released = [];
 
-    // The completed output records: every read passes a DeliveryLatch, and RememberOutput is the one writer.
+    // The completed output records: every read passes a DeliveryLatch, and RememberOutput is the one writer of a committed
+    // record. A frame's reservation (ReserveOutput) is written ahead of its commit, which replaces it in place, or is
+    // withdrawn, which puts back the records it displaced; no reservation outlives its frame.
     private sealed class OutputRecords {
         private Output[] m_current;
         private Output[] m_previous;
+        // The record a reservation pushed out of m_previous, which its withdrawal puts back. Outside a reservation it holds
+        // no record, only the named-output array the next reservation fills, so a steady frame allocates none.
+        private Output[] m_displaced;
 
         public OutputRecords(int count) {
             m_current = new Output[count];
             m_previous = new Output[count];
+            m_displaced = new Output[count];
             Clear();
+        }
+
+        public bool IsReserved(int index) => m_current[index].Reserved;
+        public Output Reservation(int index) => m_current[index];
+        public void Reserve(int index, ShaderPipelineRenderNode node, long frame, in Surface surface, GpuImageLayout layout, DeliveryLabel label, Standing standsFor, ReferenceRevision publication) {
+            var buffer = node.ReservedOutputBuffer();
+            var buffers = node.ReservedOutputBuffers(reuse: m_displaced[index].Buffers);
+
+            m_displaced[index] = m_previous[index];
+            m_previous[index] = m_current[index];
+            m_current[index] = new Output(
+                Buffer: buffer.Buffer,
+                BufferPublication: buffer.Publication,
+                Buffers: buffers,
+                Frame: frame,
+                Image: surface,
+                Label: label,
+                Layout: layout,
+                Publication: publication,
+                Reserved: true,
+                StandsFor: standsFor,
+                StateTick: node.ReservedStateTick
+            );
+        }
+        // Puts back the records a reservation displaced, as if the frame had never been prepared.
+        public void Withdraw(int index) {
+            if (!m_current[index].Reserved) { return; }
+            var spare = m_current[index].Buffers;
+
+            m_current[index] = m_previous[index];
+            m_previous[index] = m_displaced[index];
+            m_displaced[index] = (Output.None with { Buffers = spare });
         }
 
         public Output ReadAt(int producer, long frame, in DeliveryLatch latch) {
@@ -86,9 +125,15 @@ public sealed partial class RenderGraphRuntime {
         }
         public void Write(int index, ShaderPipelineRenderNode node, long frame, in Surface surface, DeliveryLabel label, Standing standsFor, ReferenceRevision publication) {
             var buffer = node.LatestOutputBuffer();
-            var buffers = node.LatestOutputBuffers(reuse: m_previous[index].Buffers);
+            // A commit replaces its own reservation, whose consumers compared what they bound before this write.
+            var reserved = m_current[index].Reserved;
+            var buffers = node.LatestOutputBuffers(reuse: (reserved ? m_current[index].Buffers : m_previous[index].Buffers));
 
-            m_previous[index] = m_current[index];
+            if (reserved) {
+                m_displaced[index] = (Output.None with { Buffers = m_displaced[index].Buffers });
+            } else {
+                m_previous[index] = m_current[index];
+            }
             m_current[index] = new Output(
                 Buffer: buffer.Buffer,
                 BufferPublication: buffer.Publication,
@@ -105,14 +150,19 @@ public sealed partial class RenderGraphRuntime {
         public void Forget(int index) {
             m_current[index] = Output.None;
             m_previous[index] = Output.None;
+            m_displaced[index] = Output.None;
         }
         public void Clear() {
             Array.Fill(array: m_current, value: Output.None);
             Array.Fill(array: m_previous, value: Output.None);
+            Array.Fill(array: m_displaced, value: Output.None);
         }
         public void Reconfigure(int count, ReadOnlySpan<int> kept, int[] renumbered) {
             var current = new Output[count];
             var previous = new Output[count];
+
+            m_displaced = new Output[count];
+            Array.Fill(array: m_displaced, value: Output.None);
 
             for (var index = 0; (index < count); index++) {
                 var old = kept[index];
@@ -197,8 +247,9 @@ public sealed partial class RenderGraphRuntime {
     // that producer's output no newer than the frame (the frame before it for a previous-frame read), resolved in turn
     // with every standing hop's label unioned; one standing for a one-frame image, itself within that frame. Nothing
     // when what it stands for is gone or refused at the latch. A node never stands for its own image, so a chain ends at
-    // another instance's own output; the bound only guards the walk.
-    private Output Resolve(in Output output, long frame, in DeliveryLatch latch) {
+    // another instance's own output; the bound only guards the walk. A consumer binding the result names itself, so each
+    // reservation the walk passes through is noted as one it depends on (NoteReservedRead).
+    private Output Resolve(in Output output, long frame, in DeliveryLatch latch, int consumer = -1) {
         if (output.Frame < 0) {
             return Output.None;
         }
@@ -230,6 +281,9 @@ public sealed partial class RenderGraphRuntime {
             if (resolved.Frame < 0) {
                 return Output.None;
             }
+            if (resolved.Reserved && (consumer >= 0)) {
+                NoteReservedRead(consumer: consumer, producer: standing.Producer);
+            }
             combinedLabel = combinedLabel.Union(other: resolved.Label);
         }
 
@@ -245,8 +299,8 @@ public sealed partial class RenderGraphRuntime {
     // producer of the image this frame bound to the external version its node published in its output's place. A stand-in
     // bound there is the runtime's own; an external producer's leased image, or a name the instance's inputs no longer
     // bind (a retired producer's hold), is bound for this frame only.
-    private Standing StandingOf(int index, ShaderPipelineRenderNode node, RenderGraphSchedule schedule, in Surface surface) {
-        if (node.PublishedBinding is not { } version) {
+    private Standing StandingOf(int index, string? forwarded, RenderGraphSchedule schedule, in Surface surface) {
+        if (forwarded is not { } version) {
             return Standing.Own;
         }
 

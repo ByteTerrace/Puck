@@ -49,6 +49,10 @@ public sealed partial class WorldDocument {
         WorldPreparedMutation.TryPrepare(this, mutation, tick, engineTick, preMetered, out prepared, out reason, out denied, derived);
 
     private bool TryStageDocument(WorldMutation mutation, ulong tick, ulong engineTick, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out DocumentStage? stage, out CellName? evictedKey, out string reason) {
+        // These setters read and replace only the installed views section.
+        if (mutation is WorldMutation.SetViewDefaults or WorldMutation.SetViewSeatRig or WorldMutation.SetViewSeatControl or WorldMutation.SetViewPost) {
+            return TryStageDocument(m_definition, mutation, tick, engineTick, out stage, out evictedKey, out reason);
+        }
         if (EditsShadingAlone(mutation, m_definition)) {
             if (!TryStageDocument(m_definition, mutation, tick, engineTick, out stage, out evictedKey, out reason)) { return false; }
             if (stage.Kind == WorldInstallKind.Presentation) { return true; }

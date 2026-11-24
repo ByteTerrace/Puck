@@ -66,6 +66,8 @@ public readonly record struct BodyPoseSection(
 /// <param name="PositionRemainder">The position accumulator's remainders.</param>
 /// <param name="RotationRemainder">The rotation accumulator's remainders.</param>
 /// <param name="VerticalVelocityRemainder">The vertical velocity accumulator's remainder.</param>
+/// <param name="DirectVerticalVelocity">The vertical velocity the last step's own thrust drove directly, outside the
+/// ballistic channel.</param>
 /// <param name="PlanarRampRemainder">The whole-vector shaping ramp's remainder.</param>
 /// <param name="DriveLongRemainder">The anisotropic row's longitudinal remainder.</param>
 /// <param name="DriveLatRemainder">The anisotropic row's lateral remainder.</param>
@@ -111,6 +113,7 @@ public readonly record struct BodyMotionSection(
     (long X, long Y, long Z) PositionRemainder,
     (long X, long Y, long Z) RotationRemainder,
     long VerticalVelocityRemainder,
+    FixedQ4816 DirectVerticalVelocity,
     long PlanarRampRemainder,
     long DriveLongRemainder,
     long DriveLatRemainder,
@@ -168,6 +171,7 @@ public readonly record struct BodyMotionSection(
         WriteRaws(raws: section.PositionRemainder, writer: writer);
         WriteRaws(raws: section.RotationRemainder, writer: writer);
         writer.WriteInt64(value: section.VerticalVelocityRemainder);
+        writer.WriteFixed(value: section.DirectVerticalVelocity);
         writer.WriteInt64(value: section.PlanarRampRemainder);
         writer.WriteInt64(value: section.DriveLongRemainder);
         writer.WriteInt64(value: section.DriveLatRemainder);
@@ -220,6 +224,7 @@ public readonly record struct BodyMotionSection(
         PositionRemainder: ReadRaws(reader: ref reader),
         RotationRemainder: ReadRaws(reader: ref reader),
         VerticalVelocityRemainder: reader.ReadInt64(),
+        DirectVerticalVelocity: reader.ReadFixed(),
         PlanarRampRemainder: reader.ReadInt64(),
         DriveLongRemainder: reader.ReadInt64(),
         DriveLatRemainder: reader.ReadInt64(),

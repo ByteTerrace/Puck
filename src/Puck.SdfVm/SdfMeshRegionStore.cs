@@ -634,6 +634,8 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
                 m_fitOwed = true;
             }
             if (!m_region.OwesMoves && !m_region.OwesCarry) { return false; }
+            // An upload slot whose upload has completed since the last service comes back before the take.
+            if ((m_freeUploadSlots.Count == 0) && (m_retired.Count > 0)) { m_retired.Poll(timeline: m_device.Services.QueueSubmitter.Timeline, release: static replaced => replaced.Dispose()); }
             if (!m_freeUploadSlots.TryPop(result: out var slot)) {
                 m_moveSlotMisses++;
                 return false;
@@ -666,9 +668,11 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
 
     /// <summary>Serves what the store owes outside a plan, on the frame thread once a prepared frame for each residency:
     /// releases what the device has finished reading, answers an account trim, and fits the mapped region again while a
-    /// chunk the device refused waits.</summary>
+    /// chunk the device refused waits. None of that is due on any one frame, so a frame that finds the store held by a
+    /// plan or a landing on another thread leaves it to the next frame rather than waiting.</summary>
     internal void Service() {
-        lock (m_gate) {
+        if (!m_gate.TryEnter()) { return; }
+        try {
             if (m_disposed) { return; }
             if (m_retired.Count > 0) { m_retired.Poll(timeline: m_device.Services.QueueSubmitter.Timeline, release: static replaced => replaced.Dispose()); }
             if (Interlocked.Exchange(location1: ref m_trimRequested, value: 0) != 0) {
@@ -684,6 +688,8 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
                 }
             }
             if (m_backingRefused) { Cover(); }
+        } finally {
+            m_gate.Exit();
         }
     }
     // Forgets the placed meshes no name holds and what the store holds for them. A mapped region's chunks follow at its
@@ -719,6 +725,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
             m_owed.Clear();
             m_arena.Dispose();
             m_retired.Release(completed: ulong.MaxValue, release: static replaced => replaced.Dispose());
+            m_probeScenes?.Dispose();
             m_region.Dispose();
             m_grant.Dispose();
             m_hostCopies.Dispose();
@@ -745,9 +752,25 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
                 if (mesh.GeometrySource is not null) { variants++; variantWords += (SdfMeshRegion.WordsOf(mesh: mesh) - SdfMeshRegion.PlacedWordsOf(mesh: mesh)); }
             }
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"mesh-store residencies={m_clients.Count} region-held={Bytes}B region-used={(m_arena.Words * sizeof(uint))}B meshes={m_placements.Count} named={m_uses.Count} region-named={(m_arena.NamedWords * sizeof(uint))}B shared={shared} shared-saved={(sharedWords * sizeof(uint))}B variants={variants} variants-saved={(variantWords * sizeof(uint))}B written={(m_wordsWritten * sizeof(uint))}B owed-meshes={m_owed.Count} moved={m_moved} compactions={m_arena.Compactions} compacted={m_arena.CompactionMoves}/{(m_arena.CompactionWords * sizeof(uint))}B gpu-moved={m_gpuMoves}/{(m_gpuMovedWords * sizeof(uint))}B move-sources={(m_arena.HoldsMoveSources ? "held" : "none")} move-slot-misses={m_moveSlotMisses} region-limit={(m_arena.LimitWords * sizeof(uint))}B region-held-limit={((m_arena.HeldLimitWords == long.MaxValue) ? "none" : $"{(m_arena.HeldLimitWords * sizeof(uint))}B")} arena-held={(m_arena.HeldWords * sizeof(uint))}B arena-placed={(m_arena.PlacedWords * sizeof(uint))}B shed={m_arena.Shed} staging-refused={m_region.StagingRefusals} refused={m_arena.Refused.Count} ahead={m_arena.AheadCount} ahead-refused={m_arena.AheadRefused.Count} refusals={m_refusals} forgotten={m_forgotten} {DescribeLandingJobs()}");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"mesh-store residencies={m_clients.Count} region-held={Bytes}B region-used={(m_arena.Words * sizeof(uint))}B meshes={m_placements.Count} named={m_uses.Count} region-named={(m_arena.NamedWords * sizeof(uint))}B shared={shared} shared-saved={(sharedWords * sizeof(uint))}B variants={variants} variants-saved={(variantWords * sizeof(uint))}B written={(m_wordsWritten * sizeof(uint))}B owed-meshes={m_owed.Count} moved={m_moved} compactions={m_arena.Compactions} compacted={m_arena.CompactionMoves}/{(m_arena.CompactionWords * sizeof(uint))}B gpu-moved={m_gpuMoves}/{(m_gpuMovedWords * sizeof(uint))}B move-sources={(m_arena.HoldsMoveSources ? "held" : "none")} move-slot-misses={m_moveSlotMisses} region-limit={(m_arena.LimitWords * sizeof(uint))}B region-held-limit={((m_arena.HeldLimitWords == long.MaxValue) ? "none" : $"{(m_arena.HeldLimitWords * sizeof(uint))}B")} arena-held={(m_arena.HeldWords * sizeof(uint))}B arena-placed={(m_arena.PlacedWords * sizeof(uint))}B shed={m_arena.Shed} staging-refused={m_region.StagingRefusals} refused={m_arena.Refused.Count} ahead={m_arena.AheadCount} ahead-refused={m_arena.AheadRefused.Count} refusals={m_refusals} forgotten={m_forgotten} {DescribeLandingJobs()} | {m_probeScenes?.Describe() ?? "probe-scenes none"}");
         }
     }
     /// <summary>Gets the bytes of the region's buffers, by the memory they live in.</summary>
     public GpuMemoryBytes OwnedBytes { get { lock (m_gate) { return (m_disposed ? default : m_region.OwnedBytes); } } }
+
+    private SdfMeshProbeScenes? m_probeScenes;
+
+    /// <summary>Gets the probe trace's scene words of every residency attached to the store, created at the first ask,
+    /// or <see langword="null"/> once the store is disposed. It records with the region's copy pipeline and goes with
+    /// the store.</summary>
+    internal SdfMeshProbeScenes? ProbeScenes {
+        get {
+            lock (m_gate) {
+                if (m_disposed) { return null; }
+                return (m_probeScenes ??= new SdfMeshProbeScenes(copyPipeline: m_copyPipeline, device: m_device));
+            }
+        }
+    }
+    /// <summary>Gets the probe scenes once created, without creating them, or <see langword="null"/>.</summary>
+    internal SdfMeshProbeScenes? ProbeScenesIfCreated { get { lock (m_gate) { return (m_disposed ? null : m_probeScenes); } } }
 }

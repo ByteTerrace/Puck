@@ -298,10 +298,10 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
         public WorldAdjacencyProjection Projection { get; set; }
         public WorldAdjacencyProjection[] Extra { get; set; } = [];
         public int Pins { get; private set; }
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() {
+        public WorldAdjacencyRead Visuals() {
             Pins++;
             UpdateReports();
-            return [Projection, .. Extra];
+            return new([Projection, .. Extra]);
         }
         public void UpdateReports() {
             if (Neighbour is not ReportedBodies bodies) { return; }

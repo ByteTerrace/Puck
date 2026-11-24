@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 using Puck.Shaders;
 
@@ -33,15 +34,13 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // the window holds at most SlotCount parts. The coordinator's alone: one coordinator calls Trace, Select and Relight
     // at a time.
     private readonly Queue<Job> m_window = new();
-    private readonly uint[]?[] m_partAnswers = new uint[]?[SdfGpuWork.SlotCount];
+    private readonly uint[][] m_partAnswers = new uint[SdfGpuWork.SlotCount][];
     private long m_parts;
     // The selection's changes by geometry, ascending, each with the hierarchy walks of it and of every later one
     // (SelectTestsOf).
     private readonly List<(uint Geometry, int Walks)> m_selectNewer = [];
     private bool m_disposed;
     private bool m_stopping;
-    private GpuRegion? m_sceneRegion;
-    private IDisposable? m_sceneCarry;
     private GpuRegion? m_feedback;
     private readonly GpuFittedBuffer m_hitCache;
     private readonly GpuFittedBuffer m_cameraSampleCache;
@@ -69,6 +68,16 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private static readonly TimeSpan AdmissionWait = TimeSpan.FromSeconds(2);
     private Job? m_waiting;
     private long m_waitingSince;
+    private long? m_feedbackRefusedAt;
+
+    public TimeSpan? UntilDue {
+        get {
+            lock (m_gate) {
+                if (m_feedbackRefusedAt is { } refused) { return SdfGpuWork.DeferralRetry - m_volume.Time.GetElapsedTime(refused); }
+                return m_waiting is null ? null : AdmissionWait - m_volume.Time.GetElapsedTime(m_waitingSince);
+            }
+        }
+    }
 
     /// <summary>Returns the descriptors the client's pool holds: a trace set and a relight set a slot, the whole of each
     /// interface's groups.</summary>
@@ -84,6 +93,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     }
 
     internal SdfMeshProbeGpuWork(SdfWorldTables tables, SdfMeshIrradiance volume) {
+        Array.Fill(m_partAnswers, []);
         m_volume = volume;
         m_gpu = tables.Gpu;
         m_batchOutput = new(m_gpu.BufferFactory, Name("batch-output"));
@@ -109,6 +119,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         // A device that runs the ray-query variants holds a set of each ray-query interface a slot too, from a pool only
         // such a device lays out.
         m_structures = StructuresOf(tables: tables);
+        m_shared = tables.Grant.Selector.TraceBottoms;
         if (m_structures is not null) {
             var tracePipeline = tables.Pipeline(SdfKernel.ProbeTraceRays);
             var relightRaysPipeline = tables.Pipeline(SdfKernel.ProbeRelightRays);
@@ -233,8 +244,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         for (var index = (m_selectNewer.Count - 1); ((index >= 0) && (m_selectNewer[index].Geometry > row[0])); index--) { newer = m_selectNewer[index].Walks; }
         return (1L + ((long)newer * SdfMeshProbeDepth.HitCount));
     }
-    internal Task<uint[]> CameraSample(SdfMeshIrradianceScene scene, Memory<Vector4> origins, Vector4[] lighting, int words, int geometry, int window) =>
-        SubmitAsync(new Job(scene.Acquire(), origins) { Input = new uint[] { 0 }, Lighting = lighting, CameraSample = true, VolumeWords = words, Geometry = geometry, Window = window });
+    internal Task<uint[]> CameraSample(SdfMeshIrradianceScene scene, Memory<Vector4> origins, Vector4[] lighting, int words, int geometry, int window, uint[] result) =>
+        SubmitAsync(new Job(scene.Acquire(), origins) { Input = new uint[] { 0 }, Lighting = lighting, CameraSample = true, VolumeWords = words, Geometry = geometry, Window = window, Result = result });
     // Runs one call of `count` rows, `rowWords` words each, as the jobs `next` cuts from the row it is handed, keeping up
     // to SdfGpuWork.SlotCount of them in flight, so a call of many jobs waits about one round trip per SlotCount jobs
     // rather than one a job. The coordinator's window holds a call's parts submitted and not yet read, oldest first, and
@@ -254,9 +265,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                     var ring = (int)(m_parts++ % SdfGpuWork.SlotCount);
 
                     job.First = start;
-                    job.Ring = ring;
-                    // Never null, so Complete answers the whole array, fault word included, which the ring keeps for reuse.
-                    job.Reuse = m_partAnswers[ring] ?? [];
+                    job.Result = ArrayCapacity.EnsureScratch(ref m_partAnswers[ring], (job.Origins.Length * rowWords) + 1);
                     m_window.Enqueue(item: job);
                     _ = SubmitAsync(job: job);
                     start += job.Origins.Length;
@@ -266,7 +275,6 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 var part = Await(answer: done.Answer.Task);
 
                 _ = m_window.Dequeue();
-                m_partAnswers[done.Ring] = part;
                 part.AsSpan(start: 0, length: (done.Origins.Length * rowWords)).CopyTo(answer.AsSpan(start: (done.First * rowWords)));
             }
         } catch {
@@ -345,38 +353,34 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         estimatedSeconds = 0;
         lock (m_gate) {
             if (m_exclusive || !tables.BindsBackgroundWork) { return false; }
-            if (m_sceneUpload is { } upload) {
-                if (!upload.Cancelled && m_volume.KeepsGpuScene(upload.Scene)) { return TakeSceneUpload(allowance, out job, out estimatedSeconds); }
-                // Stop producing immediately, but reclaim addresses only after the worker and every submitted copy
-                // retire. Completed immutable geometry is retained for the next scene, so roster churn cannot restart
-                // it forever. No frame thread joins a blocked writer or publishes an abandoned prefix.
-                upload.Cancel();
-                if (!upload.Work.IsCompleted || m_sceneInFlight != 0) { return false; }
-                if (upload.Export is { } export) { m_sceneArena.Abandon(export); }
-                upload.Dispose();
-                m_sceneUpload = null;
-            }
+            if (ServeSceneUpload() || (m_sceneStore?.Carrying ?? false)) { return false; }
             if (TryTakeStructures(allowance: (allowance with { Seconds = Math.Min(val1: allowance.Seconds, val2: FrameAllowanceSeconds) }), job: out job, estimatedSeconds: out estimatedSeconds, tables: tables)) { return true; }
             if (!m_pending.TryPeek(out var pending)) { return false; }
             if (!((pending.Commits || pending.CameraSample) ? m_volume.KeepsGpuPublication(pending.Scene, pending.Geometry, pending.Window) : m_volume.KeepsGpuScene(pending.Scene)) ||
                 (pending.CameraSample && (m_feedback is null || m_feedbackWords != pending.VolumeWords)) ||
                 (pending.Commits && pending.Batch!.Failed)) {
                 m_pending.Dequeue();
+                m_waiting = null;
+                m_feedbackRefusedAt = null;
                 Cancel(job: pending);
+                if (m_pending.Count > 0) { m_tables.GpuWork.Wake(); }
                 return false;
             }
             if (!tables.TryProbeScene(pending.Scene, out var placements, out var meshes, out var version)) {
+                m_feedbackRefusedAt = null;
                 // The scene's meshes normally land within an upload or two. A head that waits past AdmissionWait is
                 // cancelled like any obsolete job, so its coordinator and the camera sample behind it are never held without
                 // bound; the coordinator lists again on its next grant and asks for the scene as it then stands.
                 if (!ReferenceEquals(m_waiting, pending)) { m_waiting = pending; m_waitingSince = m_volume.Time.GetTimestamp(); }
-                else if (m_volume.Time.GetElapsedTime(m_waitingSince) > AdmissionWait) {
+                else if (m_volume.Time.GetElapsedTime(m_waitingSince) >= AdmissionWait) {
                     m_pending.Dequeue();
                     m_waiting = null;
+                    m_feedbackRefusedAt = null;
                     // A scene that stayed unbound this long names a mesh the residency dropped, not one about to land:
                     // the volume then builds the scene its draws now name rather than waiting on this one's traces.
                     m_volume.NoteScenePlacement(scene: pending.Scene, placed: false);
                     Cancel(job: pending);
+                    if (m_pending.Count > 0) { m_tables.GpuWork.Wake(); }
                 }
                 return false;
             }
@@ -390,7 +394,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             // A scene is replaced only with no query in flight, and none is taken while it uploads, so no slot
             // descriptor or region is changed while a query reads it.
             if (!ReferenceEquals(m_scene, pending.Scene) || m_placementVersion != version) {
-                if (m_inFlight == 0) { m_sceneUpload = new SceneUpload(pending.Scene, placements, version, m_sceneArena, m_tables.GpuWork.Wake); }
+                if (m_inFlight == 0) { BeginSceneUpload(scene: pending.Scene, placements: placements, version: version); }
                 return false;
             }
             var exclusive = Exclusive(query: pending);
@@ -405,6 +409,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             }
             pending.Meshes = meshes;
             if (pending.Lighting is not null && !pending.Selection && !pending.CameraSample && (m_feedbackWords != pending.VolumeWords)) {
+                if (m_feedbackRefusedAt is { } refused && m_volume.Time.GetElapsedTime(refused) < SdfGpuWork.DeferralRetry) {
+                    return false;
+                }
                 // A slot of the service is the region's slot its job flushes through (Record), so a ring block is
                 // rewritten only once the job that last staged through it completed. The region keeps no host copy: each
                 // relight job hands it its own updates (Record).
@@ -412,12 +419,14 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 try {
                     replacement = tables.CreateProbeRegion("probe-feedback", pending.VolumeWords * 4, SdfGpuWork.SlotCount, hostCopyBytes: 0);
                 } catch (GpuMemoryRefusedException) {
+                    m_feedbackRefusedAt = m_volume.Time.GetTimestamp();
                     return false;
                 }
                 if (m_feedback is not null) { tables.RetireBackgroundResource(m_feedback); }
                 m_feedback = replacement;
                 m_feedbackWords = pending.VolumeWords;
             }
+            m_feedbackRefusedAt = null;
             m_pending.Dequeue();
             m_inFlight++;
             pending.Serial = Admit();
@@ -443,7 +452,6 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private static ulong BatchOutputBytes(int probes) => (ulong)probes * SdfMeshProbeRelight.ResultWords * sizeof(uint);
 
     public void Record(object job, in SdfGpuWorkRecording recording) {
-        if (job is SceneChunk chunk) { RecordSceneUpload(chunk, in recording); return; }
         if (job is StructureJob structures) { RecordStructures(job: structures, recording: in recording); return; }
         var query = (Job)job;
         var slot = m_slots[recording.Slot];
@@ -502,7 +510,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             }
             recording.CopyRegion(m_feedback, recording.Slot, GpuStage.ComputeShader);
         }
-        Bind(SdfKernelInterfaces.ProbeScene, m_sceneRegion!.Buffer(0), 4);
+        Bind(SdfKernelInterfaces.ProbeScene, m_sceneStore!.Buffer, 4);
         Bind(SdfWorldPackage.MeshRegion, query.Meshes!, 4);
         Bind(SdfKernelInterfaces.ProbeOrigins, originTable, 16);
         Bind(SdfKernelInterfaces.ProbeDirections, m_directions, 16);
@@ -566,6 +574,12 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, pipelineHandle: traced.Handle);
         recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: ((top is null) ? set : raysSet),
             group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: traced.LayoutHandle);
+        // The traced kernel reads the published scene's root words at the base it is pushed: every residency's scene
+        // shares the probe scenes' buffer (sdfProbeRootWord).
+        Span<byte> rootWord = stackalloc byte[sizeof(uint)];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: rootWord, value: (uint)m_sceneExport!.Prefix);
+        recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, data: rootWord, offset: 0,
+            pipelineLayoutHandle: traced.LayoutHandle, stageFlags: GpuShaderStage.Compute);
         if (relight) {
             recorder.DispatchIndirect(command, work!.BufferHandle, 0);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: hits.BufferHandle,
@@ -666,19 +680,19 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     }
 
     public void Complete(object job, SdfGpuWorkReadback readback) {
-        if (job is SceneChunk chunk) { CompleteSceneUpload(chunk, readback); return; }
         if (job is StructureJob structures) { CompleteStructures(job: structures, readback: readback); return; }
         var query = (Job)job;
         // The job ran: what it initialized stands.
         if (query.ClearsHitCache) { m_hitCacheOwed = false; }
         if (query.FillsCameraSampleCache) { m_cameraSampleCacheOwed = false; }
-        var words = readback.Length / 4;
-        var readWords = (words == 0) ? [] : (query.Reuse is { } reuse && (reuse.Length >= words)) ? reuse : new uint[words];
-        try { readback.Read(MemoryMarshal.AsBytes(readWords.AsSpan(start: 0, length: words))); }
-        finally { readback.Release(); }
-        // A reused array is answered whole, its fault word at words - 1; any other answer drops the fault word's slot.
-        var result = (query.Reuse is not null) ? readWords : readWords[..^1];
-        var faults = readWords[words - 1];
+        var words = readback.Length / sizeof(uint);
+        var result = query.Result!;
+        try {
+            readback.Read(MemoryMarshal.AsBytes(result.AsSpan(0, words)));
+        } finally {
+            readback.Release();
+        }
+        var faults = result[words - 1];
 
         m_volume.Counters.Add(SdfMeshIrradiance.TraversalFaults, faults);
         // A walk stopped at its step or stack bound is a scene the hierarchy cannot answer; each costs a ray its whole
@@ -706,7 +720,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         }
         CountAnswered(query: query);
         if (query.CameraSample) {
-            for (var i = SdfMeshProbeRelight.CameraSampleOutputWords - 1; i < result.Length; i += SdfMeshProbeRelight.CameraSampleOutputWords) {
+            for (var i = SdfMeshProbeRelight.CameraSampleOutputWords - 1; i < words - 1; i += SdfMeshProbeRelight.CameraSampleOutputWords) {
                 if ((result[i] & 4) != 0) { m_volume.Counters.Add(SdfMeshIrradiance.CameraTraces, 1); }
                 if ((result[i] & 2) != 0) { m_volume.Counters.Add(SdfMeshIrradiance.CameraRelights, 1); }
             }
@@ -716,7 +730,6 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         query.Answer.SetResult(result);
     }
     public void Abandon(object job) {
-        if (job is SceneChunk chunk) { lock (m_gate) { m_sceneInFlight--; m_sceneUpload!.Deferred.Enqueue(chunk); } return; }
         if (job is StructureJob structures) { lock (m_gate) { AbandonStructures(job: structures); } return; }
         var query = (Job)job;
         // An abandoned relight may have handed the feedback region its updates; their owner reuses or returns that
@@ -771,7 +784,6 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         _ => query.Origins.Length,
     };
     public string Describe(object job) {
-        if (job is SceneChunk chunk) { return FormattableString.Invariant($"scene-chunk word={chunk.Word} words={chunk.Count}"); }
         if (job is StructureJob structures) { return FormattableString.Invariant($"structures kind={structures.Kind.ToString().ToLowerInvariant()} units={structures.Units}"); }
         var query = (Job)job;
         var kind = KindOf(query).ToString().ToLowerInvariant() + ((query.Top is null) ? string.Empty : "-rays");
@@ -818,9 +830,10 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         new(index: index, owner: SdfWorldTables.ObjectOwner, part: $"probe-trace {part}");
     public GpuMemoryBytes OwnedBytes {
         get {
-            var bytes = m_sceneRegion?.OwnedBytes ?? default;
-            var device = bytes.DeviceLocal;
-            var host = bytes.HostVisible + m_directions.SizeBytes + m_zero.SizeBytes;
+            // The scene's words lie in the probe scenes every residency of the mesh region shares, which parking one
+            // residency does not give back.
+            var device = 0UL;
+            var host = m_directions.SizeBytes + m_zero.SizeBytes;
             device += m_feedback?.OwnedBytes.DeviceLocal ?? 0;
             device += (m_hitCache.Buffer?.SizeBytes ?? 0) + (m_cameraSampleCache.Buffer?.SizeBytes ?? 0) + (m_batchOutput.Buffer?.SizeBytes ?? 0) + (ulong)Math.Max(val1: 0L, val2: Volatile.Read(location: ref m_structureBytes));
             host += m_feedback?.OwnedBytes.HostVisible ?? 0;
@@ -828,9 +841,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         }
     }
     internal string DescribeMemory() {
-        var scene = m_sceneRegion?.OwnedBytes ?? default;
         var feedback = m_feedback?.OwnedBytes ?? default;
-        return FormattableString.Invariant($"trace-scene-device-bytes={scene.DeviceLocal} trace-scene-upload-bytes={scene.HostVisible} trace-scene-shadow-bytes={m_sceneRegion?.ShadowBytes ?? 0} trace-scene-changes={m_sceneUploads} trace-scene-adoptions={m_sceneAdoptions} trace-scene-written-bytes={m_sceneWrittenBytes} trace-scene-last-change-bytes={m_sceneLastBytes} trace-hits-device-bytes={m_hitCache.Buffer?.SizeBytes ?? 0} trace-batch-output-device-bytes={m_batchOutput.Buffer?.SizeBytes ?? 0} trace-feedback-device-bytes={feedback.DeviceLocal} trace-feedback-upload-bytes={feedback.HostVisible} trace-feedback-shadow-bytes={m_feedback?.ShadowBytes ?? 0} {DescribeJobs()} {DescribeStructures()}");
+        return FormattableString.Invariant($"trace-scene-root={m_sceneExport?.Prefix ?? -1} trace-scene-prefix-words={((m_sceneExport is { } export) ? (export.Changed[^1].Count + SdfMeshProbeTrace.RootWords) : 0)} trace-scene-changes={m_sceneUploads} trace-scene-adoptions={m_sceneAdoptions} trace-scene-written-bytes={m_sceneWrittenBytes} trace-scene-last-change-bytes={m_sceneLastBytes} trace-hits-device-bytes={m_hitCache.Buffer?.SizeBytes ?? 0} trace-batch-output-device-bytes={m_batchOutput.Buffer?.SizeBytes ?? 0} trace-feedback-device-bytes={feedback.DeviceLocal} trace-feedback-upload-bytes={feedback.HostVisible} trace-feedback-shadow-bytes={m_feedback?.ShadowBytes ?? 0} {DescribeJobs()} {DescribeStructures()}");
     }
     public void Stop() {
         lock (m_gate) {
@@ -843,13 +855,11 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         if (m_disposed) { return; }
         Stop();
         m_disposed = true;
-        m_sceneUpload?.Dispose();
+        ReleaseScene();
         m_feedback?.Dispose();
         m_hitCache.Dispose();
         m_cameraSampleCache.Dispose();
         m_batchOutput.Dispose();
-        m_sceneRegion?.Dispose();
-        m_sceneCarry?.Dispose();
         m_scene?.Dispose();
         m_directions.Dispose();
         m_zero.Dispose();
@@ -919,9 +929,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         public bool Commits;
         public ReadOnlyMemory<int> Destinations;
         public ReadOnlyMemory<uint> CacheSlots;
-        public uint[]? Reuse;
-        // The coordinator's answer ring entry a part answers into (Run).
-        public int Ring;
+        // The requester reserves the answer, including the fault word, before the job takes a device slot.
+        public uint[]? Result;
         public long Rays;
         public long Tests;
         public uint HitCapacity;

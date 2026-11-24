@@ -175,6 +175,8 @@ public sealed class SdfKernelInterfaces {
 
         Stamp = stamp;
         FieldStamp = fieldStamp;
+        // The probe kernels' pushed index is the scene's root word base in the probe scenes' buffer, which every
+        // residency's scene shares (SdfMeshProbeScenes, sdfProbeRootWord).
         ProbeTrace = new ShaderInterface(name: "sdf-probe-trace", members: [
             Read(element: ShaderValueType.Uint, name: ProbeScene),
             Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
@@ -182,7 +184,7 @@ public sealed class SdfKernelInterfaces {
             Read(element: ShaderValueType.Float4, name: ProbeDirections),
             Written(element: ShaderValueType.Uint, name: ProbeHitsWritten),
             Written(element: ShaderValueType.Uint2, name: ProbeIdentitiesWritten),
-        ], pushesIndex: false);
+        ], pushesIndex: true);
         ProbeRelight = new ShaderInterface(name: "sdf-probe-relight", members: [
             Read(element: ShaderValueType.Uint, name: ProbeScene),
             Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
@@ -196,11 +198,11 @@ public sealed class SdfKernelInterfaces {
             Read(element: ShaderValueType.Uint, name: ProbeWork),
             Written(element: ShaderValueType.Uint, name: ProbeCacheWritten),
             Read(element: ShaderValueType.Uint, name: ProbeCache),
-        ], pushesIndex: false);
+        ], pushesIndex: true);
         // The ray-query variants read the same resources at the same bindings, and the scene's top level after them; only
         // a device with ray queries lays these out.
-        ProbeTraceRays = new ShaderInterface(name: "sdf-probe-trace-rays", members: [.. ProbeTrace.Members, Structure()], pushesIndex: false);
-        ProbeRelightRays = new ShaderInterface(name: "sdf-probe-relight-rays", members: [.. ProbeRelight.Members, Structure()], pushesIndex: false);
+        ProbeTraceRays = new ShaderInterface(name: "sdf-probe-trace-rays", members: [.. ProbeTrace.Members, Structure()], pushesIndex: true);
+        ProbeRelightRays = new ShaderInterface(name: "sdf-probe-relight-rays", members: [.. ProbeRelight.Members, Structure()], pushesIndex: true);
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
             pushesIndex: true,

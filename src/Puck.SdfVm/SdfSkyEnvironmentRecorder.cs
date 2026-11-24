@@ -19,8 +19,6 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
     // Each slot's submitted publication sequence, latched complete only by the node's proof.
     private readonly RenderGraphSlotResults<long> m_publications;
 
-    private long m_submission;
-
     public SdfSkyEnvironmentRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups,
         SdfSkyEnvironmentPasses.Built built, SdfWorldPasses views) {
         m_context = context;
@@ -28,7 +26,7 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
         m_views = views;
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: built.Tables.Pipeline(kernel: Kernel).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
-        m_publications = new RenderGraphSlotResults<long>(slots: context.InFlightFrames, complete: sequence => {
+        m_publications = new RenderGraphSlotResults<long>(slots: context.InFlightFrames, abandon: Withdraw, complete: sequence => {
             if (Screens) { m_built.Tables.CompleteScreenEmission(sequence: sequence); } else { m_built.Tables.CompleteSkyEnvironment(sequence: sequence); }
         });
     }
@@ -79,22 +77,30 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
 
         recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: (Screens ? SdfWorldTables.MaxScreenSurfaces : groups),
             groupCountY: (Screens ? 1u : groups), groupCountZ: 1);
+        // The views of this residency record after this pass on this thread (RecordingDomain), so they classify the buffer
+        // they sample by what this recording writes, before the node commits it.
+        if (Screens) {
+            tables.RecordScreenEmission(frame: m_built.Residency.PackageFrame);
+        } else if (Reduces) {
+            tables.RecordSkyEnvironment(frame: m_built.Residency.PackageFrame);
+        }
         return RenderGraphPackageOutcome.Drew;
     }
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) { readback = default; return false; }
     // Called only after this frame's recording drew (ShaderPipelineRenderNode.SubmitPackageReadbacks).
     public void Submitted(int slot) {
         if (!Reduces && !Screens) { return; }
-        m_submission = (Screens ? m_built.Tables.SubmitScreenEmission() : m_built.Tables.SubmitSkyEnvironment());
-        m_publications.Record(slot: slot, result: m_submission);
+        var sequence = (Screens ? m_built.Tables.SubmitScreenEmission() : m_built.Tables.SubmitSkyEnvironment());
+        m_publications.Record(slot: slot, result: sequence);
         m_publications.Submitted(slot: slot);
     }
     public void Completed(int slot) => m_publications.Completed(slot: slot);
     public void Abandoned(int slot) => m_publications.Abandoned(slot: slot);
+    private void Withdraw(long sequence) {
+        if (Screens) { m_built.Tables.WithdrawScreenEmission(sequence: sequence); } else { m_built.Tables.WithdrawSkyEnvironment(sequence: sequence); }
+    }
     public void Dispose() {
-        if (m_submission != 0) {
-            if (Screens) { m_built.Tables.WithdrawScreenEmission(sequence: m_submission); } else { m_built.Tables.WithdrawSkyEnvironment(sequence: m_submission); }
-        }
+        m_publications.Release(unproven: Withdraw);
         m_built.Dispose();
     }
 }

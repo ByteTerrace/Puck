@@ -247,20 +247,19 @@ public sealed partial class SdfWorldTables {
     }
     // Observes and packs one record through the same door for full and incremental staging. A posed row (the caller saw
     // the same roster and occupancy, and a draw that differs from the staged one in its matrix alone) whose record
-    // stood live, whose mesh still stands at the same placement and whose transforms were not reseated takes StagePose;
-    // posed is left set only where it did.
-    private ulong StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old, ref StagingTally tally, ref bool posed, bool incremental = false) {
+    // stood live, whose mesh still stands at the same placement and whose transforms were not reseated takes StagePose.
+    private ulong StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ref StagingTally tally, bool posed) {
         var absent = ((draw.Mesh is null) || !MeshStands(mesh: draw.Mesh));
         var wasAbsent = m_absentRows.Contains(item: index);
 
-        posed = (posed && incremental && !absent && !wasAbsent && !MeshMoved(mesh: draw.Mesh!) &&
+        posed = (posed && !absent && !wasAbsent && !MeshMoved(mesh: draw.Mesh!) &&
             !MeshTransformWasReseated(draw: in draw));
         if (posed) {
             return StagePose(draw: in draw, index: index, record: record, tally: ref tally);
         }
         Span<uint> before = stackalloc uint[SdfMeshRecord.DrawWords];
 
-        if (incremental && (absent || wasAbsent)) { record.CopyTo(destination: before); }
+        if ((absent || wasAbsent)) { record.CopyTo(destination: before); }
         var observation = default(SdfMeshObservation);
         var packedWords = SdfMeshRecord.DrawWords;
         var changedWords = 0UL;
@@ -277,7 +276,7 @@ public sealed partial class SdfWorldTables {
             observation = m_meshHistory.Observe(draw: in draw, index: index, reseat: reseat, occupancy: m_currentDrawRows.Occupancy(row: index), table: m_currentDrawRows.Rows);
             if (observation.PoseCut) { ReseatRiddenSlot(draw: in draw); }
             _ = m_absentRows.Remove(item: index);
-            if (incremental && !wasAbsent) {
+            if (!wasAbsent) {
                 // Both ordinary edits and landing use the store's current placement, never an absent record's zeros.
                 _ = m_meshStore.TryPlacement(mesh: draw.Mesh!, placement: out var placement);
                 var work = SdfMeshRegion.WriteDrawIncremental(draw: in draw, previous: in m_stagedDraws[index],
@@ -292,14 +291,14 @@ public sealed partial class SdfWorldTables {
                 tally.Selections++;
             }
         }
-        if (incremental && (absent || wasAbsent)) {
+        if ((absent || wasAbsent)) {
             for (var word = 0; (word < record.Length); word++) { if (record[word] != before[word]) { changedWords |= (1UL << word); } }
         }
         if (!absent && draw.Glass) { _ = m_glassIndices.Add(item: index); } else { _ = m_glassIndices.Remove(item: index); }
         m_glassDrawCount = ((uint)m_glassIndices.Count);
         m_meshRevision++;
         tally.Records++;
-        if (incremental && wasAbsent && !absent) { tally.Landings++; } else if (incremental && !ReferenceEquals(objA: draw.Mesh, objB: m_stagedDraws[index].Mesh)) { tally.HandOvers++; }
+        if (wasAbsent && !absent) { tally.Landings++; } else if (!ReferenceEquals(objA: draw.Mesh, objB: m_stagedDraws[index].Mesh)) { tally.HandOvers++; }
         tally.RecordBytes += (packedWords * sizeof(uint));
         if (absent) { return changedWords; }
         if (observation.Seed) {
@@ -307,11 +306,7 @@ public sealed partial class SdfWorldTables {
             if (wasAbsent) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.ReturnedLive); }
             return changedWords;
         }
-        var offset = (index * SdfMeshRegion.DrawBytes);
-        var matrix = System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: record[..SdfMeshRecord.PoseWords]);
-
-        if (incremental ? ((changedWords & ((1UL << SdfMeshRecord.PoseWords) - 1)) != 0) :
-            ((offset > (old.Length - MeshPoseBytes)) || !matrix.SequenceEqual(other: old.Slice(length: MeshPoseBytes, start: offset)))) {
+        if ((changedWords & ((1UL << SdfMeshRecord.PoseWords) - 1)) != 0) {
             m_changedMeshMatrices.Add(length: 1, start: index);
             tally.Matrices++;
         }

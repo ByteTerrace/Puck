@@ -37,7 +37,7 @@ public sealed partial class SdfWorldPasses {
                 ? (entry.TaintedNow
                     ? $"the latest views render, which read {entry.TaintCause}"
                     : $"the temporal history, which read {entry.TaintCause} and blends it into every later render")
-                : SourceTaintOf(view.Residency.Tables, view.Residency.Frame)));
+                : SourceTaintOf(view.Residency.Tables, view.Residency.Frame, view.Residency.PackageFrame)));
     }
 
     /// <inheritdoc/>
@@ -64,12 +64,13 @@ public sealed partial class SdfWorldPasses {
     }
 
     // Names a frame's tainted lighting source, a demanded sky environment or the screen emission it lights by, or null
-    // when neither is.
-    internal static string? SourceTaintOf(SdfWorldTables? tables, SdfFrame? frame) => (((tables is null) || (frame is null))
+    // when neither is: the source as a view of package frame `packageFrame` samples it, which this frame's recording of the
+    // source may have written before its node commits (SdfWorldTables.SkyEnvironmentFor).
+    internal static string? SourceTaintOf(SdfWorldTables? tables, SdfFrame? frame, long packageFrame) => (((tables is null) || (frame is null))
         ? null
-        : ((tables.SkyEnvironmentDemand && (tables.SubmittedSkyEnvironment is { Tainted: true }))
+        : ((tables.SkyEnvironmentDemand && (tables.SkyEnvironmentFor(frame: packageFrame) is { Tainted: true }))
             ? "the sky environment, projected from a panorama screen's external image"
-            : ((!frame.DisableScreenLights && (tables.SubmittedScreenEmission is { Tainted: true }))
+            : ((!frame.DisableScreenLights && (tables.ScreenEmissionFor(frame: packageFrame) is { Tainted: true }))
                 ? "the screen emission the screen lights read, reduced from a screen's external image"
                 : null)));
     // Names the first read a render bound with external content the capture gate did not fill, or null when none.

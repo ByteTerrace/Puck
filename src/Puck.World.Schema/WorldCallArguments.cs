@@ -183,10 +183,18 @@ public static class WorldCallArguments {
         // A value keyed on a clock names its clock, a timeline name written bare, and its keys' position says a key's
         // ease is one word of WorldEase; a converter-backed bindable carries no members the serializer describes.
         if (WorldKeyedValues.IsKeyable(type: owner)) {
-            return new Dictionary<string, MemberMetadata>(comparer: StringComparer.Ordinal) {
+            var keyed = new Dictionary<string, MemberMetadata>(comparer: StringComparer.Ordinal) {
                 ["clock"] = new MemberMetadata(Choices: null, Form: WorldArgumentForm.Name, Type: typeof(string)),
                 ["keys"] = new MemberMetadata(Choices: null, Form: WorldArgumentForm.Unclassified, Type: KeyPosition),
-            }.ToFrozenDictionary(comparer: StringComparer.Ordinal);
+            };
+
+            // A scalar's keys may join a second track of the same form, by a combine.
+            if ((owner == typeof(BindableScalar)) || (owner == typeof(BindableAngle))) {
+                keyed["combine"] = new MemberMetadata(Choices: Enum.GetNames<WorldKeyCombine>().ToFrozenSet(comparer: StringComparer.OrdinalIgnoreCase), Form: WorldArgumentForm.Choice, Type: typeof(WorldKeyCombine));
+                keyed["with"] = new MemberMetadata(Choices: null, Form: WorldArgumentForm.Unclassified, Type: owner);
+            }
+
+            return keyed.ToFrozenDictionary(comparer: StringComparer.Ordinal);
         }
 
         if (owner == KeyPosition) {

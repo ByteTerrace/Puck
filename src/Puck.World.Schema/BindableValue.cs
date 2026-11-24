@@ -246,18 +246,36 @@ public readonly record struct BindableScalar {
     public static implicit operator BindableScalar(float literal) => new(literal: literal);
 
     /// <summary>Returns the values the document authors for this scalar: its literal, or every key's value; none for a
-    /// binding, whose values the validator cannot know.</summary>
+    /// binding, whose values the validator cannot know. Keys that combine a second track on another clock
+    /// (<see cref="WorldKeyTrack{T}.With"/>) yield the combination's extremes instead: every combine is monotone in each
+    /// argument, so the values it reaches lie between the combinations of each track's least and greatest key, and the
+    /// two clocks move independently, so each of those corners is reached.</summary>
     /// <returns>The authored values.</returns>
     public IEnumerable<float> AuthoredValues() {
         if (Literal is { } literal) {
             yield return literal;
         }
 
-        if (Keys is { } keys) {
+        if (Keys is not { } keys) {
+            yield break;
+        }
+
+        if (keys.With is null) {
             foreach (var key in keys.Keys) {
                 yield return key.Value;
             }
+
+            yield break;
         }
+
+        if (keys.Keys.IsEmpty) {
+            yield break;
+        }
+
+        var (low, high) = WorldKeyResolver.Extremes(track: keys);
+
+        yield return low;
+        yield return high;
     }
     /// <summary>Returns whether this scalar is admissible against a document: a finite literal, a state binding naming
     /// a declared Fixed or Int cell, or keys whose every value is finite.</summary>
@@ -267,9 +285,11 @@ public readonly record struct BindableScalar {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (Keys is { } keys) {
-            foreach (var key in keys.Keys) {
-                if (!float.IsFinite(f: key.Value)) {
-                    return false;
+            for (var link = keys; (link is not null); link = link.With) {
+                foreach (var key in link.Keys) {
+                    if (!float.IsFinite(f: key.Value)) {
+                        return false;
+                    }
                 }
             }
 
@@ -543,7 +563,10 @@ public sealed class BindableScalarJsonConverter : JsonConverter<BindableScalar>,
         ["anyOf"] = new JsonArray(
             new JsonObject { ["type"] = "number" },
             new JsonObject { ["type"] = "string" },
-            WorldKeyTrackJson.Schema(value: new JsonObject { ["type"] = "number" })
+            WorldKeyTrackJson.Schema(
+                combines: true,
+                value: new JsonObject { ["type"] = "number" }
+            )
         ),
     };
     /// <summary>Reads a scalar-shaped bindable.</summary>
@@ -562,6 +585,7 @@ public sealed class BindableScalarJsonConverter : JsonConverter<BindableScalar>,
 
         if (reader.TokenType == JsonTokenType.StartObject) {
             return new BindableScalar(keys: WorldKeyTrackJson.Read(
+                combines: true,
                 kind: kind,
                 reader: ref reader,
                 readValue: static (ref Utf8JsonReader value) => ((value.TokenType == JsonTokenType.Number)

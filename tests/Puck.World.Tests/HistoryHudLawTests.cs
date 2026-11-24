@@ -82,6 +82,6 @@ public sealed class HistoryHudLawTests {
     }
 
     private sealed class NoFrames : IOverlayFrameSources {
-        public bool TryAcquire(int key, out GpuImageLease lease) => throw new InvalidOperationException(message: "the history line contains no sampled frame");
+        public bool TryAcquire(int key, in Puck.Shaders.RenderGraphFrameSamples samples, out GpuImageLease lease) => throw new InvalidOperationException(message: "the history line contains no sampled frame");
     }
 }

@@ -48,13 +48,11 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
     // What one endpoint's delivered document compiles to, kept until the mirror says its scene changed.
     private sealed class World {
         public WorldStateLease? Scale;
-        public IWorldSeatNavigation? Navigation;
-        public WorldDefinition? NavigationDefinition;
-        public WorldDocumentInputs NavigationInputs = WorldDocumentInputs.All;
+        public IWorldSeatNavigation? LastNavigation;
+        public readonly WorldDocumentProduct<IWorldSeatNavigation> Navigation = new();
         public int NavigationRevision = -1;
-        public WorldPlaces Places = WorldPlaces.None;
-        public WorldDefinition? PlacesDefinition;
-        public WorldDocumentInputs PlacesInputs = WorldDocumentInputs.All;
+        public WorldPlaces LastPlaces = WorldPlaces.None;
+        public readonly WorldDocumentProduct<WorldPlaces> Places = new();
         public int PlacesRevision = -1;
     }
 
@@ -69,21 +67,18 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
         var world = WorldOf(endpoint: endpoint);
         var revision = endpoint.Mirror.DefinitionRevision;
 
-        if ((world.Navigation is null) || (world.NavigationRevision != revision)) {
+        if ((world.LastNavigation is null) || (world.NavigationRevision != revision)) {
             var definition = endpoint.Definition;
+            var previous = world.LastNavigation;
 
-            if ((world.Navigation is null) || (world.NavigationDefinition is null) ||
-                WorldDocumentInputs.Changed(before: world.NavigationDefinition, after: definition).Overlaps(other: world.NavigationInputs)) {
-                world.Navigation = WorldDocumentReads.Record(
-                    build: () => navigation(arg1: definition, arg2: world.Navigation),
-                    inputs: out world.NavigationInputs
-                );
-            }
-            world.NavigationDefinition = definition;
+            world.LastNavigation = world.Navigation.Of(
+                document: definition,
+                build: () => navigation(arg1: definition, arg2: previous)
+            );
             world.NavigationRevision = revision;
         }
 
-        return world.Navigation;
+        return world.LastNavigation;
     }
     /// <summary>Reports whether a seat's input source registry is admitted by its routed authority.</summary>
     public bool InputAdmitted(int slot) => client.IsSeatInputAdmitted(slot: slot);
@@ -101,9 +96,7 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
     /// seat between authorities has no body to read until its new route's first delivery.</returns>
     public bool TryRead(int slot, out Reading reading) {
         reading = default;
-        if ((routes.TryRoute(slot: slot) is not { } route) ||
-            !route.Endpoint.Mirror.TryReadBody(body: out var body, index: route.EntityIndex) ||
-            (body.Generation != route.Entity.Generation) ||
+        if (!TryBody(body: out var body, route: out var route, slot: slot) ||
             !client.TrySeatLook(slot: slot, yaw: out var yaw, yawPerTick: out var perTick)) {
             return false;
         }
@@ -120,6 +113,16 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
             YawPerTick: FixedQ4816.FromDouble(value: perTick)
         );
         return true;
+    }
+    /// <summary>Reads a seat's body from its route, without the places it stands in or its camera's look.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="body">The body's latest complete delivery, when this returns <see langword="true"/>.</param>
+    /// <param name="route">The seat's route, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the seat is routed to an authority whose latest delivery holds its body.</returns>
+    public bool TryBody(int slot, out WorldDeliveredBody body, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldAuthorityRoute? route) {
+        body = default;
+        route = routes.TryRoute(slot: slot);
+        return ((route is not null) && route.Endpoint.Mirror.TryReadBody(body: out body, index: route.EntityIndex) && (body.Generation == route.Entity.Generation));
     }
     /// <summary>Gets a place's volume in the endpoint's delivered document.</summary>
     /// <param name="endpoint">The authority.</param>
@@ -168,18 +171,14 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
         if (world.PlacesRevision != revision) {
             var definition = endpoint.Definition;
 
-            if ((world.PlacesDefinition is null) ||
-                WorldDocumentInputs.Changed(before: world.PlacesDefinition, after: definition).Overlaps(other: world.PlacesInputs)) {
-                world.Places = WorldDocumentReads.Record(
-                    build: () => WorldPlaces.Of(definition: definition),
-                    inputs: out world.PlacesInputs
-                );
-            }
-            world.PlacesDefinition = definition;
+            world.LastPlaces = world.Places.Of(
+                document: definition,
+                build: () => WorldPlaces.Of(definition: definition)
+            );
             world.PlacesRevision = revision;
         }
 
-        return world.Places;
+        return world.LastPlaces;
     }
     // The body's live scale: the register the delivered document's bodies.scale names, read through the delivered state.
     private float Scale(in Reading reading) {

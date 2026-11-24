@@ -73,7 +73,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
     private static string DescribeLinks(WorldServer server, WorldInstanceHost? instances, WorldRecipientView view) {
         var definition = view.Definition;
         var rows = (definition.Adjacencies ?? []);
-        var adjacencies = server.Adjacencies;
+        using var adjacencies = server.Adjacencies?.Visuals();
         var lines = new List<string>();
 
         foreach (var row in rows) {

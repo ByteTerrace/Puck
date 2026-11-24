@@ -170,30 +170,53 @@ Built by this feature:
 - An edge that is two places (`WorldAdjacencyPresentation.Apart`): a seat that crossed the sky seam is presented in
   the moon's own scene, so the ship and its pilot are drawn as they look, under the moon's light and exposure.
 
+- A value that follows two clocks (`WorldKeyTrack.With`, `WorldKeyCombine`): a keyed scalar joins a second track on
+  another clock by adding, multiplying, or taking the greater or lesser of the two, and keys with a combine join over a
+  section's keys on the same field rather than replace them (`WorldRenderKeys`). The valley's exposure floor is the
+  greater of the day's floor and a floor that rises with `altitude` to the moon's, its key fades with height, and its
+  meter's dark cut (`render.exposure.low`, now bindable) rises to the moon's seven tenths, so a black sky never pulls the
+  meter down (hall.puck). One star field answers both the night and the height (`day.puck`'s `starsByHeight`). The
+  invariant is that every reader resolves a chained track through one path, `WorldStateMirror`'s keyed read, and every
+  clock the chain names is noted for re-resolution (`WorldEnvironmentResolve.NoteKeys`, `WorldThemeResolve`); the
+  validator judges every link's clock and times as a keyed value of its own (`WorldKeyedValues`) and the chain's reach
+  against the field's domain (`WorldKeyResolver.Extremes`). A rate and an ordered set refuse a second track, since
+  neither has a sound reading of one.
+
+- A held pace climbs as it travels (`WorldBody.VerticalThrust`): a hold's thrust reads the kit's resolved move speed
+  with its held pace, as its travel and a medium's thrust already did, so the ship's boost lifts it at four times its
+  cruise and the route's 5,900 m climb takes about a quarter of the time it did. One function serves every bond.
+- Jetpack flight (`worlds/standard/abilities.puck`'s `jetpack`): thrust, hover and boost as two hold rows and the
+  `flight` action an author expands into any kit, bound through the standard's `flight` channel. The Moth's flight
+  mode is that template (`avatars/moth-jetpack.puck`), no longer her own rows.
+- A space mode (`ship.puck`'s `shipSpace` and `shipCamera`'s `spaceRig`): a body is `Weightless` where a world's
+  gravity field no longer pulls (`ActionFact.Weightless`, the same one metre a second squared under which a body keeps
+  the up it had), the ship's kit marks its `space` register by it, and a world selects the space kit by that register
+  (`craft-form.puck`): a ship that coasts in vacuum, pitches further and frames its pilot from a longer boom behind a
+  wider lens. The engine supplies only the fact; the medium's motion and camera are the standard's data.
+
 Left open, in the order they matter to the trip:
 
-1. **A keyed value reads one clock, so the valley's exposure cannot follow both the day and the
-   height.** Its exposure floor is keyed on the day, and above about 1,500 m the darkening sky
-   pulls the meter down to that floor: the ship and the moon blow out to white before the seam,
-   and the moon's own exposure takes over in one frame past it. The fix is a keyed scalar that
-   adds a second track on another clock (the day's floor plus a lift keyed on `altitude`), which
-   also lets one star layer answer both the night and the height. Until then the two stars layers
-   in `day.puck` stand in for the second. The check is the presented frames from 1,500 m to the
-   seam with the ship's hull holding its tone.
-2. **The valley is not in the moon's sky.** A view of the debug world from the
-   moon draws that whole world again, every exhibit included, as one more
-   residency. What a world shows of itself from far away has to be a product of
-   its own (phase 4's scenery published for a far viewer) before the moon's sky
-   can hold the valley. Past the seam the pilot now sees the moon's own scene,
-   so the valley drops out of the view below in one frame; the moon's sky gains
-   a view of the debug world once one mesh store serves every residency
-   ([streaming and memory](streaming-and-memory.md)).
-3. **A refused device allocation ends the World.** With the moon's two
+1. **The valley is not in the moon's sky.** A `view` layer of the debug world
+   in the moon's sky (anchored at `moonCentre`, following the viewer, geometry
+   alone inside a 1,500 m bound round the caldera) was built and measured on a
+   windowed Direct3D 12 round trip, and taken out again. The shared mesh store
+   shared 4,196 of its groups, but the view still started a residency of the
+   whole debug world (7,163 groups, 8,386 instances, 6,751 of them dynamic) and
+   baked 360 groups the store did not hold (coarser tiers for the far view).
+   Its start held the frame thread for about half a second on the tick the
+   ship crossed, and its bakes took the bake room the moon's own routed
+   residency needed (refinements deferred with no room left), so the ship drew
+   as its proxy box for most of the outbound chapter. What a world shows of
+   itself from far away has to be a product of its own: phase 4's scenery
+   published for a far viewer, a residency of the far product rather than of
+   the world. The check is the same view drawn from it: no new bakes in the
+   view's residency and no frame-thread hold at the crossing.
+2. **A refused device allocation ends the World.** With the moon's two
    residencies (the painting's window and the sky view) beside the debug world's
    own, the device's memory account refused a mesh region's growth and the
    frame threw (`SdfMeshRegionStore.EnsureCapacity`). A refusal has to
    shed detail, not end the run.
-4. **A body across a joined seam is drawn as a catalog rig.** Where an edge
+3. **A body across a joined seam is drawn as a catalog rig.** Where an edge
    presents its two worlds as one place, a seat that crossed keeps the boot
    scene's catalog avatar and the neighbour's bodies are rigs inside the
    seam's band (`WorldAdjacencySceneEmitter`), whatever looks they wear. The
@@ -201,46 +224,66 @@ Left open, in the order they matter to the trip:
    worlds will. The pools that stamp a creation look read one world's bodies
    (`WorldBodyStampCensus`), so the fix gives the boot scene's pool the
    travelling seat and the band's bodies as stamp sources.
-5. **Each authority keeps its own day.** The two worlds start their `day`
+4. **Each authority keeps its own day.** The two worlds start their `day`
    rows alike and advance them at one rate, so they agree until one is written
    (`world.state.cell.set day`): the moon's phase then stops matching the
-   valley's sun. A clock one world reads from another needs a federated
-   read. At night the valley's sun casts no light below its horizon while
-   the moon's shines all the way round, so a night crossing lights the ship in
-   one frame.
-6. **A crossing turns a body about up only.** `WorldFrameIsometry` and the
+   valley's sun. The decision: the moon reads its parent's day through
+   federation, not a shared authored clock. A tick clock shared by both
+   documents agrees only while both authorities count one engine tick from one
+   start, which a remote authority does not, and it cannot be written, which
+   takes away the documented lever for moving the time. The moon's `day` clock
+   will name the destination whose clock it follows; a presentation that holds
+   that destination's session reads the leader's phase through it, and one
+   that holds none reads the moon's own advancing row. The invariant is one
+   day wherever both worlds are drawn, enforced at the one door every keyed
+   value's phase passes, `WorldStateMirror`'s clock phase read. It is not
+   built: the mirror has no reach to another world's mirror yet, which the
+   client's endpoints hold. The check: write `day` on the debug world and read
+   the moon's key light direction in `world.lighting` from a seat on either
+   side of the seam. The night crossing no longer lights the ship in one
+   frame: the valley's sun rises with height to the moon's full strength
+   (hall.puck's `key` light, a second track on `altitude`).
+5. **A crossing turns a body about up only.** `WorldFrameIsometry` and the
    adjacency validator admit a yaw, so the two worlds' axes agree and the side of
    the moon that faces the valley has its up pointing down in the shared frame.
    The arrival frame therefore stands at the far pole. Phase 6's whole frame
    (orientation, up, angular velocity) lets a frame stand anywhere and lets a
    banked or pitched ship cross as it is.
-7. **A door does not take a rider.** A ship flown into a painting crosses
+6. **A door does not take a rider.** A ship flown into a painting crosses
    without its pilot; only an adjacency queues the rider.
-8. **The ship has no title.** It crosses as a body of whichever world holds it.
+7. **The ship has no title.** It crosses as a body of whichever world holds it.
    Custody for a vehicle (who may recall it, what a visited world may do to it)
    waits for the companion plan's roles.
-9. **The moon's cell.** The sectors bake at the terrain pass's cell, so the
+8. **The moon's cell.** The sectors bake at the terrain pass's cell, so the
    ground shows facets underfoot, as the valley's walls do.
-10. **The crossing stalls.** The tick a body crosses the seam, a headless
-    World steps no tick for about half a second each way (the route's own
-    report names it), and a windowed one skips presentations. What the
-    crossing waits on is not attributed yet.
-11. **A re-drive reads the neighbour as it stands.** The tape carries when a
+9. **The crossing stalls, windowed.** Attributed on a windowed Direct3D 12
+    trip (`world.benchmark run moon`'s frames): on the ticks the ship crosses
+    into the moon, the frame thread's produce runs 210 to 330 ms for three
+    frames while the seat's routed residency of the moon starts (193 groups,
+    92 to bake, planned on the frame thread) after no residency of it existed.
+    The fix is to start the seam neighbour's routed residency before the
+    crossing, while the seat is inside the approach band, so the crossing
+    presents a residency already planned (residency motion judgement). Headless,
+    two trips stepped every tick across both crossings. The headless stalls the
+    route reported came from elsewhere: the run's first ticks after boot, and a
+    city tick every few seconds while the city is resident in the debug world,
+    whose citizens' goal fields derived on the step thread (290 to 400 ms per
+    derivation, from a sampled trace); they now derive over a route graph and
+    ahead of their read ([frame production](frame-production.md), step 10).
+10. **A re-drive reads the neighbour as it stands.** The tape carries when a
     neighbour delivered, never what it showed (`WorldEventFeed`'s remarks), so
     a re-drive of a tick in which a body met a neighbour's bodies or ground
     across a seam reads them as they are when it runs. The ship's own
     crossing no longer depends on them; two bodies meeting across a seam
     still do. The tape needs the contact band's content: the neighbour's
     bodies within reach of the seam, and its definition's identity.
-12. **A re-drive of the tick a seat boards on diverges** in the boot world's
+11. **A re-drive of the tick a seat boards on diverged** in the boot world's
     input: the routed input from the pilot to the ship records the
     population's revision, 2 live and 3 replayed
-    (`WorldTick.AppendRoutedInputHash`). Until it reproduces, the trip has no
-    committed scenario.
-13. **The climb is slow.** The ship's boost multiplies its speed over the
-    ground and not its climb, so the 5,900 m the route climbs take about a
-    hundred seconds each way. Whether the boost lifts too is the ship's kit to
-    author; how long the ascent should be is the owner's open question below.
+    (`WorldTick.AppendRoutedInputHash`). Boarding on the ground reproduces
+    (`moon-trip-tests.puck`, `puck test --reproduce`); the recorded divergence
+    boarded in the air near the seam in the debug world, which no committed
+    scenario yet reaches.
 
 ## The owner's rulings
 
@@ -261,6 +304,19 @@ Left open, in the order they matter to the trip:
   keeping with [one world, many perspectives](../decisions/play.md#the-game).
   The ship is a real engine body a seat possesses; its flight is an authored
   motion program in `worlds/standard/`, and the Moth's own free flight stays.
+- **The journey is continuous, planet to atmosphere to space to the moon, and
+  movement includes jetpack flight and a space mode** (the owner's direction,
+  naming No Man's Sky for the continuous journey and Anthem and Firefall for
+  jetpack movement, "but with our fancy tech"). The flight from the valley up
+  through the air, into space and down onto a moon has no load or cut at any
+  stage, the portal stays a second way in, and both are built on Puck's own
+  properties (federated worlds, the shared mesh store, the view clock, the
+  rider's mount). Jetpack flight (thrust, hover, boost) is an authored motion
+  program in `worlds/standard/`, as the dash is, and a space mode is a seat
+  program that changes the camera rig and motion model by altitude or medium,
+  never an engine-coded feature. The rock skip exists to show continuous
+  transport inside a moving frame, as a submarine carries its crew, and the
+  same mount relationship carries riders in ships and stations across a seam.
 - **Landing is open,** anywhere a body can stand, as it is now.
 - **Each moon is a federated world of its own**, beside the debug world rather
   than inside it: "it actually makes sense in Puck for a moon and the debug

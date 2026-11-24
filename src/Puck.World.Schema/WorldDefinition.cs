@@ -195,9 +195,16 @@ public sealed partial record WorldDefinition(
     /// <summary>How the world presents itself when it boots windowed; absent, it presents nothing.</summary>
     [JsonPropertyName("host"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public WorldHostDefaults? HostRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Host); return field; } init; } = HostRaw;
+    private readonly WorldViewDefaults? m_views = ViewsRaw;
     /// <summary>How the window is composed into views for the seats. A world with bodies must author it.</summary>
     [JsonPropertyName("views"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public WorldViewDefaults? ViewsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Views); return field; } init; } = ViewsRaw;
+    public WorldViewDefaults? ViewsRaw { get { WorldDocumentReads.Note(input: WorldDocumentInput.Views); return m_views; } init => m_views = value; }
+    internal int? ViewNestingInput {
+        get {
+            WorldDocumentReads.Note(WorldDocumentInput.ViewNesting);
+            return m_views?.NestingDepthRaw;
+        }
+    }
     private readonly WorldLooksSection? m_looks = LooksRaw;
     /// <summary>The appearances bodies wear, and the policy that deals them to bodies.</summary>
     [JsonPropertyName("looks"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

@@ -164,17 +164,45 @@ public sealed partial class NavigationRuntime {
     /// <exception cref="InvalidOperationException">The runtime is read-only (<see cref="EnterReadOnly"/>).</exception>
     public NavigationStatus FindRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, List<NavigationRouteNode> route, int maxExpanded, int maxNodes, out NavigationRouteWork work, NavigationCostProfile? profile = null) {
         ThrowIfReadOnly(operation: "a cross-domain route search");
-        var status = SearchRoute(fromCell: fromCell, fromDomain: fromDomain, goal: goal, maxExpanded: maxExpanded, maxNodes: maxNodes, profile: (profile ?? NavigationCostProfile.Neutral), route: route, work: out work);
+        ArgumentNullException.ThrowIfNull(argument: route);
+        var status = SearchRoute(cost: out _, fromCell: fromCell, fromDomain: fromDomain, goal: goal, maxCost: long.MaxValue, maxExpanded: maxExpanded, maxNodes: maxNodes, profile: (profile ?? NavigationCostProfile.Neutral), route: route, work: out work);
 
         m_work.Add(amount: 1, kind: NavigationSearchWork.Routes);
         m_work.Add(amount: work.Expanded, kind: NavigationSearchWork.RouteExpansions);
         return status;
     }
-    private NavigationStatus SearchRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, NavigationCostProfile profile, List<NavigationRouteNode> route, int maxExpanded, int maxNodes, out NavigationRouteWork work) {
+    /// <summary>Measures the cheapest route from a walkable cell to the nearest cell a goal accepts, as far as a cost:
+    /// the same search as <see cref="FindRoute"/>, which stops once every route it has left costs more than
+    /// <paramref name="maxCost"/>, so the work it does is bounded by the cells within that cost of the start and the
+    /// goal, wherever the goal lies.</summary>
+    /// <param name="fromDomain">The start cell's domain.</param>
+    /// <param name="fromCell">The start cell.</param>
+    /// <param name="goal">The cells the route may end at.</param>
+    /// <param name="maxCost">The most the route may cost, in millimetres of the search's cost: each step's length,
+    /// plus the clearance surcharge near walls, so a route's cost is never less than its length.</param>
+    /// <param name="cost">The route's cost, in the same millimetres, when this returns
+    /// <see cref="NavigationStatus.Active"/> or <see cref="NavigationStatus.Arrived"/>; otherwise zero.</param>
+    /// <param name="work">The nodes settled and the domain pairs joined.</param>
+    /// <returns><see cref="NavigationStatus.Active"/> when a route costs no more than <paramref name="maxCost"/>,
+    /// <see cref="NavigationStatus.Arrived"/> when the goal accepts the start, <see cref="NavigationStatus.SearchLimit"/>
+    /// when every route costs more, <see cref="NavigationStatus.Unreachable"/> when no route reaches the goal and
+    /// <see cref="NavigationStatus.OutsideDomain"/> when the start is not a walkable cell.</returns>
+    /// <exception cref="InvalidOperationException">The runtime is read-only (<see cref="EnterReadOnly"/>).</exception>
+    public NavigationStatus MeasureRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, long maxCost, out long cost, out NavigationRouteWork work) {
+        ThrowIfReadOnly(operation: "a cross-domain route search");
+        var status = SearchRoute(cost: out cost, fromCell: fromCell, fromDomain: fromDomain, goal: goal, maxCost: maxCost, maxExpanded: int.MaxValue, maxNodes: int.MaxValue, profile: NavigationCostProfile.Neutral, route: null, work: out work);
+
+        m_work.Add(amount: 1, kind: NavigationSearchWork.Routes);
+        m_work.Add(amount: work.Expanded, kind: NavigationSearchWork.RouteExpansions);
+        return status;
+    }
+    // The one A* over the network: a route is reconstructed into `route` when one is given, and the search answers
+    // SearchLimit once the cheapest open node's estimate passes `maxCost`, which no route found later could undercut.
+    private NavigationStatus SearchRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, NavigationCostProfile profile, List<NavigationRouteNode>? route, int maxExpanded, int maxNodes, long maxCost, out long cost, out NavigationRouteWork work) {
         ArgumentNullException.ThrowIfNull(argument: goal);
-        ArgumentNullException.ThrowIfNull(argument: route);
-        route.Clear();
+        route?.Clear();
         work = default;
+        cost = 0L;
         if ((((uint)fromDomain) >= ((uint)m_domains.Length)) || !m_domains[fromDomain].IsWalkable(node: fromCell)) {
             return NavigationStatus.OutsideDomain;
         }
@@ -186,7 +214,7 @@ public sealed partial class NavigationRuntime {
         var joins = 0;
         var expanded = 0;
         Span<int> next = stackalloc int[MaxRouteSteps];
-        Span<long> cost = stackalloc long[MaxRouteSteps];
+        Span<long> stepCost = stackalloc long[MaxRouteSteps];
         Span<byte> slots = stackalloc byte[MaxRouteSteps];
 
         workspace.Begin();
@@ -197,10 +225,18 @@ public sealed partial class NavigationRuntime {
             var domain = m_domains[domainIndex];
             var cell = (current - m_offsets[domainIndex]);
 
+            if ((workspace.Cost[current] + workspace.Heuristic[current]) > maxCost) {
+                work = new NavigationRouteWork(Expanded: expanded, Joins: joins);
+                return NavigationStatus.SearchLimit;
+            }
             workspace.ClosedStamp[current] = workspace.Stamp;
             expanded++;
             if (goal.Accepts(cell: cell, domain: domainIndex, foot: domain.Foot(node: cell))) {
                 work = new NavigationRouteWork(Expanded: expanded, Joins: joins);
+                cost = workspace.Cost[current];
+                if (route is null) {
+                    return ((current == start) ? NavigationStatus.Arrived : NavigationStatus.Active);
+                }
                 return ((current == start)
                     ? ReconstructRoute(goal: current, maxNodes: maxNodes, route: route, workspace: workspace) switch {
                         NavigationStatus.Active => NavigationStatus.Arrived,
@@ -213,10 +249,10 @@ public sealed partial class NavigationRuntime {
                 return NavigationStatus.SearchLimit;
             }
 
-            var count = domain.RouteSteps(cost: cost, next: next, node: cell, profile: profile, slot: slots);
+            var count = domain.RouteSteps(cost: stepCost, next: next, node: cell, profile: profile, slot: slots);
 
             for (var step = 0; (step < count); step++) {
-                RelaxRoute(bounds: in bounds, cost: checked((workspace.Cost[current] + cost[step])), node: (m_offsets[domainIndex] + next[step]), order: order, parent: current, profile: profile, workspace: workspace);
+                RelaxRoute(bounds: in bounds, cost: checked((workspace.Cost[current] + stepCost[step])), node: (m_offsets[domainIndex] + next[step]), order: order, parent: current, profile: profile, workspace: workspace);
             }
 
             var position = domain.Foot(node: cell);
@@ -241,14 +277,16 @@ public sealed partial class NavigationRuntime {
         return NavigationStatus.Unreachable;
     }
 
-    private int DomainOf(int node) {
-        var index = Array.BinarySearch(array: m_offsets, index: 0, length: m_domains.Length, value: node);
+    private int DomainOf(int node) => DomainOf(offsets: m_offsets, domains: m_domains.Length, node: node);
+    // The domain a runtime node lies in, by the first node of each of the first `domains` domains.
+    private static int DomainOf(int[] offsets, int domains, int node) {
+        var index = Array.BinarySearch(array: offsets, index: 0, length: domains, value: node);
 
         if (index < 0) {
             index = (~index - 1);
         }
         // Equal offsets name empty domains before a non-empty one; the node belongs to the last of them.
-        while (((index + 1) < m_domains.Length) && (m_offsets[(index + 1)] <= node)) {
+        while (((index + 1) < domains) && (offsets[(index + 1)] <= node)) {
             index++;
         }
 

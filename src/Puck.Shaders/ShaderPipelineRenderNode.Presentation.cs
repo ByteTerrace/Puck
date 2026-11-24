@@ -1,5 +1,3 @@
-using Puck.Abstractions.Presentation;
-
 namespace Puck.Shaders;
 
 // Presenting the selected output again without rendering a frame: a paused node whose output selection moved.
@@ -43,21 +41,14 @@ public sealed partial class ShaderPipelineRenderNode {
             commands: commands,
             slot: slot
         );
-        if (previewed) { m_preview!.Submitted(slot: slot); }
         m_frameLeases.MoveTo(destination: m_slots[slot].Leases);
-        var (_, publishedName, _) = PublicationOf(selected: PresentationResource(selected: selected), slot: slot);
-        Publish(surface: Output(slot: slot));
+        // A paused selection has no cadence frame to settle. Publish it after its submission reaches the queue.
+        m_slots[slot].Fence!.HandOff();
+        if (previewed) { m_preview!.Submitted(slot: slot); }
+        var publishedName = PublishSelectedOutput(selected: selected, slot: slot);
         if (selected.Spec.IsExternal && m_externalImages.TryGetValue(key: publishedName, value: out var bound)) {
             m_publishedLabel = (m_publishedLabel.IsClassified ? m_publishedLabel.Union(other: bound.Image.Label) : bound.Image.Label);
         }
         m_outputRefreshRequested = false;
-    }
-    private RuntimeResource PresentationResource(RuntimeResource selected) {
-        var selectedFormat = ParseFormat(format: selected.Spec.Format);
-
-        if (Surface.IsImageFormat(format: selectedFormat)) {
-            return selected;
-        }
-        throw new InvalidDataException(message: $"Selected output '{selected.Spec.Name}' is {selectedFormat}, which no surface carries.");
     }
 }

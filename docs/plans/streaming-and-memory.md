@@ -3195,37 +3195,54 @@ in order:
 - placing floors in the arena before detail, so pressure refuses detail first;
 - eviction by the selector's priority under a lowered budget, with the rungs
   of what gives way counted;
-- a residency's tables built on demand and given back, which now retire
-  through the device's one retirement without draining the device
-  (`GpuDeviceRetirement`). The fixed storage a routed residency holds whatever
-  its glass shows (its irradiance tables and hit cache, its shadows'
-  selections, its program tables) is the largest class left over the device
-  bar, and nothing gives it back while the world stays attached. The door is
-  the one a device loss already uses: a residency that keeps its bake,
-  lighting and meshes and rebuilds its tables at its next preparation
-  (`SdfWorldResidency.OnDeviceLost`). What is to build is its use on a live
-  device: the tables retired behind their readers, the views that bind them
-  rebound, the trigger (rung 4: pressure, and no view observing for a stated
-  time) and the lead that wakes the world before its glass is seen
-  ([step 4](#step-4-staged-by-demand));
-- the irradiance volume holding only the levels its frame measures
-  (`SdfFrame.IndirectLevels`): every level keeps its slots today, so a world
-  behind a small glass measures one level and stores them all;
-- the fixed storage of every residency, which is now the largest holder by
-  far: with a world resident once, a walk into the gallery with four
-  residencies held the mesh region at under two gigabytes and the fixed class
-  at about five, most of it the lighting's stores and the shadows, once per
-  residency **[reading]**. The item above (a residency's tables given back)
-  is what moves it;
+- the lead that wakes a parked world before its glass is seen
+  ([step 4](#step-4-staged-by-demand)). A residency no reader has asked for
+  gives its tables back on a live device through the door a device loss uses
+  (`SdfWorldResidency.Park`, decided once a frame by
+  `SdfWorldPasses.ParkUnobserved`: after `SdfWorldResidency.PressedParkAfter`
+  while the device's pool stands past its limit, `SdfResidencySelector.Excess`,
+  and after `SdfWorldResidency.IdleParkSeconds` otherwise), and a reader wakes
+  it, its views keeping their last images while its lighting republishes
+  (`SdfWorldResidency.Waking`). A reader is any view the frame could render or
+  reads as a screen, so a world whose glass the main view samples is never
+  parked, and a wake rebuilds within the frame that reads it; a lead would
+  build the tables and lighting before that frame;
+- the fixed storage of the residencies a frame reads: a second scene of the
+  world the presentation draws (a session's) now shares the presentation's
+  trace geometries and bottom structures
+  ([step 9](#step-9-lighting-on-the-same-demand)), but still uploads its own
+  scene words and keeps its own volume, feedback and hit cache;
+- probe-cache blocks kept alive by a few probes: a batch's `ProbeBlock` and
+  `LightBlock` stand while any kept probe names them, so a cache relit many
+  times holds far more than its probes' payload (the boot world's cache read
+  188 MB during a cold bake against 78 MB for 31,004 probes warm); copying a
+  block's survivors out once few remain is what bounds it;
 - the first judging of a floor, which still takes a core about ten seconds a
   pair (`SdfMeshTraceJudge.Admits`); the verdict is kept afterwards
   (`SdfMeshLibrary.TraceVerdict`, an entry beside the meshes in the store);
-- draw rows shed when the device refuses a region's draw records. Today that
-  refusal is raised as a lost device (`SdfWorldTables`' mesh region), which
-  rebuilds the presentation under the limit the refusal left and does not end
-  the World; the proper answer stages the rows that fit and owes the rest,
-  decided before the arena's transaction opens;
+- draw rows shed by priority when the device refuses a region's draw records:
+  a refused growth stages the rows the standing region fits and owes the rest
+  to the next staging (`SdfWorldTables`' draw region, `draws-shed` on the
+  landing line), but the rows it sheds are the tail of the list, not the
+  farthest;
 - relocation by a copy within the device.
+
+The irradiance volume stores the levels its frame measures alone
+(`SdfFrame.IndirectLevels`): a world behind a glass that reads its far level
+holds a quarter of the medium tier's slots, in its volume, its device tables and
+its hit cache. A residency parked for `SdfWorldResidency.ForgetLightingSeconds`
+gives its measured volume back too (its probe cache, volume words and trace
+scene, all host memory), and a wake after that lights the world from nothing.
+A bake group's admission promises only what its sampled lattice holds; its
+refinement waits in one queue for every bake in the process, holding its
+lattice and no worker, and takes its whole bound
+(`SdfSampledLattice.FineSampleBound`) only as the queue's door starts it
+(`SdfMeshPathBake.Refinement`), narrowing to the fine samples it measured
+once it has them. Admissions stop while the queue holds as many lattices as
+the pool has workers, and no bake worker waits on the account
+(`MemoryAccount.NeverWaitOnThisThread`): a store read it has no room for is
+read again later. A bake's readback is promised as its lattices are taken,
+not whole.
 
 The readings above are owed to a GPU leg, and they decide most on the RTX
 2060 machine, where the region refuses detail even warm.
@@ -3287,6 +3304,12 @@ on the one background budget by the glass's share of the display's pixels
 (`SdfGpuWorkBudget.Takes`); a seen volume's first light is owed work under
 the owed allowance (`SdfMeshIrradiance.OwesFirstLight`), though its debt is not
 yet counted apart from an arrival's geometry: both are the budget's `owed-jobs`.
+The scenes of one world share their geometry: a scene build takes the trace
+geometry another scene built over the same mesh buffers
+(`SdfMeshIrradianceScene.Geometry`'s shared table), and the probe clients of a
+device claim bottom-level structures from one table by that geometry
+(`SdfMeshTraceBottoms`), each keeping only its own top level; a device scene
+store for the uploaded scene words is the rest of one trace scene per world.
 The trace scene holds each static group's floor where `SdfMeshTraceJudge`
 admits it ([decision 9](#decision-9-lighting-reads-the-same-demand-and-pays-on-demand)),
 a scene built while a batch runs is installed when that batch ends, a probe's

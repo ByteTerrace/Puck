@@ -92,6 +92,9 @@ public static class WorldRenderRoot {
         // camera it films from.
         host.Screens = binder.Mappings;
         host.ViewScenes = binder;
+        // A glass out of sight warms its world by the walk from the viewer's seat, over the navigation of the seat's
+        // delivered world.
+        host.PortalReach = new WorldPortalReach(senses: sp.GetService<WorldSeatSenses>());
 
         var synthesized = ((definition.Views.Root is null)
             ? graph

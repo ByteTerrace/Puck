@@ -11,6 +11,9 @@ public interface IWorldKeyTrack {
     /// <summary>Gets the number of keys.</summary>
     int Count { get; }
 
+    /// <summary>Gets the track that joins this one on its own clock, or <see langword="null"/>.</summary>
+    IWorldKeyTrack? With { get; }
+
     /// <summary>Returns where a key sits on the clock.</summary>
     /// <param name="index">The key's index.</param>
     /// <returns>The key's time, in the clock's span units.</returns>
@@ -156,11 +159,17 @@ public static class WorldKeyedValues {
                 return true;
             }
             if (KeysOf(value: value) is { } track) {
-                Found.Add(item: new WorldKeyedValue(
-                    Path: site.Path,
-                    Track: track,
-                    Value: value
-                ));
+                var path = site.Path;
+
+                // A track's second track reads a clock of its own, judged and projected as every keyed value is.
+                for (var link = track; (link is not null); link = link.With) {
+                    Found.Add(item: new WorldKeyedValue(
+                        Path: path,
+                        Track: link,
+                        Value: value
+                    ));
+                    path = $"{path}.with";
+                }
             } else if (BindingOf(value: value) is { } binding) {
                 var scalar = (value switch {
                     BindableScalar bindable => bindable,

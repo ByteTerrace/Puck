@@ -224,10 +224,13 @@ public sealed partial class WorldPopulation {
                 m_serialKitBodies.Add(item: index);
                 continue;
             }
-            if (
-                !TryPlanAutonomy(contactFieldVersion: contactFieldVersion, entry: entry, index: index, player: player, step: out var step, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks) ||
-                (!step.SteeringDue && !step.Moves)
-            ) {
+            if (!TryPlanAutonomy(contactFieldVersion: contactFieldVersion, entry: entry, index: index, player: player, step: out var step, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks)) {
+                continue;
+            }
+            if (!step.SteeringDue && (entry.ProducerState.StandDown == BodyProducerStandDown.None) && (entry.ProducerLookup is { } ahead) && (player.Source.ProducerName is not null)) {
+                PrefetchGoalField(entry: entry, producer: ahead, self: player.FixedPosition);
+            }
+            if (!step.SteeringDue && !step.Moves) {
                 continue;
             }
             if (step.SteeringDue && (entry.ProducerState.StandDown == BodyProducerStandDown.None) && (entry.ProducerLookup is { } producer) && (player.Source.ProducerName is not null)) {
@@ -256,6 +259,7 @@ public sealed partial class WorldPopulation {
             m_kitSteers += (step.SteeringDue ? 1 : 0);
             m_kitMoves += (step.Moves ? 1 : 0);
         }
+        ResolveGoalFields();
         if (perceives) { m_perception?.BuildDeclared(); }
     }
 

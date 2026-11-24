@@ -217,13 +217,23 @@ public sealed partial class SdfMeshRegionStore {
     // The region changed size. The device bytes it gave up (a replaced buffer, or a mapped region's chunks past its new
     // size) wait behind every submission that may read them and leave the grant's reservation when they are released.
     // A replaced buffer is carried by the next recorded copy and every residency binds the new one (RefreshPages); a
-    // mapped region keeps its buffer, its bindings and its words.
+    // mapped region keeps its buffer, its bindings and its words. Invariant: a replaced buffer is released only after
+    // every submission recorded with a set that names it, enforced here, the one place a replacement is held: it stays
+    // pending while a residency's sets may still name it (SdfWorldTables.NamesReplacedStoreBuffer), and the checkpoint
+    // its release waits on is queued only once none does, behind everything those sets were recorded into.
     private void Replaced(IDisposable replaced, ulong newBytes) {
         var released = ((replaced is GpuMappedRelease release) ? ((long)release.Bytes) : (m_region.Mapped ? 0L : m_grant.Capacity));
 
-        m_retired.Hold(item: new ReplacedRegion(bytes: released, grant: m_grant, replaced: replaced), pendingUse: () => (m_region.OwesCarry || (m_unsubmitted > 0)));
+        m_retired.Hold(item: new ReplacedRegion(bytes: released, grant: m_grant, replaced: replaced), pendingUse: () => (m_region.OwesCarry || (m_unsubmitted > 0) || ClientsNameReplacedBuffer()));
         m_grant.Grown(newBytes: ((long)m_region.DestinationBytes), oldBytes: released);
         Volatile.Write(location: ref m_bytes, value: ((long)newBytes));
+    }
+    // Whether an attached residency's sets may still name a buffer the region replaced. Under the gate.
+    private bool ClientsNameReplacedBuffer() {
+        foreach (var client in m_clients) {
+            if (client.NamesReplacedStoreBuffer) { return true; }
+        }
+        return false;
     }
     // The growth is reserved before the plan that asks for it (PrepareLimit), so the ledger admits the new backing
     // against the grant. A growth refused all the same (the pool had no room for it, or the device said no) leaves the

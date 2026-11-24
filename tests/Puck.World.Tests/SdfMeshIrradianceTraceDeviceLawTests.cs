@@ -273,6 +273,8 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         recorder.BindPipeline(commandBufferHandle: command, bindPoint: GpuBindPoint.Compute, pipelineHandle: pipeline.Handle);
         recorder.BindDescriptorSet(commandBufferHandle: command, bindPoint: GpuBindPoint.Compute, descriptorSetHandle: set,
             group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: pipeline.LayoutHandle);
+        // ExportGpu lays its root words at word zero: the root word base the kernel is pushed.
+        recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, data: stackalloc byte[sizeof(uint)], offset: 0, pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
         recorder.Dispatch(command, (uint)(origins.Length * SdfMeshProbeRelight.Slices), 1, 1);
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: resultBuffer.BufferHandle,
             sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
@@ -357,6 +359,7 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
                 destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
             recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, pipelineHandle: pipeline.Handle);
             recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set, group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: pipeline.LayoutHandle);
+            recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, data: stackalloc byte[sizeof(uint)], offset: 0, pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
             recorder.Dispatch(commandBufferHandle: command, groupCountX: (uint)((origins.Length * SdfMeshProbeDepth.HitCount + SdfMeshProbeTrace.GroupSize - 1) / SdfMeshProbeTrace.GroupSize), groupCountY: 1, groupCountZ: 1);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: output.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,

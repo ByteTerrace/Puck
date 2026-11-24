@@ -117,8 +117,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public Action? PrepareFootprints { get; set; }
 
-        public void BeginFrame(in FrameContext context) {
-            m_inner.BeginFrame(context: in context);
+        public void BeginFrame(in FrameContext context, Puck.Hosting.Jobs.JobPool? jobs) {
+            m_inner.BeginFrame(context: in context, jobs: jobs);
             PrepareFootprints?.Invoke();
         }
         public void PrepareRead(string instance, in FrameContext context) => m_inner.PrepareRead(context: in context, instance: instance);

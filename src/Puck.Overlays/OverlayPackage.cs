@@ -37,6 +37,9 @@ namespace Puck.Overlays;
 /// <param name="fragmentBytecode">The unified overlay fragment shader, in the host backend's bytecode format.</param>
 /// <param name="theme">The theme a recorder starts from; <see cref="UpdateTheme"/> moves it.</param>
 public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacity capacity, OverlayGlyphSdfPack glyphs, IOverlayFrameSources frameSources, ReadOnlyMemory<byte> vertexBytecode, ReadOnlyMemory<byte> fragmentBytecode, OverlayThemeValues theme = default) : IRenderGraphPackageFactory {
+    /// <inheritdoc/>
+    public bool SamplesReads => true;
+
     private readonly OverlayChannelLeases m_leases = new(capacity: capacity);
     private OverlayThemeValues m_theme = theme;
 
@@ -302,7 +305,7 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                 );
             }
 
-            var visible = m_composer.Compose(renderTicks: recording.Context.PresentedTicks);
+            var visible = m_composer.Compose(renderTicks: recording.Context.PresentedTicks, samples: recording.Samples);
 
             // With nothing visible the world stands for the overlay's output when the instance lets it; otherwise the
             // empty frame is drawn, which reproduces the world into the output.

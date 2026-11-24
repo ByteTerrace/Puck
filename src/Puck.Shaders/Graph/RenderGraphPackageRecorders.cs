@@ -6,6 +6,29 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
+/// <summary>Named images sampled at a recording's latch and held until its submission retires.</summary>
+public readonly struct RenderGraphFrameSamples {
+    private readonly RenderGraphExternalReads? m_reads;
+    private readonly DeliveryLatch m_latch;
+    private readonly LeaseRetireList m_leases;
+
+    internal RenderGraphFrameSamples(RenderGraphExternalReads? reads, in DeliveryLatch latch, LeaseRetireList leases) {
+        m_reads = reads;
+        m_latch = latch;
+        m_leases = leases;
+    }
+
+    /// <summary>Acquires a declared image for the current submission.</summary>
+    /// <param name="producer">The producer instance.</param>
+    /// <param name="view">The sampled view, or zero when unavailable.</param>
+    /// <returns>Whether the producer has an image at this latch.</returns>
+    public bool TrySample(string producer, out nint view) {
+        view = 0;
+        return (m_reads?.IndexOf(producer) is >= 0 and var index) &&
+            m_reads.TrySample(index, in m_latch, m_leases, out view);
+    }
+}
+
 /// <summary>One version a package pass reads or writes, resolved for the frame it records: the image or the buffer
 /// that holds it in the frame slot being recorded.</summary>
 /// <param name="Version">The version name the pass binds to the port.</param>
@@ -107,6 +130,8 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public DeliveryLatch Latch => Context.Latch;
     /// <summary>Gets whether the recording may draw nothing and leave each output standing for its input.</summary>
     public bool MayStandIn { get; } = MayStandIn;
+    /// <summary>Gets the named reads a compositor can sample through this recording.</summary>
+    public RenderGraphFrameSamples Samples => new(Reads, Latch, Leases);
     /// <summary>Gets the buffer holding an indirect dispatch's group counts, or <see langword="null"/>.</summary>
     public IGpuBuffer? Arguments { get; } = Arguments;
     /// <summary>Gets the images of the instances the pass's instance reads that its graph binds to no version, or
@@ -394,7 +419,9 @@ public interface IRenderGraphPackageFactory {
     /// <summary>Starts a produced frame. The runtime calls it on the frame thread once a frame, before it asks any package
     /// whether an instance is unchanged and before any instance renders.</summary>
     /// <param name="context">The host's frame context of the frame being produced.</param>
-    void BeginFrame(in FrameContext context) { }
+    /// <param name="jobs">The pool the frame's forks run on, or <see langword="null"/> for a host with none, whose
+    /// factories do the work on the frame thread.</param>
+    void BeginFrame(in FrameContext context, Puck.Hosting.Jobs.JobPool? jobs) { }
     /// <summary>Prepares what an instance one of whose passes runs the factory's package reads this frame (an SDF view's
     /// captured frame, which <see cref="ReadsPrepared"/> packs), before the runtime asks whether the instance is
     /// unchanged and before the frame is scheduled. The runtime calls it on the frame thread once a frame for each instance something reads this frame (a

@@ -11,9 +11,9 @@ are in [the addons reference](../../.claude/skills/puck-world/references/addons.
 |---|---|---|---|
 | Watchdog | [watchdog.puck](watchdog.puck) | [addons/watchdog.wat](addons/watchdog.wat) | Checks invariants every tick and records each violation with its tick |
 | Gallery guide | [guide.puck](guide.puck) | [addons/guide.wat](addons/guide.wat) | Names the exhibit the Moth stands at on a HUD panel |
-| Companion | [companion.puck](companion.puck) | [addons/companion.wat](addons/companion.wat) | A stand-in body, body 42, that follows the Moth |
-| Fuzzer | [fuzzer.puck](fuzzer.puck) | [addons/fuzzer.wat](addons/fuzzer.wat) | Seeded bounded driving of body 44; off by default |
-| Traversal bot | [traversal.puck](traversal.puck) | [addons/traversal.wat](addons/traversal.wat) | Runs body 43 through authored waypoints and marks misses/falls; off by default |
+| Companion | [companion.puck](companion.puck) | [addons/companion.wat](addons/companion.wat) | A stand-in body, body 52, that follows the Moth |
+| Fuzzer | [fuzzer.puck](fuzzer.puck) | [addons/fuzzer.wat](addons/fuzzer.wat) | Seeded bounded driving of body 54; off by default |
+| Traversal bot | [traversal.puck](traversal.puck) | [addons/traversal.wat](addons/traversal.wat) | Runs body 53 through authored waypoints and marks misses/falls; off by default |
 | Machine debugger | [machine-debugger.puck](machine-debugger.puck) | [addons/machine-debugger.wat](addons/machine-debugger.wat) | Generic input, probes and machine health checks; off by default |
 | Kinematics scope | [kinematics-scope.puck](kinematics-scope.puck) | [addons/kinematics-scope.wat](addons/kinematics-scope.wat) | Samples a selected body into a 128-tick history; off by default |
 
@@ -248,7 +248,7 @@ world's existing irradiance and exposure. Four connected sweeps share one motion
 owner, so banking keeps every attachment intact. The separate neutral `standIn`
 creation still draws the fuzzer and traversal walkers.
 
-Body 42 starts at (-1.2, 1.52, 1). The `companion-flight` kit uses the engine's
+Body 52 starts at (-1.2, 1.52, 1). The `companion-flight` kit uses the engine's
 existing colliding free-flight Lift hold and the ordinary forward, strafe and
 rise channels. The guest reads its pose and the Moth's once per tick and follows
 her half-metre breadcrumbs at about shoulder height. It preserves the approach
@@ -279,7 +279,7 @@ flits clear with a seeded lateral choice, pauses startled, then comes back.
 A future tracked hand supplies this same authoritative input; camera pixels or
 wall-clock probe values never enter the guest's decisions directly.
 
-The guest retains Drive only over body 42 and Observe over the two poses. One
+The guest retains Drive only over body 52 and Observe over the two poses. One
 additional Observe grant discloses the sensory row (21 reads/tick, budget 24).
 It has no Edit, Mutate, pose or teleport grant. All choices and movement are
 integer simulation work; replay reconstructs its seeded guest memory under the

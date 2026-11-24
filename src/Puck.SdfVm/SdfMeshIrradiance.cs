@@ -608,7 +608,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private int m_localVersion;
     private long m_lightingCheckedAt;
     private int m_lightingVersion;
-    private SdfProgram? m_materialsProgram;
+    private SdfAppearance? m_materialsAppearance;
     private SdfMeshIrradianceScene? m_materialsScene;
     private ulong m_materialsKey;
 
@@ -830,25 +830,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 if ((m_worker is { IsCompleted: false }) || (m_gpuCameraSampleTask is { IsCompleted: false })) { return default; }
                 m_gpuTrace = m_nextGpuTrace;
                 m_gpuReattach = false;
-                foreach (var owner in m_hitOwners.Values.OrderByDescending(keySelector: owner => owner.Slot)) { m_hitSlots.Free(start: owner.Slot); }
-                m_hitOwners.Clear();
-                m_gpuVolume = null;
-                m_gpuDirty.Clear();
-                m_listed = false;
-                m_drained = default;
                 // The old device's camera sample is complete; a fault it left belonged to that device.
                 m_gpuCameraSampleTask = null;
                 m_gpuCameraSample = null;
                 m_gpuCameraSampleAskedOf = null;
-                m_changedSlots.Clear();
-                foreach (var level in m_levels) { level.Published = default; level.Changed.Clear(); }
-                m_published = default;
-                // The new tables hold no table and the new service no feedback. The volume's words still hold every
-                // measured slot, so the first relight's full snapshot carries them into the feedback, and then every
-                // slot republishes at once (RepublishAll) rather than a level publishing slots it never copied.
-                m_republishOwed = true;
-                Owe();
-                m_traceOwed = true;
+                // The new tables hold no table and the new service no feedback.
+                ForgetPublication();
             }
         }
 
@@ -873,9 +860,20 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_wrote = false;
             m_geometryWrote = false;
             var resizing = (!m_windowValid || (layout.Levels != m_layout.Levels));
-            if (resizing && !TryReplaceVolume(layout.TotalCount * SdfMeshIrradianceProbe.ProbeWords)) {
+            // Another finest level lays the volume out again, since only the measured levels hold slots. The levels both
+            // layouts measure keep their caches, which the refill writes into their new slots. A trace or a camera
+            // sample in flight reads the slots of the layout it was listed under, so the frame keeps that layout until
+            // they land.
+            var relaid = (!resizing && (layout.Finest != m_layout.Finest));
+
+            if (relaid && ((m_worker is { IsCompleted: false }) || (m_gpuCameraSampleTask is { IsCompleted: false }))) {
+                layout = (layout with { Finest = m_layout.Finest });
+                relaid = false;
+            }
+            if ((resizing || relaid) && !TryReplaceVolume(layout.TotalCount * SdfMeshIrradianceProbe.ProbeWords)) {
                 return Converging(stage: converging ? SdfMeshConvergenceStage.Refill : SdfMeshConvergenceStage.None);
             }
+            if (relaid) { ForgetPublication(); }
             if (ScenePendingDue(frame: frame)) { _ = RefreshScene(bakePending: bakePending, frame: frame); }
             RefreshLighting(frame: frame, layout: layout);
             Grant(budget: frame.IndirectBudget);
@@ -975,6 +973,25 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
 
     // Under the volume gate. Keep the published table until its complete replacement fits.
+    // Under the gate: forgets what the device holds of the volume (its hit slots, its snapshot, the published levels),
+    // for a probe service whose feedback no longer holds the volume's words in their slots: a new service (new tables),
+    // or a volume laid out again. The volume's words still hold every measured slot, so with a probe service the first
+    // relight's full snapshot carries them into the feedback, and then every slot republishes at once (RepublishAll)
+    // rather than a level publishing slots it never copied; without one, the refill owes every slot to the next write.
+    private void ForgetPublication() {
+        foreach (var owner in m_hitOwners.Values.OrderByDescending(keySelector: owner => owner.Slot)) { m_hitSlots.Free(start: owner.Slot); }
+        m_hitOwners.Clear();
+        m_gpuVolume = null;
+        m_gpuDirty.Clear();
+        m_listed = false;
+        m_drained = default;
+        m_changedSlots.Clear();
+        foreach (var level in m_levels) { level.Published = default; level.Changed.Clear(); }
+        m_published = default;
+        m_republishOwed = (m_gpuTrace is not null);
+        Owe();
+        m_traceOwed = true;
+    }
     private bool TryReplaceVolume(int words) {
         var old = m_volume;
         try { m_volume = m_volumeOwner.AllocateArray<uint>(words); }
@@ -1295,7 +1312,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // it yet places the coarser levels' slots after its own.
     private SdfMeshIrradianceWindow PublishedOf(Layout layout, int level) => (m_levels[level].Published.Present
         ? m_levels[level].Published
-        : new SdfMeshIrradianceWindow(Dims: layout.DimsOf(level: level), Low: default, Spacing: Vector3.Zero));
+        : new SdfMeshIrradianceWindow(Dims: layout.StoredDimsOf(level: level), Low: default, Spacing: Vector3.Zero));
     // The first cell of a level's window. It centres on the box of the cells of every view's camera this residency
     // renders, the first view's taken at its anchor ahead of it (WindowAnchor), and on the first view's anchor alone when
     // that box and the first camera do not fit in the window's middle together, so each level follows every view as far
@@ -2001,7 +2018,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // meshes) leaves the static draws as they were, so only this key relights it; a body's palette coming or going, which
     // no probe ray meets, leaves it alone.
     private ulong MaterialsKey(SdfProgram program) {
-        if (ReferenceEquals(objA: program, objB: m_materialsProgram) && ReferenceEquals(objA: m_scene, objB: m_materialsScene)) { return m_materialsKey; }
+        if (ReferenceEquals(objA: program.Appearance, objB: m_materialsAppearance) && ReferenceEquals(objA: m_scene, objB: m_materialsScene)) { return m_materialsKey; }
 
         var hash = Fnv1aHash.Create();
         var materials = program.Appearance.Materials;
@@ -2025,7 +2042,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             hash.Add(value: (material.EmissiveLane.HasValue ? 1U : 0U));
             hash.Add(value: unchecked((uint)material.EmissiveLane.GetValueOrDefault()));
         }
-        m_materialsProgram = program;
+        m_materialsAppearance = program.Appearance;
         m_materialsScene = m_scene;
         m_materialsKey = hash.Value;
 
@@ -3837,11 +3854,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // A static point or spot light the probes trace: its index in the lights table, and its record's position, colour,
     // intensity over pi, range, cone and bounce gain.
     private readonly record struct TracedLight(int Index, Vector3 Position, Vector3 Color, float Weight, float Range, Vector3 SpotAxis, float SpotOffset, float Bounce);
-    // A tier's volume: its levels (LevelsOf), each level's slots after the finer levels' in the volume, whether hits
-    // reflect the bounce the volume holds about them (any bounce the frame asks for), the reach of its rays (the
-    // frame's far distance), and the finest level it measures (SdfFrame.IndirectLevels). A finer level keeps its slots,
-    // so every level's offset stands whatever the frame reads, but is never listed, refilled or published, and the
-    // relight reads it as unpublished (zero spacing).
+    // A tier's volume: its levels (LevelsOf), each measured level's slots after the finer measured levels' in the volume,
+    // whether hits reflect the bounce the volume holds about them (any bounce the frame asks for), the reach of its rays
+    // (the frame's far distance), and the finest level it measures (SdfFrame.IndirectLevels). A finer level holds no
+    // slot: the volume, its device tables and its hit cache hold the measured levels alone, so a world behind a small
+    // glass that reads its coarse levels stores those. Such a level is never listed, refilled or published, and the
+    // views and the relight read it as unpublished, with no dims (StoredDimsOf) and zero spacing, so the kernels' level
+    // base (sdfMeshIrradianceBase) and OffsetOf agree.
     private readonly record struct Layout(SdfMeshIrradianceLevel[] Levels, bool Bounce, float Reach, int Finest) {
         public Vector3 Spacing => Levels[0].Spacing;
         public (int X, int Y, int Z) Dims => Levels[0].Dims;
@@ -3849,8 +3868,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // Whether the volume measures a level: one the frame's views read.
         public bool Measures(int level) => (level >= Finest);
         public Vector3 SpacingOf(int level) => Levels[level].Spacing;
+        // A level's window size, measured or not: where its window would stand.
         public (int X, int Y, int Z) DimsOf(int level) => Levels[level].Dims;
-        public int CountOf(int level) => Levels[level].Count;
+        // A level's window size as the volume stores and publishes it: none for a level it does not measure.
+        public (int X, int Y, int Z) StoredDimsOf(int level) => (Measures(level: level) ? Levels[level].Dims : default);
+        // The slots a level holds in the volume: none for a level it does not measure.
+        public int CountOf(int level) => (Measures(level: level) ? Levels[level].Count : 0);
         public int OffsetOf(int level) {
             var offset = 0;
 
@@ -3911,7 +3934,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public required int[] LightIndices { get; init; }
         public required SdfMaterial[] Materials { get; init; }
         public required TracedLight[] Points { get; init; }
-        public required SdfProgram Program { get; init; }
+        // The appearance the materials were copied from, which a later capture of the same appearance reuses. Never the
+        // program: a capture outlives it in pending reads (a camera sample's), and would keep its words alive.
+        public required SdfAppearance Appearance { get; init; }
         public bool Sky { get; init; }
         // The sky's radiance about each hit texel's ray, gain applied (SdfMeshProbeDepth.SkyRadiance) and snapped on the
         // authored grid, zero with the sky source off: what a probe's open ray carries, and the only sky a relight or a
@@ -4014,8 +4039,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 Gains = frame.IndirectGains,
                 Inputs = inputs,
                 LightIndices = [.. indices],
-                Program = frame.Program,
-                Materials = (ReferenceEquals(objA: previous?.Program, objB: frame.Program) ? previous!.Materials : [.. frame.Program.Appearance.Materials]),
+                Appearance = frame.Program.Appearance,
+                Materials = (ReferenceEquals(objA: previous?.Appearance, objB: frame.Program.Appearance) ? previous!.Materials : [.. frame.Program.Appearance.Materials]),
                 Points = [.. points],
                 Sky = ((sources & SdfIndirectSources.Sky) != 0),
             };

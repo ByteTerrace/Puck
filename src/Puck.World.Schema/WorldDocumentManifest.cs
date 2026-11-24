@@ -45,14 +45,16 @@ public static class WorldDocumentManifest {
     /// <param name="definition">The document as its recipient is disclosed it.</param>
     /// <param name="source">The document the sender loaded, whose members a recipient that installed the sender's
     /// package holds; <see langword="null"/> carries every member inline.</param>
+    /// <param name="previous">The preceding document this stream sent, or null at attach and across a cut.</param>
     /// <returns>The manifest's bytes.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static byte[] Encode(WorldDefinition definition, WorldDefinition? source) {
+    public static byte[] Encode(WorldDefinition definition, WorldDefinition? source, WorldDefinition? previous = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        var members = WorldDefinitionMembers.Of(definition: definition);
+        var members = WorldDefinitionMembers.Of(definition, previous ?? source, out _);
         var stable = ((source is null) ? null : WorldDefinitionMembers.Of(definition: source));
-        var buffer = new ArrayBufferWriter<byte>(initialCapacity: 16384);
+        var delivered = previous is null ? null : WorldDefinitionMembers.Of(previous);
+        var buffer = new ArrayBufferWriter<byte>(initialCapacity: 4096);
         var inlineBytes = 0L;
 
         using (var writer = new Utf8JsonWriter(bufferWriter: buffer, options: new JsonWriterOptions { SkipValidation = true })) {
@@ -63,12 +65,7 @@ public static class WorldDocumentManifest {
                 writer.WriteStartObject();
                 writer.WriteString(propertyName: NameProperty, value: member.Name);
                 writer.WriteString(propertyName: DigestProperty, value: member.Digest);
-                if (
-                    (member.Value.Length <= InlineBytes) ||
-                    (stable is null) ||
-                    !stable.TryGet(member: out var held, name: member.Name) ||
-                    !string.Equals(a: held.Digest, b: member.Digest, comparisonType: StringComparison.Ordinal)
-                ) {
+                if (!Holds(delivered, member) && ((member.Value.Length <= InlineBytes) || !Holds(stable, member))) {
                     writer.WritePropertyName(propertyName: ValueProperty);
                     writer.WriteRawValue(skipInputValidation: true, utf8Json: member.Value.Span);
                     inlineBytes += member.Value.Length;
@@ -83,6 +80,10 @@ public static class WorldDocumentManifest {
         WorldProjectionWork.Count(amount: inlineBytes, kind: WorldProjectionWork.ManifestInlineBytes);
 
         return buffer.WrittenSpan.ToArray();
+
+        static bool Holds(WorldDefinitionMembers? basis, in WorldDefinitionMembers.Member member) =>
+            (basis is not null) && basis.TryGet(member.Name, out var held) &&
+            string.Equals(held.Digest, member.Digest, StringComparison.Ordinal);
     }
 
     /// <summary>Returns the function a recipient resolves a member's digest with: its own content store first, then

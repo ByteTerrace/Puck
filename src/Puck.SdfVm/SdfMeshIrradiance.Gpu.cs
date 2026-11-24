@@ -59,6 +59,13 @@ public sealed partial class SdfMeshIrradiance {
     // Set by a device reattach; cleared once a completed job carried the volume's full snapshot into the new feedback.
     private bool m_republishOwed;
 
+    /// <summary>Gets whether the volume was handed a new probe service (new tables: a device loss's or a park's wake) and
+    /// has not yet carried its measured words into the new service's feedback, from which its next publication copies
+    /// every measured slot.</summary>
+    public bool Republishing {
+        get { lock (m_gate) { return (m_gpuReattach || m_republishOwed); } }
+    }
+
     // Under the gate, once the feedback holds the volume's words: owes every slot to the next publication, so each
     // measured level republishes whole into the new tables.
     private void RepublishAll() {
@@ -237,7 +244,7 @@ public sealed partial class SdfMeshIrradiance {
         rows[2] = new(lighting.Gains.Lights, lighting.Gains.Emission, lighting.Gains.Feedback, lighting.Gains.Sky);
         for (var level = 0; level < SdfMeshIrradianceProbe.Levels; level++) {
             var low = snapshot.Lows[level];
-            var dims = snapshot.Layout.DimsOf(level);
+            var dims = snapshot.Layout.StoredDimsOf(level);
             rows[3 + 2 * level] = new(low.X, low.Y, low.Z, dims.X | (dims.Y << 10) | (dims.Z << 20));
             // A level the volume does not measure reads as unpublished, as the views read it (PublishedOf).
             rows[4 + 2 * level] = new(snapshot.Layout.Measures(level) ? snapshot.Layout.SpacingOf(level) : Vector3.Zero, 0);

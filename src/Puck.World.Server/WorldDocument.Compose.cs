@@ -855,7 +855,7 @@ public sealed partial class WorldDocument {
 
                 return true;
             case WorldMutation.SetViewDefaults m:
-                candidate = (current with { ViewsRaw = m.Views });
+                candidate = (current with { ViewsRaw = WorldDefinitionMembers.ShareUnchangedMember("views", current.ViewsRaw, m.Views) });
 
                 return true;
             case WorldMutation.SetViewSeatRig or WorldMutation.SetViewSeatControl or WorldMutation.SetViewPost:

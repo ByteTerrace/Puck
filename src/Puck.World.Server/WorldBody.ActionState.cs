@@ -547,6 +547,7 @@ public sealed partial class WorldBody {
             ActionFact.HoldingUnwalkable => HoldsUnwalkableSurface(),
             ActionFact.Unsupported => HoldsFree(),
             ActionFact.Resting => m_resting,
+            ActionFact.Weightless => (TrySolvedGravityMagnitude(magnitude: out var pull) && (pull < MinFieldUpMagnitude)),
             _ => (m_affectingSubject >= 0),
         };
     }

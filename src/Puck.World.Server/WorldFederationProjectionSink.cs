@@ -148,6 +148,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
         if (!m_cursor.TakeCut()) {
             return false;
         }
+        m_manifestBasis = null;
         m_history.Clear();
         Write(WorldFederationResponse.Cut, WorldFederationCodec.EncodeCut(stream: m_cursor.Stamp(), terminal: false));
 
@@ -178,9 +179,14 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
                 payload: Manifest(definition: whole), tier: tier, version: Version));
         }
     }
-    // A replica's document travels as its manifest: member digests, with only what disclosure and the running world
-    // changed from the source this authority loaded carried inline.
-    private byte[] Manifest(WorldDefinition definition) => WorldDocumentManifest.Encode(definition: definition, source: server?.Document.Revision.Definition);
+    // A queued manifest names all members but sends no bytes the previous manifest already supplied.
+    private WorldDefinition? m_manifestBasis;
+    private byte[] Manifest(WorldDefinition definition) {
+        var payload = WorldDocumentManifest.Encode(definition, server?.Document.Revision.Definition, m_manifestBasis);
+
+        m_manifestBasis = definition;
+        return payload;
+    }
     private void Write(WorldFederationResponse kind, byte[] body) => Write(new Record(kind, body));
 
     private void Write(Record record) {
@@ -286,6 +292,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
         if (tier != WorldDisclosureTier.Replica || m_view is null || !m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
             DeliverDocument(replaced: true, rows: rows);
         } else if (moved) {
+            m_manifestBasis = null;
             WriteRecord(WorldFederationResponse.PresentationRows, WorldFederationCodec.DocumentLeaf(rows.Payload.Span, tier, Version));
             WorldOutputHub.CountPresentationRows(rows);
         }

@@ -16,6 +16,10 @@ public interface ISdfGpuWorkClient : IDisposable {
     /// <summary>Stops admission and wakes pending submitters before the service drains fences and waits for retained
     /// readbacks. Releases no device resources; a client with no dependent submissions needs no action.</summary>
     void Stop() { }
+    /// <summary>Gets the delay until a clock alone can change a declined offer. A client with no clock deadline
+    /// returns null. Calls on the recording thread follow the most recent take. Other changes signal
+    /// <see cref="SdfGpuWork.Wake"/> or arrive in a table upload.</summary>
+    TimeSpan? UntilDue => null;
     /// <summary>Takes the client's next job, or none: a job taken is recorded, submitted and answered, or abandoned.</summary>
     /// <param name="tables">The tables whose World set the job binds, holding the latest submitted upload.</param>
     /// <param name="uploadBytes">The most host payload bytes the job may stage (<see cref="UploadBytes"/>), from
@@ -535,6 +539,12 @@ public sealed class SdfGpuWork : IDisposable {
     /// <exception cref="ObjectDisposedException">The service is disposed.</exception>
     public void Pump(SdfWorldTables tables, bool withheld = false) {
         Enter(driven: withheld, tables: tables);
+        if (!withheld && Quiescent(tables: tables)) {
+            m_pumpsSpared++;
+            ReleaseIdle();
+            return;
+        }
+        SdfCaptureWork.ProcessWork.Count(kind: SdfCaptureWork.Pumped);
         try { _ = Step(tables: tables, within: null); } catch (Exception exception) {
             Fault(exception: exception);
             throw;
@@ -571,14 +581,17 @@ public sealed class SdfGpuWork : IDisposable {
                 remaining = DriveSlice - m_time.GetElapsedTime(started);
                 if ((m_clients.Count == 0) || !tables.BindsBackgroundWork || (remaining <= TimeSpan.Zero)) { return; }
 
-                var deadline = WaitDeadline.In(budget: remaining);
+                var due = UntilDue();
+                if (due is { } elapsed && elapsed <= TimeSpan.Zero) { continue; }
+                var dueFirst = due is { } next && next < remaining;
+                var deadline = WaitDeadline.In(budget: dueFirst ? due!.Value : remaining);
                 var flying = HandOff();
                 // One wait for both: a job's fence and a client's offer set the same signal, and one set while the step
                 // above ran is still set here.
                 var outcome = HostWaits.Wait(deadline: deadline, handle: m_service!.Signal, reason: ServiceReason);
 
                 if (flying) { m_driveFenceTicks += (Stopwatch.GetTimestamp() - waiting); } else { m_driveIdleTicks += (Stopwatch.GetTimestamp() - waiting); }
-                if (outcome != WaitOutcome.Completed) { return; }
+                if (outcome != WaitOutcome.Completed && (!dueFirst || UntilDue() > TimeSpan.Zero)) { return; }
             }
         } catch (Exception exception) {
             Fault(exception: exception);
@@ -596,7 +609,57 @@ public sealed class SdfGpuWork : IDisposable {
     /// <summary>Tells the service that a client has a job to take, or gave a slot back: the recording thread, asleep in
     /// the host's wait or in a <see cref="Drive"/>, steps the work at once rather than at its next frame. Callable on
     /// any thread; a client that never calls it is served at the next pump.</summary>
-    public void Wake() => Volatile.Read(location: ref m_service)?.Wake();
+    public void Wake() {
+        Volatile.Write(location: ref m_woken, value: 1);
+        Volatile.Read(location: ref m_service)?.Wake();
+    }
+
+    // Quiescence: a service whose last step ended with nothing to take (every client declined, no deferral pending, or every
+    // slot busy) has nothing to do until one of its own causes moves, so a pump or a wait's step of it does nothing else.
+    // Invariant: every cause that can give a quiescent service work ends its quiescence before the next step reads it. The
+    // causes and their doors: a job's completion (a slot's fence, read by Quiescent itself), a client's offer or a slot
+    // given back (Wake, which every client with work outside a frame calls, and SdfGpuWorkReadback.Revoke), the tables'
+    // next upload (a new frame, a new program or a newly bindable World set: SdfWorldTables.Uploads), and a held frame
+    // (a pump that is driven never rests). A clock-only cause sets the next wait through UntilDue.
+    private int m_woken;
+    private bool m_quiescent;
+    private SdfWorldTables? m_quiescentTables;
+    private ulong m_quiescentUpload;
+    private long m_quiescentAt;
+    private TimeSpan? m_dueDelay;
+    private long m_pumpsSpared;
+
+    private TimeSpan? UntilDue() => m_dueDelay - m_time.GetElapsedTime(m_quiescentAt);
+
+    // Whether the service has nothing to do: its last step rested, and no cause has moved since (see above).
+    private bool Quiescent(SdfWorldTables tables) {
+        if (!m_quiescent || (Volatile.Read(location: ref m_woken) != 0) || !ReferenceEquals(objA: tables, objB: m_quiescentTables) ||
+            (tables.Uploads != m_quiescentUpload) || (UntilDue() <= TimeSpan.Zero)) {
+            return false;
+        }
+        foreach (var slot in m_slots) {
+            if ((slot.Job is not null) && !Reads(slot: slot)) { return false; }
+        }
+        return true;
+    }
+    // Marks the step that just ended as resting, or not.
+    private void Rest(SdfWorldTables tables, bool resting) {
+        m_quiescent = resting && !m_driven;
+        m_dueDelay = null;
+        if (!resting) { return; }
+        m_quiescentTables = tables;
+        m_quiescentUpload = tables.Uploads;
+        m_quiescentAt = m_time.GetTimestamp();
+        if (BusySlots() == SlotCount) { return; }
+        foreach (var client in m_clients) {
+            if (client.UntilDue is { } due && (m_dueDelay is not { } held || due < held)) { m_dueDelay = due; }
+        }
+        foreach (var waiting in m_waiting) {
+            var due = DeferralRetry - m_time.GetElapsedTime(waiting.At, m_quiescentAt);
+
+            if (m_dueDelay is not { } held || due < held) { m_dueDelay = due; }
+        }
+    }
     /// <summary>Waits the fence of every job in flight that leased a ring slot, ending its lease, so the tables may
     /// rewrite the slot (<see cref="SdfWorldTables.SubmitUpload"/>). On the frame's own queue the upload has already
     /// waited a later submission, so this finds every such job complete and waits nothing.</summary>
@@ -642,6 +705,8 @@ public sealed class SdfGpuWork : IDisposable {
     // A failure is kept for the next pump rather than thrown into the host's wait.
     private TimeSpan? Service(TimeSpan remaining) {
         if (m_disposed || m_faulted || (m_tables is not { } tables) || (m_clients.Count == 0)) { return null; }
+        // The thread's one wake serves every service on it; only one whose own cause moved steps.
+        if (!m_driven && Quiescent(tables: tables)) { return UntilDue(); }
         try {
             var submitted = m_submitted;
             var stop = Step(tables: tables, within: remaining);
@@ -657,7 +722,7 @@ public sealed class SdfGpuWork : IDisposable {
                 Stop.Deadline => TimeSpan.FromSeconds(value: m_budget.DeadlineRetrySeconds),
                 // The services ahead of this one charge as their own jobs complete: come back after one frame allowance.
                 Stop.Turn => TimeSpan.FromSeconds(value: Math.Max(val1: m_budget.FrameAllowanceSeconds, val2: HostBudget.TotalSeconds)),
-                _ => null,
+                _ => UntilDue(),
             };
         } catch (Exception exception) {
             Fault(exception: exception);
@@ -671,15 +736,24 @@ public sealed class SdfGpuWork : IDisposable {
     // work always is.
     private Stop Step(SdfWorldTables tables, TimeSpan? within) {
         m_pumps++;
+        Volatile.Write(location: ref m_woken, value: 0);
         Poll();
-        if (m_clients.Count == 0) { return Stop.None; }
+        if (m_clients.Count == 0) {
+            Rest(resting: true, tables: tables);
+            return Stop.None;
+        }
 
         var stop = Stop.None;
 
+        m_refillRested = false;
         if (tables.BindsBackgroundWork) { stop = Refill(budgeted: !m_driven, tables: tables, within: within); } else { m_unbound++; }
+        Rest(resting: ((stop == Stop.None) && m_refillRested), tables: tables);
         ReleaseIdle();
         return stop;
     }
+    // Whether the latest refill ended with nothing it could take: every client declined with no deferral pending, or
+    // every slot busy.
+    private bool m_refillRested;
     // A lost device names the background jobs still in flight, which DRED's trail shows only as their kernels' operations.
     private void ReportInFlight() {
         for (var index = 0; (index < SlotCount); index++) {
@@ -702,11 +776,26 @@ public sealed class SdfGpuWork : IDisposable {
     public string Describe() {
         var busy = ((m_busyTicks + ((m_inFlight > 0) ? (m_time.GetTimestamp() - m_busySince) : 0L)) / ((double)m_time.TimestampFrequency));
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" gpu-work=[jobs:{m_submitted},answered:{m_answered},gpu:{(m_gpuSeconds * 1000.0):0}ms,busy:{busy:0.0}s,occupancy:{((busy > 0.0) ? (m_gpuSeconds / busy) : 0.0):0.00},most-in-flight:{m_mostInFlight},pumps:{m_pumps},services:{m_services},service-jobs:{m_serviceJobs},drives:{m_drives},drive-fence:{Seconds(ticks: m_driveFenceTicks):0.0}s,drive-idle:{Seconds(ticks: m_driveIdleTicks):0.0}s,drive-step:{Seconds(ticks: m_driveStepTicks):0.0}s,unbound:{m_unbound},budget-holds:{m_budgetHolds},deadline-holds:{m_deadlineHolds},turn-holds:{m_turnHolds},owed-jobs:{m_owedJobs},deferred:{m_deferrals},lease-waits:{m_leaseWaits},over-allowance:{m_overAllowance},over-deadline:{m_overDeadline},timestamps:{((m_timestamps is not null) ? "measured" : "estimated")}] most-job=[{(m_mostJobSeconds * 1000.0):0.00}ms {m_mostJob}]");
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" gpu-work=[jobs:{m_submitted},answered:{m_answered},gpu:{(m_gpuSeconds * 1000.0):0}ms,busy:{busy:0.0}s,occupancy:{((busy > 0.0) ? (m_gpuSeconds / busy) : 0.0):0.00},most-in-flight:{m_mostInFlight},pumps:{m_pumps},pumps-spared:{m_pumpsSpared},services:{m_services},service-jobs:{m_serviceJobs},drives:{m_drives},drive-fence:{Seconds(ticks: m_driveFenceTicks):0.0}s,drive-idle:{Seconds(ticks: m_driveIdleTicks):0.0}s,drive-step:{Seconds(ticks: m_driveStepTicks):0.0}s,unbound:{m_unbound},budget-holds:{m_budgetHolds},deadline-holds:{m_deadlineHolds},turn-holds:{m_turnHolds},owed-jobs:{m_owedJobs},deferred:{m_deferrals},lease-waits:{m_leaseWaits},over-allowance:{m_overAllowance},over-deadline:{m_overDeadline},timestamps:{((m_timestamps is not null) ? "measured" : "estimated")}] most-job=[{(m_mostJobSeconds * 1000.0):0.00}ms {m_mostJob}]");
     }
 
     private static double Seconds(long ticks) => (ticks / ((double)Stopwatch.Frequency));
 
+    /// <summary>Gets the bytes the work's slots' buffers and its clients' own tables and caches hold, by the memory they
+    /// live in; the slots' readbacks count as host-visible. Read on the frame thread.</summary>
+    public GpuMemoryBytes OwnedBytes {
+        get {
+            var bytes = default(GpuMemoryBytes);
+
+            foreach (var slot in m_slots) {
+                foreach (var held in slot.Held) {
+                    bytes += ((held.Readback || held.HostVisible) ? new GpuMemoryBytes(DeviceLocal: 0UL, HostVisible: held.Buffer.SizeBytes) : new GpuMemoryBytes(DeviceLocal: held.Buffer.SizeBytes, HostVisible: 0UL));
+                }
+            }
+            foreach (var client in m_clients) { bytes += client.OwnedBytes; }
+            return bytes;
+        }
+    }
     /// <summary>Describes the buffers the work holds for <c>world.residency</c>: its slots' buffers, readbacks among
     /// them, by the memory they live in and as its reservation stands, and its clients' own tables and caches.</summary>
     /// <returns>One line.</returns>
@@ -726,6 +815,12 @@ public sealed class SdfGpuWork : IDisposable {
 
         foreach (var client in m_clients) { clients += client.OwnedBytes; }
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"gpu-work slots={SlotCount} in-flight={m_inFlight} readback-bytes={readbacks} slot-device-bytes={device} slot-host-bytes={host} reserved-device-bytes={(m_hold?.DeviceBytes ?? 0L)} reserved-host-bytes={(m_hold?.HostBytes ?? 0L)} client-device-bytes={clients.DeviceLocal} client-host-bytes={clients.HostVisible}");
+    }
+    /// <summary>Stops every client's admission and wakes its pending submitters (<see cref="ISdfGpuWorkClient.Stop"/>),
+    /// for work that will not be pumped again before it is disposed: its tables were parked and wait in the device's
+    /// retirement. Releases nothing; <see cref="Dispose"/> stops them again and drains.</summary>
+    public void StopClients() {
+        foreach (var client in m_clients) { client.Stop(); }
     }
     /// <inheritdoc/>
     /// <remarks>Waits every job in flight, a host wait on its fence, then hands it back to its client unanswered; waits,
@@ -958,6 +1053,7 @@ public sealed class SdfGpuWork : IDisposable {
                 if (!held) {
                     // A service with nothing to take holds no other service to its pace.
                     if (budgeted) { m_budget.Idle(turn: m_turn); }
+                    m_refillRested = true;
                     return Stop.None;
                 }
                 m_deadlineHolds++;
@@ -971,6 +1067,8 @@ public sealed class SdfGpuWork : IDisposable {
             if (!Submit(allowance: fit.Seconds, charged: budgeted, client: client, estimate: estimate, index: index, job: job, owed: false, slot: slot, tables: tables)) { index--; continue; }
             if (budgeted) { m_budget.ChargeUpload(bytes: uploadBytes); }
         }
+        // Every slot is busy: only a completion or a slot given back moves the service.
+        m_refillRested = true;
         return Stop.None;
     }
     // Offers the clients a take in turn from the one after the last that took. False with held when a client's next job
@@ -986,7 +1084,9 @@ public sealed class SdfGpuWork : IDisposable {
             // A client whose job was handed back for want of room is offered a slot again once one has come back, whose
             // buffers its job may then take, or after a while, since room can come from another holder. The others'
             // jobs go on meanwhile.
-            if ((WaitingOf(client: candidate) is { } waiting) && (BusySlots() >= waiting.Busy) && (m_time.GetElapsedTime(startingTimestamp: waiting.At) < DeferralRetry)) { continue; }
+            var waiting = WaitingOf(client: candidate);
+
+            if ((waiting is not null) && (BusySlots() >= waiting.Busy) && (m_time.GetElapsedTime(startingTimestamp: waiting.At) < DeferralRetry)) { continue; }
             if (owed
                 ? candidate.TryTakeOwed(allowance: allowance, estimatedSeconds: out estimate, job: out job, tables: tables, uploadBytes: uploadBytes)
                 : candidate.TryTake(allowance: allowance, estimatedSeconds: out estimate, job: out job, tables: tables, uploadBytes: uploadBytes)) {
@@ -1001,6 +1101,7 @@ public sealed class SdfGpuWork : IDisposable {
                 if (!owed) { m_nextClient = ((first + turn) % m_clients.Count); }
                 break;
             }
+            if (!owed && (waiting is not null)) { _ = m_waiting.Remove(waiting); }
         }
         held = (allowance.Queued && (estimate > 0.0));
         client = null;

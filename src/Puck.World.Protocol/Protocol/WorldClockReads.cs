@@ -15,6 +15,15 @@ public sealed class WorldClockReads {
     /// <param name="name">The clock name.</param>
     /// <param name="integrated">Whether complete turns affect the result.</param>
     public void Note(WorldStateMirror mirror, string name, bool integrated = false) => m_readings.Add(item: Read(integrated: integrated, mirror: mirror, name: name));
+    /// <summary>Records every clock a keyed value reads: its track's and each track joined to it
+    /// (<see cref="IWorldKeyTrack.With"/>), so the value resolves again when any of them moves.</summary>
+    /// <param name="mirror">The presentation source.</param>
+    /// <param name="keys">The value's keys, or <see langword="null"/> for a value that carries none.</param>
+    public void Note(WorldStateMirror mirror, IWorldKeyTrack? keys) {
+        for (var link = keys; (link is not null); link = link.With) {
+            Note(mirror: mirror, name: link.Clock);
+        }
+    }
     /// <summary>Returns whether any recorded clock presents a different value.</summary>
     /// <param name="mirror">The presentation source.</param>
     /// <returns>Whether the cached value needs resolving.</returns>

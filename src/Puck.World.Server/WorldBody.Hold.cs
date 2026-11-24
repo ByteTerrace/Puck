@@ -1070,26 +1070,26 @@ public sealed partial class WorldBody {
         }
     }
     // A row's own thrust, applied to every non-Medium bond: while MoveUp is non-zero, drives vertical velocity
-    // directly at the row's thrust fraction of the resolved move speed and suspends the ballistic channel; releasing
-    // MoveUp returns vertical ownership to the row's own kind this same tick. A Medium bond's own thrust folds into
-    // ApplyMedium's convergence instead, so this never runs for one.
+    // directly at the row's thrust fraction of the resolved move speed, held pace included, and suspends the ballistic
+    // channel; releasing MoveUp returns vertical ownership to the row's own kind this same tick. A Medium bond's own
+    // thrust folds into ApplyMedium's convergence instead, so this never runs for one.
     private void ApplyHoldThrust(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
         if (hold.Thrust <= FixedQ4816.Zero) {
             return;
         }
 
-        var drive = Role(
-            intent: in scratch.Intent,
-            role: ChannelRole.MoveUp
+        var thrust = VerticalThrust(
+            hold: in hold,
+            scratch: ref scratch
         );
 
-        if (drive == FixedQ4816.Zero) {
+        if (thrust == FixedQ4816.Zero) {
             return;
         }
 
         m_verticalVelocity = FixedQ4816.Zero;
         m_verticalVelocityAccumulator.Reset();
-        scratch.DirectVerticalVelocity = ((drive * scratch.MoveSpeed) * hold.Thrust);
+        scratch.DirectVerticalVelocity = thrust;
     }
 
     // The floor on |Dot(gravity-up, field normal)| the displacement divide (surface.Point - position) / alignment
@@ -1163,7 +1163,7 @@ public sealed partial class WorldBody {
         }
 
         var target = FixedQ4816.Clamp(
-            value: (MediumThrust(
+            value: (VerticalThrust(
                 hold: in hold,
                 scratch: ref scratch
             ) + drift),
@@ -1237,9 +1237,10 @@ public sealed partial class WorldBody {
             medium: in medium
         );
     }
-    // The vertical half of the commanded thrust: the MoveUp role scaled by the hold's travel speed and the row's own
-    // thrust, with the same held-sprint multiplier the planar half applies.
-    private FixedQ4816 MediumThrust(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
+    // The vertical half of the commanded thrust, for every bond: the MoveUp role scaled by the hold's travel speed and
+    // the row's own thrust, with the same held pace (a boost, a sprint) the planar half applies, so a held pace climbs
+    // as fast as it travels.
+    private FixedQ4816 VerticalThrust(in FixedBodyHold hold, ref BodyMotionScratch scratch) {
         var speed = ApplySpeedHeld(
             baseSpeed: scratch.MoveSpeed,
             intent: in scratch.Intent

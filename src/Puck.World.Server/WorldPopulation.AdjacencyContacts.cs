@@ -14,6 +14,7 @@ public sealed partial class WorldPopulation {
     private FixedQ4816[] m_adjacencyCorrectionSpent = [];
     private ulong m_adjacencyTick = 1;
     private ulong? m_adjacencyImageTick;
+    private WorldAdjacencyRead? m_adjacencyRead;
     internal ImmutableArray<WorldAdjacencyProjection> AdjacencyProjections { get; private set; } = [];
 
     internal bool HasAdjacencyImage(ulong tick) => (m_adjacencyImageTick == tick);
@@ -40,6 +41,19 @@ public sealed partial class WorldPopulation {
         AdjacencyProjections = adjacency;
         m_adjacencyTick = tick;
         BeginAdjacencyContacts();
+    }
+    internal ImmutableArray<WorldAdjacencyProjection> HoldAdjacency(WorldAdjacencyRead? read) {
+        var projections = read?.Projections switch {
+            ImmutableArray<WorldAdjacencyProjection> held => held,
+            { } rows => ImmutableArray.CreateRange(rows),
+            _ => ImmutableArray<WorldAdjacencyProjection>.Empty,
+        };
+        var previous = m_adjacencyRead;
+
+        m_adjacencyRead = read;
+        AdjacencyProjections = projections;
+        previous?.Dispose();
+        return projections;
     }
     private WorldOwnershipFace[] OwnershipFaces() {
         if (!ReferenceEquals(objA: m_ownershipFacesDefinition, objB: m_adjacencyDefinition)) {

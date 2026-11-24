@@ -146,6 +146,10 @@ public sealed partial class SdfWorldTables : IDisposable {
     // The uploads submitted, which selects each upload's ring slot.
     private ulong m_uploads;
 
+    /// <summary>Gets how many uploads the tables have submitted: it moves with every frame, program and World set the
+    /// background work may bind, which wakes the service on its next <see cref="SdfGpuWork.Pump"/>.</summary>
+    public ulong Uploads => m_uploads;
+
     private readonly IGpuCommandPool[] m_commandPools = new IGpuCommandPool[FrameRingSize];
     // One per-upload fence per ring slot: an upload waits the previous upload's fence before it rewrites its slot.
     private readonly IGpuSubmissionFence[] m_frameFences = new IGpuSubmissionFence[FrameRingSize];

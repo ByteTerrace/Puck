@@ -38,6 +38,46 @@ public static class WorldPortalVisibility {
     /// still bakes or lands its meshes: the least that keeps it rendering, since a world's meshes arrive only in frames
     /// that render one of its views.</summary>
     public const double ArrivalShare = 0.0625;
+    /// <summary>Returns a glass's reach, in metres: the half-extents of its slab along its three axes together, which a
+    /// lead adds to the authored distance (<see cref="WorldViewDefaults.PortalLead"/>), so a large glass warms as early
+    /// from its edge as a small one does from its middle.</summary>
+    /// <param name="glass">The screen row whose face is the glass.</param>
+    /// <returns>The reach.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="glass"/> is <see langword="null"/>.</exception>
+    public static float ReachOf(WorldScreen glass) {
+        ArgumentNullException.ThrowIfNull(argument: glass);
+
+        var (_, right, up, thickness) = Slab(glass);
+
+        return ((right.Length() + up.Length()) + thickness.Length());
+    }
+    /// <summary>Returns the unit normal of a glass's face, pointing to the side the glass faces (the side its slab's
+    /// front stands toward: <c>Right</c> × <c>Up</c>, as <see cref="WorldScreenStamper"/> seats the slab behind it).</summary>
+    /// <param name="glass">The screen row whose face is the glass.</param>
+    /// <returns>The normal.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="glass"/> is <see langword="null"/>.</exception>
+    public static Vector3 FacingOf(WorldScreen glass) {
+        ArgumentNullException.ThrowIfNull(argument: glass);
+
+        return Vector3.Normalize(value: Vector3.Cross(vector1: Vector3.Normalize(value: glass.Right), vector2: Vector3.Normalize(value: glass.Up)));
+    }
+    /// <summary>Returns whether a glass out of a camera's sight leads by line where no walk can be measured: the camera
+    /// stands on the side the glass faces, and within <paramref name="lead"/> plus the glass's reach
+    /// (<see cref="ReachOf"/>) of the glass's face in a straight line.</summary>
+    /// <param name="camera">The consumer's camera.</param>
+    /// <param name="glass">The screen row the session shows on.</param>
+    /// <param name="lead">The authored lead, in metres (<see cref="WorldViewDefaults.PortalLead"/>).</param>
+    /// <param name="metres">The straight distance from the camera to the face's centre, in metres.</param>
+    /// <returns>Whether the glass leads.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="glass"/> is <see langword="null"/>.</exception>
+    public static bool LeadsInLine(in CameraSnapshot camera, WorldScreen glass, float lead, out float metres) {
+        ArgumentNullException.ThrowIfNull(argument: glass);
+
+        var origin = (Vector3)glass.Origin;
+
+        metres = Vector3.Distance(value1: camera.Position, value2: origin);
+        return ((Vector3.Dot(vector1: (camera.Position - origin), vector2: FacingOf(glass: glass)) >= 0f) && (metres <= (lead + ReachOf(glass: glass))));
+    }
     /// <summary>The fraction the frustum's sides are widened by when the visible part of a glass is found
     /// (<see cref="Window"/>, <see cref="Coverage"/>): room for the reader's texture filter at the image's edge.</summary>
     public const float VisibleMargin = 0.02f;
@@ -189,7 +229,7 @@ public static class WorldPortalVisibility {
     internal static (Vector3 Origin, Vector3 Right, Vector3 Up, Vector3 Thickness) Slab(WorldScreen glass) {
         var right = (Vector3.Normalize(value: glass.Right) * glass.HalfWidth);
         var up = (Vector3.Normalize(value: glass.Up) * glass.HalfHeight);
-        var thickness = (Vector3.Normalize(value: Vector3.Cross(vector1: right, vector2: up)) * glass.HalfDepth);
+        var thickness = (FacingOf(glass: glass) * glass.HalfDepth);
 
         return (((Vector3)glass.Origin) - thickness, right, up, thickness);
     }

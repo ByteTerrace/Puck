@@ -197,8 +197,8 @@ defects, not looks.
    with headroom.** One lane over both, since both are the same discipline
    (work proportional to change, off the one thread): capture only what a
    view reads and capture routed scenes side by side (start from
-   `wip/frame-production`); recording in one fork; a pump that visits what
-   completed; the input runtime proportional to seated or possessed bodies
+   `wip/frame-production`); the input runtime proportional to seated or
+   possessed bodies
    and grant changes; the step thread's copies and clears; fork and plan
    cost; `CaptureMotion`; the source watch on OS change notification instead
    of polling. Success line: the frame thread under 3 ms on the route at
@@ -862,8 +862,9 @@ wait behind them.
    Routed compositions pack transforms and draw journals on the pool between
    serial preparation and filming. Mesh compaction marks only rows that
    reference moved meshes, using the same index for every residency.
-   Left, in [its order](frame-production.md#the-steps): one fork for a frame's
-   recordings and a pump that visits what completed. Check:
+   One fork records a frame ([as built](frame-production.md#one-fork-records-a-frame)).
+   So does a pump that visits only the residencies whose work moved. Left: the
+   pipeline across frames, if the host world's chain still bounds a frame. Check:
    `world.counters sdf.captures` across a benchmark chapter,
    `run` a frame against `held`, with `packed-on-worker` and
    `uploaded-on-worker`, beside `host.frames`' capture and pack parts. At
@@ -1461,9 +1462,6 @@ What an arrival and a hand-over still cost the frame:
   batches keep enough groups in flight for a cold arrival in play is not
   measured: an earlier cut at a rate that rose to the costliest batch cut the
   groups in flight to a third. Measure a cold arrival in play against the bar.
-- [low] A probe scene upload chunk can still measure past the frame allowance
-  against its `SdfGpuWork.UploadSecondsOf` estimate (`world.residency`'s
-  `over-allowance` and `most-job`).
 - [medium] The volume's fill beside many point lights: a fresh probe's relight
   traces every hit texel toward every shadowing point light in range
   (`sdfProbeShade`), so the window beside the teal room's lamps takes minutes
@@ -2190,7 +2188,7 @@ check; this packet holds the defects beside it.
 Lifecycle lows, each argued from source and not run:
 
 - [low] The scene upload's `Dispose` swallows faulted export work
-  (`SdfMeshProbeGpuWork.SceneUpload.Dispose`). Count faulted work on cancel.
+  (`SdfMeshProbeScenes.Upload.Dispose`). Count faulted work on cancel.
 - [low · plausible] A probe job cancelled by the admission timeout never reads
   as stale-scene evidence (`SdfMeshProbeGpuWork`'s `AdmissionWait`, with
   `m_traceOwed` left set), so with an unplaced mesh every query is cancelled
@@ -2322,22 +2320,33 @@ The volume's cost and convergence:
   `RecordCommit` records one buffer copy per probe where one scatter dispatch
   would do; `SdfMeshProbeGpuWork.Record` reads back
   `SdfMeshProbeRelight.ResultWords` while `SdfMeshIrradiance.RelightGpu`
-  decodes only the `SdfMeshProbeRelight.OutputWords` prefix, and
-  `SdfMeshProbeGpuWork.Complete` allocates the full readback and copies it
-  again to strip the assertion word. Carry an explicit logical length, and
-  keep the readback token's fence ownership through commit. Where hardware
+  decodes only the `SdfMeshProbeRelight.OutputWords` prefix. Pack the host
+  output separately from the feedback, keeping the readback token's fence
+  ownership through commit. Where hardware
   ray queries answer the trace, the device holds the acceleration structures
   and the software walk's copy of the scene both (`world.residency`'s
   `trace-structures` line), about a gigabyte together by the lane's reading:
   keep one, and judge the two paths' hits against each other with a device
   law before the software copy goes.
-- [medium] The probe scene's capacity keeps its high-water mark:
-  `SdfMeshIrradianceScene.GpuArena` never lowers its word count and
-  `RecordSceneUpload` only grows the region. Reclaim capacity after a large
-  scene leaves, without moving a published root or storage an in-flight
-  submission reads. The arena and `SdfMeshRegionArena` both own keyed
-  placement over shared free ranges: unify them, keeping their payloads and
-  publication lifetimes.
+- [medium] The probe scenes' region (`SdfMeshProbeScenes`) gives back every
+  chunk no live allocation touches only where the region is mapped
+  (Direct3D 12); `SdfMeshIrradianceScene.GpuArena` never lowers its word count,
+  so Vulkan's contiguous region keeps its high-water mark. Reclaim it without
+  moving a published root or storage an in-flight submission reads. The arena
+  and `SdfMeshRegionArena` both own keyed placement over shared free ranges:
+  unify them, keeping their payloads and publication lifetimes.
+- [medium] A world's session copy shares few trace geometries with the world:
+  at the end of the debug route on the RTX 2060 the world and
+  `routed$session$18$0$shared` held about 4.0M prefix words each and 1,954
+  geometries in `SdfMeshProbeScenes`, of which 328 (30 MB) both named; the trace
+  bottoms share the same 328 (`trace-structure-bottoms-shared`). Find why the
+  session's scene names other meshes than the world's (its floors and tiers
+  against the world's, `SdfMeshLibrary.TiersOf`) and make one world's scenes
+  name one set, which also shares the bottoms.
+- [low] `SdfMeshProbeScenes.RecordOwed` and `SdfMeshRegionStore.RecordOwed`
+  each keep an upload slot ring: a free-slot stack, an unsubmitted count, a
+  hold per recorded slot released on completion and `SubmittedOwed`. Make it one
+  type both stores record through.
 - [medium] Full relight, selection, metering and hit-cache paths need CPU and
   GPU parity coverage; the trace law covers miss-only directional visibility
   and the gather law receiver lookup.
@@ -2514,6 +2523,20 @@ Artefacts still to isolate:
 Owner: rendering (GPU leg, the lead scheduling the GPU) · medium · Next: one
 draw identity, which visibility's V1 and V2 build on; then Vulkan's crossing
 frame and the pixel-pass gap at locked clocks.
+
+- [high] **One screen row of the main view is unwritten at some window
+  sizes.** At 1600 by 900 on Direct3D 12 (RTX 4070), a one-pixel row at about
+  y 488 across the left 77% of the frame reads no hit in the visibility buffer
+  (`world.view.pick primary 0.3 0.5433`: `kind=0 placement=none`, the row
+  below: the floor), standing in every presented frame; 1280 by 900 and the
+  frame bar's 2560 by 1421 show none. A dispatch or tile cover that rounds a
+  size not divisible by its group, or the one placement pass's rect math,
+  are the first suspects. Check: the row is absent at 1600 by 900 and at a
+  few odd sizes on both backends.
+- [low] **The windowed frame bar opens at 2560 by 1421** on a 1440-high
+  display, because the window's decorations take the difference; a frame-bar
+  reading names the size it ran at, and a borderless window would give the
+  full 1440.
 
 - [medium, before V1] Draw identity is tracked twice and the occlusion visible
   bit uses neither: a per-mesh identity counter in `SdfMesh` (read in
@@ -3937,6 +3960,15 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
+- [high, M1] **A reset across a changed world inventory needs its first
+  deploy and a review.** The Azure runtime drains, protects and recovers the
+  source's own worlds, activation resets each target world over its drained
+  root, and a world only the target names starts from a fresh root
+  (`WorldAuthorityBlobStore.PrepareReleaseResetFreshAsync`, under the same
+  activation ownership with no protected root for it). Next: the release from
+  `main` exercises it; a findings-only review of the activation-ownership
+  check by another family (persisted data).
+
 The RTX 2060 machine is a consumer release target (the owner's ruling,
 AGENTS.md): it installs and updates through the launcher from the hosted
 `player` channel and runs only what a player runs. It never builds from
@@ -4845,6 +4877,15 @@ their lane order; this packet keeps the single duplicates and leads.
   per-domain search arrays; non-shared routes then keep off walls as shared ones do. Check the
   volume-domain budgets (`worlds/debug/navigation.puck` and the World Games navigation laws) against
   `FindRoute`'s horizontal heuristic before landing it.
+
+- Two memory-gated queues in the mesh bake, each holding work off the workers until the memory account has room:
+  `SdfMeshPathBake.ResumeParked` (`src/Puck.SdfVm/SdfMeshPathBake.Refusals.cs`: a refused copy into the library
+  parked per bake under its gate, its room reserved in play's allowance, any parked copy that fits starting in any
+  order) and `SdfMeshPathBake.Refinement.Start` (`src/Puck.SdfVm/SdfMeshPathBake.Refinements.cs`: refinements of every
+  bake in one queue, their peaks reserved in the group's authoring workspace, served head of line with one forced job
+  so the bake always progresses). They become one queue: one door that reserves an entry's bytes without waiting,
+  where each entry names its allowance (play or authoring) and its ordering (any, or head of line), so the account's
+  room is given out in one place and a parked copy cannot be starved behind refinements or overtake one unseen.
 
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`

@@ -13,7 +13,8 @@ namespace Puck.Shaders;
 /// <param name="Output">An exported image or buffer version of the producer, or null for its default output.
 /// Selection names the resource from the scheduled producer frame, including a standing or previous frame.</param>
 /// <param name="Optional">Whether an absent named image binds the shared stand-in while that optional graph feature is off.</param>
-public readonly record struct RenderGraphRuntimeInput(string Version, string Producer, string? Output = null, bool Optional = false);
+/// <param name="SampledByName">Whether a package also samples the producer by name through its frame reads.</param>
+public readonly record struct RenderGraphRuntimeInput(string Version, string Producer, string? Output = null, bool Optional = false, bool SampledByName = false);
 /// <summary>The graph one instance runs, and where its reads land in it.</summary>
 /// <param name="Pipeline">The planned graph with its compiled shader passes. Its default output
 /// (<see cref="ShaderPipelinePlan.DefaultOutput"/>) is what consumers read unless they select an exported buffer.</param>
@@ -157,11 +158,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private bool[] m_allPassesArePackages = [];
     // Tracks forwarded or direct node captures so steady frames check capture presence in O(1) instead of scanning m_nodes.
     private readonly Action m_onNodeCaptureArmed;
+    private readonly Action<ShaderPipelineRenderNode> m_onPublicationAbandoned;
     private int m_forwardedCaptureIndex = -1;
     private int m_captureProbeNeeded;
 
     private RenderGraphRuntime(RenderGraphInstanceSet set, RenderGraphRuntimeGraph?[] graphs, ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, SourceGraph?[] sources, Binding[][] inputs, int root, IGpuDeviceContext device, RenderGraphPackageRecorders packages, PackageGraphs packageGraphs, GpuPassPipelineCache pipelines, bool hostsOnDirectX, uint inFlightFrames, GpuImageLeases images, RenderGraphStandIns standIns) {
         m_onNodeCaptureArmed = () => _ = Interlocked.Exchange(location1: ref m_captureProbeNeeded, value: 1);
+        m_onPublicationAbandoned = ForgetAbandonedOutput;
         m_standIns = standIns;
         m_images = images;
         m_packageGraphs = packageGraphs;
@@ -437,6 +440,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 ProducerName: set.Instances[producer].Name,
                 Output: input.Output,
                 Optional: input.Optional,
+                SampledByName: input.SampledByName,
                 Version: input.Version!
             );
         }
@@ -943,6 +947,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             if (buffered.BufferOf(name: binding.Output, publication: out var publication) is not { } buffer) {
                 return false;
             }
+            if (buffered.Reserved) {
+                NoteReservedRead(buffer: buffer, consumer: index, output: binding.Output, producer: binding.Producer, publication: publication, version: binding.Version);
+            }
 
             NoteTaint(
                 index: index,
@@ -1037,15 +1044,23 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 consumer: index,
                 producer: binding.Producer
             );
-            var output = OutputAt(
-                frame: frame,
-                latch: in latch,
-                producer: binding.Producer,
-                readFrame: (schedule.Frame - (binding.PreviousFrame ? 1L : 0L))
-            );
+            Output output;
 
             if (binding.Output is { } selectedImage) {
-                output = RecordedAt(frame: frame, latch: in latch, producer: binding.Producer).ImageOf(latch: in latch, name: selectedImage);
+                var recorded = RecordedAt(frame: frame, latch: in latch, producer: binding.Producer);
+
+                if (recorded.Reserved) {
+                    NoteReservedRead(consumer: index, producer: binding.Producer);
+                }
+                output = recorded.ImageOf(latch: in latch, name: selectedImage);
+            } else {
+                output = OutputAt(
+                    consumer: index,
+                    frame: frame,
+                    latch: in latch,
+                    producer: binding.Producer,
+                    readFrame: (schedule.Frame - (binding.PreviousFrame ? 1L : 0L))
+                );
             }
 
             if (
@@ -1107,15 +1122,15 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     }
     // Selects the producer's recorded output at the scheduled frame, then resolves what it stands for at the reader's
     // frame. A slow standing output follows its owner even when its own last render is older than the owner's history.
-    private Output OutputAt(int producer, long frame, long readFrame, in DeliveryLatch latch) => Resolve(
-        frame: readFrame,
-        latch: in latch,
-        output: RecordedAt(
-            frame: frame,
-            latch: in latch,
-            producer: producer
-        )
-    );
+    // A consumer binding the output names itself, so the reservations it binds are noted (NoteReservedRead).
+    private Output OutputAt(int producer, long frame, long readFrame, in DeliveryLatch latch, int consumer = -1) {
+        var recorded = RecordedAt(frame: frame, latch: in latch, producer: producer);
+
+        if (recorded.Reserved && (consumer >= 0)) {
+            NoteReservedRead(consumer: consumer, producer: producer);
+        }
+        return Resolve(consumer: consumer, frame: readFrame, latch: in latch, output: recorded);
+    }
     private void Release() {
         RetireShownLeases();
         m_outputs.Clear();
@@ -1306,6 +1321,49 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         DisposeDrainedRetiring();
         ApplyWithdrawals();
         m_captureFootprints = frame.Footprints;
+
+        // The frame's submissions reach the queue together: every submission from the packages' upkeep on joins one batch,
+        // flushed once every render has recorded (IGpuQueueSubmitter.BeginBatch). Whatever must follow deferred work on the
+        // queue splits the batch (a fence wait, a raw queue operation), so opening it this early only gathers the upkeep's
+        // background jobs with the frame's uploads into one hand-over, ahead of the renders.
+        var queue = m_device.Services.QueueSubmitter;
+
+        queue.BeginBatch();
+        try {
+            ProduceFrameBatched(frame: in frame, context: in context, work: in work);
+        } finally {
+            work.Next(HostFrameWorkPart.Flush);
+            using (GpuQueueWork.Attribute(category: GpuQueueCategory.Graph)) { SettleHandOvers(queue: queue); }
+        }
+        Complete();
+        work.Next(HostFrameWorkPart.Pump);
+        if (m_frameLongestRecord >= 0) { RenderRecordWork.Process.Frame(longestRecordTicks: m_frameLongestRecord); }
+
+        // The image the display presents this frame, read back once every node has submitted.
+        ServePresented(presentation: frame.Index);
+
+        // Every reader has submitted before this point. Borrowed-buffer producers may now stand indefinitely;
+        // retire displaced package owners against this actual reader fence, without another producer submission.
+        var submitter = m_frameSubmitter;
+
+        foreach (var node in m_nodes) { node?.RetireAfterConsumers(submitter: submitter); }
+        ArmRetiring(submitter: submitter);
+        // The frame's recordings are all handed to the queue, so a checkpoint now follows every reader of what an owner
+        // retired to the device before it (a released residency's tables).
+        m_device.Services.Retirement.Poll(timeline: queue.Timeline);
+
+        return Shown(
+            image: RootImage(),
+            submitter: submitter
+        );
+    }
+    // The frame's longest record and its submitter, as the batched part of the frame left them.
+    private long m_frameLongestRecord;
+    private ShaderPipelineRenderNode? m_frameSubmitter;
+
+    // The part of a frame inside its submission batch: upkeep and capture, the readers, the pack, the schedule, the
+    // packages' shared work and every render.
+    private void ProduceFrameBatched(in RenderGraphFrame frame, in FrameContext context, in HostFrameWork.PartScope work) {
         // Upkeep and the host's capture, then the lists sealed after the cameras it places, then the frame's readers.
         PackagesBeginFrame(context: in context);
         PrepareReaders(context: in context, frame: in frame);
@@ -1391,19 +1449,17 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             Schedule = schedule,
         };
 
-        // The frame's renders reach the queue together: every node's submission joins one batch, flushed once they have all
-        // recorded (IGpuQueueSubmitter.BeginBatch), so a frame costs the queue one call rather than one a node.
-        var queue = m_device.Services.QueueSubmitter;
         using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Graph);
 
         work.Next(HostFrameWorkPart.Prepare);
-        queue.BeginBatch();
-        try {
-            // The packages' shared frame work (an SDF residency's upload and pump) is done before any render records, so no
-            // node's recording pays for it; its submissions open the frame's batch, ahead of every render's.
-            PackagesPrepareRenders(context: in context, holdingConvergence: rendering.HoldingConvergence, renders: renders);
+        m_frameLongestRecord = -1L;
+        m_frameSubmitter = null;
+        // The packages' shared frame work (an SDF residency's upload and pump) is done before any render records, so no
+        // node's recording pays for it; its submissions reach the batch ahead of every render's.
+        PackagesPrepareRenders(context: in context, holdingConvergence: rendering.HoldingConvergence, renders: renders);
 
-            work.Next(HostFrameWorkPart.Record);
+        work.Next(HostFrameWorkPart.Record);
+        try {
             RenderWaves(context: in context, frame: in frame, rendering: ref rendering);
 
             ConvertForCapture(
@@ -1412,32 +1468,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 schedule: schedule,
                 tick: frame.Tick
             );
-            work.Next(HostFrameWorkPart.Flush);
-            Complete();
         } finally {
-            work.Next(HostFrameWorkPart.Flush);
-            SettleHandOvers(queue: queue);
+            m_frameLongestRecord = rendering.LongestRecord;
+            m_frameSubmitter = rendering.Submitter;
         }
-        work.Next(HostFrameWorkPart.Pump);
-        if (rendering.LongestRecord >= 0) { RenderRecordWork.Process.Frame(longestRecordTicks: rendering.LongestRecord); }
-
-        // The image the display presents this frame, read back once every node has submitted.
-        ServePresented(presentation: frame.Index);
-
-        // Every reader has submitted before this point. Borrowed-buffer producers may now stand indefinitely;
-        // retire displaced package owners against this actual reader fence, without another producer submission.
-        var submitter = rendering.Submitter;
-
-        foreach (var node in m_nodes) { node?.RetireAfterConsumers(submitter: submitter); }
-        ArmRetiring(submitter: submitter);
-        // The frame's recordings are all handed to the queue, so a checkpoint now follows every reader of what an owner
-        // retired to the device before it (a released residency's tables).
-        m_device.Services.Retirement.Poll(timeline: queue.Timeline);
-
-        return Shown(
-            image: RootImage(),
-            submitter: submitter
-        );
     }
     // The root's latest completed image: a graph root's output, resolved through what it stands for, or an external
     // root's latest output, whose acquisition is released at once, since the surface is valid only
@@ -1568,11 +1602,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private readonly record struct Published(GpuPixelFormat Format, ulong SizeBytes, bool Borrowed = false, uint? StrideBytes = null);
     // One input resolved at install: the version it binds, the producer whose output it reads, and whether it reads that
     // output's previous frame.
-    private readonly record struct Binding(string Version, int Producer, string ProducerName, ShaderPipelineResourceKind Kind, GpuPixelFormat Format, bool PreviousFrame, string? Output, bool RetainsPublication = true, bool Optional = false);
+    private readonly record struct Binding(string Version, int Producer, string ProducerName, ShaderPipelineResourceKind Kind, GpuPixelFormat Format, bool PreviousFrame, string? Output, bool RetainsPublication = true, bool Optional = false, bool SampledByName = false);
     // One completed output of an instance: the frame it belongs to, its published image and the layout it is in, its
     // buffer when it is one, its provenance and external-content label, and what the image stands for when it is not
-    // the instance's own (RenderGraphRuntime.Standing.cs).
-    private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, DeliveryLabel Label, Standing StandsFor, ulong? StateTick = null, ReferenceRevision Publication = default, ShaderPipelineRenderNode.BufferOutput[]? Buffers = null, ReferenceRevision BufferPublication = default) {
+    // the instance's own (RenderGraphRuntime.Standing.cs). A reserved output is what a prepared frame will publish when it
+    // commits, which the frame's consumers bind before it records (RenderGraphRuntime.Reservations.cs).
+    private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, DeliveryLabel Label, Standing StandsFor, ulong? StateTick = null, ReferenceRevision Publication = default, ShaderPipelineRenderNode.BufferOutput[]? Buffers = null, ReferenceRevision BufferPublication = default, bool Reserved = false) {
         public bool Tainted => Label.External;
 
         public Output ImageOf(string name, in DeliveryLatch latch) {

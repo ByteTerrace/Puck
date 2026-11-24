@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Waiting;
 using Puck.Hosting;
 using Puck.Hosting.Jobs;
 using Puck.Shaders;
@@ -221,6 +222,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             $"shadows {(m_tables?.DescribeShadows() is { Length: > 0 } shadows ? shadows : "none")}",
             ((m_tables is { } tables) ? $"{tables.Grant.Selector.Describe()}{tables.Grant.Selector.Work.Describe()}" : "selector=none"),
             (m_tables?.DescribeFixedCost() ?? "fixed-cost=none"),
+            DescribeParking(),
             $"{(m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none")} late-stagings={LateStagings}{(m_tables?.GpuWork.Describe() ?? string.Empty)}",
             (m_tables?.DescribeFrameSampled() ?? "frame-sampled=none"),
             $"change-history-logical-bytes transforms={(m_frame?.MovedTransforms?.StorageBytes ?? 0)} draws={(m_frame?.DrawRows.Changes?.StorageBytes ?? 0)} dresser-scratch={m_meshDresser.ScratchBytes} staging-runs={(m_tables?.DrawChangeScratchBytes ?? 0)} (array payload; headers excluded)",
@@ -244,15 +246,25 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// dispatches, or its tables still owe the staged meshes' words or their upload
     /// (<see cref="SdfWorldTables.MeshesArriving"/>), which land only after such a frame's upload. A frame that renders
     /// none of its views still prepares the residency and may pack a frame, which moves what the background work binds,
-    /// so a residency nobody renders stops landing until one of its views renders again. Read on the frame thread; never
+    /// so a residency nobody renders stops landing until one of its views renders again. A parked residency
+    /// (<see cref="IsParked"/>) has nothing arriving until a reader wakes it. Read on the frame thread; never
     /// waits.</summary>
-    public bool MeshesArriving => (MeshPathBake.Pending || (m_tables?.MeshesArriving ?? false));
+    public bool MeshesArriving => (!m_parked && (MeshPathBake.Pending || (m_tables?.MeshesArriving ?? false)));
+    /// <summary>Gets whether the residency's meshes are still making their arrival, which a window rendered out of sight
+    /// exists to bring: a group owes the frame its first mesh or an arrival's first detail over its floor
+    /// (<see cref="SdfMeshPathBake.OwedGroups"/>), or the latest staging held a draw out because its mesh had not landed
+    /// (<see cref="DrawsAwaitMeshes"/>). The bake's ordinary work in play (a tier the demand moved to, a resample) and
+    /// another residency's landing in the shared mesh region owe no arrival, so a world whose view renders only to bring its
+    /// meshes stops rendering once they have come, and can go unobserved and park. A parked residency has nothing arriving.
+    /// Read on the frame thread; never waits.</summary>
+    public bool MeshesFirstArriving => (!m_parked && ((MeshPathBake.OwedGroups > 0) || DrawsAwaitMeshes));
     /// <summary>Gets whether the residency owes work its preparation serves whether or not anything reads it this frame
     /// (its minimum): its meshes are arriving (<see cref="MeshesArriving"/>), whose bake plans and lands through a prepared
     /// frame, or its lighting is settling (<see cref="SdfMeshIrradiance.Settling"/>), whose trace a prepared frame stages,
     /// so a world becomes resident and lit before its glass shows. False once both are done, when only a reader prepares
-    /// it. Read on the frame thread; never waits.</summary>
-    public bool OwesPreparation => (MeshesArriving || MeshIrradiance.Settling);
+    /// it, and while it is parked (<see cref="IsParked"/>), when only a reader wakes it. Read on the frame thread; never
+    /// waits.</summary>
+    public bool OwesPreparation => (!m_parked && (MeshesArriving || MeshIrradiance.Settling));
     /// <summary>Gets whether the latest staging held a draw out of the frame because its mesh had not landed
     /// (<see cref="SdfWorldTables.DrawsAwaitMeshes"/>); <see langword="false"/> before the tables are built.</summary>
     public bool DrawsAwaitMeshes => (m_tables?.DrawsAwaitMeshes ?? false);
@@ -434,6 +446,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // waiting. A loss alone then drains that table, since no lease of the lost device may outlive its recovery; the host's
     // teardown drains it before the device goes.
     private void ReleaseDeviceObjects(bool deviceLost) {
+        JoinPack();
         if (deviceLost) {
             LoseShade();
             Array.Clear(array: m_boundScreenSources);
@@ -457,6 +470,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             m_deviceContext = null;
         } else {
             m_meshDresser.Dispose();
+            m_packLane?.Dispose();
             MeshPathBake.Retire();
             m_ownedLibrary?.Dispose();
         }
@@ -509,6 +523,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// presentation clock. A frame that captured nothing hands its interval to the next capture, so a residency nothing
     /// read for several frames advances its source by all of them when it is read again.</param>
     public void BeginFrame(double frameSeconds = 0) {
+        JoinPack();
         if (m_begun && !m_captured) {
             m_skippedSeconds += m_frameSeconds;
             // A frame nothing read shows the player nothing of the residency: its background work takes the least weight.
@@ -567,6 +582,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <returns><see langword="true"/> when the tables hold a frame the views can render.</returns>
     /// <exception cref="ObjectDisposedException">The residency is released.</exception>
     public bool Prepare(in FrameContext context) {
+        JoinPack();
         _ = HostFrame(context: in context);
         _ = BeginPack(context: in context);
         RunPack();
@@ -627,8 +643,67 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
     /// <summary>Packs the frame <see cref="BeginPack"/> left into the tables and stages its meshes, shading, lighting
     /// and exposure. It runs on one thread, which need not be the frame thread, and touches only the residency's own
-    /// state.</summary>
+    /// state. A pack already running beside the frame thread (<see cref="PackAhead"/>) is joined instead.</summary>
     internal void RunPack() {
+        JoinPack();
+        RunPackHeld();
+    }
+
+    // The pack run beside the frame thread (PackAhead), on the residency's own lane, until a door joins it (JoinPack).
+    //
+    // Invariant: while the pack runs on the lane, the frame thread changes nothing the pack reads or writes of this
+    // residency. The pack keeps to the residency (the RunPack invariant above), so the frame thread can go on with other
+    // residencies' captures; every member of this residency that steps its frame or reads what the pack writes joins
+    // the lane first: BeginFrame, Upkeep, Prepare (and through it Stage, BeginStage and IsUnchanged), RunPack, EndPack,
+    // Park and the release of the device objects. Frame and Tables stand while the pack runs: BeginPack set both, and
+    // the pack replaces neither. Nothing checks a new member that reads pack state without joining; review holds that.
+    private JobLane? m_packLane;
+    private PackAheadUnit? m_packAheadUnit;
+    private bool m_packPosted;
+    // Whether the calling thread runs a residency's pack on its lane, where the frame's submission is refused as it is in
+    // a partition (SubmitOnce).
+    [ThreadStatic] private static bool PackingAhead;
+
+    private static readonly WaitReason PackWait = new(Subsystem: "sdf.residency", WaitsFor: "the pack run beside the frame");
+
+    private sealed class PackAheadUnit(SdfWorldResidency owner) : IJobLaneUnit {
+        public void Run() {
+            PackingAhead = true;
+            try { owner.RunPackHeld(); } finally { PackingAhead = false; }
+        }
+    }
+
+    /// <summary>Hands the frame's pack, once <see cref="BeginPack"/> left it, to the residency's own lane, where it runs
+    /// beside the frame thread until a door of the residency joins it; the frame thread goes on meanwhile with work that
+    /// touches no state of this residency (other residencies' captures). A frame whose pack keeps to the frame thread
+    /// (<see cref="PacksBeside"/>) is left to <see cref="RunPack"/>.</summary>
+    /// <returns><see langword="true"/> when the pack was handed to the lane.</returns>
+    internal bool PackAhead() {
+        if (m_packPosted || !PacksBeside) { return false; }
+        m_packLane ??= new JobLane(name: ("Puck pack: " + Name), priority: JobPool.WorkerPriority);
+        m_packLane.Post(unit: (m_packAheadUnit ??= new PackAheadUnit(owner: this)));
+        m_packPosted = true;
+        SdfCaptureWork.ProcessWork.Count(kind: SdfCaptureWork.PackedAhead);
+        return true;
+    }
+    // Waits for the pack PackAhead posted, if any, and takes it: what it wrote may be read, and what it read may change,
+    // once this returns. Rethrows what the pack threw. The frame thread's door; the lane's own thread never joins itself.
+    private void JoinPack() {
+        if (!m_packPosted || PackingAhead) { return; }
+
+        var lane = m_packLane!;
+        var outcome = WaitOutcome.DeadlinePassed;
+
+        if (!lane.Ready) { SdfCaptureWork.ProcessWork.Count(kind: SdfCaptureWork.PackAheadWaits); }
+        try {
+            outcome = lane.Collect(deadline: WaitDeadline.Synchronous(), reason: in PackWait);
+        } finally {
+            // A pack that threw is collected too: the lane is free, and the throw reaches the caller.
+            if ((outcome == WaitOutcome.Completed) || !lane.InFlight) { m_packPosted = false; }
+        }
+        if (outcome == WaitOutcome.DeadlinePassed) { HostWaits.ThrowIfPending(pending: PackWait); }
+    }
+    private void RunPackHeld() {
         if (m_pack != PackStage.Begun) { return; }
         try {
             m_renders = PackPrepared(context: in m_packContext, device: m_packDevice!, frame: m_packFrame!);
@@ -641,6 +716,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Ends the frame's preparation on the frame thread: weighs the background work by the share of the display
     /// the frame is shown over, and submits the upload of tables whose frame waits on a pipeline.</summary>
     internal void EndPack() {
+        JoinPack();
         if (m_pack != PackStage.Ran) { return; }
         m_pack = PackStage.Ended;
         // The background work draws on the presentation's budget by the share of the display the frame is shown over.
@@ -753,6 +829,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
                     tables: tables
                 );
             }
+            // The frame the pack takes is the residency's frame from here, on the frame thread, so a pack running beside
+            // it (PackAhead) leaves Frame standing.
+            m_frame = frame;
+            m_pendingFrame = null;
         }
 
         return true;
@@ -770,8 +850,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
         )) {
             using (HostFrameWork.Measure(HostFrameWorkPart.Pack)) { tables.Pack(frame: frame); }
             m_packedFrame = frame;
-            m_frame = frame;
-            m_pendingFrame = null;
             LiveVolumes = frame.Volumes.Count;
         } else {
             // The frame stands, but meshes its draws name can have landed since it was packed.
@@ -851,6 +929,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// they are built.</returns>
     /// <exception cref="ObjectDisposedException">The residency is released.</exception>
     public bool Stage(in FrameContext context) {
+        // A staging is for a render, which a parked residency wakes for.
+        if (m_parked) { m_wakeOwed = true; }
         _ = Prepare(context: in context);
 
         if (m_tables is not { } tables) { return false; }
@@ -871,7 +951,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // (SdfWorldTables.RecordUpload), and CloseSubmit ends it on the frame thread.
     private bool OpenSubmit(SdfWorldTables tables) {
         if (m_submitted) { return false; }
-        if (JobPool.InPartition) {
+        if (JobPool.InPartition || PackingAhead) {
             throw new InvalidOperationException(message: $"Residency '{Name}' was asked to stage its frame from a forked recording; only the frame thread's preparation may.");
         }
         m_submitted = true;
@@ -881,6 +961,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
     private void CloseSubmit(SdfWorldTables tables) {
         tables.CloseUpload();
+        ServeSubmitted(tables: tables);
+    }
+    // Pumps the tables' background work against the upload just published.
+    private void ServeSubmitted(SdfWorldTables tables) {
         // A withheld frame presents nothing, so the work it waits on, its meshes or its lighting, runs at the GPU's pace.
         if (FrameWithheld) { tables.GpuWork.Drive(tables: tables); } else { tables.GpuWork.Pump(tables: tables); }
     }
@@ -902,9 +986,18 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Records the upload <see cref="BeginStage"/> opened (<see cref="SdfWorldTables.RecordUpload"/>), touching
     /// only the residency's tables.</summary>
     internal void RecordStage() => m_tables!.RecordUpload();
-    /// <summary>Submits the upload <see cref="RecordStage"/> recorded and pumps the tables' background work, on the frame
-    /// thread.</summary>
-    internal void EndStage() => CloseSubmit(tables: m_tables!);
+    /// <summary>Submits the upload <see cref="RecordStage"/> recorded, deferred in the frame's open batch, on the frame
+    /// thread; <see cref="EndStage"/> then hands it to the queue and publishes it.</summary>
+    internal void QueueStage() => m_tables!.QueueUpload();
+    /// <summary>Hands the upload <see cref="QueueStage"/> submitted to the queue, with every upload queued before it,
+    /// publishes it and pumps the tables' background work, on the frame thread.</summary>
+    internal void EndStage() {
+        var tables = m_tables!;
+
+        tables.HandOffUpload();
+        tables.PublishUpload();
+        ServeSubmitted(tables: tables);
+    }
     /// <summary>Returns the tables the frame is staged in (<see cref="Stage"/>), for a pass that records against them,
     /// staging it late (<see cref="StageLate"/>) when nothing has yet.</summary>
     /// <param name="context">The host's frame context.</param>
@@ -940,9 +1033,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <see cref="FrameWithheld"/>, is that frame's own, which the budget does not meter); publishes the uploads whose
     /// fences have signaled; and polls retired device objects and answers a memory trim the process account asked for.
     /// Called on the frame thread at the top of each frame, before any residency prepares; a residency with no tables
-    /// keeps nothing to serve.</summary>
+    /// keeps nothing to serve, beyond giving back the lighting of one parked for <see cref="ForgetLightingSeconds"/>.</summary>
     public void Upkeep() {
-        if (m_disposed || (m_tables is not { } tables)) { return; }
+        JoinPack();
+        if (m_disposed) { return; }
+        ForgetParkedLighting();
+        if (m_tables is not { } tables) { return; }
         tables.GpuWork.Pump(tables: tables, withheld: FrameWithheld);
         m_work.Poll();
         tables.ServiceMemoryTrim();
@@ -1089,18 +1185,21 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <param name="width">The view's width, in pixels.</param>
     /// <param name="height">The view's height, in pixels.</param>
     /// <returns>The counts.</returns>
-    public ShaderPipelineStorageCounts CountsAt(uint width, uint height) {
-        var instances = CountedInstances;
-
-        return new ShaderPipelineStorageCounts(
-            Height: height,
-            Width: width
-        ) {
-            InstanceMaskWords = ((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: instances)),
-            Instances = ((ulong)instances),
-            Viewports = 1,
-        };
-    }
+    public ShaderPipelineStorageCounts CountsAt(uint width, uint height) => CountsFor(height: height, instances: CountedInstances, width: width);
+    /// <summary>Returns the counts a view of a residency allocates its counted scratch by: one viewport, and the
+    /// instances it is provisioned for and their mask words.</summary>
+    /// <param name="width">The view's width, in pixels.</param>
+    /// <param name="height">The view's height, in pixels.</param>
+    /// <param name="instances">The provisioned instances.</param>
+    /// <returns>The counts.</returns>
+    public static ShaderPipelineStorageCounts CountsFor(uint width, uint height, int instances) => new(
+        Height: height,
+        Width: width
+    ) {
+        InstanceMaskWords = ((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: instances)),
+        Instances = ((ulong)instances),
+        Viewports = 1,
+    };
 
     /// <summary>Gets a revision that moves whenever <see cref="CountsAt"/> would return another value at an unchanged
     /// extent: the provisioned instance count. Before the tables exist, it is the capacity they will receive for that
@@ -1125,7 +1224,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     /// <summary>Gets the residency's indirect lighting, the irradiance volume its views read while its frame asks for
     /// indirect light.</summary>
-    public SdfMeshIrradiance MeshIrradiance { get; } = new();
+    public SdfMeshIrradiance MeshIrradiance { get; private set; } = new();
     /// <summary>Gets the exposure each view of the residency's latest frame maps the luminance it shades by.</summary>
     public SdfViewExposures Exposures { get; } = new();
 
@@ -1327,6 +1426,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
         if (m_tables is not null) {
             return true;
         }
+        // A parked residency builds its tables only for a render or for the sight's want (StandsParked).
+        if (StandsParked) {
+            return false;
+        }
 
         m_deviceContext = device;
         m_tables = m_pipelines.TryBuild(
@@ -1358,6 +1461,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
         // pipeline is (EnsureProbeWork).
         tables.Grant.Name = MeshPathBake.Residency;
         MeshIrradiance.Time = tables.Grant.Selector.Time;
+        // A residency built for a reader counts as observed from now; a park's wake withholds the views until what the
+        // park took is back (Waking).
+        m_clock = tables.Grant.Selector.Time;
+        m_observedAt = m_clock.GetTimestamp();
+        Wake();
         tables.GpuWork.Add(client: new SdfMeshBakeGpuWork(bake: MeshPathBake, tables: tables));
         MeshPathBake.DispatchReport = tables.GpuWork.Describe;
         // A lattice a worker readies is taken when it is ready, not at the next frame.

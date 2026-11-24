@@ -51,6 +51,10 @@ bool sdfProbeBlocksLight(uint instance, uint primitive, float3 localDirection) {
     return dot(cross(e1, e2), localDirection) > 0;
 }
 
+// The scene's root words lie at the base the dispatch pushes (SdfMeshProbeTrace.RootWords), since every residency's
+// scene shares one buffer: the top root's address, zero for an empty scene, then the first instance record's.
+uint sdfProbeRootWord(uint word) { return sdfProbeScene[pushedIndex.index + word]; }
+
 #ifdef SDF_PROBE_RAY_QUERY
 // The software walk's exclusive near bound: a hit closer than this along the ray is the surface the ray left.
 static const float SdfProbeNearest = 1.0e-4;
@@ -65,7 +69,7 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
     identity = uint2(0xffffffffu, 0xffffffffu);
     // An interval no wider than the near bound holds no hit the software walk accepts, and a ray query needs
     // TMin <= TMax: a shadow ray toward a light just past its surface offset answers clear here.
-    if ((sdfProbeScene[0] == 0) || (maximum <= SdfProbeNearest)) { return false; }
+    if ((sdfProbeRootWord(0u) == 0) || (maximum <= SdfProbeNearest)) { return false; }
     RayDesc ray;
     ray.Origin = origin;
     ray.Direction = direction;
@@ -76,7 +80,7 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
         light.TraceRayInline(sdfProbeStructure, RAY_FLAG_NONE, 0xffu, ray);
         while (light.Proceed()) {
             if (light.CandidateType() != CANDIDATE_NON_OPAQUE_TRIANGLE) { continue; }
-            uint instance = sdfProbeScene[SDF_PROBE_INSTANCE_BASE_WORD] + light.CandidateInstanceID() * SDF_PROBE_INSTANCE_WORDS;
+            uint instance = sdfProbeRootWord(SDF_PROBE_INSTANCE_BASE_WORD) + light.CandidateInstanceID() * SDF_PROBE_INSTANCE_WORDS;
             if (sdfProbeBlocksLight(instance, light.CandidatePrimitiveIndex(), light.CandidateObjectRayDirection())) { light.CommitNonOpaqueTriangleHit(); }
         }
         return light.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
@@ -92,7 +96,7 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
     nearest.Proceed();
     if (nearest.CommittedStatus() != COMMITTED_TRIANGLE_HIT) { return false; }
     distance = nearest.CommittedRayT();
-    uint instance = sdfProbeScene[SDF_PROBE_INSTANCE_BASE_WORD] + nearest.CommittedInstanceID() * SDF_PROBE_INSTANCE_WORDS;
+    uint instance = sdfProbeRootWord(SDF_PROBE_INSTANCE_BASE_WORD) + nearest.CommittedInstanceID() * SDF_PROBE_INSTANCE_WORDS;
     sdfProbeSurface(instance, nearest.CommittedPrimitiveIndex(), normal, material, identity);
     return true;
 }
@@ -179,7 +183,7 @@ bool sdfProbeTriangleHit(float3 origin, float3 direction, float3 v0, float3 e1, 
 bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, bool anyHit, bool toward, out float distance, out float3 normal, out uint material, out uint2 identity) {
     distance = maximum; normal = 0; material = 0;
     identity = uint2(0xffffffffu, 0xffffffffu);
-    uint root = sdfProbeScene[0];
+    uint root = sdfProbeRootWord(0u);
     float3 inverse = 1.0 / direction;
     float entryDistance;
     if (root == 0 || !sdfProbeSlab(root, origin, inverse, maximum, entryDistance)) { return false; }

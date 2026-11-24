@@ -282,7 +282,7 @@ public sealed partial class WorldPopulation {
         }
         var total = m_navigation.BakeWork;
 
-        return $"[world.navigation: retained={m_navigation.RetainedDomainCount},rebuilt={m_navigation.RebuiltDomainCount},rebaked={m_navigation.RebakedDomainCount} cells={m_navigation.CellCount} edges={total.Edges} bake=grounds:{total.Grounds},occupancies:{total.Occupancies},edgeProofs:{total.EdgeProofs},allocated:{total.AllocatedBytes} workspaceBytes={m_navigation.WorkspaceBytes} routeWorkspaceBytes={m_navigation.RouteWorkspaceBytes} junctions={m_navigation.JunctionCount} goalFields={m_navigation.ResidentGoalFields},bytes:{m_navigation.GoalFieldBytes},evictions:{m_navigation.GoalFieldEvictions},lastTick=builds:{m_navigation.GoalFieldBuildsLast},cells:{m_navigation.GoalFieldCellsLast},steps:{m_navigation.GoalFieldStepsLast}; {string.Join(
+        return $"[world.navigation: retained={m_navigation.RetainedDomainCount},rebuilt={m_navigation.RebuiltDomainCount},rebaked={m_navigation.RebakedDomainCount} cells={m_navigation.CellCount} edges={total.Edges} bake=grounds:{total.Grounds},occupancies:{total.Occupancies},edgeProofs:{total.EdgeProofs},allocated:{total.AllocatedBytes} workspaceBytes={m_navigation.WorkspaceBytes} routeWorkspaceBytes={m_navigation.RouteWorkspaceBytes} junctions={m_navigation.JunctionCount} goalFields={m_navigation.ResidentGoalFields},bytes:{m_navigation.GoalFieldBytes},evictions:{m_navigation.GoalFieldEvictions},lastTick=builds:{m_navigation.GoalFieldBuildsLast},requests:{m_navigation.GoalFieldRequestsLast},waits:{m_navigation.GoalFieldWaitsLast},cells:{m_navigation.GoalFieldCellsLast},steps:{m_navigation.GoalFieldStepsLast}; {string.Join(
             separator: "; ",
             values: rows
         )}]";

@@ -60,13 +60,13 @@ public sealed class SessionMirrorImageLawTests {
 
         // The value every body of the copied snapshot shares, or a failure naming the first body that disagrees.
         public int CommonValue() {
-            var value = ((int)Image.Entries[0].CurrentPosition.X);
+            var value = ((int)Image.Entry(0, Image.Version).CurrentPosition.X);
 
             for (var index = 0; (index < Bodies); index++) {
-                Assert.True(condition: Image.Entries[index].Active, userMessage: $"body {index} inactive");
-                Assert.Equal(expected: value, actual: ((int)Image.Entries[index].CurrentPosition.X));
-                Assert.Equal(expected: value, actual: ((int)Image.Entries[index].Color.X));
-                Assert.Equal(expected: value, actual: Image.Entries[index].Address.Generation);
+                Assert.True(condition: Image.Entry(index, Image.Version).Active, userMessage: $"body {index} inactive");
+                Assert.Equal(expected: value, actual: ((int)Image.Entry(index, Image.Version).CurrentPosition.X));
+                Assert.Equal(expected: value, actual: ((int)Image.Entry(index, Image.Version).Color.X));
+                Assert.Equal(expected: value, actual: Image.Entry(index, Image.Version).Address.Generation);
             }
             return value;
         }
@@ -121,7 +121,7 @@ public sealed class SessionMirrorImageLawTests {
             Assert.True(condition: stalled.Wait(cancellationToken: token, timeout: TimeSpan.FromSeconds(seconds: 30)));
             await CopyWithin(copy: copy, mirror: mirror, token: token);
             Assert.Equal(expected: 2, actual: copy.CommonValue());
-            Assert.True(condition: copy.Image.Entries.Length <= SeedIndex);
+            Assert.True(condition: copy.Image.Extent <= SeedIndex);
             Volatile.Write(location: ref stall, value: false);
             release.Set();
             await seed;
@@ -132,8 +132,8 @@ public sealed class SessionMirrorImageLawTests {
         }
 
         copy.From(mirror: mirror);
-        Assert.True(condition: copy.Image.Entries[SeedIndex].Active);
-        Assert.Equal(expected: 3f, actual: copy.Image.Entries[SeedIndex].CurrentPosition.X);
+        Assert.True(condition: copy.Image.Entry(SeedIndex, copy.Image.Version).Active);
+        Assert.Equal(expected: 3f, actual: copy.Image.Entry(SeedIndex, copy.Image.Version).CurrentPosition.X);
         Assert.Equal(expected: 3UL, actual: copy.Image.Tick);
     }
     [Fact]

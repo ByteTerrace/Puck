@@ -68,6 +68,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
     private string DescribeAdjacencies(WorldInstance? instance, CommandContext context) {
         var definition = (instance?.Server ?? server).ReadView(context).Definition;
         var source = (instance?.Server.Adjacencies ?? server.Adjacencies);
+        using var read = source?.Visuals();
         var builder = new StringBuilder(value: "[world.adjacencies:");
         var any = false;
 
@@ -104,7 +105,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                 ? borderCapacity.ToString(provider: CultureInfo.InvariantCulture)
                 : "destination")} unavailable={adjacency.Unavailable.ToString().ToLowerInvariant()} onUnavailable={(adjacency.OnUnavailable ?? "none")}");
 
-            if (source?.Find(adjacencyName: adjacency.Name.Value) is not { } neighbour) {
+            if (read?.Find(adjacencyName: adjacency.Name.Value) is not { } neighbour) {
                 _ = builder.Append(value: " state=CLOSED]");
                 continue;
             }
@@ -162,8 +163,8 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                 ))}]");
         }
 
-        if (source is not null) {
-            foreach (var projection in source.Visuals().Where(predicate: static projection => !projection.Direct)) {
+        if (read is not null) {
+            foreach (var projection in read.Projections.Where(predicate: static projection => !projection.Direct)) {
                 any = true;
                 var addresses = new List<string>();
 

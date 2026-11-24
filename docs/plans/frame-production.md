@@ -32,13 +32,15 @@ In order, on the frame thread unless a step says otherwise:
    (`SdfWorldPasses.BeginFrame`). Each residency a reader of the frame names
    then captures (`SdfWorldPasses.PrepareRead`), in rounds, since a capture
    can place a window that names another reader.
-3. **Pack.** Once the readers are known, every captured residency packs
+3. **Pack.** The host's pack begins once it has captured and runs on its own
+   lane beside the readers' rounds (`SdfWorldResidency.PackAhead`). Once the
+   readers are known, every other captured residency packs
    (`SdfWorldPasses.ReadsPrepared`): one residency a partition of one fork of
-   the job pool.
+   the job pool, and the host's pack is joined.
 4. **Schedule**, then **prepare**: the residencies the schedule renders record
    their uploads (`SdfWorldPasses.RendersScheduled`), again one residency a
    partition, and submit them in schedule order.
-5. **Record**, in dependency waves (`RenderGraphRuntime.RenderWaves`).
+5. **Record**, every render in one fork (`RenderGraphRuntime.RenderWaves`), and commit in schedule order.
 
 ## What is built
 
@@ -73,9 +75,10 @@ lighting and exposure, and keeps to the residency's own state, so the frame
 thread forks it across the pool, one residency a partition, and joins.
 
 **Their uploads record side by side.** The upload has the same three steps
-(`SdfWorldResidency.BeginStage`, `RecordStage`, `EndStage`). The first waits
-the previous upload's fence and takes the ring slot; the last submits, in
-schedule order, and pumps the residency's background work. The middle one
+(`SdfWorldResidency.BeginStage`, `RecordStage`, then `QueueStage` and
+`EndStage`). The first waits the previous upload's fence and takes the ring
+slot; the last queues every upload in schedule order, hands them to the queue
+together, publishes each and pumps its residency's background work. The middle one
 records the regions' copies and the world's shadow layers into the residency's
 own command list.
 
@@ -119,38 +122,316 @@ It stays the step after the ones below: once a frame costs what it shows, the
 remaining serial chain is the host world's own, and that is the chain a
 pipeline would split.
 
-**Recording every scheduled render in one fork** would end the wait between
-waves. A consumer binds what its producer published, and a producer publishes
-when it commits, so the waves are serial by construction today.
+## One fork records a frame
+
+Every scheduled render now records in one fork of the job pool
+(`RenderGraphRuntime.RenderWaves`); `render.record.waves` divided by
+`render.record.frames` reads 1.00 on the debug world's spawn. The frame thread
+prepares every render in schedule order, forks all their recordings, emits their
+lanes as a second fork, and commits in schedule order, so a producer still
+reaches the queue before its same-frame readers.
+
+**A reservation.** A consumer binds an output before its producer records. So a
+graph node whose prepared frame will record writes, as it is prepared, the record
+its commit will publish (`RenderGraphRuntime.ReserveOutput`): the selected image,
+its forwarded binding and layout, every named output's buffer and image, the
+label and the publication. The node computes the reservation with the same
+routines its commit publishes by (`ShaderPipelineRenderNode.SelectedPublication`,
+`FillBufferOutputs`), so the two cannot drift. Three parts are predictions:
+
+- A package pass that drew nothing last frame is taken to draw nothing again, and
+  the input it stands for is resolved again at this frame's slot
+  (`ShaderPipelineRenderNode.PredictedStandingOf`).
+- A buffer's content identity is taken as standing.
+- The publication is the node's next submission.
+
+**The commit is the door.** A consumer submits only if every reservation it bound
+held (`RenderGraphRuntime.HoldsReservations`). A producer's reservation breaks
+when its frame did not commit (a failed or abandoned recording), when the commit
+published another image, layout, buffer, binding or image publication, or when
+its label gained external content the reservation lacked
+(`SettleReservation`, `FinishReservation`). A consumer of a broken reservation is
+abandoned, counted in `render.record.invalidated`, and keeps its last good
+output, which is what its readers bind next frame. Its own reservation is then
+withdrawn (`OutputRecords.Withdraw` puts back the records it displaced), so its
+consumers, later in the same loop, are abandoned in turn: the dependency closure.
+A buffer identity that changed matters only to a consumer whose pass stood on it
+(`ShaderPipelineRenderNode.StoodOnExternal`); a consumer that recorded reads the
+buffer after its producer on the queue whatever its identity says.
+
+**Where a later wave remains** (`RenderGraphRuntime.PlanWaves`): a consumer that
+submits as it is prepared (an external producer, a paused node) waits for its
+producer's commit, and so does every consumer of a node that publishes history,
+whose instance follows whichever pass writes it this frame. The debug world has
+neither on its route.
+
+### The decisions and the invariant each serves
+
+1. **Every value a consumer reads at record is decided at prepare, or is a
+   prediction the commit checks.** Serves: no command list reads a resource
+   whose producer has not submitted exactly what was bound. The prediction for a
+   stand-in outcome replaces deciding it at prepare because the decision lives
+   in the recorder's `Record`, which reads frame state only the recording has
+   (the overlay's composition of its HUD, the place pass's placements); the
+   prediction holds in the steady state and a flip costs the consumers one frame.
+2. **Glass's forwarding needs no cross-node decision.** The glass shading pass
+   stands its lit image for the opaque one inside its own view's graph
+   (`SdfGlassRecorder.Record`); the view publishes `color`, which the display
+   pass writes every frame. The forwarding never reaches another node's binding,
+   so the reservation does not see it. A selection of `glassLit` as a view's
+   output is the one way it would, and the prediction covers it.
+3. **A lighting source's classification is recorded as it records.** The sky
+   environment and the screen emission record what their submission will carry
+   (`SdfWorldTables.RecordSkyEnvironment`, `RecordScreenEmission`) and a view
+   reads it for its package frame (`SdfWorldPasses.SourceTaintOf` through
+   `SkyEnvironmentFor`). Serves: a view classifies the buffer it samples, never
+   the previous submission's. The door is the recording domain: the source's
+   recorder and every view of its residency name the residency
+   (`IRenderGraphPackageRecorder.RecordingDomain`), and `RecordWave` records a
+   domain's jobs on one thread in schedule order, the source first. A view whose
+   source's frame does not commit is abandoned with it (decision 1). This keeps
+   the classification on the frame it describes rather than reading the latch's
+   previous frame, which would classify a buffer by a submission it is not.
+4. **A failed producer invalidates its dependents through the existing
+   abandonment**, never a second gate: `AbandonFrame` rolls back the cadence and
+   retires the leases, as a failed recording always has, and the dependents keep
+   their last good output, as a stand-in rule would have them do for a producer
+   with no output.
+
+### The invariants and their doors
+
+| Invariant | Door | Where the guarantee stops |
+|---|---|---|
+| No command list reads a resource whose producer has not submitted, in the same frame, exactly what it bound, unless it reads the stand-in or an earlier frame's output. | The commit loop's `HoldsReservations` in `RenderGraphRuntime.RenderWaves`, with every binding read noted through `OutputAt`, `Resolve` or `NoteReservedRead`. | A new binding path that reads another instance's output without naming its consumer goes around it; review holds that. |
+| No reserved binding outlives the frame's retirement. | A reservation is settled in `ReleaseRender` on every path out of a prepared frame (commit, failure, abandonment, a throw), and leases bound to it retire through the consumer's slot like any other (`GpuRetirementQueue` for replaced allocations). | Nothing new: the image table's leases are unchanged. |
+| Every residency's upload of a frame reaches the queue before any view of that frame records. Compaction moves ride the next upload (`SdfMeshRegionStore.RecordOwed`). | `SdfWorldPasses.RendersScheduled` submits every scheduled residency's upload (`SdfWorldResidency.EndStage`) before the runtime prepares any render; the fork comes after. | A residency staged late (a graph installed mid-frame) stages in `PrepareRecord`, still on the frame thread before the fork. |
+
+### What showed it
+
+On the RTX 4070 at 2560×1440, Direct3D 12, in-process authority, after the
+bakes settled: `render.record.waves` against `render.record.frames` read
+5178 against 5177 over the run and 242 against 242 over a 120-tick window, with
+about 6.4 jobs a frame. Armed `gpu.faults record` failures of
+`world$environment`, `main`, a machine source and the overlay failed those
+recordings, abandoned twelve dependents (`invalidated` 1 to 13), and every
+instance was reported current again on the following frames.
 
 ## The steps
 
 Each step names the count that shows it worked, read with `world.counters`
 across a benchmark chapter and divided by the frames.
 
-3. **One fork records a frame.** A node publishes the output it will commit as
-   it is prepared, so every consumer binds before any recording runs, and a
-   failed recording abandons its consumers with it. `ShaderPipelineRenderNode.PrepareFrame`
-   reserves a slot, but `PublishBuffers` resolves the actual named outputs
-   after recording and `RenderGraphRuntime.RememberOutput` records their
-   delivery label and forwarded image. Move those decisions into preparation
-   and retain their exact images and buffers through commit. Check that
-   `render.record.waves` falls to one per recorded frame.
-4. **The pump follows what completed.** Each residency's background work polls
-   every frame (`SdfWorldResidency.Upkeep`). The fence wakes the thread's shared
-   `WaitService.Signal`, which cannot identify the ready residency. Give the
-   pump readiness from the fence, a client's new job, and budget credit. Keep
-   device retirement and memory trims progressing even when no background job
-   is ready. Compare the number of residencies pumped per frame with the
-   number held.
-5. **Then the pipeline**, if the host world's own chain still bounds a frame.
+4. **The pump follows what completed.** Built. A residency's background work
+   rests once a step finds nothing to take (every client declined with no
+   deferral pending, or every slot busy), and a pump or the host wait's step of
+   a resting service does nothing else (`SdfGpuWork.Quiescent`). The shared
+   `WaitService.Signal` still wakes the thread, and each service then reads its
+   own causes: a completed slot fence, its own wake (`SdfGpuWork.Wake`, which
+   every client with work outside a frame calls, and a released readback), the
+   tables' next upload (`SdfWorldTables.Uploads`), a held frame, or the first
+   deadline a client or a deferred job reported. `ISdfGpuWorkClient.UntilDue`
+   gives the service the client deadline. The host wait anchors each deadline
+   as its service answers. Device retirement and memory trims run every frame
+   whatever the work does (`SdfWorldResidency.Upkeep`), and a resting service
+   still gives back idle buffers. `sdf.captures.pumped` against
+   `sdf.captures.held` read 685 against 3256 over 120 ticks of the settled
+   spawn, about 21%.
+5. **Restaged draw records.** Measured, and left as they stand. Over a settled
+   spawn on the RTX 4070, about 400 restaged records split: 273 a rigid copy
+   whose pose epoch moves every tick (the card cursor, whose position arrives
+   as a teleport each tick, so its motion identity, and with it the record's
+   generation, moves; the generation is what lets the temporal resolve refuse
+   history across a jump, so the restage is correct), 96 pose-word writes of
+   two slot riders whose scale animates (`SdfMeshDrawDifference.Matrix`), 20
+   roster and 10 tier changes. That is a few records a frame out of about
+   23,000 rows: no structural change pays here. Moving a rider's scale into its
+   slot's row would remove the 96, and a cursor that glides instead of
+   teleporting would remove the 273; the second is the cursor rule's to decide.
+   Skinned rows write only their selection words (`NoteSkinnedRows`).
+6. **Steady allocation.** The frame thread's median allocation on the settled
+   spawn fell from about 43 KB to about 17 KB an iteration (`host.frames`).
+   one set per banks table).
+   The output records recycle the reservations' named-output arrays
+   (`OutputRecords`). The binding bar builds one set per banks table
+   (`CompiledBindingBarLayout.Places`).
+
+   On the moving route the process's allocation was dominated by two sources
+   that had nothing to do with frame production, and both are gone:
+
+   - A scoped replay that captured the whole population every tick and then
+     refused (`WorldScopedReplayRuntime.Capture`). A scope now captures only
+     its own bodies, after checking they are present
+     (`WorldPopulation.TryCaptureEntries`).
+   - A blocking, compacting collection the memory account ran every two
+     seconds for a background bake (`MemoryAccount.ReclaimForAuthoring`), which
+     stopped every thread for 400 to 560 ms. Decision: a reclaim serves
+     authoring, so it is a background collection. Invariant: play never stops
+     for authoring's sake. The door is the account's one reclaim delegate; a
+     caller that passes its own `reclaim` chooses its own collection.
+
+   Per-definition derivations the adjacency step asked for several times a
+   tick are derived once a definition (`WorldAdjacencyPolicy.TryBodyReach`,
+   `TryVerticalOwnershipDeadband`, through `CodeDerivedTable`).
+
+   The tick and renderer retain the same frozen body image through
+   `WorldAdjacencyRead`. Only the last release returns its array.
+   `WorldSessionMirror.BodyImage.Entry` checks the pinned publication before
+   exposing a body. `SdfMeshProbeGpuWork.Complete` reads into answer buffers
+   the requesters reserve before submission. The volume exchanges its camera
+   sample's writable and published buffers under the camera readers' gate.
+   The view graph still builds footprints and instance sets when its inputs
+   move (`RenderGraphInstanceSet.TryCreate`, `WorldViewGraphHost.ScreenFootprints`).
+7. **A view-graph change rebuilds what it changed.** The client now keeps what
+   it derives from a delivered definition while the delivery moves none of the
+   parts the derivation read, through the document's own read recording
+   (`WorldDocumentProduct`, over `WorldDocumentReads` and
+   `WorldDocumentInputs.Changed`): the creation facets
+   (`WorldFramePresenter.ReconcileDelivery`) and the presentation query field,
+   which records its reads on its build thread. A `world.row.set views
+   nestingDepth` pair rebuilt the field twice and now once (334 to 178 MB of
+   allocation across the pair, `puck host allocations`). The rest of the cost
+   is real new work and duplicate work elsewhere: opening the deeper screen
+   sessions (`WorldInstanceHost.OpenScreenSession`), each session's facets
+   derived again (`WorldPrototypeFacets.Seated`) and its scene composed, the new
+   residencies' programs. The authority's validation, rule compilation and
+   delivery apply the same change rule as `WorldDocument.PlanProducts`.
+
+   The screen nesting limit is a tracked input of its own. The validation
+   partition for it checks the limit. Graph topology and the remaining
+   validation read the rest of the views section. Validated rule programs and
+   their work analysis carry the inputs they actually read and can serve a
+   candidate whose inputs stand. Delivery keeps canonical member bytes across
+   immutable definitions and omits inline bytes the stream already sent.
+   Composition shares unchanged view members with the installed record before
+   planning products. A depth-only edit that keeps the arena and rule receipt
+   publishes its new definition without reinstalling the authority's programs.
+8. **The host world's chain overlaps.** Built, in two parts.
+
+   **The host's pack runs beside the readers' rounds.** The host captures
+   first (`SdfWorldPasses.BeginFrame`), and its pack begins right after, on the
+   frame thread, then runs on the residency's own lane
+   (`SdfWorldResidency.PackAhead`) while the frame thread captures the readers'
+   rounds and packs the other residencies; the frame's pack
+   (`SdfWorldPasses.ReadsPrepared`) joins it before it ends the host's pack.
+   The step-8 premise that the pack's screen binding waits on the rounds did
+   not hold when read: the binder publishes every screen's mapping and slot
+   before the frame (`WorldScreenBinder.Publish`), and the host's filmed views
+   and their levels are fixed by the host's own capture
+   (`WorldScreenBinder.FilmViews`). So the first step stays whole and moves
+   earlier, rather than splitting.
+
+   Decision: a residency's pack may run beside the frame thread on a lane of
+   its own. Invariant: while it does, the frame thread changes nothing of that
+   residency the pack reads or writes. Door: `SdfWorldResidency.JoinPack`,
+   which every member that steps the residency's frame or reads pack state
+   calls first (`BeginFrame`, `Upkeep`, `Prepare` and through it `Stage`,
+   `BeginStage` and `IsUnchanged`, `RunPack`, `EndPack`, the release of the
+   device objects); `Park` already refuses a begun pack. The residency's
+   `Frame` is set by `BeginPack`, so it stands while the pack runs, and the
+   frame's submission refuses to run from the lane as from a partition. Where
+   it stops: a new member that reads pack state without joining goes around it;
+   review holds that. `sdf.captures.packed-ahead` counts the packs run ahead
+   and `sdf.captures.pack-ahead-waits` the joins that found one still running.
+
+   **A frame's uploads reach the queue in one execute.** Each scheduled
+   residency queues its upload deferred, in schedule order
+   (`SdfWorldResidency.QueueStage`), and the first hand-off carries every one
+   of them to the queue together (`SdfWorldResidency.EndStage`). No new fence
+   value was needed: a deferred fence already reads unsignaled until its batch
+   reaches the queue (`GpuBatchedSubmissionFence.IsSignaled`); what forced one
+   execute per upload was the hand-off each upload made before publishing.
+   Invariant: nothing an upload writes (the shared mesh store's moves, the
+   shadows' slot, the upload count background work binds against) is published
+   before the upload reaches the queue. Door: `SdfWorldTables.PublishUpload`
+   refuses an upload still deferred. `gpu.queue.executes.upload.fence-wait`
+   divided by `gpu.queue.frames` shows it: one a frame on a frame that stages
+   two or more residencies side by side, where it was one a residency.
+
+   What remains of the frame thread's own chain is the host's capture and its
+   recording partitions. The next structural step is the pipeline this plan
+   weighed above: frame N+1's capture beside frame N's recording.
+9. **Judge rigid motion by slot.** Built. The previous draw-row judgement
+   raised `sdf.residency.motion.rows` by 1,332,578 over 120 ticks of the
+   east-wing route. `SdfWorldTables.NoteMovedSlots` now judges each moved
+   slot once. Its union meets every scope and owes every rectangle its rows
+   would have owed. The shadow entries keep their drawn and judged bounds
+   by slot.
+
+   The slot judgement owns both the previous and current bounds of its rigid
+   rows. It reduces the boxes in the slot's frame when a draw record changes,
+   grouping by carry transform so a moved slot can project the union without
+   visiting its rows. A fixed world box stays fixed, and an unbounded member
+   makes the slot unbounded. `SdfWorldShadows.Moved` owes both projected bounds
+   for a moved slot because its union can hide motion inside it. Draws with no
+   slot and skins with multiple pose dependencies keep separate identities.
+
+10. **The step thread and the crossing.** The stalls the frame lanes
+    attributed outside the frame thread.
+
+    - **Goal fields derive off the step.** Built. A domain keeps its route
+      graph (`NavigationRuntime.Domain.GoalGraph`): a forward and a reverse
+      slot mask a cell, built once a bake, so a derivation walks mask bits
+      instead of testing every edge on every visit. The plan requests every
+      due body's field before it resolves any (`WorldPopulation.PrepareGoalField`,
+      `ResolveGoalFields`), so a tick's misses derive side by side, and
+      requests ahead the field of a body not due to steer whose goal changed
+      (`WorldPopulation.PrefetchGoalField`). Decision: residency decides work,
+      never outcome. Invariant: no tick's result depends on when a derivation
+      ran (AGENTS.md rule 4). Door: `NavigationRuntime.GoalField`, the only
+      read, always yields the field (resident, joined or derived), and a
+      derivation reads only what `Freeze` took on the owning thread. A version
+      that landed requested fields a step later and held the body meanwhile
+      made residency state a checkpoint does not carry, and
+      `puck test worlds/debug/city-tests.puck --reproduce` diverged at its
+      first tick; that version is gone. `physics.navigation.field-waits`
+      counts the reads that held a step.
+    - **A climb carries across a seam.** Built. Thrust drives the vertical
+      channel directly each tick, so a transfer captured no vertical motion;
+      the body keeps the direct velocity its last step drove and its transfer
+      state carries it (`WorldBody.CaptureTransferState`).
+    - **An unresolved view counts its scratch as it last did.** Built. An
+      `sdf.world` instance whose residency does not resolve for a while (its
+      world released or not yet routed, as at a crossing) keeps the capacity it
+      was last counted at, one viewport and those instances
+      (`SdfWorldResidency.CountsFor`), so it neither rebuilds for the gap nor
+      sizes a buffer at zero bytes.
+    - **The seam neighbour's routed residency starts before the crossing.**
+      Not built. A seat's routed scene and its residency exist only once the
+      seat is presented in the other world (`WorldFramePresenter.RouteView`,
+      `WorldScreenBinder.RoutedResidencyOf`), and the client holds no endpoint
+      for an `apart` neighbour before its route moves there: the endpoint is
+      made when the route forms (`WorldInstanceHost.EndpointFor`), and an
+      `apart` edge delivers no projection. The step needs, in order: the host
+      names the endpoint a seat is predicted to cross into within a lead time
+      (its body's velocity against the ownership face,
+      `WorldOwnershipFace.Outward`), from its tick; the client observes that
+      endpoint ahead of the route; the presenter keeps the endpoint's scene
+      alive with no view, as a window does (`WorldRoutedScene.Attach`); the
+      binder makes its residency and the package holds it, so its upkeep, its
+      first capture and its bake run while it owes preparation. What shows it:
+      no `[sdf.mesh-bake] start residency=routed…` line on a crossing tick,
+      and no produce over 33 ms at either crossing of
+      `world.benchmark run moon`.
 
 ## Systems considered
 
 - `JobPool.Fork` and its `JobClass.Frame` carry the pack fork, as they carry
   the pose pack and the recording waves. No second pool.
-- `JobLane` runs one unit beside its owner. It fits a pipeline's second half
-  and nothing built here.
+- `JobLane` runs one unit beside its owner; the host's pack runs on one
+  beside the readers' rounds (`SdfWorldResidency.PackAhead`), joined at its
+  doors as the bake's demand measure is (`SdfMeshPathBake.JoinMeasure`), and it
+  fits a pipeline's second half.
+- `GpuSubmissionBatch` already let several own-signal submissions share one
+  hand-over and answered each fence from the last; a frame's uploads use it by
+  deferring their hand-off (`SdfWorldTables.QueueUpload`), with no new fence.
+- `NavigationRuntime.Domain`'s bake (`m_edges`, walkability) and the route
+  search's edge predicate (`CanTraverse`) are what the route graph caches; the
+  domain bake's own `Task.Run` and join (`Domain.EnsureBaked`) are the pattern
+  a requested goal field follows. The cross-domain route search
+  (`NavigationRuntime.FindRoute`) still walks neighbours per visit and could
+  read the same graph.
+- `CodeDerivedTable` is the one door for a value derived from a definition;
+  the adjacency proofs use it rather than a field cache of their own.
 - `RenderGraphRuntime.RenderWaves` already groups recordings by residency
   (`IRenderGraphPackageRecorder.RecordingDomain`); the pack fork uses the same
   boundary, one residency a partition.
@@ -158,3 +439,23 @@ across a benchmark chapter and divided by the frames.
   screens; the minimum takes their slowest tier and adds no lever.
 - `SdfFrame.Writer` already gives each residency a frame of its own to capture
   into, so a capture is a hand-off of three records, not a rebuild.
+- The output records (`RenderGraphRuntime.OutputRecords`) already held a
+  current and a previous record a reader resolves through; a reservation is a
+  third state of the same record, written ahead and replaced or withdrawn, so
+  every reader keeps the door it had (`RecordedAt`, `Resolve`).
+- The existing abandonment (`ShaderPipelineRenderNode.AbandonFrame`) already
+  rolled back a frame's cadence and retired its leases unsampled; the commit
+  loop reuses it for a consumer of a broken reservation instead of adding a
+  second gate. The stand-in rule (`RenderGraphRuntime.StandInFor`) stays for a
+  producer with no output at all.
+- `IRenderGraphPackageRecorder.RecordingDomain` and `RecordWave`'s grouping
+  already order a residency's recordings on one thread; the lighting sources'
+  recorded classification rests on that order rather than on a new latch.
+- `RenderGraphSlotResults` holds what a recording captured until its slot is
+  proven complete; a reservation needs proof of submission, not completion, so
+  it is settled at the commit.
+- `WorldDocumentReads` and `WorldDocumentInputs.Changed` already record what a
+  product reads of a document and name what a delivery changed; the server's
+  `WorldDocument.PlanProducts` decides its rebuilds by them.
+  `WorldDocumentProduct` is the client's holder of one such product, so a
+  reader does not keep its own document, inputs and comparison.

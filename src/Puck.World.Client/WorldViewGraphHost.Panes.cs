@@ -63,14 +63,37 @@ public interface IWorldViewScenes {
     /// <param name="glass">The screen row the session shows on, when this returns <see cref="WorldPortalGlass.Found"/>.</param>
     /// <returns>Whether the producer is a session the consumer's world shows, and where.</returns>
     WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass);
-    /// <summary>Returns the world a session view renders when that world's meshes are still arriving (its bake pending,
-    /// or its baked meshes not yet landed and uploaded) and the view's consumer renders another: a world's meshes arrive
+    /// <summary>Finds the glass a session view shows on, as <see cref="PortalGlass(string, string, out WorldScreen?)"/>
+    /// does, and the world it stands in.</summary>
+    /// <param name="consumer">The reading instance's name.</param>
+    /// <param name="producer">The read instance's name.</param>
+    /// <param name="glass">The screen row the session shows on, when this returns <see cref="WorldPortalGlass.Found"/>.</param>
+    /// <param name="world">The definition of the world the glass stands in, when this returns
+    /// <see cref="WorldPortalGlass.Found"/> and it is known; otherwise <see langword="null"/>.</param>
+    /// <returns>Whether the producer is a session the consumer's world shows, and where.</returns>
+    WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass, out WorldDefinition? world) {
+        world = null;
+        return PortalGlass(consumer: consumer, glass: out glass, producer: producer);
+    }
+    /// <summary>Returns the world a session view renders when that world's meshes are still making their arrival
+    /// (<see cref="SdfVm.SdfWorldResidency.MeshesFirstArriving"/>) and the view's consumer renders another: a world's meshes arrive
     /// only in frames that render one of its views, and a consumer that renders the same world brings them already.</summary>
     /// <param name="view">The session view's instance name.</param>
     /// <param name="consumer">The instance whose image shows the view.</param>
     /// <returns>The world's residency, as an identity to compare by reference; <see langword="null"/> when the
-    /// view's world has no mesh still arriving or is the world its consumer renders.</returns>
+    /// view's world has no mesh still arriving, is the world its consumer renders, or is one the sight let go of
+    /// (<see cref="SdfVm.SdfWorldResidency.SightLetGo"/>).</returns>
     object? ArrivingWorld(string view, string consumer);
+    /// <summary>Records that the world a session view renders is wanted this frame: a consumer sees the view's glass,
+    /// or the glass stands near enough out of sight, by the walk to it, that a viewer comes to it soon
+    /// (<see cref="WorldPortalReach"/>). A world wanted keeps its residency's tables, and a parked one builds
+    /// them again ahead of its glass coming into sight (<see cref="SdfVm.SdfWorldResidency.Want"/>); a world behind
+    /// glass that is never wanted gives them back.</summary>
+    /// <param name="view">The session view's instance name.</param>
+    /// <param name="consumer">The instance whose sight wants it.</param>
+    /// <param name="why">Why, a constant word <c>world.residency</c> names.</param>
+    /// <param name="metres">The distance the glass leads by, or <see cref="float.NaN"/> where its consumer's sight wants it.</param>
+    void Want(string view, string consumer, string why, float metres) { }
     /// <summary>Finds the extent of what a source instance's image shows, when that differs from the extent the instance
     /// renders at: a window capture scales the captured window into its profile extent, and shows the window's own
     /// pixels at the window's own aspect ratio. A pane's published mapping is in these pixels.</summary>

@@ -392,6 +392,11 @@ public sealed partial class WorldScreenBinder : IWorldViewScenes {
             camera = CameraOf(feed: feed);
             return true;
         }
+        // An infinity view's camera is the one its consumer's sky fitted it to (FilmInfinity), in the layer's own world.
+        if (m_infinityOutputs.TryGetValue(key: view, value: out var output) && (output.Index < output.Entry.Views.Count)) {
+            camera = output.Entry.Views[output.Index].Camera;
+            return true;
+        }
         // Boot-world cameras are filmed during the host's current dress. Other worlds' filmed cameras may still
         // describe a held frame; until their current pose is known, retain their reads conservatively.
         return m_viewCameras.TryGetValue(key: view, value: out camera);

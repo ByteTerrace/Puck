@@ -121,7 +121,7 @@ public sealed class SdfCompositionFrameSourceLawTests {
         var adopted = Settle(source: source, until: frame => !ReferenceEquals(objA: frame.Program, objB: first.Program));
         var delta = Assert.IsType<SdfProgramDelta>(@object: adopted.ProgramDelta);
 
-        Assert.Same(expected: first.Program, actual: delta.From);
+        Assert.True(condition: delta.LeadsFrom(program: first.Program));
         Assert.Same(expected: adopted.Program, actual: delta.To);
         Assert.InRange(actual: delta.Runs.Count, high: Puck.Abstractions.Gpu.GpuRegion.MaxCopyRuns, low: 1);
         Assert.Equal(expected: 3L, actual: OwedRows(source: source));

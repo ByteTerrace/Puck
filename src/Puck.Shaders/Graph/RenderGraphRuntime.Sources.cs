@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 using Puck.Hosting;
 
@@ -344,7 +345,12 @@ public sealed partial class RenderGraphRuntime {
         m_forwardedCaptureIndex = index;
 
         var submitted = node.FrameCounter;
-        var surface = node.ProduceFrame(context: in context);
+        Surface surface;
+        try {
+            surface = node.ProduceFrame(context: in context);
+        } finally {
+            TrackHandOver(node: node);
+        }
 
         NoteOwedReadbacks(index: index);
 

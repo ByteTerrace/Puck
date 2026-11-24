@@ -713,10 +713,12 @@ public sealed partial class WorldServer {
             objA: compilation?.Definition,
             objB: definition
         )) {
-            compilation = (((compilation ?? m_ruleCompilation) is { } held) &&
+            var recorded = compilation?.ReuseFor(definition) ?? m_ruleCompilation?.ReuseFor(definition);
+
+            compilation = recorded ?? ((((compilation ?? m_ruleCompilation) is { } held) &&
                 (WorldDocument.ReloadInstallKindOf(candidate: definition, live: held.Definition, rows: out _) is WorldInstallKind.Nothing or WorldInstallKind.Value))
                 ? held
-                : WorldRuleCompilation.Compile(definition: definition);
+                : WorldRuleCompilation.Compile(definition: definition));
         }
         m_ruleHost.Install(compilation: compilation!);
         m_ruleCompilation = compilation;
@@ -739,6 +741,13 @@ public sealed partial class WorldServer {
 
         BindArenaDocument();
         return m_document.Definition;
+    }
+
+    // An edit that preserves the installed programs and arena still needs the current definition for cost reports.
+    internal bool TryKeepRuleReceipt(WorldDefinition definition) {
+        if (m_ruleCompilation?.ReuseFor(definition, installedBasis: m_document.Definition) is not { } receipt) { return false; }
+        m_ruleCompilation = receipt;
+        return true;
     }
 
     // The search jobs advance right after the rules, so a job judges the position this tick's rules settled and a

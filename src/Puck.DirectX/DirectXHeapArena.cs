@@ -26,6 +26,10 @@ namespace Puck.DirectX;
 public sealed unsafe class DirectXHeapArena {
     /// <summary>The bytes of a shared heap.</summary>
     public const ulong HeapBytes = (64UL << 20);
+    /// <summary>The bytes of a heap kept for tiles (<see cref="PlaceTiles"/>): a few of a mapped buffer's chunks, so a heap
+    /// empties, and is freed, once those few are unmapped. A buffer gives chunks back scattered across the heaps that
+    /// backed them, and a heap holding many chunks strands most of what a shrink returns.</summary>
+    public const ulong TileHeapBytes = (4UL << 20);
 
     /// <summary>The private-data key a placed resource carries its token under.</summary>
     public static readonly Guid TokenKey = new(g: "4f6b1c2e-8a0d-4e57-9b3f-2d7c6a1e5b90");
@@ -42,6 +46,8 @@ public sealed unsafe class DirectXHeapArena {
     // A key's Tiles marks the heaps that back reserved buffers' tiles (PlaceTiles), kept apart from placed resources, so
     // a resource that never moves cannot pin a heap whose tiles a shrinking buffer gives back.
     private readonly GpuMemoryPool<(D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role, bool Tiles), nint> m_pool;
+    // The heaps kept for tiles, of TileHeapBytes each.
+    private readonly GpuMemoryPool<(D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role, bool Tiles), nint> m_tiles;
 
     /// <summary>Initializes a new instance of the <see cref="DirectXHeapArena"/> class.</summary>
     /// <param name="calls">The device calls it makes.</param>
@@ -55,14 +61,18 @@ public sealed unsafe class DirectXHeapArena {
         m_device = device;
         m_memory = memory;
         m_pool = new(allocate: Allocate, blockBytes: HeapBytes, free: (heap, _) => Free(heap: heap));
-        if (m_memory is not null) { m_memory.TrimRequested += m_pool.Trim; }
+        m_tiles = new(allocate: Allocate, blockBytes: TileHeapBytes, free: (heap, _) => Free(heap: heap));
+        if (m_memory is not null) { m_memory.TrimRequested += Trim; }
     }
 
     /// <summary>Gets the heaps the arena holds now.</summary>
-    public int Heaps => m_pool.Blocks;
+    public int Heaps => (m_pool.Blocks + m_tiles.Blocks);
 
     /// <summary>Releases empty heaps and marks held heaps for release after their last fenced placement returns.</summary>
-    public void Trim() => m_pool.Trim();
+    public void Trim() {
+        m_pool.Trim();
+        m_tiles.Trim();
+    }
     /// <summary>Creates a resource placed in a heap of a type: one with room, or a new one.</summary>
     /// <param name="description">The resource's description.</param>
     /// <param name="heapType">The heap type it lives on.</param>
@@ -121,18 +131,18 @@ public sealed unsafe class DirectXHeapArena {
     /// <summary>Gets the bytes of the heaps kept for tiles that no run of tiles holds: device memory the arena already
     /// holds, which only <see cref="PlaceTiles"/> takes. A heap is freed only once every run in it is returned, so tiles
     /// returned from many heaps leave this room behind them.</summary>
-    public ulong SpareTileBytes => m_pool.FreeBytes(key: TileKey);
+    public ulong SpareTileBytes => m_tiles.FreeBytes(key: TileKey);
     /// <summary>Places a run of 64 KiB tiles a reserved buffer maps (<see cref="DirectXGpuMappedBuffer"/>): a range of a
     /// default-heap buffer heap kept for tiles alone, admitted and counted as any heap is, and named to the family in the
     /// counts. The caller maps it and gives it back through <see cref="ReturnTiles"/> once no queue reads it.</summary>
-    /// <param name="bytes">The run's bytes; a whole number of tiles, at most half of <see cref="HeapBytes"/> to share a
-    /// heap.</param>
+    /// <param name="bytes">The run's bytes; a whole number of tiles, at most half of <see cref="TileHeapBytes"/> to share
+    /// a heap.</param>
     /// <param name="family">The family the run is named to in the counts (<see cref="GpuObjectName.MemoryFamily"/>),
     /// whose reservation pays for a heap the run makes.</param>
     /// <returns>The run's placement: its heap and offset.</returns>
     /// <exception cref="GpuMemoryRefusedException">The account or the device refused a new heap; nothing was placed.</exception>
     /// <exception cref="ObjectDisposedException">The arena was retired (<see cref="FreeAll"/>).</exception>
-    public DirectXTilePlacement PlaceTiles(ulong bytes, string family) => m_pool.Place(
+    public DirectXTilePlacement PlaceTiles(ulong bytes, string family) => m_tiles.Place(
         alignment: DirectXGpuMappedBuffer.TileBytes,
         key: TileKey,
         payer: family,
@@ -148,7 +158,7 @@ public sealed unsafe class DirectXHeapArena {
     /// <param name="tiles">The run's placement.</param>
     public void ReturnTiles(DirectXTilePlacement tiles) {
         if (tiles.Name != 0) { _ = m_memory?.CountUnplaced(token: tiles.Name); }
-        m_pool.Return(placement: tiles.Placement);
+        m_tiles.Return(placement: tiles.Placement);
     }
     /// <summary>Returns the range a placed resource held, as the resource is released.</summary>
     /// <param name="resource">The resource.</param>
@@ -169,10 +179,11 @@ public sealed unsafe class DirectXHeapArena {
     /// <summary>Releases every heap once, as the device is released, and retires the arena. A second call does
     /// nothing.</summary>
     public void FreeAll() {
+        _ = m_tiles.FreeAll();
         if (!m_pool.FreeAll()) {
             return;
         }
-        if (m_memory is not null) { m_memory.TrimRequested -= m_pool.Trim; }
+        if (m_memory is not null) { m_memory.TrimRequested -= Trim; }
         foreach (var (token, placed) in Placed) {
             if (ReferenceEquals(objA: placed.Arena, objB: this)) { _ = Placed.TryRemove(key: token, value: out _); }
         }

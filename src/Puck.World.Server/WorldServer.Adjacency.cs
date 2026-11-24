@@ -25,7 +25,7 @@ public sealed partial class WorldServer {
     internal ImmutableArray<WorldAdjacencyProjection> PrepareAdjacency(ulong tick) {
         if (m_adjacencies is null) { return []; }
         if (m_population.HasAdjacencyImage(tick)) { return m_population.AdjacencyProjections; }
-        return m_adjacencyFields is { } fields ? fields.Prepare() : [.. m_adjacencies.Visuals()];
+        return CaptureAdjacency();
     }
 
     // A row that has yet to step can still be presented while paused. Its first actual tick captures its own input.
@@ -59,9 +59,12 @@ public sealed partial class WorldServer {
     public void PrepareAdjacencyContacts() {
         lock (AuthorityGate) {
             if (m_adjacencies is null || m_tick.PendingReason is not null) { return; }
-            m_population.BeginAdjacencyContacts(NextInputTick, (m_adjacencyFields is { } fields) ? fields.Prepare() : [.. m_adjacencies.Visuals()]);
+            m_population.BeginAdjacencyContacts(NextInputTick, CaptureAdjacency());
         }
     }
+
+    private ImmutableArray<WorldAdjacencyProjection> CaptureAdjacency() =>
+        m_population.HoldAdjacency(m_adjacencyFields?.Prepare() ?? m_adjacencies?.Visuals());
 
     /// <summary>Lands a recorded arrival again under the preparation a live arrival lands under
     /// (<see cref="WorldTransferEscrow.TryReland"/>), so a re-drive pins the same input the recording did.</summary>

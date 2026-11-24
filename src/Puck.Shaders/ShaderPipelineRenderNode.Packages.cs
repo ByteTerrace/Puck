@@ -33,6 +33,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private void PrepareBufferPublications(int count) {
         m_bufferPublicationScratch = ((m_previousBuffers.Length == count) ? [] : new BufferOutput[count]);
         m_bufferPublicationSecondScratch = ((m_publishedBuffers.Length == count) ? [] : new BufferOutput[count]);
+        m_reservedBuffers = new BufferOutput[count];
     }
     private void PublishBuffers(int slot) {
         var outputs = m_pipeline!.Plan.Outputs;
@@ -40,6 +41,17 @@ public sealed partial class ShaderPipelineRenderNode {
 
         m_bufferPublicationScratch = m_bufferPublicationSecondScratch;
         m_bufferPublicationSecondScratch = [];
+        FillBufferOutputs(into: next, predicted: false, revision: m_submissions, slot: slot);
+        m_previousBuffers = m_publishedBuffers;
+        m_publishedBuffers = next;
+        m_publishedBufferDefault = m_pipeline.Plan.DefaultOutput;
+    }
+    // Writes each named output's publication for a slot into `into`: its buffer and the content identity it carries, or its
+    // image as it publishes, under the submission `revision`. The one routine a commit publishes by and a preparation
+    // reserves by (ReserveOutputs), which predicts each pass's outcome from its last.
+    private void FillBufferOutputs(BufferOutput[] into, int slot, long revision, bool predicted) {
+        var outputs = m_pipeline!.Plan.Outputs;
+
         for (var index = 0; (index < outputs.Count); index++) {
             var name = outputs[index];
             var resource = m_resourceLookup[name];
@@ -49,7 +61,7 @@ public sealed partial class ShaderPipelineRenderNode {
             var publication = default(ReferenceRevision);
 
             if (buffer is not null) {
-                publication = new ReferenceRevision(Owner: this, Revision: m_submissions);
+                publication = new ReferenceRevision(Owner: this, Revision: revision);
                 foreach (var version in resource.Cadence) {
                     if ((version.Name == name) && version.Valid) {
                         publication = new ReferenceRevision(Owner: version, Revision: version.Generation);
@@ -61,7 +73,7 @@ public sealed partial class ShaderPipelineRenderNode {
             var ownedImageHandle = ((nint)0);
 
             if (resource.Spec.Kind == ShaderPipelineResourceKind.Image) {
-                var (published, publishedName, instance) = PublicationOf(selected: resource, slot: slot);
+                var (published, publishedName, instance) = PublicationOf(predicted: predicted, selected: resource, slot: slot);
                 var resolved = ResolveImage(index: instance, label: out var imageLabel, name: publishedName, resource: published);
                 var layout = (published.Spec.IsExternal ? ResolveExternalLayout(name: publishedName) : m_outputLayout);
 
@@ -76,13 +88,10 @@ public sealed partial class ShaderPipelineRenderNode {
                     Publication: resolved.Publication,
                     Width: resolved.Width
                 );
-                publication = new ReferenceRevision(Owner: this, Revision: m_submissions);
+                publication = new ReferenceRevision(Owner: this, Revision: revision);
             }
-            next[index] = new BufferOutput(Buffer: buffer, Image: image, Name: name, OwnedImageHandle: ownedImageHandle, Publication: publication);
+            into[index] = new BufferOutput(Buffer: buffer, Image: image, Name: name, OwnedImageHandle: ownedImageHandle, Publication: publication);
         }
-        m_previousBuffers = m_publishedBuffers;
-        m_publishedBuffers = next;
-        m_publishedBufferDefault = m_pipeline.Plan.DefaultOutput;
     }
     private void ClearBufferPublications() {
         Array.Clear(array: m_publishedBuffers);
@@ -448,22 +457,39 @@ public sealed partial class ShaderPipelineRenderNode {
             output.Alias = new PackageAlias(
                 Instance: instance,
                 Name: name,
+                Pass: pass,
+                Position: index,
                 Target: target
             );
         }
     }
-    // The image an output publishes in its place: its own, or the input it stands for this frame.
-    private (RuntimeResource Resource, string Name, int Instance) PublicationOf(RuntimeResource selected, int slot) => ((selected.Alias.Target is { } target)
-        ? (target, selected.Alias.Name!, selected.Alias.Instance)
-        : (selected, selected.Spec.Name, HistoryIndex(
-            previous: false,
-            resource: selected,
-            slot: slot
-        )));
+    // The image an output publishes in its place: its own, or the input it stands for this frame. A prediction, made
+    // while the frame is prepared and before any pass records (ReserveOutputs), takes each pass's last outcome as this
+    // frame's and resolves the input an output stands for again at this frame's slot, since the alias names the instance
+    // the pass read in the frame that drew nothing.
+    private (RuntimeResource Resource, string Name, int Instance) PublicationOf(RuntimeResource selected, int slot, bool predicted = false) {
+        if (selected.Alias.Target is { } target) {
+            return ((predicted && (selected.Alias.Pass is { } pass))
+                ? PredictedStandingOf(input: pass.Inputs[selected.Alias.Position], slot: slot)
+                : (target, selected.Alias.Name!, selected.Alias.Instance));
+        }
+        return (selected, selected.Spec.Name, HistoryIndex(previous: false, resource: selected, slot: slot));
+    }
+    // What an input reads at a slot if every pass repeats its last outcome: StandingOf, with each hop of a chain of passes
+    // that drew nothing resolved again at the slot.
+    private (RuntimeResource Resource, string Name, int Instance) PredictedStandingOf(ResourceReference input, int slot) {
+        var resource = m_resourceLookup[input.Name];
+
+        for (var depth = 0; (!input.PreviousFrame && (resource.Alias is { Target: not null, Pass: { } pass } alias) && (depth <= m_passes.Length)); depth++) {
+            input = pass.Inputs[alias.Position];
+            resource = m_resourceLookup[input.Name];
+        }
+        return (resource, input.Name, InstanceIndex(previous: input.PreviousFrame, resource: resource, slot: slot));
+    }
 
     // An output a package that drew nothing leaves standing for one of its inputs: the input's storage, name and the
-    // instance the pass read.
-    private readonly record struct PackageAlias(RuntimeResource? Target, string? Name, int Instance);
+    // instance the pass read, and the pass and input position it stands for, which a prediction resolves again.
+    private readonly record struct PackageAlias(RuntimeResource? Target, string? Name, int Instance, RuntimePass? Pass = null, int Position = 0);
 
     // Records a package pass whole into one command list: its decision and its commands in a row.
     private void RecordPackage(RuntimePass pass, int slot, in FrameContext context, nint command) {
