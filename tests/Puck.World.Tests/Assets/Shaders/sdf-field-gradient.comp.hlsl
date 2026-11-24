@@ -1,8 +1,11 @@
 // The SDF gradient probe: walks the shipped interpreter (field/sdf-vm.hlsli) in forward mode (SDF_FIELD_DUAL, as the
-// bake's gradient kernel does) over the program the host packed into sdfWords, at each case's point, and beside it takes
-// the bake's tetrahedral stencil of the plain field there at two spacings, through the same call site. Each case writes
-// (|dual - stencil|, |stencil - stencil at twice the spacing|, whether the walk kept every derivative, |dual with x and
-// y exchanged - stencil|) into one texel of the results. SdfFieldDeviceLawTests binds it as it binds sdf-field.comp.hlsl.
+// bake's gradient kernel does) over the program the host packed into sdfWords at each case's point and at the bake's
+// four tetrahedral taps around it, through one call site. Each case writes (|dual - stencil|, the most any tap's dual
+// gradient differs from the point's, one more than the dual gradient's length where the walk kept every derivative and zero
+// where it did not, |dual with its axes rotated - stencil|) into
+// one texel of the results: the stencil is the four taps' values differenced as the bake's fallback differences them,
+// and the spread tells a smooth neighbourhood from one a crease passes through, where the stencil blends two faces and
+// the dual takes one. SdfFieldDeviceLawTests binds it as it binds sdf-field.comp.hlsl.
 #define SDF_FIELD_DUAL
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-world.interface.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-vm.hlsli"
@@ -31,28 +34,25 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     sdfProgramLayout = sdfLoadProgramLayout();
 
     float3 dual = 0.0;
-    float3 near = 0.0;
-    float3 far = 0.0;
+    float3 stencil = 0.0;
+    float spread = 0.0;
     bool covered = false;
 
     [loop]
-    for (uint tap = 0u; tap <= (2u * SDF_BAKE_GRADIENT_TAPS); tap++) {
-        bool wide = (tap > SDF_BAKE_GRADIENT_TAPS);
-        float3 direction = sdfBakeTap(wide ? (tap - SDF_BAKE_GRADIENT_TAPS) : tap);
-        SdfHit hit = mapCore(probe.xyz + (direction * (wide ? (2.0 * GradientSpacing) : GradientSpacing)), SDF_INSTANCE_MASK_ALL, false);
+    for (uint tap = 0u; tap <= SDF_BAKE_GRADIENT_TAPS; tap++) {
+        float3 direction = sdfBakeTap(tap);
+        SdfHit hit = mapCore(probe.xyz + (direction * GradientSpacing), SDF_INSTANCE_MASK_ALL, false);
 
         if (tap == 0u) {
             dual = hit.gradient;
             covered = sdfFieldDualCovered;
-        } else if (wide) {
-            far += (direction * hit.distance);
         } else {
-            near += (direction * hit.distance);
+            stencil += (direction * hit.distance);
+            spread = max(spread, length(hit.gradient - dual));
         }
     }
 
-    near *= (0.25 / GradientSpacing);
-    far *= (0.125 / GradientSpacing);
+    stencil *= (0.25 / GradientSpacing);
     fieldResults[uint2((slot % FieldResultsWidth), (slot / FieldResultsWidth))] =
-        float4(length(dual - near), length(near - far), (covered ? 1.0 : 0.0), length(dual.yxz - near));
+        float4(length(dual - stencil), spread, (covered ? (1.0 + length(dual)) : 0.0), length(dual.yzx - stencil));
 }

@@ -6,22 +6,25 @@ namespace Puck.World.Tests;
 /// <summary>
 /// The bake's gradient kernel walks the field once in forward mode (<c>SDF_FIELD_DUAL</c>) and takes the walk's gradient
 /// in place of the four-tap stencil wherever the walk keeps every derivative. The gradient probe
-/// (<c>Assets/Shaders/sdf-field-gradient.comp.hlsl</c>) walks every accepted program of the field law that way at each of
-/// its points and takes the stencil there at two spacings. Where the two stencils agree (the field is smooth across them)
-/// and the walk kept its derivatives, the dual gradient is the stencil's within <see cref="GradientTolerance"/>; the walk
-/// keeps them on every accepted program except those through an operation with no dual rule, which the probe reports
-/// uncovered. The red leg reads each dual gradient with two axes exchanged, which must miss the stencil somewhere in every
-/// program, so the tolerance sees a partial read from the wrong axis.
+/// (<c>Assets/Shaders/sdf-field-gradient.comp.hlsl</c>) walks every accepted and oracle program of the field law that way
+/// at each of its points and at the stencil's four taps around it. Where every tap's dual gradient stays within
+/// <see cref="SmoothTolerance"/> of the point's (no crease passes through the taps) and the walk kept its derivatives,
+/// the dual gradient is the stencil's within <see cref="GradientTolerance"/> plus that spread: the tetrahedral stencil is
+/// first-order, its error the field's curvature across the taps, which the spread measures. The walk keeps its
+/// derivatives on every program except those through an operation with no dual rule, which the probe reports
+/// uncovered. The red leg reads each dual gradient with its axes rotated, which must miss the stencil somewhere in every
+/// program whose gradient is not zero, so the tolerance sees a partial read from the wrong axis.
 /// </summary>
 public sealed partial class SdfFieldDeviceLawTests {
     private const string GradientKernelName = "sdf-field-gradient.comp";
-    // The largest disagreement between the dual gradient and the stencil at a smooth point, in field units per metre: the
-    // stencil's single-precision differences resolve about a ten-thousandth of a unit gradient, its curvature error under
-    // a thousandth for the probe programs' radii.
+    // The disagreement between the dual gradient and the stencil at a smooth point beyond the stencil's curvature error,
+    // in field units per metre: the stencil's single-precision differences resolve about a ten-thousandth of a unit
+    // gradient.
     private const float GradientTolerance = 2e-3f;
-    // The most the stencil at twice the spacing may differ from it for the point to count as smooth: past it a crease
-    // lies within the taps, where the stencil blends two faces and the dual takes one.
-    private const float SmoothTolerance = 1e-3f;
+    // The most a tap's dual gradient may differ from the point's for the point to count as smooth: the probe programs'
+    // tightest curvature turns a gradient by under a hundredth across the taps, and past it a crease lies among them,
+    // where the stencil blends two faces and the dual takes one.
+    private const float SmoothTolerance = 2e-2f;
 
     [Fact]
     public void AVulkanDeviceWalksEveryProgramsGradientAsItsStencilReadsIt() {
@@ -45,7 +48,7 @@ public sealed partial class SdfFieldDeviceLawTests {
     }
 
     private static void VerifyGradients(string backend, byte[] kernel, Puck.Abstractions.Gpu.GpuDeviceServices services) {
-        var legs = AcceptedLegs().ToList();
+        var legs = AcceptedLegs().Concat(OracleLegs()).ToList();
         var results = Run(
             kernel: kernel,
             legs: legs,
@@ -61,21 +64,25 @@ public sealed partial class SdfFieldDeviceLawTests {
             var worst = 0f;
             var worstPoint = -1;
             var swappedMisses = false;
+            var sloped = false;
             var smooth = 0;
             var covered = 0;
 
             for (var point = 0; (point < Points.Length); point++) {
                 var result = results[((index * Points.Length) + point)];
 
-                if (result.Z != 1f) { continue; }
+                if (!(result.Z >= 1f)) { continue; }
                 covered++;
                 if (!(result.Y <= SmoothTolerance)) { continue; }
                 smooth++;
-                if (!(result.X <= worst)) {
-                    worst = result.X;
+                // The miss past the stencil's own curvature error.
+                var miss = (result.X - result.Y);
+                if (!(miss <= worst)) {
+                    worst = miss;
                     worstPoint = point;
                 }
-                swappedMisses |= (result.W > GradientTolerance);
+                swappedMisses |= (result.W > (GradientTolerance + result.Y));
+                sloped |= ((result.Z - 1f) > GradientTolerance);
             }
 
             compared += smooth;
@@ -86,8 +93,8 @@ public sealed partial class SdfFieldDeviceLawTests {
             if (!(worst <= GradientTolerance)) {
                 failures.Add(item: $"{leg.Name}: the dual gradient misses the stencil by {worst} at {Points[worstPoint]}");
             }
-            if ((smooth > 0) && !swappedMisses) {
-                failures.Add(item: $"{leg.Name}: the dual gradient with x and y exchanged stayed within {GradientTolerance} of the stencil at every smooth point");
+            if (sloped && !swappedMisses) {
+                failures.Add(item: $"{leg.Name}: the dual gradient with its axes rotated stayed within {GradientTolerance} of the stencil at every smooth point");
             }
         }
 
