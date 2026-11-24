@@ -127,6 +127,8 @@ public sealed class SdfResidencySelector {
     public TimeProvider Time { get; }
     /// <summary>Gets the one budget of GPU time and upload bytes the presentation's background GPU work draws on.</summary>
     public SdfGpuWorkBudget Work { get; }
+    /// <summary>Gets the device's bottom-level trace structures, which every residency's lighting claims by geometry.</summary>
+    internal SdfMeshTraceBottoms TraceBottoms { get; } = new();
 
     /// <summary>Returns a device's selector, the same one for every residency on the device, reading the process
     /// account.</summary>

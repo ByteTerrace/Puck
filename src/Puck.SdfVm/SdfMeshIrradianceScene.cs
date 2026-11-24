@@ -1,4 +1,5 @@
 using Puck.Maths;
+using System.Diagnostics.CodeAnalysis;
 using Puck.Hosting.Jobs;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -274,6 +275,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
         var geometries = new Dictionary<GeometryKey, Geometry>();
         var pending = new List<(GeometryKey Key, SdfMesh Mesh)>();
+        List<Geometry>? borrowed = null;
         var statics = 0;
 
         // Indexed: an interface list's enumerator is an allocation.
@@ -288,6 +290,14 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             if (geometries.ContainsKey(key: key)) { continue; }
             if ((previous is not null) && previous.TryFind(geometry: out var held, key: key)) {
                 geometries.Add(key: key, value: held);
+                continue;
+            }
+            // Another scene of the same mesh (a second residency of the world, whose draws the mesh region store
+            // hands the same meshes) built its geometry already: the build takes a claim on it, which it gives back
+            // once the scene holds its own.
+            if (Geometry.TryAcquireShared(key: key, geometry: out var shared)) {
+                geometries.Add(key: key, value: shared);
+                (borrowed ??= []).Add(item: shared);
                 continue;
             }
             geometries.Add(key: key, value: null!);
@@ -308,6 +318,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             for (var index = 0; (index < pending.Count); index++) {
                 geometries[pending[index].Key] = built[index];
                 trianglesBuilt += built[index].Count;
+                Geometry.Share(key: pending[index].Key, geometry: built[index]);
             }
 
             // The scene's draws go straight into the array it keeps, rented at the static draws' count.
@@ -345,6 +356,9 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             throw;
         } finally {
             foreach (var geometry in built) { geometry?.Release(); }
+            if (borrowed is not null) {
+                foreach (var geometry in borrowed) { geometry.Release(); }
+            }
             ReleaseStorage(workspace);
         }
     }
@@ -732,7 +746,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     }
     // A geometry's identity: its mesh's position and index buffers. A mesh renumbered into another program's materials
     // (SdfMeshLibrary) shares both, so its draws take the same geometry and read their own triangle materials.
-    private readonly record struct GeometryKey(ReadOnlyMemory<Vector3> Positions, ReadOnlyMemory<uint> Indices) {
+    internal readonly record struct GeometryKey(ReadOnlyMemory<Vector3> Positions, ReadOnlyMemory<uint> Indices) {
         public static GeometryKey Of(SdfMesh mesh) => new(Indices: mesh.Indices, Positions: mesh.Positions);
     }
 
@@ -823,10 +837,44 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // triangle whose box is loose about it (a long thin one a merged polygon leaves, SdfMeshPlanarMerge) holds several
     // leaf positions, each bounded by a piece of it, so a ray tests it only where it passes near.
     internal sealed class Geometry(MemoryAccount.Owner storage) {
+        // Every geometry a scene holds, by its mesh's buffers, across every residency in the process: a second scene of
+        // a world (its meshes the same SdfMesh objects, which the mesh region store places once) takes the first's
+        // geometry instead of building its hierarchy again. A geometry leaves at its last release.
+        // Invariant: a claim is taken only on a geometry whose claims stand above zero (TryAcquireShared's exchange),
+        // so a geometry whose last release has begun is never handed out, and its storage goes exactly once.
+        private static readonly Dictionary<GeometryKey, Geometry> SharedGeometries = [];
+        private static readonly Lock SharedGate = new();
+
         private int m_claims = 1;
+        private GeometryKey? m_sharedAs;
+
+        // Takes a claim on the geometry another scene built over the same mesh buffers; false when none stands.
+        internal static bool TryAcquireShared(GeometryKey key, [NotNullWhen(true)] out Geometry? geometry) {
+            lock (SharedGate) {
+                if (SharedGeometries.TryGetValue(key: key, value: out geometry)) {
+                    for (var claims = Volatile.Read(location: ref geometry.m_claims); (claims > 0); claims = Volatile.Read(location: ref geometry.m_claims)) {
+                        if (Interlocked.CompareExchange(location1: ref geometry.m_claims, value: (claims + 1), comparand: claims) == claims) { return true; }
+                    }
+                }
+            }
+            geometry = null;
+            return false;
+        }
+        // Offers a geometry a scene build just made to every later build over the same mesh buffers.
+        internal static void Share(GeometryKey key, Geometry geometry) {
+            lock (SharedGate) {
+                geometry.m_sharedAs = key;
+                SharedGeometries[key] = geometry;
+            }
+        }
         internal void Acquire() => Interlocked.Increment(ref m_claims);
         internal void Release() {
             if (Interlocked.Decrement(ref m_claims) != 0) { return; }
+            if (m_sharedAs is { } key) {
+                lock (SharedGate) {
+                    if (SharedGeometries.TryGetValue(key: key, value: out var listed) && ReferenceEquals(objA: listed, objB: this)) { _ = SharedGeometries.Remove(key: key); }
+                }
+            }
             // A GPU placement can still use the geometry as an identity after its last scene reader leaves.
             Braids = [];
             Frames = [];

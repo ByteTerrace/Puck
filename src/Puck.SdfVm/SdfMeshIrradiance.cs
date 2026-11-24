@@ -608,7 +608,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private int m_localVersion;
     private long m_lightingCheckedAt;
     private int m_lightingVersion;
-    private SdfProgram? m_materialsProgram;
+    private SdfAppearance? m_materialsAppearance;
     private SdfMeshIrradianceScene? m_materialsScene;
     private ulong m_materialsKey;
 
@@ -2018,7 +2018,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // meshes) leaves the static draws as they were, so only this key relights it; a body's palette coming or going, which
     // no probe ray meets, leaves it alone.
     private ulong MaterialsKey(SdfProgram program) {
-        if (ReferenceEquals(objA: program, objB: m_materialsProgram) && ReferenceEquals(objA: m_scene, objB: m_materialsScene)) { return m_materialsKey; }
+        if (ReferenceEquals(objA: program.Appearance, objB: m_materialsAppearance) && ReferenceEquals(objA: m_scene, objB: m_materialsScene)) { return m_materialsKey; }
 
         var hash = Fnv1aHash.Create();
         var materials = program.Appearance.Materials;
@@ -2042,7 +2042,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             hash.Add(value: (material.EmissiveLane.HasValue ? 1U : 0U));
             hash.Add(value: unchecked((uint)material.EmissiveLane.GetValueOrDefault()));
         }
-        m_materialsProgram = program;
+        m_materialsAppearance = program.Appearance;
         m_materialsScene = m_scene;
         m_materialsKey = hash.Value;
 
@@ -3934,7 +3934,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public required int[] LightIndices { get; init; }
         public required SdfMaterial[] Materials { get; init; }
         public required TracedLight[] Points { get; init; }
-        public required SdfProgram Program { get; init; }
+        // The appearance the materials were copied from, which a later capture of the same appearance reuses. Never the
+        // program: a capture outlives it in pending reads (a camera sample's), and would keep its words alive.
+        public required SdfAppearance Appearance { get; init; }
         public bool Sky { get; init; }
         // The sky's radiance about each hit texel's ray, gain applied (SdfMeshProbeDepth.SkyRadiance) and snapped on the
         // authored grid, zero with the sky source off: what a probe's open ray carries, and the only sky a relight or a
@@ -4037,8 +4039,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 Gains = frame.IndirectGains,
                 Inputs = inputs,
                 LightIndices = [.. indices],
-                Program = frame.Program,
-                Materials = (ReferenceEquals(objA: previous?.Program, objB: frame.Program) ? previous!.Materials : [.. frame.Program.Appearance.Materials]),
+                Appearance = frame.Program.Appearance,
+                Materials = (ReferenceEquals(objA: previous?.Appearance, objB: frame.Program.Appearance) ? previous!.Materials : [.. frame.Program.Appearance.Materials]),
                 Points = [.. points],
                 Sky = ((sources & SdfIndirectSources.Sky) != 0),
             };
