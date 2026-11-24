@@ -3,7 +3,8 @@ using System.Numerics;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// The bake kernel's gradient stencil, for every CPU answer of a bake lattice (the offline bake, the field levels and the
+/// The bake's gradient stencil: the gradient kernel's answer for a sample whose forward-mode walk met an op that keeps no
+/// derivatives (<c>sdf-mesh-bake-gradient.comp.hlsl</c>), and every CPU answer of a bake lattice (the offline bake, the field levels and the
 /// laws' kernel stand-ins): four tetrahedral taps about a sample, a sixty-fourth of the lattice's finest cell out, whose
 /// values combine into the gradient in field units per world unit. The kernel reads the same four offsets from the
 /// generated <c>isa/sdf-bake-taps.hlsli</c> (<see cref="SdfMeshBakeTapsHlsl"/>); the spacing is not shared, since the

@@ -724,8 +724,9 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 `passes/sdf-pixel-entry.hlsli`) and call no field query. The table in
 [kernels](references/kernels.md#the-frame) says what each writes.
 
-The mesh bake's two kernels (`sdf-mesh-bake-mask`, `sdf-mesh-bake`, the one
-`mapCore` call site) are no pass of a view: they run as the residency's
+The mesh bake's kernels (`sdf-mesh-bake-mask`, and the two samplers that share
+`passes/sdf-mesh-bake-stage.hlsli`: `sdf-mesh-bake` for values and
+`sdf-mesh-bake-gradient` for gradients, each one `mapCore` call site) are no pass of a view: they run as the residency's
 background GPU work (`SdfGpuWork`, its bake client `SdfMeshBakeGpuWork`), a
 ring of slots each submitted on its own fence and refilled when a slot's job
 completes and its readback is released, stepped on the frame thread at the top
@@ -1315,13 +1316,24 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   bounded. Vulkan on NVIDIA loses the device on the read once it passes the
   allocation's slack, while Direct3D 12 returns zero, so an even-sized window
   and Direct3D 12 both hide it.
-- **One `mapCore` call site.** The bake (`passes/sdf-mesh-bake.comp.hlsl`) is
-  the only GPU kernel that walks the field, and it does so through one rolled
-  `[loop]` over its samples. Every call site is a full inlined copy of the
-  interpreter, costing register pressure, compile time and a driver translation
-  on every cold boot, so more samples go through that loop, never through a new
-  call. Never add `[noinline]`: a real SPIR-V call loses the device on NVIDIA's
-  Vulkan driver.
+- **One `mapCore` call site a kernel.** The bake's two samplers
+  (`passes/sdf-mesh-bake-stage.hlsli`) are the only GPU kernels that walk the
+  field, each through one call site: the value sampler once a sample, the
+  gradient sampler (`SDF_FIELD_DUAL`) through one rolled `[loop]` that ends after
+  its forward-mode walk unless the walk was uncovered. Every call site is a full
+  inlined copy of the interpreter, costing register pressure, compile time and a
+  driver translation on every cold boot, so more samples go through that loop,
+  never through a new call. Never add `[noinline]`: a real SPIR-V call loses the
+  device on NVIDIA's Vulkan driver.
+- **A walk arm keeps its derivatives or says it does not.** Under
+  `SDF_FIELD_DUAL` the walk carries `localJacobian` beside `localPosition` and
+  `SdfHit.gradient` beside `distance`. A formula arm gets its dual from the
+  generator (`SdfShaderAction.Map`, `Part`); a hand-written arm that changes the
+  point or the distance updates both under `#ifdef SDF_FIELD_DUAL` and sets
+  `Dual = true`, or the generator marks it `SDF_FIELD_DUAL_UNCOVERED` and every
+  sample whose walk runs it takes the stencil. Setting `Dual` on an arm whose
+  derivatives are wrong is silent: `SdfFieldDeviceLawTests.Gradients` is what
+  sees it.
 - **Keep each pixel kernel's include closure its own.** A pixel kernel includes
   the common head (`passes/sdf-pixel-pass.hlsli`), only its own stage module,
   then the entry; a stage module includes what it reads beyond

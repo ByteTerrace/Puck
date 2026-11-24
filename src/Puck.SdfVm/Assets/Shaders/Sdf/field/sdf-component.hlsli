@@ -22,5 +22,14 @@ uint sdfComponent(uint4 v, uint i) {
 int sdfComponent(int4 v, uint i) {
     return ((i == 0u) ? v.x : ((i == 1u) ? v.y : ((i == 2u) ? v.z : v.w)));
 }
+// A matrix's row at a runtime index, by the same comparisons.
+float3 sdfComponent(float3x3 m, uint i) {
+    return (i == 0u) ? m[0] : ((i == 1u) ? m[1] : m[2]);
+}
+void sdfSetComponent(inout float3x3 m, uint i, float3 row) {
+    if (i == 0u) { m[0] = row; }
+    else if (i == 1u) { m[1] = row; }
+    else { m[2] = row; }
+}
 
 #endif

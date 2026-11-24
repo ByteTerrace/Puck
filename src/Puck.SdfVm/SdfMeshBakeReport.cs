@@ -314,10 +314,12 @@ internal static class SdfMeshBakeReport {
     /// <param name="named">The first groups begun, at most <see cref="NamedMost"/>.</param>
     /// <param name="disk">The library's store, or <see langword="null"/>.</param>
     /// <param name="identity">The identity the bake began under.</param>
-    public static void Start(string residency, string residencyId, int groups, int dynamic, int instances, string cause, int baking, int loading, int shared, int joined, IReadOnlyList<Begun>? named, SdfMeshStore? disk, SdfMeshBakeIdentity identity) {
+    /// <param name="stencil">The ops of the program whose gradient samples take the stencil's taps instead of one
+    /// forward-mode walk, by name, or <c>none</c>.</param>
+    public static void Start(string residency, string residencyId, int groups, int dynamic, int instances, string cause, int baking, int loading, int shared, int joined, IReadOnlyList<Begun>? named, SdfMeshStore? disk, SdfMeshBakeIdentity identity, string stencil) {
         var names = string.Join(separator: ',', values: (named ?? []).Select(selector: static group => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{group.Selector}/{(group.Dynamic ? $"slot{group.Place}" : $"union{group.Place}")}/{(group.Loading ? "load" : "bake")}")));
 
-        Say(line: $"[sdf.mesh-bake] start residency={residency} residency-id={residencyId} groups={groups} baking={baking} loading={loading} shared={shared} joined={joined} dynamic={dynamic} instances={instances} cause={cause} begun=[{names}{(((baking + loading) > NamedMost) ? ",…" : "")}]");
+        Say(line: $"[sdf.mesh-bake] start residency={residency} residency-id={residencyId} groups={groups} baking={baking} loading={loading} shared={shared} joined={joined} dynamic={dynamic} instances={instances} cause={cause} begun=[{names}{(((baking + loading) > NamedMost) ? ",…" : "")}] stencil-ops=[{stencil}]");
         // The store's account reads its directory, so it runs off the frame's thread.
         if (disk is not null) {
             _ = Task.Run(action: () => {

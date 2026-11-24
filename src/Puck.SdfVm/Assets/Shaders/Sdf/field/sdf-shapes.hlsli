@@ -8,6 +8,9 @@
 // The ellipse's projection core, a primitive of each reader that the ellipse formula calls.
 #include "sdf-ellipse.hlsli"
 #include "../isa/sdf-field-shape-formulas.hlsli"
+#ifdef SDF_FIELD_DUAL
+#include "../isa/sdf-field-shape-dual.hlsli"
+#endif
 // The gauge-envelope device probe distinguishes the clamped endpoints.
 bool sdfSuperellipsoidNormIsClamped(float approximate, float norm, float exponent) {
     return ((asuint(approximate) & 0x7F800000u) == 0x7F800000u)
@@ -570,4 +573,29 @@ precise float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1
 
     return result;
 }
+
+#ifdef SDF_FIELD_DUAL
+SDF_DUAL_LOCAL_TAPS(sdfPolyStar)
+SDF_DUAL_LOCAL_TAPS(sdfConvexPolygonSolid)
+SDF_DUAL_LOCAL_TAPS(sdfPathSolid)
+SDF_DUAL_LOCAL_TAPS(sdfGlyphQuad)
+#ifdef SDF_GLYPH_ATLAS
+SDF_DUAL_LOCAL_TAPS(sdfGlyph)
+#endif
+SDF_DUAL_LOCAL_TAPS(sdfSampledRegion)
+SDF_DUAL_LOCAL_TAPS(sdfSweep)
+// The shape dispatch over a dual point: the same arms, each resolving to its formula's dual overload (or an escape's
+// local taps above).
+SdfDual evaluateShape(uint shapeType, SdfDual3 p, float4 data0, float4 data1) {
+    sdfWorkShapes++;
+    SdfDual result = sdfdLift(SDF_FAR_DISTANCE);
+
+    switch (shapeType) {
+#include "../isa/sdf-field-shapes.hlsli"
+        default: return sdfdLift(asfloat(0x7fc00000u));
+    }
+
+    return result;
+}
+#endif
 #endif

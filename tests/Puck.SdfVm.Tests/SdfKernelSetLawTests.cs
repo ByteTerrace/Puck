@@ -141,7 +141,7 @@ public sealed class SdfKernelSetLawTests {
         Assert.NotEqual(expected: SdfWorldInterfaces.Stamp, actual: SdfWorldInterfaces.FieldStamp);
         Assert.All(
             action: kernel => Assert.Same(expected: SdfWorldInterfaces.MeshBakeLayout, actual: SdfKernelSet.LayoutOf(kernel: kernel)),
-            collection: [SdfKernel.MeshBakeMask, SdfKernel.MeshBake]
+            collection: [SdfKernel.MeshBakeMask, SdfKernel.MeshBake, SdfKernel.MeshBakeGradient]
         );
 
         // The recorded fingerprints are the model's: the host names the instruction set its kernels were generated against.
