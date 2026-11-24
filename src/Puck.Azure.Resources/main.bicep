@@ -1968,7 +1968,14 @@ module applicationInsightsContainers 'br/public:avm/res/insights/component:0.8.0
     publicNetworkAccessForIngestion: 'Enabled'
     publicNetworkAccessForQuery: 'Enabled'
     retentionInDays: 30
-    roleAssignments: []
+    // The world silo's azure.monitor telemetry sink signs in as the silo identity; local auth is disabled.
+    roleAssignments: [
+      {
+        principalId: worldSiloIdentity.outputs.principalId
+        principalType: 'ServicePrincipal'
+        roleDefinitionIdOrName: 'Monitoring Metrics Publisher'
+      }
+    ]
     samplingPercentage: 100
     tags: union(tags, resources.containerEnvironment.applicationInsights.?tags ?? {})
     workspaceResourceId: logAnalyticsWorkspace.outputs.resourceId
@@ -3376,6 +3383,7 @@ output worldSiloIdentityResourceId string = worldSiloIdentity.outputs.resourceId
 output worldSiloClientId string = worldSiloIdentity.outputs.clientId
 output worldSiloOwner string = worldSiloIdentity.outputs.principalId
 output worldSiloStorageEndpoint string = worldSilo.outputs.storageEndpoint
+output worldSiloTelemetryConnectionString string = applicationInsightsContainers.outputs.connectionString
 output worldSiloConfiguration worldSiloConfigType = worldSilo.outputs.deploymentConfiguration
 output worldMcpConfiguration worldMcpConfigurationType? = worldMcp == null ? null : mcp!.outputs.worldMcpConfiguration
 output worldSiloHostedData string = worldSiloHostedData

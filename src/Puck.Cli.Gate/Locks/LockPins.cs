@@ -69,6 +69,7 @@ public static class LockPins {
 
         if ((JsonNode.Parse(json: previous) is not JsonObject before) || (JsonNode.Parse(json: current) is not JsonObject after)) { return null; }
         if ((before["dependencies"] is not JsonObject oldFrameworks) || (after["dependencies"] is not JsonObject newFrameworks)) { return null; }
+        if ((JsonNode.Parse(json: current) as JsonObject)?["dependencies"] is not JsonObject restoredFrameworks) { return null; }
 
         var held = false;
 
@@ -76,6 +77,7 @@ public static class LockPins {
             if (newNode is not JsonObject newPackages) { continue; }
 
             var oldPackages = (oldFrameworks[framework] as JsonObject);
+            var heldIds = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             foreach (var (id, newEntry) in newPackages) {
                 if (newEntry is not JsonObject entry) { continue; }
@@ -95,11 +97,13 @@ public static class LockPins {
                 }
                 if ((source is null) || (StringValue(node: entry["resolved"]) == StringValue(node: source["resolved"]))) { continue; }
 
-                packages.Add(item: $"{id} {StringValue(node: source["resolved"])} (restored from {StringValue(node: entry["resolved"])})");
-                entry["resolved"] = source["resolved"]?.DeepClone();
-                entry["contentHash"] = source["contentHash"]?.DeepClone();
-                _ = entry.Remove(propertyName: "dependencies");
-                if (source["dependencies"] is { } dependencies) { entry["dependencies"] = dependencies.DeepClone(); }
+                Pin(entry: entry, source: source);
+                _ = heldIds.Add(item: id);
+            }
+            ReleaseUnmet(heldIds: heldIds, packages: newPackages, restored: (restoredFrameworks[framework] as JsonObject), solution: solution);
+            foreach (var (id, node) in newPackages) {
+                if (!heldIds.Contains(item: id)) { continue; }
+                packages.Add(item: $"{id} {StringValue(node: node!["resolved"])} (restored from {StringValue(node: (restoredFrameworks[framework] as JsonObject)?[id]?["resolved"])})");
                 held = true;
             }
         }
@@ -113,6 +117,59 @@ public static class LockPins {
         return (current.EndsWith(value: '\n') ? (text + newline) : text);
     }
 
+    // Writes a pinned entry's version, contentHash and dependency list over a restored entry.
+    private static void Pin(JsonObject entry, JsonObject source) {
+        entry["resolved"] = source["resolved"]?.DeepClone();
+        entry["contentHash"] = source["contentHash"]?.DeepClone();
+        _ = entry.Remove(propertyName: "dependencies");
+        if (source["dependencies"] is { } dependencies) { entry["dependencies"] = dependencies.DeepClone(); }
+    }
+    // A held pin stands only while every entry in the framework that depends on the package admits it. A locked restore
+    // checks a lock file's direct requests and project closure, never a transitive package against the minimum another
+    // entry declares, so a pin held below such a minimum restores cleanly and fails the compile instead (CS1705: an
+    // assembly built against a newer version than the one referenced). Each pin below a declared minimum moves to the
+    // solution's pin when that meets it, else back to what the restore resolved, which NuGet chose to meet every minimum;
+    // either move can change the entry's own dependency list, so the check repeats until nothing moves.
+    private static void ReleaseUnmet(HashSet<string> heldIds, JsonObject packages, JsonObject? restored, IReadOnlyDictionary<string, JsonObject>? solution) {
+        for (var moved = true; moved;) {
+            moved = false;
+            foreach (var (_, node) in packages) {
+                if ((node as JsonObject)?["dependencies"] is not JsonObject dependencies) { continue; }
+
+                foreach (var (id, specification) in dependencies) {
+                    if (!heldIds.Contains(item: id) || (packages[id] is not JsonObject entry) || (Minimum(specification: StringValue(node: specification)) is not { } minimum)) { continue; }
+                    if (Meets(minimum: minimum, version: StringValue(node: entry["resolved"]))) { continue; }
+
+                    if ((solution is not null) && solution.TryGetValue(key: id, value: out var pinned) && Meets(minimum: minimum, version: StringValue(node: pinned["resolved"]))) {
+                        Pin(entry: entry, source: pinned);
+                    } else if (restored?[id] is JsonObject resolved) {
+                        Pin(entry: entry, source: resolved);
+                        _ = heldIds.Remove(item: id);
+                    } else {
+                        continue;
+                    }
+                    moved = true;
+                }
+            }
+        }
+    }
+    // The lower bound of a dependency as a lock file spells it: a bare version (NuGet's minimum) or a range whose lower
+    // bound may float; an exclusive bound is marked so the version itself does not meet it.
+    private static (string Version, bool Exclusive)? Minimum(string? specification) {
+        if (string.IsNullOrWhiteSpace(value: specification)) { return null; }
+        if ((specification[0] != '[') && (specification[0] != '(')) { return (specification.Trim(), false); }
+
+        var lower = specification[1..].Split(separator: ',')[0].Trim().TrimEnd(']', ')').Replace(oldValue: "*", newValue: "0", comparisonType: StringComparison.Ordinal);
+
+        return ((lower.Length == 0) ? null : (lower, (specification[0] == '(')));
+    }
+    private static bool Meets((string Version, bool Exclusive) minimum, string? version) {
+        if (version is null) { return false; }
+
+        var order = Compare(left: version, right: minimum.Version);
+
+        return ((order > 0) || ((order == 0) && !minimum.Exclusive));
+    }
     // Whether a version lies in a lock file's requested range, spelled as NuGet writes it: a bracket or parenthesis, a lower
     // bound (a floating part is a wildcard), a comma, an optional upper bound, a bracket or parenthesis. A spelling it does
     // not read admits nothing, so the entry keeps what the restore resolved.

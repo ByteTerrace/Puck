@@ -309,6 +309,7 @@ public static partial class AzureCommand {
             ["storageAccountName"] = (Text(value: source["partitioning"]!["value"]!["prefix"]) + "stp001"),
             ["registryName"] = source["resources"]!["value"]!["containerRegistry"]!["name"]!.DeepClone(),
             ["keyVaultName"] = source["resources"]!["value"]!["keyVault"]!["name"]!.DeepClone(),
+            ["applicationInsightsName"] = source["resources"]!["value"]!["containerEnvironment"]!["applicationInsights"]!["name"]!.DeepClone(),
             ["location"] = await AzAsync(
             "group",
             "show",
