@@ -353,7 +353,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         estimatedSeconds = 0;
         lock (m_gate) {
             if (m_exclusive || !tables.BindsBackgroundWork) { return false; }
-            if (ServeSceneUpload()) { return false; }
+            if (ServeSceneUpload() || (m_sceneStore?.Carrying ?? false)) { return false; }
             if (TryTakeStructures(allowance: (allowance with { Seconds = Math.Min(val1: allowance.Seconds, val2: FrameAllowanceSeconds) }), job: out job, estimatedSeconds: out estimatedSeconds, tables: tables)) { return true; }
             if (!m_pending.TryPeek(out var pending)) { return false; }
             if (!((pending.Commits || pending.CameraSample) ? m_volume.KeepsGpuPublication(pending.Scene, pending.Geometry, pending.Window) : m_volume.KeepsGpuScene(pending.Scene)) ||

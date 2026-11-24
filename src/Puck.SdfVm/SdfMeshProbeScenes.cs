@@ -51,6 +51,8 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
     // The chunks the region owes and has not flushed: those the latest take moved here, kept across a refused flush.
     private readonly List<Chunk> m_staged = [];
     private int m_unsubmitted;
+    // Whether an upload recorded and not yet submitted carries the region into a buffer that replaced its old one.
+    private bool m_carryUnsubmitted;
     private bool m_disposed;
     // Whether an allocation was made or freed since the region's chunks were last fitted to the live allocations (Cover),
     // and which chunks the latest fit found covered.
@@ -93,6 +95,11 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
     /// <summary>Gets the buffer every probe client binds at the scene's member. A region that grows by replacement answers
     /// another buffer once it has grown; a client reads it as it records each job.</summary>
     internal IGpuBuffer Buffer { get { lock (m_gate) { return m_region.Buffer(slot: 0); } } }
+
+    /// <summary>Gets whether the region grew into a buffer whose carry has not reached the queue: it is owed, or recorded
+    /// into an upload not yet submitted. A probe job recorded meanwhile would bind the new buffer before the words it
+    /// holds were copied into it, so a client takes no query while this holds.</summary>
+    internal bool Carrying { get { lock (m_gate) { return (!m_disposed && (m_region.OwesCarry || m_carryUnsubmitted)); } } }
 
     /// <summary>Gets the device bytes the region holds. Safe to read from any thread.</summary>
     internal GpuMemoryBytes OwnedBytes { get { lock (m_gate) { return (m_disposed ? default : m_region.OwnedBytes); } } }
@@ -186,7 +193,11 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
                     if (need > m_region.ByteCount) {
                         var replaced = m_region.Grow(byteCount: (sizeof(uint) * GpuCapacity.Headroom(required: m_arena.Words, ceiling: (GpuRegion.MaxByteCount / sizeof(uint)), divisor: 8)));
 
-                        m_retired.Hold(item: replaced, pendingUse: m_region.PendingCarry);
+                        // The carry out of the replaced buffer is recorded below into an upload that is submitted only
+                        // at its residency's CloseUpload, after other residencies' uploads have opened and polled this
+                        // queue (SdfWorldPasses.RendersScheduled opens every upload before it closes any), so the
+                        // replaced buffer is held until that upload is submitted, not only until the carry is recorded.
+                        m_retired.Hold(item: replaced, pendingUse: () => (m_region.OwesCarry || (m_unsubmitted > 0)));
                         m_coverOwed = true;
                     }
                     if (m_coverOwed) { Cover(); }
@@ -202,6 +213,7 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
                 return false;
             }
 
+            m_carryUnsubmitted |= m_region.OwesCarry;
             var copies = new GpuRegionCopyRecording(recorder: recorder, readers: readers, begin: () => commandBuffer);
 
             copies.Record(flushed: true, handsToReaders: true, region: m_region, slot: slot);
@@ -283,7 +295,10 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
     }
     /// <summary>Reports that the upload a residency recorded the region's owed copies into has been submitted.</summary>
     internal void SubmittedOwed() {
-        lock (m_gate) { if (m_unsubmitted > 0) { m_unsubmitted--; } }
+        lock (m_gate) {
+            if (m_unsubmitted > 0) { m_unsubmitted--; }
+            if (m_unsubmitted == 0) { m_carryUnsubmitted = false; }
+        }
     }
     /// <summary>Releases what the device has finished reading, on the frame thread: the slots of completed uploads, which
     /// land their chunks and root the uploads whose root words they carried.</summary>
