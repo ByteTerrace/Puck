@@ -8,17 +8,34 @@ the dual contouring reads at each cell's corners.
 
 ## The bake's gradients
 
-The bake measures a gradient with four tetrahedral taps of `mapCore` around a
-sample, at a spacing tied to the lattice's own cell, and only at the corners of
-cells whose corners disagree in sign: the samples `SdfDualContouring` reads a
-normal at. A cell's normal reads its own eight corners, so no other sample needs
-one. A gradient sample costs five field evaluations, which the bake's batch
-and lattice bounds (`SdfMeshPathBake.BatchTaps`, `LatticeTaps`) count as five. A dynamic group's taps are
-carried through its slot's transform with the sample, so its gradient comes
-back in the group's own frame.
+The bake measures a gradient only at the corners of cells whose corners
+disagree in sign and at the crossings it places vertices by: the samples
+`SdfDualContouring` reads a normal at. A cell's normal reads its own eight
+corners, so no other sample needs one.
 
-`gpu.shapes.evaluated` counts every tap; `gpu.shapes.gradients` counts analytic
-primitive derivatives, which no kernel takes.
+A gradient lattice runs its own kernel, `sdf-mesh-bake-gradient`, which walks
+the field once in forward mode (`SDF_FIELD_DUAL`, `field/sdf-dual.hlsli`):
+every point is carried with its Jacobian over the world point and every
+distance with its gradient, so the walk returns the value and its analytic
+gradient together. The same walk source serves both bake kernels. Each shared
+formula is generated a fourth time as an HLSL overload over duals
+(`SdfFormula.EmitAllDual`), so a shape's, blend's or point map's arm resolves to
+its dual by the types it is handed; the hand-written warps carry the Jacobian
+themselves; a hard minimum, a clamp or a select takes its active branch's
+derivative, so a crease reads one face's gradient where a stencil would blend
+both. An arm that keeps no derivatives (`SdfShaderAction.Dual`) marks the
+sample uncovered, and only that sample takes four tetrahedral taps around it
+(`SdfMeshBakeTaps`), through the same call site. The bake's start line names
+the program's ops that do so (`stencil-ops=[…]`). A primitive the formulas do
+not carry (a polygon, a path, a glyph, a sampled region, a sweep) takes four
+taps of itself alone, never of the program. A gradient sample counts
+`SdfMeshBakeRequest.GradientCost` toward the bake's batch and lattice bounds
+(`SdfMeshPathBake.BatchTaps`, `LatticeTaps`). A dynamic group's sample is
+carried through its slot's transform, and its gradient comes back along the
+group's own axes.
+
+`SdfFieldDeviceLawTests.Gradients` holds the dual gradient to the stencil on
+both backends wherever no crease passes through the taps.
 
 ## Failure modes
 

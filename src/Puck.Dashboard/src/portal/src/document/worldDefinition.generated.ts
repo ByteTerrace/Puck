@@ -8087,7 +8087,7 @@ export type WorldExports = {
 
 export type WorldFarProduct = {
   /**
-   * The error, in metres, the product's finest level is levelled against; its coarser levels, which a far view's draws choose between by the pixels they cover, stay within multiples of it. Within [0.01, 1024]. Absent is one metre.
+   * The side, in metres, of the cells the product gathers its vertices into, so its finest level holds about two triangles a cell of surface; its coarser levels, which a far view's draws choose between by the pixels they cover, stay within multiples of it. Within [0.01, 1024]. Absent is one metre.
    */
   cell?: number;
   /**
@@ -12988,7 +12988,7 @@ export type WorldRenderSkyLayerView = {
    */
   coverage?: boolean | null;
   /**
-   * Whether the view draws the destination's far product (its settled static scene, merged at the coarse levels its own render.farProduct asks for) rather than a residency of the whole destination: no bake, none of its bodies, creations or screens, and only the product's triangles held. A view that asks for it and has no product yet draws the destination whole until one is built from that residency. Absent is not.
+   * Whether the view draws the destination's far product (its settled static scene, gathered at the cell its own render.farProduct asks for) rather than a residency of the whole destination: no bake, none of its bodies, creations or screens, and only the product's triangles held. A view that asks for it and has no product yet draws the destination whole until one is built from that residency. Absent is not.
    */
   farProduct?: boolean | null;
   layerName?: string | null;

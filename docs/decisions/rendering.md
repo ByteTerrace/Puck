@@ -1479,6 +1479,43 @@ reference tier, `high`, and its `bound` station's pixels depend on a bound row
 the world's own rules move. Hardware observations also run at `high` and meet
 that device's worst-frame bar.
 
+## A far viewer draws a world's far product
+
+**What a world shows of itself from far away is a product of its own, never a residency of the world.** At MMO scale
+every zone, moon and server is a world and a player sees many at once, so seeing a world cannot cost holding it. A
+sky `view` layer that asks for it (`farProduct: true`, `InfinityViewSpec.FarProduct`) draws the destination's far
+product (`SdfFarProduct`): the world's settled static scene (`SdfMeshDraw.InStaticScene`), each mesh at the coarsest
+level it carries, placed in the world, its vertices gathered into cells (`SdfMeshCluster`, vertex clustering binned by
+facing so thin walls keep both faces), then chunked and levelled (`SdfMeshChunks.Bake`) so the view's draws pick a level
+by the pixels they cover. Its materials are the source program's, renumbered into the product's own. Dynamic content
+(bodies, skinned or displaced meshes, glass, screens) is absent: a far viewer sees ground and standing masses, never
+motion.
+
+**It is a cache derived from what a residency already drew.** A product is taken on the frame thread from a settled
+residency's frame (claims hold its meshes) and built on a worker, named by a digest of its inputs, never recorded, and
+built once per document version of the world (`WorldDocumentVersion`). The boot world's comes from the presentation's
+own residency; a view of a world no residency here holds draws that world whole once and builds the product from that
+residency, then swaps to it (the derive on a miss). The publishing world authors what it shows (`render.farProduct`:
+the cell, and the smallest part kept), since a far look is the author's choice.
+
+**Its residency composes the product alone.** The view's scene is one emitter that emits the product's materials and
+one static draw per piece (`WorldFarProductEmitter`), so the residency plans no bake group and bakes nothing; the
+world's session emitter only dresses the frame with that world's sky, lights and exposure, measured from the fitted
+camera (`WorldSessionSceneEmitter.ViewPointOf`). A view that draws geometry alone nests no view of its world's sky.
+
+**The hand-over is the seam.** A sky view across a seam shows the far product; crossing the seam moves the seat into
+that world, whose own residency draws it. Both draw the same meshes (the product is built from the drawn ones), and
+the authored minimum size is what a pixel spans at the nearest far viewer, so what the product leaves out is under a
+pixel where the hand-over happens.
+
+Options weighed: following the source world's tier board in a scoped residency (the second-scene path) still plans a
+group per placement and bakes whatever the board does not lead; reusing the world's own residency for the far view
+keeps the whole world resident and unparked; per-group far tiers in the mesh store cost a draw and a bake per group
+for every far world. The merged product holds one mesh a world, bakes nothing, and its triangle count is bounded by
+the surface area over the cell squared. Invariant: a far entry draws only a product built from the document version
+its source residency's world holds now, enforced at `WorldScreenBinder.FarProductOf`; where it stops, a product is not
+yet persisted in the mesh store, so each process derives it once.
+
 ## The frame graph and nesting
 
 **The frame graph is the centre of rendering, and the SDF engine is one pass

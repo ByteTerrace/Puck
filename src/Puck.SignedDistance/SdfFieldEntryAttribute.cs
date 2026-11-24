@@ -24,6 +24,11 @@ public readonly record struct SdfShaderAction(string? Code, SdfShaderOperands Op
     /// <summary>The reader does not admit this entry.</summary>
     public static SdfShaderAction Unavailable => new(Code: null, Operands: SdfShaderOperands.None);
 
+    /// <summary>Gets whether the arm keeps the gradient walk's derivatives (SDF_FIELD_DUAL: the local point's Jacobian and
+    /// the running field's gradient) true to what it does; an arm that does not marks the sample uncovered, which then
+    /// takes its gradient from the four-tap stencil.</summary>
+    public bool Dual { get; init; }
+
     // The arm that calls a shared formula's generated function with the entry's operands.
     internal static SdfShaderAction Of(SdfFormula formula) =>
         new(Code: $"result = {formula.Dispatch(shader: true)}; break;", Operands: SdfShaderOperands.None);
@@ -32,24 +37,40 @@ public readonly record struct SdfShaderAction(string? Code, SdfShaderOperands Op
     // decodes an instruction's data vectors only in the arms that read them; the rigid and part readers hold both.
     private static readonly (string State, string Held)[] MapState = [("p", "localPosition"), ("distance", "result.distance")];
     private static readonly (string State, string Held)[] RigidState = [("p", "p")];
+    // The same state carried with its derivatives, for the gradient walk's overloads of each formula.
+    private static readonly (string State, string Held)[] DualState = [
+        ("p", "sdfdMake(localPosition, localJacobian)"), ("distance", "sdfdMake(result.distance, result.gradient)"),
+    ];
 
     /// <summary>The map reader's arm that writes each named state from its shared formula.</summary>
-    internal static SdfShaderAction Map(params (string State, SdfFormula Formula)[] writes) => Write(MapState, loads: true, writes);
-    /// <summary>The rigid fold reader's arm that writes each named state from its shared formula.</summary>
-    internal static SdfShaderAction Rigid(params (string State, SdfFormula Formula)[] writes) => Write(RigidState, loads: false, writes);
+    internal static SdfShaderAction Map(params (string State, SdfFormula Formula)[] writes) => Write(MapState, loads: true, dual: true, writes);
+    /// <summary>The rigid fold reader's arm that writes each named state from its shared formula. The gradient walk's fold
+    /// reader holds its point as a dual, so the same call resolves to the formula's dual overload.</summary>
+    internal static SdfShaderAction Rigid(params (string State, SdfFormula Formula)[] writes) => Write(RigidState, loads: false, dual: false, writes);
     /// <summary>The part reader's arm that writes each named state from its shared formula.</summary>
-    internal static SdfShaderAction Part(params (string State, SdfFormula Formula)[] writes) => Write(MapState, loads: false, writes);
+    internal static SdfShaderAction Part(params (string State, SdfFormula Formula)[] writes) => Write(MapState, loads: false, dual: true, writes);
 
     /// <summary>The same arm with hand-written statements ahead of it: a guard, or a value the formula reads.</summary>
     internal SdfShaderAction After(string statements, SdfShaderOperands operands = SdfShaderOperands.None) =>
-        new(Code: statements.TrimEnd('\n') + "\n" + Code, Operands: Operands | operands);
+        new(Code: statements.TrimEnd('\n') + "\n" + Code, Operands: Operands | operands) { Dual = Dual };
 
-    private static SdfShaderAction Write((string State, string Held)[] held, bool loads, (string State, SdfFormula Formula)[] writes) {
-        var code = string.Concat(writes.Select(write =>
-            $"{held.FirstOrDefault(name => name.State == write.State).Held ?? write.State} = {write.Formula.Dispatch(shader: true, held)};\n"));
+    // A dual arm writes the point and the running distance through the formula's dual overload (SdfFormula's dual
+    // lowering) under SDF_FIELD_DUAL, and every other state as the plain reader does.
+    private static SdfShaderAction Write((string State, string Held)[] held, bool loads, bool dual, (string State, SdfFormula Formula)[] writes) {
+        string Plain((string State, SdfFormula Formula) write) =>
+            $"{held.FirstOrDefault(name => name.State == write.State).Held ?? write.State} = {write.Formula.Dispatch(shader: true, held)};\n";
+        var code = string.Concat(writes.Select(Plain));
+        if (dual) {
+            var derived = string.Concat(writes.Select(write => write.State switch {
+                "p" => $"{{ SdfDual3 sdfDualMapped = {write.Formula.Dispatch(shader: true, DualState)}; localPosition = sdfDualMapped.v; localJacobian = sdfDualMapped.d; }}\n",
+                "distance" => $"{{ SdfDual sdfDualEdited = {write.Formula.Dispatch(shader: true, DualState)}; result.distance = sdfDualEdited.v; result.gradient = sdfDualEdited.d; }}\n",
+                _ => Plain(write),
+            }));
+            code = "#ifdef SDF_FIELD_DUAL\n" + derived + "#else\n" + code + "#endif\n";
+        }
         var operands = !loads ? SdfShaderOperands.None
             : (code.Contains("data0") ? SdfShaderOperands.Data0 : SdfShaderOperands.None) | (code.Contains("data1") ? SdfShaderOperands.Data1 : SdfShaderOperands.None);
-        return new(Code: code + "break;", Operands: operands);
+        return new(Code: code + "break;", Operands: operands) { Dual = true };
     }
 }
 

@@ -4,6 +4,9 @@
 // Each blend's arithmetic, smooth minimum and radius floor included, is a shared formula generated with its fixed-point
 // twin (Puck.SignedDistance's SdfFieldFormulas).
 #include "../isa/sdf-field-blend-formulas.hlsli"
+#ifdef SDF_FIELD_DUAL
+#include "../isa/sdf-field-blend-dual.hlsli"
+#endif
 // operand is a scope pop's own lane (a stairs pop's step count, a morph pop's weight), zero at a shape's join.
 float blendShape(float current, float candidate, uint blendOp, float smoothRadius, float operand) {
     float result;
@@ -41,5 +44,26 @@ void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int m
 
     result.distance = blendShape(result.distance, candidate, blend, smooth, operand);
 }
+
+#ifdef SDF_FIELD_DUAL
+SdfDual blendShape(SdfDual current, SdfDual candidate, uint blendOp, float smoothRadius, float operand) {
+    SdfDual result;
+
+    switch (blendOp) {
+#include "../isa/sdf-field-blends.hlsli"
+        default: return sdfdLift(asfloat(0x7fc00000u));
+    }
+
+    return result;
+}
+// The material winner is the plain compose's; the distance and its gradient come from the blend's dual overload.
+void sdfComposeCandidate(inout SdfHit result, SdfDual candidate, uint blend, int material, int instanceIndex, int frameSlot, float smooth, float operand, bool trackMaterial) {
+    SdfDual current = sdfdMake(result.distance, result.gradient);
+    sdfComposeCandidate(result, candidate.v, blend, material, instanceIndex, frameSlot, smooth, operand, trackMaterial);
+    SdfDual blended = blendShape(current, candidate, blend, smooth, operand);
+    result.distance = blended.v;
+    result.gradient = blended.d;
+}
+#endif
 
 #endif

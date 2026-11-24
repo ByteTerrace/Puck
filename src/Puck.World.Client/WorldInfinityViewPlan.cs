@@ -141,8 +141,9 @@ public sealed class WorldInfinityViewPlan {
                 Spec: next.Spec
             ));
 
-            // A far product holds geometry alone, so the world it shows draws no sky and nests no view.
-            if ((next.Spec.Kind == InfinityViewKind.World) && !next.Spec.FarProduct) {
+            // A view that draws geometry alone (its coverage, or a far product) shows none of its world's sky, so it nests no
+            // view of that sky.
+            if ((next.Spec.Kind == InfinityViewKind.World) && !next.Spec.GeometryCoverage && !next.Spec.FarProduct) {
                 foreach (var child in childrenOf(arg1: name, arg2: next.Spec)) {
                     pending.Enqueue(item: (name, (next.Depth + 1), child));
                 }

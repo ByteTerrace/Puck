@@ -691,6 +691,7 @@ add the row you found.
 | Reserve device memory before allocating it, share a pool between residencies, or hold detail to a budget | `MemoryAccount.ReserveDevice` (a holder's peak, under the owner its objects are named for, `GpuObjectName.MemoryOwnerOf`), `GpuDeviceMemoryWork.TryAdmit` (the one door every native allocation asks; `CountAllocated` takes only its `GpuMemoryGrant`), `GpuMemoryAdmissionScope` (opened around the synchronous allocation of a replacement its holder can do without, so a full pool refuses it instead of admitting it past the limit), `SdfResidencySelector` (the one detail bias, each bake's budget, each mesh region's reservation, `SdfGpuWorkBudget`); never a share of `GpuMemoryProfile` | `src/Puck.Hosting/Jobs/MemoryAccount.cs`, `src/Puck.Abstractions/Gpu/Counters`, `src/Puck.SdfVm/SdfResidencySelector.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-3-one-reservation) |
 | Read where frame time goes | `world.counters gpu`, `world.gpu-timing`, the bake's `gpu-work=[…]` line | [performance and cost](#performance-and-cost) |
 | Know which draws a raster pass selected and at which level (triangles drawn by level and tier, mesh bytes no pass selected) | The occlusion kernel's selection marks, taken only while a reading asked (`SdfWorldTables.MarksSelections`), one stage in `SdfWorldTables.SelectionMarkFrames`, read back with the portal sight verdicts through the slot's one readback (`SdfMeshOcclusion`) and read against the row epoch (`SdfWorldTables.ObserveSelectionMarks`); `world.residency`'s selection line | `src/Puck.SdfVm` |
+| Show a world from far away without holding it (a planet from its moon, a neighbour across a seam) | The world's far product (`SdfFarProduct`, built by `SdfMeshCluster` from a settled residency's static draws), drawn by a sky `view` layer with `farProduct: true` through `WorldFarProductEmitter`; products are published and judged by document version in `WorldScreenBinder.Device.Far.cs` | `src/Puck.SdfVm`, `src/Puck.World.Presentation`; [decision](../../../docs/decisions/rendering.md#a-far-viewer-draws-a-worlds-far-product) |
 | Show something where a group's detail has not landed or was refused | The group's floor: planned first on an arrival in view (`SdfMeshDemand.Sees`; one out of view bakes its detail directly, behind the groups in view), kept while detail draws, evicted to on refusal (`SdfMeshPathBake.Floor.cs`, `Group.KeptFloor`); `world.residency`'s floor line | [mesh bake](references/mesh-bake.md#groups-poses-and-materials) |
 | Name a backend's compiled-kernel extension, or its target from an extension or some bytecode | `ShaderBytecode.FileExtension` (the extension), `ShaderTargets` (`Of` a backend or bytecode, `FileExtension` and `DeployedPath` of a `ShaderTarget`); never a `.dxil`/`.spv` ternary or string compare. A kernel-loading API (`SdfKernelSet.Load`, `SdfWorldPipelineCatalog.LoadDeployed`, `GpuRegionCopyPass`, `SdfMeshRasterPass`) takes a `ShaderTarget`, never an extension string | `src/Puck.Abstractions/Gpu/Shaders`, `src/Puck.Shaders.Model/Compiler/ShaderTarget.cs` |
 | Place several images into rects of one output in one pass, or let a package pass leave trailing inputs unbound | `RenderGraphPackageCatalog.PlaceViews` (the `place` kernel's body, `place.hlsli`, over up to `PlaceSourceCount` sources, recorded by `PlacePackage`, each source placed by its version's name through `IRenderGraphPlacements`), which `WorldRootGraph` places every view and pane through; `RenderGraphPackage.OptionalInputs` | `src/Puck.Shaders/Graph/PlacePackage.cs`, `src/Puck.Shaders.Model/Graph/RenderGraphPackages.cs`; [shaders reference](../../../docs/reference/shaders.md#the-default-root-graph) |
@@ -723,8 +724,9 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 `passes/sdf-pixel-entry.hlsli`) and call no field query. The table in
 [kernels](references/kernels.md#the-frame) says what each writes.
 
-The mesh bake's two kernels (`sdf-mesh-bake-mask`, `sdf-mesh-bake`, the one
-`mapCore` call site) are no pass of a view: they run as the residency's
+The mesh bake's kernels (`sdf-mesh-bake-mask`, and the two samplers that share
+`passes/sdf-mesh-bake-stage.hlsli`: `sdf-mesh-bake` for values and
+`sdf-mesh-bake-gradient` for gradients, each one `mapCore` call site) are no pass of a view: they run as the residency's
 background GPU work (`SdfGpuWork`, its bake client `SdfMeshBakeGpuWork`), a
 ring of slots each submitted on its own fence and refilled when a slot's job
 completes and its readback is released, stepped on the frame thread at the top
@@ -1314,13 +1316,24 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   bounded. Vulkan on NVIDIA loses the device on the read once it passes the
   allocation's slack, while Direct3D 12 returns zero, so an even-sized window
   and Direct3D 12 both hide it.
-- **One `mapCore` call site.** The bake (`passes/sdf-mesh-bake.comp.hlsl`) is
-  the only GPU kernel that walks the field, and it does so through one rolled
-  `[loop]` over its samples. Every call site is a full inlined copy of the
-  interpreter, costing register pressure, compile time and a driver translation
-  on every cold boot, so more samples go through that loop, never through a new
-  call. Never add `[noinline]`: a real SPIR-V call loses the device on NVIDIA's
-  Vulkan driver.
+- **One `mapCore` call site a kernel.** The bake's two samplers
+  (`passes/sdf-mesh-bake-stage.hlsli`) are the only GPU kernels that walk the
+  field, each through one call site: the value sampler once a sample, the
+  gradient sampler (`SDF_FIELD_DUAL`) through one rolled `[loop]` that ends after
+  its forward-mode walk unless the walk was uncovered. Every call site is a full
+  inlined copy of the interpreter, costing register pressure, compile time and a
+  driver translation on every cold boot, so more samples go through that loop,
+  never through a new call. Never add `[noinline]`: a real SPIR-V call loses the
+  device on NVIDIA's Vulkan driver.
+- **A walk arm keeps its derivatives or says it does not.** Under
+  `SDF_FIELD_DUAL` the walk carries `localJacobian` beside `localPosition` and
+  `SdfHit.gradient` beside `distance`. A formula arm gets its dual from the
+  generator (`SdfShaderAction.Map`, `Part`); a hand-written arm that changes the
+  point or the distance updates both under `#ifdef SDF_FIELD_DUAL` and sets
+  `Dual = true`, or the generator marks it `SDF_FIELD_DUAL_UNCOVERED` and every
+  sample whose walk runs it takes the stencil. Setting `Dual` on an arm whose
+  derivatives are wrong is silent: `SdfFieldDeviceLawTests.Gradients` is what
+  sees it.
 - **Keep each pixel kernel's include closure its own.** A pixel kernel includes
   the common head (`passes/sdf-pixel-pass.hlsli`), only its own stage module,
   then the entry; a stage module includes what it reads beyond

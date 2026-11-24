@@ -1,6 +1,7 @@
 using System.Globalization;
 using Puck.SdfVm;
 using Puck.World.Client;
+using Puck.World.Protocol;
 
 namespace Puck.World;
 
@@ -10,9 +11,11 @@ namespace Puck.World;
 // view of it draws the world whole once, which is that product's source (the derive on a miss); the boot world's own
 // residency is its source from the start, so a view of it never draws it whole.
 //
-// Invariant: a far entry draws only a product built from the version of its world it shows. Enforced at the one door that
-// hands a product to the plan, FarProductOf, which answers only a product whose revision is the mirror's current one; the
-// plan replaces an entry whose product is no longer that answer (ReplanInfinity, InfinityInputsMoved).
+// Invariant: a far entry draws only a product built from the document version its source residency's world holds now.
+// Enforced at the one door that hands a product to the plan, FarProductOf, which answers only a product whose version is
+// its source mirror's current one; the plan replaces an entry whose product is no longer that answer (ReplanInfinity,
+// InfinityInputsMoved). The viewer's own mirror of the world is not asked: two mirrors of one world receive an install
+// at different moments, and the product follows the residency it is built from.
 public sealed partial class WorldScreenBinder {
     private readonly Dictionary<string, FarProductState> m_farProducts = new(comparer: StringComparer.Ordinal);
     // Moves whenever any product installs, so a root planned before it replans once (InfinityInputsMoved).
@@ -20,15 +23,16 @@ public sealed partial class WorldScreenBinder {
     private long m_farBuilds;
 
     // The product of a world's current version, or null while none is built.
-    private SdfFarProduct? FarProductOf(string instance, WorldSessionMirror mirror) =>
-        ((m_farProducts.TryGetValue(key: instance, value: out var state) && (state.Product is { } product) && (state.Revision == mirror.DefinitionRevision))
+    private SdfFarProduct? FarProductOf(string instance) =>
+        ((m_farProducts.TryGetValue(key: instance, value: out var state) && (state.Product is { } product) && (state.Source is { } source)
+            && (state.Revision == source.Document.Version))
             ? product
             : null);
     // Whether a view of a world waits for its product rather than drawing the world whole: the presentation holds a
     // residency of that world anyway (the boot world's own) and no build has yet finished for the world's version.
-    private bool FarSourceResident(string instance, WorldSessionMirror mirror) =>
+    private bool FarSourceResident(string instance) =>
         ((instance == WorldDefinitionLoader.BootInstanceName) && (ViewHost is not null)
-            && !(m_farProducts.TryGetValue(key: instance, value: out var state) && (state.BuiltFor == mirror.DefinitionRevision)));
+            && !(m_farProducts.TryGetValue(key: instance, value: out var state) && (state.Source is { } source) && (state.BuiltFor == source.Document.Version)));
 
     // Builds each product whose source has settled and whose world's version it does not hold, and installs each build
     // that finished. Runs once a reconcile, on the frame thread, before the roots follow their inputs.
@@ -48,6 +52,7 @@ public sealed partial class WorldScreenBinder {
             state = new FarProductState();
             m_farProducts.Add(key: instance, value: state);
         }
+        state.Source = mirror;
         if (state.Building is { } building) {
             if (!building.IsCompleted) { return; }
             state.Building = null;
@@ -65,14 +70,14 @@ public sealed partial class WorldScreenBinder {
             m_farVersion++;
         }
         // One build a version: a version whose build failed or kept nothing is not built again until the world changes.
-        if (state.BuiltFor == mirror.DefinitionRevision) { return; }
+        if (state.BuiltFor == mirror.Document.Version) { return; }
         // The product is taken from a settled residency only: one still bringing its meshes would leave out what it owes.
         if (residency.MeshesArriving || (residency.Frame is not { } frame)) { return; }
         var options = OptionsOf(render: mirror.Definition.Render?.FarProduct);
         var inputs = SdfFarProduct.Take(frame: frame, options: options);
 
         if (inputs is null) { return; }
-        state.BuildingRevision = mirror.DefinitionRevision;
+        state.BuildingRevision = mirror.Document.Version;
         state.Building = Task.Run(function: () => SdfFarProduct.Build(inputs: inputs));
         m_farBuilds++;
     }
@@ -85,17 +90,19 @@ public sealed partial class WorldScreenBinder {
 
         foreach (var (instance, state) in m_farProducts.OrderBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)) {
             lines.Add(item: string.Create(provider: CultureInfo.InvariantCulture,
-                handler: $"  {instance}: revision={state.Revision} {(((object?)state.Product) ?? "none")}{((state.Building is null) ? string.Empty : " building")}{((state.Fault is null) ? string.Empty : $" fault={state.Fault}")}"));
+                handler: $"  {instance}: version={state.Revision.Sequence} {(((object?)state.Product) ?? "none")}{((state.Building is null) ? string.Empty : " building")}{((state.Fault is null) ? string.Empty : $" fault={state.Fault}")}"));
         }
         return string.Join(separator: Environment.NewLine, values: lines);
     }
     private sealed class FarProductState {
         public SdfFarProduct? Product { get; set; }
+        // The mirror of the world the source residency draws, whose document version the product is judged by.
+        public WorldSessionMirror? Source { get; set; }
         // The definition revision the product was built from, the one its build is building from, and the last one a
         // build finished for (whether or not it kept anything).
-        public int Revision { get; set; } = int.MinValue;
-        public int BuildingRevision { get; set; } = int.MinValue;
-        public int BuiltFor { get; set; } = int.MinValue;
+        public WorldDocumentVersion Revision { get; set; }
+        public WorldDocumentVersion BuildingRevision { get; set; }
+        public WorldDocumentVersion BuiltFor { get; set; }
         public Task<SdfFarProduct?>? Building { get; set; }
         public string? Fault { get; set; }
     }

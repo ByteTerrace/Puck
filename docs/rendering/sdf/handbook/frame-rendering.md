@@ -347,7 +347,7 @@ views and screens one frame updated over the same window.
 
 ## What each pass costs
 
-The passes scale with different things. The bake's two kernels are no pass of
+The passes scale with different things. The bake's kernels are no pass of
 the frame: they run as the residency's background GPU work, by each job's
 measured timestamps, and only while a bake is pending ([the bake](#the-bake)).
 Background work takes the share of the GPU's time the frame's own work leaves

@@ -16,8 +16,10 @@ bool sdfEllipseRootAbove(float2 numerator, float2 gap, float u) {
 // implicit test; the bracket runs from e_m p_m to e_m^2 inside and to |e p| outside, halved geometrically while its ends
 // differ by more than two to one and arithmetically after, until it has no middle; a point on the minor axis's plane takes
 // the pole when the other term's square there is at most one. A result that is not finite answers the scaled circle's
-// bound, (|p / e| - 1) min(e).
-precise float sdfEllipse2D(float2 p, float2 ab) {
+// bound, (|p / e| - 1) min(e). gradient is the distance's derivative: the unit direction from the foot, which is the
+// ellipse's outward normal at the foot on both sides (at the point itself on the curve).
+precise float sdfEllipse2DGrad(float2 p, float2 ab, out float2 gradient) {
+    float2 side = float2((p.x < 0.0) ? -1.0 : 1.0, (p.y < 0.0) ? -1.0 : 1.0);
     float2 e = max(ab, 1.0e-30);
     float2 y = abs(p);
     float widest = max(max(e.x, e.y), max(y.x, y.y));
@@ -31,6 +33,7 @@ precise float sdfEllipse2D(float2 p, float2 ab) {
     float2 z = (y / e);
 
     if ((z.x < 1.0) && (z.y < 1.0) && (dot(z, z) == 1.0)) {
+        gradient = side * normalize(z / e);
         return 0.0;
     }
 
@@ -56,7 +59,10 @@ precise float sdfEllipse2D(float2 p, float2 ab) {
             float rest = (least * sqrt(max(0.0, (1.0 - sum))));
 
             if (gap.x == 0.0) { foot.x = rest; } else { foot.y = rest; }
-            return (-length(foot - y) / scale);
+            float2 toFoot = (foot - y);
+            float footDistance = length(toFoot);
+            gradient = side * ((footDistance > 0.0) ? (toFoot / footDistance) : normalize(foot / (e * e)));
+            return (-footDistance / scale);
         }
     }
 
@@ -76,13 +82,21 @@ precise float sdfEllipse2D(float2 p, float2 ab) {
 
     float u = (0.5 * (low + high));
     float2 nearest = ((e * numerator) / (u + gap));
-    float distance = (length(nearest - y) / scale);
+    float2 away = (y - nearest);
+    float reach = length(away);
+    float distance = (reach / scale);
 
     if (!isfinite(distance)) {
+        gradient = side * normalize(z / e);
         return ((length(z) - 1.0) * least / scale);
     }
 
+    gradient = side * ((reach > 0.0) ? ((outside ? away : -away) / reach) : normalize(nearest / (e * e)));
     return (outside ? distance : -distance);
+}
+precise float sdfEllipse2D(float2 p, float2 ab) {
+    float2 gradient;
+    return sdfEllipse2DGrad(p, ab, gradient);
 }
 
 #endif

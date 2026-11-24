@@ -854,7 +854,7 @@
       ],
       "properties": {
         "cell": {
-          "description": "The error, in metres, the product\u0027s finest level is levelled against; its coarser levels, which a far view\u0027s draws choose between by the pixels they cover, stay within multiples of it. Within [0.01, 1024]. Absent is one metre.",
+          "description": "The side, in metres, of the cells the product gathers its vertices into, so its finest level holds about two triangles a cell of surface; its coarser levels, which a far view\u0027s draws choose between by the pixels they cover, stay within multiples of it. Within [0.01, 1024]. Absent is one metre.",
           "type": "number",
           "default": 1
         },

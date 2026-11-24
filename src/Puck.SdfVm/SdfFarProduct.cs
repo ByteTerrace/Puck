@@ -6,9 +6,10 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// What a world shows of itself to a far viewer: its settled static scene merged into one world-space mesh at the
-/// coarsest level each of its meshes carries, chunked and levelled again at the product's own cell
-/// (<see cref="SdfMeshChunks.Bake"/>), with the materials its triangles shade with. A view that shows a world from far
+/// What a world shows of itself to a far viewer: its settled static scene, each mesh at the coarsest level it carries,
+/// placed in the world and gathered into the product's own cells (<see cref="SdfMeshCluster"/>), so its triangles are
+/// bounded by the surface's area over the cell squared, then chunked and levelled (<see cref="SdfMeshChunks.Bake"/>),
+/// with the materials its triangles shade with. A view that shows a world from far
 /// away draws this product instead of a residency of the whole world, so it bakes nothing, holds none of the world's
 /// bodies, creations or screens, and holds only the product's triangles.
 /// <para>It is a derived product, a cache: built from what a residency of the world already drew
@@ -21,8 +22,8 @@ namespace Puck.SdfVm;
 /// <see cref="Materials"/>, and a triangle whose material the source program does not hold (a screen's) is left out.</para>
 /// </summary>
 public sealed class SdfFarProduct {
-    /// <summary>The product's cell when its options state none: the largest error, in metres, the product's finest level
-    /// is levelled against (<see cref="SdfMesh.BakeCell"/>).</summary>
+    /// <summary>The product's cell when its options state none, in metres: the side of the cells its vertices are
+    /// gathered into, and the cell its levels are measured against (<see cref="SdfMesh.BakeCell"/>).</summary>
     public const float DefaultCell = 1f;
 
     private SdfFarProduct(SdfMesh mesh, IReadOnlyList<SdfMaterial> materials, ulong key, int sourceDraws, long sourceTriangles) {
@@ -91,7 +92,7 @@ public sealed class SdfFarProduct {
         return new Inputs(draws: draws, materials: frame.Program.Appearance.Materials, options: options);
     }
     /// <summary>Builds the product from its inputs, on a worker: each draw's coarsest level placed in the world, its
-    /// triangles' materials renumbered into the product's own, merged into one mesh and chunked and levelled at the
+    /// triangles' materials renumbered into the product's own, gathered into the product's cells and chunked and levelled at the
     /// product's cell. Releases the inputs' claims whatever happens.</summary>
     /// <param name="inputs">What <see cref="Take"/> took.</param>
     /// <returns>The product, or <see langword="null"/> when no triangle survives.</returns>
@@ -101,10 +102,7 @@ public sealed class SdfFarProduct {
         using (inputs) {
             var options = inputs.Options;
             var sourceMaterials = inputs.Materials;
-            var positions = new List<Vector3>();
-            var normals = new List<Vector3>();
-            var indices = new List<uint>();
-            var materials = new List<uint>();
+            var cluster = new SdfMeshCluster(cell: options.Cell);
             var renumbered = new Dictionary<int, uint>();
             var kept = new List<SdfMaterial>();
             var remap = Array.Empty<int>();
@@ -137,8 +135,7 @@ public sealed class SdfFarProduct {
                 remap.AsSpan(start: 0, length: piecePositions.Length).Fill(value: -1);
 
                 for (var corner = 0; (corner < pieceIndices.Length); corner += 3) {
-                    var triangle = (corner / 3);
-                    var program = (draw.Material + (pieceMaterials.IsEmpty ? 0 : ((int)pieceMaterials[triangle])));
+                    var program = (draw.Material + (pieceMaterials.IsEmpty ? 0 : ((int)pieceMaterials[(corner / 3)])));
 
                     // A triangle whose material the program does not hold (a screen's face) has nothing to shade with here.
                     if ((program < 0) || (program >= sourceMaterials.Count)) { continue; }
@@ -147,41 +144,29 @@ public sealed class SdfFarProduct {
                         renumbered.Add(key: program, value: material);
                         kept.Add(item: sourceMaterials[program]);
                     }
+
+                    int a, b, c;
+
                     if (pieceNormals.IsEmpty) {
-                        // A mesh without normals (an authored sheet) takes its face's normal at three corners of its own.
-                        var a = Vector3.Transform(position: piecePositions[((int)pieceIndices[corner])], matrix: placement);
-                        var b = Vector3.Transform(position: piecePositions[((int)pieceIndices[(corner + 1)])], matrix: placement);
-                        var c = Vector3.Transform(position: piecePositions[((int)pieceIndices[(corner + 2)])], matrix: placement);
-                        var face = SdfMeshAudit.FaceNormal(a: a, b: b, c: c);
+                        // A mesh without normals (an authored sheet) takes its face's normal at each corner.
+                        var pa = Vector3.Transform(position: piecePositions[((int)pieceIndices[corner])], matrix: placement);
+                        var pb = Vector3.Transform(position: piecePositions[((int)pieceIndices[(corner + 1)])], matrix: placement);
+                        var pc = Vector3.Transform(position: piecePositions[((int)pieceIndices[(corner + 2)])], matrix: placement);
+                        var face = SdfMeshAudit.FaceNormal(a: pa, b: pb, c: pc);
 
                         if (face == Vector3.Zero) { continue; }
-                        foreach (var point in (ReadOnlySpan<Vector3>)[a, b, c]) {
-                            indices.Add(item: ((uint)positions.Count));
-                            positions.Add(item: point);
-                            normals.Add(item: face);
-                        }
+                        (a, b, c) = (cluster.Add(normal: face, position: pa), cluster.Add(normal: face, position: pb), cluster.Add(normal: face, position: pc));
                     } else {
-                        for (var at = 0; (at < 3); at++) {
-                            var vertex = ((int)pieceIndices[(corner + at)]);
-
-                            if (remap[vertex] < 0) {
-                                remap[vertex] = positions.Count;
-                                positions.Add(item: Vector3.Transform(position: piecePositions[vertex], matrix: placement));
-                                normals.Add(item: Normalized(normal: Vector3.TransformNormal(normal: pieceNormals[vertex], matrix: placement)));
-                            }
-                            indices.Add(item: ((uint)remap[vertex]));
-                        }
+                        a = ClusterOf(cluster: cluster, normals: pieceNormals, placement: in placement, positions: piecePositions, remap: remap, vertex: ((int)pieceIndices[corner]));
+                        b = ClusterOf(cluster: cluster, normals: pieceNormals, placement: in placement, positions: piecePositions, remap: remap, vertex: ((int)pieceIndices[(corner + 1)]));
+                        c = ClusterOf(cluster: cluster, normals: pieceNormals, placement: in placement, positions: piecePositions, remap: remap, vertex: ((int)pieceIndices[(corner + 2)]));
                     }
-                    materials.Add(item: material);
+                    cluster.AddTriangle(a: a, b: b, c: c, material: material);
                 }
             }
-            if (indices.Count == 0) { return null; }
+            if (cluster.TriangleCount == 0) { return null; }
 
-            var merged = new SdfMesh(indices: indices.ToArray(), normals: normals.ToArray(), positions: positions.ToArray(), triangleMaterials: materials.ToArray()) {
-                BakeCell = new Vector3(value: options.Cell),
-            };
-
-            return new SdfFarProduct(key: digest.Value, materials: kept.ToArray(), mesh: SdfMeshChunks.Bake(mesh: merged), sourceDraws: drawn, sourceTriangles: sourceTriangles);
+            return new SdfFarProduct(key: digest.Value, materials: kept.ToArray(), mesh: SdfMeshChunks.Bake(mesh: cluster.Build()), sourceDraws: drawn, sourceTriangles: sourceTriangles);
         }
     }
 
@@ -203,6 +188,15 @@ public sealed class SdfFarProduct {
         var extent = (high - low);
 
         return (MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z)) >= size);
+    }
+    // The cluster a piece's vertex joins, placed in the world: each vertex joins once, however many triangles name it.
+    private static int ClusterOf(SdfMeshCluster cluster, int[] remap, int vertex, ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals, in Matrix4x4 placement) {
+        if (remap[vertex] < 0) {
+            remap[vertex] = cluster.Add(
+                normal: Normalized(normal: Vector3.TransformNormal(normal: normals[vertex], matrix: placement)),
+                position: Vector3.Transform(position: positions[vertex], matrix: placement));
+        }
+        return remap[vertex];
     }
     private static Vector3 Normalized(Vector3 normal) {
         var length = normal.Length();
@@ -244,7 +238,8 @@ public sealed class SdfFarProduct {
     }
 }
 /// <summary>What a world's far product keeps (<see cref="SdfFarProduct"/>).</summary>
-/// <param name="Cell">The error, in metres, the product's finest level is levelled against: its coarser levels stay
+/// <param name="Cell">The side, in metres, of the cells the product gathers its vertices into, and the cell its levels are
+/// measured against: its coarser levels stay
 /// within multiples of it (<see cref="SdfMeshCollapse.CellShares"/>), which the far view's draws choose between by the
 /// pixels they cover. Positive.</param>
 /// <param name="MinimumSize">The least size, in metres, a static draw's longest side reaches to enter the product: a far

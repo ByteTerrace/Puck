@@ -154,8 +154,12 @@ public sealed partial class WorldScreenBinder {
             // A view asking for its world's far product draws the product once it is built. Until then it draws the world
             // whole, which is the product's source, unless the presentation holds a residency of that world anyway, whose
             // product is on its way: then it draws its fallback for the moments the build takes.
-            var far = ((ready && planned.Spec.FarProduct) ? FarProductOf(instance: source.Instance!, mirror: source.Mirror!) : null);
-            var waits = (ready && planned.Spec.FarProduct && (far is null) && FarSourceResident(instance: source.Instance!, mirror: source.Mirror!));
+            var far = ((ready && planned.Spec.FarProduct) ? FarProductOf(instance: source.Instance!) : null);
+            var waits = (ready && planned.Spec.FarProduct && (far is null) && FarSourceResident(instance: source.Instance!));
+
+            if (ready && planned.Spec.FarProduct) {
+                Console.Out.WriteLine(value: $"[world.far: {root.Name}/{planned.Name} shows '{source.Instance}' {((far is not null) ? "from its far product" : (waits ? "once its far product is built" : "whole until its far product is built"))}]");
+            }
 
             if (root.Entries.TryGetValue(key: planned.Name, value: out var held)
                 && (!ready || waits || !ReferenceEquals(objA: held.Mirror, objB: source.Mirror) || !ReferenceEquals(objA: held.Hosted?.Token, objB: source.Hosted?.Token)
@@ -236,9 +240,7 @@ public sealed partial class WorldScreenBinder {
         var content = ContentOf(far: far, hosted: hosted, mirror: mirror, planned: planned, prototypes: prototypes, root: root);
 
         if (!m_infinityContents.TryGetValue(key: content, value: out var entry)) {
-            entry = ((far is not null)
-                ? CreateFarInfinity(root, planned, mirror, instance, hosted, far)
-                : CreateInfinity(root, planned, mirror, instance, hosted, prototypes));
+            entry = CreateInfinity(root, planned, mirror, instance, hosted, prototypes, far);
             entry.Identity = content;
             m_infinityContents.Add(key: content, value: entry);
         }
@@ -257,22 +259,29 @@ public sealed partial class WorldScreenBinder {
         _ = m_infinityContents.Remove(key: entry.Identity);
         ReleaseInfinity(entry: entry);
     }
+    // A layer's entry. A layer that draws its world's far product composes that product alone, and the world's own session
+    // emitter only dresses its frames with that world's sky, lights and exposure, holding none of the world (no prototype,
+    // so no placement, body, stamp or screen); it films no camera screen and measures no envelope.
     private InfinityEntry CreateInfinity(InfinityRoot root, WorldInfinityView planned, WorldSessionMirror mirror,
-        string instance, WorldObservedSession? hosted, IReadOnlyList<string>? prototypes) {
+        string instance, WorldObservedSession? hosted, IReadOnlyList<string>? prototypes, SdfFarProduct? far) {
         var name = ((root.Name == WorldViewGraphs.WorldInstance) ? planned.Name : ((root.Name + Puck.State.GeneratedName.Joiner) + planned.Name));
         var emitter = new WorldSessionSceneEmitter(mirror: mirror, effectiveCameraName: null, domains: m_domains, jobs: m_stamps.Jobs,
-            onlyPrototypes: ((planned.Spec.Kind == InfinityViewKind.Far) ? new HashSet<string>(collection: (prototypes ?? []), comparer: StringComparer.Ordinal) : null)) {
+            onlyPrototypes: (((far is not null) || (planned.Spec.Kind == InfinityViewKind.Far)) ? new HashSet<string>(collection: (((far is null) ? prototypes : null) ?? []), comparer: StringComparer.Ordinal) : null)) {
             SkyLayers = SkyLayers,
             Session = Settings,
         };
-        var entry = new InfinityEntry(current: Current, emitter: emitter, hosted: hosted, instance: instance, mirror: mirror, name: name, planned: planned, prototypes: (prototypes ?? []), root: root);
+        var entry = new InfinityEntry(current: Current, emitter: emitter, hosted: hosted, instance: instance, mirror: mirror, name: name, planned: planned, prototypes: (prototypes ?? []), root: root) {
+            Far = far,
+        };
+
+        // The shown world's air and keyed looks read the height of the cameras the layer is fitted to, not its default camera.
+        emitter.ViewPointOf = entry.FirstViewPoint;
         var scene = new WorldInfinityViewScene(emitter, () => entry.Views, planned.Spec) {
             FitSkyViews = (views, sky, width, height) => FilmInfinity(entry: entry, height: height, sky: sky, views: views, width: width),
         };
-        var source = new SdfCompositionFrameSource(dresser: scene, emitters: [emitter]);
 
-        entry.Source = source;
-        if (planned.Spec.Kind == InfinityViewKind.World) {
+        entry.Source = new SdfCompositionFrameSource(dresser: scene, emitters: ((far is not null) ? [new WorldFarProductEmitter(product: far)] : [emitter]));
+        if ((far is null) && (planned.Spec.Kind == InfinityViewKind.World)) {
             var screens = new WorldNestedScreens<SessionFeed>(definition: () => mirror.Definition,
                 depth: (root.Depth + planned.Depth), head: name, shares: SharesProducer, world: instance);
 
@@ -281,34 +290,11 @@ public sealed partial class WorldScreenBinder {
                 () => ((entry.Views.Count == 0) ? null : entry.Views[0].Camera), null, null) { Infinity = entry });
             m_accessBindingsVersion++;
         }
-        if (Observations.EnvelopeOf(instance: instance) is { } envelope) {
+        if ((far is null) && (Observations.EnvelopeOf(instance: instance) is { } envelope)) {
             entry.Envelope = envelope.Configure(
                 measure: candidate => ((entry.Hosted is not { } session) ? emitter.MeasureCandidate(candidate: candidate)
                     : ((session.Observation?.Disclose(arg: candidate) is { } disclosed) ? emitter.MeasureCandidate(candidate: disclosed) : default)));
         }
-        m_feedsMoved = true;
-        m_infinityEntriesMoved = true;
-        return entry;
-    }
-    // A far view's entry: the product's emitter is its whole scene, and the world's own session emitter only dresses its
-    // frames with that world's sky, lights and exposure, holding none of the world (no prototype, so no placement, body,
-    // stamp or screen). It films no camera screen and measures no envelope, since its scene is the product alone.
-    private InfinityEntry CreateFarInfinity(InfinityRoot root, WorldInfinityView planned, WorldSessionMirror mirror,
-        string instance, WorldObservedSession? hosted, SdfFarProduct product) {
-        var name = ((root.Name == WorldViewGraphs.WorldInstance) ? planned.Name : ((root.Name + Puck.State.GeneratedName.Joiner) + planned.Name));
-        var dresser = new WorldSessionSceneEmitter(mirror: mirror, effectiveCameraName: null, domains: m_domains, jobs: m_stamps.Jobs,
-            onlyPrototypes: new HashSet<string>(comparer: StringComparer.Ordinal)) {
-            SkyLayers = SkyLayers,
-            Session = Settings,
-        };
-        var entry = new InfinityEntry(current: Current, emitter: dresser, hosted: hosted, instance: instance, mirror: mirror, name: name, planned: planned, prototypes: [], root: root) {
-            Far = product,
-        };
-        var scene = new WorldInfinityViewScene(dresser, () => entry.Views, planned.Spec) {
-            FitSkyViews = (views, sky, width, height) => FilmInfinity(entry: entry, height: height, sky: sky, views: views, width: width),
-        };
-
-        entry.Source = new SdfCompositionFrameSource(dresser: scene, emitters: [new WorldFarProductEmitter(product: product)]);
         m_feedsMoved = true;
         m_infinityEntriesMoved = true;
         return entry;
@@ -426,6 +412,8 @@ public sealed partial class WorldScreenBinder {
         public WorldSessionSceneEmitter Emitter { get; } = emitter;
         public IReadOnlyList<string> Prototypes { get; } = prototypes;
         public List<SdfViewSnapshot> Views { get; } = [];
+        // Where the first consuming camera stands in the shown world, or null before a consumer fits the layer.
+        public System.Numerics.Vector3? FirstViewPoint() => ((Views.Count > 0) ? Views[0].Camera.Position : null);
         public Dictionary<InfinityConsumer, int> Indices { get; } = new(comparer: ReferenceEqualityComparer.Instance);
 
         public IDisposable? Envelope { get; set; }
