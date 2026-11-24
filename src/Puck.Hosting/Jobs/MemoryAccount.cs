@@ -206,12 +206,13 @@ public sealed class MemoryAccount {
     /// <param name="lowMemorySignaled">Reads whether the system says its memory is running low, beside each free-memory
     /// reading; <see langword="null"/> reads <see cref="HostMemory.LowMemorySignaled"/>.</param>
     /// <param name="reclaim">Gives back the memory the runtime holds and no longer uses, when authoring work finds the
-    /// machine without room (<see cref="Reclaims"/>); <see langword="null"/> runs a blocking, compacting collection that
-    /// decommits what it frees.</param>
+    /// machine without room (<see cref="Reclaims"/>); <see langword="null"/> starts a background collection of every
+    /// generation, which frees the heap's garbage while every other thread runs on, so the frame a player sees never
+    /// stops for authoring's sake.</param>
     public MemoryAccount(Func<long?>? availablePhysicalBytes = null, long? installedPhysicalBytes = null, Func<long>? clock = null, Func<bool>? lowMemorySignaled = null, Action? reclaim = null) {
         var installed = (installedPhysicalBytes ?? (HostMemory.InstalledPhysicalBytes() ?? GC.GetGCMemoryInfo().TotalAvailableMemoryBytes));
 
-        m_reclaim = (reclaim ?? (static () => GC.Collect(generation: GC.MaxGeneration, mode: GCCollectionMode.Aggressive, blocking: true, compacting: true)));
+        m_reclaim = (reclaim ?? (static () => GC.Collect(generation: GC.MaxGeneration, mode: GCCollectionMode.Forced, blocking: false, compacting: false)));
         m_clock = (clock ?? Stopwatch.GetTimestamp);
         m_readAvailable = (availablePhysicalBytes ?? HostMemory.AdmissibleBytes);
         m_readLowMemory = (lowMemorySignaled ?? HostMemory.LowMemorySignaled);

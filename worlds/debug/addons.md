@@ -137,7 +137,7 @@ bulk query, and listens for collision begins. It records:
 |---|---|
 | `below-floor` | A body more than 1 m under y = 0, the lowest floor anything stands on; `fall-recovery` only catches a body at y = -40 |
 | `unnormalised-orientation` | A body's orientation quaternion more than 1/64 from unit length |
-| `piece-overlap` | Two chess pieces (bodies 8 to 39) begin to overlap |
+| `piece-overlap` | Two chess pieces (bodies 18 to 49) begin to overlap |
 | `companion-overlap` | The Moth (body 0) and the companion (body 42) begin to overlap |
 
 The pieces, the Moth and the flying companion are `Solid` kits, whose contact solve separates two
