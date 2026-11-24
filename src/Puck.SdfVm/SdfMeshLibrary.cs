@@ -59,6 +59,81 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
     /// <summary>Gets the store the library keeps its meshes in between runs, or <see langword="null"/>.</summary>
     public SdfMeshStore? Disk { get; } = store;
+
+    [Puck.SideTable(reason: "the drawn tiers of each world a presentation draws twice, which leave with the world's key")]
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, TierBoard> m_tiers = [];
+
+    /// <summary>Returns the tiers the residency that draws a world for the presentation draws each of its groups at,
+    /// by the group's shape: what a residency drawing a second scene of that world follows
+    /// (<see cref="SdfFrameContent.DemandWorld"/>).</summary>
+    /// <param name="world">What names the world, compared by reference.</param>
+    /// <returns>The world's board, the same one for every caller.</returns>
+    internal TierBoard TiersOf(object world) => m_tiers.GetValue(key: world, createValueCallback: static _ => new TierBoard());
+
+    /// <summary>The tier one residency draws each of its groups at, by the group's shape, which the residencies drawing
+    /// a second scene of its world read. Where several of its groups share a shape, the finest. Thread-safe: the
+    /// publisher writes it whole under a lock the readers take.</summary>
+    internal sealed class TierBoard {
+        private readonly Lock m_gate = new();
+        private readonly Dictionary<UInt128, int> m_tiers = [];
+        private long m_revision;
+
+        /// <summary>Gets a count that moves each time the board is published.</summary>
+        public long Revision => Interlocked.Read(location: ref m_revision);
+
+        /// <summary>Replaces the board's tiers with those a publisher lists.</summary>
+        /// <typeparam name="TState">The publisher's state.</typeparam>
+        /// <param name="state">The publisher's state.</param>
+        /// <param name="list">Lists each group's shape and tier through the callback it is handed.</param>
+        public void Publish<TState>(TState state, Action<TState, Action<UInt128, int>> list) {
+            lock (m_gate) {
+                m_tiers.Clear();
+                list(arg1: state, arg2: (shape, tier) => {
+                    ref var held = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_tiers, exists: out var exists, key: shape);
+
+                    held = (exists ? Math.Min(val1: held, val2: tier) : tier);
+                });
+                _ = Interlocked.Increment(location: ref m_revision);
+            }
+        }
+        /// <summary>Returns the tier the publisher draws a shape at.</summary>
+        /// <param name="shape">The group's shape.</param>
+        /// <param name="tier">The tier, when this returns <see langword="true"/>.</param>
+        /// <returns><see langword="false"/> for a shape the publisher draws no group of.</returns>
+        public bool TryGet(UInt128 shape, out int tier) {
+            lock (m_gate) { return m_tiers.TryGetValue(key: shape, value: out tier); }
+        }
+    }
+
+    // The trace judge's verdicts every bake holding the library reads and gives, by bake identity and the two
+    // geometries: a verdict is a function of the two meshes and the judge alone, so a floor one residency judged is
+    // judged for every other, and the store keeps it between runs.
+    private readonly ConcurrentDictionary<(UInt128 Identity, SdfMeshGeometry Floor, SdfMeshGeometry Finer), bool> m_verdicts = new();
+
+    /// <summary>Returns the trace judge's verdict on a floor and a finer mesh of one group, where a bake holding the
+    /// library gave it in this run or the store kept it from an earlier one.</summary>
+    /// <param name="identity">The identity of the bake that meshed both meshes.</param>
+    /// <param name="floor">The floor's geometry.</param>
+    /// <param name="finer">The finer mesh's geometry.</param>
+    /// <returns>Whether the floor was admitted, or <see langword="null"/> when no verdict on the pair is known.</returns>
+    /// <remarks>Reads the judge's code identity (<see cref="SdfMeshTraceJudge.CodeIdentity"/>), whose first read walks
+    /// the running build's modules: call it off the frame's thread.</remarks>
+    internal bool? TraceVerdict(UInt128 identity, SdfMeshGeometry floor, SdfMeshGeometry finer) {
+        if (m_verdicts.TryGetValue(key: (identity, floor, finer), value: out var known)) { return known; }
+        if (Disk?.TraceVerdict(finer: finer, floor: floor, identity: identity, judge: SdfMeshTraceJudge.CodeIdentity) is not { } kept) { return null; }
+        _ = m_verdicts.TryAdd(key: (identity, floor, finer), value: kept);
+
+        return kept;
+    }
+    /// <summary>Keeps the trace judge's verdict on a floor and a finer mesh for every bake holding the library, and in
+    /// <see cref="Disk"/> between runs.</summary>
+    /// <param name="identity">The identity of the bake that meshed both meshes.</param>
+    /// <param name="floor">The floor's geometry.</param>
+    /// <param name="finer">The finer mesh's geometry.</param>
+    /// <param name="admitted">The verdict.</param>
+    internal void KeepTraceVerdict(UInt128 identity, SdfMeshGeometry floor, SdfMeshGeometry finer, bool admitted) {
+        if (m_verdicts.TryAdd(key: (identity, floor, finer), value: admitted)) { Disk?.KeepTraceVerdict(admitted: admitted, finer: finer, floor: floor, identity: identity, judge: SdfMeshTraceJudge.CodeIdentity); }
+    }
     /// <summary>Gets the counts of the groups planned again as a frame input moved (<see cref="SdfMeshInputs"/>) every bake
     /// holding the library counts into, so one source reads a presentation's residencies together.</summary>
     public WorkCounterSet Inputs { get; } = SdfMeshInputs.Counters();

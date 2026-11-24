@@ -184,7 +184,8 @@ public sealed class SdfMeshDemand {
     private long m_version;
 
 
-    /// <summary>Reads the demand points from a frame's views: each view's eye, and its pixels a metre one metre in front of
+    /// <summary>Reads the demand points from a frame's views, and after them from the views of its world another residency
+    /// renders (<see cref="SdfFrameContent.DemandViews"/>): each view's eye, and its pixels a metre one metre in front of
     /// it, from the height its sizes are measured in (<see cref="SdfViewSnapshot.DemandHeight"/>) or else its share of
     /// the output's height, and its field of view. A view that demands only inside its frustum
     /// (<see cref="SdfViewSnapshot.DemandWithinView"/>) demands nothing of a box wholly outside it, widened by
@@ -201,18 +202,19 @@ public sealed class SdfMeshDemand {
         BeforeChange?.Invoke();
 
         var views = frame.Views;
+        var others = frame.Content.DemandViews;
         var count = 0;
         var travel = 0f;
         var scale = 0f;
         var unsourced = 0;
 
         Hold();
-        EnsureCapacity(views.Count);
+        EnsureCapacity(views.Count + others.Count);
         Span<bool> matched = stackalloc bool[m_heldCount];
 
         matched.Clear();
-        for (var index = 0; (index < views.Count); index++) {
-            var view = views[index];
+        for (var index = 0; (index < (views.Count + others.Count)); index++) {
+            var view = ((index < views.Count) ? views[index] : others[index - views.Count]);
             var camera = view.Camera;
             var tan = camera.TanHalfFieldOfView;
 

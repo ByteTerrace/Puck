@@ -354,6 +354,12 @@ public sealed partial class SdfMeshPathBake {
         spare.Clear();
         firsts.Clear();
 
+        // A second scene of a world another residency draws follows that residency's tiers, group by group.
+        var board = FollowedTiers(frame: frame);
+        var follow = m_followCandidates;
+
+        follow.Clear();
+
         // Only the groups the demand watch measured or the list set since they last stood (Attend): every other group
         // demands the tier it draws, with nothing owed and nothing in flight, so it adds nothing below.
         var attention = m_attention;
@@ -374,12 +380,16 @@ public sealed partial class SdfMeshPathBake {
             var demanded = DemandedTierOf(group: group, pixel: pixel);
             // The tier a frame draws is the replaced group's while a replacement is still to land.
             var resident = (group.Replaces ?? group).Tier;
+            var leadTier = 0;
+            var led = ((board is not null) && board.TryGet(shape: group.Shape, tier: out leadTier));
+
+            if (led) { demanded = leadTier; }
 
             // A lattice past the floor steps over a part thinner than its cells, and one that meshed nothing covers
             // nothing: the group owes the rung below it, down to its floor, whatever its demand asks.
             if (MeshedNothingPastFloor(group: group)) { demanded = Math.Min(val1: demanded, val2: (resident - 1)); }
 
-            Decide(group: group, index: index, pixel: pixel, demanded: demanded, resident: resident);
+            Decide(group: group, index: index, pixel: pixel, demanded: demanded, resident: resident, led: led);
             if ((demanded == resident) && !group.FirstDetailOwed && (group.Replaces is null)) {
                 attention.Drop(group: group);
                 continue;
@@ -391,7 +401,7 @@ public sealed partial class SdfMeshPathBake {
 
         // Reads one group's demanded tier against the one it draws: a first detail it owes, a finer tier it owes or a
         // coarser one it could give back, each counted and, past its hold, a candidate.
-        void Decide(Group group, int index, float pixel, int demanded, int resident) {
+        void Decide(Group group, int index, float pixel, int demanded, int resident, bool led) {
             if (demanded != group.DemandedTier) {
                 group.DemandedTier = demanded;
                 group.RetierRefused = false;
@@ -406,6 +416,17 @@ public sealed partial class SdfMeshPathBake {
                     if (group.Done && (group.Replaces is null) && !group.Ahead) { firsts.Add(item: (pixel, index, demanded, group)); }
                     return;
                 }
+            }
+            // A group the world's own residency draws takes that residency's tier at once, with no hold and whatever the
+            // budget: the mesh is already placed for the other residency, so following costs no bytes, and a tier of this
+            // scene's own choosing would be placed beside it.
+            if (led) {
+                group.OwedFrames = 0;
+                group.SpareFrames = 0;
+                if ((demanded != resident) && group.Done && (group.Replaces is null) && !group.RetierRefused && !group.Ahead && !group.Failed && ((demanded < resident) || (group.Mesh is not null))) {
+                    follow.Add(item: (index, demanded));
+                }
+                return;
             }
             if (demanded >= resident) {
                 group.OwedFrames = 0;
@@ -461,6 +482,16 @@ public sealed partial class SdfMeshPathBake {
         firstsInFlight += firstsStarted;
         firstsOwed = m_firstDetailsOwed;
 
+        foreach (var (index, tier) in follow) {
+            if (inFlight >= SdfMeshTier.MaxInFlight) { break; }
+
+            var started = Retier(delta: 0L, frame: frame, index: index, old: m_groups[index], tier: tier);
+
+            if (started == TierStart.None) { continue; }
+            if (started == TierStart.Baking) { inFlight++; }
+            m_tiersFollowed++;
+            replaced = true;
+        }
         foreach (var (_, index, tier) in candidates) {
             var old = m_groups[index];
             var bytes = old.PlacedBytes;
@@ -507,7 +538,10 @@ public sealed partial class SdfMeshPathBake {
             // that could not is more than spare detail explains: the demand itself is past the budget, and waiting for
             // the last spare to bake coarser would leave the pool over its limit for as long as that takes.
             anySpare = (((spare.Count > 0) || (sparesWaiting > 0) || (coarsening > 0)) && (((named - freed) - spareSaving) <= budget));
-            pressing = (anySpare || (spare.Count > 0) || (coarsening > 0) || (bias < SdfMeshTier.MaxBias));
+            // The budget presses only on what it can still coarsen: spare tiers, or a demand another half rung of bias
+            // would coarsen. Once every group stands at its floor the bias moves no tier, and the detail rests over its
+            // budget rather than waiting on steps that change nothing.
+            pressing = (anySpare || (spare.Count > 0) || (coarsening > 0) || ((bias < SdfMeshTier.MaxBias) && BiasCoarsens(bias: bias)));
         } else {
             // A tier no demand has asked for SdfMeshTier.SpareKeptFrames is given back though the budget has room: a
             // viewer who comes back within that time finds it, and past it the detail is unobserved storage, which the
@@ -538,6 +572,7 @@ public sealed partial class SdfMeshPathBake {
                 Over: over
             )));
         }
+        PublishTiers(frame: frame);
         // A ladder bake's detail is settled once every drawn geometry's other rungs stand in the store too.
         var filling = ((Library.Policy == SdfMeshCachePolicy.Ladder) && FillLadders(fills: fills));
 
@@ -561,6 +596,57 @@ public sealed partial class SdfMeshPathBake {
         m_detailHold = hold;
         Volatile.Write(location: ref m_detailQuiet, value: (hold.Holds ? 0 : Math.Min(val1: (m_detailQuiet + elapsed), val2: SdfMeshTier.SettleFrames)));
     }
+    // The groups a second scene's decision moves to the tier the world's own residency draws, the tiers it has followed,
+    // and the board revision and product revision it last read and published at.
+    private readonly List<(int Index, int Tier)> m_followCandidates = [];
+    private long m_tiersFollowed;
+    private long m_followedRevision = -1L;
+    private long m_publishedRevision = -1L;
+    private object? m_publishedWorld;
+
+    // The tiers this bake follows, when its frame is of a second scene of a world another residency draws
+    // (SdfFrameContent.DemandWorld with SdfFrameContent.DemandViews); null otherwise. Every group is decided again when
+    // the board has moved, since a group whose own demand stands still is on no list.
+    private SdfMeshLibrary.TierBoard? FollowedTiers(SdfFrame frame) {
+        if ((frame.Content.DemandWorld is not { } world) || (frame.Content.DemandViews.Count == 0)) {
+            m_followedRevision = -1L;
+            return null;
+        }
+
+        var board = Library.TiersOf(world: world);
+        var revision = board.Revision;
+
+        if (revision != m_followedRevision) {
+            m_followedRevision = revision;
+            foreach (var group in m_groups) {
+                if (!group.Retired && group.Listed && group.HasDemandBox) { Attend(group: group); }
+            }
+        }
+        return board;
+    }
+    // Publishes the tier each group draws, by its shape, when this bake's frame is of the residency that draws a world
+    // for the presentation and its products have changed since it last published.
+    private void PublishTiers(SdfFrame frame) {
+        if ((frame.Content.DemandWorld is not { } world) || (frame.Content.DemandViews.Count != 0)) { return; }
+        if ((m_publishedRevision == m_productRevision) && ReferenceEquals(objA: world, objB: m_publishedWorld)) { return; }
+        m_publishedRevision = m_productRevision;
+        m_publishedWorld = world;
+        Library.TiersOf(world: world).Publish(state: m_groups, list: static (groups, add) => {
+            foreach (var group in groups) {
+                if (!group.Retired && group.Listed) { add(arg1: group.Shape, arg2: (group.Replaces ?? group).Tier); }
+            }
+        });
+    }
+    // Whether another half rung of bias would coarsen any group's demanded tier: false once every group stands at its
+    // floor, where the bias stops (SdfMeshTier.Demanded).
+    private bool BiasCoarsens(int bias) {
+        foreach (var group in m_groups) {
+            if (group.Retired || !group.Listed || !group.HasDemandBox || float.IsNaN(f: group.DemandPixel)) { continue; }
+            if (SdfMeshTier.Demanded(coarsest: group.CoarsestTier, finest: group.FinestTier, floor: group.FloorTier, halfRungs: (bias + 1), pixel: group.DemandPixel) != DemandedTierOf(group: group, pixel: group.DemandPixel)) { return true; }
+        }
+        return false;
+    }
+
     // What the latest tier decision found keeping the detail from settled (DetailSettled), one count or flag a reason: a
     // tier started this decision, replacements still baking or landing ahead of the draws, owed finer tiers waiting their
     // hold, first details in flight or owed, a budget that presses on something it can still coarsen (over its budget,

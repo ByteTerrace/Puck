@@ -5,7 +5,10 @@ namespace Puck.World.Client;
 /// <param name="Mirror">The mirror of the session whose stream the scene draws.</param>
 /// <param name="Authority">The identity of the world the session observes.</param>
 /// <param name="Name">The scene's own name, unique among the presentation's scenes.</param>
-public readonly record struct WorldSharedScene(WorldSessionMirror Mirror, string Authority, string Name);
+/// <param name="Presented">Whether the world the session observes is the one the presentation's own frame draws: the
+/// scene is then a second scene of that world, in its coordinates, and plans its meshes at that world's demand as well
+/// as its windows' (<see cref="WorldRoutedScene.HostDemand"/>).</param>
+public readonly record struct WorldSharedScene(WorldSessionMirror Mirror, string Authority, string Name, bool Presented = false);
 
 /// <summary>
 /// A session screen's access to its destination and its route into a scene it shares, both settled once a frame. While
@@ -69,7 +72,7 @@ public sealed class WorldSessionRoute : IDisposable {
             if ((Window is { } held) && ReferenceEquals(objA: held.Scene.Key, objB: scene.Mirror)) { return; }
 
             Window?.Dispose();
-            Window = presenter.AttachSharedWindow(authority: scene.Authority, mirror: scene.Mirror, name: scene.Name);
+            Window = presenter.AttachSharedWindow(authority: scene.Authority, mirror: scene.Mirror, name: scene.Name, presented: scene.Presented);
 
             return;
         }

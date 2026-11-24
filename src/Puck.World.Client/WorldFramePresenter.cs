@@ -2502,6 +2502,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         }
 
         m_frameScreenRateCodes = null;
+        LatchHostDemand(height: height, views: m_frameViews);
         // The presentation's one frame, written again for each capture: a residency renders its own copy of it.
         m_dressedFrame = m_frameWriter.Write(
             content: new SdfFrameContent(
@@ -2512,6 +2513,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             ) {
                 DynamicTransforms = transforms,
                 MovedTransforms = moved,
+                // The world this frame draws, for the scenes that are second scenes of it (AttachSharedWindow).
+                DemandWorld = this,
                 TickLocked = TickLocked,
                 ConvergesLighting = LightingConvergence?.Invoke() ?? false,
                 // A tier view's codes: the stamp pool's bodies as its pack this frame rated them, and the screens as the
