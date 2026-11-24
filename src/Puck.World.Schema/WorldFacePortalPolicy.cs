@@ -110,15 +110,16 @@ public static class WorldFacePortalPolicy {
 
         return ceiling;
     }
-    /// <summary>Returns the opening of every portal face a document declares, in document order.</summary>
+    /// <summary>Returns the opening of every portal face a document declares, in document order, each with the placement
+    /// and face that declare it.</summary>
     /// <param name="definition">The document to read.</param>
-    /// <returns>Each portal face's box aperture.</returns>
+    /// <returns>Each portal face's placement id, face name and box aperture.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static WorldFaceAperture.Box[] PortalApertures(WorldDefinition definition) {
+    public static (string PlacementId, string Face, WorldFaceAperture.Box Box)[] PortalApertures(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(definition);
 
         var catalog = WorldFaceCatalog.For(definition: definition);
-        var openings = new List<WorldFaceAperture.Box>();
+        var openings = new List<(string PlacementId, string Face, WorldFaceAperture.Box Box)>();
 
         foreach (var placement in definition.Placements) {
             foreach (var face in (placement?.FaceSources ?? [])) {
@@ -132,7 +133,7 @@ public static class WorldFacePortalPolicy {
                 ) &&
                     (aperture is WorldFaceAperture.Box box)
                 ) {
-                    openings.Add(item: box);
+                    openings.Add(item: (placement.Id, face.Face, box));
                 }
             }
         }

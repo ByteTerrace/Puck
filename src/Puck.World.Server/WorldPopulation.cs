@@ -67,6 +67,9 @@ public sealed partial class WorldPopulation {
 
     /// <summary>The authored entity-table capacity allocated at world load.</summary>
     public int Capacity => m_entries.Length;
+    /// <summary>Gets the doors standing closed, which the host's door scan writes and this population's contact field
+    /// reads, so a closed door's wall holds a body back.</summary>
+    public WorldPortalClosures PortalClosures { get; } = new();
     /// <summary>The world's compiled channel table (name→ordinal, per-ordinal shape/threshold) — the co-driving
     /// fold's one source of per-channel shape/threshold (<see cref="Server.WorldServer"/>'s fold phase reads it
     /// directly rather than re-deriving it).</summary>

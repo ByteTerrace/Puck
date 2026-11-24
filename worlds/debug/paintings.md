@@ -11,6 +11,7 @@ leads. Each canvas ripples like an event horizon (see
 | North wall, x = 57 | `painting-garden`, gilt frame | Opens onto the garden ([garden.puck](garden.puck)), a sunset plot. The garden's `arrival` frame is the way back. |
 | North wall, x = 64 | `painting-night`, gallery frame (white mat in a black frame) | Opens onto the night field ([night.puck](night.puck)), a snowfield under stars. Its `arrival` frame is the way back. |
 | South wall, x = 60 | `painting-city`, ornate frame | Opens onto the city ([city.puck](city.puck)), a town on a river bend. Its teal `arrival` frame is the way back. |
+| South wall, x = 66 | `painting-moon`, gallery frame behind a curtain | A door opened in play onto the moon ([moon-door.puck](moon-door.puck), [moon.md](moon.md#through-the-painting)): a press on its step asks the moon, the moon's rules open the socket on its pad, and the curtain draws aside for the seat that pressed. The switch to its left lights the moon's beacon. |
 | West and east walls, z = 34.5 | `painting-link-west` and `painting-link-east`, brass frames | Two paintings facing each other 18 m apart across the room: step into either and step out of the other, facing out of it. |
 | Floor and ceiling, (66, 22.6) | `painting-fall-floor` and `painting-fall-ceiling`, gilt squares | The endless fall: a body that steps onto the floor glass drops out of the ceiling glass still falling, and falls through the floor again, forever. |
 

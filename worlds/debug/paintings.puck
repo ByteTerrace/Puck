@@ -93,8 +93,8 @@ let wallPaintings = [
     title: "THE CITY", note: "A town on a river bend, its market, terraces, works and quay. Step in; the frame behind you leads back."
   }
   {
-    name: "moon", x: 66, z: wingZ0, yaw: 180, frame: modern, destination: "moon", counterpart: "arrival/glass", fallback: fallbackMoon
-    title: "THE MOON", note: "The pale moon over the valley, the same one a ship from the launch field lands on. Step in; the frame behind you leads back."
+    name: "moon", x: 66, z: wingZ0, yaw: 180, frame: modern, destination: "moon", counterpart: "moon-socket/glass", fallback: fallbackMoon
+    title: "THE MOON", note: "The pale moon over the valley, the same one a ship from the launch field lands on. Knock and wait for the moon to answer; the frame it opens leads back."
   }
   {
     name: "link-west", x: wingX0, z: 34.5, yaw: 270, frame: brass, destination: "self", counterpart: "painting-link-east/glass", fallback: fallbackSelf
@@ -555,7 +555,8 @@ placements {
     solid
   }
 
-  for painting in wallPaintings {
+  // The moon painting is a door opened in play, placed with its gate and its curtain (moon-door.puck).
+  for painting in filter(wallPaintings, p => (p.name != "moon")) {
     placement $"painting-{painting.name}" {
       prototype: $"painting-{painting.name}"
       position [painting.x, wingFloor, painting.z]
