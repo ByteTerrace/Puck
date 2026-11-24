@@ -966,8 +966,12 @@ built, and the design carries its review's answers.
 
 ### A multi-seat client
 
-Owner: a principal writes the design memo, another family reviews it, then
-specialists build · high, M2 · Next: the design memo, before any code.
+Owner: the `cpu` campaign builds; another family reviews the memo · high, M2 ·
+Next: step 1 of [the design](multi-seat-client.md)'s
+[steps](multi-seat-client.md#the-steps), the party join, then the member's
+proof. The memo is written and owes its cross-family review, which runs
+beside the build because [its second decision](multi-seat-client.md#decision-2-a-member-proves-its-own-identity)
+is a trust boundary.
 
 The owner's direction: "come up with an intelligent way to handle the four
 player local split screen connected to remote scenario. In some cases players
@@ -1570,7 +1574,7 @@ The frame thread's CPU work, largest first:
   (`SdfWorldResidency.EnsureTables`). Unmeasured; read
   it on an arrival before moving it.
 - [low] View placement (`WorldViewGraphHost.CompleteFootprints`) and screen
-  binding (`SdfWorldResidency.PrepareOnce`: `WorldScreenDecals.Resolve`,
+  binding (`SdfWorldResidency.PrepareTables`: `WorldScreenDecals.Resolve`,
   `WorldScreenBinder.TryRippleOf`) run each frame for every screen.
 - [low] Walks over every row or copy each frame that the arrival memo's row
   table does not absorb: the bake's copy layout (`SdfMeshPathBake`) and two
@@ -1814,7 +1818,7 @@ Remaining detailed findings and smaller cuts in this area:
   bound atlas texture apart from the program that names its new identity
   (`SdfProgram.GlyphAtlas`), so a bake taken between the two could store old
   pixels under the new key. Confirm whether the order inside
-  `SdfWorldResidency.PrepareOnce` rules it out; if not, bind both in one step.
+  `SdfWorldResidency.PrepareTables` rules it out; if not, bind both in one step.
   `WorldTextCatalog.Reconcile` also copies the whole packed image into
   `SdfGlyphAtlas`.
 - [high, iteration] An edit to `SdfMeshPathBake` that the bake's content never
