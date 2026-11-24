@@ -1744,10 +1744,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_arrivalNext.Clear();
         if (ViewScenes is not { } scenes) { return; }
 
-        _ = m_arrivalReached.TryAdd(key: WorldViewGraphs.MainInstance, value: null);
-        foreach (var root in m_viewRoots) { _ = m_arrivalReached.TryAdd(key: root.Instance, value: null); }
-        foreach (var footprint in m_footprints) { _ = m_arrivalReached.TryAdd(key: footprint.Producer, value: null); }
-        m_arrivalFrontier.UnionWith(other: m_arrivalReached.Keys);
+        AddRenderingSeeds(views: m_arrivalFrontier);
+        foreach (var seed in m_arrivalFrontier) { _ = m_arrivalReached.TryAdd(key: seed, value: null); }
         while (m_arrivalFrontier.Count > 0) {
             foreach (var footprint in m_screenFootprints) {
                 if (m_arrivalFrontier.Contains(item: footprint.Consumer)) {
@@ -1786,6 +1784,14 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         set => m_portalReach = (value ?? throw new ArgumentNullException(paramName: nameof(value)));
     }
 
+    // Adds the views that render whatever the windows do: the main instance, the roots, and every producer the root reads
+    // this frame (the synthesized footprint, each placed view and each pane, which m_footprints holds before the screens
+    // are decided). Both walks over the windows start from these.
+    private void AddRenderingSeeds(HashSet<string> views) {
+        _ = views.Add(item: WorldViewGraphs.MainInstance);
+        foreach (var root in m_viewRoots) { _ = views.Add(item: root.Instance); }
+        foreach (var footprint in m_footprints) { _ = views.Add(item: footprint.Producer); }
+    }
     // The consumers whose image this frame renders, as WantSightedWorlds walks them, and its frontier.
     private readonly HashSet<string> m_sightRendering = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> m_sightFrontier = new(comparer: StringComparer.Ordinal);
@@ -1809,9 +1815,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_sightRendering.Clear();
         m_sightFrontier.Clear();
         m_sightNext.Clear();
-        _ = m_sightRendering.Add(item: WorldViewGraphs.MainInstance);
-        foreach (var root in m_viewRoots) { _ = m_sightRendering.Add(item: root.Instance); }
-        foreach (var footprint in m_footprints) { _ = m_sightRendering.Add(item: footprint.Producer); }
+        AddRenderingSeeds(views: m_sightRendering);
         m_sightRendering.UnionWith(other: m_arrivalKept);
         m_sightFrontier.UnionWith(other: m_sightRendering);
         while (m_sightFrontier.Count > 0) {
