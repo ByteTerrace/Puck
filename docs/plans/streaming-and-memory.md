@@ -1851,6 +1851,39 @@ Built with it:
    neither follows the other's tiers, since the board leads only a second
    scene of the world the presentation draws (`SdfFrameContent.DemandWorld`).
    Check: `world.residency` lists one residency a content.
+3. **A window of the world the presentation draws.** The moon's session
+   screen of the valley (`routed$session$18$0$shared`, 7,163 groups) is a
+   shared scene of the boot world (`WorldSharedScene.Presented`), made at the
+   crossing, when a window in the moon's scene first shows it. It is a
+   second scene because its session is handed less than the whole scene: the
+   World narrates `[world.session: session:0:1 is handed less than its
+   world's whole scene (row 'sheddingCards', which its scene reads, withholds
+   from it)]`, the card faces of the shedding table
+   (`worlds/debug/shedding.puck`), which a reader not allowed to read a card
+   is dealt as its back. The world's own residency draws the authority's
+   whole state (a session draws from it only while it is handed everything,
+   `WorldInstanceHost.TryWindowEndpoint`), and the world's far product is
+   built from that residency's static draws (`SdfFarProduct.Take`), which
+   include the dealt cards, since a dealt card is a static placement. Either
+   source would show this viewer faces its session is not handed, so neither
+   can stand in for the window as the code stands. A window drawing its
+   world from the residency or far product that holds it needs the content
+   that reads a withheld row (a placement dealt from it, a creation whose rig
+   reads it, `WorldSceneInputs.Rows`) to be replaced by the session's own,
+   and two things are missing for that: a residency's draws name no
+   placement (a static bake group merges instances of several placements, and
+   `SdfMeshDraw.ObjectKey` names only a copy or a group's first instance), so
+   nothing can leave out the withheld content; and a residency renders one
+   frame for all its views, so a view of it cannot swap some instances for an
+   overlay's. The steps, each checked by `world.residency` showing the
+   shared scene at its overlay's groups alone and a capture of the window
+   showing backs where its session is dealt backs: attribute every draw to
+   the placements it merges, and keep a placement that reads a scene row out
+   of another placement's group; let the far product leave out every draw that
+   reads state, so a product is a function of content alone; draw the window
+   as that product while its glass is small, with an overlay emitter scoped to
+   the session's state-reading placements and its bodies
+   (`WorldSessionSceneEmitter`'s prototype scope, widened to keep avatars).
 
 **Settled with it.**
 
@@ -1902,12 +1935,44 @@ Built with it:
   gave 4.26 GB, 4.40 GB and 4.56 GB. The device pool then read
   `budget=4831838208 peak=4625296304 over-limit-grants=9
   over-limit-granted-bytes=371880612`: grants past the limit stand, which is
-  where the earlier overshoot can come from, and the device ledger's peak
-  (`WorldBenchmarkCommandModule.DeviceLedger`) sums each device segment's own
-  peak (`heap0`, and `heap2` at 67 MB), which may overstate a simultaneous
-  peak by up to the smaller segment. The peak still rises route on route as
-  the region fills its held limit, so a fourth route is the reading that would
-  show where it stands.
+  where the earlier overshoot can come from. The benchmark's device peak
+  (`WorldBenchmarkCommandModule.DeviceLedger`) is now the device pool's own
+  peak, the most its blocks held at once, where it had summed each segment's
+  peak.
+- **What the device's over-limit grants are** **[reading]**, Vulkan, two
+  routes in one warm World: `host.memory`'s `over-limit-by` named the history
+  window (207 MB), two history surfaces (100 MB), the history colour (60 MB),
+  two irradiance tables (85 MB), the probe trace's hit cache (62 MB) and one
+  sky base of no bytes: view and lighting storage a graph or relayout cannot
+  run without, admitted past the limit as designed (`AdmitPastLimit`). The
+  grant of no bytes shows the door: such storage reserves its peak as a floor
+  whatever the pool holds, so its grant draws on that promise and passes the
+  pool's check, and it is the main segment's own limit (`EffectiveLimit`,
+  the system's budget less its margin and the usage beyond the ledger) that
+  the grant passes. At the same reading `world.residency` showed the shared
+  mesh region holding 1,007 MB against a held limit of 584 MB: it grew while
+  the pool had room, and when the views' storage took the room the share
+  fell, but a contiguous region can only give storage back through a smaller
+  replacement, which a full pool refuses (`SdfResidencyGrant.TryReserveReplacement`),
+  so the region stands and the views' storage passes the limit instead. The
+  cause is the contiguous region; the cure is the sparse destination for
+  Vulkan that [the backing](#step-7-the-backing) proposes, which gives chunks
+  back in place as Direct3D 12's mapped region does. The device pool's peak
+  stayed under the cap (4.35 GB at that reading). A segment the pool's
+  headroom would swallow (the 157 MB host-visible aperture) now keeps a
+  quarter of its budget as its margin (`MemoryAccount.SpendLimitOf`), so its
+  one block is no longer an over-limit grant, and a device pool's limit is
+  what its segments hold plus the roomiest segment's room
+  (`MemoryAccount.LimitOf`), so a small segment's room is never promised to
+  storage only the main segment places.
+- **Vulkan levels off under the cap** **[reading]**: four routes in one World,
+  the first baking cold, gave route peaks of 4.12 GB, 4.24 GB, 4.29 GB and
+  4.31 GB (the pool's own peak), each route adding less than the one before,
+  and the pool ended with one over-limit grant (`session/sdf.world$visibility`,
+  37 MB), a view's storage of the kind above. The run lost the device once,
+  in the second route as the city's routed scene and a 4-million-triangle
+  group landed, and recovered on the first attempt; the fault named
+  instruction pointers, not a freed buffer.
 
 **Closes.** A board that led a second scene by each copy's place; a trace
 scene sized by view detail; a relayout holding two hit caches and two
@@ -3437,6 +3502,26 @@ hierarchy follow steps 5 and 9.
 
 **Replaces.** The library forgetting claimed meshes; the cached claim as a
 reason to keep host words.
+
+**Where it stands** **[reading]**. On the RTX 2060 under `world.device-profile
+rtx2060`, Vulkan, a warm boot and two routes in one World ended at
+`host.memory` `ws=7686 peak-ws=9178 private=11901 MiB`, a managed heap of
+4,227 MiB (2,676 MiB large objects, 1,550 MiB gen2), the native allocator at
+2,495 MB with 1,069 MB of it unnamed and 1,091 MB of runtime and driver
+memory: the 6 GiB play bar is far off, and most of the gap is unnamed. `puck
+host heap --min-mib 2` at that point found 2.13 GB of live large objects,
+1.04 GB of them in tenants of 2 MiB or more: the irradiance's CPU side (the
+probe data's publication arena 127 MB, light and probe blocks 130 MB,
+candidates and indices about 60 MB), programs held by several holders
+(`SdfPortalSight`, `WorldRenderSettings`, `SdfMeshSkinSource`, about 150 MB,
+some of them the same current program), the desktop capture's three frame
+buffers for two feeds (88 MB), the field deltas a session's delivery keeps
+(44 MB), composed images (62 MB), the region's mesh words (34 MB) and the
+bake's frustum watches (31 MB); the other 1.09 GB lies in large objects under
+2 MiB. A skinned group's source no longer pins its whole planned program
+(`SdfMeshSkinSource`), which at boot had held 8 programs, 160 MB. The next
+steps are a walk at a lower threshold, to name the large objects under 2 MiB,
+and owners with capacities for the irradiance's CPU tables.
 
 **Check.** Exists: account `live` and `cached`, `mesh-released-now`, the
 store's restores. First, the `[sdf.mesh-bake] start` line of a garden
