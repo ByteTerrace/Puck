@@ -32,7 +32,8 @@ public sealed partial class SdfWorldTables {
             return;
         }
         var draws = frame.DrawRows;
-        var extent = draws.Count;
+        // A staging that shed rows (EnsureMeshDrawCapacity) holds records for the first m_stagedCount alone.
+        var extent = Math.Min(val1: draws.Count, val2: m_stagedCount);
 
         if (!m_ledgerEnabled) { m_rowLedger = []; m_ledgerExtent = 0; m_ledgerEnabled = true; }
         ArrayCapacity.EnsureLength(ref m_rowLedger, extent);

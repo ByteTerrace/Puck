@@ -71,6 +71,13 @@ public interface IWorldViewScenes {
     /// <returns>The world's residency, as an identity to compare by reference; <see langword="null"/> when the
     /// view's world has no mesh still arriving or is the world its consumer renders.</returns>
     object? ArrivingWorld(string view, string consumer);
+    /// <summary>Records that the world a session view renders is wanted this frame: a consumer sees the view's glass,
+    /// or the glass stands near enough out of sight that a turn or a step shows it
+    /// (<see cref="WorldPortalVisibility.Leads"/>). A world wanted keeps its residency's tables, and a parked one builds
+    /// them again ahead of its glass coming into sight (<see cref="SdfVm.SdfWorldResidency.Want"/>); a world behind
+    /// glass that is never wanted gives them back.</summary>
+    /// <param name="view">The session view's instance name.</param>
+    void Want(string view) { }
     /// <summary>Finds the extent of what a source instance's image shows, when that differs from the extent the instance
     /// renders at: a window capture scales the captured window into its profile extent, and shows the window's own
     /// pixels at the window's own aspect ratio. A pane's published mapping is in these pixels.</summary>

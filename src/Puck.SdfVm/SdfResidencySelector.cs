@@ -113,6 +113,14 @@ public sealed class SdfResidencySelector {
     public int Bias => Volatile.Read(location: ref m_bias);
     /// <summary>Gets the pool the mesh regions lie in.</summary>
     public PhysicalMemory Pool { get; }
+    /// <summary>Gets the bytes the pool the mesh regions lie in holds and has promised past its limit, which follows the
+    /// system's budget for the process less the usage the ledgers do not hold (<see cref="MemoryAccount.Record"/>), and a
+    /// profile's bar; zero while the pool fits its limit or nothing bounds it. Past it, storage the account admitted
+    /// because it cannot give way stands where the system may move memory out of the device behind it, and the
+    /// presentation gives back what it can do without (<see cref="SdfWorldPasses.BeginFrame"/>).</summary>
+    public long Excess => (m_account.TryReadTotals(held: out var held, limit: out var limit, pool: Pool, promised: out var promised)
+        ? Math.Max(val1: 0L, val2: ((held + promised) - limit))
+        : 0L);
 
     /// <summary>Gets the clock the presentation's background work is metered by: its budget, its services' waits and its
     /// lighting's ages.</summary>
@@ -235,7 +243,7 @@ public sealed class SdfResidencySelector {
                 _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | grant {grant.Name}={((share == long.MaxValue) ? "unbounded" : $"{share}B")} named={grant.Named}B filled={grant.Filled}B");
             }
             if (m_region is { } region) {
-                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | region named={m_regionNamed}B region-limit={Bytes(bytes: ((region.LimitBytes == long.MaxValue) ? null : region.LimitBytes))} region-held-limit={Bytes(bytes: ((region.HeldLimitBytes == long.MaxValue) ? null : region.HeldLimitBytes))} region-held={region.Capacity}B region-reserved={region.Reserved}B region-retiring={region.Retiring}B");
+                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | region named={m_regionNamed}B region-limit={Bytes(bytes: ((region.LimitBytes == long.MaxValue) ? null : region.LimitBytes))} region-held-limit={Bytes(bytes: ((region.HeldLimitBytes == long.MaxValue) ? null : region.HeldLimitBytes))} region-held={region.Capacity}B region-reserved={region.Reserved}B region-retiring={region.Retiring}B region-spare={m_spare}B");
             }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | grants={((usable is null) ? "unbounded" : $"{granted}B")}");
         }
