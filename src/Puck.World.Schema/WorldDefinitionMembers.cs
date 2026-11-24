@@ -11,7 +11,7 @@ namespace Puck.World;
 /// read member by member from these slices: two definitions whose member digests agree hold the same member, so a delta
 /// between them names only the members whose digests moved and parses nothing else.</summary>
 /// <remarks>A definition's slices are cut once, from one serialization, and kept beside it for as long as the
-/// definition lives (<see cref="Of"/>). A definition built from another by replacing members
+/// definition lives (<see cref="Of(WorldDefinition)"/>). A definition built from another by replacing members
 /// (<see cref="Replace"/>) is held with the slices it was built from, so its own are never cut again. A member the
 /// serializer omits (a null value) has no slice; its absence is part of the pin.</remarks>
 public sealed class WorldDefinitionMembers {
@@ -288,6 +288,21 @@ public sealed class WorldDefinitionMembers {
             }
         }
         return With(basis: basis, documentDirectory: next.DocumentDirectory, slices: after, values: shared);
+    }
+
+    /// <summary>Shares the unchanged children of a single decoded root member with the installed member.</summary>
+    /// <typeparam name="T">The member type.</typeparam>
+    /// <param name="name">The member's JSON name.</param>
+    /// <param name="basis">The installed member, if present.</param>
+    /// <param name="value">The decoded replacement.</param>
+    /// <returns>The replacement holding the installed instances of its unchanged children.</returns>
+    public static T ShareUnchangedMember<T>(string name, T? basis, T value) where T : class {
+        if ((basis is null) || ReferenceEquals(basis, value)) { return value; }
+        var before = Write(name, basis);
+        var after = Write(name, value);
+
+        if (OrderedJson.Equals(before, after)) { return basis; }
+        return (T)ShareValue(name, value, basis, after, before, WorldDocumentBasis.DiffValue(before, after))!;
     }
     // One member's value with every member and keyed row the patch leaves equal taken from the basis's value; the value
     // itself when either side is absent, the member is an extension member, or nothing could be shared.

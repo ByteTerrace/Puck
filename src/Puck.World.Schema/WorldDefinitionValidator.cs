@@ -1734,6 +1734,7 @@ public static partial class WorldDefinitionValidator {
         Puck.State.Rules.CompiledRuleGroup[] groups;
         Puck.State.Rules.CompiledRule[] interactions;
         CompiledTable[] tables;
+        Puck.State.Rules.RuleEvaluationOrder order;
         (WorldRuleWorkBudget Budget, IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Contributors) work;
 
         try {
@@ -1746,10 +1747,8 @@ public static partial class WorldDefinitionValidator {
             foreach (var (rule, cell) in WorldRuleWorkBudget.ContradictoryGates(catalog: definition.StateCatalog, rules: rules)) {
                 errors.Add($"rule '{rule}' gate can never hold: its comparisons pin {cell} to an empty range.");
             }
-            work = WorldRuleWorkBudget.Analyze(
-                context: context, definition: definition, interactions: interactions,
-                order: Puck.State.Rules.RuleEvaluationOrder.Of(groups: groups, rules: rules)
-            );
+            order = Puck.State.Rules.RuleEvaluationOrder.Of(groups: groups, rules: rules);
+            work = WorldRuleWorkBudget.Analyze(definition, order, interactions, context);
             if (WorldRuleWorkBudget.Refuse(
                 contributors: () => work.Contributors,
                 rowsAtCeiling: name => (rules.Concat(interactions).FirstOrDefault(rule => rule.Name == name) is { } line
@@ -1762,13 +1761,13 @@ public static partial class WorldDefinitionValidator {
             if (errors.Count > 0) { return null; }
 
             ValidateSearch(definition: definition, errors: errors, recurringWork: work.Budget.WorkUnitsPerTick, rules: rules);
-            if (errors.Count > 0) { return null; }
+            if ((errors.Count > 0) || !run.RetainCompilation) { return null; }
 
             tables = WorldRuleCompilation.CompileTables(definition, context);
         } finally {
             inputs = recording.End();
         }
-        var compiled = new WorldRuleCompilation(definition, rules, groups, interactions, tables, work: work, inputs: inputs);
+        var compiled = new WorldRuleCompilation(definition, rules, groups, interactions, tables, order, work, inputs);
         ValidatedPrograms.AddOrUpdate(definition, compiled);
         return compiled;
     }

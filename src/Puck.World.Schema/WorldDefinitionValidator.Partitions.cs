@@ -220,7 +220,7 @@ public static partial class WorldDefinitionValidator {
         new(
             name: "document",
             granularity: WorldValidationGranularity.Section,
-            owns: WorldDocumentInputs.All,
+            owns: WorldDocumentInputs.None, // VerifyPartitions assigns the remaining inputs.
             reads: WorldDocumentInputs.All.Except(WorldDocumentInputs.Of(WorldDocumentInput.ViewNesting)),
             validate: static (run, _) => run.Compilation = ValidateDocumentPartition(run: run)
         ),

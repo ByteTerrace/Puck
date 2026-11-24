@@ -1126,6 +1126,17 @@ public sealed partial class WorldDocument {
         WorldRebuildKind? rebuildKind, WorldArenaContinuity continuity) {
         var rebuildPopulation = products.RebuildsPopulation;
 
+        // The nesting limit has no authority-side consumer beyond delivery. The mutation composed over the
+        // installed, already-bound definition and kept the same arena and executable programs.
+        if ((rebuildKind is null) && (continuity == WorldArenaContinuity.Edit) && ReferenceEquals(arena, Host.Arena) &&
+            (products.Changed == WorldDocumentInputs.Of(WorldDocumentInput.ViewNesting)) && Host.TryKeepRuleReceipt(definition)) {
+            authority.Install();
+            WorldBootWork.Count(kind: WorldBootWork.FullInstalls);
+            AdoptDefinition(definition);
+            MarkDefinitionDeliveryPending();
+            return;
+        }
+
         Host.Input.PrepareCameraReconfigure(definition);
         authority.Install();
         var previousActionState = (rebuildKind.HasValue ? Host.Population.ActionStateLane.Definitions : null);

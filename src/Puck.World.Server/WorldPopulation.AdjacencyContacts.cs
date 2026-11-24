@@ -43,10 +43,10 @@ public sealed partial class WorldPopulation {
         BeginAdjacencyContacts();
     }
     internal ImmutableArray<WorldAdjacencyProjection> HoldAdjacency(WorldAdjacencyRead? read) {
-        ImmutableArray<WorldAdjacencyProjection> projections = read?.Projections switch {
+        var projections = read?.Projections switch {
             ImmutableArray<WorldAdjacencyProjection> held => held,
-            { } rows => [.. rows],
-            _ => [],
+            { } rows => ImmutableArray.CreateRange(rows),
+            _ => ImmutableArray<WorldAdjacencyProjection>.Empty,
         };
         var previous = m_adjacencyRead;
 

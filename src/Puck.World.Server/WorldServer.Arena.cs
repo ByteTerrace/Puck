@@ -743,6 +743,13 @@ public sealed partial class WorldServer {
         return m_document.Definition;
     }
 
+    // An edit that preserves the installed programs and arena still needs the current definition for cost reports.
+    internal bool TryKeepRuleReceipt(WorldDefinition definition) {
+        if (m_ruleCompilation?.ReuseFor(definition, installedBasis: m_document.Definition) is not { } receipt) { return false; }
+        m_ruleCompilation = receipt;
+        return true;
+    }
+
     // The search jobs advance right after the rules, so a job judges the position this tick's rules settled and a
     // finished job's outputs are delivered with the same tick.
     private ulong m_searchTick;
