@@ -1033,7 +1033,8 @@ laws exercise that boundary.
   draws stale, or a still group keeps drawing the old mesh.
 - **Every landed mesh is merged into its planar polygons** (`SdfMeshPlanarMerge`,
   called in `SdfMeshPathBake.Land` before the library stores it), so the store
-  keeps, every pass draws and the irradiance trace reads the merged mesh. A
+  keeps and every pass draws the merged mesh, and the irradiance trace reads its
+  coarsest collapse level within `SdfMeshIrradiance.TraceError`. A
   region is a run of triangles across shared edges with one material, one member,
   one normal bit for bit at every vertex and every vertex within 2^-21 of its
   plane relative to its coordinates; a vertex only its region names, whose

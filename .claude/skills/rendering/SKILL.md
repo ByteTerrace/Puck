@@ -1582,9 +1582,14 @@ wrong. The contracts that bite most often:
   a first vertex: Direct3D 12's `SV_VertexID` counts from zero whatever the
   draw's first vertex, so the draw fetches the merged mesh's first triangles and
   objects go missing. The surface pass reads the triangle the pixel names with
-  no level of its own. Everything that reads `SdfMesh.Indices` (the
-  irradiance trace, the audit, the diagnostics' nearest query) reads the merged
-  mesh, level zero. Each pass's choice runs beside the box cull in
+  no level of its own. The audit reads the merged mesh, level zero. The
+  irradiance trace reads each static mesh's coarsest level within
+  `SdfMeshIrradiance.TraceError` (`SdfMeshIrradianceScene.GeometryKey.Of`): its
+  geometry copies that level's indices, its instance records and bottoms
+  address the level's indices and materials past the finer levels' in the region
+  (`Geometry.FirstTriangle`), a hit's triangle is the level's own, and the
+  diagnostics' nearest query adds the level's error to its budget. A scene built
+  with no `traceError` (the offline field-level audit) traces level zero. Each pass's choice runs beside the box cull in
   `frame/sdf-mesh-selection.hlsli`, from `SdfMeshDetail`'s packed controls;
   `world.detail 0|1|2` forces one level
   everywhere, and `world.detail auto` restores the choice.
