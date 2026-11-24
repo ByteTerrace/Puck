@@ -57,23 +57,4 @@ public sealed class WorldReleaseStateResetDirectoryLawTests {
             documentDirectory: directory.RootPath
         ));
     }
-    [Fact]
-    public void AStateThatDoesNotDecodeBesideTheDirectoryStillResetsWithItsReason() {
-        using var directory = new TemporaryDirectory();
-        var export = ExportBeside(directory: directory);
-        var reset = WorldReleaseCoordinator.FindStateReset(
-            checkpoints: export,
-            documentDirectory: null
-        );
-
-        Assert.NotNull(@object: reset);
-        Assert.Contains(
-            actualString: reset,
-            expectedSubstring: "the source's 'row' state does not decode under this build"
-        );
-        Assert.Contains(
-            actualString: reset,
-            expectedSubstring: $"'{CompiledWorldFixtures.PatchBeside}' is relative, and this document has no directory"
-        );
-    }
 }

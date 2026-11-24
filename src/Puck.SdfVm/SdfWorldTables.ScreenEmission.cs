@@ -28,6 +28,10 @@ public sealed partial class SdfWorldTables {
     internal ulong? ScreenEmissionSignature(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads, in DeliveryLatch latch) =>
         m_screenEmission.Observe(latch: in latch, reads: reads, residency: residency, view: view);
     internal long SubmitScreenEmission() => m_screenEmission.Publish();
+    // Records the reduction this frame's recording draws, which a view recorded after it reads (EnvironmentPublication).
+    internal void RecordScreenEmission(long frame) => m_screenEmission.Publication.Record(frame: frame, tainted: m_screenEmission.Tainted);
+    // The reduction a view of package frame `frame` samples.
+    internal SdfEnvironmentSubmission? ScreenEmissionFor(long frame) => m_screenEmission.Publication.Current(frame: frame);
     internal void CompleteScreenEmission(long sequence) => m_screenEmission.Publication.Complete(sequence: sequence);
     internal void WithdrawScreenEmission(long sequence) => m_screenEmission.Withdraw(sequence: sequence);
 
@@ -75,6 +79,8 @@ public sealed partial class SdfWorldTables {
         public bool Forced { get; set; }
 
         public EnvironmentPublication Publication { get; }
+        // Whether the latest observation read a source with unfilled external content.
+        public bool Tainted => m_watch.Tainted;
 
         public ulong? Observe(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads, in DeliveryLatch latch) {
             m_watch.Clear();

@@ -187,7 +187,8 @@ public sealed partial class WorldGrants {
         if (WorldAdmissionDoor.TryAdmitArrival(
             entries: Host.Definition.Admission,
             sourceAuthority: sourceAuthority,
-            verdict: out var verdict
+            verdict: out var verdict,
+            kind: WorldAdmissionArrival.Session
         ) is { } refused) {
             session = default;
             tier = WorldDisclosureTier.Frames;

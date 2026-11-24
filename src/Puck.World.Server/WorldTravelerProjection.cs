@@ -21,7 +21,8 @@ internal static class WorldTravelerProjection {
             if (WorldAdmissionDoor.TryAdmitArrival(
                 entries: server.AdmissionPolicy,
                 sourceAuthority: request.SourceAuthority,
-                verdict: out var admission
+                verdict: out var admission,
+                kind: WorldAdmissionArrival.Visitor
             ) is not null) {
                 return "the source authority is no longer admitted for traveler projection";
             }
@@ -53,7 +54,7 @@ internal static class WorldTravelerProjection {
             }
             bool Authorized() => (
                 credentialIsCurrent?.Invoke() != false &&
-                WorldAdmissionDoor.TryAdmitArrival(server.AdmissionPolicy, request.SourceAuthority, out var liveAdmission) is null &&
+                WorldAdmissionDoor.TryAdmitArrival(server.AdmissionPolicy, request.SourceAuthority, out var liveAdmission, WorldAdmissionArrival.Visitor) is null &&
                 liveAdmission!.Tier >= request.Ceiling &&
                 server.TryTransferredPrincipal(
                 request.SourceAuthority,
@@ -104,7 +105,7 @@ internal static class WorldTravelerProjection {
             // The live policy at this instant, whatever replaced the admission section. The guarded output asks it
             // before every frame, so the cut never depends on an AdmissionChanged notification having arrived.
             bool StillAdmitted() => (
-                (WorldAdmissionDoor.TryAdmitArrival(server.AdmissionPolicy, request.SourceAuthority, out var liveAdmission) is null) &&
+                (WorldAdmissionDoor.TryAdmitArrival(server.AdmissionPolicy, request.SourceAuthority, out var liveAdmission, WorldAdmissionArrival.Visitor) is null) &&
                 (liveAdmission!.Tier >= request.Ceiling)
             );
             var guardedOutput = new PolicyGuardedProjectionOutput(inner: output, outerToken: ct, forwardToken: forwardLifetime.Token, stillAdmitted: StillAdmitted);

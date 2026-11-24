@@ -77,6 +77,13 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
 
         recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: (Screens ? SdfWorldTables.MaxScreenSurfaces : groups),
             groupCountY: (Screens ? 1u : groups), groupCountZ: 1);
+        // The views of this residency record after this pass on this thread (RecordingDomain), so they classify the buffer
+        // they sample by what this recording writes, before the node commits it.
+        if (Screens) {
+            tables.RecordScreenEmission(frame: m_built.Residency.PackageFrame);
+        } else if (Reduces) {
+            tables.RecordSkyEnvironment(frame: m_built.Residency.PackageFrame);
+        }
         return RenderGraphPackageOutcome.Drew;
     }
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) { readback = default; return false; }

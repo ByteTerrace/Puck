@@ -1281,7 +1281,14 @@ public static class WorldBootComposition {
             object[] arguments = inputs.ConnectionSubject is { } connectionSubject
                 ? [connectionSubject, inputs.Scenario]
                 : [inputs.Scenario];
-            services.AddSingleton(implementationFactory: sp => ActivatorUtilities.CreateInstance<WorldServer>(sp, arguments));
+            services.AddSingleton(implementationFactory: sp => {
+                var server = ActivatorUtilities.CreateInstance<WorldServer>(sp, arguments);
+
+                if (inputs.ConnectionSubject is { } explicitSubject) {
+                    server.OverrideAuthorityIdentity(authorityIdentity: explicitSubject);
+                }
+                return server;
+            });
         }
 
         services.AddSingleton(implementationInstance: new WorldServiceExtensionOptions(Configuration: inputs.ExtensionsConfiguration));

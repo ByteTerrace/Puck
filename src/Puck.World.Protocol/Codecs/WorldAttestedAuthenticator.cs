@@ -136,10 +136,23 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator {
             return new((VerifiedPeerIdentity?)null);
         }
 
-        if (
-            (claim.PayloadKind != AttestationPayloadKind.Opaque) ||
-            !challenge.Span.SequenceEqual(other: claim.PayloadBytes.Span)
-        ) {
+        if (claim.PayloadKind != AttestationPayloadKind.Opaque) {
+            return new((VerifiedPeerIdentity?)null);
+        }
+
+        var payload = claim.PayloadBytes.Span;
+        string? sessionSuffix = null;
+
+        if (payload.Length == challenge.Length) {
+            if (!CryptographicOperations.FixedTimeEquals(left: challenge.Span, right: payload)) {
+                return new((VerifiedPeerIdentity?)null);
+            }
+        } else if (payload.Length == (challenge.Length + 16)) {
+            if (!CryptographicOperations.FixedTimeEquals(left: challenge.Span, right: payload[..challenge.Length])) {
+                return new((VerifiedPeerIdentity?)null);
+            }
+            sessionSuffix = Convert.ToHexStringLower(bytes: payload[challenge.Length..]);
+        } else {
             return new((VerifiedPeerIdentity?)null);
         }
 
@@ -147,6 +160,10 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator {
             var current = m_trustEntries?.Invoke();
             return ReferenceEquals(current, entries) || (current is not null && entries is not null && current.SequenceEqual(entries));
         }
-        return new(claim.Header.Subject is { } subject ? new VerifiedPeerIdentity(subject, result.ValidThrough, TrustIsCurrent) : null);
+        if (claim.Header.Subject is not { } subject) {
+            return new((VerifiedPeerIdentity?)null);
+        }
+        var authority = ((sessionSuffix is null) ? subject : $"{claim.Header.Domain}/{subject}/{sessionSuffix}");
+        return new(new VerifiedPeerIdentity(authority, result.ValidThrough, TrustIsCurrent));
     }
 }

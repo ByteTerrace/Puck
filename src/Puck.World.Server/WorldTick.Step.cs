@@ -862,6 +862,9 @@ public sealed partial class WorldTick {
                         peer: in peer,
                         tick: Host.NextInputTick
                     );
+                    if (!Host.Population.IsActive(index: peer.BodyIndex)) {
+                        Host.TransferEscrow.RetireDepartedPeer(peer: peer.Identity);
+                    }
                     if (!Host.ReplaysInput) { Host.ClosePeerTransport(principal: peer.Identity); }
                 }
 
@@ -1230,6 +1233,6 @@ public sealed partial class WorldTick {
         SweepContributionTenure(tick: tick);
         // The body half of a park only: a peer generation's grant rows go at its PeerDisconnected event, and a
         // restored parked generation's go at RestoreCheckpoint, so an expiring park holds nothing to release here.
-        Host.Population.ReclaimExpiredParks(tick: tick);
+        Host.Population.ReclaimExpiredParks(tick: tick, onPeerRetired: Host.TransferEscrow.RetireDepartedPeer);
     }
 }

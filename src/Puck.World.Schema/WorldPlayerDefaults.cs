@@ -112,6 +112,8 @@ public sealed record WorldControllerStateSlots(
 /// <param name="FormantThousandths">Vowel formant frequency scale, 250..4000.</param>
 /// <param name="PaceThousandths">Speech speed, 250..4000; 2000 halves each character's interval.</param>
 /// <param name="SampleSet">Optional syllable-bank document path, replacing synthesis for HUD text.</param>
+/// <param name="Hash">Optional SHA-256 content pin of the canonical <paramref name="SampleSet"/> manifest so a
+/// delivered world with no document directory resolves its voice samples through <see cref="WorldProjectionContent.Resolver"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldVoiceProfile(
     [property: DocumentText("a synth patch id")] string? PatchId = null,
@@ -119,5 +121,7 @@ public sealed record WorldVoiceProfile(
     int PitchThousandths = 1000,
     int FormantThousandths = 1000,
     int PaceThousandths = 1000,
-    [property: DocumentText("a sample set id")] string? SampleSet = null
+    [property: DocumentText("a sample set id")] string? SampleSet = null,
+    [property: DocumentText("a content hash")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Hash = null
 );

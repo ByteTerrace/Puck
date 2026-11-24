@@ -1,0 +1,27 @@
+// Visitor admission for a federated world: an arriving body or party receives exclusive Drive and Observe over the
+// body its admission assigns, at the presentation tier unless the caller widens it. A library: it hands its importers
+// a function and a template, and emits no document.
+
+function visitorAdmissionRow(domain = "*", driveBudget = 8, observeBudget = 64, disclosure = Presentation) = {
+  admits: Visitor
+  disclosure: disclosure
+  domain: domain
+  grants [
+    {
+      budget: driveBudget
+      capability: Drive
+      exclusive: true
+    }
+    {
+      budget: observeBudget
+      capability: Observe
+    }
+  ]
+  mode: FederatedAuthority
+}
+
+template visitorAdmission(domain = "*", driveBudget = 8, observeBudget = 64, disclosure = Presentation) {
+  admission [
+    visitorAdmissionRow(domain: domain, driveBudget: driveBudget, observeBudget: observeBudget, disclosure: disclosure)
+  ]
+}

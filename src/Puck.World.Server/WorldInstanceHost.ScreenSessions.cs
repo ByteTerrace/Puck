@@ -187,14 +187,13 @@ public sealed partial class WorldInstanceHost {
         m_screenDepthQueue.Clear();
 
         foreach (var (name, instance) in m_instances) {
-            if (
-                string.Equals(
-                    a: name,
-                    b: BootInstanceName,
-                    comparisonType: StringComparison.Ordinal
-                ) ||
-                IsOccupied(instance: instance)
-            ) {
+            var isBoot = string.Equals(
+                a: name,
+                b: BootInstanceName,
+                comparisonType: StringComparison.Ordinal
+            );
+
+            if (isBoot ? !SuppressesClientBootScreens(boot: instance) : IsOccupied(instance: instance)) {
                 m_screenDepths[name] = 0;
                 m_screenDepthQueue.Enqueue(item: name);
             }

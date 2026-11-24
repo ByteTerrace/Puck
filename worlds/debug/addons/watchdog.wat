@@ -5,8 +5,8 @@
 ;;   below-floor             a body more than 1 m under y = 0, the lowest floor anything stands on (fall-recovery
 ;;                           catches a body at y = -40, long after it fell through);
 ;;   unnormalised-orientation a body whose orientation quaternion is more than 1/64 away from unit length;
-;;   piece-overlap           a collision begin between two chess pieces (bodies 8 to 39), which rest apart;
-;;   companion-overlap       a collision begin between the Moth (body 0) and the companion (body 42), whose flight
+;;   piece-overlap           a collision begin between two chess pieces (bodies 18 to 49), which rest apart;
+;;   companion-overlap       a collision begin between the Moth (body 0) and the companion (body 52), whose flight
 ;;                           keeps clear of her capsule (companion.wat).
 ;; The host discloses an Observe handle for every body watchdog.puck grants. The guest queries the pose of every body
 ;; in one BodyPoses bulk read every tick. Collision
@@ -148,13 +148,13 @@
   (func $collision (param $a i64) (param $b i64)
     (local $pieces i32)
     (local.set $pieces (i32.and
-      (i32.and (i64.ge_s (local.get $a) (i64.const 8)) (i64.le_s (local.get $a) (i64.const 39)))
-      (i32.and (i64.ge_s (local.get $b) (i64.const 8)) (i64.le_s (local.get $b) (i64.const 39)))))
+      (i32.and (i64.ge_s (local.get $a) (i64.const 18)) (i64.le_s (local.get $a) (i64.const 49)))
+      (i32.and (i64.ge_s (local.get $b) (i64.const 18)) (i64.le_s (local.get $b) (i64.const 49)))))
     (if (local.get $pieces)
       (then
         (call $begin)
         (call $puts (i32.const 0x6680))))
-    (if (i32.and (i64.eqz (local.get $a)) (i64.eq (local.get $b) (i64.const 42)))
+    (if (i32.and (i64.eqz (local.get $a)) (i64.eq (local.get $b) (i64.const 52)))
       (then
         (call $begin)
         (call $puts (i32.const 0x6700))

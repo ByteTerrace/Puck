@@ -479,6 +479,10 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
             ? authored
             : Puck.World.WorldDefinitionLoader.BootInstanceName
         );
+        var clientSession = (((connectTarget is not null) && ((parseResult.GetValue(option: listenOption) ?? worldSource.Definition.Host.Listen) is null))
+            ? Guid.NewGuid()
+            : (Guid?)null
+        );
 
         try {
             var pkcs8 = File.ReadAllBytes(path: Path.GetFullPath(path: federationKeyFile));
@@ -488,13 +492,18 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
                 algorithm: Puck.Attestation.AttestationAlgorithms.EcdsaP256Sha256,
                 pkcs8: pkcs8
             );
+            var oracle = new Puck.World.Protocol.LocalKeySigningOracle(
+                key: key,
+                session: clientSession,
+                subject: federationSubject,
+                validity: Puck.World.Protocol.WorldAttestedAuthenticator.MaximumClaimAge
+            );
 
+            if (clientSession is not null) {
+                connectionSubject = oracle.AuthorityIdentity;
+            }
             authenticator = new Puck.World.Protocol.WorldAttestedAuthenticator(
-                oracle: new Puck.World.Protocol.LocalKeySigningOracle(
-                    key: key,
-                    subject: federationSubject,
-                    validity: Puck.World.Protocol.WorldAttestedAuthenticator.MaximumClaimAge
-                ),
+                oracle: oracle,
                 // Read on network threads while a tick runs, so it reads the policy the last install published.
                 trustEntries: () => ((admissionServer is { } trusted) ? trusted.AdmissionPolicy : worldSource.Definition.Admission)
             );
@@ -794,7 +803,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         // Every local seat crosses, the ones seated now as one party and each later one as it joins.
         host.Services.GetRequiredService<WorldInstanceHost>().JoinRemote(
             authority: remoteEndpoint,
-            documentPath: worldSource.SourcePath
+            documentPath: worldSource.SourcePath,
+            listens: (hostSettings.Listen is not null)
         );
     }
     // A rendering World compiles its own code in the background, so a first crossing or a first addon write runs compiled
