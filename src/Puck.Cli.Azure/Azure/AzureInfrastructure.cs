@@ -105,7 +105,7 @@ public static partial class AzureCommand {
             );
         }
     }
-    private static async Task DeployInfrastructureAsync(TimeProvider clock, string group, string? infrastructure) {
+    private static async Task DeployInfrastructureAsync(TimeProvider clock, string group, string? infrastructure, bool full) {
         var owner = await SetOwnerAsync(group: group);
         var graph = await AzJsonAsync(
             "ad",
@@ -212,8 +212,9 @@ public static partial class AzureCommand {
 
         parameters["parameters"]!["actorsImage"] = new JsonObject { ["value"] = image };
         // The deployment is a function of its compiled template and parameters (the live actors image among them). When
-        // the latest successful deployment carries this exact input identity, applying again changes nothing, so its
-        // outputs are reused; any change, a failed or missing deployment, or one deployed by hand applies in full.
+        // the latest successful deployment carries this exact input identity, applying again changes nothing the
+        // template declares, so its outputs are reused; any change, a failed or missing deployment, one deployed by hand,
+        // or an explicit full reconcile (which repairs a resource changed in Azure by hand) applies in full.
         _ = parameters["parameters"]!.AsObject().Remove(propertyName: "inputIdentity");
         var identity = Puck.Abstractions.ContentDigest.HexOfText(text: (File.ReadAllText(path: "artifacts/production-infrastructure.json") + "\n" + parameters.ToJsonString()));
 
@@ -235,6 +236,7 @@ public static partial class AzureCommand {
         );
 
         if (
+            !full &&
             (deployed["state"]?.GetValue<string>() == "Succeeded") &&
             (deployed["outputs"]?["deploymentInputIdentity"]?["value"]?.GetValue<string>() == identity)
         ) {

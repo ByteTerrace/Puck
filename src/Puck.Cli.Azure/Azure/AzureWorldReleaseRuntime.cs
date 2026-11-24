@@ -246,14 +246,6 @@ public static partial class AzureCommand {
                 throw new InvalidOperationException(message: "the durable release operation changed before the Azure worker effect");
             }
         }
-        private void ValidateRoots(IReadOnlyDictionary<string, string> roots) {
-            if (
-                (roots.Count != m_sourceIdentities.Length) ||
-                !roots.Keys.ToHashSet(comparer: StringComparer.Ordinal).SetEquals(other: m_sourceIdentities.Select(selector: identity => identity.RootKey))
-            ) {
-                throw new InvalidDataException(message: "protected source roots do not match the release inventory");
-            }
-        }
         private async Task<string> WorkerAsync() {
             var workers = await WorkersAsync(
                 group: resourceGroup,
@@ -351,7 +343,7 @@ public static partial class AzureCommand {
 
                     roots = (response.Deserialize<Dictionary<string, string>>(options: Json) ?? throw new InvalidDataException(message: "source drain returned no protected roots"));
                 }
-                ValidateRoots(roots: roots);
+                WorldReleaseRoots.Validate(identities: m_sourceIdentities, roots: roots);
                 // The drain endpoint retains the frozen host for retries. Stop only after its immutable roots exist.
                 await RequireAsync(
                     cancellationToken: cancellationToken,
@@ -429,38 +421,17 @@ public static partial class AzureCommand {
                 expected: operation,
                 phases: [WorldReleaseOperationPhase.Recover]
             ).ConfigureAwait(continueOnCapturedContext: false);
-            ValidateRoots(roots: operation.RecoveryRoots);
-            // Validate the entire protected inventory before the first maintenance takeover.
-            foreach (var identity in m_sourceIdentities) {
-                _ = (await authority.LoadRecoveryRootAsync(
-                    identity,
-                    operation.RecoveryRoots[identity.RootKey],
-                    operation.PendingOperationId!.Value,
-                    cancellationToken
-                ).ConfigureAwait(continueOnCapturedContext: false)
-                    ?? throw new InvalidDataException(message: "a protected source root is missing"));
-            }
-            foreach (var identity in m_sourceIdentities) {
-                await RequireAsync(
-                    cancellationToken: cancellationToken,
+            await WorldReleaseRoots.RestoreSourceAsync(
+                authority: authority,
+                cancellationToken: cancellationToken,
+                guard: token => RequireAsync(
+                    cancellationToken: token,
                     expected: operation,
                     phases: [WorldReleaseOperationPhase.Recover]
-                ).ConfigureAwait(continueOnCapturedContext: false);
-                var fence = (await authority.AcquireActivationAsync(
-                    cancellationToken: cancellationToken,
-                    identity: identity
-                ).ConfigureAwait(continueOnCapturedContext: false)
-                    ?? throw new IOException(message: "source recovery could not acquire maintenance ownership"));
-                var restored = await authority.RestoreRecoveryRootAsync(
-                    identity,
-                    operation.RecoveryRoots[identity.RootKey],
-                    operation.PendingOperationId!.Value,
-                    fence,
-                    cancellationToken
-                ).ConfigureAwait(continueOnCapturedContext: false);
-
-                if (!restored.Ok) { throw new IOException(message: $"source recovery failed for '{identity.World}': {restored.Detail}"); }
-            }
+                ),
+                identities: m_sourceIdentities,
+                operation: operation
+            ).ConfigureAwait(continueOnCapturedContext: false);
             return new(
                 true,
                 "protected source roots restored under fresh fences"
@@ -481,45 +452,19 @@ public static partial class AzureCommand {
                         operation: operation,
                         token: cancellationToken
                     ).ConfigureAwait(continueOnCapturedContext: false);
-                } else if (operation.PendingStateReset is not null) {
-                    foreach (var identity in m_identities) {
-                        var reset = await authority.PrepareReleaseResetAsync(
-                            identity,
-                            operation,
-                            target.Manifest,
-                            archive,
-                            cancellationToken
-                        ).ConfigureAwait(continueOnCapturedContext: false);
-
-                        if (!reset.Ok) {
-                            return new(
-                                false,
-                                $"'{identity.World}' release reset refused: {reset.Detail}"
-                            );
-                        }
-                    }
-                } else {
-                    foreach (var identity in m_identities) {
-                        var key = identity.RootKey;
-
-                        if (!operation.ReturnsToPreviousRelease && source.Manifest.Definitions[key] == target.Manifest.Definitions[key]) { continue; }
-                        var publication = await authority.PrepareReleaseMetadataAsync(
-                            identity,
-                            operation,
-                            source.Manifest,
-                            target.Manifest,
-                            archive,
-                            cancellationToken,
-                            CliWorldVocabulary.EnsureInstalled()
-                        ).ConfigureAwait(continueOnCapturedContext: false);
-
-                        if (!publication.Ok) {
-                            return new(
-                                false,
-                                $"'{identity.World}' release definition publication refused: {publication.Detail}"
-                            );
-                        }
-                    }
+                } else if (await WorldReleaseRoots.PrepareCandidateAsync(
+                    archive: archive,
+                    authority: authority,
+                    cancellationToken: cancellationToken,
+                    identities: m_identities,
+                    operation: operation,
+                    source: source.Manifest,
+                    target: target.Manifest
+                ).ConfigureAwait(continueOnCapturedContext: false) is { } refused) {
+                    return new(
+                        false,
+                        refused
+                    );
                 }
             }
             await EnsureWorkerAsync(
