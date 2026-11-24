@@ -868,8 +868,8 @@ Before it schedules each frame the runtime starts every package's frame
 (`IRenderGraphPackageFactory.BeginFrame`), seals the frame's roots and
 footprints after the captures that start composes (`RenderGraphFrame.Seal`),
 and prepares what the frame reads (`IRenderGraphPackageFactory.PrepareRead`):
-each instance a schedule of the frame could render, by the scheduler's demand
-rules before any refresh or budget (`RenderGraphScheduler.Readers`), visited in
+each instance that could render at its current cadence, using the scheduler's
+demand rules before any budget is applied (`RenderGraphScheduler.ReadersInto`), visited in
 rounds until a round finds no new reader. Once the readers are all prepared it
 tells every package so (`IRenderGraphPackageFactory.ReadsPrepared`), which is
 where a package finishes work it left until it knew every reader, side by side

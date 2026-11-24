@@ -869,10 +869,10 @@ wait behind them.
    lighting settles owes a minimum and a day that turns never stops settling
    it. [The plan](frame-production.md) states the rule, the invariant the
    forks rest on and the options weighed, a pipeline across frames among them.
-   Built: the minimum is one residency a frame, and the captured residencies
-   pack, and their uploads record, as forks of the job pool with a residency a
-   partition. Left, in [its order](frame-production.md#the-steps): a rated
-   view's residency captured at the view's rate, routed scenes captured side
+   Built: a paced frame serves at most one residency minimum, readers request
+   captures at their scheduled cadence, and the captured residencies pack and
+   record their uploads as forks of the job pool with a residency a partition.
+   Left, in [its order](frame-production.md#the-steps): routed scenes captured side
    by side (the largest step left: every routed capture calls back into the
    one binder), one fork for a frame's recordings, and a pump that visits what
    completed. Check: `world.counters sdf.captures` across a benchmark chapter,
