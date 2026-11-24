@@ -52,8 +52,9 @@ slowest view tier's period without a capture (`SdfUpdateRateTiers.Tiers`). A
 frame that rates nothing (the views lever off, a locked tick, a converging
 capture, a host not paced to a display) serves every owed residency, so a
 lockstep bake and a settled capture land every world as fast as they can. A
-residency a reader names is captured for that reader on that frame whatever
-the minimum did.
+residency a due reader names is captured for that reader on that frame whatever
+the minimum did. Reader discovery uses the scheduler's demand and cadence
+calculation, so a held view does not trigger a capture.
 
 **Residencies pack side by side.** A residency's preparation is three steps
 (`SdfWorldResidency.BeginPack`, `RunPack`, `EndPack`). The first asks the
@@ -123,13 +124,6 @@ when it commits, so the waves are serial by construction today.
 Each step names the count that shows it worked, read with `world.counters`
 across a benchmark chapter and divided by the frames.
 
-1. **A rated view's residency captures at the view's rate.** A reader today is
-   any instance a footprint reaches (`RenderGraphScheduler.ReadersInto`),
-   whether or not its refresh holds it this frame, so a world shown through a
-   small glass at a reduced tier is still captured every frame. The readers
-   walk takes the schedule's own hold decision and leaves a held producer
-   unprepared. Check: `sdf.captures.run` a frame falls to the residencies the
-   frame's schedule renders.
 2. **Routed scenes capture side by side.** The binder's three callbacks
    (filming a scene's cameras, fitting its sky, fitting its windows) move to a
    serial step before the captures, or take one gate; the scenes' shared

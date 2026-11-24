@@ -1,4 +1,3 @@
-using Puck.Abstractions.Collections;
 using Puck.Abstractions.Sources;
 using Puck.Maths;
 
@@ -105,13 +104,11 @@ public static class RenderGraphScheduler {
             HasSourceState = new bool[count];
             ResolvedSources = new RenderGraphSourceState[count];
             HasAdmittedReader = new bool[count];
-            ReaderShows = new List<int>[count];
             Staleness = new long[count];
             Width = new int[count];
 
             for (var index = 0; (index < count); index++) {
                 Shows[index] = [];
-                ReaderShows[index] = [];
             }
         }
 
@@ -168,9 +165,6 @@ public static class RenderGraphScheduler {
         public List<int> RootIndices { get; } = [];
         // Every footprint's resolved (consumer, producer) ordinals, reused by Named propagation without re-hashing.
         public List<(int Consumer, int Producer)> FootprintPairs { get; } = [];
-        // Per-consumer same-frame image targets for Readers(set, frame, schedule, ...), cleared sparsely via ReaderTouched.
-        public List<int>[] ReaderShows { get; }
-        public MarkedIndexSet ReaderTouched { get; } = new();
         public long[] Staleness { get; }
         public int[] Width { get; }
 
@@ -613,267 +607,32 @@ public static class RenderGraphScheduler {
         ? (staleness[left] > staleness[right])
         : (positionOf[left] < positionOf[right])
     );
-    private static bool IsSameFrameImageRead(RenderGraphInstanceSet set, int consumer, int producer) {
-        var reads = set.Reads[consumer];
-
-        for (var read = 0; (read < reads.Count); read++) {
-            if ((reads[read].Producer == producer) && !reads[read].PreviousFrame && (reads[read].Kind != ShaderPipelineResourceKind.Buffer)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>Marks every instance a schedule of the frame could render: each root the display shows at an extent, and
-    /// in turn each producer a marked consumer shows over a same-frame footprint of nonzero extent or reads as a
-    /// same-frame buffer, by the rules <see cref="Schedule"/> passes demand by, before any refresh, cadence, budget or
-    /// unchanged declaration is weighed. Whatever <see cref="Schedule"/> renders for the frame is marked; an instance left
-    /// unmarked renders in no schedule of it, so nothing it would read needs preparing. A root or footprint naming no
-    /// instance of the set, or a footprint naming no declared read, marks nothing (<see cref="Schedule"/> refuses
-    /// it).</summary>
-    /// <param name="set">The instances.</param>
-    /// <param name="frame">What the frame shows.</param>
-    /// <param name="reached">The marks, one per instance of <paramref name="set"/>, cleared on entry.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="set"/> or <paramref name="reached"/> is
-    /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="reached"/> does not hold one mark per instance.</exception>
-    public static void Readers(RenderGraphInstanceSet set, in RenderGraphFrame frame, bool[] reached) {
-        ArgumentNullException.ThrowIfNull(argument: set);
-        ArgumentNullException.ThrowIfNull(argument: reached);
-        if (reached.Length != set.Instances.Count) {
-            throw new ArgumentException(message: $"The marks hold {reached.Length} instances; the set declares {set.Instances.Count}.", paramName: nameof(reached));
-        }
-
-        Array.Clear(array: reached);
-        if (frame.Roots is { } roots) {
-            for (var position = 0; (position < roots.Count); position++) {
-                var root = roots[position];
-
-                if ((root.Width > 0) && (root.Height > 0) && (set.IndexOf(name: root.Instance) is var index and >= 0)) { reached[index] = true; }
-            }
-        }
-
-        var footprints = (frame.Footprints ?? []);
-
-        for (var grew = true; grew;) {
-            grew = false;
-            for (var position = 0; (position < footprints.Count); position++) {
-                var footprint = footprints[position];
-
-                if (!(footprint.Width > 0) || !(footprint.Height > 0) || (set.IndexOf(name: footprint.Consumer) is not (var consumer and >= 0)) || !reached[consumer] || set.Instances[consumer].IsSource ||
-                    (set.IndexOf(name: footprint.Producer) is not (var producer and >= 0)) || reached[producer]) {
-                    continue;
-                }
-                if (IsSameFrameImageRead(set: set, consumer: consumer, producer: producer)) {
-                    reached[producer] = true;
-                    grew = true;
-                }
-            }
-            for (var index = 0; (index < reached.Length); index++) {
-                if (!reached[index] || set.Instances[index].IsSource) { continue; }
-                var reads = set.Reads[index];
-
-                for (var read = 0; (read < reads.Count); read++) {
-                    if ((reads[read].Kind == ShaderPipelineResourceKind.Buffer) && !reads[read].PreviousFrame && !reached[reads[read].Producer]) {
-                        reached[reads[read].Producer] = true;
-                        grew = true;
-                    }
-                }
-            }
-        }
-    }
-    /// <summary>Marks every instance a schedule of the frame could render and collects their ordinals into
-    /// <paramref name="reachedIndices"/> without allocating, using <paramref name="schedule"/>'s scratch to resolve each
-    /// footprint once and walk only reached instances.</summary>
-    /// <param name="set">The instances.</param>
-    /// <param name="frame">What the frame shows.</param>
-    /// <param name="schedule">A schedule for <paramref name="set"/> whose scratch this call borrows without altering its
-    /// published rows.</param>
-    /// <param name="reached">The marks, one per instance of <paramref name="set"/>, cleared on entry.</param>
-    /// <param name="reachedIndices">Receives every marked ordinal, cleared on entry.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="set"/>, <paramref name="schedule"/>,
-    /// <paramref name="reached"/> or <paramref name="reachedIndices"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="reached"/> or <paramref name="schedule"/> covers a different
-    /// number of instances than <paramref name="set"/>.</exception>
-    public static void ReadersInto(RenderGraphInstanceSet set, in RenderGraphFrame frame, RenderGraphSchedule schedule, bool[] reached, List<int> reachedIndices) {
-        ArgumentNullException.ThrowIfNull(argument: set);
-        ArgumentNullException.ThrowIfNull(argument: schedule);
-        ArgumentNullException.ThrowIfNull(argument: reached);
-        ArgumentNullException.ThrowIfNull(argument: reachedIndices);
-
-        var count = set.Instances.Count;
-
-        if (reached.Length != count) {
-            throw new ArgumentException(message: $"The marks hold {reached.Length} instances; the set declares {count}.", paramName: nameof(reached));
-        }
-        if (schedule.Count != count) {
-            throw new ArgumentException(message: $"The schedule covers {schedule.Count} instances; the set declares {count}.", paramName: nameof(schedule));
-        }
-
-        Array.Clear(array: reached);
-        reachedIndices.Clear();
-        if (frame.Roots is { } roots) {
-            for (var position = 0; (position < roots.Count); position++) {
-                var root = roots[position];
-
-                if ((root.Width > 0) && (root.Height > 0) && (set.IndexOf(name: root.Instance) is var index and >= 0) && !reached[index]) {
-                    reached[index] = true;
-                    reachedIndices.Add(item: index);
-                }
-            }
-        }
-        if (reachedIndices.Count == 0) {
-            return;
-        }
-
-        var work = schedule.Work;
-        var shows = work.ReaderShows;
-        var touched = work.ReaderTouched;
-        var footprints = (frame.Footprints ?? []);
-
-        touched.Clear();
-        for (var position = 0; (position < footprints.Count); position++) {
-            var footprint = footprints[position];
-
-            if (!(footprint.Width > 0) || !(footprint.Height > 0)) {
-                continue;
-            }
-            var consumer = set.IndexOf(name: footprint.Consumer);
-
-            if ((consumer < 0) || set.Instances[consumer].IsSource) {
-                continue;
-            }
-            var producer = set.IndexOf(name: footprint.Producer);
-
-            if ((producer < 0) || !IsSameFrameImageRead(set: set, consumer: consumer, producer: producer)) {
-                continue;
-            }
-            if (touched.Add(index: consumer)) {
-                shows[consumer].Clear();
-            }
-            shows[consumer].Add(item: producer);
-        }
-
-        for (var head = 0; (head < reachedIndices.Count); head++) {
-            var consumer = reachedIndices[head];
-
-            if (set.Instances[consumer].IsSource) {
-                continue;
-            }
-            if (touched.Contains(index: consumer)) {
-                var targets = shows[consumer];
-
-                for (var target = 0; (target < targets.Count); target++) {
-                    var producer = targets[target];
-
-                    if (!reached[producer]) {
-                        reached[producer] = true;
-                        reachedIndices.Add(item: producer);
-                    }
-                }
-            }
-
-            var reads = set.Reads[consumer];
-
-            for (var read = 0; (read < reads.Count); read++) {
-                if ((reads[read].Kind == ShaderPipelineResourceKind.Buffer) && !reads[read].PreviousFrame && !reached[reads[read].Producer]) {
-                    var producer = reads[read].Producer;
-
-                    reached[producer] = true;
-                    reachedIndices.Add(item: producer);
-                }
-            }
-        }
-
-        touched.Clear();
-    }
-
-    /// <summary>Schedules one frame into a schedule the caller owns.</summary>
-    /// <param name="set">The instances.</param>
-    /// <param name="frame">What the frame shows.</param>
-    /// <param name="history">The previous frame's history: <see cref="RenderGraphHistory.Empty"/> or a fresh schedule's
-    /// <see cref="RenderGraphSchedule.Next"/> for the first frame, otherwise the previous schedule's
-    /// <see cref="RenderGraphSchedule.Next"/>.</param>
-    /// <param name="schedule">The schedule to fill, created for a set of the same size. Every member it held is
-    /// replaced, so the result depends on the other arguments alone; when this throws, it is left unchanged.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="set"/>, <paramref name="history"/> or
-    /// <paramref name="schedule"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="history"/> or <paramref name="schedule"/> covers a
-    /// different number of instances, <paramref name="history"/> is <paramref name="schedule"/>'s own
-    /// <see cref="RenderGraphSchedule.Next"/>, the frame's roots or footprints are <see langword="null"/>, the frame
-    /// does not follow the history, the display extent is not positive, a root or footprint names an undeclared
-    /// instance or read, a root names an instance whose output is a buffer, a footprint shows a buffer read, or a source
-    /// state names no source, names one twice, or declares a negative extent or an ill-formed cadence, or a rerender names
-    /// no instance or names a source.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A root or footprint fraction is negative or not finite, or the
-    /// budget is negative.</exception>
-    public static void Schedule(RenderGraphInstanceSet set, RenderGraphFrame frame, RenderGraphHistory history, RenderGraphSchedule schedule) =>
-        ScheduleOrdinal(frame: frame, history: history, overlay: default, schedule: schedule, set: set);
-    /// <summary>Schedules one frame into a schedule the caller owns, merging per-frame runtime overlays addressed by
-    /// instance ordinal without re-hashing names.</summary>
-    /// <param name="set">The instances.</param>
-    /// <param name="frame">What the frame shows.</param>
+    /// <summary>Collects the instances the frame could render before packages declare unchanged input and the budget
+    /// admits renders. The schedule lends its demand scratch without changing its published rows.</summary>
+    /// <param name="set">The instance set.</param>
+    /// <param name="frame">The sealed roots and footprints.</param>
     /// <param name="history">The previous frame's history.</param>
-    /// <param name="schedule">The schedule to fill.</param>
-    /// <param name="overlay">Per-frame stale, rerender, unchanged and source states addressed by ordinal.</param>
-    public static void ScheduleOrdinal(RenderGraphInstanceSet set, RenderGraphFrame frame, RenderGraphHistory history, RenderGraphSchedule schedule, in RenderGraphOrdinalOverlay overlay) {
-        ArgumentNullException.ThrowIfNull(argument: set);
-        ArgumentNullException.ThrowIfNull(argument: history);
-        ArgumentNullException.ThrowIfNull(argument: schedule);
-        ArgumentOutOfRangeException.ThrowIfNegative(value: frame.PassPixelBudget);
-
-        var count = set.Instances.Count;
-
-        if (history.Count != count) {
-            throw new ArgumentException(
-                message: $"The history covers {history.Count} instances; the set declares {count}.",
-                paramName: nameof(history)
-            );
-        }
-        if (schedule.Count != count) {
-            throw new ArgumentException(
-                message: $"The schedule covers {schedule.Count} instances; the set declares {count}.",
-                paramName: nameof(schedule)
-            );
-        }
-        if (ReferenceEquals(
-            objA: history,
-            objB: schedule.Next
-        )) {
-            throw new ArgumentException(
-                message: "The history is the schedule's own next history; schedule the next frame into another schedule.",
-                paramName: nameof(schedule)
-            );
-        }
-        if (
-            (frame.Roots is null) ||
-            (frame.Footprints is null)
-        ) {
-            throw new ArgumentException(
-                message: "The frame's roots and footprints must not be null.",
-                paramName: nameof(frame)
-            );
-        }
-        if (frame.Index <= history.Frame) {
-            throw new ArgumentException(
-                message: $"Frame {frame.Index} does not follow the history's frame {history.Frame}.",
-                paramName: nameof(frame)
-            );
-        }
-        if (
-            (frame.DisplayWidth <= 0) ||
-            (frame.DisplayHeight <= 0)
-        ) {
-            throw new ArgumentException(
-                message: $"The display extent {frame.DisplayWidth}x{frame.DisplayHeight} must be positive.",
-                paramName: nameof(frame)
-            );
-        }
-
-        // Every refusal is raised while only the scratch is written, so a refused call leaves the schedule's members
-        // as they were.
+    /// <param name="schedule">The schedule for this set.</param>
+    /// <param name="overlay">Runtime rerender and stale declarations.</param>
+    /// <param name="readers">The due ordinals in render order, replaced on each call.</param>
+    public static void ReadersInto(RenderGraphInstanceSet set, in RenderGraphFrame frame, RenderGraphHistory history,
+        RenderGraphSchedule schedule, in RenderGraphOrdinalOverlay overlay, List<int> readers) {
         var work = schedule.Work;
+        var pending = frame with { Unchanged = null };
+        var demand = new RenderGraphOrdinalOverlay { Rerender = overlay.Rerender, Stale = overlay.Stale };
+
+        PlanDemand(frame: pending, history: history, overlay: in demand, set: set, work: work);
+        readers.Clear();
+        for (var position = 0; position < set.Order.Count; position++) {
+            var index = set.Order[position];
+
+            if (work.Decided[index] && work.Due[index]) { readers.Add(item: index); }
+        }
+    }
+
+    private static void PlanDemand(RenderGraphInstanceSet set, RenderGraphFrame frame, RenderGraphHistory history,
+        in RenderGraphOrdinalOverlay overlay, Scratch work) {
+        var count = set.Instances.Count;
 
         work.Clear();
 
@@ -891,7 +650,7 @@ public static class RenderGraphScheduler {
         var demandWidth = work.DemandWidth;
         var demandHeight = work.DemandHeight;
         var rootIndices = work.RootIndices;
-        var roots = frame.Roots;
+        var roots = frame.Roots ?? throw new ArgumentException(message: "The frame must declare its roots.", paramName: nameof(frame));
 
         for (var position = 0; (position < roots.Count); position++) {
             var root = roots[position];
@@ -985,15 +744,6 @@ public static class RenderGraphScheduler {
             unchanged: unchanged
         );
 
-        var named = work.Named;
-
-        Names(
-            frame: frame,
-            named: named,
-            rootIndices: rootIndices,
-            set: set
-        );
-
         var divisor = work.Divisor;
         var due = work.Due;
 
@@ -1017,7 +767,7 @@ public static class RenderGraphScheduler {
             due[index] = (
                 forced[index] ||
                 (history.LatestFrame(index: index) < 0) ||
-                (!unchanged[index] && !Holds(frame: frame, history: history, index: index, refresh: refresh, stale: stale))
+                !Holds(frame: frame, history: history, index: index, refresh: refresh, stale: stale)
             );
         }
 
@@ -1079,13 +829,11 @@ public static class RenderGraphScheduler {
                     fraction: demandHeight[index]
                 ));
 
-                // An unchanged instance demanded at another extent renders again: a new image holds nothing.
-                if (
-                    unchanged[index] &&
-                    (exact is null) &&
-                    ((scaleWidth[index] != allocatedWidth) || (scaleHeight[index] != allocatedHeight))
-                ) {
-                    due[index] = true;
+                // Unchanged input can hold a due render only at the same extent. A resize does not override a
+                // cadence hold. Forced and first renders never stand on an unchanged declaration.
+                if (due[index] && unchanged[index] && !forced[index] && (history.LatestFrame(index: index) >= 0) &&
+                    ((exact is not null) || ((scaleWidth[index] == allocatedWidth) && (scaleHeight[index] == allocatedHeight)))) {
+                    due[index] = false;
                 }
                 if (!due[index]) {
                     continue;
@@ -1117,6 +865,110 @@ public static class RenderGraphScheduler {
                 }
             }
         }
+
+    }
+
+    /// <summary>Schedules one frame into a schedule the caller owns.</summary>
+    /// <param name="set">The instances.</param>
+    /// <param name="frame">What the frame shows.</param>
+    /// <param name="history">The previous frame's history: <see cref="RenderGraphHistory.Empty"/> or a fresh schedule's
+    /// <see cref="RenderGraphSchedule.Next"/> for the first frame, otherwise the previous schedule's
+    /// <see cref="RenderGraphSchedule.Next"/>.</param>
+    /// <param name="schedule">The schedule to fill, created for a set of the same size. Every member it held is
+    /// replaced, so the result depends on the other arguments alone; when this throws, it is left unchanged.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="set"/>, <paramref name="history"/> or
+    /// <paramref name="schedule"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="history"/> or <paramref name="schedule"/> covers a
+    /// different number of instances, <paramref name="history"/> is <paramref name="schedule"/>'s own
+    /// <see cref="RenderGraphSchedule.Next"/>, the frame's roots or footprints are <see langword="null"/>, the frame
+    /// does not follow the history, the display extent is not positive, a root or footprint names an undeclared
+    /// instance or read, a root names an instance whose output is a buffer, a footprint shows a buffer read, or a source
+    /// state names no source, names one twice, or declares a negative extent or an ill-formed cadence, or a rerender names
+    /// no instance or names a source.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A root or footprint fraction is negative or not finite, or the
+    /// budget is negative.</exception>
+    public static void Schedule(RenderGraphInstanceSet set, RenderGraphFrame frame, RenderGraphHistory history, RenderGraphSchedule schedule) =>
+        ScheduleOrdinal(frame: frame, history: history, overlay: default, schedule: schedule, set: set);
+    /// <summary>Schedules one frame into a schedule the caller owns, merging per-frame runtime overlays addressed by
+    /// instance ordinal without re-hashing names.</summary>
+    /// <param name="set">The instances.</param>
+    /// <param name="frame">What the frame shows.</param>
+    /// <param name="history">The previous frame's history.</param>
+    /// <param name="schedule">The schedule to fill.</param>
+    /// <param name="overlay">Per-frame stale, rerender, unchanged and source states addressed by ordinal.</param>
+    public static void ScheduleOrdinal(RenderGraphInstanceSet set, RenderGraphFrame frame, RenderGraphHistory history, RenderGraphSchedule schedule, in RenderGraphOrdinalOverlay overlay) {
+        ArgumentNullException.ThrowIfNull(argument: set);
+        ArgumentNullException.ThrowIfNull(argument: history);
+        ArgumentNullException.ThrowIfNull(argument: schedule);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: frame.PassPixelBudget);
+
+        var count = set.Instances.Count;
+
+        if (history.Count != count) {
+            throw new ArgumentException(
+                message: $"The history covers {history.Count} instances; the set declares {count}.",
+                paramName: nameof(history)
+            );
+        }
+        if (schedule.Count != count) {
+            throw new ArgumentException(
+                message: $"The schedule covers {schedule.Count} instances; the set declares {count}.",
+                paramName: nameof(schedule)
+            );
+        }
+        if (ReferenceEquals(
+            objA: history,
+            objB: schedule.Next
+        )) {
+            throw new ArgumentException(
+                message: "The history is the schedule's own next history; schedule the next frame into another schedule.",
+                paramName: nameof(schedule)
+            );
+        }
+        if (
+            (frame.Roots is null) ||
+            (frame.Footprints is null)
+        ) {
+            throw new ArgumentException(
+                message: "The frame's roots and footprints must not be null.",
+                paramName: nameof(frame)
+            );
+        }
+        if (frame.Index <= history.Frame) {
+            throw new ArgumentException(
+                message: $"Frame {frame.Index} does not follow the history's frame {history.Frame}.",
+                paramName: nameof(frame)
+            );
+        }
+        if (
+            (frame.DisplayWidth <= 0) ||
+            (frame.DisplayHeight <= 0)
+        ) {
+            throw new ArgumentException(
+                message: $"The display extent {frame.DisplayWidth}x{frame.DisplayHeight} must be positive.",
+                paramName: nameof(frame)
+            );
+        }
+
+        // Every refusal is raised while only the scratch is written, so a refused call leaves the schedule's members
+        // as they were.
+        var work = schedule.Work;
+
+        PlanDemand(frame: frame, history: history, overlay: in overlay, set: set, work: work);
+
+        var decided = work.Decided;
+        var divisor = work.Divisor;
+        var due = work.Due;
+        var forced = work.Forced;
+        var isRoot = work.IsRoot;
+        var hasSourceState = work.HasSourceState;
+        var resolvedSources = work.ResolvedSources;
+        var scaleWidth = work.ScaleWidth;
+        var scaleHeight = work.ScaleHeight;
+        var shown = work.Shows;
+        var footprintPairs = work.FootprintPairs;
+        var named = work.Named;
+        Names(frame: frame, named: named, rootIndices: work.RootIndices, set: set);
 
         var width = work.Width;
         var height = work.Height;

@@ -101,12 +101,12 @@ public static partial class AzureCommand {
                         identity: sourceIdentity,
                         token: token
                     ).ConfigureAwait(continueOnCapturedContext: false);
-                    if (!WorldReleaseTransitionPolicy.TryPrepare(
-                        source.Manifest,
-                        manifest,
-                        out _,
-                        out reason
-                    )) { throw new InvalidDataException(message: reason); }
+                    // A pair that cannot carry state structurally is not refused here: hosted data is scratch, so the
+                    // fixture's reset decision (WorldReleaseCoordinator.FindDefinitionResetAsync) starts it fresh.
+                    if (
+                        !WorldReleaseManifest.TryValidate(manifest: source.Manifest, reason: out reason) ||
+                        !WorldReleaseManifest.TryValidate(manifest: manifest, reason: out reason)
+                    ) { throw new InvalidDataException(message: reason); }
                 }
                 // Reuse already retained inputs on retry. Regenerating SSH material or reading today's template would
                 // otherwise turn a lost preflight response into a conflicting configuration for the same release.

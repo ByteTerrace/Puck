@@ -136,7 +136,7 @@ public sealed partial class SdfMeshRegionStore {
 
         if (!m_landingRanks.TryGetValue(key: mesh, value: out var rank)) {
             if (!staged) { return 0; }
-            rank = new LandingRank(mesh: mesh, words: SdfMeshRegion.WordsOf(mesh: mesh));
+            rank = new LandingRank(mesh: mesh, words: SdfMeshRegion.PlacedWordsOf(mesh: mesh));
             m_landingRanks.Add(key: mesh, value: rank);
             m_landingAheadStale = true;
             AddOwedWords(mesh: mesh, words: rank.Words);
@@ -286,14 +286,14 @@ public sealed partial class SdfMeshRegionStore {
         while ((cursor < order.Count) && (taken < budget) && ((job?.Slices.Count ?? 0) < LandingSlices)) {
             var mesh = order.MeshAt(index: cursor);
 
-            if (!m_owed.Contains(mesh: mesh) || !m_arena.Names(mesh: mesh) || !m_placements.TryGetValue(key: mesh, value: out var placement)) { cursor++; continue; }
+            if (!m_owed.Contains(mesh: mesh) || !m_arena.Names(mesh: mesh) || !m_arena.Placements.TryGetValue(key: mesh, value: out var own)) { cursor++; continue; }
             if (!mesh.Resident) {
                 if (waiting < 0) { waiting = cursor; }
                 cursor++;
                 continue;
             }
             if (!m_landing.TryGetValue(key: mesh, value: out var progress)) {
-                progress = new LandingProgress(words: SdfMeshRegion.WordsOf(mesh: mesh));
+                progress = new LandingProgress(words: SdfMeshRegion.PlacedWordsOf(mesh: mesh));
                 m_landing.Add(key: mesh, value: progress);
             }
 
@@ -303,7 +303,7 @@ public sealed partial class SdfMeshRegionStore {
                 continue;
             }
             if (progress.Pages is null) {
-                progress.Pages = m_region.TryLease((((long)placement.VertexWord) * sizeof(uint)), (((long)progress.Words) * sizeof(uint)));
+                progress.Pages = m_region.TryLease((((long)own) * sizeof(uint)), (((long)progress.Words) * sizeof(uint)));
                 if (progress.Pages is null) {
                     if (waiting < 0) { waiting = cursor; }
                     cursor++;
@@ -315,7 +315,7 @@ public sealed partial class SdfMeshRegionStore {
             if (take > 0) {
                 // The job's words are packed one slice after another, each from the word the slices before it end at.
                 (job ??= new LandingJob(store: this)).Slices.Add(item: new LandingSlice(Mesh: mesh, Progress: progress, Word: progress.Taken, Count: take,
-                    Source: taken, Placement: placement));
+                    Source: taken, Own: own));
                 progress.Taken += take;
                 taken += take;
             }
@@ -344,9 +344,9 @@ public sealed partial class SdfMeshRegionStore {
                 var slice = landing.Slices[index];
 
                 if (!m_landing.TryGetValue(key: slice.Mesh, value: out var progress) || !ReferenceEquals(objA: progress, objB: slice.Progress) ||
-                    !m_placements.TryGetValue(key: slice.Mesh, value: out var placement) || (placement.VertexWord != slice.Placement.VertexWord) ||
+                    !m_arena.Placements.TryGetValue(key: slice.Mesh, value: out var own) || (own != slice.Own) ||
                     (progress.Pages is not { IsCurrent: true }) || !landing.PackedSlices[index]) { continue; }
-                if (!m_region.TryOweGather(destinationOffset: ((((long)placement.VertexWord) + slice.Word) * sizeof(uint)), source: landing.Buffer!,
+                if (!m_region.TryOweGather(destinationOffset: ((((long)own) + slice.Word) * sizeof(uint)), source: landing.Buffer!,
                     sourceWord: slice.Source, words: slice.Count)) { continue; }
                 landing.Slices[index] = slice with { Recorded = true };
                 words += slice.Count;
@@ -650,9 +650,9 @@ public sealed partial class SdfMeshRegionStore {
         public int Taken { get; set; }
         public int Words { get; } = words;
     }
-    // A slice of one mesh's words: from its word Word, Count words, packed into its job's buffer from word Source, for the
-    // placement the mesh held when it was taken.
-    private readonly record struct LandingSlice(SdfMesh Mesh, LandingProgress Progress, int Word, int Count, int Source, SdfMeshRegionMesh Placement) {
+    // A slice of one mesh's placed words: from its word Word, Count words, packed into its job's buffer from word Source,
+    // for the first word the mesh lay at when it was taken (Own).
+    private readonly record struct LandingSlice(SdfMesh Mesh, LandingProgress Progress, int Word, int Count, int Source, int Own) {
         public bool Recorded { get; init; }
     }
     // A landing job: its slices and words, the region slot it records into, the buffer a worker packs them into and the
@@ -681,7 +681,7 @@ public sealed partial class SdfMeshRegionStore {
                     if (!PackedSlices[index]) { continue; }
 
                     var slice = Slices[index];
-                    var words = Packer!.Of(mesh: slice.Mesh, placement: slice.Placement);
+                    var words = Packer!.Of(mesh: slice.Mesh);
 
                     Buffer!.Write<uint>(data: words.Slice(start: slice.Word, length: slice.Count), destinationOffsetBytes: (((ulong)slice.Source) * sizeof(uint)));
                 }
@@ -690,9 +690,10 @@ public sealed partial class SdfMeshRegionStore {
             }
         }
     }
-    // One placed mesh's words from its first vertex word, written into a scratch of its own unless it holds that mesh's
-    // already: a mesh's words relative to its first vertex word follow from the mesh alone, so a mesh sliced over several
-    // copies is written once. The words are read through a hold (SdfMesh.Hold), the one door to its normals and levels.
+    // One mesh's placed words (SdfMeshRegion.PlacedWordsOf) from its first word, written into a scratch of its own unless
+    // it holds that mesh's already: a mesh's words relative to its first word follow from the mesh alone, so a mesh
+    // sliced over several copies is written once. A mesh renumbered from another is written whole and answered by its
+    // triangle materials, the only words placed for it. The words are read through a hold (SdfMesh.Hold), the one door to its normals and levels.
     // A mesh the store could not restore writes zeros; its groups bake again (SdfMeshLibrary.Lose). One instance serves
     // one thread at a time: the landing's packer.
     private sealed class MeshWords {
@@ -701,32 +702,23 @@ public sealed partial class SdfMeshRegionStore {
         private SdfMesh? m_mesh;
         private uint[] m_words = [];
 
-        public ReadOnlySpan<uint> Of(SdfMesh mesh, SdfMeshRegionMesh placement) {
+        public ReadOnlySpan<uint> Of(SdfMesh mesh) {
+            var placed = SdfMeshRegion.PlacedWordsOf(mesh: mesh);
             var words = SdfMeshRegion.WordsOf(mesh: mesh);
+            // The mesh's layout from its first vertex word, and where the words placed for it begin in that layout.
+            var layout = PlacementAt(mesh: mesh, vertexWord: 0);
+            var first = ((mesh.GeometrySource is null) ? 0 : layout.MaterialWord);
 
-            if (ReferenceEquals(objA: mesh, objB: m_mesh)) { return m_words.AsSpan(length: words, start: 0); }
+            if (ReferenceEquals(objA: mesh, objB: m_mesh)) { return m_words.AsSpan(length: placed, start: first); }
 
             using var held = mesh.Hold();
 
-            if (!held.Readable) { return ((words <= ZeroWords.Length) ? ZeroWords.AsSpan(length: words, start: 0) : new uint[words]); }
+            if (!held.Readable) { return ((placed <= ZeroWords.Length) ? ZeroWords.AsSpan(length: placed, start: 0) : new uint[placed]); }
             ArrayCapacity.EnsureScratch(ref m_words, words);
-
-            var destination = m_words.AsSpan(length: words, start: 0);
-
-            SdfMeshRegion.WriteMesh(
-                destination: destination,
-                held: in held,
-                placement: new SdfMeshRegionMesh(
-                    IndexCount: placement.IndexCount,
-                    IndexWord: (placement.IndexWord - placement.VertexWord),
-                    MaterialWord: (placement.MaterialWord - placement.VertexWord),
-                    VertexWord: 0,
-                    SkinWord: ((placement.SkinWord == 0) ? 0 : (placement.SkinWord - placement.VertexWord))
-                )
-            );
+            SdfMeshRegion.WriteMesh(destination: m_words.AsSpan(length: words, start: 0), held: in held, placement: layout);
             m_mesh = mesh;
 
-            return destination;
+            return m_words.AsSpan(length: placed, start: first);
         }
     }
 }

@@ -408,6 +408,13 @@ told the store (its landing priority). A mesh the store lands, moves or takes ba
 residency that names it (`SdfWorldTables.NoteStoreChange`), and the copies no landing job carries (a compaction's
 moves, a grown region's carry) ride whichever upload records next (`SdfMeshRegionStore.RecordOwed`), which relies on
 every residency's upload of a frame reaching the queue before a view of that frame records.
+A world is resident once: a mesh renumbered for another program's materials (`SdfMesh.GeometrySource`) is placed as
+its triangle materials alone and draws the first mesh's vertices and indices (`SdfMeshRegion.PlacedWordsOf`), so use
+`PlacedWordsOf`, never `WordsOf`, for anything the region places or lands; the library finds a living mesh its cache
+let go of instead of decoding a second (`SdfMeshLibrary.Revived`); and a second scene of the world the presentation
+draws takes that world's demand (`SdfFrameContent.DemandViews`) and its tiers (`SdfMeshLibrary.TiersOf`). Editing any
+type the bake's closure reaches (`SdfMesh`, `SdfMeshLibrary`, `SdfMeshStore`, `SdfMeshPathBake`) moves the bake
+identity, and the next boot bakes the world cold.
 A staged region created `mapped` (the mesh region, the probe scene) asks `IGpuBufferFactory.TryCreateMapped` for a
 destination that reserves `GpuRegion.MaxByteCount` and backs 1 MiB chunks on demand (`IGpuMappedBuffer`; Direct3D 12's
 `DirectXGpuMappedBuffer` at reserved resources tier 2, tile runs from `DirectXHeapArena.PlaceTiles`; Vulkan answers
@@ -1791,12 +1798,9 @@ counts in `sdf.transforms`, never in `records.posed`.
   rates nothing (the views lever off, a locked tick, a converging capture, an unpaced host). A day that turns keeps
   lighting settling for good, so a minimum served every frame captures every held world every frame. The runtime
   then seals its roots and footprints (`RenderGraphFrame.Seal`) and captures only the instances
-  `RenderGraphScheduler.Readers` marks (`IRenderGraphPackageFactory.PrepareRead`), in rounds until none is new, and
-  asks `IsUnchanged` of those alone. A scheduled render is always among them, since `Readers` follows every edge
-  `Schedule` passes demand along; a new demand edge in the scheduler goes into `Readers` in the same change, or its
-  producer renders from a residency nobody captured this frame. `Readers` does not know a refresh holds an instance,
-  so a view rated to a reduced tier still captures its residency every frame
-  ([the plan](../../../docs/plans/frame-production.md#the-steps), step 1). A graph installed mid-frame still stages
+  `RenderGraphScheduler.ReadersInto` marks (`IRenderGraphPackageFactory.PrepareRead`), in rounds until none is new, and
+  asks `IsUnchanged` of those alone. The reader walk shares the scheduler's cadence and demand calculation. A rated
+  view only asks for its residency when it is due. A graph installed mid-frame still stages
   late (`SdfWorldResidency.Staged`, counted). `world.counters sdf.captures` reads residencies held against captures
   run, the minimums served and held, and the residencies packed and uploaded beside others.
 - **Residencies pack and upload on the pool.** A captured residency's frame is packed in

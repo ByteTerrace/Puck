@@ -7,6 +7,8 @@
 [[vk::binding(5, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> motionResults : register(u5, space3);
 [[vk::binding(6, 3)]] StructuredBuffer<float4> sdfPreviousDynamicTransforms : register(t6, space3);
 [[vk::binding(7, 3)]] StructuredBuffer<uint> sdfFrameSampled : register(t7, space3);
+// The draw records sit in the region buffer at the words the cases name; binding 8 is that buffer again.
+[[vk::binding(8, 3)]] StructuredBuffer<uint> sdfMeshDraws : register(t8, space3);
 // The mesh hit door's bound admits every case's draw, a rejection counts nowhere, and the zero-initialized pose overlay
 // (a zero slot count) leaves every slot reading its own row.
 struct MotionPass { float4 previousView[6]; uint meshDraws; uint3 poseOverlay; };

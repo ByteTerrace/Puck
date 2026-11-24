@@ -59,6 +59,99 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
     /// <summary>Gets the store the library keeps its meshes in between runs, or <see langword="null"/>.</summary>
     public SdfMeshStore? Disk { get; } = store;
+
+    [Puck.SideTable(reason: "the drawn tiers of each world a presentation draws twice, which leave with the world's key")]
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, TierBoard> m_tiers = [];
+
+    /// <summary>Returns the tiers the residency that draws a world for the presentation draws each of its groups at,
+    /// by the group's shape: what a residency drawing a second scene of that world follows
+    /// (<see cref="SdfFrameContent.DemandWorld"/>).</summary>
+    /// <param name="world">What names the world, compared by reference.</param>
+    /// <returns>The world's board, the same one for every caller.</returns>
+    internal TierBoard TiersOf(object world) => m_tiers.GetValue(key: world, createValueCallback: static _ => new TierBoard());
+
+    /// <summary>The tier one residency draws each of its groups at, by the group's shape and where it stands in the
+    /// world (<see cref="PlaceOf"/>), which the residencies drawing a second scene of its world read: a shape many
+    /// placements share is drawn at as many tiers as its copies' distances ask, so the shape alone names no group.
+    /// Where two groups share a shape and a place, the finest. Thread-safe: the publisher writes it whole under a lock
+    /// the readers take.</summary>
+    internal sealed class TierBoard {
+        /// <summary>The cells a metre is cut into where a group's place is told from another's: 64, well under the
+        /// spacing of any two placements and well over the difference rounding makes between two scenes' copies of one
+        /// placement's transform.</summary>
+        public const float PlaceCellsPerMetre = 64f;
+
+        private readonly Lock m_gate = new();
+        private readonly Dictionary<(UInt128 Shape, long Place), int> m_tiers = [];
+        private long m_revision;
+
+        /// <summary>Returns the cell a group's world-space box is centred in, as one number: the place a group stands
+        /// at, alike for the same placement in two scenes of one world and apart for two copies of one shape.</summary>
+        /// <param name="center">The centre of the group's box, in world space.</param>
+        /// <returns>The place.</returns>
+        public static long PlaceOf(System.Numerics.Vector3 center) {
+            static long Cell(float value) => (((long)MathF.Round(x: (value * PlaceCellsPerMetre))) & 0x1FFFFFL);
+
+            return ((Cell(value: center.X) | (Cell(value: center.Y) << 21)) | (Cell(value: center.Z) << 42));
+        }
+
+        /// <summary>Gets a count that moves each time the board is published.</summary>
+        public long Revision => Interlocked.Read(location: ref m_revision);
+
+        /// <summary>Replaces the board's tiers with those a publisher lists.</summary>
+        /// <typeparam name="TState">The publisher's state.</typeparam>
+        /// <param name="state">The publisher's state.</param>
+        /// <param name="list">Lists each group's shape, place and tier through the callback it is handed.</param>
+        public void Publish<TState>(TState state, Action<TState, Action<UInt128, long, int>> list) {
+            lock (m_gate) {
+                m_tiers.Clear();
+                list(arg1: state, arg2: (shape, place, tier) => {
+                    ref var held = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_tiers, exists: out var exists, key: (shape, place));
+
+                    held = (exists ? Math.Min(val1: held, val2: tier) : tier);
+                });
+                _ = Interlocked.Increment(location: ref m_revision);
+            }
+        }
+        /// <summary>Returns the tier the publisher draws a group at.</summary>
+        /// <param name="shape">The group's shape.</param>
+        /// <param name="place">The group's place (<see cref="PlaceOf"/>).</param>
+        /// <param name="tier">The tier, when this returns <see langword="true"/>.</param>
+        /// <returns><see langword="false"/> where the publisher draws no group of the shape at the place.</returns>
+        public bool TryGet(UInt128 shape, long place, out int tier) {
+            lock (m_gate) { return m_tiers.TryGetValue(key: (shape, place), value: out tier); }
+        }
+    }
+
+    // The trace judge's verdicts every bake holding the library reads and gives, by bake identity and the two
+    // geometries: a verdict is a function of the two meshes and the judge alone, so a floor one residency judged is
+    // judged for every other, and the store keeps it between runs.
+    private readonly ConcurrentDictionary<(UInt128 Identity, SdfMeshGeometry Floor, SdfMeshGeometry Finer), bool> m_verdicts = new();
+
+    /// <summary>Returns the trace judge's verdict on a floor and a finer mesh of one group, where a bake holding the
+    /// library gave it in this run or the store kept it from an earlier one.</summary>
+    /// <param name="identity">The identity of the bake that meshed both meshes.</param>
+    /// <param name="floor">The floor's geometry.</param>
+    /// <param name="finer">The finer mesh's geometry.</param>
+    /// <returns>Whether the floor was admitted, or <see langword="null"/> when no verdict on the pair is known.</returns>
+    /// <remarks>Reads the judge's code identity (<see cref="SdfMeshTraceJudge.CodeIdentity"/>), whose first read walks
+    /// the running build's modules: call it off the frame's thread.</remarks>
+    internal bool? TraceVerdict(UInt128 identity, SdfMeshGeometry floor, SdfMeshGeometry finer) {
+        if (m_verdicts.TryGetValue(key: (identity, floor, finer), value: out var known)) { return known; }
+        if (Disk?.TraceVerdict(finer: finer, floor: floor, identity: identity, judge: SdfMeshTraceJudge.CodeIdentity) is not { } kept) { return null; }
+        _ = m_verdicts.TryAdd(key: (identity, floor, finer), value: kept);
+
+        return kept;
+    }
+    /// <summary>Keeps the trace judge's verdict on a floor and a finer mesh for every bake holding the library, and in
+    /// <see cref="Disk"/> between runs.</summary>
+    /// <param name="identity">The identity of the bake that meshed both meshes.</param>
+    /// <param name="floor">The floor's geometry.</param>
+    /// <param name="finer">The finer mesh's geometry.</param>
+    /// <param name="admitted">The verdict.</param>
+    internal void KeepTraceVerdict(UInt128 identity, SdfMeshGeometry floor, SdfMeshGeometry finer, bool admitted) {
+        if (m_verdicts.TryAdd(key: (identity, floor, finer), value: admitted)) { Disk?.KeepTraceVerdict(admitted: admitted, finer: finer, floor: floor, identity: identity, judge: SdfMeshTraceJudge.CodeIdentity); }
+    }
     /// <summary>Gets the counts of the groups planned again as a frame input moved (<see cref="SdfMeshInputs"/>) every bake
     /// holding the library counts into, so one source reads a presentation's residencies together.</summary>
     public WorkCounterSet Inputs { get; } = SdfMeshInputs.Counters();
@@ -130,7 +223,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
                 running.Recount();
                 return running;
             }
-            if (m_held.Contains(hash: (identity, geometry))) {
+            if (m_held.Contains(hash: (identity, geometry)) || Revive(key: (identity, geometry))) {
                 waiter = new SdfMeshBakeShare.Waiter(bake: bake, group: group);
                 landed = true;
                 return new SdfMeshBakeShare(bake: bake, geometry: geometry, identity: identity) { Resolved = true };
@@ -252,7 +345,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     internal SdfMesh CopyUnstored(SdfMesh mesh) => mesh.NativeCopy(Allocator, Account);
 
     private bool HoldsAny(SdfMeshGeometry geometry, UInt128 identity) {
-        lock (m_gate) { return m_held.Contains(hash: (identity, geometry)); }
+        lock (m_gate) { return (m_held.Contains(hash: (identity, geometry)) || Revive(key: (identity, geometry))); }
     }
 
     /// <summary>Takes the latest mesh the library holds of a dynamic group's form, baked at whatever pose its other slots
@@ -414,6 +507,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         refused = null;
 
         lock (m_gate) {
+            if (!m_held.Contains(hash: key)) { _ = Revive(key: key); }
             if (!m_held.TryGet(hash: key, value: out var held) || (held.Variants.Count == 0)) {
                 mesh = null;
                 return false;
@@ -464,7 +558,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
         lock (m_gate) {
             if (form is { } shapes) { SetForm(form: shapes, geometry: geometry, identity: identity); }
-            if (m_held.Contains(hash: key)) { return false; }
+            if (m_held.Contains(hash: key) || Revive(key: key)) { return false; }
             Admit(held: new Held(geometry: geometry, identity: identity, library: this, variants: [new Variant(Materials: materials, Mesh: mesh.Acquire(cached: true))]) { Bytes = mesh.StorageBytes });
 
             return true;
@@ -483,12 +577,57 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     }
     // Drops a geometry's cache claims, its pending read and the forms it answers, under the gate.
     private void Evict((UInt128 Identity, SdfMeshGeometry Geometry) key) => m_held.Remove(hash: key);
+
+    // The geometries the cache let go of (its budget, or a trim) whose meshes a residency or the mesh region may still
+    // hold, each with the meshes the cache held for it and no claim on any. Invariant: one geometry under one bake
+    // identity has one mesh in the process for as long as anything holds it. The cache's budget bounds what the library
+    // itself keeps alive, never what it knows: a take of a geometry it let go of finds the living mesh here (Revive)
+    // instead of decoding the store's entry into a second one, which a second residency of the same world would then
+    // hold beside the first's, in host memory and in the mesh region. Revive is the one door, which every answer about
+    // whether the library holds a geometry passes (TryTake, HoldsAny, Share, Hold). Under m_gate.
+    private readonly Dictionary<(UInt128 Identity, SdfMeshGeometry Geometry), Held> m_let = [];
+    // Whether a geometry is leaving because its store entry is lost (Lose), so no later take may find its meshes.
+    private bool m_losing;
+    private long m_revived;
+
+    /// <summary>Gets how many times a take found the living mesh of a geometry the cache had let go of, in place of
+    /// decoding the store's entry again.</summary>
+    public long Revived => Interlocked.Read(location: ref m_revived);
+
+    // Takes a geometry the cache let go of back into it, when the first mesh it held for the geometry still lives: that
+    // mesh and each renumbered mesh still living are claimed again. False when the cache never held it, or its first
+    // mesh has gone, and the caller reads the store. Under m_gate.
+    private bool Revive((UInt128 Identity, SdfMeshGeometry Geometry) key) {
+        if (!m_let.Remove(key: key, value: out var let)) { return false; }
+        if (m_held.Contains(hash: key)) { return true; }
+        if (!let.Variants[0].Mesh.TryAcquire(cached: true)) { return false; }
+
+        var variants = new List<Variant>(capacity: let.Variants.Count) { let.Variants[0] };
+        var bytes = let.Variants[0].Mesh.StorageBytes;
+
+        for (var index = 1; (index < let.Variants.Count); index++) {
+            if (!let.Variants[index].Mesh.TryAcquire(cached: true)) { continue; }
+            variants.Add(item: let.Variants[index]);
+            bytes += let.Variants[index].Mesh.StorageBytes;
+        }
+        _ = Interlocked.Increment(location: ref m_revived);
+        Admit(held: new Held(geometry: key.Geometry, identity: key.Identity, library: this, variants: variants) { Bytes = bytes });
+
+        return m_held.Contains(hash: key);
+    }
     // What leaving the cache takes with a geometry, run by the cache under the gate.
     private void Release(Held held) {
         var key = (held.Identity, held.Geometry);
 
         foreach (var variant in held.Variants) { variant.Mesh.Release(cached: true); }
         _ = m_reads.TryRemove(key: key, value: out _);
+        if (!m_losing && (held.Variants.Count > 0)) {
+            m_let[key] = held;
+            // The meshes nothing holds any more leave the table once it has grown well past what the cache holds.
+            if (m_let.Count > ((4 * m_held.Count) + 4096)) {
+                foreach (var (gone, entry) in m_let) { if (entry.Variants[0].Mesh.IsReleased) { _ = m_let.Remove(key: gone); } }
+            }
+        }
         if (m_clearing) { return; }
         if (m_formsOf.Remove(key: key, value: out var forms)) {
             foreach (var form in forms) { _ = m_forms.Remove(key: (key.Identity, form)); }
@@ -521,7 +660,11 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <param name="identity">The bake identity it was held under.</param>
     /// <param name="reason">Why the restore failed, for the log.</param>
     internal void Lose(SdfMeshGeometry geometry, UInt128 identity, string reason) {
-        lock (m_gate) { Evict(key: (identity, geometry)); }
+        lock (m_gate) {
+            m_losing = true;
+            try { Evict(key: (identity, geometry)); } finally { m_losing = false; }
+            _ = m_let.Remove(key: (identity, geometry));
+        }
         var lost = Interlocked.Increment(location: ref m_lostRevision);
 
         // An evicted set loses every geometry it held at once: the first and each doubling are named.

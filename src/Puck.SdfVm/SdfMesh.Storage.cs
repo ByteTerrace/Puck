@@ -385,7 +385,14 @@ public sealed partial record SdfMesh {
         m_levelledTriangleCount = source.m_levelledTriangleCount;
         m_payload = payload;
         m_restorable = source.m_restorable;
+        GeometrySource = (source.GeometrySource ?? source);
     }
+
+    /// <summary>Gets the mesh whose positions, normals, indices and members this mesh shares, for a mesh renumbered for
+    /// another program's material ids (<see cref="RenumberNative"/>): the two differ in their triangle materials alone,
+    /// so the presentation's mesh region places this one as its materials and draws its geometry from the other's words
+    /// (<see cref="SdfMeshRegion.PlacedWordsOf"/>). <see langword="null"/> for a mesh that owns its geometry.</summary>
+    public SdfMesh? GeometrySource { get; }
 
     // A palette variant shares the original immutable geometry under an explicit source claim. Only its remapped
     // material arrays are new physical allocations; renumbering must not duplicate positions, normals or indices, and a

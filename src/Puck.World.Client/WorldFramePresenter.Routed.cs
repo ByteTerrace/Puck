@@ -21,6 +21,21 @@ public sealed partial class WorldFramePresenter {
 
     private SdfFrame? m_dressedFrame;
     private readonly SdfFrame.Writer m_frameWriter = new();
+    // The dressed frame's views as demand points for a second scene of the same world: every view this presentation
+    // renders here, each with the height its sizes are measured in, since its region places it in this frame's output.
+    private readonly List<SdfViewSnapshot> m_hostDemandViews = [];
+    private Func<IReadOnlyList<SdfViewSnapshot>>? m_hostDemand;
+    private Func<IReadOnlyList<SdfViewSnapshot>> HostDemand => (m_hostDemand ??= () => m_hostDemandViews);
+
+    // Latches the dressed frame's views as demand points (m_hostDemandViews), at the output height the frame is dressed
+    // for.
+    private void LatchHostDemand(IReadOnlyList<SdfViewSnapshot> views, uint height) {
+        m_hostDemandViews.Clear();
+        foreach (var view in views) {
+            if (view.Elsewhere || !(view.Region.Height > 0f)) { continue; }
+            m_hostDemandViews.Add(item: ((view.DemandHeight > 0f) ? view : (view with { DemandHeight = MathF.Max(x: 1f, y: (view.Region.Height * height)) })));
+        }
+    }
 
     /// <summary>Returns the scene of the world a seat was presented in as the last Dress latched it, and its view's index
     /// among that scene's views, so a query through the seat's view (a surface under its pointer) reads the world the
@@ -90,16 +105,20 @@ public sealed partial class WorldFramePresenter {
     /// <param name="mirror">The mirror of the session whose stream the scene draws.</param>
     /// <param name="authority">The identity of the world the session observes.</param>
     /// <param name="name">The scene's own name, unique among the presentation's scenes.</param>
+    /// <param name="presented">Whether the world the session observes is the one this presentation's own frame draws,
+    /// so the scene plans its meshes at this frame's demand too (<see cref="WorldRoutedScene.HostDemand"/>).</param>
     /// <returns>The window, which its holder frames each frame and disposes when it closes.</returns>
     /// <remarks>Call it on the frame thread. It enters the next presenter latch; until then its index is -1.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="mirror"/> is <see langword="null"/>.</exception>
-    public WorldRoutedWindow AttachSharedWindow(WorldSessionMirror mirror, string authority, string name) {
+    public WorldRoutedWindow AttachSharedWindow(WorldSessionMirror mirror, string authority, string name, bool presented = false) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
         if (!m_routedScenes.TryGetValue(key: mirror, value: out var scene)) {
             scene = NewScene(authority: authority, bodyColor: mirror.BodyColor, endpoint: null, key: mirror, mirror: mirror, name: name);
             m_routedScenes.Add(key: mirror, value: scene);
         }
+        scene.HostDemand = (presented ? HostDemand : null);
+        scene.HostWorld = (presented ? this : null);
 
         return scene.Attach();
     }

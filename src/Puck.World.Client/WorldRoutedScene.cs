@@ -137,6 +137,16 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     public int ViewCount => m_views.Count;
     /// <summary>Gets how many windows are attached to the scene.</summary>
     public int WindowCount => m_windows.Count;
+    /// <summary>Gets or sets the demand of the presentation's own frame, for a scene that is a second scene of the world
+    /// that frame draws: the views the presentation renders that world through, each with the height its sizes are
+    /// measured in. The scene's frames carry them as demand points alone (<see cref="SdfFrameContent.DemandViews"/>), so
+    /// the scene plans each group at the tier the presentation's own residency draws it at and the two name the same
+    /// meshes. <see langword="null"/>, the default, for a scene of any other world.</summary>
+    public Func<IReadOnlyList<SdfViewSnapshot>>? HostDemand { get; set; }
+    /// <summary>Gets or sets what names the world the presentation's own frame draws, where this scene is a second scene
+    /// of it (<see cref="HostDemand"/>): the scene's frames carry it (<see cref="SdfFrameContent.DemandWorld"/>), so its
+    /// bake draws each group at the tier the presentation's own residency draws it at.</summary>
+    public object? HostWorld { get; set; }
     /// <summary>Gets or sets what films the world's cameras into each dressed frame: handed the frame's views, the seats'
     /// and windows' first, it adds a view of each camera of the world a screen shows, at an index the caller records.
     /// <see langword="null"/>, the default, films none.</summary>
@@ -234,6 +244,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
         // is rated by its own. The scene also takes the boot presentation's clock and lockstep.
         var host = m_hostFrame();
         var content = (frame.Content with { Views = m_frameViews });
+
+        if ((HostWorld is { } world) && (HostDemand?.Invoke() is { Count: > 0 } demand)) { content = (content with { DemandViews = demand, DemandWorld = world }); }
 
         if (host is not null) {
             content = (content with {

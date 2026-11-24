@@ -265,7 +265,9 @@ public sealed class WorldReleaseCoordinator {
     /// anywhere but its metadata (<see cref="WorldReleaseMetadataTransition.ChangesOutsideMetadata"/>) has no admitted
     /// preservation rule, and hosted data is scratch until its owner says otherwise, so the deployment starts its target
     /// fresh (<see cref="BeginResetAsync"/>) instead of refusing. A metadata-only change carries state through the
-    /// metadata transition. Worlds whose definition pins are equal are not read.</summary>
+    /// metadata transition. Worlds whose definition pins are equal are not read. A pair that is not structurally
+    /// compatible (<see cref="WorldReleaseCompatibility.TryCheckStructuralCompatibility"/>: another world inventory,
+    /// persistence or peer contract, or packaged pins) resets for the same reason.</summary>
     /// <param name="archive">The verified package reader holding both manifests' definition files.</param>
     /// <param name="source">The active release.</param>
     /// <param name="target">The release being deployed.</param>
@@ -279,6 +281,10 @@ public sealed class WorldReleaseCoordinator {
         ArgumentNullException.ThrowIfNull(archive);
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(target);
+        // A pair whose inventory, contracts or packaged pins differ carries no state by any rule, so it resets too.
+        if (!WorldReleaseCompatibility.TryCheckStructuralCompatibility(candidate: target, previous: source, reason: out var structural)) {
+            return $"the release cannot carry state across its pair: {structural}";
+        }
         foreach (var key in source.DefinitionFiles.Keys.Order(comparer: StringComparer.Ordinal)) {
             if (
                 !target.DefinitionFiles.TryGetValue(key: key, value: out var targetFile) ||

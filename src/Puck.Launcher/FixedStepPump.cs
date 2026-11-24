@@ -278,12 +278,14 @@ public sealed class FixedStepPump {
             dropped = 0UL;
 
             if (gate == StepGate.RateChanged) {
+                m_burstCostTicks = 0UL;
                 break;
             }
 
             if (gate == StepGate.Withheld) {
                 CaptureOriginTicks += heldTicks;
                 m_accumulatorTicks -= heldTicks;
+                m_burstCostTicks = 0UL;
 
                 break;
             }
@@ -293,32 +295,11 @@ public sealed class FixedStepPump {
             // No step is waited for: one left executing ends the call, and the steps due behind it begin once it is
             // collected, since the next step's input needs its results.
             if (!Step(collection: StepCollection.Polls, stepTicks: width)) { break; }
-            m_accumulatorTicks -= Math.Min(m_accumulatorTicks, width);
-            m_burstCostTicks += m_lastStepCostTicks;
             stepCount++;
 
-            // A step that owes the host a frame (a capture armed for its tick) ends the burst here, keeping the
-            // time still due: the host composes the frame showing this tick, and its next call resumes the catch-up.
-            if (m_simulation.AwaitsFrame) {
-                break;
-            }
+            var spent = (m_wallClock?.NowTicks ?? burstStartTicks) - burstStartTicks;
 
-            if (m_accumulatorTicks < stepTicks) {
-                m_burstCostTicks = 0UL;
-            } else if (
-                (m_wallClock is { } wallClock) &&
-                (((wallClock.NowTicks - burstStartTicks) >= stepTicks) || (m_burstCostTicks >= stepTicks))
-            ) {
-                var shedTicks = ((m_accumulatorTicks / stepTicks) * stepTicks);
-
-                m_timeline?.NoteShed(steps: (shedTicks / stepTicks));
-
-                CaptureOriginTicks += shedTicks;
-                m_accumulatorTicks -= shedTicks;
-                m_burstCostTicks = 0UL;
-
-                break;
-            }
+            if (!FinishPacedStep(width: width, stepTicks: stepTicks, rate: ratePerSecond, spent: spent)) { break; }
         }
 
         return stepCount;
@@ -415,14 +396,38 @@ public sealed class FixedStepPump {
         }
 
         var width = m_pendingContext.StepTicks;
+        var rate = m_simulation.RatePerSecond;
 
         if (!Step(collection: StepCollection.Polls, stepTicks: width)) {
             return false;
         }
-        m_accumulatorTicks -= Math.Min(m_accumulatorTicks, width);
-        m_burstCostTicks += m_lastStepCostTicks;
+        _ = FinishPacedStep(width: width, stepTicks: width, rate: rate, spent: 0UL);
 
         return true;
+    }
+
+    // A burst spans only outstanding whole steps. Both ways of collecting a paced step settle that debt here so
+    // a step collected while the host sleeps cannot charge a later, unrelated burst.
+    private bool FinishPacedStep(ulong width, ulong stepTicks, uint rate, ulong spent) {
+        m_accumulatorTicks -= Math.Min(m_accumulatorTicks, width);
+        if ((m_accumulatorTicks < stepTicks) || (m_simulation.RatePerSecond != rate)) {
+            m_burstCostTicks = 0UL;
+            return false;
+        }
+        m_burstCostTicks += m_lastStepCostTicks;
+        // A captured tick must get its frame before the host may spend or discard more due steps.
+        if (m_simulation.AwaitsFrame) { return false; }
+        if ((m_wallClock is null) || ((spent < stepTicks) && (m_burstCostTicks < stepTicks))) { return true; }
+
+        var shed = m_accumulatorTicks / stepTicks;
+        var shedTicks = shed * stepTicks;
+
+        m_timeline?.NoteShed(steps: shed);
+        CaptureOriginTicks += shedTicks;
+        m_accumulatorTicks -= shedTicks;
+        m_burstCostTicks = 0UL;
+
+        return false;
     }
 
     /// <summary>Waits for the step in progress and completes it, as the host's run ends: a step left executing beside

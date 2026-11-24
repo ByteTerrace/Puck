@@ -50,6 +50,11 @@ public sealed class SdfMeshStore {
     public const string Extension = ".mesh";
     private const string CheckpointExtension = ".bake";
     private const string SampleExtension = ".samples";
+    // The trace judge's verdicts on a floor and a finer mesh (SdfMeshTraceJudge), one one-byte entry a pair beside the
+    // meshes in their bake identity's set, its kind the verdict, so a listing of the set answers every pair with no
+    // file read and a verdict leaves the store with the meshes it is about.
+    private const string AdmittedExtension = ".admitted";
+    private const string DeclinedExtension = ".declined";
 
     private const int ChecksumBytes = 16;
     private const int HeaderBytes = SdfMeshStoreCodec.HeaderBytes;
@@ -495,6 +500,54 @@ public sealed class SdfMeshStore {
     private static bool IsMeshEntry(string name) => name.EndsWith(value: Extension, comparisonType: StringComparison.Ordinal);
     private static bool IsIntermediateEntry(string name) =>
         name.EndsWith(value: CheckpointExtension, comparisonType: StringComparison.Ordinal) || name.EndsWith(value: SampleExtension, comparisonType: StringComparison.Ordinal);
+    // Whether an entry kind lives in its bake identity's set of finished meshes, rather than among the intermediates.
+    private static bool IsFinishedKind(string extension) =>
+        (string.Equals(a: extension, b: Extension, comparisonType: StringComparison.Ordinal) || string.Equals(a: extension, b: AdmittedExtension, comparisonType: StringComparison.Ordinal) ||
+        string.Equals(a: extension, b: DeclinedExtension, comparisonType: StringComparison.Ordinal));
+
+    /// <summary>Returns the trace judge's kept verdict on a floor and a finer mesh of one group
+    /// (<see cref="SdfMeshTraceJudge.Admits"/>), which is a function of the two meshes and the judge alone and so is
+    /// derived once and kept, as a mesh is. Answered from the listing of the bake identity's set once it stands, and
+    /// by one look at the file system until then.</summary>
+    /// <param name="identity">The identity of the bake that meshed both meshes.</param>
+    /// <param name="judge">The judge's code identity (<see cref="SdfMeshTraceJudge.CodeIdentity"/>).</param>
+    /// <param name="floor">The floor's geometry.</param>
+    /// <param name="finer">The finer mesh's geometry.</param>
+    /// <returns>Whether the floor was admitted, or <see langword="null"/> when the store keeps no verdict on the pair.</returns>
+    internal bool? TraceVerdict(UInt128 identity, UInt128 judge, SdfMeshGeometry floor, SdfMeshGeometry finer) {
+        var key = VerdictKeyOf(finer: finer, floor: floor, judge: judge);
+
+        if (HoldsEntry(extension: AdmittedExtension, identity: identity, key: key)) { return true; }
+        return (HoldsEntry(extension: DeclinedExtension, identity: identity, key: key) ? false : null);
+    }
+    /// <summary>Keeps the trace judge's verdict on a floor and a finer mesh, on the store's writer; a writer with no room
+    /// keeps nothing, and a later run judges the pair again.</summary>
+    /// <param name="identity">The identity of the bake that meshed both meshes.</param>
+    /// <param name="judge">The judge's code identity.</param>
+    /// <param name="floor">The floor's geometry.</param>
+    /// <param name="finer">The finer mesh's geometry.</param>
+    /// <param name="admitted">The verdict.</param>
+    internal void KeepTraceVerdict(UInt128 identity, UInt128 judge, SdfMeshGeometry floor, SdfMeshGeometry finer, bool admitted) {
+        var key = VerdictKeyOf(finer: finer, floor: floor, judge: judge);
+        var extension = (admitted ? AdmittedExtension : DeclinedExtension);
+
+        _ = WriteLater(bytes: 0L, behind: Behind.Drop, write: () => KeepIfWritten(
+            WriteEntry(PathOf(identity, key, extension), admitted, static (output, verdict) => output.WriteByte(value: ((byte)(verdict ? 1 : 0))), queued: true), identity, extension, key));
+    }
+    private bool HoldsEntry(UInt128 identity, UInt128 key, string extension) =>
+        (EntrySetOf(identity, extension).Holds(key) ?? File.Exists(path: PathOf(identity, key, extension)));
+    // The key of a verdict: the judge's code and the two geometries, floor first.
+    private static UInt128 VerdictKeyOf(UInt128 judge, SdfMeshGeometry floor, SdfMeshGeometry finer) {
+        Span<byte> key = stackalloc byte[50];
+
+        BinaryPrimitives.WriteUInt128LittleEndian(destination: key, value: judge);
+        BinaryPrimitives.WriteUInt128LittleEndian(destination: key[16..], value: floor.Hash);
+        key[32] = ((byte)(floor.Dynamic ? 1 : 0));
+        BinaryPrimitives.WriteUInt128LittleEndian(destination: key[33..], value: finer.Hash);
+        key[49] = ((byte)(finer.Dynamic ? 1 : 0));
+
+        return XxHash128.HashToUInt128(source: key);
+    }
 
     internal bool MayHoldCheckpoint(UInt128 identity, SdfMeshGeometry geometry) => EntrySetOf(identity, CheckpointExtension).MayHold(KeyOf(identity, geometry));
 
@@ -612,7 +665,7 @@ public sealed class SdfMeshStore {
         var set = new EntrySet();
 
         if (!m_entrySets.TryAdd((identity, extension), set)) { return m_entrySets[(identity, extension)]; }
-        var directory = Path.Combine(string.Equals(a: extension, b: Extension, comparisonType: StringComparison.Ordinal) ? Directory : IntermediateDirectory, identity.ToString(format: "x32", provider: null));
+        var directory = Path.Combine(IsFinishedKind(extension: extension) ? Directory : IntermediateDirectory, identity.ToString(format: "x32", provider: null));
 
         // A cold store has no directory, which one look settles; a directory is listed on the pool, and the set answers
         // "may hold" until the listing stands.
@@ -868,7 +921,7 @@ public sealed class SdfMeshStore {
         extension.CopyTo(destination: name[32..]);
 
         return Path.Join(
-            path1: (string.Equals(a: extension, b: Extension, comparisonType: StringComparison.Ordinal) ? Directory : IntermediateDirectory),
+            path1: (IsFinishedKind(extension: extension) ? Directory : IntermediateDirectory),
             path2: set,
             path3: name[..(32 + extension.Length)]);
     }
