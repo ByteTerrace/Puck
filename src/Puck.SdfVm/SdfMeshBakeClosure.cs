@@ -2,8 +2,9 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// The C# a mesh bake executes, read from a build's assemblies: every method the bake's own code reaches through calls,
-/// delegates, the overrides of the types it constructs and the implementations of the abstract members it calls, across
-/// the <c>Puck</c> assemblies, each hashed by its IL with every token written as the member it names rather than its
+/// delegates and the overrides of the types it constructs, across the <c>Puck</c> assemblies (a call through an abstract
+/// or interface member reaches only the implementations the walk constructs, so a job lane the bake posts to does not
+/// bring in every other unit posted to lanes), each hashed by its IL with every token written as the member it names rather than its
 /// number, with its locals, its exception regions and the field data it loads; and the layout of every type that code
 /// names. Its <see cref="Hash"/> is the code half of the final bake identity
 /// (<see cref="SdfMeshBakeIdentity.Code"/>). Sampling, contouring and simplification also have their own reachable code
@@ -15,6 +16,7 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfMeshBakeReport"/>), which words, counts and writes what the bake says about itself and so changes no
 /// mesh, however its text or counters change; at the GPU region and its owed
 /// runs and bake-input transport, which allocate and carry a table's words rather than choose them, as the driver does; at
+/// host waits and work counters, which pace when the bake's work runs and count it, never what it makes; at
 /// memory accounting and storage (the process memory account and the machine's free memory, which pace when a group is
 /// admitted to hold its final lattice, never what it meshes, and the allocators and owned buffers that hold the words the
 /// bake's own code writes and reads), as the runtime's arrays are; at the kernels' interfaces and
@@ -54,6 +56,12 @@ public sealed class SdfMeshBakeClosure {
     ];
     private static readonly HashSet<string> StopTypes = new(collection: [
         "Puck.Abstractions.CacheRetention",
+        // Work counters count what the bake did and waits pace when it runs; neither changes what it makes.
+        "Puck.Abstractions.Counting.WorkClass",
+        "Puck.Abstractions.Counting.WorkCount",
+        "Puck.Abstractions.Counting.WorkCounterSet",
+        "Puck.Abstractions.Counting.WorkKind",
+        "Puck.Abstractions.Counting.WorkKindRegistry",
         "Puck.Abstractions.Gpu.GpuRegion",
         "Puck.Abstractions.Gpu.GpuUploadRuns",
         // Memory accounting and storage: admission paces when a group holds its final lattice, never what it meshes, and a
@@ -65,6 +73,11 @@ public sealed class SdfMeshBakeClosure {
         "Puck.Abstractions.Memory.RentedArrays",
         "Puck.Abstractions.Memory.RentedArrays/Lease`1",
         "Puck.Abstractions.Memory.RentedScope",
+        "Puck.Abstractions.Waiting.HostWaits",
+        "Puck.Abstractions.Waiting.WaitConsumer",
+        "Puck.Abstractions.Waiting.WaitDeadline",
+        "Puck.Abstractions.Waiting.WaitReason",
+        "Puck.Abstractions.Waiting.WaitRecord",
         "Puck.Hosting.HostMemory",
         "Puck.Hosting.Jobs.MemoryAccount",
         "Puck.SdfVm.SdfKernelInterfaces",

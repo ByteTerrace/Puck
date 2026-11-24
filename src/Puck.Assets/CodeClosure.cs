@@ -169,8 +169,6 @@ public sealed partial class CodeClosure {
         // The fields the closure's code loads, stores or takes the address of, and the types whose layout counts only those.
         private readonly HashSet<(Module, FieldDefinitionHandle)> m_touched = [];
         private readonly List<(Module, TypeDefinitionHandle)> m_byTouch = [];
-        // Each type of the indexed assemblies by the types it derives from or implements directly.
-        private readonly Dictionary<(Module, TypeDefinitionHandle), List<(Module, TypeDefinitionHandle)>> m_derived = [];
         // The member each entity was first reached from, and the member being hashed, which reaches whatever it names.
         private readonly Dictionary<(Module, EntityHandle), string> m_from = [];
         private string m_current = "root";
@@ -187,7 +185,6 @@ public sealed partial class CodeClosure {
             foreach (var (assembly, type, method) in roots) {
                 var module = (load(assembly) ?? throw new FileNotFoundException(message: $"'{directory}' holds no {assembly}.dll.", fileName: Path.Combine(path1: directory, path2: (assembly + ".dll"))));
 
-                Index(root: module);
                 Root(method: method, module: module, type: module.Types[CanonicalTypeName(name: type)]);
             }
             while ((m_methods.Count > 0) || (m_types.Count > 0)) {
@@ -224,32 +221,6 @@ public sealed partial class CodeClosure {
                 Root(method: null, module: module, type: nested);
             }
         }
-        // Loads every Puck assembly a root's references, transitively, and indexes each type under the types it derives
-        // from and implements, so a call to an abstract member reaches every implementation those assemblies hold.
-        private void Index(Module root) {
-            var pending = new Queue<Module>(collection: [root]);
-            var indexed = new HashSet<Module>();
-
-            while (pending.TryDequeue(result: out var module)) {
-                if (!indexed.Add(item: module) || m_indexed.Contains(item: module)) { continue; }
-                foreach (var handle in module.Metadata.AssemblyReferences) {
-                    if (load(module.Metadata.GetString(handle: module.Metadata.GetAssemblyReference(handle: handle).Name)) is { } referenced) { pending.Enqueue(item: referenced); }
-                }
-            }
-            foreach (var module in indexed.Where(predicate: m_indexed.Add).OrderBy(keySelector: static module => module.Name, comparer: StringComparer.Ordinal)) {
-                foreach (var handle in module.Metadata.TypeDefinitions) {
-                    var type = module.Metadata.GetTypeDefinition(handle: handle);
-
-                    foreach (var parent in type.GetInterfaceImplementations().Select(selector: implementation => module.Metadata.GetInterfaceImplementation(handle: implementation).Interface).Prepend(element: type.BaseType)) {
-                        if (!parent.IsNil && (Resolve(handle: parent, module: module) is { } resolved)) {
-                            if (!m_derived.TryGetValue(key: resolved, value: out var list)) { m_derived[resolved] = list = []; }
-                            list.Add(item: (module, handle));
-                        }
-                    }
-                }
-            }
-        }
-        private readonly HashSet<Module> m_indexed = [];
         // The Puck type a type token names, through a generic instantiation to its definition; null outside Puck.
         private (Module, TypeDefinitionHandle)? Resolve(Module module, EntityHandle handle) {
             var reader = module.Metadata;
@@ -301,7 +272,10 @@ public sealed partial class CodeClosure {
         }
         // A type whose instances the closure makes: its static constructor runs, and any override it or its base types
         // declare may run, through the runtime's interfaces as through Puck's, but a record's synthesized members, whose
-        // behavior its hashed layout decides.
+        // behavior its hashed layout decides. This is the only way a virtual call reaches an implementation: a call
+        // through an abstract or interface member runs on an instance some code made, so the members of the types the
+        // closure makes are every implementation such a call can reach, and a type that merely derives from the callee's
+        // (a job unit another caller posts to the same lane, an evaluator the walk never builds) joins nothing.
         private void Construct(Module module, TypeDefinitionHandle type) {
             if (!m_constructed.Add(item: (module, type))) { return; }
 
@@ -319,26 +293,6 @@ public sealed partial class CodeClosure {
         private static bool IsCompilerGenerated(Module module, CustomAttributeHandleCollection attributes) => attributes
             .Select(selector: handle => module.Metadata.GetCustomAttribute(handle: handle).Constructor)
             .Any(predicate: constructor => ((constructor.Kind == HandleKind.MemberReference) && (module.Metadata.GetMemberReference(handle: (MemberReferenceHandle)constructor).Parent is { Kind: HandleKind.TypeReference } parent) && module.Metadata.StringComparer.Equals(handle: module.Metadata.GetTypeReference(handle: (TypeReferenceHandle)parent).Name, value: "CompilerGeneratedAttribute")));
-        // A call to a virtual or abstract member of a Puck type reaches the members of its name in every type deriving from
-        // or implementing it.
-        private void Dispatch(Module module, MethodDefinitionHandle method) {
-            var definition = module.Metadata.GetMethodDefinition(handle: method);
-            var name = module.Metadata.GetString(handle: definition.Name);
-            var pending = new Queue<(Module, TypeDefinitionHandle)>(collection: (((definition.Attributes & MethodAttributes.Virtual) != 0) ? [(module, definition.GetDeclaringType())] : []));
-            var seen = new HashSet<(Module, TypeDefinitionHandle)>();
-
-            while (pending.TryDequeue(result: out var type)) {
-                foreach (var (derivedModule, derivedType) in ((seen.Add(item: type) && m_derived.TryGetValue(key: type, value: out var derived)) ? derived : [])) {
-                    pending.Enqueue(item: (derivedModule, derivedType));
-                    foreach (var candidate in derivedModule.Metadata.GetTypeDefinition(handle: derivedType).GetMethods()) {
-                        var candidateName = derivedModule.Metadata.GetString(handle: derivedModule.Metadata.GetMethodDefinition(handle: candidate).Name);
-
-                        if ((candidateName == name) || candidateName.EndsWith(value: ("." + name), comparisonType: StringComparison.Ordinal)) { Enqueue(method: candidate, module: derivedModule); }
-                    }
-                }
-            }
-        }
-
         // A value type's layout is the bytes its code moves, so it counts whole; any other type's layout counts the fields
         // the closure's code reads or writes (HashLayout, once the walk ends and every such field is known), and a field the
         // code never touches cannot change what it does.
@@ -456,7 +410,6 @@ public sealed partial class CodeClosure {
                         if (Stopped(module: resolved.Item1, type: declaring)) { return name; }
                         if ((code == OpCodes.Newobj) || resolved.Item1.Metadata.StringComparer.Equals(handle: definition.Name, value: ".ctor")) { Construct(module: resolved.Item1, type: declaring); }
                         if ((definition.Attributes & MethodAttributes.Static) != 0) { Initialize(module: resolved.Item1, type: declaring); }
-                        if ((code == OpCodes.Callvirt) || (code == OpCodes.Ldvirtftn)) { Dispatch(method: resolved.Item2, module: resolved.Item1); }
                     }
 
                     return name;
