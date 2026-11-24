@@ -35,7 +35,7 @@ public sealed partial class SdfWorldTables {
         if (
             (delta is { } known) &&
             ReferenceEquals(objA: known.To, objB: program) &&
-            ReferenceEquals(objA: known.From, objB: m_liveProgram)
+            known.LeadsFrom(program: m_liveProgram)
         ) {
             _ = m_programRegion.WriteRuns(
                 head: program.FieldWords,
