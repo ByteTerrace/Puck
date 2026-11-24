@@ -811,7 +811,7 @@ authored program (`SdfLightInputs.unseen`, tested in the generated
 traced light its surface's probes do not see, as it cannot for a light whose
 `reach` is zero. On that rule a tile leaves out every traced light the probes
 about none of its shaded pixels see (`sdfViewsTileLights`,
-`sdfViewsLightsSeen`). A directional, an untraced light (one that rides an
+`sdfViewsCellLightsSeen`, `sdfViewsPixelLightsSeen`). A directional, an untraced light (one that rides an
 anchor) and a screen are never left out this way: a directional's visibility is
 its cascades' wherever they hold the point, and the others have no bits.
 
@@ -823,10 +823,10 @@ from its records alone.
 
 **What enforces it, and where that stops.** A pixel's seen lights are a
 superset of the lights whose share is above zero at it: every light where no
-probe answers the pixel (its lights then go unoccluded), the record's `any`
-bits where its cell's representative serves it, and its own gather's corners
-otherwise (`sdfMeshLightAgreement`, the one loop the record's agreement and the
-pixel's read share). A light the tile left out is therefore unseen at every
+probe answers the pixel (its lights then go unoccluded), the `any` bits of
+every cell about its tile, whose representatives its pixels blend, and the
+`any` bits of the extra a pixel reads (`sdfMeshLightAgreement`, the one loop
+every slot's agreement comes from). A light the tile left out is therefore unseen at every
 pixel of it, and the door gives it no response, so the mask changes no pixel:
 a paused still of the painting room with the cull on and off differs by at most
 one level in a tenth of a percent of pixels, inside the difference between two
@@ -1780,15 +1780,21 @@ can still receive its measured light.
 **A view gathers once for what its pixels can show, across its cells and its
 frames.** The gather itself is the contract the CPU twin holds
 (`SdfMeshIrradiance.Gather`); how often a view runs it is presentation. The
-probe lookup gathers at one representative pixel of each 2×2 cell and shares
-the result with every pixel of the cell within a tolerance measured on the
-screen: two pixels along the surface (a pixel's footprint over the cosine at
-which the ray meets the surface, at most eight footprints) or the 5 cm normal
-bias where that is wider, half a pixel off the representative's tangent plane,
-and normals within about eleven degrees (`sdfViewsProbeTolerance`,
-`sdfViewsProbesCompatible`). A tolerance in metres alone would have every pixel
-of grazing or distant ground gather for itself, although a cell there shows
-light that varies over metres. Every view also keeps each representative's
+probe lookup gathers at one representative pixel of each cell of four pixels
+a side, and every pixel blends the representatives of the four cells about
+it: each by its bilinear share, weighed by how nearly the pixel lies on the
+representative's surface (`sdfProbeBlend`: off its tangent plane by no more
+than the 5 cm normal bias, a cell's pixels, or what a smooth surface turns by
+over the distance between the two, and normals within about eleven degrees).
+The volume's light varies over metres and a cell spans four pixels, so the
+blend loses nothing a view can show, and it leaves no cell's edge on a
+surface, which sharing one gather across a cell did. A pixel none of the four
+serves (a leaf against a wall, the far side of a crease) shares one of its
+cell's extras with the cell's other such pixels compatible with it
+(`sdfViewsProbesCompatible`), a gather taken at the first of them, so the
+blend never crosses a depth or crease edge the record shows. A tolerance in
+metres alone would have every pixel of grazing or distant ground gather for
+itself. Every view also keeps each representative's
 gather for its next render (`sdf-probe-history.hlsli`), a nested view
 (a portal, a window, a painting) at the extent it is shown at, so a secondary
 view's lookup costs what moved in it rather than its whole image each frame. A
@@ -1808,10 +1814,9 @@ move only where it read no stage another window's place decides and its level
 still holds the receiver inside one cage; a gather that met a missing probe is
 never kept, since the probe landing moves no serial. The blended light is read
 again every frame, so a relight shows at once. Views reads a traced light's
-probe visibility from the representative's record, which holds the light bits
-every measured corner sees and any sees with those corners' summed weight
-(`sdfViewsLightVisibility`), and visits the corners only for a light they
-disagree on. A glass pane is lit apart from the surface behind it, so the glass
+probe visibility from the slots its pixel blends, each of which holds the light
+bits every measured corner sees and any sees with those corners' summed weight
+and lists the lights they disagree on (`sdfViewsLightVisibility`). A glass pane is lit apart from the surface behind it, so the glass
 pass keeps its nearest faces' gathers in a history of its own on the same
 functions and test, one entry a cell written by the cell's first pixel; the
 glass pass draws nothing in a frame with no glass in view, and the render graph

@@ -27,15 +27,14 @@ static const uint SdfViewsProbeRemainderMeasured = (1u << 17u);
 
 // The tolerances a reused gather is held to at a receiver whose pixel spans `footprint` metres across its ray, met at
 // `cosine` (the absolute cosine between the ray and the receiver's geometric normal). In `x`, the reach it may lie from
-// the receiver: the normal bias, or two pixels measured along the surface where those are wider, since a cell's
-// representative stands up to a pixel's diagonal from any pixel of its cell and the preceding frame's a pixel further,
+// the receiver: the normal bias, or a cell and a half measured along the surface where that is wider, since the
+// representatives a pixel blends stand a cell apart about it and the preceding frame's stood anywhere in their cells,
 // and a pixel met at a grazing angle spans its footprint over the cosine along the surface (within SdfViewsProbeGrazing).
 // In `y`, its distance off the representative's tangent plane: SdfViewsProbePlane, or half a pixel where that is wider.
-// Where two pixels span more than the bias, a cell's pixels show the volume's light at the cell's own resolution on the
-// screen, as the representative already shows it for the pixels it serves, and the plane and facing tests still keep a
-// receiver from reading a gather across a crease or a depth edge.
+// Where that reach spans more than the bias, a kept gather serves a receiver at the lookup's own resolution on the
+// screen, and the plane and facing tests still keep a receiver from reading a gather across a crease or a depth edge.
 float2 sdfViewsProbeTolerance(float footprint, float cosine) {
-    return float2(max(SdfViewsProbeReach, ((2.0 * footprint) / max(cosine, SdfViewsProbeGrazing))), max(SdfViewsProbePlane, (0.5 * footprint)));
+    return float2(max(SdfViewsProbeReach, (((1.5 * float(SDF_VIEWS_PROBE_RATE)) * footprint) / max(cosine, SdfViewsProbeGrazing))), max(SdfViewsProbePlane, (0.5 * footprint)));
 }
 // Whether a receiver at `offset` from a representative whose normal is `representativeNormal`, with its own geometric
 // normal `normal`, may read the representative's gather (the head of this file): within the reach of `tolerance`

@@ -80,9 +80,9 @@ groupshared uint sdfViewsFilterShadows[SDF_VIEWS_FILTER_TILE_ENTRIES];
 groupshared float4 sdfViewsFilterFaces[SDF_VIEWS_FILTER_TILE_ENTRIES];
 // An entry's distance along its ray, which says which of two surfaces is the nearer.
 groupshared float sdfViewsFilterDepths[SDF_VIEWS_FILTER_TILE_ENTRIES];
-// An entry's keys, which the edge search compares and nothing else reads: its material, then its draw's object key
-// (SDF_MESH_OBJECT_KEY_SHIFT), with SdfViewsEdgeCut set where the entry seeds no edge. Neither names a draw, so two
-// chunks of one mesh have nothing to differ by.
+// An entry's keys, which the edge search compares and nothing else reads, as its visibility record holds them
+// (sdfVisibilityEdgeKeys): its material, then its draw's object key, with SdfViewsEdgeCut set where the entry seeds no
+// edge. Neither names a draw, so two chunks of one mesh have nothing to differ by, and the search reads no draw record.
 groupshared uint2 sdfViewsFilterKeys[SDF_VIEWS_FILTER_TILE_ENTRIES];
 // An entry that seeds no edge: one outside the image, and a hit beside its draw's clip plane, so a body cut by a
 // portal's glass draws no line along the cut.
@@ -210,18 +210,7 @@ void sdfViewsGatherFilter(SdfPixel p, bool shadows, bool edges) {
                 if (edges) {
                     face.w = (((SdfViewsEdgeDepth * p.pixelFootprint) * t) / max(abs(dot(face.xyz, direction)), SdfViewsEdgeGrazing));
 
-                    uint draw = sdfVisibilitySource(sdfVisibilityRecordBuffer[record + SdfVisibilityIdentityWord]);
-
-                    keys.x = sdfVisibilityRecordBuffer[record + SdfVisibilityMaterialWord];
-                    if (draw < passGroup.meshDraws) {
-                        uint meshRecord = sdfMeshRecord(draw);
-                        uint flags = sdfMeshRecordWord(meshRecord + SDF_MESH_FLAGS_WORD);
-
-                        keys.y = (flags >> SDF_MESH_OBJECT_KEY_SHIFT);
-                        if (((flags & SDF_MESH_CLIP_FLAG) != 0u) && (sdfMeshClipDistance(meshRecord, entry.xyz) < ((3.0 * p.pixelFootprint) * t))) {
-                            keys.y |= SdfViewsEdgeCut;
-                        }
-                    }
+                    keys = sdfVisibilityEdgeKeys(record);
                 }
             }
         }
