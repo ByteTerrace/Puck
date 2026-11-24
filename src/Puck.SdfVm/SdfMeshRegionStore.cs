@@ -634,6 +634,8 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
                 m_fitOwed = true;
             }
             if (!m_region.OwesMoves && !m_region.OwesCarry) { return false; }
+            // An upload slot whose upload has completed since the last service comes back before the take.
+            if ((m_freeUploadSlots.Count == 0) && (m_retired.Count > 0)) { m_retired.Poll(timeline: m_device.Services.QueueSubmitter.Timeline, release: static replaced => replaced.Dispose()); }
             if (!m_freeUploadSlots.TryPop(result: out var slot)) {
                 m_moveSlotMisses++;
                 return false;

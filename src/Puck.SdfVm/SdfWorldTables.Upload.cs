@@ -70,6 +70,25 @@ public sealed partial class SdfWorldTables {
         m_gpuWork.EndLeases(ringSlot: slot);
         m_uploadPreviousSlot = m_currentSlot;
         m_currentSlot = slot;
+
+        var recorder = m_gpu.Recorder;
+        var commandBuffer = m_commandPools[slot].CommandBufferHandle;
+
+        recorder.BeginCommandBuffer(commandBufferHandle: commandBuffer);
+        // The outer debug-marker group scoping this residency's upload (see DebugLabel); pixel-neutral.
+        recorder.BeginDebugGroup(
+            commandBufferHandle: commandBuffer,
+            label: DebugLabel
+        );
+        // The presentation's mesh region records what it owes that no landing job carries (a compaction's moves, a
+        // grown region's carry) ahead of this residency's passes, whichever residency's plan owed it. Invariant: the
+        // upload that carries the copies reaches the queue before every pass that reads the moved words, this residency's
+        // shadows and every view of the frame included. It is enforced here: uploads open on the frame thread in the
+        // order they are submitted (SdfWorldPasses.RendersScheduled opens and closes its fork in one order, and a
+        // residency staged alone opens, records and submits in turn), and the store's gate hands the copies to the first
+        // upload that opens after they were owed, so no upload submitted earlier draws a mesh at words a later one fills.
+        // Never record them in RecordUpload, which runs side by side with other residencies' recordings in no order.
+        m_meshStoreCopies = m_meshStore.RecordOwed(client: this, commandBuffer: commandBuffer, readers: RegionReaders, recorder: recorder);
     }
     /// <summary>Records the open upload into its ring slot's command list: the fillers' first transitions, the regions'
     /// copies, the lighting's and the world's shadow layers. It touches only these tables and the device's recorder, so
@@ -80,12 +99,7 @@ public sealed partial class SdfWorldTables {
         var recorder = m_gpu.Recorder;
         var commandBuffer = m_commandPools[slot].CommandBufferHandle;
 
-        recorder.BeginCommandBuffer(commandBufferHandle: commandBuffer);
-        // The outer debug-marker group scoping this residency's upload (see DebugLabel); pixel-neutral.
-        recorder.BeginDebugGroup(
-            commandBufferHandle: commandBuffer,
-            label: DebugLabel
-        );
+        // OpenUpload began the command list and recorded the mesh region's owed copies into it.
         if (m_fillersInitialized) {
             m_work.SkipPass(pass: FillersPass);
         } else {
@@ -99,13 +113,6 @@ public sealed partial class SdfWorldTables {
         if (!keepsMotion) {
             RecordPreviousTables(commandBuffer: commandBuffer, previousSlot: previousSlot);
         }
-        // The presentation's mesh region records what it owes that no landing job carries (a compaction's moves, a
-        // grown region's carry) ahead of this residency's passes, whichever residency's plan owed it. The store takes
-        // its gate, so residencies recording side by side record it once, in whichever upload reaches it first. That
-        // upload must reach the queue before any pass that reads the copies: it holds while every residency's upload
-        // of a frame is submitted (SdfWorldResidency.EndStage) before a view of that frame records.
-        m_meshStoreCopies = m_meshStore.RecordOwed(client: this, commandBuffer: commandBuffer, readers: RegionReaders, recorder: recorder);
-
         RecordRegionCopies();
         RecordMeshIrradiance(command: commandBuffer);
         if (!keepsMotion) {
