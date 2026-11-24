@@ -73,7 +73,8 @@ public sealed partial class WorldBody {
             VerticalFollowerSeeded: m_verticalFollowerSeeded,
             VerticalFollowerVelocityRaw: m_verticalFollower.VelocityRaw,
             VerticalVelocity: m_verticalVelocity,
-            VerticalVelocityRemainder: m_verticalVelocityAccumulator.Remainder
+            VerticalVelocityRemainder: m_verticalVelocityAccumulator.Remainder,
+            DirectVerticalVelocity: m_directVerticalVelocity
         );
         clocks = new(
             IdleSleepGravity: IdleSleepGravity,
@@ -266,6 +267,7 @@ public sealed partial class WorldBody {
 
         m_planarVelocity = motion.PlanarVelocity;
         m_verticalVelocity = motion.VerticalVelocity;
+        m_directVerticalVelocity = motion.DirectVerticalVelocity;
         m_drivePitch = motion.DrivePitch;
         m_overlayVelocity = motion.OverlayVelocity;
         m_timedMove = (CanStartTimedMove ? motion.TimedMove : default);

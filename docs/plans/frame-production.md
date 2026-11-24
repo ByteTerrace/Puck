@@ -32,9 +32,11 @@ In order, on the frame thread unless a step says otherwise:
    (`SdfWorldPasses.BeginFrame`). Each residency a reader of the frame names
    then captures (`SdfWorldPasses.PrepareRead`), in rounds, since a capture
    can place a window that names another reader.
-3. **Pack.** Once the readers are known, every captured residency packs
+3. **Pack.** The host's pack begins once it has captured and runs on its own
+   lane beside the readers' rounds (`SdfWorldResidency.PackAhead`). Once the
+   readers are known, every other captured residency packs
    (`SdfWorldPasses.ReadsPrepared`): one residency a partition of one fork of
-   the job pool.
+   the job pool, and the host's pack is joined.
 4. **Schedule**, then **prepare**: the residencies the schedule renders record
    their uploads (`SdfWorldPasses.RendersScheduled`), again one residency a
    partition, and submit them in schedule order.
@@ -73,9 +75,10 @@ lighting and exposure, and keeps to the residency's own state, so the frame
 thread forks it across the pool, one residency a partition, and joins.
 
 **Their uploads record side by side.** The upload has the same three steps
-(`SdfWorldResidency.BeginStage`, `RecordStage`, `EndStage`). The first waits
-the previous upload's fence and takes the ring slot; the last submits, in
-schedule order, and pumps the residency's background work. The middle one
+(`SdfWorldResidency.BeginStage`, `RecordStage`, then `QueueStage` and
+`EndStage`). The first waits the previous upload's fence and takes the ring
+slot; the last queues every upload in schedule order, hands them to the queue
+together, publishes each and pumps its residency's background work. The middle one
 records the regions' copies and the world's shadow layers into the residency's
 own command list.
 
@@ -302,25 +305,51 @@ across a benchmark chapter and divided by the frames.
    Composition shares unchanged view members with the installed record before
    planning products. A depth-only edit that keeps the arena and rule receipt
    publishes its new definition without reinstalling the authority's programs.
-8. **Then the pipeline**, if the host world's own chain still bounds a frame.
-   It does. A sampled thread-time trace of the frame thread on the moving route
-   (40 s, RTX 4070, 2560x1440) puts about two thirds of the thread's wall time in
-   producing the frame, and the largest parts are one world's own: the host
-   residency's pack (11% of the thread, which the frame thread runs as its own
-   partition of the pack fork while the workers pack the smaller worlds), the
-   host's capture (12%), the recording waves (14%, half of it the frame
-   thread's own partitions) and the routed readers' capture rounds (9%). No
-   step below 3 ms is reachable while one thread captures, packs and records
-   the host world in turn. Two things stand in the way of overlapping them, and
-   each is the next step's to settle:
+8. **The host world's chain overlaps.** Built, in two parts.
 
-   - The host's pack cannot start before the readers' capture rounds end: its
-     first half binds the screens (`SdfWorldResidency.BeginPack`,
-     `BindScreens`), and what a screen shows is resolved by those rounds.
-   - Fewer queue executes need a deferred fence that reads as not signaled
-     until its batch reaches the queue: every upload hands its fence off at
-     once (`SdfWorldTables.CloseUpload`) because a deferred fence that started
-     signaled would satisfy geometry staged for the next upload.
+   **The host's pack runs beside the readers' rounds.** The host captures
+   first (`SdfWorldPasses.BeginFrame`), and its pack begins right after, on the
+   frame thread, then runs on the residency's own lane
+   (`SdfWorldResidency.PackAhead`) while the frame thread captures the readers'
+   rounds and packs the other residencies; the frame's pack
+   (`SdfWorldPasses.ReadsPrepared`) joins it before it ends the host's pack.
+   The step-8 premise that the pack's screen binding waits on the rounds did
+   not hold when read: the binder publishes every screen's mapping and slot
+   before the frame (`WorldScreenBinder.Publish`), and the host's filmed views
+   and their levels are fixed by the host's own capture
+   (`WorldScreenBinder.FilmViews`). So the first step stays whole and moves
+   earlier, rather than splitting.
+
+   Decision: a residency's pack may run beside the frame thread on a lane of
+   its own. Invariant: while it does, the frame thread changes nothing of that
+   residency the pack reads or writes. Door: `SdfWorldResidency.JoinPack`,
+   which every member that steps the residency's frame or reads pack state
+   calls first (`BeginFrame`, `Upkeep`, `Prepare` and through it `Stage`,
+   `BeginStage` and `IsUnchanged`, `RunPack`, `EndPack`, the release of the
+   device objects); `Park` already refuses a begun pack. The residency's
+   `Frame` is set by `BeginPack`, so it stands while the pack runs, and the
+   frame's submission refuses to run from the lane as from a partition. Where
+   it stops: a new member that reads pack state without joining goes around it;
+   review holds that. `sdf.captures.packed-ahead` counts the packs run ahead
+   and `sdf.captures.pack-ahead-waits` the joins that found one still running.
+
+   **A frame's uploads reach the queue in one execute.** Each scheduled
+   residency queues its upload deferred, in schedule order
+   (`SdfWorldResidency.QueueStage`), and the first hand-off carries every one
+   of them to the queue together (`SdfWorldResidency.EndStage`). No new fence
+   value was needed: a deferred fence already reads unsignaled until its batch
+   reaches the queue (`GpuBatchedSubmissionFence.IsSignaled`); what forced one
+   execute per upload was the hand-off each upload made before publishing.
+   Invariant: nothing an upload writes (the shared mesh store's moves, the
+   shadows' slot, the upload count background work binds against) is published
+   before the upload reaches the queue. Door: `SdfWorldTables.PublishUpload`
+   refuses an upload still deferred. `gpu.queue.executes.upload.fence-wait`
+   divided by `gpu.queue.frames` shows it: one a frame on a frame that stages
+   two or more residencies side by side, where it was one a residency.
+
+   What remains of the frame thread's own chain is the host's capture and its
+   recording partitions. The next structural step is the pipeline this plan
+   weighed above: frame N+1's capture beside frame N's recording.
 9. **Judge rigid motion by slot.** Built. The previous draw-row judgement
    raised `sdf.residency.motion.rows` by 1,332,578 over 120 ticks of the
    east-wing route. `SdfWorldTables.NoteMovedSlots` now judges each moved
@@ -336,13 +365,71 @@ across a benchmark chapter and divided by the frames.
    for a moved slot because its union can hide motion inside it. Draws with no
    slot and skins with multiple pose dependencies keep separate identities.
 
+10. **The step thread and the crossing.** The stalls the frame lanes
+    attributed outside the frame thread.
+
+    - **Goal fields derive off the step.** Built. A domain keeps its route
+      graph (`NavigationRuntime.Domain.GoalGraph`): a forward and a reverse
+      slot mask a cell, built once a bake, so a derivation walks mask bits
+      instead of testing every edge on every visit. The plan requests every
+      due body's field before it resolves any (`WorldPopulation.PrepareGoalField`,
+      `ResolveGoalFields`), so a tick's misses derive side by side, and
+      requests ahead the field of a body not due to steer whose goal changed
+      (`WorldPopulation.PrefetchGoalField`). Decision: residency decides work,
+      never outcome. Invariant: no tick's result depends on when a derivation
+      ran (AGENTS.md rule 4). Door: `NavigationRuntime.GoalField`, the only
+      read, always yields the field (resident, joined or derived), and a
+      derivation reads only what `Freeze` took on the owning thread. A version
+      that landed requested fields a step later and held the body meanwhile
+      made residency state a checkpoint does not carry, and
+      `puck test worlds/debug/city-tests.puck --reproduce` diverged at its
+      first tick; that version is gone. `physics.navigation.field-waits`
+      counts the reads that held a step.
+    - **A climb carries across a seam.** Built. Thrust drives the vertical
+      channel directly each tick, so a transfer captured no vertical motion;
+      the body keeps the direct velocity its last step drove and its transfer
+      state carries it (`WorldBody.CaptureTransferState`).
+    - **An unresolved view counts its scratch as it last did.** Built. An
+      `sdf.world` instance whose residency does not resolve for a while (its
+      world released or not yet routed, as at a crossing) keeps the capacity it
+      was last counted at, one viewport and those instances
+      (`SdfWorldResidency.CountsFor`), so it neither rebuilds for the gap nor
+      sizes a buffer at zero bytes.
+    - **The seam neighbour's routed residency starts before the crossing.**
+      Not built. A seat's routed scene and its residency exist only once the
+      seat is presented in the other world (`WorldFramePresenter.RouteView`,
+      `WorldScreenBinder.RoutedResidencyOf`), and the client holds no endpoint
+      for an `apart` neighbour before its route moves there: the endpoint is
+      made when the route forms (`WorldInstanceHost.EndpointFor`), and an
+      `apart` edge delivers no projection. The step needs, in order: the host
+      names the endpoint a seat is predicted to cross into within a lead time
+      (its body's velocity against the ownership face,
+      `WorldOwnershipFace.Outward`), from its tick; the client observes that
+      endpoint ahead of the route; the presenter keeps the endpoint's scene
+      alive with no view, as a window does (`WorldRoutedScene.Attach`); the
+      binder makes its residency and the package holds it, so its upkeep, its
+      first capture and its bake run while it owes preparation. What shows it:
+      no `[sdf.mesh-bake] start residency=routed…` line on a crossing tick,
+      and no produce over 33 ms at either crossing of
+      `world.benchmark run moon`.
+
 ## Systems considered
 
 - `JobPool.Fork` and its `JobClass.Frame` carry the pack fork, as they carry
   the pose pack and the recording waves. No second pool.
-- `JobLane` runs one unit beside its owner. It fits a pipeline's second half,
-  and the host's pack beside the readers' capture rounds once its screen
-  binding no longer waits on them.
+- `JobLane` runs one unit beside its owner; the host's pack runs on one
+  beside the readers' rounds (`SdfWorldResidency.PackAhead`), joined at its
+  doors as the bake's demand measure is (`SdfMeshPathBake.JoinMeasure`), and it
+  fits a pipeline's second half.
+- `GpuSubmissionBatch` already let several own-signal submissions share one
+  hand-over and answered each fence from the last; a frame's uploads use it by
+  deferring their hand-off (`SdfWorldTables.QueueUpload`), with no new fence.
+- `NavigationRuntime.Domain`'s bake (`m_edges`, walkability) and the route
+  search's edge predicate (`CanTraverse`) are what the route graph caches; the
+  domain bake's own `Task.Run` and join (`Domain.EnsureBaked`) are the pattern
+  a requested goal field follows. The cross-domain route search
+  (`NavigationRuntime.FindRoute`) still walks neighbours per visit and could
+  read the same graph.
 - `CodeDerivedTable` is the one door for a value derived from a definition;
   the adjacency proofs use it rather than a field cache of their own.
 - `RenderGraphRuntime.RenderWaves` already groups recordings by residency

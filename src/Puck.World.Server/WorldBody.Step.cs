@@ -713,6 +713,7 @@ public sealed partial class WorldBody {
     }
     private void IntegratePlanarAndVerticalVelocity(ref BodyMotionScratch scratch) {
         scratch.Velocity = (m_planarVelocity + (scratch.Up * (m_verticalVelocity + scratch.DirectVerticalVelocity)));
+        m_directVerticalVelocity = scratch.DirectVerticalVelocity;
         // The support search only re-aims the planar velocity along what lies below: from a body at rest it lands a
         // zero velocity, and finding nothing keeps the zero it already holds, so a resting body skips its sweeps.
         var resting = ((m_planarVelocity == FixedVector3.Zero) && (scratch.Velocity == FixedVector3.Zero));
@@ -1070,6 +1071,7 @@ public sealed partial class WorldBody {
     // Stops integrated locomotion without claiming a teleport, changing support facts, or cancelling timed actions.
     private void ResetTranslationMomentum() {
         m_verticalVelocity = FixedQ4816.Zero;
+        m_directVerticalVelocity = FixedQ4816.Zero;
         m_verticalVelocityAccumulator.Reset();
 
         // A teleport must not carry momentum: drop the ramped planar velocity, its accumulator carries (the
