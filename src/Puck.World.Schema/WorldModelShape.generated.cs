@@ -2678,6 +2678,7 @@ public static partial class WorldModelShape {
                 M("capacity", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldAdjacency), "Capacity", Read | Write, static value => ((global::Puck.World.WorldAdjacency)value).Capacity),
                 M("livenessGraceSeconds", typeof(global::System.Single), typeof(global::Puck.World.WorldAdjacency), "LivenessGraceSeconds", Read | Write, static value => ((global::Puck.World.WorldAdjacency)value).LivenessGraceSeconds),
                 M("hysteresis", typeof(global::System.Single), typeof(global::Puck.World.WorldAdjacency), "Hysteresis", Read | Write, static value => ((global::Puck.World.WorldAdjacency)value).Hysteresis),
+                M("presentation", typeof(global::Puck.World.WorldAdjacencyPresentation), typeof(global::Puck.World.WorldAdjacency), "Presentation", Read | Write, static value => ((global::Puck.World.WorldAdjacency)value).Presentation),
             ],
             []),
         T(typeof(global::Puck.World.WorldAdjacencyBoundary), true, JsonTypeInfoKind.Object, null,

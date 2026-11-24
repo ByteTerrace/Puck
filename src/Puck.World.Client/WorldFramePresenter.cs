@@ -984,7 +984,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         // While the seat rides or drives a body whose kit authors a rider camera, that program stands in the seat rig's
         // place for every read below and for the seat's own look input.
-        views = view.Ride(views: views, camera: RiderCamera(definition: definition, presentedHere: presentedHere, route: route, slot: slot));
+        views = view.Ride(views: views, camera: RiderCamera(definition: definition, route: route, slot: slot));
         // The seat's look advances on the same fixed ticks as the body it steers, so the frame presents it at the
         // fraction the body above was interpolated at.
         var chase = view.ResolveChase(
@@ -1345,13 +1345,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         return framing;
     }
     // The rider camera of the body the seat is framed through (WorldMount.Camera), or null when it rides and drives
-    // nothing, or a body whose kit authors none. In the boot world the perception anchor names the body the seat
-    // possesses; in a world presented from another authority the seat's own body is delivered with the body it rides
-    // (EntitySnapshot.Mount).
-    private string? RiderCamera(int slot, in WorldAuthorityRoute route, WorldDefinition definition, bool presentedHere) {
+    // nothing, or a body whose kit authors none. While the seat is routed to the boot authority the perception anchor
+    // names the body it possesses; routed to any other, its own body is delivered with the body it rides
+    // (EntitySnapshot.Mount), whichever frame it is presented in.
+    private string? RiderCamera(int slot, WorldAuthorityRoute route, WorldDefinition definition) {
         int kit;
 
-        if (presentedHere) {
+        if (string.Equals(a: route.Endpoint.Authority, b: m_client.Authority, comparisonType: StringComparison.Ordinal)) {
             if (m_anchor.Possessed(slot: slot) is not (var possessed and >= 0)) {
                 return null;
             }

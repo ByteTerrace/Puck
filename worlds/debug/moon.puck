@@ -83,6 +83,7 @@ adjacencies [
     name: "sky"
     destination: "debug"
     counterpart: "sky"
+    presentation: Apart
     boundary {
       center [debugOrigin[0], (debugOrigin[1] + skySeamAltitude), debugOrigin[2]]
       outwardYawDegrees: 180

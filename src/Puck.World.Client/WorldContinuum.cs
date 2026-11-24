@@ -52,8 +52,14 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
     /// <summary>Ends the frame-thread capture's pinned route reads.</summary>
     public void EndFrame() => m_inFrame = false;
 
-    private static bool ProjectionExists(IReadOnlyList<WorldAdjacencyProjection> projections, string authority, string? documentId) {
+    // Whether an adjacency of the boot document that presents its neighbour joined to it projects the authority: a seat
+    // routed there stays in the boot frame. An edge authored apart (WorldAdjacencyPresentation.Apart) projects no seat.
+    private bool ProjectionExists(IReadOnlyList<WorldAdjacencyProjection> projections, string authority, string? documentId) {
         foreach (var projection in projections) {
+            if (PresentsApart(name: projection.Name)) {
+                continue;
+            }
+
             if (string.Equals(
                 a: projection.Neighbour.Authority,
                 b: authority,
@@ -64,6 +70,15 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
                 comparisonType: StringComparison.Ordinal
             )) {
                 return true;
+            }
+        }
+
+        return false;
+    }
+    private bool PresentsApart(string name) {
+        foreach (var adjacency in (m_client.Definition.Adjacencies ?? [])) {
+            if (string.Equals(a: adjacency.Name.Value, b: name, comparisonType: StringComparison.Ordinal)) {
+                return (adjacency.Presentation == WorldAdjacencyPresentation.Apart);
             }
         }
 
@@ -110,6 +125,13 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
         }
         var authority = route.Endpoint.Authority;
         var entity = route.Entity;
+
+        // A seat that rides a body of another authority is framed through that body, which the authority delivers
+        // with the rider's own (EntitySnapshot.Mount); in the boot authority the perception anchor has already chosen.
+        if ((seatSlot is not null) && !string.Equals(a: authority, b: m_client.Authority, comparisonType: StringComparison.Ordinal) && route.Endpoint.TryMount(rider: in entity, mount: out var ridden)) {
+            entity = ridden;
+        }
+
         var entityIndex = entity.Index;
 
         if (authority.Length > 0) {
