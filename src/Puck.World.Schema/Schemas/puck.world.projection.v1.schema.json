@@ -939,6 +939,28 @@
           "$ref": "#/$defs/SdfViewsRate",
           "description": "The maximum shared shading footprint and classification tile size. Absent shades every pixel.",
           "default": null
+        },
+        "farProduct": {
+          "description": "What the world shows of itself to a far viewer (WorldFarProduct): the product a sky view asking for it draws. Absent takes the product\u0027s defaults.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "cell": {
+              "description": "The error, in metres, the product\u0027s finest level is levelled against; its coarser levels, which a far view\u0027s draws choose between by the pixels they cover, stay within multiples of it. Within [0.01, 1024]. Absent is one metre.",
+              "type": "number",
+              "default": 1
+            },
+            "minimumSize": {
+              "description": "The least size, in metres, a static part\u0027s longest side reaches to enter the product: what the nearest far viewer resolves. Within [0, 8192]. Absent keeps every static part.",
+              "type": "number",
+              "default": 0
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldFarProduct"
         }
       },
       "additionalProperties": false,
@@ -11402,6 +11424,14 @@
         },
         "coverage": {
           "description": "Whether the view draws only the destination\u0027s geometry, so this world\u0027s sky shows around it. Absent is not: the destination\u0027s own sky fills the view.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "farProduct": {
+          "description": "Whether the view draws the destination\u0027s far product (its settled static scene, merged at the coarse levels its own render.farProduct asks for) rather than a residency of the whole destination: no bake, none of its bodies, creations or screens, and only the product\u0027s triangles held. A view that asks for it and has no product yet draws the destination whole until one is built from that residency. Absent is not.",
           "type": [
             "boolean",
             "null"

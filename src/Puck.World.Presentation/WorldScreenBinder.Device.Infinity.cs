@@ -33,6 +33,7 @@ public sealed partial class WorldScreenBinder {
     }
     private void ReconcileInfinityRoots() {
         m_infinityEpoch++;
+        PublishFarProducts();
         if (Observations.BootEndpoint is { } boot) {
             _ = InfinityRootOf(boot.Mirror, WorldDefinitionLoader.BootInstanceName, 0, WorldViewGraphs.WorldInstance);
         }
@@ -117,6 +118,7 @@ public sealed partial class WorldScreenBinder {
         }
     }
     private bool InfinityInputsMoved(InfinityRoot root) {
+        if ((root.FarVersion != m_farVersion) && root.Plan.Views.Any(predicate: static view => view.Spec.FarProduct)) { return true; }
         foreach (var row in root.Skies) {
             if (!ReferenceEquals(objA: row.Mirror.Definition.Render?.Sky, objB: row.Sky)) { return true; }
         }
@@ -149,15 +151,23 @@ public sealed partial class WorldScreenBinder {
                     .FirstOrDefault(predicate: layer => (layer.Name == planned.Spec.Name))?.Prototypes
                 : null);
             var ready = ((source.Mirror is not null) && ((source.Hosted is null) || (source.Hosted.Observation is { Ended: false })));
+            // A view asking for its world's far product draws the product once it is built. Until then it draws the world
+            // whole, which is the product's source, unless the presentation holds a residency of that world anyway, whose
+            // product is on its way: then it draws its fallback for the moments the build takes.
+            var far = ((ready && planned.Spec.FarProduct) ? FarProductOf(instance: source.Instance!, mirror: source.Mirror!) : null);
+            var waits = (ready && planned.Spec.FarProduct && (far is null) && FarSourceResident(instance: source.Instance!, mirror: source.Mirror!));
 
             if (root.Entries.TryGetValue(key: planned.Name, value: out var held)
-                && (!ready || !ReferenceEquals(objA: held.Mirror, objB: source.Mirror) || !ReferenceEquals(objA: held.Hosted?.Token, objB: source.Hosted?.Token)
-                    || (held.Planned.Spec != planned.Spec) || !held.Prototypes.SequenceEqual(second: (prototypes ?? [])))) {
+                && (!ready || waits || !ReferenceEquals(objA: held.Mirror, objB: source.Mirror) || !ReferenceEquals(objA: held.Hosted?.Token, objB: source.Hosted?.Token)
+                    || (held.Planned.Spec != planned.Spec) || !held.Prototypes.SequenceEqual(second: (prototypes ?? []))
+                    || ((far is not null) && !ReferenceEquals(objA: held.Far, objB: far)))) {
                 ReleaseInfinity(entry: held);
                 _ = root.Entries.Remove(key: planned.Name);
             }
-            if (ready && !root.Entries.ContainsKey(key: planned.Name)) {
-                var entry = CreateInfinity(root, planned, source.Mirror!, source.Instance!, source.Hosted, prototypes);
+            if (ready && !waits && !root.Entries.ContainsKey(key: planned.Name)) {
+                var entry = ((far is not null)
+                    ? CreateFarInfinity(root, planned, source.Mirror!, source.Instance!, source.Hosted, far)
+                    : CreateInfinity(root, planned, source.Mirror!, source.Instance!, source.Hosted, prototypes));
 
                 root.Entries.Add(key: planned.Name, value: entry);
             }
@@ -169,6 +179,7 @@ public sealed partial class WorldScreenBinder {
         }
 
         root.Plan = plan;
+        root.FarVersion = m_farVersion;
         m_renderProbe?.RegisterInfinityPlan(root, root.Name, plan);
         root.NestingDepth = depth;
         root.Subplans.Clear();
@@ -237,6 +248,29 @@ public sealed partial class WorldScreenBinder {
                 measure: candidate => ((entry.Hosted is not { } session) ? emitter.MeasureCandidate(candidate: candidate)
                     : ((session.Observation?.Disclose(arg: candidate) is { } disclosed) ? emitter.MeasureCandidate(candidate: disclosed) : default)));
         }
+        m_feedsMoved = true;
+        m_infinityEntriesMoved = true;
+        return entry;
+    }
+    // A far view's entry: the product's emitter is its whole scene, and the world's own session emitter only dresses its
+    // frames with that world's sky, lights and exposure, holding none of the world (no prototype, so no placement, body,
+    // stamp or screen). It films no camera screen and measures no envelope, since its scene is the product alone.
+    private InfinityEntry CreateFarInfinity(InfinityRoot root, WorldInfinityView planned, WorldSessionMirror mirror,
+        string instance, WorldObservedSession? hosted, SdfFarProduct product) {
+        var name = ((root.Name == WorldViewGraphs.WorldInstance) ? planned.Name : ((root.Name + Puck.State.GeneratedName.Joiner) + planned.Name));
+        var dresser = new WorldSessionSceneEmitter(mirror: mirror, effectiveCameraName: null, domains: m_domains, jobs: m_stamps.Jobs,
+            onlyPrototypes: new HashSet<string>(comparer: StringComparer.Ordinal)) {
+            SkyLayers = SkyLayers,
+            Session = Settings,
+        };
+        var entry = new InfinityEntry(current: Current, emitter: dresser, hosted: hosted, instance: instance, mirror: mirror, name: name, planned: planned, prototypes: [], root: root) {
+            Far = product,
+        };
+        var scene = new WorldInfinityViewScene(dresser, () => entry.Views, planned.Spec) {
+            FitSkyViews = (views, sky, width, height) => FilmInfinity(entry: entry, height: height, sky: sky, views: views, width: width),
+        };
+
+        entry.Source = new SdfCompositionFrameSource(dresser: scene, emitters: [new WorldFarProductEmitter(product: product)]);
         m_feedsMoved = true;
         m_infinityEntriesMoved = true;
         return entry;
@@ -314,6 +348,8 @@ public sealed partial class WorldScreenBinder {
         public int Epoch { get; set; }
 
         public int NestingDepth { get; set; } = -1;
+        // The far products' version the plan was made at (m_farVersion).
+        public long FarVersion { get; set; }
         public WorldInfinityViewPlan Plan { get; set; } = WorldInfinityViewPlan.Empty;
         // The sky section of each mirror the plan was resolved from: the only part of a definition the plan reads.
         public List<(WorldSessionMirror Mirror, WorldRenderSky? Sky)> Skies { get; } = [];
@@ -352,6 +388,8 @@ public sealed partial class WorldScreenBinder {
 
         public IDisposable? Envelope { get; set; }
         public SdfWorldResidency? Residency { get; set; }
+        // The far product the entry draws, or null for an entry that draws its world whole or its prototypes.
+        public SdfFarProduct? Far { get; init; }
         // The layer's access to its destination and what its residency may render (ContentAccess), both settled once a
         // frame (SettleSessionRoutes) and first as the entry is made.
         public WorldViewerAccess Access { get; } = SettledAccess(hosted: hosted);

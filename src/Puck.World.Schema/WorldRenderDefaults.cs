@@ -213,6 +213,8 @@ public readonly record struct WorldQualityPreset(
 /// <param name="FarShadows">How often the world boots refreshing the far shadow cascade (<see cref="WorldFarShadows"/>);
 /// a quality preset's row replaces it. Absent refreshes it every frame.</param>
 /// <param name="ViewsRate">The maximum shared shading footprint and classification tile size. Absent shades every pixel.</param>
+/// <param name="FarProduct">What the world shows of itself to a far viewer (<see cref="WorldFarProduct"/>): the product a
+/// sky view asking for it draws. Absent takes the product's defaults.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     bool AmbientOcclusion = false,
@@ -247,7 +249,8 @@ public sealed record WorldRenderDefaults(
     bool RayQueries = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDistantShadows? DistantShadows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarShadows? FarShadows = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfViewsRate? ViewsRate = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfViewsRate? ViewsRate = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarProduct? FarProduct = null
 ) {
     /// <summary>The most world lanes <see cref="Lanes"/> holds (<c>SdfLanes.WorldCount</c>).</summary>
     public const int MaxLanes = SdfLanes.WorldCount;
@@ -430,6 +433,35 @@ public sealed record WorldRenderShadowCoverage(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Near = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Far = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Casters = null);
+/// <summary>What a world shows of itself to a far viewer: its settled static scene, each mesh at the coarsest level it
+/// carries, merged and levelled again at <paramref name="Cell"/>, without the parts smaller than
+/// <paramref name="MinimumSize"/>. A sky view of the world that asks for its far product draws it. Presentation
+/// only.</summary>
+/// <param name="Cell">The error, in metres, the product's finest level is levelled against; its coarser levels, which a
+/// far view's draws choose between by the pixels they cover, stay within multiples of it. Within [0.01, 1024]. Absent
+/// is one metre.</param>
+/// <param name="MinimumSize">The least size, in metres, a static part's longest side reaches to enter the product: what
+/// the nearest far viewer resolves. Within [0, 8192]. Absent keeps every static part.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldFarProduct(float Cell = 1f, float MinimumSize = 0f) {
+    /// <summary>The finest cell a product may ask for, in metres.</summary>
+    public const float MinCell = 0.01f;
+    /// <summary>The coarsest cell a product may ask for, in metres.</summary>
+    public const float MaxCell = 1024f;
+
+    /// <summary>Returns why the product cannot be built, or <see langword="null"/> when it can.</summary>
+    /// <param name="path">The document path the refusal names the product by.</param>
+    /// <returns>The refusal, or <see langword="null"/>.</returns>
+    public string? Refusal(string path) {
+        if (!float.IsFinite(f: Cell) || (Cell < MinCell) || (Cell > MaxCell)) {
+            return $"{path}.cell is {Cell}; it lies within [{MinCell}, {MaxCell}] metres.";
+        }
+        if (!float.IsFinite(f: MinimumSize) || (MinimumSize < 0f) || (MinimumSize > WorldRenderDefaults.MaxFarDistance)) {
+            return $"{path}.minimumSize is {MinimumSize}; it lies within [0, {WorldRenderDefaults.MaxFarDistance}] metres.";
+        }
+        return null;
+    }
+}
 /// <summary>The key light's distant shadow map: one more shadow map past the far cascade, with texels of its own, so ridges
 /// shadow walls hundreds of metres off without costing the near cascades precision. It draws only what stands still and
 /// holds what it drew while the light turns within <paramref name="TurnDegrees"/> and the eye stays within an eighth of
@@ -1155,6 +1187,10 @@ public abstract record WorldRenderSkyLayer {
     /// <param name="Bound">The sphere that bounds what the view shows, in the destination's coordinates. Absent is none.</param>
     /// <param name="Coverage">Whether the view draws only the destination's geometry, so this world's sky shows around
     /// it. Absent is not: the destination's own sky fills the view.</param>
+    /// <param name="FarProduct">Whether the view draws the destination's far product (its settled static scene, merged
+    /// at the coarse levels its own <c>render.farProduct</c> asks for) rather than a residency of the whole destination:
+    /// no bake, none of its bodies, creations or screens, and only the product's triangles held. A view that asks for it
+    /// and has no product yet draws the destination whole until one is built from that residency. Absent is not.</param>
     public sealed record View(
         [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
@@ -1170,7 +1206,8 @@ public abstract record WorldRenderSkyLayer {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Fallback = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Follow = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSkyViewBound? Bound = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Coverage = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Coverage = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? FarProduct = null
     ) : WorldRenderSkyLayer {
         /// <inheritdoc/>
         public override string? LayerName => Name;

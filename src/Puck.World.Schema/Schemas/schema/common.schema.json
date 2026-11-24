@@ -2447,6 +2447,14 @@
           ],
           "default": null
         },
+        "farProduct": {
+          "description": "Whether the view draws the destination\u0027s far product (its settled static scene, merged at the coarse levels its own render.farProduct asks for) rather than a residency of the whole destination: no bake, none of its bodies, creations or screens, and only the product\u0027s triangles held. A view that asks for it and has no product yet draws the destination whole until one is built from that residency. Absent is not.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "layerName": {
           "type": [
             "string",

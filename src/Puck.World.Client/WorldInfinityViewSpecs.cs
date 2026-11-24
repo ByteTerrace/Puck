@@ -54,6 +54,7 @@ public static class WorldInfinityViewSpecs {
                         Bound = ((view.Bound is { } bound) ? new InfinityViewBound(Center: bound.Center.Value, Radius: bound.Radius) : null),
                         Follows = (view.Follow == true),
                         GeometryCoverage = (view.Coverage == true),
+                        FarProduct = (view.FarProduct == true),
                     });
 
                     break;

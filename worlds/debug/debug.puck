@@ -441,6 +441,13 @@ render {
     radius: 0.08
   }
   farDistance: 6000
+  // What the valley shows of itself from the moon's sky: the nearest far viewer stands at the sky seam, a couple of
+  // kilometres up, where a pixel spans about two metres, so smaller parts stay out and the product's finest level is
+  // a metre from the drawn surface.
+  farProduct {
+    cell: 1
+    minimumSize: 2
+  }
   temporal: true
   // As the shipped presets do, the indirect volume's rays take the ray hardware where the device has it.
   rayQueries: true

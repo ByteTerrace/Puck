@@ -845,6 +845,28 @@
       "$ref": "./common.schema.json#/$defs/SdfViewsRate",
       "description": "The maximum shared shading footprint and classification tile size. Absent shades every pixel.",
       "default": null
+    },
+    "farProduct": {
+      "description": "What the world shows of itself to a far viewer (WorldFarProduct): the product a sky view asking for it draws. Absent takes the product\u0027s defaults.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "cell": {
+          "description": "The error, in metres, the product\u0027s finest level is levelled against; its coarser levels, which a far view\u0027s draws choose between by the pixels they cover, stay within multiples of it. Within [0.01, 1024]. Absent is one metre.",
+          "type": "number",
+          "default": 1
+        },
+        "minimumSize": {
+          "description": "The least size, in metres, a static part\u0027s longest side reaches to enter the product: what the nearest far viewer resolves. Within [0, 8192]. Absent keeps every static part.",
+          "type": "number",
+          "default": 0
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldFarProduct"
     }
   },
   "additionalProperties": false,
