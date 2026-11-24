@@ -615,10 +615,18 @@ public static class WorldAdjacencyPolicy {
             )
         );
     }
-    // One derivation a definition: every adjacency projection and ownership sweep of every tick asks for it, and a
-    // creation's collider compiles whole each time it is derived.
-    private sealed record BodyReach(bool Proven, FixedQ4816 Reach, string Reason);
-    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, BodyReach> BodyReaches = new();
+    // A fixed-point bound a definition proves, or why it cannot. Each is derived once a definition: every adjacency
+    // projection and ownership sweep of every tick asks for them, and deriving one walks every kit (a creation's
+    // collider compiles whole).
+    private sealed record Proof(bool Proven, FixedQ4816 Value, string Reason) {
+        public bool Answer(out FixedQ4816 value, out string reason) {
+            value = Value;
+            reason = Reason;
+            return Proven;
+        }
+    }
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, Proof> BodyReaches = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, Proof> VerticalDeadbands = new();
 
     /// <summary>Derives the greatest collider-center reach in a document for overlap and reciprocal-contact proofs, once
     /// a definition.</summary>
@@ -626,14 +634,10 @@ public static class WorldAdjacencyPolicy {
     /// <param name="reach">The reach, or zero when it cannot be proven.</param>
     /// <param name="reason">Why the reach cannot be proven, or empty.</param>
     /// <returns><see langword="true"/> when every kit's collider bounds its reach.</returns>
-    public static bool TryBodyReach(WorldDefinition definition, out FixedQ4816 reach, out string reason) {
-        var known = BodyReaches.GetValue(key: definition, derive: static candidate => new BodyReach(
-            Proven: DeriveBodyReach(definition: candidate, reach: out var derived, reason: out var why), Reach: derived, Reason: why));
-
-        reach = known.Reach;
-        reason = known.Reason;
-        return known.Proven;
-    }
+    public static bool TryBodyReach(WorldDefinition definition, out FixedQ4816 reach, out string reason) =>
+        BodyReaches.GetValue(key: definition, derive: static candidate => new Proof(
+            Proven: DeriveBodyReach(definition: candidate, reach: out var derived, reason: out var why), Value: derived, Reason: why))
+        .Answer(value: out reach, reason: out reason);
     private static bool DeriveBodyReach(WorldDefinition definition, out FixedQ4816 reach, out string reason) {
         reach = FixedQ4816.Zero;
         foreach (var kit in definition.Kits) {
@@ -926,6 +930,11 @@ public static class WorldAdjacencyPolicy {
     public static bool TryVerticalOwnershipDeadband(WorldDefinition definition, out FixedQ4816 depth, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        return VerticalDeadbands.GetValue(key: definition, derive: static candidate => new Proof(
+            Proven: DeriveVerticalOwnershipDeadband(definition: candidate, depth: out var derived, reason: out var why), Value: derived, Reason: why))
+            .Answer(value: out depth, reason: out reason);
+    }
+    private static bool DeriveVerticalOwnershipDeadband(WorldDefinition definition, out FixedQ4816 depth, out string reason) {
         depth = FixedQ4816.Zero;
         var rate = Math.Max(
             val1: definition.SimulationRateHz,
