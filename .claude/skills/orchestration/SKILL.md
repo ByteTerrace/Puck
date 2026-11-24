@@ -31,7 +31,7 @@ loop waits on another:
 3. **A release.** A green window starts the Azure validation run on the
    integration branch, and the lead produces that head's mesh cache sets beside
    it (`puck world player … --target …` then `puck world caches produce --push`,
-   [CI](../../../docs/development/ci.md#publish-the-player-channel)), because the
+   [CI](../../../docs/development/ci.md#the-player-channel)), because the
    player job holds the channel when no set matches the build's bake identity
    (the first replace deploy shipped with its channel held for that reason); when it is green, the integration branch goes to `main`,
    which deploys, and the lead watches the release to the end. A red pipeline
