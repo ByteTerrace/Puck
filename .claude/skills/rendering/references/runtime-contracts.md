@@ -200,7 +200,11 @@ frame thread (`SdfWorldResidency.BeginPack`, which asks the host for the
 screens' sources, surfaces, decals and texts and uploads a changed program;
 `BeginStage`, which waits the previous upload's fence and takes the ring slot),
 the middle on whichever thread holds the residency (`RunPack`, `RecordStage`),
-and the last on the frame thread again (`EndPack`, `EndStage`, which submits).
+and the last on the frame thread again (`EndPack`; `QueueStage` and `EndStage`, which queue every upload of the
+frame, hand them to the queue in one execute and only then publish each, `SdfWorldTables.PublishUpload` refusing an
+upload still deferred). The host's pack runs its middle step on a lane of its own beside the readers' rounds
+(`SdfWorldResidency.PackAhead`), and every member of the residency that steps its frame or reads pack state joins
+it first (`JoinPack`).
 The invariant is that a middle step reads and writes only its own residency,
 that residency's tables, bake, lighting and exposures, the frame it packs and
 the device. It holds because everything that reads the host or another
