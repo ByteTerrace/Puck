@@ -408,6 +408,13 @@ told the store (its landing priority). A mesh the store lands, moves or takes ba
 residency that names it (`SdfWorldTables.NoteStoreChange`), and the copies no landing job carries (a compaction's
 moves, a grown region's carry) ride whichever upload records next (`SdfMeshRegionStore.RecordOwed`), which relies on
 every residency's upload of a frame reaching the queue before a view of that frame records.
+A world is resident once: a mesh renumbered for another program's materials (`SdfMesh.GeometrySource`) is placed as
+its triangle materials alone and draws the first mesh's vertices and indices (`SdfMeshRegion.PlacedWordsOf`), so use
+`PlacedWordsOf`, never `WordsOf`, for anything the region places or lands; the library finds a living mesh its cache
+let go of instead of decoding a second (`SdfMeshLibrary.Revived`); and a second scene of the world the presentation
+draws takes that world's demand (`SdfFrameContent.DemandViews`) and its tiers (`SdfMeshLibrary.TiersOf`). Editing any
+type the bake's closure reaches (`SdfMesh`, `SdfMeshLibrary`, `SdfMeshStore`, `SdfMeshPathBake`) moves the bake
+identity, and the next boot bakes the world cold.
 A staged region created `mapped` (the mesh region, the probe scene) asks `IGpuBufferFactory.TryCreateMapped` for a
 destination that reserves `GpuRegion.MaxByteCount` and backs 1 MiB chunks on demand (`IGpuMappedBuffer`; Direct3D 12's
 `DirectXGpuMappedBuffer` at reserved resources tier 2, tile runs from `DirectXHeapArena.PlaceTiles`; Vulkan answers
