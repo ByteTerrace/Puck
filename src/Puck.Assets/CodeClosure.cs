@@ -122,6 +122,13 @@ public sealed partial class CodeClosure {
 
     private static string CanonicalTypeName(string name) => FileLocalChecksum().Replace(input: name, replacement: "__").Replace(oldChar: '+', newChar: '/');
 
+    // A compiler-generated name (a lambda, a local function, a closure class, a cached delegate or a state machine) carries
+    // the ordinal of the method that declares it among its type's members: <M>b__O_L, <M>g__F|O_L, <>c__DisplayClassO_L,
+    // <>9__O_L and <M>d__O. The ordinal moves whenever a member is added or removed above that method, though nothing the
+    // method does changed.
+    [System.Text.RegularExpressions.GeneratedRegex(pattern: @"^(?<pre><[^>]*>b__|<[^>]*>g__[^|]*\||<>c__DisplayClass|<>9__)(?<o>\d+)(?<post>_\d+(`\d+)?)$|^(?<pre><[^>]*>d__)(?<o>\d+)(?<post>(`\d+)?)$")]
+    private static partial System.Text.RegularExpressions.Regex GeneratedOrdinal();
+
     // One assembly the walk reads: its metadata, its image and its types by full name.
     private sealed class Module {
         public Module(string name, byte[] image) {
@@ -144,7 +151,86 @@ public sealed partial class CodeClosure {
             var declaring = type.GetDeclaringType();
             var space = Metadata.GetString(handle: type.Namespace);
 
-            return ((!declaring.IsNil) ? (FullName(handle: declaring) + "/" + name) : ((space.Length == 0) ? name : (space + "." + name)));
+            return ((!declaring.IsNil) ? (FullName(handle: declaring) + "/" + Canonical(declaring: declaring, name: name)) : ((space.Length == 0) ? name : (space + "." + name)));
+        }
+        public string NameOf(MethodDefinitionHandle method) {
+            var definition = Metadata.GetMethodDefinition(handle: method);
+
+            return Canonical(declaring: definition.GetDeclaringType(), name: Metadata.GetString(handle: definition.Name));
+        }
+        public string NameOf(FieldDefinitionHandle field) {
+            var definition = Metadata.GetFieldDefinition(handle: field);
+
+            return Canonical(declaring: definition.GetDeclaringType(), name: Metadata.GetString(handle: definition.Name));
+        }
+
+        // Each user type's generated ordinals, written as the name of the method that declares them.
+        private readonly Dictionary<TypeDefinitionHandle, Dictionary<string, string>> m_ordinals = [];
+
+        // A member or nested type's name with a generated ordinal written as its method's name (GeneratedOrdinal), so an
+        // edit elsewhere in the type renames nothing the closure runs. Overloads that each declare generated members keep
+        // apart by their order among themselves; an ordinal whose method no generated name shows stays as it is.
+        public string Canonical(TypeDefinitionHandle declaring, string name) {
+            var match = GeneratedOrdinal().Match(input: name);
+
+            if (!match.Success) { return name; }
+
+            var scope = declaring;
+
+            for (var type = Metadata.GetTypeDefinition(handle: scope); Metadata.GetString(handle: type.Name).StartsWith(value: '<') && !type.GetDeclaringType().IsNil; type = Metadata.GetTypeDefinition(handle: scope)) {
+                scope = type.GetDeclaringType();
+            }
+
+            return (OrdinalsOf(scope: scope).TryGetValue(key: match.Groups["o"].Value, value: out var method) ? (match.Groups["pre"].Value + method + match.Groups["post"].Value) : name);
+        }
+        private Dictionary<string, string> OrdinalsOf(TypeDefinitionHandle scope) {
+            if (m_ordinals.TryGetValue(key: scope, value: out var held)) { return held; }
+
+            var methods = new SortedDictionary<int, string>();
+            var pending = new Stack<TypeDefinitionHandle>(collection: [scope]);
+
+            while (pending.TryPop(result: out var handle)) {
+                var type = Metadata.GetTypeDefinition(handle: handle);
+
+                foreach (var method in type.GetMethods()) {
+                    var name = Metadata.GetString(handle: Metadata.GetMethodDefinition(handle: method).Name);
+
+                    if (GeneratedOrdinal().Match(input: name) is { Success: true } named && name.StartsWith(value: '<') && (name[1] != '>')) {
+                        _ = methods.TryAdd(key: int.Parse(s: named.Groups["o"].ValueSpan, provider: System.Globalization.CultureInfo.InvariantCulture), value: name[1..name.IndexOf(value: '>')]);
+                    }
+                }
+                foreach (var nested in type.GetNestedTypes()) {
+                    var name = Metadata.GetString(handle: Metadata.GetTypeDefinition(handle: nested).Name);
+
+                    if (!name.StartsWith(value: '<')) { continue; }
+                    pending.Push(item: nested);
+                    if (GeneratedOrdinal().Match(input: name) is not { Success: true } named) { continue; }
+
+                    var ordinal = int.Parse(s: named.Groups["o"].ValueSpan, provider: System.Globalization.CultureInfo.InvariantCulture);
+
+                    if (name[1] != '>') {
+                        _ = methods.TryAdd(key: ordinal, value: name[1..name.IndexOf(value: '>')]);
+                    } else if (Metadata.GetTypeDefinition(handle: nested).GetMethods().Select(selector: member => Metadata.GetString(handle: Metadata.GetMethodDefinition(handle: member).Name)).FirstOrDefault(predicate: member => member.StartsWith(value: '<') && (member.Length > 1) && (member[1] != '>')) is { } owned) {
+                        _ = methods.TryAdd(key: ordinal, value: owned[1..owned.IndexOf(value: '>')]);
+                    }
+                }
+            }
+
+            var ordinals = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+            foreach (var group in methods.GroupBy(keySelector: static pair => pair.Value, comparer: StringComparer.Ordinal)) {
+                var rank = 0;
+                var overloads = group.Count();
+
+                foreach (var (ordinal, method) in group) {
+                    ordinals[ordinal.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)] = ((overloads == 1) ? method : (method + "~" + rank));
+                    rank++;
+                }
+            }
+
+            m_ordinals[scope] = ordinals;
+
+            return ordinals;
         }
     }
 
@@ -169,8 +255,6 @@ public sealed partial class CodeClosure {
         // The fields the closure's code loads, stores or takes the address of, and the types whose layout counts only those.
         private readonly HashSet<(Module, FieldDefinitionHandle)> m_touched = [];
         private readonly List<(Module, TypeDefinitionHandle)> m_byTouch = [];
-        // Each type of the indexed assemblies by the types it derives from or implements directly.
-        private readonly Dictionary<(Module, TypeDefinitionHandle), List<(Module, TypeDefinitionHandle)>> m_derived = [];
         // The member each entity was first reached from, and the member being hashed, which reaches whatever it names.
         private readonly Dictionary<(Module, EntityHandle), string> m_from = [];
         private string m_current = "root";
@@ -187,7 +271,6 @@ public sealed partial class CodeClosure {
             foreach (var (assembly, type, method) in roots) {
                 var module = (load(assembly) ?? throw new FileNotFoundException(message: $"'{directory}' holds no {assembly}.dll.", fileName: Path.Combine(path1: directory, path2: (assembly + ".dll"))));
 
-                Index(root: module);
                 Root(method: method, module: module, type: module.Types[CanonicalTypeName(name: type)]);
             }
             while ((m_methods.Count > 0) || (m_types.Count > 0)) {
@@ -224,32 +307,6 @@ public sealed partial class CodeClosure {
                 Root(method: null, module: module, type: nested);
             }
         }
-        // Loads every Puck assembly a root's references, transitively, and indexes each type under the types it derives
-        // from and implements, so a call to an abstract member reaches every implementation those assemblies hold.
-        private void Index(Module root) {
-            var pending = new Queue<Module>(collection: [root]);
-            var indexed = new HashSet<Module>();
-
-            while (pending.TryDequeue(result: out var module)) {
-                if (!indexed.Add(item: module) || m_indexed.Contains(item: module)) { continue; }
-                foreach (var handle in module.Metadata.AssemblyReferences) {
-                    if (load(module.Metadata.GetString(handle: module.Metadata.GetAssemblyReference(handle: handle).Name)) is { } referenced) { pending.Enqueue(item: referenced); }
-                }
-            }
-            foreach (var module in indexed.Where(predicate: m_indexed.Add).OrderBy(keySelector: static module => module.Name, comparer: StringComparer.Ordinal)) {
-                foreach (var handle in module.Metadata.TypeDefinitions) {
-                    var type = module.Metadata.GetTypeDefinition(handle: handle);
-
-                    foreach (var parent in type.GetInterfaceImplementations().Select(selector: implementation => module.Metadata.GetInterfaceImplementation(handle: implementation).Interface).Prepend(element: type.BaseType)) {
-                        if (!parent.IsNil && (Resolve(handle: parent, module: module) is { } resolved)) {
-                            if (!m_derived.TryGetValue(key: resolved, value: out var list)) { m_derived[resolved] = list = []; }
-                            list.Add(item: (module, handle));
-                        }
-                    }
-                }
-            }
-        }
-        private readonly HashSet<Module> m_indexed = [];
         // The Puck type a type token names, through a generic instantiation to its definition; null outside Puck.
         private (Module, TypeDefinitionHandle)? Resolve(Module module, EntityHandle handle) {
             var reader = module.Metadata;
@@ -301,7 +358,10 @@ public sealed partial class CodeClosure {
         }
         // A type whose instances the closure makes: its static constructor runs, and any override it or its base types
         // declare may run, through the runtime's interfaces as through Puck's, but a record's synthesized members, whose
-        // behavior its hashed layout decides.
+        // behavior its hashed layout decides. This is the only way a virtual call reaches an implementation: a call
+        // through an abstract or interface member runs on an instance some code made, so the members of the types the
+        // closure makes are every implementation such a call can reach, and a type that merely derives from the callee's
+        // (a job unit another caller posts to the same lane, an evaluator the walk never builds) joins nothing.
         private void Construct(Module module, TypeDefinitionHandle type) {
             if (!m_constructed.Add(item: (module, type))) { return; }
 
@@ -319,26 +379,6 @@ public sealed partial class CodeClosure {
         private static bool IsCompilerGenerated(Module module, CustomAttributeHandleCollection attributes) => attributes
             .Select(selector: handle => module.Metadata.GetCustomAttribute(handle: handle).Constructor)
             .Any(predicate: constructor => ((constructor.Kind == HandleKind.MemberReference) && (module.Metadata.GetMemberReference(handle: (MemberReferenceHandle)constructor).Parent is { Kind: HandleKind.TypeReference } parent) && module.Metadata.StringComparer.Equals(handle: module.Metadata.GetTypeReference(handle: (TypeReferenceHandle)parent).Name, value: "CompilerGeneratedAttribute")));
-        // A call to a virtual or abstract member of a Puck type reaches the members of its name in every type deriving from
-        // or implementing it.
-        private void Dispatch(Module module, MethodDefinitionHandle method) {
-            var definition = module.Metadata.GetMethodDefinition(handle: method);
-            var name = module.Metadata.GetString(handle: definition.Name);
-            var pending = new Queue<(Module, TypeDefinitionHandle)>(collection: (((definition.Attributes & MethodAttributes.Virtual) != 0) ? [(module, definition.GetDeclaringType())] : []));
-            var seen = new HashSet<(Module, TypeDefinitionHandle)>();
-
-            while (pending.TryDequeue(result: out var type)) {
-                foreach (var (derivedModule, derivedType) in ((seen.Add(item: type) && m_derived.TryGetValue(key: type, value: out var derived)) ? derived : [])) {
-                    pending.Enqueue(item: (derivedModule, derivedType));
-                    foreach (var candidate in derivedModule.Metadata.GetTypeDefinition(handle: derivedType).GetMethods()) {
-                        var candidateName = derivedModule.Metadata.GetString(handle: derivedModule.Metadata.GetMethodDefinition(handle: candidate).Name);
-
-                        if ((candidateName == name) || candidateName.EndsWith(value: ("." + name), comparisonType: StringComparison.Ordinal)) { Enqueue(method: candidate, module: derivedModule); }
-                    }
-                }
-            }
-        }
-
         // A value type's layout is the bytes its code moves, so it counts whole; any other type's layout counts the fields
         // the closure's code reads or writes (HashLayout, once the walk ends and every such field is known), and a field the
         // code never touches cannot change what it does.
@@ -372,7 +412,7 @@ public sealed partial class CodeClosure {
 
                 var field = reader.GetFieldDefinition(handle: handle);
 
-                text.Append(value: '\n').Append(value: (int)field.Attributes).Append(value: ' ').Append(value: reader.GetString(handle: field.Name)).Append(value: ' ').Append(value: Quiet(name: () => field.DecodeSignature(genericContext: null, provider: this))).Append(value: ' ').Append(value: field.GetOffset());
+                text.Append(value: '\n').Append(value: (int)field.Attributes).Append(value: ' ').Append(value: module.NameOf(field: handle)).Append(value: ' ').Append(value: Quiet(name: () => field.DecodeSignature(genericContext: null, provider: this))).Append(value: ' ').Append(value: field.GetOffset());
             }
 
             m_members[key] = XxHash128.HashToUInt128(source: Encoding.UTF8.GetBytes(s: text.ToString()));
@@ -395,7 +435,7 @@ public sealed partial class CodeClosure {
             var definition = reader.GetMethodDefinition(handle: method);
             var text = new StringBuilder();
             var signature = Quiet(name: () => MethodSignature(signature: definition.DecodeSignature(genericContext: null, provider: this)));
-            var key = (module.Name + "!" + module.FullName(handle: definition.GetDeclaringType()) + "." + reader.GetString(handle: definition.Name) + signature);
+            var key = (module.Name + "!" + module.FullName(handle: definition.GetDeclaringType()) + "." + module.NameOf(method: method) + signature);
 
             m_current = key;
             Reasons[key] = m_from[(module, method)];
@@ -456,7 +496,6 @@ public sealed partial class CodeClosure {
                         if (Stopped(module: resolved.Item1, type: declaring)) { return name; }
                         if ((code == OpCodes.Newobj) || resolved.Item1.Metadata.StringComparer.Equals(handle: definition.Name, value: ".ctor")) { Construct(module: resolved.Item1, type: declaring); }
                         if ((definition.Attributes & MethodAttributes.Static) != 0) { Initialize(module: resolved.Item1, type: declaring); }
-                        if ((code == OpCodes.Callvirt) || (code == OpCodes.Ldvirtftn)) { Dispatch(method: resolved.Item2, module: resolved.Item1); }
                     }
 
                     return name;
@@ -490,12 +529,13 @@ public sealed partial class CodeClosure {
             if (handle.Kind == HandleKind.FieldDefinition) {
                 var field = reader.GetFieldDefinition(handle: (FieldDefinitionHandle)handle);
 
-                return ((TypeName(handle: field.GetDeclaringType(), module: module) + "." + reader.GetString(handle: field.Name) + " " + Quiet(name: () => field.DecodeSignature(genericContext: null, provider: this))), (FieldDefinitionHandle)handle, module);
+                return ((TypeName(handle: field.GetDeclaringType(), module: module) + "." + module.NameOf(field: (FieldDefinitionHandle)handle) + " " + Quiet(name: () => field.DecodeSignature(genericContext: null, provider: this))), (FieldDefinitionHandle)handle, module);
             }
 
             var member = reader.GetMemberReference(handle: (MemberReferenceHandle)handle);
-            var name = (TypeName(handle: member.Parent, module: module) + "." + reader.GetString(handle: member.Name) + " " + Quiet(name: () => member.DecodeFieldSignature(genericContext: null, provider: this)));
             var parent = Resolve(handle: member.Parent, module: module);
+            var fieldName = reader.GetString(handle: member.Name);
+            var name = (TypeName(handle: member.Parent, module: module) + "." + ((parent is { } declaring) ? declaring.Item1.Canonical(declaring: declaring.Item2, name: fieldName) : fieldName) + " " + Quiet(name: () => member.DecodeFieldSignature(genericContext: null, provider: this)));
             var match = ((parent is { } owner) ? owner.Item1.Metadata.GetTypeDefinition(handle: owner.Item2).GetFields().Where(predicate: field => owner.Item1.Metadata.StringComparer.Equals(handle: owner.Item1.Metadata.GetFieldDefinition(handle: field).Name, value: reader.GetString(handle: member.Name))).Cast<FieldDefinitionHandle?>().FirstOrDefault() : null);
 
             return (name, match, parent?.Item1);
@@ -522,7 +562,7 @@ public sealed partial class CodeClosure {
             if (handle.Kind == HandleKind.MethodDefinition) {
                 var definition = reader.GetMethodDefinition(handle: (MethodDefinitionHandle)handle);
 
-                return ((TypeName(handle: definition.GetDeclaringType(), module: module) + "." + reader.GetString(handle: definition.Name) + Quiet(name: () => MethodSignature(signature: definition.DecodeSignature(genericContext: null, provider: this)))), (module, (MethodDefinitionHandle)handle));
+                return ((TypeName(handle: definition.GetDeclaringType(), module: module) + "." + module.NameOf(method: (MethodDefinitionHandle)handle) + Quiet(name: () => MethodSignature(signature: definition.DecodeSignature(genericContext: null, provider: this)))), (module, (MethodDefinitionHandle)handle));
             }
             if (handle.Kind == HandleKind.MethodSpecification) {
                 var specification = reader.GetMethodSpecification(handle: (MethodSpecificationHandle)handle);
@@ -537,7 +577,7 @@ public sealed partial class CodeClosure {
             var parent = Resolve(handle: member.Parent, module: module);
             var match = ((parent is { } owner) ? owner.Item1.Metadata.GetTypeDefinition(handle: owner.Item2).GetMethods().Where(predicate: candidate => owner.Item1.Metadata.StringComparer.Equals(handle: owner.Item1.Metadata.GetMethodDefinition(handle: candidate).Name, value: name) && (Quiet(name: () => MethodSignature(signature: owner.Item1.Metadata.GetMethodDefinition(handle: candidate).DecodeSignature(genericContext: null, provider: this))) == signature)).Select(selector: candidate => ((Module, MethodDefinitionHandle)?)(owner.Item1, candidate)).FirstOrDefault() : null);
 
-            return ((TypeName(handle: member.Parent, module: module) + "." + name + signature), match);
+            return ((TypeName(handle: member.Parent, module: module) + "." + ((parent is { } declaring) ? declaring.Item1.Canonical(declaring: declaring.Item2, name: name) : name) + signature), match);
         }
         private string Quiet(Func<string> name) {
             var was = m_quiet;

@@ -519,9 +519,7 @@ measured.**
 17. [high] [Bake proportional to change](#bake-proportional-to-change): the
     bake samples a dense lattice in about twenty round trips a group. Its
     replacement is sampling in one round trip a stage from one root-search
-    source, with coarse-to-fine pruning; the CPU-stage cuts follow it. First,
-    though, the defect that an edit the bake never reads moved its identity
-    and forced a cold set: it taxes every engine edit and every release.
+    source, with coarse-to-fine pruning; the CPU-stage cuts follow it.
 18. [high, before the hosted world admits players] [Security review](#security-review):
     the write door's remaining leaks, then
     [disclosure](disclosure.md#the-build-order)'s next steps and what
@@ -1736,8 +1734,7 @@ Stalls and hitches to attribute:
 
 ### Bake proportional to change
 
-Owner: specialist (rendering) · high · Next: the identity defect below, which
-taxes every engine edit and every release; a quiet cold bake per backend on
+Owner: specialist (rendering) · high · Next: a quiet cold bake per backend on
 the integration head, which the cache sets need anyway
 ([verification debts](#verification-debts)); then
 [the cold bake's steps](iteration.md#the-cold-bakes-steps), whose step 3
@@ -1828,27 +1825,18 @@ Remaining detailed findings and smaller cuts in this area:
   `SdfWorldResidency.Prepare` rules it out; if not, bind both in one step.
   `WorldTextCatalog.Reconcile` also copies the whole packed image into
   `SdfGlyphAtlas`.
-- [high, iteration] An edit to `SdfMeshPathBake` that the bake's content never
-  reads still moved the mesh bake identity and forced a cold set: the lane
-  that built the cache policy added state only its own `Driven` reads and
-  every stored mesh missed. The mesh-bake reference says a field the closure
-  never reads leaves the identity alone
-  ([the closure](../../.claude/skills/rendering/references/mesh-bake.md#the-library-and-the-store)),
-  so either the closure counts that type whole or the reference is wrong.
-  Reproduce with a scratch field on `SdfMeshPathBake` and
-  `puck mesh identity --against`, then fix whichever is wrong. An engine edit
-  that rebakes the world breaks the edit loop the iteration plan protects, and
-  costs the lead a cold set per backend before every release. Unconfirmed
-  beside it: a kernel reload may move the identity, so the next restart
-  rebakes.
+- [medium, iteration] Unconfirmed: a kernel reload may move the bake identity,
+  so the next restart rebakes. Check with `puck mesh identity --against` across
+  a reload's build.
 - [low] Two leads from the bake's lanes, neither reproduced: a change in a
   group's material order discards an identical bake in flight
   (`SdfMeshPathBake`'s `Keeps` and `Place`), and the landing stage may judge
   its error in clamped units, several times more lenient than the field's.
 - [medium] The bake closure reaches code that decides no content, so editing it
-  moves the store identity: `WorkCounterSet`, `WorkCount` and `WorkKind`,
-  `CameraSnapshot` and `SweptBox`, `CodeDerivedTable`, and a group's `Outcome`
-  text literals, which only the done line reads. Make them stop types or
+  moves the store identity: `CameraSnapshot` and `SweptBox`,
+  `CodeDerivedTable`, and a group's `Outcome` text literals, which only the
+  done line reads. A field the bake's code only writes (a counter set in the
+  constructor) still moves the constructor's IL. Make them stop types or
   values the report words (`SdfMeshBakeReport`), with a scratch-edit check
   that each no longer moves the identity; the `m_restarts`, `m_loads*` and
   `m_planMilliseconds` counters belong in `SdfMeshBakeReport.Accounts` too.

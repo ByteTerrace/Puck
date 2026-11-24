@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Puck.Abstractions;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Maths;
@@ -1624,22 +1625,23 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
     }
 
-    // The frame's search for the windows that render while a world's meshes arrive (ReserveArrivals): the arriving
-    // worlds it has given a window, the windows it keeps (each such world's one window and every window on the way to
-    // it), each view it has reached with the consumer it was reached from, and the views reached in the last pass and
-    // in this one.
+    // The frame's search for the windows that render while a world's meshes arrive (ReserveArrivals), by topology id:
+    // the arriving worlds it has given a window, the windows it keeps (each such world's one window and every window on
+    // the way to it), each view it has reached with the consumer it was reached from (-1 for a seed), the views reached in
+    // the last pass and in this one, and a pass's edges.
     private readonly HashSet<object> m_arrivingWorlds = new(comparer: ReferenceEqualityComparer.Instance);
-    private readonly HashSet<string> m_arrivalKept = new(comparer: StringComparer.Ordinal);
-    private readonly Dictionary<string, string?> m_arrivalReached = new(comparer: StringComparer.Ordinal);
-    private readonly HashSet<string> m_arrivalFrontier = new(comparer: StringComparer.Ordinal);
-    private readonly List<string> m_arrivalNext = [];
+    private readonly MarkedIndexSet m_arrivalKept = new();
+    private readonly StampedIndexTable<int> m_arrivalReached = new();
+    private MarkedIndexSet m_arrivalFrontier = new();
+    private MarkedIndexSet m_arrivalNext = new();
+    private readonly List<int> m_levelEdges = [];
 
     // Whether a window its consumer does not render for its own sake (out of sight, too small or occluded) renders
     // at the least share this frame so a world's meshes arrive (ReserveArrivals).
-    private bool RendersForArrival(string view) => m_arrivalKept.Contains(item: view);
+    private bool RendersForArrival(int view) => m_arrivalKept.Contains(index: view);
     // Whether such a window renders at the least share this frame: for an arrival, or to give back the storage of the
     // extent it was last seen at (ReserveShrinks).
-    private bool RendersAtLeastShare(string view) => (m_arrivalKept.Contains(item: view) || m_shrinkKept.Contains(item: view));
+    private bool RendersAtLeastShare(int view) => (m_arrivalKept.Contains(index: view) || m_shrinkKept.Contains(index: view));
 
     /// <summary>The consecutive frames a session view renders nothing before the host shrinks the storage it holds to
     /// its least share.</summary>
@@ -1652,9 +1654,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
     // The session views shrinking their storage, each with the frames it has rendered at its least share for it, or
     // ShrinkAbandoned once the limit passed; and the views this frame renders at their least share for one (each
-    // shrinking view and every window on the way to it).
+    // shrinking view and every window on the way to it), by topology id.
     private readonly Dictionary<string, int> m_shrinking = new(comparer: StringComparer.Ordinal);
-    private readonly HashSet<string> m_shrinkKept = new(comparer: StringComparer.Ordinal);
+    private readonly MarkedIndexSet m_shrinkKept = new();
 
     private const int ShrinkAbandoned = -1;
 
@@ -1668,7 +1670,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // which names the extent last asked for. A view on the way to a shrinking one renders with it, since a nested view
     // renders only when its consumer does. Only the sights that ask no footprint read the choice (RendersAtLeastShare),
     // so a window in sight that stands on an unchanged scene keeps its extent however long it renders nothing.
-    private void ReserveShrinks() {
+    private void ReserveShrinks(FootprintTopology topology) {
         m_shrinkKept.Clear();
         if (
             (m_runtime is not { } runtime) ||
@@ -1711,18 +1713,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 continue;
             }
 
-            for (var kept = portal; (kept is not null) && m_shrinkKept.Add(item: kept); kept = ConsumingPortalOf(view: kept)) { }
+            for (var kept = topology.IdOf(name: portal); (kept >= 0) && m_shrinkKept.Add(index: kept); kept = topology.ConsumingPortal[kept]) { }
         }
-    }
-    // The session view whose image shows another session view's glass, or null when a view that is not one shows it.
-    private string? ConsumingPortalOf(string view) {
-        foreach (var footprint in m_screenFootprints) {
-            if (string.Equals(a: footprint.Producer, b: view, comparisonType: StringComparison.Ordinal) && m_portals.Contains(item: footprint.Consumer)) {
-                return footprint.Consumer;
-            }
-        }
-
-        return null;
     }
 
     // Chooses the windows that render at the least share this frame so the worlds behind them become resident. A
@@ -1732,11 +1724,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // settles, and a window onto it renders only if its consumer does. The search walks outward from the views that
     // render whatever the windows do (the main instance, the roots, and every producer the root reads this frame: the
     // synthesized footprint, each placed view and each pane, which m_footprints holds before the screens are decided),
-    // through session windows only, a pass a level: the first window reached onto an arriving world its consumer does
-    // not render is that world's one window, and it and every window on the way back to a view that renders are kept. So a world
-    // behind a chain of hidden windows becomes resident, a window no rendered view leads to never takes a world's
-    // place, a world many windows show keeps one of them rendering, the nearest, and a resident world keeps none.
-    private void ReserveArrivals(in FootprintFrame frame) {
+    // through session windows only, a pass a level and each pass's edges in footprint order, the filming cameras after:
+    // the first window reached onto an arriving world its consumer does not render is that world's one window, and it and
+    // every window on the way back to a view that renders are kept. So a world behind a chain of hidden windows becomes
+    // resident, a window no rendered view leads to never takes a world's place, a world many windows show keeps one of
+    // them rendering, the nearest, and a resident world keeps none. A pass visits only the edges out of the views the last
+    // pass reached.
+    private void ReserveArrivals(FootprintTopology topology, in FootprintFrame frame) {
         m_arrivingWorlds.Clear();
         m_arrivalKept.Clear();
         m_arrivalReached.Clear();
@@ -1744,34 +1738,32 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_arrivalNext.Clear();
         if (ViewScenes is not { } scenes) { return; }
 
-        AddRenderingSeeds(views: m_arrivalFrontier);
-        foreach (var seed in m_arrivalFrontier) { _ = m_arrivalReached.TryAdd(key: seed, value: null); }
+        AddRenderingSeeds(topology: topology, views: m_arrivalFrontier);
+        foreach (var seed in m_arrivalFrontier.Members) { m_arrivalReached.Set(index: seed, value: -1); }
         while (m_arrivalFrontier.Count > 0) {
-            foreach (var footprint in m_screenFootprints) {
-                if (m_arrivalFrontier.Contains(item: footprint.Consumer)) {
-                    ReachForArrival(consumer: footprint.Consumer, frame: in frame, producer: footprint.Producer, scenes: scenes);
-                }
+            LevelEdges(frontier: m_arrivalFrontier, level: m_levelEdges, topology: topology);
+            foreach (var edge in m_levelEdges) {
+                ReachForArrival(edge: edge, frame: in frame, scenes: scenes, topology: topology);
             }
-            foreach (var (camera, filmed) in m_filmedViews) {
-                if (m_arrivalFrontier.Contains(item: camera.Name)) {
-                    ReachForArrival(consumer: camera.Name, frame: in frame, producer: filmed.Name, scenes: scenes);
-                }
-            }
-            m_arrivalFrontier.Clear();
-            m_arrivalFrontier.UnionWith(other: m_arrivalNext);
+            (m_arrivalFrontier, m_arrivalNext) = (m_arrivalNext, m_arrivalFrontier);
             m_arrivalNext.Clear();
         }
     }
     // Reaches a session window from a consumer the search has reached, once: a window whose glass stands in another
     // world than its consumer's is no way onward, and one onto an arriving world no window has yet is kept with the
     // windows it was reached through.
-    private void ReachForArrival(string consumer, string producer, IWorldViewScenes scenes, in FootprintFrame frame) {
-        if (!m_portals.Contains(item: producer) || m_arrivalReached.ContainsKey(key: producer)) { return; }
-        if (frame.PortalCoverage(consumer: consumer, coverage: out _, glass: out _, producer: producer) == PortalSight.Hidden) { return; }
-        m_arrivalReached.Add(key: producer, value: consumer);
-        m_arrivalNext.Add(item: producer);
-        if ((scenes.ArrivingWorld(consumer: consumer, view: producer) is not { } world) || !m_arrivingWorlds.Add(item: world)) { return; }
-        for (var kept = producer; (kept is not null) && m_arrivalKept.Add(item: kept); kept = m_arrivalReached.GetValueOrDefault(key: kept)) { }
+    private void ReachForArrival(int edge, FootprintTopology topology, IWorldViewScenes scenes, in FootprintFrame frame) {
+        var producer = topology.Producer[edge];
+
+        if (!topology.Portal[producer] || m_arrivalReached.TryGetValue(index: producer, value: out _)) { return; }
+        if (frame.PortalCoverage(coverage: out _, edge: edge, glass: out _) == PortalSight.Hidden) { return; }
+
+        var consumer = topology.Consumer[edge];
+
+        m_arrivalReached.Set(index: producer, value: consumer);
+        _ = m_arrivalNext.Add(index: producer);
+        if ((scenes.ArrivingWorld(consumer: topology.Names[consumer], view: topology.Names[producer]) is not { } world) || !m_arrivingWorlds.Add(item: world)) { return; }
+        for (var kept = producer; (kept >= 0) && m_arrivalKept.Add(index: kept); kept = (m_arrivalReached.TryGetValue(index: kept, value: out var from) ? from : -1)) { }
     }
 
     private WorldPortalReach m_portalReach = new(senses: null);
@@ -1786,16 +1778,19 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
     // Adds the views that render whatever the windows do: the main instance, the roots, and every producer the root reads
     // this frame (the synthesized footprint, each placed view and each pane, which m_footprints holds before the screens
-    // are decided). Both walks over the windows start from these.
-    private void AddRenderingSeeds(HashSet<string> views) {
-        _ = views.Add(item: WorldViewGraphs.MainInstance);
-        foreach (var root in m_viewRoots) { _ = views.Add(item: root.Instance); }
-        foreach (var footprint in m_footprints) { _ = views.Add(item: footprint.Producer); }
+    // are decided). Both walks over the windows start from these; a seed no edge names leads nowhere and is left out.
+    private void AddRenderingSeeds(FootprintTopology topology, MarkedIndexSet views) {
+        AddSeed(name: WorldViewGraphs.MainInstance, topology: topology, views: views);
+        foreach (var root in m_viewRoots) { AddSeed(name: root.Instance, topology: topology, views: views); }
+        foreach (var footprint in m_footprints) { AddSeed(name: footprint.Producer, topology: topology, views: views); }
+    }
+    private static void AddSeed(string name, FootprintTopology topology, MarkedIndexSet views) {
+        if (topology.IdOf(name: name) is >= 0 and var id) { _ = views.Add(index: id); }
     }
     // The consumers whose image this frame renders, as WantSightedWorlds walks them, and its frontier.
-    private readonly HashSet<string> m_sightRendering = new(comparer: StringComparer.Ordinal);
-    private readonly HashSet<string> m_sightFrontier = new(comparer: StringComparer.Ordinal);
-    private readonly List<string> m_sightNext = [];
+    private readonly MarkedIndexSet m_sightRendering = new();
+    private MarkedIndexSet m_sightFrontier = new();
+    private MarkedIndexSet m_sightNext = new();
 
     // Tells each world behind a session's glass that it is wanted this frame (IWorldViewScenes.Want): a view that renders
     // sees the glass, too small to render or not, or its sight is not known yet, or the glass leads out of its sight
@@ -1808,33 +1803,29 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // answer), never through one out of sight, held small or merely leading: that window's camera stands where its viewer
     // would look through it, and judging its glasses from there would keep every world behind every painting in a world
     // wanted wherever the viewer stands. Runs after ReserveArrivals.
-    private void WantSightedWorlds(in FootprintFrame frame) {
+    private void WantSightedWorlds(FootprintTopology topology, in FootprintFrame frame) {
         if (ViewScenes is not { } scenes) { return; }
 
         m_portalReach.Sweep();
         m_sightRendering.Clear();
         m_sightFrontier.Clear();
         m_sightNext.Clear();
-        AddRenderingSeeds(views: m_sightRendering);
-        m_sightRendering.UnionWith(other: m_arrivalKept);
-        m_sightFrontier.UnionWith(other: m_sightRendering);
+        AddRenderingSeeds(topology: topology, views: m_sightRendering);
+        foreach (var kept in m_arrivalKept.Members) { _ = m_sightRendering.Add(index: kept); }
+        foreach (var rendering in m_sightRendering.Members) { _ = m_sightFrontier.Add(index: rendering); }
         while (m_sightFrontier.Count > 0) {
-            foreach (var footprint in m_screenFootprints) {
-                if (m_portals.Contains(item: footprint.Producer) && m_sightFrontier.Contains(item: footprint.Consumer)
-                    && WantIfSighted(consumer: footprint.Consumer, frame: in frame, producer: footprint.Producer, scenes: scenes)
-                    && m_sightRendering.Add(item: footprint.Producer)) {
-                    m_sightNext.Add(item: footprint.Producer);
+            LevelEdges(frontier: m_sightFrontier, level: m_levelEdges, topology: topology);
+            foreach (var edge in m_levelEdges) {
+                var producer = topology.Producer[edge];
+
+                // A screen footprint passes the walk on only through a session window; a filming camera's view through any.
+                if (((edge >= topology.ScreenCount) || topology.Portal[producer])
+                    && WantIfSighted(edge: edge, frame: in frame, scenes: scenes, topology: topology)
+                    && m_sightRendering.Add(index: producer)) {
+                    _ = m_sightNext.Add(index: producer);
                 }
             }
-            foreach (var (camera, filmed) in m_filmedViews) {
-                if (m_sightFrontier.Contains(item: camera.Name)
-                    && WantIfSighted(consumer: camera.Name, frame: in frame, producer: filmed.Name, scenes: scenes)
-                    && m_sightRendering.Add(item: filmed.Name)) {
-                    m_sightNext.Add(item: filmed.Name);
-                }
-            }
-            m_sightFrontier.Clear();
-            m_sightFrontier.UnionWith(other: m_sightNext);
+            (m_sightFrontier, m_sightNext) = (m_sightNext, m_sightFrontier);
             m_sightNext.Clear();
         }
     }
@@ -1844,12 +1835,15 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // shows its latest image whether or not its world holds tables (SdfWorldResidency.StandsParked), and grows into a seen
     // glass, which wakes the world while its views keep that image (SdfWorldResidency.Waking), before it shows more. Returns
     // whether the view renders with its consumer: one that is no portal, or whose glass is seen or of unknown sight.
-    private bool WantIfSighted(string consumer, string producer, IWorldViewScenes scenes, in FootprintFrame frame) {
-        if (!m_portals.Contains(item: producer)) {
+    private bool WantIfSighted(int edge, FootprintTopology topology, IWorldViewScenes scenes, in FootprintFrame frame) {
+        var consumer = topology.Names[topology.Consumer[edge]];
+        var producer = topology.Names[topology.Producer[edge]];
+
+        if (!topology.Portal[topology.Producer[edge]]) {
             scenes.Want(consumer: consumer, metres: float.NaN, view: producer, why: "rendered");
             return true;
         }
-        switch (PortalSightOf(consumer: consumer, coverage: out _, frame: in frame, glass: out _, pixels: (double.PositiveInfinity, double.PositiveInfinity), producer: producer)) {
+        switch (PortalSightOf(coverage: out _, edge: edge, frame: in frame, glass: out _, pixels: (double.PositiveInfinity, double.PositiveInfinity))) {
             case PortalSight.Seen:
                 scenes.Want(consumer: consumer, metres: float.NaN, view: producer, why: "seen");
                 return true;
@@ -1859,38 +1853,48 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
         if ((scenes.PortalGlass(consumer: consumer, glass: out var glass, producer: producer, world: out var world) == WorldPortalGlass.Found)
             && (m_cameras.TryGetValue(key: consumer, value: out var camera) || scenes.TryVisibilityCamera(camera: out camera, view: consumer))) {
-            var lead = m_portalReach.Judge(camera: in camera, glass: glass!, seated: !m_portals.Contains(item: consumer), world: world);
+            var lead = m_portalReach.Judge(camera: in camera, glass: glass!, seated: !topology.Portal[topology.Consumer[edge]], world: world);
 
             if (lead.Leads) { scenes.Want(consumer: consumer, metres: lead.Metres, view: producer, why: lead.Why); }
         }
         return false;
     }
 
+    // The edge each screen footprint m_footprints holds from the first screen on came from (CompleteFootprints), in the
+    // same order.
+    private readonly List<int> m_screenEdges = [];
+
     // Finish only after this frame's cameras and placements have been composed. First form the visible graph without
     // rate holds, then measure its display shares before deciding which glass is small. Measuring last frame's pruned
     // graph would delay wake-up when a consumer grows or a portal becomes visible again.
     private void CompleteFootprints() {
+        var topology = Topology;
         var frame = new FootprintFrame(this);
-        ReserveArrivals(frame: in frame);
-        WantSightedWorlds(frame: in frame);
-        ReserveShrinks();
-        RootFilmedViews(frame: in frame);
+        ReserveArrivals(frame: in frame, topology: topology);
+        WantSightedWorlds(frame: in frame, topology: topology);
+        ReserveShrinks(topology: topology);
+        RootFilmedViews(frame: in frame, topology: topology);
         var firstScreen = m_footprints.Count;
 
-        foreach (var footprint in m_screenFootprints) {
-            if (!m_portals.Contains(item: footprint.Producer)) {
+        m_screenEdges.Clear();
+        for (var edge = 0; (edge < topology.ScreenCount); edge++) {
+            var footprint = m_screenFootprints[edge];
+            var producer = topology.Producer[edge];
+
+            if (!topology.Portal[producer]) {
                 m_footprints.Add(item: footprint);
+                m_screenEdges.Add(item: edge);
                 continue;
             }
 
             switch (frame.PortalCoverage(
                 glass: out _,
-                consumer: footprint.Consumer,
-                coverage: out var coverage,
-                producer: footprint.Producer
+                edge: edge,
+                coverage: out var coverage
             )) {
                 case PortalSight.Unknown:
                     m_footprints.Add(item: footprint);
+                    m_screenEdges.Add(item: edge);
 
                     break;
                 case PortalSight.Seen:
@@ -1905,16 +1909,18 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                         Height = held.Height,
                         Width = held.Width,
                     }));
+                    m_screenEdges.Add(item: edge);
 
                     break;
                 // A window out of its consumer's sight, or too small in it, renders at the least share while a world's
                 // meshes arrive through it (RendersForArrival): its world, or one behind it, then becomes resident
                 // before the glass comes into view. It renders there too while its storage shrinks (ReserveShrinks).
-                case PortalSight.Unseen or PortalSight.Small when RendersAtLeastShare(view: footprint.Producer):
+                case PortalSight.Unseen or PortalSight.Small when RendersAtLeastShare(view: producer):
                     m_footprints.Add(item: (footprint with {
                         Height = WorldPortalVisibility.ArrivalShare,
                         Width = WorldPortalVisibility.ArrivalShare,
                     }));
+                    m_screenEdges.Add(item: edge);
 
                     break;
                 case PortalSight.Unseen:
@@ -1925,13 +1931,16 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
 
         MeasureDisplayShares(rates: frame.Rates);
-        DecideScreenFootprints(firstScreen: firstScreen, frame: in frame);
+        DecideScreenFootprints(firstScreen: firstScreen, frame: in frame, topology: topology);
         RateEnvironmentReads();
         PublishRateReadings();
         MeasureDisplayShares(rates: frame.Rates);
         m_visiblePortals.Clear();
-        foreach (var footprint in m_footprints) {
-            if (m_portals.Contains(item: footprint.Producer) && m_displayShares.ContainsKey(key: footprint.Consumer)) {
+        for (var index = 0; (index < m_footprints.Count); index++) {
+            var footprint = m_footprints[index];
+            var portal = ((index >= firstScreen) ? topology.Portal[topology.Producer[m_screenEdges[(index - firstScreen)]]] : m_portals.Contains(item: footprint.Producer));
+
+            if (portal && m_displayShares.ContainsKey(key: footprint.Consumer)) {
                 _ = m_visiblePortals.Add(item: footprint.Producer);
             }
         }
@@ -1947,59 +1956,70 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // world.rates. The display shares were measured before this pruning: a consumer they reach that no kept footprint
     // reaches keeps its footprints as they stood (never decided), and a consumer they never reach decides at once, as
     // it does with no lever on, without demanding its producer.
-    private void DecideScreenFootprints(int firstScreen, in FootprintFrame frame) {
+    private void DecideScreenFootprints(int firstScreen, FootprintTopology topology, in FootprintFrame frame) {
         m_pending.Clear();
         m_pendingState.Clear();
+        m_pendingShared.Clear();
         for (var index = firstScreen; (index < m_footprints.Count); index++) {
             m_pending.Add(item: m_footprints[index]);
             m_pendingState.Add(item: FootprintState.Waiting);
+            m_pendingShared.Add(item: m_displayShares.ContainsKey(key: m_footprints[index].Consumer));
         }
 
         m_footprints.RemoveRange(index: firstScreen, count: (m_footprints.Count - firstScreen));
         m_demanded.Clear();
-        _ = m_demanded.Add(item: WorldViewGraphs.MainInstance);
+        AddSeed(name: WorldViewGraphs.MainInstance, topology: topology, views: m_demanded);
         foreach (var root in m_roots) {
-            _ = m_demanded.Add(item: root.Instance);
+            AddSeed(name: root.Instance, topology: topology, views: m_demanded);
         }
         foreach (var footprint in m_footprints) {
-            _ = m_demanded.Add(item: footprint.Producer);
+            AddSeed(name: footprint.Producer, topology: topology, views: m_demanded);
         }
 
         for (var progressed = true; progressed;) {
             progressed = false;
 
             for (var index = 0; (index < m_pending.Count); index++) {
-                var footprint = m_pending[index];
+                var edge = m_screenEdges[index];
+                var consumer = topology.Consumer[edge];
 
                 if (
                     (m_pendingState[index] != FootprintState.Waiting) ||
-                    (m_displayShares.ContainsKey(key: footprint.Consumer) && !m_demanded.Contains(item: footprint.Consumer))
+                    (m_pendingShared[index] && !m_demanded.Contains(index: consumer))
                 ) {
                     continue;
                 }
 
-                var reached = m_demanded.Contains(item: footprint.Consumer);
-                var kept = DecideFootprint(footprint: ref footprint, frame: in frame);
+                var footprint = m_pending[index];
+                var reached = m_demanded.Contains(index: consumer);
+                var kept = DecideFootprint(edge: edge, footprint: ref footprint, frame: in frame, topology: topology);
 
                 m_pending[index] = footprint;
                 m_pendingState[index] = (kept ? FootprintState.Kept : FootprintState.Dropped);
                 progressed = true;
                 if (kept && reached) {
-                    _ = m_demanded.Add(item: footprint.Producer);
+                    _ = m_demanded.Add(index: topology.Producer[edge]);
                 }
             }
         }
 
+        // The kept footprints, with their edges kept beside them in the same order (m_screenEdges).
+        var keptCount = 0;
+
         for (var index = 0; (index < m_pending.Count); index++) {
             if (m_pendingState[index] != FootprintState.Dropped) {
                 m_footprints.Add(item: m_pending[index]);
+                m_screenEdges[keptCount++] = m_screenEdges[index];
             }
         }
+        m_screenEdges.RemoveRange(index: keptCount, count: (m_screenEdges.Count - keptCount));
     }
     // One footprint's demand: a source's screens rated, a session's glass dropped (false) when too small to render, at
     // its least share while a world's meshes arrive through it, or rated by the views lever.
-    private bool DecideFootprint(ref RenderGraphFootprint footprint, in FootprintFrame frame) {
-        if (!m_portals.Contains(item: footprint.Producer)) {
+    private bool DecideFootprint(int edge, ref RenderGraphFootprint footprint, FootprintTopology topology, in FootprintFrame frame) {
+        var producer = topology.Producer[edge];
+
+        if (!topology.Portal[producer]) {
             footprint = footprint with { Refresh = ScreenRefresh(footprint: in footprint, rates: frame.Rates) };
 
             return true;
@@ -2009,8 +2029,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             ? (Width: share.Width * m_displayWidth, Height: share.Height * m_displayHeight)
             : (Width: double.PositiveInfinity, Height: double.PositiveInfinity));
 
-        switch (PortalSightOf(consumer: footprint.Consumer, producer: footprint.Producer, pixels: pixels, coverage: out var coverage, glass: out var glass, frame: in frame)) {
-            case PortalSight.Small or PortalSight.Hidden when RendersAtLeastShare(view: footprint.Producer):
+        switch (PortalSightOf(edge: edge, pixels: pixels, coverage: out var coverage, glass: out var glass, frame: in frame)) {
+            case PortalSight.Small or PortalSight.Hidden when RendersAtLeastShare(view: producer):
                 footprint = footprint with { Width = WorldPortalVisibility.ArrivalShare, Height = WorldPortalVisibility.ArrivalShare };
 
                 return true;
@@ -2034,27 +2054,28 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // camera's own pixels), at the share of that image the glass spans, so a probe camera facing away from a portal roots
     // nothing beneath it; any other filmed view, or a session whose glass the camera's world cannot place, at the
     // camera's extent times the view's declared one.
-    private void RootFilmedViews(in FootprintFrame frame) {
+    private void RootFilmedViews(FootprintTopology topology, in FootprintFrame frame) {
         m_roots.Clear();
         m_roots.AddRange(collection: m_viewRoots);
 
-        foreach (var (camera, filmed) in m_filmedViews) {
+        for (var filmedIndex = 0; (filmedIndex < m_filmedViews.Count); filmedIndex++) {
+            var (camera, filmed) = m_filmedViews[filmedIndex];
+            var edge = (topology.ScreenCount + filmedIndex);
             var (width, height) = (filmed.Width, filmed.Height);
 
-            if (m_portals.Contains(item: filmed.Name)) {
+            if (topology.Portal[topology.Producer[edge]]) {
                 switch (PortalSightOf(
                     frame: in frame,
                     glass: out _,
-                    consumer: camera.Name,
+                    edge: edge,
                     coverage: out var coverage,
-                    pixels: (camera.Width * m_displayWidth, camera.Height * m_displayHeight),
-                    producer: filmed.Name
+                    pixels: (camera.Width * m_displayWidth, camera.Height * m_displayHeight)
                 )) {
                     case PortalSight.Seen:
                         (width, height) = coverage;
 
                         break;
-                    case PortalSight.Unseen or PortalSight.Small or PortalSight.Hidden when RendersForArrival(view: filmed.Name):
+                    case PortalSight.Unseen or PortalSight.Small or PortalSight.Hidden when RendersForArrival(view: topology.Producer[edge]):
                         (width, height) = (WorldPortalVisibility.ArrivalShare, WorldPortalVisibility.ArrivalShare);
 
                         break;
@@ -2074,21 +2095,32 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     // The one decision whether a consumer's image shows a session's glass this frame (PortalCoverage), and whether that
     // glass is large enough to render: a glass seen at no more than SdfUpdateRateTiers.ViewHeldPixels of the consumer's
     // image is Small and holds its latest image (HoldsGlass). Every footprint and every filming camera's root of a session
-    // takes its demand from here.
-    private PortalSight PortalSightOf(string consumer, string producer, (double Width, double Height) pixels, out (double Width, double Height) coverage, out int glass, in FootprintFrame frame) {
+    // takes its demand from here. The occlusion answer is read once an edge a frame.
+    private PortalSight PortalSightOf(int edge, (double Width, double Height) pixels, out (double Width, double Height) coverage, out int glass, in FootprintFrame frame) {
         var sight = frame.PortalCoverage(
             glass: out glass,
-            consumer: consumer,
-            coverage: out coverage,
-            producer: producer
+            edge: edge,
+            coverage: out coverage
         );
+        var topology = frame.Topology;
+        var consumer = topology.Names[topology.Consumer[edge]];
+        var producer = topology.Names[topology.Producer[edge]];
 
         if (sight == PortalSight.Seen && m_runtime?.SettledCapturePath is null &&
-            RenderSettings is { Cull: SdfMeshCullLevel.Occlusion or SdfMeshCullLevel.Camera } && Pickers is { } passes && ViewScenes is { } scenes &&
-            scenes.PortalGlass(consumer, producer, out var screen) == WorldPortalGlass.Found &&
-            (m_cameras.TryGetValue(consumer, out var camera) || scenes.TryVisibilityCamera(consumer, out camera))) {
-            var slab = WorldPortalVisibility.Slab(screen!);
-            if (passes.PortalOccluded(consumer, screen!.Index, in camera, slab.Origin, slab.Right, slab.Up, slab.Thickness)) {
+            RenderSettings is { Cull: SdfMeshCullLevel.Occlusion or SdfMeshCullLevel.Camera } && Pickers is { } passes && ViewScenes is { } scenes) {
+            ref var reading = ref m_edgeSights[edge];
+
+            if (reading.Occlusion == 0) {
+                reading.Occlusion = 1;
+                if (scenes.PortalGlass(consumer, producer, out var screen) == WorldPortalGlass.Found &&
+                    (m_cameras.TryGetValue(consumer, out var camera) || scenes.TryVisibilityCamera(consumer, out camera))) {
+                    var slab = WorldPortalVisibility.Slab(screen!);
+                    if (passes.PortalOccluded(consumer, screen!.Index, in camera, slab.Origin, slab.Right, slab.Up, slab.Thickness)) {
+                        reading.Occlusion = 2;
+                    }
+                }
+            }
+            if (reading.Occlusion == 2) {
                 return PortalSight.Hidden;
             }
         }
