@@ -76,7 +76,7 @@ public static class WorldProjectionPrototypeFetch {
         WorldTravelerObservation? traveler = null, ContentAddressedStore? content = null) {
         var forward = false;
         var bytes = server.ExecuteAuthorityOperation(operation: () => {
-            var liveTier = ((WorldAdmissionDoor.TryAdmitArrival(entries: server.Definition.Admission,
+            var liveTier = ((WorldAdmissionDoor.TryAdmitArrival(entries: server.AdmissionPolicy,
                 sourceAuthority: sourceAuthority, verdict: out var publicAdmission) is null)
                     ? publicAdmission!.Tier : WorldDisclosureTier.Frames);
 
@@ -87,7 +87,7 @@ public static class WorldProjectionPrototypeFetch {
             if (traveler is { } request) {
                 if ((request.RemainingHops is 0 or > 64) || (request.SourceAuthority != sourceAuthority) ||
                     !server.TryTransferredPrincipal(sourceAuthority: sourceAuthority, mobility: request.Mobility, principal: out var principal) ||
-                    (WorldAdmissionDoor.TryAdmitArrival(entries: server.Definition.Admission, sourceAuthority: sourceAuthority,
+                    (WorldAdmissionDoor.TryAdmitArrival(entries: server.AdmissionPolicy, sourceAuthority: sourceAuthority,
                         verdict: out var admission) is not null)) { return null; }
                 ceiling = ((WorldDisclosureTier)Math.Min(val1: ((byte)ceiling), val2: Math.Min(val1: ((byte)request.Ceiling), val2: ((byte)admission!.Tier))));
                 traveler = request with { Ceiling = ceiling };
