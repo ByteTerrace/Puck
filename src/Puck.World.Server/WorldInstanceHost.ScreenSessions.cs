@@ -556,8 +556,8 @@ public sealed partial class WorldInstanceHost {
         }
 
         var definition = instance.Server.Configuration;
-        // The door scan is the closures' one writer, between ticks; a tick still pending keeps the closures it read.
-        var closures = ((instance.Server.Tick.PendingReason is null) ? instance.Server.Population.PortalClosures : null);
+        // The door scan is the closures' one writer, and it runs on this thread just before the settle.
+        var closures = instance.PortalClosures;
         var closed = (closures?.Revision ?? owned.Closures);
         var changed = false;
 

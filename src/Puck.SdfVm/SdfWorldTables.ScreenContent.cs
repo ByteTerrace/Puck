@@ -459,22 +459,19 @@ public sealed partial class SdfWorldTables {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is negative or past <see cref="SdfProgramBuilder.MaxScreenIdentities"/>.</exception>
     public void SetScreenSurface(int screenIndex, Vector3 origin, Vector3 right, Vector3 up, float halfWidth, float halfHeight) {
         if (!TryScreenSlot(screen: screenIndex, slot: out var slot)) { return; }
-
-        var unitRight = Vector3.Normalize(value: right);
-        var unitUp = Vector3.Normalize(value: up);
-        // 3 float4 per entry (right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+range) — KEEP IN SYNC with SdfProgram's
-        // ScreenSurfaceWords packing and frame/sdf-environment.hlsli's ScreenSurfaceData.
+        WriteSurfaceRow(halfHeight: halfHeight, halfWidth: halfWidth, origin: origin, right: Vector3.Normalize(value: right), slot: slot, up: Vector3.Normalize(value: up));
+    }
+    // Writes a slot's surface row: 3 float4 (right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+range), the slot keeping
+    // the range its last frame sized. KEEP IN SYNC with frame/sdf-environment.hlsli's ScreenSurfaceData. The residency
+    // polls this every frame via transform providers, often with an unchanged value (a static screen, or a rig sampled at
+    // the same pose); the region owes only the words that actually changed.
+    private void WriteSurfaceRow(int slot, Vector3 origin, Vector3 right, Vector3 up, float halfWidth, float halfHeight) {
         Span<float> floats = stackalloc float[(ScreenSurfaceByteLength / sizeof(float))];
 
-        floats[0] = unitRight.X; floats[1] = unitRight.Y; floats[2] = unitRight.Z; floats[3] = halfWidth;
-        floats[4] = unitUp.X; floats[5] = unitUp.Y; floats[6] = unitUp.Z; floats[7] = halfHeight;
+        floats[0] = right.X; floats[1] = right.Y; floats[2] = right.Z; floats[3] = halfWidth;
+        floats[4] = up.X; floats[5] = up.Y; floats[6] = up.Z; floats[7] = halfHeight;
         floats[8] = origin.X; floats[9] = origin.Y; floats[10] = origin.Z; floats[11] = m_screenReach[slot];
-        // The residency polls this every frame via transform providers, often with an unchanged value (a static screen,
-        // or a rig sampled at the same pose); the region owes only the words that actually changed.
-        _ = m_screenSurfaceRegion.Write(
-            bytes: MemoryMarshal.AsBytes(span: floats),
-            offset: (slot * ScreenSurfaceByteLength)
-        );
+        _ = m_screenSurfaceRegion.Write(bytes: MemoryMarshal.AsBytes(span: floats), offset: (slot * ScreenSurfaceByteLength));
     }
 
     // One past the highest screen whose source is bound, or zero when none is.

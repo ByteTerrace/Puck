@@ -86,9 +86,9 @@ steps 1, 11 and 12, without the moving door frames step 1 also names:
   follows the socket back, and the door opens only while both stand. Each world
   owns the door that stands in it, and either lease lapses on its own clock.
 
-The screen slots a door's glass takes are one `UInt128` mask per set
-(`SdfProgramBuilder.MaxScreenSurfaces`, see the
-[rendering decision](../decisions/rendering.md#a-screen-set-is-one-wide-mask)),
+A world declares any number of screens, and a door's glass holds a slot only
+while it is resident
+([rendering decision](../decisions/rendering.md#a-screen-is-an-identity-a-slot-is-a-cache-entry)),
 so the valley door is the debug world's thirty-third screen and many more fit.
 
 Left in this interaction, in order:
@@ -100,17 +100,9 @@ Left in this interaction, in order:
    gives each door its own way home; the socket is the moon's document, so the
    change is the `crossworld` lane's. *Check:* walking back out of the socket
    after entering by the valley frame lands before the valley frame.
-2. **Screens past the mask.** A world holds at most one mask of declared screens
-   at once. At MMO scale a zone shows thousands of screens, portals and windows,
-   most of them far or unseen, so the next step splits a screen's identity (its
-   authored index, which the material id carries) from its GPU slot, which a
-   residency claims through one allocator while the screen is near and open and
-   releases when it is not, with a slot table the kernels read. *Check:* a world
-   declaring more screens than the mask holds boots, and `world.faces` names
-   only the near and open ones bound.
-3. **Pooled doors on bodies** (live door frames), so a door is posed where a
+2. **Pooled doors on bodies** (live door frames), so a door is posed where a
    player aims rather than standing where an author put it.
-4. **The door lease across two processes**
+3. **The door lease across two processes**
    ([step 13](portals-in-play.md#build-order)): a followed row already reads a
    remote leader through the remote-capable observation; the kill-mid-lease
    scenarios are owed.

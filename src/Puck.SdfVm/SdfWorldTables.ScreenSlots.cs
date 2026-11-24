@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
-using System.Runtime.InteropServices;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -137,16 +136,9 @@ public sealed partial class SdfWorldTables {
     // Writes a slot's surface row from the live program's declaration of its screen; a screen the program does not
     // declare leaves the row as it stands, and a surface transform patches it each frame it moves (SetScreenSurface).
     private void WriteDeclaredSurface(int slot, int screen) {
-        if ((m_liveProgram is null) || !m_liveProgram.Appearance.TryGetScreenSurface(screenIndex: screen, surface: out var surface)) {
-            return;
+        if ((m_liveProgram is not null) && m_liveProgram.Appearance.TryGetScreenSurface(screenIndex: screen, surface: out var surface)) {
+            WriteSurfaceRow(halfHeight: surface.HalfHeight, halfWidth: surface.HalfWidth, origin: surface.Origin, right: surface.Right, slot: slot, up: surface.Up);
         }
-
-        Span<float> floats = stackalloc float[(ScreenSurfaceByteLength / sizeof(float))];
-
-        floats[0] = surface.Right.X; floats[1] = surface.Right.Y; floats[2] = surface.Right.Z; floats[3] = surface.HalfWidth;
-        floats[4] = surface.Up.X; floats[5] = surface.Up.Y; floats[6] = surface.Up.Z; floats[7] = surface.HalfHeight;
-        floats[8] = surface.Origin.X; floats[9] = surface.Origin.Y; floats[10] = surface.Origin.Z; floats[11] = m_screenReach[slot];
-        _ = m_screenSurfaceRegion.Write(bytes: MemoryMarshal.AsBytes(span: floats), offset: (slot * ScreenSurfaceByteLength));
     }
     // Rewrites every resident slot's surface row from a newly uploaded program.
     private void WriteResidentSurfaces() {
