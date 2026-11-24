@@ -77,9 +77,11 @@ public static class WorldPlacementAudiences {
     /// <summary>Returns whether the disclosure can show a placement differently to some principal: a row under a deal
     /// template that can withhold (<see cref="DealtAncestor"/>, <see cref="WithholdingRow"/>), a card back a reader's view
     /// deals in a withheld cell's place, or a responding row one of whose conditions reads a row that can withhold.</summary>
-    /// <param name="definition">The document the placement belongs to.</param>
+    /// <param name="definition">The document whose state declarations decide which rows can withhold: the fullest
+    /// reader's at hand, since a reader's own delivery may carry less of a row it is withheld than its declaration.</param>
     /// <param name="placement">The placement.</param>
-    /// <param name="placementsById">The document's placements by id (<see cref="WorldPlacementIndex.ById"/>).</param>
+    /// <param name="placementsById">The placements of the document the placement belongs to, by id
+    /// (<see cref="WorldPlacementIndex.ById"/>).</param>
     /// <returns>Whether some reader can be shown the placement otherwise than another.</returns>
     public static bool Varies(WorldDefinition definition, WorldPlacement placement, IReadOnlyDictionary<string, WorldPlacement> placementsById) {
         ArgumentNullException.ThrowIfNull(argument: definition);

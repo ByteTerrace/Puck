@@ -124,7 +124,7 @@ public sealed partial class WorldScreenBinder {
             );
         }
         // An audience no feed shows any more is let go, and is handed to another viewer only once no copy carries it.
-        foreach (var mirror in m_audiences.Keys.Where(predicate: mirror => !m_overlaidMirrors.Contains(item: mirror)).ToArray()) { m_audiences.Remove(key: mirror); }
+        foreach (var mirror in m_audiences.Keys.Where(predicate: mirror => !m_overlaidMirrors.Contains(item: mirror)).ToArray()) { m_audiences.Remove(key: mirror); m_narratedOverlays.Remove(key: mirror); }
         presenter.SetAudienceOverlays(overlays: m_overlays);
     }
     // The view audience each session mirror a home view draws for holds while a feed shows it, the overlays this frame
@@ -133,6 +133,9 @@ public sealed partial class WorldScreenBinder {
     private readonly List<WorldAudienceOverlay> m_overlays = [];
     private readonly HashSet<WorldSessionMirror> m_overlaidMirrors = new(comparer: ReferenceEqualityComparer.Instance);
     private byte m_nextAudience = 1;
+    // What the operator was last told of each overlay: the document counted, its varying placements, and whether any copy
+    // carries its audience.
+    private readonly Dictionary<WorldSessionMirror, (WorldDefinition? Delivered, int Count, bool Carried)> m_narratedOverlays = new(comparer: ReferenceEqualityComparer.Instance);
     // The latest refusal of each document judged for overlays (WorldRigidAssets.AudienceRefusal), by instance, and the
     // refusal last narrated.
     private readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, AudienceVerdict> m_audienceRefusals = new();
@@ -167,6 +170,15 @@ public sealed partial class WorldScreenBinder {
             if (audience == 0) { return 0; }
             m_audiences[mirror] = audience;
         }
+        var carried = presenter.CarriesAudience(viewAudience: audience);
+        if (!m_narratedOverlays.TryGetValue(key: mirror, value: out var narrated) || !ReferenceEquals(objA: narrated.Delivered, objB: delivered) || (narrated.Carried != carried)) {
+            var count = (ReferenceEquals(objA: narrated.Delivered, objB: delivered) ? narrated.Count : VaryingCount(rows: delivered, host: host));
+
+            m_narratedOverlays[mirror] = (delivered, count, carried);
+            if ((narrated.Delivered is null) || (narrated.Count != count) || (narrated.Carried != carried)) {
+                Console.Error.WriteLine(value: $"[world.screen: session {feed.ScreenIndex} draws the World's residency for audience {audience}, with the {count} placements its disclosure varies as its session is dealt them ({(carried ? "drawn" : "none drawn yet")})]");
+            }
+        }
         if (m_overlaidMirrors.Add(item: mirror)) { m_overlays.Add(item: new WorldAudienceOverlay(Audience: audience, Definition: delivered)); }
         return audience;
     }
@@ -180,6 +192,16 @@ public sealed partial class WorldScreenBinder {
         ).Refusal;
     }
     private sealed record AudienceVerdict(WorldDefinition Host, string? Refusal);
+    // How many of a delivered document's placements the disclosure varies, for the operator's account of an overlay.
+    private static int VaryingCount(WorldDefinition rows, WorldDefinition host) {
+        var byId = WorldPlacementIndex.ById(placements: rows.Placements);
+        var count = 0;
+
+        foreach (var placement in rows.Placements) {
+            if (WorldPlacementAudiences.Varies(definition: host, placement: placement, placementsById: byId)) { count++; }
+        }
+        return count;
+    }
     // The install side of a narrowing (ContentAccess). A session's own frame source and the residency that renders it
     // hold, and their background work (program builds, bakes, probe traces) was submitted over, content delivered under
     // wider access than the viewer has now: the source goes, and the residency with it (ReconcileViewResidencies

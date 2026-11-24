@@ -21,6 +21,12 @@ public sealed partial class WorldRigidAssets {
     // whether it was admitted, and the copies its stamp placed (empty for a refused row or an empty stamp). A row is
     // immutable, so the same instance showing the same creation instance is admitted alike, and the same compiled stamp
     // (WorldPlacementStamp keeps one per row while its frame and inputs stand) places the same copies.
+    // A static row as the roster meets it: the row instance, compared by reference, and the overlay's view audience it is
+    // placed for, zero for the presentation's own.
+    private readonly record struct RowKey(WorldPlacement Placement, byte Overlay) {
+        public bool Equals(RowKey other) => (ReferenceEquals(objA: Placement, objB: other.Placement) && (Overlay == other.Overlay));
+        public override int GetHashCode() => HashCode.Combine(value1: System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o: Placement), value2: Overlay);
+    }
     private sealed class StaticRow(WorldPrototype creation, string? refusal, byte audience) {
         public readonly WorldPrototype Creation = creation;
         public readonly string? Refusal = refusal;
@@ -32,8 +38,8 @@ public sealed partial class WorldRigidAssets {
     private readonly List<StaticAsset> m_staticAssets = [];
     private readonly List<StaticCopy> m_staticCopies = [];
     // The rows the latest reconcile met, by instance, and the scratch the next reconcile fills before the two swap.
-    private Dictionary<WorldPlacement, StaticRow> m_staticRowsMet = new(comparer: ReferenceEqualityComparer.Instance);
-    private Dictionary<WorldPlacement, StaticRow> m_staticRowsNext = new(comparer: ReferenceEqualityComparer.Instance);
+    private Dictionary<RowKey, StaticRow> m_staticRowsMet = [];
+    private Dictionary<RowKey, StaticRow> m_staticRowsNext = [];
     private readonly Dictionary<string, StaticAsset> m_staticVariants = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, StaticAsset> m_staticVariantsNext = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, int> m_staticUnsupported = new(comparer: StringComparer.Ordinal);
@@ -47,7 +53,7 @@ public sealed partial class WorldRigidAssets {
     /// <summary>Gets the last emission's occurrences with at least one shape left visible by isolation.</summary>
     public int StaticVisibleCopies { get; private set; }
     /// <summary>Returns whether this exact row is owned by the retained static-copy roster.</summary>
-    public bool ContainsPlacement(WorldPlacement placement) => (m_staticRowsMet.TryGetValue(key: placement, value: out var row) && (row.Refusal is null));
+    public bool ContainsPlacement(WorldPlacement placement) => (m_staticRowsMet.TryGetValue(key: new RowKey(Placement: placement, Overlay: 0), value: out var row) && (row.Refusal is null));
 
     /// <summary>Prepares static occurrences from the same definition and rows the visual scene will emit. This is the
     /// sole admission door: visual emission skips exactly these rows; query emission never passes this catalog. A
@@ -105,22 +111,24 @@ public sealed partial class WorldRigidAssets {
     // (WorldPlacementAudiences.Varies); or an overlay's rows, of which only those the disclosure varies are placed, each
     // tagged for that overlay's views alone, since every other row is the presentation's own. Creations always resolve
     // in the presentation's document, whose templates every copy draws. Returns the copies placed anew.
-    private int ReconcileRows(WorldDefinition creations, WorldDefinition rows, IReadOnlyList<WorldPlacement> placements, byte? overlay, Dictionary<WorldPlacement, StaticRow> met, Dictionary<WorldPlacement, StaticRow> next, Dictionary<string, StaticAsset> variants, string? scope, ulong seed) {
+    private int ReconcileRows(WorldDefinition creations, WorldDefinition rows, IReadOnlyList<WorldPlacement> placements, byte? overlay, Dictionary<RowKey, StaticRow> met, Dictionary<RowKey, StaticRow> next, Dictionary<string, StaticAsset> variants, string? scope, ulong seed) {
         IReadOnlyDictionary<string, WorldPlacement>? byId = null;
         var rebuilt = 0;
 
         foreach (var placement in placements) {
-            var varies = (MayVary(placement: placement) && WorldPlacementAudiences.Varies(definition: rows, placement: placement, placementsById: (byId ??= WorldPlacementIndex.ById(placements: placements))));
+            var varies = (MayVary(placement: placement) && WorldPlacementAudiences.Varies(definition: creations, placement: placement, placementsById: (byId ??= WorldPlacementIndex.ById(placements: placements))));
             if ((overlay is not null) && !varies) { continue; }
             var audience = ((overlay is { } own) ? SdfMeshAudience.DrawTagOf(viewAudience: own) : (varies ? SdfMeshAudience.Own : SdfMeshAudience.Neutral));
             var creation = WorldDefinitionRows.FindCreation(creations.Creations, placement.ShownPrototypeId);
             if ((creation is null) || !CopiesRow(placement: placement, creation: creation)) { continue; }
-            if (!met.TryGetValue(key: placement, value: out var row) || !ReferenceEquals(objA: row.Creation, objB: creation) || (row.Audience != audience)) {
+            var key = new RowKey(Placement: placement, Overlay: (overlay ?? 0));
+            if (!met.TryGetValue(key: key, value: out var row) || !ReferenceEquals(objA: row.Creation, objB: creation) || (row.Audience != audience)) {
                 row = new StaticRow(audience: audience, creation: creation, refusal: Refusal(creation: creation, placement: placement));
             }
-            // A row listed twice is one occurrence set, as the instance it is. An overlay's rows are its own session's
-            // delivered instances, never the presentation's.
-            if (!next.TryAdd(key: placement, value: row)) { continue; }
+            // A row listed twice is one occurrence set, as the instance it is. Sessions of one disclosure share their
+            // delivered row instances, with the presentation's too where a row stands as authored, so a row is met once
+            // for the presentation and once for each overlay that holds it.
+            if (!next.TryAdd(key: key, value: row)) { continue; }
             if (row.Refusal is { } reason) {
                 m_staticUnsupported[reason] = (m_staticUnsupported.GetValueOrDefault(reason) + 1);
                 continue;
@@ -128,7 +136,7 @@ public sealed partial class WorldRigidAssets {
             var stamp = WorldPlacementStamp.Resolve(rows, placement, worldSeed: seed);
             if (stamp.Count == 0) { row.Stamp = stamp; row.Copies = []; continue; }
             // A riding row is one copy rooted on its body; a pattern of occurrences stays with the stamp pool.
-            if ((placement.Attach is not null) && (stamp.Count != 1)) { next.Remove(key: placement); m_staticUnsupported["riding-pattern"] = (m_staticUnsupported.GetValueOrDefault("riding-pattern") + 1); continue; }
+            if ((placement.Attach is not null) && (stamp.Count != 1)) { next.Remove(key: key); m_staticUnsupported["riding-pattern"] = (m_staticUnsupported.GetValueOrDefault("riding-pattern") + 1); continue; }
             // A responding row holds a template for every creation it can show, in its authored order, so a sweep that
             // moves its holding swaps the copies' template and leaves the template set, and the program, standing.
             if (placement.Respond is { Count: > 0 } responses) {
@@ -172,7 +180,7 @@ public sealed partial class WorldRigidAssets {
         IReadOnlyDictionary<string, WorldPlacement>? byId = null;
 
         foreach (var placement in placements) {
-            if (!MayVary(placement: placement) || !WorldPlacementAudiences.Varies(definition: rows, placement: placement, placementsById: (byId ??= WorldPlacementIndex.ById(placements: placements)))) { continue; }
+            if (!MayVary(placement: placement) || !WorldPlacementAudiences.Varies(definition: creations, placement: placement, placementsById: (byId ??= WorldPlacementIndex.ById(placements: placements)))) { continue; }
             // A deal template renders nothing itself; its dealt children are the rows.
             if (placement.Deal is not null) { continue; }
             if (WorldDefinitionRows.FindCreation(creations.Creations, placement.ShownPrototypeId) is not { } creation) { return $"placement '{placement.Id}' shows '{placement.ShownPrototypeId}', which the presentation's document does not hold"; }
