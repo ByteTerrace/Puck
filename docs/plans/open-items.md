@@ -3960,21 +3960,26 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
-- [high, M1] **A reset across a changed world inventory needs its first
-  deploy and a review.** The Azure runtime drains, protects and recovers the
-  source's own worlds, activation resets each target world over its drained
-  root, and a world only the target names starts from a fresh root
-  (`WorldAuthorityBlobStore.PrepareReleaseResetFreshAsync`, under the same
-  activation ownership with no protected root for it). Next: the release from
-  `main` exercises it; a findings-only review of the activation-ownership
-  check by another family (persisted data).
-
-The RTX 2060 machine is a consumer release target (the owner's ruling,
-AGENTS.md): it installs and updates through the launcher from the hosted
-`player` channel and runs only what a player runs. It never builds from
-source, compiles a cartridge or cold-bakes. The lead machine bakes each
-backend's mesh cache set and pushes it as a prerelease, and CI releases what
-is pushed to `main` ([the player channel](../development/ci.md#the-player-channel)).
+- [high, M1] **While hosted data is scratch, a deploy replaces the hosted
+  world with a fresh bootstrap.** Three releases in a row failed after their
+  qualification passed: the inventory refusal and the drain (both fixed), then
+  the new worker either exiting at start or, with its silo up and listening,
+  answering private health with "simulation is not progressing" until the
+  readiness wait ran out. The silo heartbeats on every step even with admission
+  closed (`WorldSiloSimulation.TryStep`), so its pump stopped stepping; the
+  activation of the reset roots the in-place reset writes (an empty root with
+  its epoch and sequence raised, no journal or checkpoint behind it) runs on
+  the pump at a tick boundary and is the prime suspect, unconfirmed. The
+  in-place reset has never run anywhere, while the bootstrap path is what CI's
+  qualification exercises. Hosted data is scratch until the owner says
+  otherwise (AGENTS.md rule 5), so the structural answer is a replace deploy:
+  stop the source compute, discard the group's hosted roots and record, and
+  start the target as a first deployment's bootstrap; the preservation path
+  (drain, protected roots, reset, recovery) stays for when the owner declares
+  hosted data durable, off the critical path. Separately, a pump that stops
+  stepping is silent today: private health should name what the pump is
+  blocked in. Next: one lane, with a findings-only review of the deletion of
+  hosted roots by another family.
 
 - [high] No release has passed its public probe, and no player build has
   reached the RTX 2060 through the hosted channel: its one run was a local
