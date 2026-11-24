@@ -220,7 +220,7 @@ public sealed class OverlayFrameCrossFadeLawTests {
     }
 
     private sealed class FixedFrameSources(int refuseKey) : IOverlayFrameSources {
-        public bool TryAcquire(int key, out GpuImageLease lease) {
+        public bool TryAcquire(int key, in Puck.Shaders.RenderGraphFrameSamples samples, out GpuImageLease lease) {
             if (key == refuseKey) {
                 lease = default;
 

@@ -317,6 +317,6 @@ public sealed class TeardownAfterFaultLawTests {
     // The overlay's frame sources over the refusing device: acquiring one from a node that never produced a frame is a
     // failure, counted with the device's own.
     private sealed class UnusedFrameSources(RefusingGpuDevice gpu) : IOverlayFrameSources {
-        public bool TryAcquire(int key, out Puck.Hosting.GpuImageLease lease) => throw gpu.Reach(member: "IOverlayFrameSources.TryAcquire");
+        public bool TryAcquire(int key, in Puck.Shaders.RenderGraphFrameSamples samples, out Puck.Hosting.GpuImageLease lease) => throw gpu.Reach(member: "IOverlayFrameSources.TryAcquire");
     }
 }

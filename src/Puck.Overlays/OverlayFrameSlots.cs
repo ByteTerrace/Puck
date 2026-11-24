@@ -18,6 +18,7 @@ public sealed class OverlayFrameSlots {
 
     private readonly IOverlayFrameSources m_sources;
 
+    private RenderGraphFrameSamples m_samples;
     private int m_boundCount;
     private bool m_capacityExceeded;
 
@@ -43,8 +44,10 @@ public sealed class OverlayFrameSlots {
 
     /// <summary>Starts a new produced frame: holds any lease still bound from the frame before, which <see cref="MoveTo"/>
     /// hands on with this frame's, and clears the slot table for this frame's binds.</summary>
-    public void BeginFrame() {
+    /// <param name="samples">The current recording's named reads.</param>
+    public void BeginFrame(RenderGraphFrameSamples samples = default) {
         HoldBound();
+        m_samples = samples;
         m_capacityExceeded = false;
     }
     /// <summary>Binds <paramref name="key"/> to a slot for this frame: the first bind of a key acquires its lease
@@ -69,6 +72,7 @@ public sealed class OverlayFrameSlots {
         if (
             !m_sources.TryAcquire(
             key: key,
+            samples: in m_samples,
             lease: out var lease
         )
         ) {
@@ -104,6 +108,8 @@ public sealed class OverlayFrameSlots {
         HoldBound();
         m_pendingRetire.MoveTo(destination: destination);
     }
+
+    internal void EndSampling() => m_samples = default;
 
     // Moves the bound leases to the retire-pending list, after any still pending, and empties the slot table.
     private void HoldBound() {

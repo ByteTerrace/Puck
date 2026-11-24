@@ -123,6 +123,54 @@ pipeline would split.
 waves. A consumer binds what its producer published, and a producer publishes
 when it commits, so the waves are serial by construction today.
 
+## Reserving a render before its consumers record
+
+A command list may sample a scheduled same-frame write only if that write
+precedes it on the queue. Otherwise the consumer keeps its last good output
+or binds the graph's stand-in at the frame's delivery latch. History reads
+keep their declared frame. A reservation lives only for this frame. After
+submission the sampling slot owns its leases until its fence retires. A
+reservation that never reaches submission releases its leases on abandonment.
+
+Use the schedule's read edges and the installed pipeline's storage plan.
+Prepare producers in schedule order. For each named output, resolve its
+storage instance, layout, publication identity and delivery label. This
+includes the selected image, an input forwarded by an empty pass and the
+previously written history slot when a writer stands. A recorder that can
+choose between these outcomes must make that choice during preparation.
+The recorder and publisher must then use the same choice.
+
+The read paths are the image and buffer ports in `RenderGraphRuntime.Bind`,
+the package and external-producer reads in `RenderGraphRuntime.BindReads`,
+and reads through a standing output in `RenderGraphRuntime.Resolve`. A HUD
+frame showing a named camera needs an overlay-to-camera edge and the lease
+of that read. Captures, exports and the display observe only a publication
+whose submission succeeded. A paused node can also submit a newly selected
+output. An external producer that submits inside its own `Produce` call must
+accept the same ordering constraint before it receives any reserved read.
+
+At submission, walk those same edges in producer order. Abandon a recording
+that used a failed reservation and propagate that outcome to its consumers.
+Independent recordings still submit. The latch checks delivery provenance.
+Only the submitter can establish whether a producer reached the queue.
+`ShaderPipelineRenderNode.SettleHandOver` settles each deferred hand-over
+against its own fence, including when a batch splits. The runtime's output
+records and scheduling history must withdraw any write that the node rolls
+back. Keep the existing slot leases for images and the device's
+`GpuRetirementQueue` for replaced allocations.
+
+Residency uploads precede view recording. `SdfMeshRegionStore.RecordOwed`
+puts compaction moves in the next upload. `SdfWorldResidency.EndStage`
+submits that upload. A deferred upload needs queue hand-over before a view
+records, including a residency discovered when a candidate graph installs.
+This requires submission order only. GPU completion can follow later.
+
+The checks are a forced producer recording failure with a dependent and an
+independent reader, a failed batch hand-over, and a graph replacement while
+a reader still owns an image. Compare record waves and dispatches per
+recorded frame with the same route chapter. A wave count alone cannot show
+whether a consumer sampled the right publication.
+
 ## The steps
 
 Each step names the count that shows it worked, read with `world.counters`
