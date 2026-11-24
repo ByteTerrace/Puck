@@ -1,10 +1,11 @@
-// The mesh pass's and the surface and views passes' reads of the mesh region, SdfMeshRegion's raw word layout: one
-// record a draw (SdfMeshRecord), then the vertices, six words each (position, normal), then the triangle materials,
-// then the indices, then each mesh's members. Every offset and flag is SdfMeshRecord's (Puck.SdfVm.Model), generated
-// into sdf-render.hlsli (SDF_MESH_*). The includer's interface declares the region, sdfMeshRegion, the frame's dynamic
+// The mesh pass's and the surface and views passes' reads of a residency's draw records and the presentation's mesh
+// region, SdfMeshRegion's raw word layout: one record a draw (SdfMeshRecord) in the draw records, and in the region each
+// mesh's vertices, six words each (position, normal), then its triangle materials, then its indices, then its members.
+// Every offset and flag is SdfMeshRecord's (Puck.SdfVm.Model), generated into sdf-render.hlsli (SDF_MESH_*). The
+// includer's interface declares the draw records, sdfMeshDraws, the region, sdfMeshRegion, the frame's dynamic
 // transforms, sdfDynamicTransforms, and the frame's sampled table, sdfFrameSampled: sdf-world and sdf-mesh all do.
-// Every read of the region passes through sdf-mesh-words.hlsli: a record's words through sdfMeshRecordWord, a mesh's
-// own words through sdfMeshWord. A draw's placement passes through sdfMeshPoseOf, which poses a draw riding its frame
+// A record's words are read through sdfMeshRecordWord (sdf-mesh-records.hlsli) and a mesh's own words through
+// sdfMeshWord (sdf-mesh-words.hlsli). A draw's placement passes through sdfMeshPoseOf, which poses a draw riding its frame
 // slot from the slot's row and any other from the matrix its record holds. Every read of a vertex's position or normal
 // passes through sdfMeshWorldPosition, sdfMeshWorldNormal or, for the previous frame, sdfMeshPreviousPosition, which
 // displace a height field's draw (sdfMeshDisplaced), so every pass sees one surface.
@@ -12,7 +13,7 @@
 #define SDF_MESH_HLSLI
 #include "../field/sdf-quaternion.hlsli"
 #include "../isa/sdf-render.hlsli"
-#include "sdf-mesh-words.hlsli"
+#include "sdf-mesh-records.hlsli"
 
 // The bits below the level of detail (SDF_MESH_LEVEL_SHIFT) in the index a mesh draw call pushes: the draw.
 static const uint SdfMeshDrawMask = ((1u << SDF_MESH_LEVEL_SHIFT) - 1u);

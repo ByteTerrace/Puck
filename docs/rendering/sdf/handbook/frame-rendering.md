@@ -1811,8 +1811,8 @@ compares the live dress as a multiset against the canonical rebuild. A backgroun
 compares device records to a host snapshot only when the region owes no copies or carry and
 no landing is in flight. `world.counters sdf.rows.check` reports comparisons, mismatches and
 forcing counts; `world.rows status` names the first differing row and identity.
-`world.rows force limit <bytes|auto>`, `force relocate`, `force skip <tables|host|scene>`,
-`force pack` and `force dress-fault [<dresses>]` exercise admission, relocation, expired history,
+`world.rows force limit <bytes|auto>`, `force skip <tables|host|scene>`,
+`force pack` and `force dress-fault [<dresses>]` exercise admission, expired history,
 canonical packing and publication retry. `host.memory collect` and `gpu.faults lose` exercise trim and new tables.
 The static scene's key is a per-row sum, and its diagnostic comparison is a multiset, so
 packing rows alone keeps the trace scene. Its static-row set supplies scene-build snapshots.

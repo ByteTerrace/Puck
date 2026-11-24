@@ -191,7 +191,7 @@ Left open, in the order they matter to the trip:
 3. **A refused device allocation ends the World.** With the moon's two
    residencies (the painting's window and the sky view) beside the debug world's
    own, the device's memory account refused a mesh region's growth and the
-   frame threw (`SdfWorldTables.EnsureMeshRegionCapacity`). A refusal has to
+   frame threw (`SdfMeshRegionStore.EnsureCapacity`). A refusal has to
    shed detail, not end the run.
 4. **A body across a joined seam is drawn as a catalog rig.** Where an edge
    presents its two worlds as one place, a seat that crossed keeps the boot

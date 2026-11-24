@@ -36,6 +36,9 @@ public sealed partial class SdfWorldTables {
     // The ring slot the upload before the open one wrote, which the open upload's recording copies the previous tables
     // from (OpenUpload, RecordUpload).
     private int m_uploadPreviousSlot = -1;
+    // Whether the open upload's recording carries copies the mesh region owed (SdfMeshRegionStore.RecordOwed), which
+    // its submission reports to the store.
+    private bool m_meshStoreCopies;
 
     /// <summary>Opens the frame's upload on the frame thread: waits the previous upload and takes the next ring slot.
     /// <see cref="RecordUpload"/> then records it and <see cref="CloseUpload"/> submits it, in that order, once
@@ -96,6 +99,13 @@ public sealed partial class SdfWorldTables {
         if (!keepsMotion) {
             RecordPreviousTables(commandBuffer: commandBuffer, previousSlot: previousSlot);
         }
+        // The presentation's mesh region records what it owes that no landing job carries (a compaction's moves, a
+        // grown region's carry) ahead of this residency's passes, whichever residency's plan owed it. The store takes
+        // its gate, so residencies recording side by side record it once, in whichever upload reaches it first. That
+        // upload must reach the queue before any pass that reads the copies: it holds while every residency's upload
+        // of a frame is submitted (SdfWorldResidency.EndStage) before a view of that frame records.
+        m_meshStoreCopies = m_meshStore.RecordOwed(client: this, commandBuffer: commandBuffer, readers: RegionReaders, recorder: recorder);
+
         RecordRegionCopies();
         RecordMeshIrradiance(command: commandBuffer);
         if (!keepsMotion) {
@@ -121,8 +131,7 @@ public sealed partial class SdfWorldTables {
         // Publish submission only after the fence has been armed by the queue. Before this point an initially
         // signaled fence must not satisfy geometry staged for the next upload.
         m_uploads = checked((m_uploads + 1UL));
-        // The flush above staged the moved meshes' words.
-        ReleaseUploadNeeds();
+        if (m_meshStoreCopies) { m_meshStoreCopies = false; m_meshStore.SubmittedOwed(); }
         m_uploadedBindingRevision = m_bindingRevision;
         m_backgroundProgram = m_liveProgram;
         ServiceRetirements();

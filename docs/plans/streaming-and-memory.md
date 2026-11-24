@@ -279,7 +279,7 @@ What the memory side holds today:
   own wait and a frame that never waits are still stepped at pumps alone.
 - **The region gives memory back only by replacing itself.** It grows by
   allocating a larger buffer and copying (`GpuRegion.Grow`), and shrinks the
-  same way (`GpuRegion.Shrink` from `SdfWorldTables.FitMeshRegion`), so both
+  same way (`GpuRegion.Shrink` from `SdfMeshRegionStore.Fit`), so both
   need the new buffer while the old one stands, and both reserve the two
   together.
 - **Pressure fires a trim.** A limit that falls under what its pool holds, a
@@ -1403,7 +1403,7 @@ declines positions, level-zero indices, materials, members and influences
 **[opened]**. Positions, level-zero indices and triangle materials stay, and
 the region reads a mesh's words again through the hold for a flush, a
 relocation, a moved mesh the region cannot copy on the GPU and a landing
-(`SdfWorldTables.MeshWords`); the lighting's trace scene claims every static
+(`SdfMeshRegionStore.MeshWords`); the lighting's trace scene claims every static
 mesh and builds its CPU hierarchy from positions and level-zero indices,
 leaving dynamic and glass meshes out (`SdfMeshDraw.IsStatic`); a
 renumbered variant reads the materials; a device loss lands everything again.
@@ -2587,7 +2587,7 @@ of the heap arena's tile-only heaps (`DirectXHeapArena.PlaceTiles`), each run
 admitted and counted like any heap range. A `GpuRegion` created `mapped` grows
 by mapping chunks and shrinks by unmapping them, with no carry and no
 replacement; the mesh region fits its chunks to its placements
-(`SdfWorldTables.CoverMeshRegion`), so a forgotten mesh's chunk leaves the pool
+(`SdfMeshRegionStore.Cover`), so a forgotten mesh's chunk leaves the pool
 wherever it lay, and the probe scene grows in place. The page authority has one
 page a chunk. Reservation credit still counts the whole tile heap a new run
 opens (M2's page-only credit is not built), and nothing compacts physical
@@ -3184,14 +3184,25 @@ in order:
 - the irradiance volume holding only the levels its frame measures
   (`SdfFrame.IndirectLevels`): every level keeps its slots today, so a world
   behind a small glass measures one level and stores them all;
-- one mesh store for a presentation
+- a second scene of one world planned at that world's demand. The mesh store
+  for a presentation
   ([decision 3](#decision-3-one-reservation-across-residencies-with-floors-and-classes)'s
-  option C), so a mesh several residencies name is placed once. It is what
-  makes a second scene of one world cheap where disclosure requires one: the
-  debug world's own sessions are handed a scene that differs from a whole
-  reader's by one row a card game withholds, which is a different scene and
-  rightly a second residency (`WorldSessionRoute`), and nearly every mesh the
-  two name is the same;
+  option C) is built: every residency on a device names its meshes in one
+  region (`SdfMeshRegionStore`), where a mesh any number of them name is
+  placed, landed and held once, and keeps only its draw records in a region
+  of its own. The debug world's own sessions are handed a scene that differs
+  from a whole reader's by one row a card game withholds, which is a
+  different scene and rightly a second residency (`WorldSessionRoute`). That
+  scene still measures its tiers from its own windows, so most of its meshes
+  are other tiers of the boot world's groups and are placed beside them: on
+  the route about a thousand of its meshes coincided with the boot world's.
+  Its demand has to join the boot world's (the same world, in the same
+  coordinates) for the rest to coincide, and its meshes then cost nothing;
+- a material variant placed as its materials alone. A mesh taken into a
+  program that numbers its materials otherwise is a variant that shares the
+  first mesh's geometry on the host (`SdfMesh.RenumberNative`) and is placed
+  whole in the region, since the store keys by mesh. Whether two scenes of
+  one world carry the same ids is unread;
 - draw rows shed when the device refuses a region's draw records. Today that
   refusal is raised as a lost device (`SdfWorldTables`' mesh region), which
   rebuilds the presentation under the limit the refusal left and does not end

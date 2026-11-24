@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/d90e5141e68a292cc224c94f31ebe279624f41c85cb4a100955c1d9480595b4b). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/2117e0b4390ccfb42391a57a8582f55c60a8d16ac72dc738fc3575d1d1eac85a). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -139,6 +139,7 @@ struct SdfMeshPass {
 [[vk::binding(12, 3)]] RWStructuredBuffer<uint> sdfMeshOcclusionDepthRW : register(u12, space3);
 [[vk::binding(13, 3)]] StructuredBuffer<uint> sdfMeshIndirectCommands : register(t13, space3);
 [[vk::binding(14, 3)]] StructuredBuffer<uint4> sdfWords : register(t14, space3);
+[[vk::binding(15, 3)]] StructuredBuffer<uint> sdfMeshDraws : register(t15, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfMeshPushedIndex {

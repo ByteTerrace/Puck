@@ -253,7 +253,7 @@ public sealed partial class SdfWorldTables {
         var absent = ((draw.Mesh is null) || !MeshStands(mesh: draw.Mesh));
         var wasAbsent = m_absentRows.Contains(item: index);
 
-        posed = (posed && incremental && !absent && !wasAbsent && !m_meshArena.Relocated && ((m_meshArena.Moved.Count == 0) || !m_meshArena.Moved.Contains(item: draw.Mesh!)) &&
+        posed = (posed && incremental && !absent && !wasAbsent && !MeshMoved(mesh: draw.Mesh!) &&
             !MeshTransformWasReseated(draw: in draw));
         if (posed) {
             return StagePose(draw: in draw, index: index, record: record, tally: ref tally);
@@ -269,7 +269,7 @@ public sealed partial class SdfWorldTables {
             m_meshHistory.Retire(index: index);
             SdfMeshRegion.WriteAbsent(record: record);
             if (draw.Mesh is not null) { _ = m_absentRows.Add(item: index); } else { _ = m_absentRows.Remove(item: index); }
-            if ((draw.Mesh is not null) && m_meshArena.Refused.Contains(item: draw.Mesh)) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.RefusedAbsent); }
+            if ((draw.Mesh is not null) && m_meshStore.Refuses(mesh: draw.Mesh)) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.RefusedAbsent); }
         } else {
             var reseat = MeshTransformWasReseated(draw: in draw);
 
@@ -278,8 +278,8 @@ public sealed partial class SdfWorldTables {
             if (observation.PoseCut) { ReseatRiddenSlot(draw: in draw); }
             _ = m_absentRows.Remove(item: index);
             if (incremental && !wasAbsent) {
-                // Both ordinary edits and landing use the arena's current placement, never an absent record's zeros.
-                var placement = m_meshArena.Placements[draw.Mesh!];
+                // Both ordinary edits and landing use the store's current placement, never an absent record's zeros.
+                _ = m_meshStore.TryPlacement(mesh: draw.Mesh!, placement: out var placement);
                 var work = SdfMeshRegion.WriteDrawIncremental(draw: in draw, previous: in m_stagedDraws[index],
                     placement: placement, generation: observation.Generation, record: record);
 
@@ -287,7 +287,8 @@ public sealed partial class SdfWorldTables {
                 changedWords = work.ChangedWords;
                 if (work.SelectionComputed) { tally.Selections++; }
             } else {
-                SdfMeshRegion.WriteDraw(draw: in draw, placement: m_meshArena.Placements[draw.Mesh!], generation: observation.Generation, record: record);
+                _ = m_meshStore.TryPlacement(mesh: draw.Mesh!, placement: out var placed);
+                SdfMeshRegion.WriteDraw(draw: in draw, placement: placed, generation: observation.Generation, record: record);
                 tally.Selections++;
             }
         }

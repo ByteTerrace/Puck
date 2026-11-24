@@ -1386,7 +1386,7 @@ back only when there is room to spare. The renderer can shrink today: a
 trim forgets the meshes no current draw names
 (`SdfMeshRegionArena.TrimUnused`), and the region is replaced by a smaller
 one when it holds more than half as much again as it needs
-(`SdfWorldTables.FitMeshRegion`). But the replacement needs room for both
+(`SdfMeshRegionStore.Fit`). But the replacement needs room for both
 buffers at once, so under pressure, which is when memory is wanted back, it
 is refused. A mesh a draw still names is never given up, however much more
 detail it holds than the view needs. And a mesh that is not in memory

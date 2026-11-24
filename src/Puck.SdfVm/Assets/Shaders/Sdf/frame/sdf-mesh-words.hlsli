@@ -1,12 +1,9 @@
-// One direct word read for both sparse and contiguous backing.
+// The presentation's mesh region (sdfMeshRegion), which every residency's draw records address. One direct word read
+// for both sparse and contiguous backing. A kernel that reads draw records too includes sdf-mesh-records.hlsli.
 #ifndef SDF_MESH_WORDS_HLSLI
 #define SDF_MESH_WORDS_HLSLI
 #include "../isa/sdf-render.hlsli"
 
-// A word of a draw's record (SdfMeshRecord): the record's first word (sdfMeshRecord) plus the word's offset.
-uint sdfMeshRecordWord(uint word) {
-    return sdfMeshRegion[word];
-}
 // A word of a mesh's own words, at its index in the region (an address a record or another mesh word holds).
 uint sdfMeshWord(uint word) {
     return sdfMeshRegion[word];
@@ -19,5 +16,5 @@ uint3 sdfMeshWords3(uint word) {
 uint4 sdfMeshWords4(uint word) {
     return uint4(sdfMeshWord(word), sdfMeshWord(word + 1u), sdfMeshWord(word + 2u), sdfMeshWord(word + 3u));
 }
-#define sdfMeshRegion sdfMeshRegion_is_read_through_sdfMeshWord_or_sdfMeshRecordWord
+#define sdfMeshRegion sdfMeshRegion_is_read_through_sdfMeshWord
 #endif

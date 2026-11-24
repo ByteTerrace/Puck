@@ -583,7 +583,7 @@ derived from the budget). Recommendation:
   eviction by priority (campaign step 5). A refused device allocation is the same
   signal (lower the limit to what is held), never a World-ending throw; that
   closes the open item on `GpuRegion.Grow` from
-  `SdfWorldTables.EnsureMeshRegionCapacity`.
+  `SdfMeshRegionStore.EnsureCapacity`.
 - **On a rise:** restore after a quiet period with hysteresis (the tier bias
   already has `SdfMeshTier.BiasQuietFrames`), so an alt-tab does not churn bakes.
 - Every change of reading is counted and printed by `host.memory`, so one window

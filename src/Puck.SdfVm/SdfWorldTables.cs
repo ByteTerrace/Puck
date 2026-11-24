@@ -225,10 +225,6 @@ public sealed partial class SdfWorldTables : IDisposable {
     // (FrameWaiting). Its region copy and the set's tables' kernels (SdfWorldPipelines.TableKernels) are built.
     internal SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, SdfWorldPassPipelines passes, SdfWorldTablesOptions options) {
         ArgumentNullException.ThrowIfNull(device);
-        // The arena places nothing past the region's first granule until the grant reserves room to grow
-        // (PrepareMeshRegionLimit).
-        m_meshArena = new SdfMeshRegionArena(limitBytes: MeshRegionGranuleBytes);
-        m_meshesOwed = new OwedMeshes(arena: m_meshArena, touched: m_landingTouched);
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(passes.RegionCopy);
         ObjectDisposedException.ThrowIf(
@@ -347,25 +343,19 @@ public sealed partial class SdfWorldTables : IDisposable {
             byteCount: ((DecalBufferCells * DecalWordsPerCell) * sizeof(uint)),
             region: DecalRegionIndex
         ));
-        // Reserved before it is created, so the ledger admits the region's first buffer against the grant: the draw
-        // record, which a mapped region backs a whole chunk for. The floor is what the residency cannot draw without, so
-        // a full pool admits it past its limit and the selector coarsens the residencies already drawing, rather than
-        // refusing this one its existence.
-        m_meshGrant = scope.Own(created: (options.Selector ?? SdfResidencySelector.Of(device: device)).Register(name: ObjectOwner));
-        m_meshGrant.Created(capacityBytes: ((gpu.BufferFactory.MappedChunkBytes is var chunk and > 0UL)
-            ? ((long)MeshRegionGrownBytes(mappedChunkBytes: ((long)chunk), needBytes: SdfMeshRegion.DrawBytes))
-            : SdfMeshRegion.DrawBytes));
+        // The residency's draw records, which it cannot draw without: the selector names them as its floor. Its meshes
+        // lie in the presentation's one mesh region, which the residency attaches to here and leaves when it is disposed.
+        var selector = (options.Selector ?? SdfResidencySelector.Of(device: device));
+
+        m_meshGrant = scope.Own(created: selector.Register(name: ObjectOwner));
         m_meshRegion = scope.Own(created: CreateRegion(
-            byteCount: SdfMeshRegion.DrawBytes,
+            byteCount: (MinimumDrawCapacity * SdfMeshRegion.DrawBytes),
             region: MeshRegionIndex
         ));
-        // A mapped region's first chunk is backing beyond its draw record.
-        m_meshGrant.Mapped = m_meshRegion.Mapped;
-        m_meshGrant.Created(capacityBytes: ((long)m_meshRegion.DestinationBytes));
-        // The arena compacts by moving standing meshes on the GPU (SdfMeshRegionArena.Moved, GpuRegion.TryOweMove). A
-        // mapped region's free words cost nothing past the chunks they share, so only an unmapped one compacts to shrink.
-        m_meshRegion.ReserveRunCopies();
-        m_meshArena.FreeWordsCost = !m_meshRegion.Mapped;
+        m_meshDrawCapacity = MinimumDrawCapacity;
+        m_meshGrant.Floor(bytes: (((long)MinimumDrawCapacity) * SdfMeshRegion.DrawBytes));
+        m_meshStore = selector.AttachStore(client: this, copyPipeline: m_regionCopyPipeline, device: device);
+        _ = scope.Own(created: new StoreAttachment(tables: this));
         m_lightRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_lightRecords), region: LightRegionIndex));
         m_skyRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyRecord), region: SkyRegionIndex));
         m_skyLayerRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyLayerRecords), region: SkyLayerRegionIndex));
@@ -377,8 +367,6 @@ public sealed partial class SdfWorldTables : IDisposable {
             destination: m_shadowHandoffBuffer, byteCount: RecordBytes(records: m_shadowHandoffs), slotCount: FrameRingSize,
             buffers: gpu.BufferFactory, bindings: gpu.Bindings, recorder: gpu.Recorder, copyPipeline: m_regionCopyPipeline,
             name: RegionName(region: ShadowHandoffRegionIndex), copySets: m_regionCopyPool.Region(index: ShadowHandoffRegionIndex), hostCopies: m_regionHostCopies));
-        m_meshRegionBytes = SdfMeshRegion.DrawBytes;
-        ShadowMeshRecords();
         void RetireBuffer(IGpuBuffer buffer) => Retire(buffer);
         m_previousDynamicTransforms = scope.Own(new GpuFittedBuffer(gpu.BufferFactory, NameOf("previous-dynamic-transforms"), sizing: GpuBufferSizing.Exact));
         m_previousDynamicTransforms.Fit((ulong)m_dynamicTransformRegion.ByteCount);
@@ -456,6 +444,11 @@ public sealed partial class SdfWorldTables : IDisposable {
         );
     }
 
+    // The residency's place in the presentation's mesh region, left should construction throw after it was taken.
+    private sealed class StoreAttachment(SdfWorldTables tables) : IDisposable {
+        public void Dispose() => tables.m_meshStore.Detach(ahead: tables.m_meshesAhead, client: tables);
+    }
+
     /// <summary>Releases every device object the tables own, without waiting for the device: call it only once no
     /// submission reads them or after a device loss.</summary>
     public void Dispose() {
@@ -464,16 +457,13 @@ public sealed partial class SdfWorldTables : IDisposable {
         }
 
         m_disposed = true;
-        if (m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested -= RequestMeshTrim; m_meshTrimListening = false; }
-        if (Interlocked.Exchange(location1: ref m_meshTrimRequested, value: 0) != 0) { Puck.Hosting.Jobs.MemoryAccount.Shared.CompleteDeferredTrim(); }
 
         // No idle wait: the views' submissions, which the tables' own fences cannot see, read every table, so the owner
         // disposes the tables only once they have completed (the residency through GpuDeviceRetirement) or after a loss.
         m_gpuWork.Dispose();
+        // The rows' names and the names ahead leave the store with the residency; the last one to leave disposes it.
+        m_meshStore.Detach(ahead: m_meshesAhead, client: this);
         m_meshClaims?.Dispose(); m_meshClaims = null;
-        m_meshesOwed.Clear();
-        ReleaseUploadNeeds();
-        m_meshArena.Dispose();
         m_shadows?.Dispose();
         m_shadows = null;
         DisposeRetired(completed: ulong.MaxValue);

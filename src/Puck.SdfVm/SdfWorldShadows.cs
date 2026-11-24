@@ -80,7 +80,7 @@ internal sealed class SdfWorldShadows : IDisposable {
     private const int FirstRectangleKind = 2;
     private const int Kinds = (FirstRectangleKind + MaxRectangles);
     // The buffers a mesh set binds and those the selection kernel's sets add (SdfWorldPassRecorder lays them alike).
-    private const int MeshSetBuffers = 7;
+    private const int MeshSetBuffers = 8;
     private const int MeshSetCounters = 2;
     private const int MeshSetVisibility = 3;
     private const int MeshSetGlassSums = 4;

@@ -18,6 +18,9 @@ internal sealed class SdfMeshClaims : IDisposable {
     }
 
     public SdfMeshClaims Clone() => new(cached: m_cached, meshes: m_meshes.Keys);
+    // The claimed meshes, each once, and how many there are.
+    public Dictionary<SdfMesh, int>.KeyCollection Meshes => m_meshes.Keys;
+    public int Count => m_meshes.Count;
     // Claims the meshes the draws name that it does not hold yet, then releases those the draws no longer name: a mesh
     // both lists name keeps its one claim, so a frame whose draws only move takes no claim and no lock.
     public void Update(IReadOnlyList<SdfMeshDraw> draws) {

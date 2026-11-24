@@ -270,6 +270,8 @@ public sealed class SdfKernelInterfaces {
                 Written(element: ShaderValueType.Uint, name: MeshOcclusionDepthWritten),
                 Read(element: ShaderValueType.Uint, name: MeshIndirectCommands),
                 Read(element: ShaderValueType.Uint4, name: SdfWorldPackage.ProgramWords),
+                // The residency's draw records, apart from the presentation's mesh region their words address.
+                Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshDrawRecords),
             ],
             name: "sdf-mesh",
             pushesIndex: true
