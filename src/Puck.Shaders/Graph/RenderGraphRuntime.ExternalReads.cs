@@ -173,6 +173,7 @@ public sealed partial class RenderGraphRuntime {
             // A read the frame does not show still binds the producer's latest output, so an image the display will
             // show again is never replaced by nothing.
             var completed = OutputAt(
+                consumer: index,
                 frame: ((frame < 0)
                     ? long.MaxValue
                     : frame),

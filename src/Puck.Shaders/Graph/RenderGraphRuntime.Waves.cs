@@ -6,13 +6,15 @@ using Puck.Hosting.Jobs;
 
 namespace Puck.Shaders;
 
-// The frame's renders in dependency waves. A render's wave is one past the latest wave of a graph node it reads this
-// frame (an external producer produces as it is prepared, so its readers may share its wave); every other render of a
-// wave reads nothing the wave writes. Each wave is prepared on the frame thread in schedule order (bindings, the slot's
-// fence, leases and checkpoint, IRenderGraphPackageRecorder.PrepareRecord), recorded as one fork of the job pool's frame
+// The frame's renders, in as few waves as the reads allow, ordinarily one. Each wave is prepared on the frame thread in
+// schedule order (bindings, the slot's fence, leases and checkpoint, IRenderGraphPackageRecorder.PrepareRecord), and a graph
+// node whose frame will record reserves what its commit will publish as it is prepared (RenderGraphRuntime.Reservations.cs),
+// so a consumer later in the same wave binds that reservation. The wave is recorded as one fork of the job pool's frame
 // class, its recordings' lanes emitted as a second fork (EmitWave), and committed on the frame thread in schedule order,
-// so the next wave binds what this one published. Submission order is wave order, then schedule order: every producer
-// still reaches the queue before its same-frame readers.
+// a consumer only once every reservation it bound held. Submission order is wave order, then schedule order: every
+// producer reaches the queue before its same-frame readers. A read starts a later wave only where its consumer cannot take
+// a reservation: an external producer or a paused node, which submit as they are prepared, or a producer publishing
+// history, whose instance no preparation can name (PlanWaves).
 //
 // The invariant the first fork rests on: a recording reads and writes only its own instance and the recording domains its
 // passes name (ShaderPipelineRenderNode.AddRecordingDomains). One door enforces it: RecordWave groups the wave's jobs by
@@ -65,7 +67,11 @@ public sealed partial class RenderGraphRuntime {
                 while (committed < m_waveJobs.Count) {
                     var job = m_waveJobs[committed++];
 
-                    FinishRender(rendering: ref rendering, job: in job);
+                    if (HoldsReservations(index: job.Index, broken: out var broken)) {
+                        FinishRender(rendering: ref rendering, job: in job);
+                    } else {
+                        InvalidateRender(broken: broken, job: in job, rendering: ref rendering);
+                    }
                 }
             } catch {
                 for (var position = committed; (position < m_waveJobs.Count); position++) {
@@ -83,7 +89,9 @@ public sealed partial class RenderGraphRuntime {
         }
     }
     // Assigns each render its wave (m_waveOf) from the schedule's same-frame reads, which name every producer a render
-    // binds this frame's output of; returns the number of waves.
+    // binds this frame's output of; returns the number of waves. A read of a graph node shares its producer's wave, binding
+    // its reservation, unless the consumer cannot take one (it submits as it is prepared: an external producer or a paused
+    // node) or the producer publishes history; then the consumer waits for the producer's commit in the next wave.
     private int PlanWaves(RenderGraphSchedule schedule) {
         var renders = schedule.Renders;
         var reads = schedule.Reads;
@@ -94,6 +102,7 @@ public sealed partial class RenderGraphRuntime {
         for (var position = 0; (position < renders.Count); position++) {
             var index = renders[position];
             var wave = 0;
+            var submitsAsPrepared = ((m_producers[index] is not null) || (m_nodes[index] is { Paused: true }));
 
             schedule.ConsumerReads(consumer: index, start: out var start, count: out var count);
             for (var read = start; (read < (start + count)); read++) {
@@ -102,7 +111,9 @@ public sealed partial class RenderGraphRuntime {
                 if ((producer == index) || (reads[read].Frame != schedule.Frame) || (m_waveOf[producer] < 0)) {
                     continue;
                 }
-                wave = Math.Max(val1: wave, val2: (m_waveOf[producer] + ((m_producers[producer] is null) ? 1 : 0)));
+                var awaitsCommit = ((m_producers[producer] is null) && (submitsAsPrepared || (m_nodes[producer] is { PublishesHistory: true })));
+
+                wave = Math.Max(val1: wave, val2: (m_waveOf[producer] + (awaitsCommit ? 1 : 0)));
             }
             m_waveOf[index] = wave;
             waves = Math.Max(val1: waves, val2: (wave + 1));
@@ -117,6 +128,7 @@ public sealed partial class RenderGraphRuntime {
         var prior = rendering.Prior;
         var row = schedule.Instances[index];
 
+        BeginReads(index: index);
         // The display encoder may still be building after the last requested sample. Keep the contributing
         // images alive until readback completes; another render would silently capture a later jitter sample.
         if (rendering.HoldingConvergence && m_convergenceInstances.Contains(item: index)) {
@@ -311,11 +323,17 @@ public sealed partial class RenderGraphRuntime {
         // What the node commits for a deferred submission, and an export it writes, settle once the batch is flushed.
         node.DefersExportCompletion = true;
 
-        bool records;
+        var records = false;
 
         try {
             records = node.BeginFrame(context: in context);
+            if (records) {
+                ReserveOutput(index: index, node: node, schedule: schedule);
+            }
         } catch {
+            if (records) {
+                node.AbandonFrame();
+            }
             ReleaseRender(rendering: ref rendering, job: in job, schedule: schedule);
             throw;
         }
@@ -463,10 +481,15 @@ public sealed partial class RenderGraphRuntime {
 
         node.DefersExportCompletion = false;
         TrackHandOver(node: node);
-        if (node.FrameCounter != job.Rendered) {
+
+        var rendered = (node.FrameCounter != job.Rendered);
+        var reserved = SettleReservation(index: index, node: node, rendered: rendered);
+
+        if (rendered) {
             rendering.LongestRecord = Math.Max(val1: rendering.LongestRecord, val2: node.LastLongestRecordTicks);
             m_historySucceeded[index] = true;
             RememberOutput(frame: schedule.Frame, index: index, node: node, rendered: true, schedule: schedule, surface: node.PublishedSurface);
+            FinishReservation(frame: schedule.Frame, index: index, reserved: in reserved);
         }
         node.Reads?.RetireUntaken();
         node.Reads = null;

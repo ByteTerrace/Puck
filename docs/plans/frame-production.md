@@ -38,7 +38,7 @@ In order, on the frame thread unless a step says otherwise:
 4. **Schedule**, then **prepare**: the residencies the schedule renders record
    their uploads (`SdfWorldPasses.RendersScheduled`), again one residency a
    partition, and submit them in schedule order.
-5. **Record**, in dependency waves (`RenderGraphRuntime.RenderWaves`).
+5. **Record**, every render in one fork (`RenderGraphRuntime.RenderWaves`), and commit in schedule order.
 
 ## What is built
 
@@ -119,84 +119,105 @@ It stays the step after the ones below: once a frame costs what it shows, the
 remaining serial chain is the host world's own, and that is the chain a
 pipeline would split.
 
-**Recording every scheduled render in one fork** would end the wait between
-waves. A consumer binds what its producer published, and a producer publishes
-when it commits, so the waves are serial by construction today.
+## One fork records a frame
 
-## Reserving a render before its consumers record
+Every scheduled render now records in one fork of the job pool
+(`RenderGraphRuntime.RenderWaves`); `render.record.waves` divided by
+`render.record.frames` reads 1.00 on the debug world's spawn. The frame thread
+prepares every render in schedule order, forks all their recordings, emits their
+lanes as a second fork, and commits in schedule order, so a producer still
+reaches the queue before its same-frame readers.
 
-A command list may sample a scheduled same-frame write only if that write
-precedes it on the queue. Otherwise the consumer keeps its last good output
-or binds the graph's stand-in at the frame's delivery latch. History reads
-keep their declared frame. A reservation lives only for this frame. After
-submission the sampling slot owns its leases until its fence retires. A
-reservation that never reaches submission releases its leases on abandonment.
+**A reservation.** A consumer binds an output before its producer records. So a
+graph node whose prepared frame will record writes, as it is prepared, the record
+its commit will publish (`RenderGraphRuntime.ReserveOutput`): the selected image,
+its forwarded binding and layout, every named output's buffer and image, the
+label and the publication. The node computes the reservation with the same
+routines its commit publishes by (`ShaderPipelineRenderNode.SelectedPublication`,
+`FillBufferOutputs`), so the two cannot drift. Three parts are predictions:
 
-Use the schedule's read edges and the installed pipeline's storage plan.
-Prepare producers in schedule order. For each named output, resolve its
-storage instance, layout, publication identity and delivery label. This
-includes the selected image, an input forwarded by an empty pass and the
-previously written history slot when a writer stands. A recorder that can
-choose between these outcomes must make that choice during preparation.
-The recorder and publisher must then use the same choice.
+- A package pass that drew nothing last frame is taken to draw nothing again, and
+  the input it stands for is resolved again at this frame's slot
+  (`ShaderPipelineRenderNode.PredictedStandingOf`).
+- A buffer's content identity is taken as standing.
+- The publication is the node's next submission.
 
-The read paths are the image and buffer ports in `RenderGraphRuntime.Bind`,
-the package and external-producer reads in `RenderGraphRuntime.BindReads`,
-and reads through a standing output in `RenderGraphRuntime.Resolve`. A HUD
-frame showing a named camera now reads it through the overlay's graph edge.
-`RenderGraphFrameSamples.TrySample` checks the latch and passes the acquired
-image lease to the overlay's frame slot. Captures, exports and the display
-must observe only a publication whose submission succeeded. A paused node can also submit a newly selected
-output. An external producer that submits inside its own `Produce` call must
-accept the same ordering constraint before it receives any reserved read.
+**The commit is the door.** A consumer submits only if every reservation it bound
+held (`RenderGraphRuntime.HoldsReservations`). A producer's reservation breaks
+when its frame did not commit (a failed or abandoned recording), when the commit
+published another image, layout, buffer, binding or image publication, or when
+its label gained external content the reservation lacked
+(`SettleReservation`, `FinishReservation`). A consumer of a broken reservation is
+abandoned, counted in `render.record.invalidated`, and keeps its last good
+output, which is what its readers bind next frame. Its own reservation is then
+withdrawn (`OutputRecords.Withdraw` puts back the records it displaced), so its
+consumers, later in the same loop, are abandoned in turn: the dependency closure.
+A buffer identity that changed matters only to a consumer whose pass stood on it
+(`ShaderPipelineRenderNode.StoodOnExternal`); a consumer that recorded reads the
+buffer after its producer on the queue whatever its identity says.
 
-At submission, walk those same edges in producer order. Abandon a recording
-that used a failed reservation and propagate that outcome to its consumers.
-Independent recordings still submit. The latch checks delivery provenance.
-Only the submitter can establish whether a producer reached the queue.
-`ShaderPipelineRenderNode.SettleHandOver` settles each deferred hand-over
-against its own fence, including when a batch splits. The runtime's output
-records and scheduling history withdraw a rolled-back node's write through
-`RenderGraphRuntime.ForgetAbandonedOutput`. A paused selection hands its
-submission to the queue before it publishes the selected image. Keep the
-existing slot leases for images and the device's `GpuRetirementQueue` for
-replaced allocations.
+**Where a later wave remains** (`RenderGraphRuntime.PlanWaves`): a consumer that
+submits as it is prepared (an external producer, a paused node) waits for its
+producer's commit, and so does every consumer of a node that publishes history,
+whose instance follows whichever pass writes it this frame. The debug world has
+neither on its route.
 
-Residency uploads precede view recording. `SdfMeshRegionStore.RecordOwed`
-puts compaction moves in the next upload. `SdfWorldResidency.EndStage`
-submits that upload. `SdfWorldTables.CloseUpload` hands off its fence before
-publishing the upload, including when installation triggers late staging.
-GPU completion can follow later.
+### The decisions and the invariant each serves
 
-The reservation must also carry the lighting producer's delivery provenance.
-`SdfSkyEnvironmentRecorder.Submitted` publishes the sky and screen emission
-sequences. Its slot's abandonment withdraws an unproven sequence. A view
-calls `SdfWorldPasses.SourceTaintOf` during recording to
-decide whether its lighting contains an external image. Reading yesterday's
-label while recording a consumer of today's buffer would let capture make
-that decision on different data from the shader. Resolve the prospective
-label with the producing pass's draw or stand-in decision and carry it on
-the same graph edge as the buffer.
+1. **Every value a consumer reads at record is decided at prepare, or is a
+   prediction the commit checks.** Serves: no command list reads a resource
+   whose producer has not submitted exactly what was bound. The prediction for a
+   stand-in outcome replaces deciding it at prepare because the decision lives
+   in the recorder's `Record`, which reads frame state only the recording has
+   (the overlay's composition of its HUD, the place pass's placements); the
+   prediction holds in the steady state and a flip costs the consumers one frame.
+2. **Glass's forwarding needs no cross-node decision.** The glass shading pass
+   stands its lit image for the opaque one inside its own view's graph
+   (`SdfGlassRecorder.Record`); the view publishes `color`, which the display
+   pass writes every frame. The forwarding never reaches another node's binding,
+   so the reservation does not see it. A selection of `glassLit` as a view's
+   output is the one way it would, and the prediction covers it.
+3. **A lighting source's classification is recorded as it records.** The sky
+   environment and the screen emission record what their submission will carry
+   (`SdfWorldTables.RecordSkyEnvironment`, `RecordScreenEmission`) and a view
+   reads it for its package frame (`SdfWorldPasses.SourceTaintOf` through
+   `SkyEnvironmentFor`). Serves: a view classifies the buffer it samples, never
+   the previous submission's. The door is the recording domain: the source's
+   recorder and every view of its residency name the residency
+   (`IRenderGraphPackageRecorder.RecordingDomain`), and `RecordWave` records a
+   domain's jobs on one thread in schedule order, the source first. A view whose
+   source's frame does not commit is abandoned with it (decision 1). This keeps
+   the classification on the frame it describes rather than reading the latch's
+   previous frame, which would classify a buffer by a submission it is not.
+4. **A failed producer invalidates its dependents through the existing
+   abandonment**, never a second gate: `AbandonFrame` rolls back the cadence and
+   retires the leases, as a failed recording always has, and the dependents keep
+   their last good output, as a stand-in rule would have them do for a producer
+   with no output.
 
-The checks are a forced producer recording failure with a dependent and an
-independent reader, a failed batch hand-over, and a graph replacement while
-a reader still owns an image. Compare record waves and dispatches per
-recorded frame with the same route chapter. A wave count alone cannot show
-whether a consumer sampled the right publication.
+### The invariants and their doors
+
+| Invariant | Door | Where the guarantee stops |
+|---|---|---|
+| No command list reads a resource whose producer has not submitted, in the same frame, exactly what it bound, unless it reads the stand-in or an earlier frame's output. | The commit loop's `HoldsReservations` in `RenderGraphRuntime.RenderWaves`, with every binding read noted through `OutputAt`, `Resolve` or `NoteReservedRead`. | A new binding path that reads another instance's output without naming its consumer goes around it; review holds that. |
+| No reserved binding outlives the frame's retirement. | A reservation is settled in `ReleaseRender` on every path out of a prepared frame (commit, failure, abandonment, a throw), and leases bound to it retire through the consumer's slot like any other (`GpuRetirementQueue` for replaced allocations). | Nothing new: the image table's leases are unchanged. |
+| Every residency's upload of a frame reaches the queue before any view of that frame records. Compaction moves ride the next upload (`SdfMeshRegionStore.RecordOwed`). | `SdfWorldPasses.RendersScheduled` submits every scheduled residency's upload (`SdfWorldResidency.EndStage`) before the runtime prepares any render; the fork comes after. | A residency staged late (a graph installed mid-frame) stages in `PrepareRecord`, still on the frame thread before the fork. |
+
+### What showed it
+
+On the RTX 4070 at 2560×1440, Direct3D 12, in-process authority, after the
+bakes settled: `render.record.waves` against `render.record.frames` read
+5178 against 5177 over the run and 242 against 242 over a 120-tick window, with
+about 6.4 jobs a frame. Armed `gpu.faults record` failures of
+`world$environment`, `main`, a machine source and the overlay failed those
+recordings, abandoned twelve dependents (`invalidated` 1 to 13), and every
+instance was reported current again on the following frames.
 
 ## The steps
 
 Each step names the count that shows it worked, read with `world.counters`
 across a benchmark chapter and divided by the frames.
 
-3. **One fork records a frame.** A node publishes the output it will commit as
-   it is prepared, so every consumer binds before any recording runs, and a
-   failed recording abandons its consumers with it. `ShaderPipelineRenderNode.PrepareFrame`
-   reserves a slot, but `PublishBuffers` resolves the actual named outputs
-   after recording and `RenderGraphRuntime.RememberOutput` records their
-   delivery label and forwarded image. Move those decisions into preparation
-   and retain their exact images and buffers through commit. Check that
-   `render.record.waves` falls to one per recorded frame.
 4. **The pump follows what completed.** Each residency's background work polls
    every frame (`SdfWorldResidency.Upkeep`). The fence wakes the thread's shared
    `WaitService.Signal`, which cannot identify the ready residency. Give the

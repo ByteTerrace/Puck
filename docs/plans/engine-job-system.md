@@ -788,14 +788,15 @@ and re-records once. The fixtures are focused `*-tests.puck` sources under
 
 ### As built
 
-The render graph runtime records in dependency waves
-(`RenderGraphRuntime.RenderWaves`). A render's wave is one past the latest graph
-node it reads this frame; the frame thread prepares a wave in schedule order
-(bindings, the slot's fence wait, leases, the cadence checkpoint and each package
-pass's `IRenderGraphPackageRecorder.PrepareRecord`, which follows a view and
-begins and stages its residency), forks the wave's recordings as one `Frame`
-fork, and commits them in schedule order before the next wave binds what they
-published. Same-frame read semantics are unchanged. Every node already owned its
+The render graph runtime records a frame in one fork
+(`RenderGraphRuntime.RenderWaves`). The frame thread prepares every render in
+schedule order (bindings, the slot's fence wait, leases, the cadence checkpoint
+and each package pass's `IRenderGraphPackageRecorder.PrepareRecord`, which
+follows a view and begins and stages its residency), and a node whose frame will
+record reserves what its commit will publish, so a consumer later in the schedule
+binds the reservation. It forks every recording as one `Frame` fork and commits
+them in schedule order; a consumer whose bound reservation did not hold is
+abandoned with its own consumers ([frame production](frame-production.md#one-fork-records-a-frame)). Every node already owned its
 command pools per slot, the backend recorders and bindings are free-threaded,
 the counting recorder counts into the node's own ledger, and the pipeline cache
 is safe on any thread, so none of them needed a change.

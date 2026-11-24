@@ -947,6 +947,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             if (buffered.BufferOf(name: binding.Output, publication: out var publication) is not { } buffer) {
                 return false;
             }
+            if (buffered.Reserved) {
+                NoteReservedRead(buffer: buffer, consumer: index, output: binding.Output, producer: binding.Producer, publication: publication, version: binding.Version);
+            }
 
             NoteTaint(
                 index: index,
@@ -1041,15 +1044,23 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 consumer: index,
                 producer: binding.Producer
             );
-            var output = OutputAt(
-                frame: frame,
-                latch: in latch,
-                producer: binding.Producer,
-                readFrame: (schedule.Frame - (binding.PreviousFrame ? 1L : 0L))
-            );
+            Output output;
 
             if (binding.Output is { } selectedImage) {
-                output = RecordedAt(frame: frame, latch: in latch, producer: binding.Producer).ImageOf(latch: in latch, name: selectedImage);
+                var recorded = RecordedAt(frame: frame, latch: in latch, producer: binding.Producer);
+
+                if (recorded.Reserved) {
+                    NoteReservedRead(consumer: index, producer: binding.Producer);
+                }
+                output = recorded.ImageOf(latch: in latch, name: selectedImage);
+            } else {
+                output = OutputAt(
+                    consumer: index,
+                    frame: frame,
+                    latch: in latch,
+                    producer: binding.Producer,
+                    readFrame: (schedule.Frame - (binding.PreviousFrame ? 1L : 0L))
+                );
             }
 
             if (
@@ -1111,15 +1122,15 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     }
     // Selects the producer's recorded output at the scheduled frame, then resolves what it stands for at the reader's
     // frame. A slow standing output follows its owner even when its own last render is older than the owner's history.
-    private Output OutputAt(int producer, long frame, long readFrame, in DeliveryLatch latch) => Resolve(
-        frame: readFrame,
-        latch: in latch,
-        output: RecordedAt(
-            frame: frame,
-            latch: in latch,
-            producer: producer
-        )
-    );
+    // A consumer binding the output names itself, so the reservations it binds are noted (NoteReservedRead).
+    private Output OutputAt(int producer, long frame, long readFrame, in DeliveryLatch latch, int consumer = -1) {
+        var recorded = RecordedAt(frame: frame, latch: in latch, producer: producer);
+
+        if (recorded.Reserved && (consumer >= 0)) {
+            NoteReservedRead(consumer: consumer, producer: producer);
+        }
+        return Resolve(consumer: consumer, frame: readFrame, latch: in latch, output: recorded);
+    }
     private void Release() {
         RetireShownLeases();
         m_outputs.Clear();
@@ -1574,8 +1585,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private readonly record struct Binding(string Version, int Producer, string ProducerName, ShaderPipelineResourceKind Kind, GpuPixelFormat Format, bool PreviousFrame, string? Output, bool RetainsPublication = true, bool Optional = false, bool SampledByName = false);
     // One completed output of an instance: the frame it belongs to, its published image and the layout it is in, its
     // buffer when it is one, its provenance and external-content label, and what the image stands for when it is not
-    // the instance's own (RenderGraphRuntime.Standing.cs).
-    private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, DeliveryLabel Label, Standing StandsFor, ulong? StateTick = null, ReferenceRevision Publication = default, ShaderPipelineRenderNode.BufferOutput[]? Buffers = null, ReferenceRevision BufferPublication = default) {
+    // the instance's own (RenderGraphRuntime.Standing.cs). A reserved output is what a prepared frame will publish when it
+    // commits, which the frame's consumers bind before it records (RenderGraphRuntime.Reservations.cs).
+    private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, DeliveryLabel Label, Standing StandsFor, ulong? StateTick = null, ReferenceRevision Publication = default, ShaderPipelineRenderNode.BufferOutput[]? Buffers = null, ReferenceRevision BufferPublication = default, bool Reserved = false) {
         public bool Tainted => Label.External;
 
         public Output ImageOf(string name, in DeliveryLatch latch) {

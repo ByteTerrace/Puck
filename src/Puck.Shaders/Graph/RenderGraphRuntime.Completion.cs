@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using Puck.Abstractions.Collections;
 using Puck.Hosting;
 using Puck.Abstractions.Presentation;
 
@@ -87,11 +86,7 @@ public sealed partial class RenderGraphRuntime {
             NotePackageTaint(index: index);
         }
         SettleWithdrawal(index: index);
-        var publication = (((node.PublishedBinding is { } binding) &&
-            node.TryGetBoundImage(image: out var input, name: binding) &&
-            input.TryRead(latch: in m_latch, image: out var resolvedInput))
-            ? resolvedInput.Publication
-            : new ReferenceRevision(Owner: node, Revision: node.SubmissionCount));
+        var publication = node.PublicationOf(binding: node.PublishedBinding, latch: in m_latch, revision: node.SubmissionCount);
         // The node's published label is its route and everything it bound when it committed the frame
         // (ShaderPipelineRenderNode.FrameBindingLabel). A frame the runtime rendered adds the instance's route, which a
         // source's node is not given; a frame presented again without rendering keeps the label it was made under, never
@@ -112,7 +107,7 @@ public sealed partial class RenderGraphRuntime {
 
         var standsFor = ((schedule is null)
             ? Standing.Own
-            : StandingOf(index: index, node: node, schedule: schedule, surface: in surface));
+            : StandingOf(forwarded: node.PublishedBinding, index: index, schedule: schedule, surface: in surface));
 
         m_outputs.Write(
             frame: frame,
