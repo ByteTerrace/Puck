@@ -10744,6 +10744,14 @@ export type WorldPlacementPortal = {
    * The maximum number of live bodies and outstanding reservations admitted through this border at once, or null to use the destination population's remaining capacity. A full border refuses the current attempt immediately; it never queues.
    */
   capacity?: number | null;
+  /**
+   * The state condition (StateCondition, the condition a placement's respond reads) under which the door is open, read each tick the authority scans its doors; null for a door always open. A closed door fires nothing: a body that walks into it meets the frame as though no door hung there, and a body standing in it when it closes stays on the side it is on.
+   */
+  open?: WorldPlacementResponseCondition | null;
+  /**
+   * Who may pass: a condition on a row keyed by body index, read at the traveller's own index (Admits); null admits every traveller the destination admits. A body the gate refuses walks through the frame without crossing. The destination's admission still judges every body the gate lets in.
+   */
+  gate?: WorldPortalGate | null;
 };
 
 /**
@@ -10801,7 +10809,7 @@ export type WorldPlacementResponse = {
   /**
    * The condition tested every sweep — a lattice-field read or a state-cell read.
    */
-  when: WorldPlacementResponseCondition;
+  when: WorldPlacementResponseConditionNonNullable;
   /**
    * The creation the placement shows/collides as while When holds and no earlier entry does. Must resolve to a declared, non-animated creation row.
    */
@@ -10831,6 +10839,11 @@ export type WorldPlacementResponseConditionFieldCondition = {
    */
   value: WorldLatticeScalar | null;
 };
+
+/**
+ * The closed union a response entry's When speaks. Both arms evaluate against the SAME per-tick document the rule frame folds a rule's writes into before this sweep runs (Server.WorldTick.SweepPlacementResponses runs after EvaluateWorldRules' own end-of-tick fold), so a cell a rule wrote this tick already reads through StateCondition on the same tick's sweep.
+ */
+export type WorldPlacementResponseConditionNonNullable = WorldPlacementResponseConditionFieldCondition | WorldPlacementResponseConditionStateCondition | null;
 
 /**
  * A state-cell condition: compares State's cell (its slot cell when Key is absent, else the cell at Key) against Value, or — when ComparandState is authored instead — against another declared row's cell, read live at the same evaluation. Exactly one of Value and ComparandState may be present, the same one-comparand rule CompareState already enforces for a rule's own gate — this facet reuses that field convention rather than inventing a second reading of "compare a state cell." Independent of the placement's position, and of whether the document declares a fields section at all.
@@ -11044,6 +11057,24 @@ export type WorldPortalDefaults = {
    * Whether a party transfer reserves and commits as one cohort. When false, each member is a separate atomic body transfer.
    */
   partyAllOrNothing?: boolean;
+};
+
+/**
+ * A door's gate (Gate): a row keyed by body index whose cell at a traveller's index decides whether that traveller passes. The author's rules write the row: a door bound to its opener writes the opener's cell, a party door writes each member's, so who may pass is a rule of play, never an engine choice.
+ */
+export type WorldPortalGate = {
+  /**
+   * The keyed numeric row read, one cell per body index (key "0", "1", …).
+   */
+  state: string;
+  /**
+   * The comparison the traveller's cell must satisfy.
+   */
+  comparison: ExpressionComparisonNonNullable;
+  /**
+   * The literal the cell is compared against; a cell the row does not hold reads as no value and refuses.
+   */
+  value: number;
 };
 
 export type WorldPortalTravel = "party" | "body";

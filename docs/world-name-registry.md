@@ -1267,6 +1267,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].portal.open[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].portal.open[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].portal.open[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].portal.open[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -1672,6 +1679,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].portal.open[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].portal.open[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].portal.open[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].portal.open[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -2077,6 +2091,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].portal.open[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].portal.open[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -2249,6 +2270,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `placements.rows[].faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `placements.rows[].faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
+| `placements.rows[].faceSources[].portal.open[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `placements.rows[].faceSources[].portal.open[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `placements.rows[].faceSources[].portal.open[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `placements.rows[].faceSources[].portal.open[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `placements.rows[].faceSources[].portal.open[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `placements.rows[].faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
+| `placements.rows[].faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `placements.rows[].faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `placements.rows[].attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `placements.rows[].contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -3026,6 +3054,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].portal.open[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].portal.open[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
+| `rules[].effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `rules[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `rules[].effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -3449,6 +3484,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].portal.open[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].portal.open[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -3895,6 +3937,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].portal.open[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].portal.open[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].portal.open[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].portal.open[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].portal.open[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -4283,6 +4332,13 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].portal.open[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].portal.open[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].portal.open[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
@@ -5855,6 +5911,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].field.paint[][draw].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].verdict.gate` | `WorldVerdictTrait.Gate` | literal text |
 | `state.world[].verdict.status` | `WorldVerdictTrait.Status` | a verdict's status cell key is local to its own row |
+| `state.world[].follows.destination` | `WorldStateFollow.Destination` | a destination name |
+| `state.world[].follows.row` | `WorldStateFollow.Row` | a state row of the followed world |
 | `state.world[].draw.generator.start` | `StateGenerator.Start` | a context key is local to its generator |
 | `state.world[].draw.generator.contexts[].key` | `GeneratorContext.Key` | a context key is local to its generator |
 | `state.world[].draw.generator.contexts[].alternatives[].token` | `GeneratorAlternative.Token` | literal text |

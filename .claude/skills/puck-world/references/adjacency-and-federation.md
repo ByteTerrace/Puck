@@ -704,6 +704,28 @@ reach `EnqueueMutation` directly — a mounted guest's decoded act and a world
 rule's `generate` effect — are deliberately untaped and re-derive during the
 drive.
 
+## Followed rows
+
+A state row with `follows { destination, row }` (`WorldStateFollow`) holds a row
+of another world, which only that world writes. `WorldAdjacencyFields.AdoptFollows`
+(in `WorldAdjacencyFields.Follows.cs`) runs at the same host boundary as
+`ResolveNeighbours`: it observes the destination as a session (an adjacency's
+mirror when one leads there, else one lease per destination), reads the
+leader's row from that delivery at the leader's tick beside this authority's
+(`WorldSessionMirror.TryReadDelivered`), and where this row reads apart by more
+than one tick of the leader's advance writes the leader's value as
+`Principal.World` through `WorldDocument.EnqueueTapedMutation`, the one taped
+mutation door. A replay drive skips adoption and re-applies the tape. The cell
+doors refuse every other writer (`WorldStateFollow.RefuseWrite`); a rule writing
+a followed row is not refused, and the next adoption restores the leader's
+value. `world.counters world.federation` counts reads and adoptions;
+`world.follows` narrates a leader's row it cannot adopt.
+
+A door's `portal.open` and `portal.gate` (`WorldPlacementPortal.Open`,
+`WorldPortalGate`) are read in `ScanPortalFace`; a closed door's opening is a
+wall again through `WorldPopulation.PortalClosures`. The debug world's moon
+door pairs two such doors on followed rows (moon-door.puck, moon.puck).
+
 ## Federation transport
 
 `WorldFederationCodec` (`Puck.World.Server`) is the one authority-to-authority
