@@ -188,8 +188,27 @@ public static class WorldContactSelection {
     public static bool RequiresField(WorldCollision collision) => (collision.Requirements is { Count: > 0 });
 }
 /// <summary>The immutable one-time fixed-point compilation of a kit's compound body volume.</summary>
-public readonly struct FixedWorldCollider {
+/// <remarks>Two colliders are equal when they share one compilation's storage: a collider is compiled once and never
+/// changed, so equal storage is equal geometry, and the comparison neither boxes nor walks the volumes.</remarks>
+public readonly struct FixedWorldCollider : IEquatable<FixedWorldCollider> {
     private readonly FixedBodyColliderVolume[]? m_volumes;
+
+    /// <inheritdoc/>
+    public bool Equals(FixedWorldCollider other) => ReferenceEquals(objA: m_volumes, objB: other.m_volumes);
+    /// <inheritdoc/>
+    public override bool Equals(object? obj) => ((obj is FixedWorldCollider other) && Equals(other: other));
+    /// <inheritdoc/>
+    public override int GetHashCode() => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o: m_volumes);
+    /// <summary>Returns whether two colliders share one compilation.</summary>
+    /// <param name="left">The first collider.</param>
+    /// <param name="right">The second collider.</param>
+    /// <returns><see langword="true"/> when they are equal.</returns>
+    public static bool operator ==(FixedWorldCollider left, FixedWorldCollider right) => left.Equals(other: right);
+    /// <summary>Returns whether two colliders are different compilations.</summary>
+    /// <param name="left">The first collider.</param>
+    /// <param name="right">The second collider.</param>
+    /// <returns><see langword="true"/> when they differ.</returns>
+    public static bool operator !=(FixedWorldCollider left, FixedWorldCollider right) => !left.Equals(other: right);
 
     /// <summary>Copies the body-local volumes into collider-owned storage, so a caller retaining the input cannot
     /// change a body's geometry without replacing its collider and refreshing its derived broadphase radius.</summary>

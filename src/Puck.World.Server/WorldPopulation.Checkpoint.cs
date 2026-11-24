@@ -153,6 +153,29 @@ public sealed partial class WorldPopulation {
 
         return entries;
     }
+    /// <summary>Captures the checkpoint entries of the named slots only, in the order given, as <see cref="Capture"/>
+    /// would hold them. The work is the named slots', never the whole population's.</summary>
+    /// <param name="indices">The slots to capture.</param>
+    /// <param name="entries">The entries, one for each slot, when every slot is active.</param>
+    /// <returns><see langword="false"/>, capturing nothing, when a named slot holds no active body.</returns>
+    /// <exception cref="InvalidOperationException">A pending-output list is non-empty.</exception>
+    public bool TryCaptureEntries(ReadOnlySpan<int> indices, out WorldPopulationEntryCheckpoint[] entries) {
+        RequireCapturePoint();
+        foreach (var index in indices) {
+            if (((uint)index >= (uint)Capacity) || (m_entries[index] is not { Active: true, Body: not null })) {
+                entries = [];
+                return false;
+            }
+        }
+        entries = new WorldPopulationEntryCheckpoint[indices.Length];
+        for (var position = 0; (position < indices.Length); position++) {
+            var index = indices[position];
+            var entry = m_entries[index];
+
+            EntryCheckpoint(alias: false, body: entry.Body!, entry: entry, held: false, image: out entries[position], index: index);
+        }
+        return true;
+    }
     private void RequireCapturePoint() {
         if (
             (!m_outputs.IsEmpty) ||

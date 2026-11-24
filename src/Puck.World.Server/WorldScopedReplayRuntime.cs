@@ -169,10 +169,10 @@ public sealed partial class WorldScopedReplayRuntime {
     }
 
     private void Capture() {
+        if (!m_server.Population.TryCaptureEntries(indices: m_orderedBodies, entries: out var bodies)) {
+            throw new InvalidOperationException(message: "A scoped body is absent.");
+        }
         var start = m_server.Arena.CaptureScope(rows: m_rows);
-        var bodies = m_server.Population.Capture().Entries.Where(predicate: entry => m_bodies.Contains(item: entry.Index)).ToArray();
-
-        if (bodies.Length != m_bodies.Count) { throw new InvalidOperationException(message: "A scoped body is absent."); }
         var hash = Hash();
 
         m_start = start;
