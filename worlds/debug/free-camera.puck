@@ -4,5 +4,6 @@
 // an overview of the caldera, until a seat first flies it.
 import "../standard/inputs"
 import "../standard/free-camera"
+import "shapes"
 
-freeCamera(seats: freeCameraBodies)
+freeCamera(seats: seatPopulation)

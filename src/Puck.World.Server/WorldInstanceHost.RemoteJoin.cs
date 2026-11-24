@@ -22,11 +22,52 @@ public sealed partial class WorldInstanceHost {
     // sent: until it has, the join holds back while fewer seats than that stand in the boot world.
     private int m_remoteJoinEager;
     private bool m_remoteJoinPartySent;
+    // Whether this host also listens for incoming connections, in which case its boot world keeps stepping even while no
+    // local seat stands in it.
+    private bool m_remoteJoinListens;
 
     /// <summary>How long, in seconds of the destination's time, a joining seat's reservation holds its slot. A host
     /// that joins at boot can take seconds to step its own first ticks, and a reservation that lapsed before its commit
     /// arrived decides nothing, so the join asks for a hold that outlasts a slow start.</summary>
     public const double RemoteJoinHoldSeconds = 60.0;
+
+    // Whether this host's boot world is a non-listening client launchpad with no work of its own left: its boot party
+    // was sent, nobody stands in it, no local seat presents it, and no transfer, forwarding route or custody holds it.
+    internal bool IsIdleClientBoot(WorldInstance boot) {
+        if ((m_remoteJoin is null) || m_remoteJoinListens || !m_remoteJoinPartySent) {
+            return false;
+        }
+        if (IsOccupied(instance: boot)) {
+            return false;
+        }
+        if (m_authorityEndpoints.TryGetValue(key: BootInstanceName, value: out var bootEndpoint)) {
+            for (var slot = 0; (slot < m_seats.SeatCount); slot++) {
+                if (m_seats.IsOccupied(slot: slot) && ReferenceEquals(objA: m_seats.RoutedEndpoint(slot: slot), objB: bootEndpoint)) {
+                    return false;
+                }
+            }
+        }
+        if (HasForwardingFrom(source: boot.Server) || CustodyHeldBy(instance: boot).Holds || HasQueuedArrival(name: BootInstanceName)) {
+            return false;
+        }
+        foreach (var pending in m_pendingTransfers) {
+            if (string.Equals(a: pending.SourceInstance, b: BootInstanceName, comparisonType: StringComparison.Ordinal)) {
+                return false;
+            }
+        }
+        foreach (var inDoubt in m_inDoubtTransfers) {
+            if (string.Equals(a: inDoubt.Transfer.SourceInstance, b: BootInstanceName, comparisonType: StringComparison.Ordinal)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Whether the boot world withholds opening screen sessions because it is a non-listening client launchpad whose
+    // seats either have not yet been dispatched on their boot join or have already crossed away. If a join refuses and
+    // leaves a seat standing in boot after m_remoteJoinPartySent, this turns false and boot opens its sessions normally.
+    internal bool SuppressesClientBootScreens(WorldInstance boot) =>
+        ((m_remoteJoin is not null) && !m_remoteJoinListens && (!m_remoteJoinPartySent || IsIdleClientBoot(boot: boot)));
 
     // Lets the join send a seat again after its crossing came home because the authority no longer held the
     // reservation: the lease lapsed, which decided nothing about the seat. A reservation the authority refused is not
@@ -43,9 +84,10 @@ public sealed partial class WorldInstanceHost {
     /// <param name="documentPath">The document the boot world was loaded from, which names the world the remote
     /// authority is expected to hold.</param>
     /// <param name="authority">The remote authority's endpoint, an <c>ip:port</c> pair.</param>
+    /// <param name="listens">Whether this host also binds a listen endpoint of its own.</param>
     /// <exception cref="ArgumentException"><paramref name="documentPath"/> or <paramref name="authority"/> is
     /// empty.</exception>
-    public void JoinRemote(string documentPath, string authority) {
+    public void JoinRemote(string documentPath, string authority, bool listens = false) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: documentPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: authority);
         m_remoteJoin = TransferDestination.Remote(
@@ -53,6 +95,7 @@ public sealed partial class WorldInstanceHost {
             documentPath: documentPath,
             name: "remote-boot"
         );
+        m_remoteJoinListens = listens;
         Array.Clear(array: m_remoteJoinTried);
         m_remoteJoinPartySent = false;
     }

@@ -28,6 +28,8 @@ public sealed class LocalKeySigningOracle : ISigningOracle, IDisposable {
     private readonly string m_domain;
     private readonly ECDsa m_key;
     private readonly Func<DateTimeOffset> m_now;
+    private readonly string? m_session;
+    private readonly byte[]? m_sessionBytes;
     private readonly string m_subject;
     private readonly TimeSpan m_validity;
 
@@ -40,9 +42,12 @@ public sealed class LocalKeySigningOracle : ISigningOracle, IDisposable {
     /// <param name="validity">The signed window every minted claim carries, kept short because this door has no
     /// per-claim nonce beyond the challenge itself (see <see cref="WorldAttestedAuthenticator"/>'s own remarks).</param>
     /// <param name="now">The wall-clock read, overridable for tests; defaults to <see cref="DateTimeOffset.UtcNow"/>.</param>
+    /// <param name="session">Optional per-run client session nonce; when supplied, binds those 16 bytes into every
+    /// signed challenge payload so <see cref="WorldAttestedAuthenticator.VerifyAsync"/> derives the per-run authority
+    /// identity <see cref="AuthorityIdentity"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="subject"/> is null or whitespace.</exception>
-    public LocalKeySigningOracle(ECDsa key, string subject, TimeSpan validity, Func<DateTimeOffset>? now = null) {
+    public LocalKeySigningOracle(ECDsa key, string subject, TimeSpan validity, Func<DateTimeOffset>? now = null, Guid? session = null) {
         ArgumentNullException.ThrowIfNull(argument: key);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: subject);
 
@@ -51,8 +56,16 @@ public sealed class LocalKeySigningOracle : ISigningOracle, IDisposable {
         m_subject = subject;
         m_validity = validity;
         m_now = (now ?? (static () => DateTimeOffset.UtcNow));
+        if (session is { } runSession) {
+            m_session = runSession.ToString(format: "N");
+            m_sessionBytes = Convert.FromHexString(s: m_session);
+        }
     }
 
+    /// <summary>Gets the federation authority identity <see cref="WorldAttestedAuthenticator.VerifyAsync"/> derives
+    /// from claims this oracle signs: <c>&lt;domain&gt;/&lt;subject&gt;/&lt;session&gt;</c> for a session-scoped client
+    /// run, or <see cref="Subject"/> for a persistent world authority.</summary>
+    public string AuthorityIdentity => ((m_session is { } session) ? $"{m_domain}/{m_subject}/{session}" : m_subject);
     /// <summary>Gets the signing key's own domain fingerprint — the value a peer's
     /// <see cref="WorldAdmissionEntry.Domain"/> must pin for a <see cref="AttestationTrustMode.SignsDirectly"/>
     /// entry naming <see cref="Subject"/>.</summary>
@@ -70,9 +83,18 @@ public sealed class LocalKeySigningOracle : ISigningOracle, IDisposable {
         var codec = WorldAttestedAuthenticator.Codec;
         var now = m_now();
         var seconds = now.ToUnixTimeSeconds();
+        byte[] payload;
+
+        if (m_sessionBytes is { } sessionBytes) {
+            payload = new byte[challenge.Length + sessionBytes.Length];
+            challenge.CopyTo(destination: payload);
+            sessionBytes.CopyTo(destination: payload.AsSpan(start: challenge.Length));
+        } else {
+            payload = challenge.ToArray();
+        }
         var claim = AttestationSigner.SignClaim(
             audience: WorldAttestedAuthenticator.Audience,
-            claimBytes: challenge.ToArray(),
+            claimBytes: payload,
             codec: codec,
             domain: m_domain,
             notAfter: (seconds + checked((long)m_validity.TotalSeconds)),

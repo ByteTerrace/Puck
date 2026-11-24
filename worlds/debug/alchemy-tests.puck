@@ -1,9 +1,9 @@
 // The Alchemy table's scenarios (alchemy.puck), each booted in the whole debug world:
 // `puck test worlds/debug/alchemy-tests.puck --reproduce --jobs 1`.
 // Cells are named by ordinal on the 8x5 `alchemyGrid` (8 * row + column): cell 0 is the reset tile, cells 1 to 31 hold
-// the 31 element tokens (`alchemyToken1`..`alchemyToken31`, bodies 502..472), and row 4 holds the cauldron between the
+// the 31 element tokens (`alchemyToken1`..`alchemyToken31`, bodies 512..482), and row 4 holds the cauldron between the
 // left hand well (cell 37, world x = 65.21, z = 30.88) and right hand well (cell 34, world x = 64.79, z = 30.88).
-// Body indices follow shapes.puck's population counts: the cursor is 503, and token e is 503 - e.
+// Body indices follow shapes.puck's population counts: the cursor is 513, and token e is 513 - e.
 
 schema: "puck.world.definition.v1"
 basis: "debug"
@@ -13,8 +13,8 @@ import "stopped-machines"
 test "overturned tokens on their own shelves return to the book's face" {
   when {
     ticks 150
-    seat1: body.pose 64.65 9.97 30.32 0 0 180 502
-    seat1: body.pose 65.21 9.97 30.32 0 0 0 498
+    seat1: body.pose 64.65 9.97 30.32 0 0 180 512
+    seat1: body.pose 65.21 9.97 30.32 0 0 0 508
     ticks 150
   }
   expect {

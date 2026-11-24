@@ -181,7 +181,7 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        var seen = new HashSet<(string Domain, string? Subject, WorldAdmissionTrustMode Mode)>();
+        var seen = new Dictionary<(string Domain, string? Subject, WorldAdmissionTrustMode Mode), byte>();
 
         for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
@@ -193,9 +193,26 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (!seen.Add(item: (row.Domain, row.Subject, row.Mode))) {
-                errors.Add(item: $"{path} duplicates an earlier row naming the same domain, subject, and mode.");
+            byte arrivalMask = 0b11;
+
+            if (row.Admits is { } admits) {
+                if (!Enum.IsDefined(value: admits)) {
+                    errors.Add(item: $"{path}.admits '{admits}' is not defined.");
+                } else {
+                    arrivalMask = ((admits == WorldAdmissionArrival.Visitor) ? (byte)0b01 : (byte)0b10);
+                }
+                if (row.Mode != WorldAdmissionTrustMode.FederatedAuthority) {
+                    errors.Add(item: $"{path}.admits is only valid on a '{WorldAdmissionTrustMode.FederatedAuthority}' row.");
+                }
             }
+
+            var seenKey = (row.Domain, row.Subject, row.Mode);
+            var priorMask = seen.GetValueOrDefault(key: seenKey);
+
+            if ((priorMask & arrivalMask) != 0) {
+                errors.Add(item: $"{path} duplicates an earlier row naming the same domain, subject, mode, and arrival kind.");
+            }
+            seen[seenKey] = ((byte)(priorMask | arrivalMask));
             if (
                 (row.Mode == WorldAdmissionTrustMode.OAuth) &&
                 (row.Domain is { } boundedIssuer) &&

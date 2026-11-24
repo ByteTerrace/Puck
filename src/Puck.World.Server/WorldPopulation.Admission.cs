@@ -100,16 +100,21 @@ public sealed partial class WorldPopulation {
     // Activate a simulated entry: re-seed its canonical pose/color/producer state from its index, then mint its own body from
     // its kit row (tuning + primary-action binding) spawned at that pose with the stored peer-source default. The
     // Warp/Face is a server-authoritative spawn (a one-time write into the sim); from here the pose flows only out.
-    private void ActivateSimulated(int index, int? generation = null, IntentSource? source = null) {
+    private void ActivateSimulated(int index, int? generation = null, IntentSource? source = null, bool remoteHuman = false) {
         m_entries[index].CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
         m_entries[index].TravelTurn = FixedQ4816.Zero;
+        m_entries[index].IsRemoteHuman = remoteHuman;
         SeedSimulated(index: index);
+        if (remoteHuman) {
+            SeedSeatSteeringProducer(slot: index);
+        }
 
         var entry = m_entries[index];
-        // Profileless — advances on the kit row's tuning with the row's lane bindings.
+        // Profileless — advances on the resolved kit row's tuning with the row's lane bindings (the world's seat kit
+        // for a remote human, or the entry's assigned simulated row for an autonomous/census peer).
         var player = BuildBodyForKit(
             index: index,
-            kitIndex: entry.KitIndex,
+            kitIndex: ResolveKitIndex(index: index),
             profile: null
         );
 
@@ -220,6 +225,7 @@ public sealed partial class WorldPopulation {
         if (!SupportsSource(
             index: slot,
             refusal: out refusal,
+            remoteHuman: remoteHuman,
             source: source
         )) {
             admitted = default;
@@ -229,13 +235,13 @@ public sealed partial class WorldPopulation {
 
         ActivateSimulated(
             index: slot,
+            remoteHuman: remoteHuman,
             source: source
         );
 
         var entry = m_entries[slot];
 
         entry.Active = true;
-        entry.IsRemoteHuman = remoteHuman;
         entry.IsAuthorityTransferred = authorityTransferred;
         // Before the admitted event is taken, so the event a tape records carries the arrival's turn.
         if (occupant is { } transferred) {
@@ -327,10 +333,10 @@ public sealed partial class WorldPopulation {
             ActivateSimulated(
                 index: peer.BodyIndex,
                 generation: peer.Generation,
+                remoteHuman: peer.RemoteHuman,
                 source: peer.Source
             );
             entry.Active = true;
-            entry.IsRemoteHuman = peer.RemoteHuman;
             m_revision++;
         }
         // A resumed connection rides the same PeerAdmitted event as a fresh one, and a replay reaches it against an
@@ -622,7 +628,9 @@ public sealed partial class WorldPopulation {
     /// freshly-stamped entry is deliberately not evaluated for teardown in the same rescan — the visitor's window
     /// restarts at the revival tick, so it must survive at least one full sweep before it can expire.</para></summary>
     /// <param name="tick">The current (just-completed) simulation tick.</param>
-    public void ReclaimExpiredParks(ulong tick) {
+    /// <param name="onPeerRetired">Optional callback notified with the retired peer principal as each parked peer's
+    /// grace expires.</param>
+    public void ReclaimExpiredParks(ulong tick, Action<Principal>? onPeerRetired = null) {
         var signedTick = unchecked((long)tick);
         var changed = false;
 
@@ -656,7 +664,9 @@ public sealed partial class WorldPopulation {
                 }
 
                 if (signedTick >= deadline) {
+                    var retiredPeer = ((index >= LocalSeatCount) ? Principal.Peer(index: index, generation: entry.Generation) : (Principal?)null);
                     RetireParkedEntry(entry: entry);
+                    if (retiredPeer is { } departed) { onPeerRetired?.Invoke(obj: departed); }
                     changed = true;
 
                     continue;
@@ -673,7 +683,10 @@ public sealed partial class WorldPopulation {
             tick: signedTick,
             out var slot
         )) {
-            RetireParkedEntry(entry: m_entries[slot]);
+            var entry = m_entries[slot];
+            var retiredPeer = (((slot >= LocalSeatCount) && entry.Active) ? Principal.Peer(index: slot, generation: entry.Generation) : (Principal?)null);
+            RetireParkedEntry(entry: entry);
+            if (retiredPeer is { } departed) { onPeerRetired?.Invoke(obj: departed); }
             changed = true;
         }
 
@@ -683,6 +696,25 @@ public sealed partial class WorldPopulation {
         }
 
         m_parkDeadlineRevision = m_revision;
+    }
+
+    internal bool TryUnparkTransferredPeer(int index, WorldDisclosureTier tier, WorldAdmissionTrustIdentity? admissionTrust, out WorldPeerEventEntry admitted) {
+        admitted = default;
+        if ((((uint)(index - LocalSeatCount)) >= PeerCapacity) || !IsParked(index: index)) {
+            return false;
+        }
+        var entry = m_entries[index];
+        if (!entry.IsRemoteHuman || !entry.IsAuthorityTransferred) {
+            return false;
+        }
+        entry.Parked = false;
+        entry.ParkedUntilTick = null;
+        entry.AdmissionTier = tier;
+        entry.AdmissionTrust = admissionTrust;
+        m_revision++;
+        entry.Body?.WakeUp();
+        admitted = PeerEventEntry(index: index);
+        return true;
     }
 
     // The full-teardown half of an expired park, shared by both the rescan and the plain table drain below it.
@@ -1051,8 +1083,10 @@ public sealed partial class WorldPopulation {
     /// <param name="index">The 0-based entity index.</param>
     /// <param name="source">The requested source.</param>
     /// <param name="refusal">The named refusal on failure.</param>
+    /// <param name="remoteHuman">Whether this entity is being admitted as a remote human embodied in the world's seat
+    /// kit.</param>
     /// <returns><see langword="true"/> when the source is live, idle, or declared by the selected kit.</returns>
-    public bool SupportsSource(int index, IntentSource source, out string refusal) {
+    public bool SupportsSource(int index, IntentSource source, out string refusal, bool remoteHuman = false) {
         if (
             source.IsLive ||
             source.IsIdle
@@ -1070,7 +1104,9 @@ public sealed partial class WorldPopulation {
             return false;
         }
 
-        var kitIndex = ResolveKitIndex(index: index);
+        var kitIndex = ((remoteHuman && (m_entries[index].SelectedKit < 0))
+            ? m_seatKit
+            : ResolveKitIndex(index: index));
 
         if (!m_kits[kitIndex].Producers.ContainsKey(key: producerName)) {
             refusal = $"kit '{m_kitRows[kitIndex].Name}' declares no parameters for producer '{producerName}'";

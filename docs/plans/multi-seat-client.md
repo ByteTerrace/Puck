@@ -52,6 +52,17 @@ transfer's reservation.
   carries the whole party, whether close seats share one view, and whether a
   world admits unproven co-seats are authored. The engine supplies the
   mechanisms and the standard package the defaults.
+- **A client's authority is a per-run session under its verified credential, and
+  a departed client's travellers lapse on the world's reconnect grace.** A
+  non-listening client boots an ephemeral seat container with no durable world
+  authority to preserve across restarts. Its federation handshake signs a fresh
+  per-run session nonce beneath its verified credential
+  (`<domain>/<subject>/<session>` for a key, `<oid>/<session>` for Entra), so
+  rejoins and co-running clients sharing a document namespace or key never
+  collide on transfer ids, source floors or incarnations. When every stream of a
+  transferred traveller ends, the authority parks the body and retires both the
+  body and its mobility admission once `bodies.reconnectGraceSeconds` elapses
+  without a resume.
 - **Where the guarantee stops:** the destination knows that a holder of each
   seat's key was present at this client when the seat was admitted. It cannot
   know which person holds which controller, and a client that holds four keys
@@ -376,6 +387,113 @@ overrides.
 | Close seats share one view | A camera program that frames the party, and the panes' layout rule |
 | Unproven co-seats are admitted | The guest count on the federated-authority admission row |
 | A secret is kept from co-seats | The cap on members per client on the row that admits to the secret's world |
+
+## Decision 7: what names a client's authority, and when its travellers lapse
+
+**What must be decided.** What federation `sourceAuthority` identity a
+non-listening client (`--connect`) presents across restarts and across multiple
+client processes that load the same world package or hold the same development
+key, and how an authority reclaims a transferred human traveller when its client
+exits without sending `SessionRequest.Leave`.
+
+**Evidence from the tree.**
+
+- A transfer is keyed by `WorldTransferKey(SourceAuthority, TransferId)`
+  (`WorldTransferEscrow.Reserve`), guarded by a monotonic `SourceFloor` per
+  `SourceAuthority`, and each arriving body is indexed by
+  `WorldEntityAddress(Authority, Index, Generation)`.
+- A client started without a persisted crossing log resets `NextTransferId` to
+  `0` and seat `Generation` to `1` on every run. When `Program.cs` derived the
+  signing oracle's subject solely from `host.authorityNamespace ?? "boot"` and
+  `WorldAttestedAuthenticator.VerifyAsync` returned `claim.Header.Subject`
+  alone, a second run of the same client was refused with
+  `transfer 0 was already leased or answered here`, and two clients booting the
+  same world package (even with distinct keys!) or sharing a pair key minted
+  identical `sourceAuthority` strings and colliding incarnations.
+- `EntraWorldAuthenticator` already mints a per-process `Guid` (`m_session`) and
+  verifies `<oid:D>/<session:N>`, retaining that identity across socket
+  reconnects within one run while isolating separate runs and windows.
+- On `WorldPeerHost`, a transferred federated human (`IsRemoteHuman &&
+  IsAuthorityTransferred`) was retired only on an explicit forwarded
+  `SessionRequest.Leave`; a client that exited or crashed closed its
+  `ObserveTraveler` and `IntentStream` lanes while leaving its traveller body
+  active and holding a `networkPlayers` slot and exclusive `Drive` grant.
+
+**Options.**
+
+1. *A durable per-client authority identity across restarts, backed by a client
+   crossing log.* The client persists `NextTransferId` and seat generations in
+   its local state directory and signs as `<key-domain>`. Fails in three places
+   at scale: two windows or machines holding the same player credential still
+   collide live on `TransferId`, `SourceFloor` and `WorldEntityAddress`; a
+   fresh install, browser host, wiped state directory or un-flushed crash loses
+   its counter and is fenced out by the server's `m_answered` / `SourceFloor`
+   until the server restarts; and it treats a client's transient `boot` launchpad
+   as a persistent federated world, although player continuity belongs to
+   seat/member identity ([decision 2](#decision-2-a-member-proves-its-own-identity)),
+   never to the client's boot container.
+2. *A per-run session-qualified client authority identity bound into the
+   federation handshake proof, paired with stream-liveness parking and
+   reconnect-grace retirement at the authority.* A listening world (`--listen`
+   or a silo row) keeps its exact `host.authorityNamespace` so named
+   `FederatedAuthority` rows match world peers unchanged. A non-listening client
+   mints one 128-bit session id at process boot, signs `challenge || session`
+   under its key in `LocalKeySigningOracle`, and authenticates as
+   `<domain>/<subject>/<session>` in `WorldAttestedAuthenticator` (matching
+   `<oid>/<session>` in `EntraWorldAuthenticator`). Transport reconnects within
+   that run keep the same identity, so in-doubt commit recovery,
+   `ObserveTraveler` and `IntentStream` resume seamlessly. When all active
+   traveller streams (`ObserveTraveler` and `IntentStream`) for a live local
+   transferred human close (or all federation connections from `sourceAuthority`
+   close before a stream attaches), `WorldPeerHost` parks the peer through
+   `DisconnectPeerConnection`; re-attaching a stream before
+   `bodies.reconnectGraceSeconds` expires unparks it and re-mints its `Visitor`
+   grants, while expiry on the simulation tick (`ReclaimExpiredParks`) retires
+   both the body and its `WorldTransferEscrow` mobility admission.
+
+**Ruling: per-run session-qualified client authority identity with
+stream-liveness grace.** It aligns key-attested clients with
+`EntraWorldAuthenticator`, requires no durable crossing log on disposable client
+installs, isolates both sequential rejoins and concurrent clients sharing a
+document namespace or key, and reclaims abandoned slots deterministically on the
+authority's tick.
+
+**The invariants.**
+
+- *Session binding:* a connection authenticates as `<domain>/<subject>/<session>`
+  only if the private key for `<domain>` (verified against an `admission` trust
+  entry that admits `<subject>`) signed the exact `challenge || session` bytes
+  issued on that connection, and every subsequent transfer, observation, intent
+  and submission leaf on that connection must carry that exact `sourceAuthority`.
+  **What enforces it:** `WorldAttestedAuthenticator.VerifyAsync` derives
+  `VerifiedPeerIdentity.Authority` exclusively from the verified
+  `SignedAttestation` header and signed payload bytes, and `WorldPeerHost`
+  checks ordinal equality against the connection's authenticated
+  `sourceAuthority` at every frame door.
+- *Deterministic grace retirement:* whether a disconnected traveller is still
+  embodied or retired at tick `T` is a pure function of the ordered
+  `PeerDisconnected` / `PeerAdmitted` lifecycle events recorded on the tick
+  thread and the world's compiled `PopulationReconnectGraceTicks` evaluated at
+  `ReclaimExpiredParks(T)` — never wall-clock time on a socket thread. **What
+  enforces it:** socket threads only enqueue tick-thread lifecycle transitions
+  when a traveller's active stream count crosses zero or rises from zero while
+  parked; `ApplyPeerDisconnected` stamps `ParkedUntilTick = tick + graceTicks`
+  and `ReclaimExpiredParks` sweeps deadlines strictly by simulation `tick`,
+  after which `WorldTransferEscrow.PruneDepartedAdmissions` drops departed
+  mobility and border records.
+
+**Attacks it closes.**
+
+- *Cross-client namespace collision and denial of service:* another client
+  booting the same `.puck` world cannot squat `sourceAuthority = "debug"` or
+  advance its `SourceFloor` to fence other visitors out, because `<domain>` and
+  `<session>` come from the verified signature.
+- *Session hijacking across keys:* a holder of one trusted key cannot claim
+  another key's `<domain>` or `<subject>`, nor forge an already-admitted
+  client's `<session>` under that key.
+- *Slot exhaustion by crashed clients:* a client that vanishes without sending
+  `Leave` holds its `networkPlayers` slot at most for the world's authored
+  `bodies.reconnectGraceSeconds`.
 
 ## The steps
 

@@ -1,6 +1,8 @@
 // Seeded development tool. Toggle fuzzer[enabled] over MCP; it returns to zero after limit driven ticks.
-// Imported before traversal and companion, its stand-in is body 44; no human seat is driven.
+// Imported before traversal and companion, its stand-in is body (galleryPopulation + 1); no human seat is driven.
+import "shapes"
 import "stand-in"
+let fuzzerBody = (galleryPopulation + 1)
 state {
   world {
     table fuzzer {
@@ -51,8 +53,8 @@ addon "fuzzer" {
   requests [
     { capability: Observe, subject: "state:fuzzer" }
     { capability: Observe, subject: "state:fuzzerBounds" }
-    { capability: Observe, subject: "body:44" }
-    { capability: Drive, subject: "body:44" }
+    { capability: Observe, subject: $"body:{fuzzerBody}" }
+    { capability: Drive, subject: $"body:{fuzzerBody}" }
     { capability: Edit, subject: "state:fuzzer" }
   ]
 }
@@ -60,7 +62,7 @@ addon "fuzzer" {
 grants [
   { grantee: "addon:fuzzer", capability: Observe, subject: "state:fuzzer", budget: 3 }
   { grantee: "addon:fuzzer", capability: Observe, subject: "state:fuzzerBounds", budget: 4 }
-  { grantee: "addon:fuzzer", capability: Observe, subject: "body:44", budget: 2 }
-  { grantee: "addon:fuzzer", capability: Drive, subject: "body:44", budget: 7 }
+  { grantee: "addon:fuzzer", capability: Observe, subject: $"body:{fuzzerBody}", budget: 2 }
+  { grantee: "addon:fuzzer", capability: Drive, subject: $"body:{fuzzerBody}", budget: 7 }
   { grantee: "addon:fuzzer", capability: Edit, subject: "state:fuzzer", budget: 5, writeMask: "Set" }
 ]

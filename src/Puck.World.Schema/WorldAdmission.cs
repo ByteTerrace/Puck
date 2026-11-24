@@ -46,6 +46,17 @@ public enum WorldDisclosureTier : byte {
     /// explicitly, never defaulted into.</summary>
     Replica,
 }
+/// <summary>Which kind of federated arrival a <see cref="WorldAdmissionTrustMode.FederatedAuthority"/> row authorizes:
+/// an embodied traveler (<see cref="Visitor"/>) or an unembodied screen/window observation (<see cref="Session"/>).
+/// Omitting <see cref="WorldAdmissionEntry.Admits"/> authorizes both.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldAdmissionArrival>))]
+public enum WorldAdmissionArrival : byte {
+    /// <summary>An arriving body or party reservation, its traveler projection, and its routed input/submissions.</summary>
+    Visitor,
+
+    /// <summary>An unembodied screen, portal window, or infinity-layer observation session.</summary>
+    Session,
+}
 /// <summary>One capability a verified admission entry mints for the connecting peer once its identity checks out —
 /// the same fields <see cref="WorldGrant"/> carries for a Peer principal, minus <see cref="WorldGrant.Grantee"/>
 /// itself (unknowable until <c>Server.WorldPopulation.TryAdmitRemotePeer</c> assigns the connection's body index and
@@ -148,6 +159,8 @@ public sealed record WorldAdmissionVerdict {
 /// <see cref="WorldDisclosureTier"/>). Absent resolves to <see cref="WorldDisclosureTier.Presentation"/>, so a
 /// projection-only wire is the default and nothing has to be edited to stay closed.
 /// <see cref="WorldDisclosureTier.Replica"/> is reachable only by authoring it.</param>
+/// <param name="Admits">Which federated arrival kind this row authorizes (<see cref="WorldAdmissionArrival.Visitor"/>
+/// or <see cref="WorldAdmissionArrival.Session"/>). Absent authorizes both.</param>
 public sealed record WorldAdmissionEntry(
     [property: DocumentText("an authority namespace")] string Domain,
     WorldAdmissionTrustMode Mode,
@@ -158,12 +171,17 @@ public sealed record WorldAdmissionEntry(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Algorithm = null,
     [property: DocumentText("a public key")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicKey = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDisclosureTier? Disclosure = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDisclosureTier? Disclosure = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAdmissionArrival? Admits = null
 ) {
     /// <summary>Gets the tier this entry mints — <see cref="Disclosure"/>, or
     /// <see cref="WorldDisclosureTier.Presentation"/> when it authors none.</summary>
     [JsonIgnore]
     public WorldDisclosureTier Tier => (Disclosure ?? WorldDisclosureTier.Presentation);
+
+    /// <summary>Returns whether this row authorizes <paramref name="kind"/> (<see langword="null"/> matches any arrival row).</summary>
+    public bool AdmitsArrival(WorldAdmissionArrival? kind) =>
+        ((kind is null) || (Admits is null) || (Admits.Value == kind.Value));
 
     /// <summary>The <see cref="Domain"/> value a <see cref="WorldAdmissionTrustMode.FederatedAuthority"/> row uses to
     /// name every authority that completes the federation handshake rather than one namespace.</summary>

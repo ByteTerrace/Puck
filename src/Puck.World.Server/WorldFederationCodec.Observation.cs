@@ -76,19 +76,13 @@ public static class WorldProjectionPrototypeFetch {
         WorldTravelerObservation? traveler = null, ContentAddressedStore? content = null) {
         var forward = false;
         var bytes = server.ExecuteAuthorityOperation(operation: () => {
-            var liveTier = ((WorldAdmissionDoor.TryAdmitArrival(entries: server.AdmissionPolicy,
-                sourceAuthority: sourceAuthority, verdict: out var publicAdmission) is null)
-                    ? publicAdmission!.Tier : WorldDisclosureTier.Frames);
-
-            ceiling = ((WorldDisclosureTier)Math.Min(val1: ((byte)ceiling), val2: ((byte)liveTier)));
-            if (ceiling == WorldDisclosureTier.Frames) { return null; }
             Principal? recipient = null;
 
             if (traveler is { } request) {
                 if ((request.RemainingHops is 0 or > 64) || (request.SourceAuthority != sourceAuthority) ||
                     !server.TryTransferredPrincipal(sourceAuthority: sourceAuthority, mobility: request.Mobility, principal: out var principal) ||
                     (WorldAdmissionDoor.TryAdmitArrival(entries: server.AdmissionPolicy, sourceAuthority: sourceAuthority,
-                        verdict: out var admission) is not null)) { return null; }
+                        verdict: out var admission, kind: WorldAdmissionArrival.Visitor) is not null)) { return null; }
                 ceiling = ((WorldDisclosureTier)Math.Min(val1: ((byte)ceiling), val2: Math.Min(val1: ((byte)request.Ceiling), val2: ((byte)admission!.Tier))));
                 traveler = request with { Ceiling = ceiling };
                 if (ceiling == WorldDisclosureTier.Frames) { return null; }
@@ -99,6 +93,13 @@ public static class WorldProjectionPrototypeFetch {
                 if (!server.Grants.Allows(capability: WorldCapability.Observe, principal: principal,
                     subject: GrantSubject.Body(index: principal.Index)).IsAllowed) { return null; }
                 recipient = principal;
+            } else {
+                var liveTier = ((WorldAdmissionDoor.TryAdmitArrival(entries: server.AdmissionPolicy,
+                    sourceAuthority: sourceAuthority, verdict: out var publicAdmission, kind: WorldAdmissionArrival.Session) is null)
+                        ? publicAdmission!.Tier : WorldDisclosureTier.Frames);
+
+                ceiling = ((WorldDisclosureTier)Math.Min(val1: ((byte)ceiling), val2: ((byte)liveTier)));
+                if (ceiling == WorldDisclosureTier.Frames) { return null; }
             }
             try {
                 var store = (content ?? WorldProjectionContent.Shared);

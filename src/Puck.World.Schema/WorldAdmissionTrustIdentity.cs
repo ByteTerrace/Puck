@@ -8,10 +8,12 @@ namespace Puck.World.Protocol;
 /// <param name="Subject">The pinned subject, or null for a vouching root.</param>
 /// <param name="Algorithm">The pinned algorithm, or null for keyless admission.</param>
 /// <param name="KeyHash">The complete pinned key hash, or null for keyless admission.</param>
-public sealed record WorldAdmissionTrustIdentity(WorldAdmissionTrustMode Mode, string Domain, string? Subject, string? Algorithm, string? KeyHash) {
+/// <param name="Admits">The arrival kind pinned on a federated-authority row, or null when unpinned.</param>
+public sealed record WorldAdmissionTrustIdentity(WorldAdmissionTrustMode Mode, string Domain, string? Subject, string? Algorithm, string? KeyHash, WorldAdmissionArrival? Admits = null) {
     internal static WorldAdmissionTrustIdentity FromEntry(WorldAdmissionEntry entry) => new(
         entry.Mode, entry.Domain, entry.Subject, entry.Algorithm,
-        ((entry.PublicKey is { } key) ? KeyId.ComputeKeyHash(subjectPublicKeyInfo: Convert.FromBase64String(s: key)) : null));
+        ((entry.PublicKey is { } key) ? KeyId.ComputeKeyHash(subjectPublicKeyInfo: Convert.FromBase64String(s: key)) : null),
+        entry.Admits);
     internal static WorldAdmissionTrustIdentity FromVerified(TrustListEntry entry) => new(
         ((entry.Mode == AttestationTrustMode.Vouches) ? WorldAdmissionTrustMode.Vouches : WorldAdmissionTrustMode.SignsDirectly),
         entry.PinnedId.Domain, entry.PinnedId.Subject, entry.PinnedId.Algorithm, entry.PinnedId.KeyHash);

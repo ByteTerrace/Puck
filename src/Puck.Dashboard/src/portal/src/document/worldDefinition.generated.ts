@@ -5869,6 +5869,8 @@ export type WorldAdjacencyPresentation = "Joined" | "Apart";
 
 export type WorldAdjacencyUnavailable = "Closed";
 
+export type WorldAdmissionArrival = "Visitor" | "Session";
+
 export type WorldAdmissionEntry = {
   /**
    * The trusted key's own id domain — a lowercase-hex SHA-256 fingerprint (64 characters). For Vouches this must be PublicKey's own fingerprint (a root is self-certifying). For SignsDirectly it names the domain namespace this individual is pinned under, which need not equal their own key's hash. For FederatedAuthority it is not a key id at all: it names the authenticated source-authority namespace, or AnyAuthority for any authority that completes the federation handshake. For OAuth it is the exact HTTPS issuer.
@@ -5898,6 +5900,10 @@ export type WorldAdmissionEntry = {
    * How much of this world's document a peer verified under this entry receives (see WorldDisclosureTier). Absent resolves to Presentation, so a projection-only wire is the default and nothing has to be edited to stay closed. Replica is reachable only by authoring it.
    */
   disclosure?: WorldDisclosureTier | null;
+  /**
+   * Which federated arrival kind this row authorizes (Visitor or Session). Absent authorizes both.
+   */
+  admits?: WorldAdmissionArrival | null;
 };
 
 export type WorldAdmissionGrant = {
@@ -15709,6 +15715,10 @@ export type WorldVoiceProfile = {
    * Optional syllable-bank document path, replacing synthesis for HUD text.
    */
   sampleSet?: string | null;
+  /**
+   * Optional SHA-256 content pin of the canonical SampleSet manifest so a delivered world with no document directory resolves its voice samples through Resolver.
+   */
+  hash?: string | null;
 };
 
 /**

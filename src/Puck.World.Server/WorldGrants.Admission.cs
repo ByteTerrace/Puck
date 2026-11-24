@@ -101,6 +101,86 @@ public sealed partial class WorldGrants {
             );
         }
     }
+
+    internal void ParkTransferredPeer(string sourceAuthority, in WorldMobilityIdentity mobility) {
+        lock (Host.AuthorityGate) {
+            if (
+                !Host.TransferEscrow.TryMobilityPrincipal(sourceAuthority: sourceAuthority, mobility: in mobility, principal: out var principal) ||
+                (principal.Kind != PrincipalKind.Peer) ||
+                !Host.IsLivePeer(principal: principal) ||
+                Host.Population.IsParked(index: principal.Index) ||
+                !Host.Population.TryCaptureTransferredPeer(index: principal.Index, peer: out var peer)
+            ) {
+                return;
+            }
+            ApplyLifecycleEvents(
+                admitted: [],
+                disconnected: [peer],
+                ordered: true,
+                input: true
+            );
+        }
+    }
+
+    internal void ParkUnattachedTransferredPeers(string sourceAuthority, Func<WorldEntityAddress, bool> hasActiveStream) {
+        lock (Host.AuthorityGate) {
+            foreach (var (incarnation, epoch) in Host.TransferEscrow.SourceMobilities(sourceAuthority: sourceAuthority)) {
+                if (hasActiveStream(incarnation)) {
+                    continue;
+                }
+                var mobility = new WorldMobilityIdentity(
+                    Incarnation: incarnation,
+                    Epoch: epoch,
+                    DepartedFrom: default
+                );
+                ParkTransferredPeer(sourceAuthority: sourceAuthority, mobility: in mobility);
+            }
+        }
+    }
+
+    internal bool TryResumeTransferredPeer(string sourceAuthority, in WorldMobilityIdentity mobility) {
+        lock (Host.AuthorityGate) {
+            if (
+                !Host.TransferEscrow.TryMobilityPrincipal(sourceAuthority: sourceAuthority, mobility: in mobility, principal: out var principal) ||
+                (principal.Kind != PrincipalKind.Peer) ||
+                !Host.IsLivePeer(principal: principal)
+            ) {
+                return false;
+            }
+            if (!Host.Population.IsParked(index: principal.Index)) {
+                return true;
+            }
+            if (
+                (Protocol.WorldAdmissionDoor.TryAdmitArrival(
+                    entries: Host.Definition.Admission,
+                    sourceAuthority: sourceAuthority,
+                    verdict: out var verdict,
+                    kind: Protocol.WorldAdmissionArrival.Visitor
+                ) is not null) ||
+                (verdict is null) ||
+                !Host.Population.TryUnparkTransferredPeer(
+                    index: principal.Index,
+                    tier: verdict.Tier,
+                    admissionTrust: verdict.TrustIdentity,
+                    admitted: out var admitted
+                )
+            ) {
+                return false;
+            }
+            ApplyLifecycleEvents(
+                admitted: [admitted],
+                disconnected: [],
+                ordered: true,
+                input: true,
+                mintedGrants: BuildAdmissionGrants(
+                    principal: admitted.Identity,
+                    bodyIndex: admitted.BodyIndex,
+                    templates: verdict.Templates
+                )
+            );
+            return true;
+        }
+    }
     /// <summary>Removes a peer admitted by a transfer whose multi-member commit is rolling back, including every
     /// generation-scoped grant minted with it.</summary>
     internal void RollbackTransferredEntity(int slot) {
@@ -424,7 +504,8 @@ public sealed partial class WorldGrants {
                 ? ((Protocol.WorldAdmissionDoor.TryAdmitArrival(
                     entries: candidate.Admission,
                     sourceAuthority: domain,
-                    verdict: out var arrivalVerdict
+                    verdict: out var arrivalVerdict,
+                    kind: Protocol.WorldAdmissionArrival.Visitor
                 ) is null)
                     ? arrivalVerdict
                     : null)

@@ -97,9 +97,16 @@ public sealed class WorldPeerHost : IDisposable {
     // Federation connections are long-lived and are not admitted bodies, so they are not in m_connections. They are
     // tracked independently so idle observation/intent streams expire along with request/response sessions.
     private readonly ConcurrentDictionary<PeerStream, Credential> m_federationConnections = new();
+    private readonly ConcurrentDictionary<(string SourceAuthority, WorldEntityAddress Incarnation), TravelerLiveness> m_travelerLiveness = new();
     private readonly SemaphoreSlim m_federationSlots = new(initialCount: MaximumFederationConnections, maxCount: MaximumFederationConnections);
     private readonly List<Connection> m_connections = [];
     private readonly Lock m_connectionsLock = new();
+
+    private sealed class TravelerLiveness(WorldMobilityIdentity mobility) {
+        public readonly Lock Gate = new();
+        public WorldMobilityIdentity Mobility = mobility;
+        public int ActiveStreams;
+    }
 
     /// <summary>Initializes a new instance of the <see cref="WorldPeerHost"/> class over the server it admits into.</summary>
     /// <param name="server">The authoritative server.</param>
@@ -250,11 +257,12 @@ public sealed class WorldPeerHost : IDisposable {
     // The tier a federated peer's own authority namespace is authored at, read at reply encoding through the
     // same admission arm that decides what an arriving traveler is minted. A namespace no admission row names
     // receives no document. A cryptographic identity alone authorizes no public federation disclosure.
-    private WorldDisclosureTier DisclosureFor(string sourceAuthority) =>
+    private WorldDisclosureTier DisclosureFor(string sourceAuthority, WorldAdmissionArrival kind) =>
         (((WorldAdmissionDoor.TryAdmitArrival(
             entries: m_server.AdmissionPolicy,
             sourceAuthority: sourceAuthority,
-            verdict: out var verdict
+            verdict: out var verdict,
+            kind: kind
         ) is null) && (verdict is not null))
             ? verdict.Tier
             : WorldDisclosureTier.Frames
@@ -479,9 +487,9 @@ public sealed class WorldPeerHost : IDisposable {
                 }
                 var federationAuthority = identityProof.Authority;
                 var currentProof = identityProof;
-                var hadArrivalAdmission = WorldAdmissionDoor.TryAdmitArrival(verifiedPolicy, federationAuthority, out _) is null;
+                var hadArrivalAdmission = WorldAdmissionDoor.AdmitsAnyArrival(verifiedPolicy, federationAuthority);
                 async ValueTask<VerifiedPeerIdentity?> ReverifyAsync(IReadOnlyList<WorldAdmissionEntry>? policy, CancellationToken token) {
-                    var admittedNow = WorldAdmissionDoor.TryAdmitArrival(policy, federationAuthority, out _) is null;
+                    var admittedNow = WorldAdmissionDoor.AdmitsAnyArrival(policy, federationAuthority);
                     if (hadArrivalAdmission && !admittedNow) { return null; }
                     hadArrivalAdmission |= admittedNow;
                     var latest = Volatile.Read(ref currentProof);
@@ -554,6 +562,7 @@ public sealed class WorldPeerHost : IDisposable {
                             key: client,
                             value: out _
                         );
+                        SweepDisconnectedAuthorityTravelers(sourceAuthority: federationAuthority);
                     }
                 } finally {
                     _ = m_federationSlots.Release();
@@ -873,7 +882,7 @@ public sealed class WorldPeerHost : IDisposable {
 
     private Task<Principal?> TransferredPrincipalAsync(Credential credential, WorldMobilityIdentity mobility, string sourceAuthority) =>
         ExecuteAuthenticatedAsync<Principal?>(credential, () =>
-            ((WorldAdmissionDoor.TryAdmitArrival(m_server.AdmissionPolicy, sourceAuthority, out _) is null) &&
+            ((WorldAdmissionDoor.TryAdmitArrival(m_server.AdmissionPolicy, sourceAuthority, out _, WorldAdmissionArrival.Visitor) is null) &&
             m_server.TryTransferredPrincipal(sourceAuthority, mobility, out var principal)) ? principal : null);
 
     // A destination asks this authority, as a companion's title authority, whether a hop is currently granted to it.
@@ -1187,7 +1196,7 @@ public sealed class WorldPeerHost : IDisposable {
                     return true;
                 }
                 var fetch = await ExecuteAuthenticatedAsync(credential, () => WorldProjectionPrototypeFetch.FetchAsync(m_server, pin,
-                    sourceAuthority, DisclosureFor(sourceAuthority), traveler)).ConfigureAwait(false);
+                    sourceAuthority, DisclosureFor(sourceAuthority, (traveler is null) ? WorldAdmissionArrival.Session : WorldAdmissionArrival.Visitor), traveler)).ConfigureAwait(false);
                 var prototype = await fetch.ConfigureAwait(false);
                 if (prototype is null) {
                     await WriteFederationRefusal(ct: ct, detail: "the current projection does not disclose this prototype", refusal: WorldFederationRefusal.PrototypeUndisclosed, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
@@ -1225,25 +1234,30 @@ public sealed class WorldPeerHost : IDisposable {
                 }
                 observation = observation with {
                     Ceiling = ((WorldDisclosureTier)Math.Min(
-                    val1: ((byte)DisclosureFor(sourceAuthority: sourceAuthority)),
+                    val1: ((byte)DisclosureFor(sourceAuthority: sourceAuthority, kind: WorldAdmissionArrival.Visitor)),
                     val2: ((byte)observation.Ceiling)
                 )),
                 };
-                var refusal = await WorldTravelerProjection.StreamAsync(
-                    m_server,
-                    observation,
-                    (m_server.DeclaredEndpoint ?? ListenEndpoint ?? m_server.AuthorityIdentity),
-                    stream,
-                    ct,
-                    credential.IsValid
-                ).ConfigureAwait(continueOnCapturedContext: false);
-                if (refusal is not null) {
-                    await WriteFederationRefusal(
-                        ct: ct,
-                        detail: refusal,
-                        refusal: WorldFederationRefusal.RouteUnknown,
-                        stream: stream
+                await BeginTravelerStreamAsync(sourceAuthority: sourceAuthority, mobility: observation.Mobility, ct: ct).ConfigureAwait(false);
+                try {
+                    var refusal = await WorldTravelerProjection.StreamAsync(
+                        m_server,
+                        observation,
+                        (m_server.DeclaredEndpoint ?? ListenEndpoint ?? m_server.AuthorityIdentity),
+                        stream,
+                        ct,
+                        credential.IsValid
                     ).ConfigureAwait(continueOnCapturedContext: false);
+                    if (refusal is not null) {
+                        await WriteFederationRefusal(
+                            ct: ct,
+                            detail: refusal,
+                            refusal: WorldFederationRefusal.RouteUnknown,
+                            stream: stream
+                        ).ConfigureAwait(continueOnCapturedContext: false);
+                    }
+                } finally {
+                    EndTravelerStream(sourceAuthority: sourceAuthority, mobility: observation.Mobility, handoff: false);
                 }
                 return false;
 
@@ -1290,8 +1304,8 @@ public sealed class WorldPeerHost : IDisposable {
         }
     }
     // The one document-reply door: current credentials, current policy and encoding share the authority gate.
-    private Task<byte[]> EncodeFederationReplyAsync(string sourceAuthority, Credential credential, Func<WorldDisclosureTier, byte[]> encode) =>
-        ExecuteAuthenticatedAsync(credential: credential, operation: () => encode(DisclosureFor(sourceAuthority: sourceAuthority)));
+    private Task<byte[]> EncodeFederationReplyAsync(string sourceAuthority, Credential credential, Func<WorldDisclosureTier, byte[]> encode, WorldAdmissionArrival kind = WorldAdmissionArrival.Visitor) =>
+        ExecuteAuthenticatedAsync(credential: credential, operation: () => encode(DisclosureFor(sourceAuthority: sourceAuthority, kind: kind)));
 
     private async Task<bool> ServeReserveAsync(Stream stream, string sourceAuthority, Credential credential, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (
@@ -1523,6 +1537,7 @@ public sealed class WorldPeerHost : IDisposable {
             (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
             (result is WorldSubmissionResult.Session { Reply.Accepted: true })
         ) {
+            _ = m_travelerLiveness.TryRemove(key: (sourceAuthority, mobility.Incarnation), value: out _);
             await m_server.RunOnTickThreadAsync(() => { m_server.RetireTransferredMobility(in mobility); return true; }).ConfigureAwait(false);
         }
 
@@ -1637,6 +1652,7 @@ public sealed class WorldPeerHost : IDisposable {
     private async Task StreamFederatedIntentsAsync(Stream stream, string sourceAuthority, Credential credential, CancellationToken ct) {
         var leaseId = WorldFederatedIntentLease.Next();
         var touched = new Dictionary<WorldMobilityIdentity, (Principal Principal, IntentSubmission Submission)>();
+        var leasedMobilities = new HashSet<WorldMobilityIdentity>();
         var forwardRelease = true;
 
         await WorldFederationCodec.WriteResponseAsync(
@@ -1735,7 +1751,7 @@ public sealed class WorldPeerHost : IDisposable {
                 var (resolved, accepted) = m_server.ExecuteAuthorityOperation(operation: () => {
                     credential.RequireValid();
 
-                    return ((WorldAdmissionDoor.TryAdmitArrival(m_server.AdmissionPolicy, sourceAuthority, out _) is null)
+                    return ((WorldAdmissionDoor.TryAdmitArrival(m_server.AdmissionPolicy, sourceAuthority, out _, WorldAdmissionArrival.Visitor) is null)
                         ? WorldLocalForwardedAuthority.TryApplyIntent(m_server, sourceAuthority, in mobility, leaseId, in submission)
                         : (((IntentSubmission?)null), false));
                 });
@@ -1761,7 +1777,7 @@ public sealed class WorldPeerHost : IDisposable {
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     credential.RequireValid();
                     accepted = await ExecuteAuthenticatedAsync(credential, () =>
-                        (WorldAdmissionDoor.TryAdmitArrival(m_server.AdmissionPolicy, sourceAuthority, out _) is null) &&
+                        (WorldAdmissionDoor.TryAdmitArrival(m_server.AdmissionPolicy, sourceAuthority, out _, WorldAdmissionArrival.Visitor) is null) &&
                         forwarder.TryForwardIntent(
                             mobility: in mobility,
                             reason: out reason,
@@ -1784,9 +1800,15 @@ public sealed class WorldPeerHost : IDisposable {
 
                 // An accepted update is not answered: the lane writes without waiting, and the authority's answer to an
                 // input travels in its deliveries. Only a refusal, or a handoff's acknowledgement, is written here.
+                if (leasedMobilities.Add(item: mobility)) {
+                    AttachTravelerStream(sourceAuthority: sourceAuthority, mobility: mobility);
+                }
                 touched[mobility] = (Principal: stamped.Principal, Submission: stamped);
             }
         } finally {
+            foreach (var leased in leasedMobilities) {
+                EndTravelerStream(sourceAuthority: sourceAuthority, mobility: leased, handoff: !forwardRelease);
+            }
             _ = m_server.RunOnTickThreadAsync(() => {
                 m_server.ReleaseFederatedIntents(leaseId: leaseId);
 
@@ -1830,12 +1852,135 @@ public sealed class WorldPeerHost : IDisposable {
             });
         }
     }
+    private void AttachTravelerStream(string sourceAuthority, WorldMobilityIdentity mobility) {
+        var entry = m_travelerLiveness.GetOrAdd(
+            key: (sourceAuthority, mobility.Incarnation),
+            valueFactory: static (_, m) => new TravelerLiveness(mobility: m),
+            factoryArgument: mobility
+        );
+        var shouldResume = false;
+
+        lock (entry.Gate) {
+            if (mobility.Epoch > entry.Mobility.Epoch) {
+                entry.Mobility = mobility;
+            }
+            entry.ActiveStreams++;
+            shouldResume = (entry.ActiveStreams == 1);
+        }
+        if (shouldResume) {
+            _ = m_server.RunOnTickThreadAsync(work: () => m_server.GrantTable.TryResumeTransferredPeer(sourceAuthority: sourceAuthority, mobility: in mobility));
+        }
+    }
+
+    private async Task BeginTravelerStreamAsync(string sourceAuthority, WorldMobilityIdentity mobility, CancellationToken ct) {
+        var entry = m_travelerLiveness.GetOrAdd(
+            key: (sourceAuthority, mobility.Incarnation),
+            valueFactory: static (_, m) => new TravelerLiveness(mobility: m),
+            factoryArgument: mobility
+        );
+        var shouldResume = false;
+
+        lock (entry.Gate) {
+            if (mobility.Epoch > entry.Mobility.Epoch) {
+                entry.Mobility = mobility;
+            }
+            entry.ActiveStreams++;
+            shouldResume = (entry.ActiveStreams == 1);
+        }
+        if (shouldResume) {
+            _ = await m_server.RunOnTickThreadAsync(
+                work: () => m_server.GrantTable.TryResumeTransferredPeer(sourceAuthority: sourceAuthority, mobility: in mobility),
+                ct: ct
+            ).ConfigureAwait(false);
+        }
+    }
+
+    private void EndTravelerStream(string sourceAuthority, WorldMobilityIdentity mobility, bool handoff) {
+        if (!m_travelerLiveness.TryGetValue(key: (sourceAuthority, mobility.Incarnation), value: out var entry)) {
+            return;
+        }
+        var becameIdle = false;
+        WorldMobilityIdentity latest;
+
+        lock (entry.Gate) {
+            if (entry.ActiveStreams > 0) {
+                entry.ActiveStreams--;
+            }
+            latest = entry.Mobility;
+            becameIdle = (!handoff && (entry.ActiveStreams == 0));
+        }
+        if (becameIdle) {
+            ScheduleIdleTravelerPark(sourceAuthority: sourceAuthority, entry: entry, fallback: latest);
+        }
+    }
+
+    private void SweepDisconnectedAuthorityTravelers(string sourceAuthority) {
+        foreach (var credential in m_federationConnections.Values) {
+            if (string.Equals(a: credential.Authority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
+                return;
+            }
+        }
+        foreach (var (key, entry) in m_travelerLiveness) {
+            if (!string.Equals(a: key.SourceAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+            WorldMobilityIdentity latest;
+            bool idle;
+            lock (entry.Gate) {
+                latest = entry.Mobility;
+                idle = (entry.ActiveStreams == 0);
+            }
+            if (idle) {
+                ScheduleIdleTravelerPark(sourceAuthority: sourceAuthority, entry: entry, fallback: latest);
+            }
+        }
+        _ = m_server.RunOnTickThreadAsync(work: () => {
+            foreach (var credential in m_federationConnections.Values) {
+                if (string.Equals(a: credential.Authority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
+                    return false;
+                }
+            }
+            m_server.GrantTable.ParkUnattachedTransferredPeers(
+                sourceAuthority: sourceAuthority,
+                hasActiveStream: incarnation => {
+                    if (!m_travelerLiveness.TryGetValue(key: (sourceAuthority, incarnation), value: out var live)) {
+                        return false;
+                    }
+                    lock (live.Gate) {
+                        return (live.ActiveStreams > 0);
+                    }
+                }
+            );
+            return true;
+        });
+    }
+
+    private void ScheduleIdleTravelerPark(string sourceAuthority, TravelerLiveness entry, WorldMobilityIdentity fallback) {
+        _ = m_server.RunOnTickThreadAsync(work: () => {
+            WorldMobilityIdentity mobility;
+            lock (entry.Gate) {
+                if (entry.ActiveStreams > 0) {
+                    return false;
+                }
+                mobility = entry.Mobility;
+            }
+            if (mobility == default) {
+                mobility = fallback;
+            }
+            m_server.GrantTable.ParkTransferredPeer(sourceAuthority: sourceAuthority, mobility: in mobility);
+            if (!m_server.ExecuteAuthorityOperation(operation: () => m_server.TryTransferredPrincipal(sourceAuthority: sourceAuthority, mobility: in mobility, principal: out _))) {
+                _ = m_travelerLiveness.TryRemove(key: (sourceAuthority, mobility.Incarnation), value: out _);
+            }
+            return true;
+        });
+    }
+
     // The lane authenticated a source authority's namespace, which names no body here, so it observes as the public
     // observer. A seat reads its own disclosure through ObserveTraveler, whose credential resolves to its principal.
     private async Task StreamProjectionAsync(Stream stream, string sourceAuthority, Credential credential, CancellationToken ct) {
         var policy = m_server.AdmissionPolicy;
 
-        var tier = DisclosureFor(sourceAuthority: sourceAuthority);
+        var tier = DisclosureFor(sourceAuthority: sourceAuthority, kind: WorldAdmissionArrival.Session);
         if (tier == WorldDisclosureTier.Frames) {
             await WriteFederationRefusal(ct: ct, detail: "no public federation document disclosure is authorized",
                 refusal: WorldFederationRefusal.AuthenticationFailed, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
@@ -2012,9 +2157,11 @@ public sealed class WorldPeerHost : IDisposable {
             m_host = host;
             m_verify = verify;
             m_lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            Authority = proof.Authority;
             Token = m_lifetime.Token;
             m_verdict = new(policy, proof, host.m_timeProvider.GetUtcNow().ToUnixTimeSeconds());
         }
+        public string Authority { get; }
         public CancellationToken Token { get; }
         public void RequireValid() {
             if (!IsValid()) { throw new OperationCanceledException("the authenticated session credential is no longer valid"); }
