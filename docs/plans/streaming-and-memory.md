@@ -1895,9 +1895,19 @@ Built with it:
   replacement, so a growth holds the old and the new buffer at once. The
   growth reserves the replacement beside what stands
   (`SdfResidencyGrant.ReserveGrowth`), yet the device ledger still passed the
-  pool's limit; which allocation went unadmitted is the next reading
-  (`host.memory families 0` sampled through the east wing, beside the region's
-  `region-held-limit` and `region-reserved`).
+  pool's limit. On the next head (with the trace geometries pinning their
+  meshes and the bake identity narrowed) the same reading, three routes in one
+  World with the first baking cold, gave 3.87 GB, 4.39 GB and 4.63 GB, the two
+  warm routes under the cap, with no device loss; Direct3D 12 on that head
+  gave 4.26 GB, 4.40 GB and 4.56 GB. The device pool then read
+  `budget=4831838208 peak=4625296304 over-limit-grants=9
+  over-limit-granted-bytes=371880612`: grants past the limit stand, which is
+  where the earlier overshoot can come from, and the device ledger's peak
+  (`WorldBenchmarkCommandModule.DeviceLedger`) sums each device segment's own
+  peak (`heap0`, and `heap2` at 67 MB), which may overstate a simultaneous
+  peak by up to the smaller segment. The peak still rises route on route as
+  the region fills its held limit, so a fourth route is the reading that would
+  show where it stands.
 
 **Closes.** A board that led a second scene by each copy's place; a trace
 scene sized by view detail; a relayout holding two hit caches and two
