@@ -1,17 +1,20 @@
 namespace Puck.World;
 
 /// <summary>The rules, interactions, and pinned tables compiled for one exact definition. Pass a validation result
-/// directly into installation while the definition and its collection contents remain unchanged; this is a receipt
-/// for that operation, not a cache to transfer across document edits.</summary>
+/// directly into installation. A new receipt can share the programs when the inputs that compiled them stand.</summary>
 public sealed class WorldRuleCompilation {
+    private readonly WorldDocumentInputs m_inputs;
+    private readonly int m_codeRevision = Puck.Abstractions.CodeRevision.Current;
     private readonly Lazy<(WorldRuleWorkBudget Budget, IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Contributors)> m_work;
     private readonly Lazy<WorldCostReport> m_costReport;
     private readonly Lazy<IReadOnlyList<Puck.State.Rules.RuleHazard>> m_hazards;
 
     internal WorldRuleCompilation(WorldDefinition definition, Puck.State.Rules.CompiledRule[] rules, Puck.State.Rules.CompiledRuleGroup[] groups, Puck.State.Rules.CompiledRule[] interactions, CompiledTable[] tables, WorldFactsCompileContext? context = null,
-        (WorldRuleWorkBudget Budget, IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Contributors)? work = null) {
+        (WorldRuleWorkBudget Budget, IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Contributors)? work = null,
+        WorldDocumentInputs? inputs = null) {
         WorldBootWork.Count(kind: WorldBootWork.RuleCompilations);
         Definition = definition;
+        m_inputs = inputs ?? WorldDocumentInputs.All;
         Rules = rules;
         Groups = groups;
         Order = Puck.State.Rules.RuleEvaluationOrder.Of(
@@ -26,6 +29,30 @@ public sealed class WorldRuleCompilation {
             catalog: Definition.StateCatalog,
             rules: Rules
         ));
+    }
+
+    private WorldRuleCompilation(WorldDefinition definition, WorldRuleCompilation held) {
+        Definition = definition;
+        m_inputs = held.m_inputs;
+        Rules = held.Rules;
+        Groups = held.Groups;
+        Order = held.Order;
+        Interactions = held.Interactions;
+        Tables = held.Tables;
+        m_work = held.m_work;
+        m_hazards = held.m_hazards;
+        m_costReport = new(valueFactory: () => WorldCostReport.Generate(compilation: this));
+    }
+
+    /// <summary>Returns a receipt for the candidate, sharing programs and work analysis when none of their inputs
+    /// changed, or null when the candidate needs a fresh compilation.</summary>
+    /// <param name="definition">The candidate definition.</param>
+    /// <returns>The receipt for the candidate, if its compilation stands.</returns>
+    public WorldRuleCompilation? ReuseFor(WorldDefinition definition) {
+        if ((m_codeRevision != Puck.Abstractions.CodeRevision.Current) ||
+            WorldDocumentInputs.Changed(Definition, definition).Overlaps(m_inputs)) { return null; }
+        WorldDocumentReads.Note(m_inputs);
+        return ReferenceEquals(Definition, definition) ? this : new(definition, this);
     }
 
     /// <summary>Gets the exact definition compiled.</summary>

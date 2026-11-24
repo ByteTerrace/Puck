@@ -127,6 +127,8 @@ public static partial class WorldDefinitionValidator {
             ) {
                 refusals.Add(item: $"bodies.capacity {outcome} is outside 0..{WorldBodiesLimits.IndexLimit}, the body-index format bound.");
             } else {
+                // The same nesting-depth scalar was checked on the parent. This proof changes only the census.
+                using var unrecorded = WorldDocumentReads.Unrecorded();
                 _ = ValidateCore(
                     definition: (definition with { PopulationRaw = (definition.Population with { CapacityRaw = ((int)outcome) }) }),
                     neighbours: null,

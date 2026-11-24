@@ -713,10 +713,12 @@ public sealed partial class WorldServer {
             objA: compilation?.Definition,
             objB: definition
         )) {
-            compilation = (((compilation ?? m_ruleCompilation) is { } held) &&
+            var recorded = compilation?.ReuseFor(definition) ?? m_ruleCompilation?.ReuseFor(definition);
+
+            compilation = recorded ?? ((((compilation ?? m_ruleCompilation) is { } held) &&
                 (WorldDocument.ReloadInstallKindOf(candidate: definition, live: held.Definition, rows: out _) is WorldInstallKind.Nothing or WorldInstallKind.Value))
                 ? held
-                : WorldRuleCompilation.Compile(definition: definition);
+                : WorldRuleCompilation.Compile(definition: definition));
         }
         m_ruleHost.Install(compilation: compilation!);
         m_ruleCompilation = compilation;

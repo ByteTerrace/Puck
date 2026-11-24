@@ -95,6 +95,7 @@ internal readonly record struct WorldValidationRowChange(IReadOnlyList<int> Rows
 /// <summary>One validation's inputs and the refusals its partitions collect, shared by every partition it runs.</summary>
 internal sealed class WorldValidationRun {
     public required WorldDefinition Definition { get; init; }
+    public WorldDefinition? Before { get; init; }
     public bool BoundUnit { get; init; }
     public List<string> Errors { get; } = [];
     public ICollection<string>? Deferred { get; init; }

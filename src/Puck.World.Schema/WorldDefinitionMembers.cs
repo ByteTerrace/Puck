@@ -59,6 +59,62 @@ public sealed class WorldDefinitionMembers {
 
         return Held.GetValue(key: definition, derive: static definition => Slice(json: WorldDefinitionSerialization.SerializeCompact(definition: definition)));
     }
+
+    // The root serializer supplies names, visibility and declared types. A value that stands keeps its previous
+    // canonical bytes, including the computed shade table and individual extension members.
+    internal static WorldDefinitionMembers Of(WorldDefinition definition, WorldDefinition? previous, out long written) {
+        written = 0;
+        if (Held.TryGetValue(definition, out var cached)) { return cached; }
+        if (previous is null) {
+            var bytes = WorldDefinitionSerialization.SerializeCompact(definition);
+
+            written = bytes.Length;
+            var first = Slice(bytes);
+            Held.AddOrUpdate(definition, first);
+            return first;
+        }
+
+        var held = Of(previous);
+        var type = WorldJsonContext.Default.WorldDefinition;
+        var members = new List<Member>(held.Members.Count);
+
+        foreach (var property in type.Properties) {
+            if (property.IsExtensionData || (property.Get is not { } get)) { continue; }
+            var next = get(definition);
+
+            if (property.ShouldSerialize?.Invoke(definition, next) == false) { continue; }
+            var old = get(previous);
+            if (SameValue(old, next) && held.TryGet(property.Name, out var member)) {
+                members.Add(member);
+            } else {
+                var bytes = CanonicalJsonDocument.SerializeCompact(next, type.Options.GetTypeInfo(property.PropertyType));
+
+                written += bytes.Length;
+                members.Add(Member.Of(property.Name, bytes));
+            }
+        }
+        if (definition.Extensions is { } extensions) {
+            var old = previous.Extensions;
+
+            foreach (var (name, value) in extensions) {
+                if ((old is not null) && old.TryGetValue(name, out var prior) && prior.Equals(value) && held.TryGet(name, out var member)) {
+                    members.Add(member);
+                } else {
+                    var bytes = CanonicalJsonDocument.SerializeCompact(value, type.Options.GetTypeInfo(typeof(JsonElement)));
+
+                    written += bytes.Length;
+                    members.Add(Member.Of(name, bytes));
+                }
+            }
+        }
+        var refreshed = new WorldDefinitionMembers(members);
+
+        Held.AddOrUpdate(definition, refreshed);
+        return refreshed;
+
+        static bool SameValue(object? old, object? next) =>
+            ReferenceEquals(old, next) || ((old is string or ValueType) && old.Equals(next));
+    }
     /// <summary>Returns whether a root member name is one of the document model's members; any other name is an
     /// extension member (<see cref="WorldDefinition.Extensions"/>: a <c>_</c> comment or a <c>$</c> key), whose value is
     /// its <see cref="JsonElement"/>.</summary>
