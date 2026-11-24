@@ -62,13 +62,34 @@ float3 sdfWorldPointInSlot(float3 world, uint slot, inout SdfDynamicRoot root) {
 // still warps finitely. Divides the point's cross-axis components by s(t) and returns the factor the caller's distance
 // scale takes, the size correction; the residual shear from the axis-varying scale is bounded separately by
 // SdfProgram.AnalyzeLipschitz's chain step clamp, not corrected per candidate. axis is below 3.
-float sdfAxialProfile(inout float3 localPosition, uint axis, float4 data0, float4 data1) {
-    float axial = sdfComponent(localPosition, axis);
+// The flare's scale s at an axial coordinate, and its derivative along that coordinate (zero where t or s is clamped).
+float sdfAxialProfileScale(float axial, float4 data0, float4 data1, out float slope) {
     float rawT = (data0.z - axial) * data0.w;
     float t = saturate(rawT);
     float rawS = data1.y + data0.x * t + data0.y * sin(SDF_PI * t);
-    float scale = max(rawS, SDF_FLARE_MIN_SCALE);
-    float invScale = 1.0 / scale;
+    slope = (((rawT > 0.0) && (rawT < 1.0) && (rawS > SDF_FLARE_MIN_SCALE)) ? (-data0.w * (data0.x + (data0.y * SDF_PI * cos(SDF_PI * t)))) : 0.0);
+    return max(rawS, SDF_FLARE_MIN_SCALE);
+}
+float sdfAxialProfile(inout float3 localPosition, uint axis, float4 data0, float4 data1) {
+    float axial = sdfComponent(localPosition, axis);
+    float slope;
+    float invScale = 1.0 / sdfAxialProfileScale(axial, data0, data1, slope);
+    localPosition *= invScale;
+    sdfSetComponent(localPosition, axis, axial);
+    return data1.x;
+}
+// The same warp carrying the point's Jacobian: each cross row is d(p / s) = dp / s - (p / s^2) ds, ds the scale's slope
+// times the axial row; the axial row stands.
+float sdfAxialProfile(inout float3 localPosition, inout float3x3 jacobian, uint axis, float4 data0, float4 data1) {
+    float axial = sdfComponent(localPosition, axis);
+    float slope;
+    float invScale = 1.0 / sdfAxialProfileScale(axial, data0, data1, slope);
+    float3 axialRow = sdfComponent(jacobian, axis);
+    jacobian = float3x3(
+        (jacobian[0] * invScale) - (axialRow * ((localPosition.x * slope) * (invScale * invScale))),
+        (jacobian[1] * invScale) - (axialRow * ((localPosition.y * slope) * (invScale * invScale))),
+        (jacobian[2] * invScale) - (axialRow * ((localPosition.z * slope) * (invScale * invScale))));
+    sdfSetComponent(jacobian, axis, axialRow);
     localPosition *= invScale;
     sdfSetComponent(localPosition, axis, axial);
     return data1.x;
@@ -79,6 +100,13 @@ void sdfShear(inout float3 localPosition, uint target, uint driver, float3 coeff
     float t = sdfComponent(localPosition, driver);
     float offset = ((coefficients.z * t + coefficients.y) * t + coefficients.x) * t;
     sdfSetComponent(localPosition, target, sdfComponent(localPosition, target) + offset);
+}
+// The same shear carrying the point's Jacobian: the target row gains the polynomial's slope times the driver row.
+void sdfShear(inout float3 localPosition, inout float3x3 jacobian, uint target, uint driver, float3 coefficients) {
+    float t = sdfComponent(localPosition, driver);
+    float slope = ((((3.0 * coefficients.z) * t) + (2.0 * coefficients.y)) * t) + coefficients.x;
+    sdfSetComponent(jacobian, target, sdfComponent(jacobian, target) + (sdfComponent(jacobian, driver) * slope));
+    sdfShear(localPosition, target, driver, coefficients);
 }
 
 // GLSL-style FLOOR modulo. HLSL's fmod truncates toward zero, so it disagrees with GLSL's mod for negative

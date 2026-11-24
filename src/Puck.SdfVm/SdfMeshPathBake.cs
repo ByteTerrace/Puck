@@ -1790,6 +1790,19 @@ public sealed partial class SdfMeshPathBake {
             started.Begun(group: group, how: Start(group: group));
         }
     }
+    // The ops whose walk keeps no derivatives (SdfShaderAction.Dual), so a gradient sample whose walk meets one takes the
+    // stencil's five walks (sdf-mesh-bake-gradient.comp.hlsl), and a masked relief's rows, whose weight the dual reads as a
+    // constant.
+    private static readonly System.Collections.Frozen.FrozenSet<SdfOp> StencilOps = System.Collections.Frozen.FrozenSet.ToFrozenSet(source: SdfFieldOps.ShaderActions()
+        .Where(predicate: static action => ((action.Action.Code is not null) && !action.Action.Dual))
+        .Select(selector: static action => action.Value)
+        .Append(element: SdfOp.ReliefRow));
+    // The stencil ops a program holds, by name, or "none": with none, every gradient sample of the bake is one walk.
+    private static string StencilOpsOf(SdfProgram? program) {
+        var held = (program?.Instructions.Select(selector: static instruction => instruction.Op).Where(predicate: StencilOps.Contains).Distinct().Order().ToArray() ?? []);
+
+        return ((held.Length == 0) ? "none" : string.Join(separator: ',', values: held));
+    }
     // Opens the accounts and the start line of the work a restart, resample or promotion began, if any: a new program's, or
     // any once the bake before it reported, whose counts and clock start again; otherwise work added to the bake still
     // running, whose done line then covers it. A bake that began nothing and has every group done reports here or never.
@@ -1806,7 +1819,7 @@ public sealed partial class SdfMeshPathBake {
             m_loadsDone = 0;
             m_loadFirst = ((started.Loading > 0) ? restarted : 0);
             m_loadLast = 0;
-            SdfMeshBakeReport.Start(baking: started.Baking, cause: cause, disk: Library.Disk, dynamic: m_groups.Count(predicate: static group => group.Dynamic), groups: m_groups.Count, identity: Identity, instances: instances, joined: started.Joined, loading: started.Loading, named: started.Named, residency: Residency, residencyId: ResidencyId, shared: started.Shared);
+            SdfMeshBakeReport.Start(baking: started.Baking, cause: cause, disk: Library.Disk, dynamic: m_groups.Count(predicate: static group => group.Dynamic), groups: m_groups.Count, identity: Identity, instances: instances, joined: started.Joined, loading: started.Loading, named: started.Named, residency: Residency, residencyId: ResidencyId, shared: started.Shared, stencil: StencilOpsOf(program: Program));
         } else if (begun > 0) {
             m_accounts.Joined += started.Joined;
             m_loadsQueued += started.Loading;

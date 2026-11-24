@@ -340,12 +340,18 @@ public static partial class SdfFieldOps {
                 float angle = data0.x * (sdfComponent(localPosition, driver) - data0.y);
                 float c = cos(angle), sn = sin(angle);
                 float pu = sdfComponent(localPosition, u), pv = sdfComponent(localPosition, v);
+                #ifdef SDF_FIELD_DUAL
+                float3 turn = (sdfComponent(localJacobian, driver) * data0.x);
+                float3 rowU = sdfComponent(localJacobian, u), rowV = sdfComponent(localJacobian, v);
+                sdfSetComponent(localJacobian, u, ((c * rowU) + (sn * rowV)) + (turn * ((-sn * pu) + (c * pv))));
+                sdfSetComponent(localJacobian, v, ((-sn * rowU) + (c * rowV)) - (turn * ((c * pu) + (sn * pv))));
+                #endif
                 sdfSetComponent(localPosition, u, c * pu + sn * pv);
                 sdfSetComponent(localPosition, v, -sn * pu + c * pv);
                 break;
                 """,
             Operands: SdfShaderOperands.Data0
-        );
+        ) { Dual = true };
         public override SdfShaderAction RigidShader => SdfShaderAction.Unavailable;
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
@@ -803,6 +809,13 @@ public static partial class SdfFieldOps {
                 localPosition.xy = float2(
                     ((spinCos * localPosition.x) - (spinSin * localPosition.y)),
                     ((spinSin * localPosition.x) + (spinCos * localPosition.y)));
+                #ifdef SDF_FIELD_DUAL
+                localJacobian /= shellScale;
+                localJacobian = float3x3(
+                    ((spinCos * localJacobian[0]) - (spinSin * localJacobian[1])),
+                    ((spinSin * localJacobian[0]) + (spinCos * localJacobian[1])),
+                    localJacobian[2]);
+                #endif
 
                 // The r/density metric correction: within a shell the fold is a similarity that shrank space by
                 // 1/shellScale, so evaluateShape(localPosition) UNDERESTIMATES true distance by 1/shellScale — multiply
@@ -813,7 +826,7 @@ public static partial class SdfFieldOps {
                 break;
                 """,
             Operands: SdfShaderOperands.Data0
-        );
+        ) { Dual = true };
         public override SdfShaderAction RigidShader => SdfShaderAction.Unavailable;
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
@@ -922,6 +935,9 @@ public static partial class SdfFieldOps {
                     float sa = sin(ha);
                     float4 q = float4((axis * sa), cos(ha));       // (x,y,z,w) matches SDF_OP_ROTATE's layout
                     localPosition = rotatePointByInverseQuaternion(localPosition, q);
+                    #ifdef SDF_FIELD_DUAL
+                    localJacobian = sdfdRotateJacobian(localJacobian, q);
+                    #endif
                 }
 
                 // Per-cell material variant (same channel WallpaperFold recolors through): a hashed palette row in
@@ -933,7 +949,7 @@ public static partial class SdfFieldOps {
                 break;
                 """,
             Operands: SdfShaderOperands.Data0 | SdfShaderOperands.Data1
-        );
+        ) { Dual = true };
         public override SdfShaderAction RigidShader => SdfShaderAction.Unavailable;
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
@@ -1000,6 +1016,18 @@ public static partial class SdfFieldOps {
                 float r = length(pv);
                 float sector = floor(a * data0.y);                         // data0.y = 1/angle
                 a = ((a - (sectorAngle * sector)) - (0.5 * sectorAngle));  // a in [-angle/2, angle/2)
+                #ifdef SDF_FIELD_DUAL
+                // The fold turns the plane by -sector angles, then a mirrored sector reflects its second axis.
+                {
+                    float turnCos = cos(sectorAngle * sector), turnSin = sin(sectorAngle * sector);
+                    uint axisU = ((polarAxis == SDF_AXIS_X) ? SDF_AXIS_Y : SDF_AXIS_X);
+                    uint axisV = ((polarAxis == SDF_AXIS_Z) ? SDF_AXIS_Y : SDF_AXIS_Z);
+                    float3 rowU = sdfComponent(localJacobian, axisU), rowV = sdfComponent(localJacobian, axisV);
+                    float mirror = (((SDF_INSTRUCTION_BLEND(instructionHeader) != 0u) && (a < 0.0)) ? -1.0 : 1.0);
+                    sdfSetComponent(localJacobian, axisU, (turnCos * rowU) + (turnSin * rowV));
+                    sdfSetComponent(localJacobian, axisV, ((turnCos * rowV) - (turnSin * rowU)) * mirror);
+                }
+                #endif
                 if (SDF_INSTRUCTION_BLEND(instructionHeader) != 0u) { a = abs(a); }             // mirror: reflect across the sector bisector
                 pv = (float2(cos(a), sin(a)) * r);
 
@@ -1017,7 +1045,7 @@ public static partial class SdfFieldOps {
                 break;
                 """,
             Operands: SdfShaderOperands.Data0
-        );
+        ) { Dual = true };
         public override SdfShaderAction RigidShader => SdfShaderAction.Unavailable;
         public override SdfShaderAction PartShader => SdfShaderAction.Unavailable;
         public override bool PartDomain => false;
@@ -1460,22 +1488,30 @@ public static partial class SdfFieldOps {
             Code: """
                 uint axis = SDF_INSTRUCTION_SHAPE(instructionHeader);
                 if (axis >= 3u) { return sdfIsaErrorHit(); }
+                #ifdef SDF_FIELD_DUAL
+                distanceScale *= sdfAxialProfile(localPosition, localJacobian, axis, data0, data1);
+                #else
                 distanceScale *= sdfAxialProfile(localPosition, axis, data0, data1);
+                #endif
                 break;
                 """,
             Operands: SdfShaderOperands.Data0 | SdfShaderOperands.Data1
-        );
+        ) { Dual = true };
         public override SdfShaderAction RigidShader => SdfShaderAction.Unavailable;
         public override SdfShaderAction PartShader => new(
             Code: """
                 float4 data1 = sdfFieldData(dataOffset, domainIndex, 1u);
                 uint axis = SDF_INSTRUCTION_SHAPE(domain);
                 if (axis >= 3u) { parent = sdfIsaErrorHit(); return; }
+                #ifdef SDF_FIELD_DUAL
+                distanceScale *= sdfAxialProfile(localPosition, localJacobian, axis, data0, data1);
+                #else
                 distanceScale *= sdfAxialProfile(localPosition, axis, data0, data1);
+                #endif
                 break;
                 """,
             Operands: SdfShaderOperands.None
-        );
+        ) { Dual = true };
         public override bool PartDomain => true;
         public override SdfPointAction Point => SdfPointAction.Warp;
         public override SdfIntervalAction Interval => SdfIntervalAction.Warp;
@@ -1518,21 +1554,29 @@ public static partial class SdfFieldOps {
             Code: """
                 uint target = SDF_INSTRUCTION_SHAPE(instructionHeader), driver = SDF_INSTRUCTION_BLEND(instructionHeader);
                 if (target >= 3u || driver >= 3u) { return sdfIsaErrorHit(); }
+                #ifdef SDF_FIELD_DUAL
+                sdfShear(localPosition, localJacobian, target, driver, data0.xyz);
+                #else
                 sdfShear(localPosition, target, driver, data0.xyz);
+                #endif
                 break;
                 """,
             Operands: SdfShaderOperands.Data0
-        );
+        ) { Dual = true };
         public override SdfShaderAction RigidShader => SdfShaderAction.Unavailable;
         public override SdfShaderAction PartShader => new(
             Code: """
                 uint target = SDF_INSTRUCTION_SHAPE(domain), driver = SDF_INSTRUCTION_BLEND(domain);
                 if (target >= 3u || driver >= 3u) { parent = sdfIsaErrorHit(); return; }
+                #ifdef SDF_FIELD_DUAL
+                sdfShear(localPosition, localJacobian, target, driver, data0.xyz);
+                #else
                 sdfShear(localPosition, target, driver, data0.xyz);
+                #endif
                 break;
                 """,
             Operands: SdfShaderOperands.None
-        );
+        ) { Dual = true };
         public override bool PartDomain => true;
         public override SdfPointAction Point => SdfPointAction.RenderWarp;
         public override SdfIntervalAction Interval => SdfIntervalAction.RenderWarp;

@@ -12,18 +12,24 @@ case SDF_OP_SCALE:
 }
 case SDF_OP_AXIAL_PROFILE:
 {
-    SDF_FIELD_DUAL_UNCOVERED;
     float4 data1 = sdfFieldData(dataOffset, domainIndex, 1u);
     uint axis = SDF_INSTRUCTION_SHAPE(domain);
     if (axis >= 3u) { parent = sdfIsaErrorHit(); return; }
+#ifdef SDF_FIELD_DUAL
+    distanceScale *= sdfAxialProfile(localPosition, localJacobian, axis, data0, data1);
+#else
     distanceScale *= sdfAxialProfile(localPosition, axis, data0, data1);
+#endif
     break;
 }
 case SDF_OP_SHEAR:
 {
-    SDF_FIELD_DUAL_UNCOVERED;
     uint target = SDF_INSTRUCTION_SHAPE(domain), driver = SDF_INSTRUCTION_BLEND(domain);
     if (target >= 3u || driver >= 3u) { parent = sdfIsaErrorHit(); return; }
+#ifdef SDF_FIELD_DUAL
+    sdfShear(localPosition, localJacobian, target, driver, data0.xyz);
+#else
     sdfShear(localPosition, target, driver, data0.xyz);
+#endif
     break;
 }
