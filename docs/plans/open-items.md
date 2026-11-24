@@ -3968,9 +3968,10 @@ retirement.
   at its first start. The wait now ends at the first exit, a replace deploy
   skips the export, drain and source recovery, and the worker is
   force-deleted. Left: skip the infrastructure apply when the compiled
-  template and parameters equal the last deployment's; qualify a bootstrap
-  with two legs (the import and the recovery of the state it wrote), since
-  the four legs compare one image with itself; and measure whether reusing
+  template and parameters equal the last deployment's; weigh whether a
+  bootstrap needs both of its qualification pairs, which for one image are two
+  determinism checks (two imports of the seed, then two imports of the state
+  the first continuation wrote); and measure whether reusing
   the worker VM (stop the container, rerun the extension) beats a fresh one,
   which costs a delete and a create on every deploy.
 - [medium] **Silo telemetry.** A failed worker is deleted after its attempt,

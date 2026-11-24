@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Puck.Cli.Automation;
 using Puck.World;
+using Puck.World.Server;
 
 namespace Puck.Cli.Azure;
 
