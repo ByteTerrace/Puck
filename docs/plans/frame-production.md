@@ -225,10 +225,10 @@ across a benchmark chapter and divided by the frames.
    `WaitService.Signal` still wakes the thread, and each service then reads its
    own causes: a completed slot fence, its own wake (`SdfGpuWork.Wake`, which
    every client with work outside a frame calls, and a released readback), the
-   tables' next upload (`SdfWorldTables.Uploads`), a held frame. A client whose
-   next job comes due by the clock alone waits at most
-   `SdfGpuWork.QuiescentRest`; asking clients for their next due time would
-   remove that bound. Device retirement and memory trims run every frame
+   tables' next upload (`SdfWorldTables.Uploads`), a held frame, or the first
+   deadline a client or a deferred job reported. `ISdfGpuWorkClient.UntilDue`
+   gives the service the client deadline. The host wait anchors each deadline
+   as its service answers. Device retirement and memory trims run every frame
    whatever the work does (`SdfWorldResidency.Upkeep`), and a resting service
    still gives back idle buffers. `sdf.captures.pumped` against
    `sdf.captures.held` read 685 against 3256 over 120 ticks of the settled
@@ -271,15 +271,14 @@ across a benchmark chapter and divided by the frames.
    tick are derived once a definition (`WorldAdjacencyPolicy.TryBodyReach`,
    `TryVerticalOwnershipDeadband`, through `CodeDerivedTable`).
 
-   What still allocates on the frame thread, about 8 MB a second while moving:
-   the adjacency projections' body images (`WorldSessionMirror.CaptureBodyImage`,
-   about 1.8 MB a second: a whole `Body[]` for every neighbour delivery), the
-   probe readback (`SdfMeshProbeGpuWork.Complete`), and the view graph's
-   footprints and instance sets rebuilt as the views change
-   (`RenderGraphInstanceSet.TryCreate`, `WorldViewGraphHost.ScreenFootprints`).
-   The body image is published to the step thread and to presentation with no
-   lifetime either side records, so reusing its storage needs a release the
-   readers make; that is the fix, not a pool.
+   The tick and renderer retain the same frozen body image through
+   `WorldAdjacencyRead`. Only the last release returns its array.
+   `WorldSessionMirror.BodyImage.Entry` checks the pinned publication before
+   exposing a body. `SdfMeshProbeGpuWork.Complete` reads into answer buffers
+   the requesters reserve before submission. The volume exchanges its camera
+   sample's writable and published buffers under the camera readers' gate.
+   The view graph still builds footprints and instance sets when its inputs
+   move (`RenderGraphInstanceSet.TryCreate`, `WorldViewGraphHost.ScreenFootprints`).
 7. **A view-graph change rebuilds what it changed.** The client now keeps what
    it derives from a delivered definition while the delivery moves none of the
    parts the derivation read, through the document's own read recording
@@ -298,6 +297,13 @@ across a benchmark chapter and divided by the frames.
    Those are the next step: the server's product plan
    (`WorldDocument.PlanProducts`) already skips products whose inputs did not
    move; validation, rule compilation and delivery need the same rule.
+
+   The screen nesting limit is a tracked input of its own. The validation
+   partition for it checks the limit. Graph topology and the remaining
+   validation read the rest of the views section. Validated rule programs and
+   their work analysis carry the inputs they actually read and can serve a
+   candidate whose inputs stand. Delivery keeps canonical member bytes across
+   immutable definitions and omits inline bytes the stream already sent.
 8. **Then the pipeline**, if the host world's own chain still bounds a frame.
    It does. A sampled thread-time trace of the frame thread on the moving route
    (40 s, RTX 4070, 2560x1440) puts about two thirds of the thread's wall time in

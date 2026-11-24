@@ -294,7 +294,8 @@ public sealed class MeshCommandTests {
 
         Assert.False(condition: answered);
         Assert.Equal(expected: 0L, actual: inert.SubmitEnvelope(payload: default!, principal: default));
-        Assert.Empty(collection: inert.Visuals());
+        using var visuals = inert.Visuals();
+        Assert.Empty(collection: visuals.Projections);
     }
 
     private static (int ExitCode, bool Named) Refused((int ExitCode, string Output) output, string text) =>

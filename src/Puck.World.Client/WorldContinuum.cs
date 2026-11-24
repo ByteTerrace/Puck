@@ -164,7 +164,8 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
                 }
             }
 
-            var projections = m_adjacencies.Visuals();
+            using var read = m_adjacencies.Visuals();
+            var projections = read.Projections;
             // Prefer the same pinned neighbour image that emits the visible avatar. Camera and body therefore use
             // one generation-addressed record rather than two independently arriving copies of the same authority.
             var foundProjection = false;
@@ -357,7 +358,8 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
         }
 
         if (m_selectedProjectionNames[slot] is { } name) {
-            foreach (var projection in m_adjacencies.Visuals()) {
+            using var read = m_adjacencies.Visuals();
+            foreach (var projection in read.Projections) {
                 if (
                     string.Equals(a: projection.Name, b: name, comparisonType: StringComparison.Ordinal) &&
                     string.Equals(a: projection.Neighbour.Authority, b: authority, comparisonType: StringComparison.Ordinal)
@@ -377,6 +379,7 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
             return null;
         }
         var authority = endpoint.Authority;
+        using var read = m_adjacencies.Visuals();
 
         if (
             (authority.Length == 0) ||
@@ -393,7 +396,7 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
             ProjectionExists(
                 authority: authority,
                 documentId: endpoint.Definition.DocumentId,
-                projections: m_adjacencies.Visuals()
+                projections: read.Projections
             )
         ) {
             return null;

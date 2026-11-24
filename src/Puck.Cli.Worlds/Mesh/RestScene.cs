@@ -330,6 +330,6 @@ public sealed class RestScene {
         /// <inheritdoc/>
         public void SubmitCue(string eventToken, Vector3? site) { }
         /// <inheritdoc/>
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [];
+        public WorldAdjacencyRead Visuals() => new([]);
     }
 }

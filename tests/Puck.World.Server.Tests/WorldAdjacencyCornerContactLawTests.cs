@@ -476,7 +476,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
                 )];
         }
 
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => m_projections;
+        public WorldAdjacencyRead Visuals() => new(m_projections);
     }
     private sealed class SeamNeighbour : IWorldAdjacencyNeighbourContact {
         private readonly WorldSolidField? m_field;
@@ -561,7 +561,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
                 )];
         }
 
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => m_projections;
+        public WorldAdjacencyRead Visuals() => new(m_projections);
     }
     private sealed class CornerNeighbour : IWorldAdjacencyNeighbourContact {
         private readonly WorldSolidField m_field;

@@ -97,7 +97,8 @@ public sealed class SeamCrossingOrchestrationLawTests {
         try {
             foreach (var row in rows) { host.Admit(row: row.Instance); }
             using var fields = new WorldAdjacencyFields(instances: host, sourceInstanceName: "source");
-            var projection = fields.Prepare().Single(predicate: candidate => !candidate.Direct);
+            using var prepared = fields.Prepare();
+            var projection = prepared.Projections.Single(predicate: candidate => !candidate.Direct);
 
             Assert.Equal(expected: authored, actual: projection.Path[0].OverlapDepth);
             Assert.Equal(expected: authored, actual: projection.OverlapDepth);

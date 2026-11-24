@@ -645,7 +645,7 @@ public sealed partial class WorldPopulation {
 
         m_adjacencyAuthority = authority;
         m_adjacencyImageTick = null;
-        AdjacencyProjections = [];
+        _ = HoldAdjacency(null);
         ComposeContactField();
 
         // The composition root configures the runtime adjacency source after the boot seats already exist. Bodies retain
