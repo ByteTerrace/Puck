@@ -61,7 +61,12 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             m_inputDefinitions[slot] = route.Endpoint.Definition;
             if (replace) { seat.Input!.Admit(route.Endpoint, principal, route.EntityIndex, freshAttachment); }
         }
-        if (TryRouteInput(principal: principal, publication: out var publication, route: route)) { _ = seat.Input!.Reconcile(publication: publication, router: m_inputRouter, seat: seat, slot: slot); } else { seat.Input!.Admit(route.Endpoint, principal, route.EntityIndex, freshAttachment: false); }
+        // A publication of another source registry is not this seat's: the authority holds a profile the seat did not
+        // send (the one a landed traveller starts with, or the one before a changed profile), so the seat sends its own.
+        if (!TryRouteInput(principal: principal, publication: out var publication, route: route) ||
+            !seat.Input!.Reconcile(publication: publication, router: m_inputRouter, seat: seat, slot: slot)) {
+            seat.Input!.Admit(route.Endpoint, principal, route.EntityIndex, freshAttachment: false);
+        }
         if (m_inputRouter is { } router) { seat.Input!.AcknowledgeReleasedButtons(router: router, slot: slot); }
     }
     // The one door a seat's input publication at its route's authority is read through: under the seat's own principal,

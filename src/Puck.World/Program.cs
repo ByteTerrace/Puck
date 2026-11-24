@@ -789,18 +789,10 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     }
     batchHost?.Initialize?.Invoke(host);
     if (connectTarget is { } remoteEndpoint) {
-        var instances = host.Services.GetRequiredService<WorldInstanceHost>();
-
-        _ = instances.EnqueueTransfer(
-            sourceInstance: WorldInstanceHost.BootInstanceName,
-            scope: WorldInstanceHost.TransferScope.Body,
-            sourceSlot: 0,
-            destination: WorldInstanceHost.TransferDestination.Remote(
-                name: "remote-boot",
-                documentPath: worldSource.SourcePath,
-                authority: remoteEndpoint
-            ),
-            actingPrincipal: Principal.Console
+        // Every local seat crosses, the ones seated now as one party and each later one as it joins.
+        host.Services.GetRequiredService<WorldInstanceHost>().JoinRemote(
+            authority: remoteEndpoint,
+            documentPath: worldSource.SourcePath
         );
     }
     // A rendering World compiles its own code in the background, so a first crossing or a first addon write runs compiled
