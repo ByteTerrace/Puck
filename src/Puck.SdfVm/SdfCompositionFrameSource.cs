@@ -550,7 +550,10 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         for (var owner = 0; (owner < m_emitters.Count); owner++) {
             var copies = m_emitters[owner].MeshInstances;
 
-            if (standing) {
+            // An emitter's change list names the rows its pack rewrote on this frame. One with no dynamic slot was not
+            // packed above, so its list is an earlier frame's and may name rows its roster no longer holds: every copy
+            // it has is read instead.
+            if (standing && (m_emitters[owner].DynamicSlotCount != 0)) {
                 if (m_emitters[owner].MeshInstanceChanges is { } changes) {
                     for (var at = 0; (at < changes.Count); at++) {
                         ReadCopy(copy: copies[changes[at]], position: (position + changes[at]));

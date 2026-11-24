@@ -41,6 +41,8 @@ public sealed partial class WorldInputRuntime {
                 saved.Owner.Input.Restore(checkpoint: saved.Input);
                 saved.Owner.Generation = saved.Generation;
                 saved.Owner.KitName = saved.KitName;
+                // The owner is as an earlier point of the step left it, not as its last admission did.
+                if (saved.Owner.Program is { } standing) { standing.Valid = false; }
             }
             m_host.Population.RestoreInputEffectSelections(definition: m_host.Definition, revision: m_kitPopulationRevision);
             foreach (var saved in m_kitUndo) {

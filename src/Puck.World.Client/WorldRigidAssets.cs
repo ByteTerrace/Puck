@@ -183,7 +183,7 @@ public sealed partial class WorldRigidAssets {
         m_bodyAt.Clear();
         m_stateWatch.Clear();
         m_wakeAll = true;
-        m_copiesRevision++;
+        CopiesChanged();
         var hasBodyVolumes = false;
         foreach (var body in bodies) {
             if (IsRigid(creation: body.Creation, look: body.Look)) {
@@ -211,7 +211,7 @@ public sealed partial class WorldRigidAssets {
         m_isolation = isolation;
         // The isolation, the materials and the static copies an emit places are read by every copy's row.
         m_wakeAll = true;
-        m_copiesRevision++;
+        CopiesChanged();
         m_slots.Clear();
         m_materials.Clear();
         for (var index = 0; (index < m_assets.Count); index++) {
@@ -302,6 +302,13 @@ public sealed partial class WorldRigidAssets {
     /// <summary>Gets a counter that moves whenever <see cref="Copies"/> changes other than by a row
     /// <see cref="ChangedCopies"/> names: a reconcile's membership, or the static copies an emit places.</summary>
     public long CopiesRevision => m_copiesRevision;
+
+    // The copies changed other than by a row a pack rewrote. The rows the last pack named belong to the roster it read,
+    // so they are forgotten with it: ChangedCopies never names a row Copies does not hold.
+    private void CopiesChanged() {
+        m_copiesRevision++;
+        m_changedCopies.Clear();
+    }
     /// <summary>Gets the number of bodies the latest <see cref="Pack"/> read: every rigid body on a pack that owes them
     /// all, otherwise only those something woke.</summary>
     public int VisitCount { get; private set; }

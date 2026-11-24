@@ -1310,6 +1310,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         // Upkeep and the host's capture, then the lists sealed after the cameras it places, then the frame's readers.
         PackagesBeginFrame(context: in context);
         PrepareReaders(context: in context, frame: in frame);
+        using (HostFrameWork.Measure(HostFrameWorkPart.Pack)) { PackagesReadsPrepared(context: in context); }
         // Preparation can rebuild a host's live footprints; capture and scheduling must read the same demand.
         RefreshConvergenceDemand(captured: m_captureInstance);
         work.Next(HostFrameWorkPart.Schedule);

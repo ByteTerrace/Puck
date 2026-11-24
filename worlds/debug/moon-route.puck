@@ -1,0 +1,76 @@
+// The trip to the moon as a route: `world.benchmark run moon` flies it, the standard's `pilot` seat program
+// (../standard/ship.puck's `shipPilot`) working seat 1's own controls as a player does. The seat boards the ship on the
+// launch field's pad with the context button, climbs through the sky seam with the boost held, crosses over the moon's
+// north pole above its reach, comes down beside the arrival frame and lands; then the same way home, down through the
+// seam onto the pad, and out of the ship. moon.md beside this file describes the trip.
+//
+// The way keeps the ship's up the valley's the whole trip: it climbs clear of the moon's reach beside it, crosses to
+// the pole's own axis above the reach, and comes down along it, where the moon's pull is straight down. Points are each
+// world's own coordinates: the debug world's until the seam, the moon's past it (moon-frame.puck's `moonCentre` is the
+// shift).
+
+import "../standard/ship"
+import "moon-frame"
+
+shipPilot()
+
+// A debug-world point in the moon's coordinates.
+function onMoon(point) = [(point[0] - moonCentre[0]), (point[1] - moonCentre[1]), (point[2] - moonCentre[2])]
+
+// How far above the moon's centre the crossing to the pole flies, clear of the moon's reach, and the same height over
+// the pad in the debug world's coordinates.
+let crossingHeight = moonReach + 300
+let overPad = [launchPad[0], (moonCentre[1] + crossingHeight), launchPad[1]]
+// The landing ground: beside the arrival frame on the pole's pad, off the frame's own line.
+let landing = [30, 30]
+let overLanding = [landing[0], crossingHeight, landing[1]]
+
+function rest(seconds) = { $type: "rest", seconds: seconds }
+function fly(point, pace, within, world) = { $type: "fly", point: point, pace: pace, within: within, world: world }
+function land(point, world) = { $type: "fly", point: point, pace: "cruise", lands: true, world: world }
+
+routes [
+  {
+    name: "moon"
+    program: "pilot"
+    chapters [
+      {
+        name: "the pad to the moon"
+        timeoutSeconds: 420
+        steps [
+          { $type: "pose", point [(launchPad[0] - 3), (launchPadTop + 0.1), (launchPad[1] - 3)], yawDegrees: launchHeading }
+          rest(1)
+          { $type: "press", action: "interact", seconds: 2 }
+          // Up through the seam: the moon's world takes the ship and its pilot at the seam's height.
+          { $type: "fly", point: overPad, pace: "boost", within: 80, world: "debug", enters: "moon" }
+          fly(onMoon(overPad), "boost", 80, "moon")
+          fly(overLanding, "boost", 80, "moon")
+          fly([landing[0], (moonRadius + 80), landing[1]], "cruise", 30, "moon")
+          land([landing[0], (moonRadius - 20), landing[1]], "moon")
+          rest(4)
+        ]
+      }
+      {
+        name: "the moon to the pad"
+        timeoutSeconds: 420
+        steps [
+          fly(overLanding, "boost", 80, "moon")
+          fly(onMoon(overPad), "boost", 80, "moon")
+          // Down through the seam into the valley's air.
+          {
+            $type: "fly"
+            point: onMoon([launchPad[0], (skySeamAltitude - 300), launchPad[1]])
+            pace: "boost"
+            within: 80
+            world: "moon"
+            enters: "debug"
+          }
+          fly([launchPad[0], 80, launchPad[1]], "cruise", 30, "debug")
+          land([launchPad[0], -20, launchPad[1]], "debug")
+          rest(3)
+          { $type: "press", action: "interact", seconds: 2 }
+        ]
+      }
+    ]
+  }
+]

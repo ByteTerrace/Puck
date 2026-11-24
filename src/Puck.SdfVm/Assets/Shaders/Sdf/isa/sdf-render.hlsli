@@ -121,9 +121,10 @@
 #define SDF_SHADE_TILE_LIGHT_WORDS    5u
 #define SDF_VIEWS_FILTER_WORDS        3u
 #define SDF_EDGE_REACH                4u
-#define SDF_VIEWS_PROBE_RATE          2u
-#define SDF_VIEWS_PROBE_WORDS         43u
+#define SDF_VIEWS_PROBE_RATE          4u
+#define SDF_VIEWS_PROBE_WORDS         73u
 #define SDF_VIEWS_PROBE_RECORD_WORDS  29u
+#define SDF_VIEWS_PROBE_POOL_WORDS    28u
 #define SDF_VIEWS_PROBE_SLOT_WORDS    28u
 #define SDF_VIEWS_PROBE_HISTORY_WORDS 17u
 #define SDF_SHADOW_BITS               8u
@@ -136,6 +137,10 @@
 // The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.
 #define SDF_VISIBILITY_NORMAL_SCALE 32767.0
 #define SDF_VISIBILITY_ZERO_NORMAL  0x80008000u
+
+// The visibility record's material and frame slot words (SdfVisibility): the bits each field fills below the object key's.
+#define SDF_VISIBILITY_MATERIAL_BITS   17u
+#define SDF_VISIBILITY_FRAME_SLOT_BITS 25u
 
 // The mesh region's draw record (SdfMeshRecord) and the level shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshLevelShift).
 #define SDF_MESH_DRAW_WORDS             58u

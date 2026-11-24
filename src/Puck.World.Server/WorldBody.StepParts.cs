@@ -138,7 +138,9 @@ public sealed partial class WorldBody {
     /// <param name="tick">The explicit simulation tick.</param>
     internal void AdmitProducerObservation(int entityIndex, ulong tick) {
         if (AdmitsProducerObservation) {
-            InputImagesEdit.Producer = m_stateLane!.Input!.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
+            var admitted = m_stateLane!.Input!.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
+
+            if (admitted != InputImages.Producer) { InputImagesEdit.Producer = admitted; }
         }
     }
 
@@ -152,7 +154,7 @@ public sealed partial class WorldBody {
 
         // A refused sweep is a full block: everything this step writes from here on is undone when its contact phase
         // meets a refusal, and the outputs it emitted are withdrawn (WorldBody.SweepRefusal.cs).
-        CaptureMotion(scratch: scratch);
+        CaptureMotion(restorePoint: true, scratch: scratch);
         if (transactional) { m_stateLane?.Input?.BeginKitStep(); }
         start.Transactional = transactional;
         start.InputEpoch = InputEpoch;
@@ -173,7 +175,7 @@ public sealed partial class WorldBody {
         start.HadIncomingIntent = (intent != default);
         // Captured EVERY step, regardless of the latch — a mirrored application set needs this body's resolved intent
         // for its targets' translation/passthrough even while the avatar keeps integrating.
-        InputReadbacksEdit.EngagedIntent = intent;
+        if (InputReadbacks.EngagedIntent != intent) { InputReadbacksEdit.EngagedIntent = intent; }
         // The SAME edge test ProcessLaneActions uses (bit crossing the ordinal's threshold, previous tick's bit clear),
         // computed ahead of integration so a fired edge can preempt it entirely rather than firing a bound action (a
         // jump) the same tick it engages.
@@ -229,6 +231,15 @@ public sealed partial class WorldBody {
     /// one's action track, idle floor and kit transaction; then reports a body that moved as awake.</summary>
     /// <returns>Whether the step's engage edge fired.</returns>
     internal bool EndStep(in StepStart start, ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, ulong sleepAfterTicks, ulong contactFieldVersion) {
+        try {
+            return SettleStep(contactFieldVersion: contactFieldVersion, outputs: outputs, scratch: scratch, sleepAfterTicks: sleepAfterTicks, start: in start, stepTicks: stepTicks, tick: tick);
+        } finally {
+            // The step's restore point closes however the step ends: nothing after it may be put back.
+            m_action.Binding.EndRestore();
+            scratch.HeldByRestorePoint = false;
+        }
+    }
+    private bool SettleStep(in StepStart start, ulong tick, ulong stepTicks, StepScratch scratch, StepOutputs outputs, ulong sleepAfterTicks, ulong contactFieldVersion) {
         var inputRuntime = (start.Transactional ? m_stateLane?.Input : null);
         var intent = start.Intent;
 
@@ -251,20 +262,26 @@ public sealed partial class WorldBody {
             // A firing may have installed a different bank. Never write old-slot bits over its continuing baseline.
             if (InputEpoch != start.InputEpoch) { intent = InputReadbacks.EngagedIntent; }
             // The previous-bit image is written once after action evaluation; timed presses drain even under capture.
+            // Each lane is written only where its value moves: a write reaches the section's door, which moves its
+            // version and, under the step's restore point, copies the whole section aside.
             for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-                ActionEdit.PreviousBit[ordinal] = (intent[ordinal] >= m_channelThresholds[ordinal]);
+                var bit = (intent[ordinal] >= m_channelThresholds[ordinal]);
+
+                if (Action.PreviousBit[ordinal] != bit) { ActionEdit.PreviousBit[ordinal] = bit; }
             }
 
             for (var lane = 0; (lane < ActionLaneCount); lane++) {
-                ActionEdit.TimerTicks[lane] = SubtractSaturating(
+                var remaining = SubtractSaturating(
                     value: Action.TimerTicks[lane],
                     amount: stepTicks
                 );
+
+                if (Action.TimerTicks[lane] != remaining) { ActionEdit.TimerTicks[lane] = remaining; }
             }
 
             // The held-channel image is a one-tick publish, like the submitted intent: the client republishes it every
             // submission, so a missed tick reads no channels rather than a stale hold.
-            InputImagesEdit.Held = default;
+            if (InputImages.Held != default) { InputImagesEdit.Held = default; }
             m_affectingSubject = -1;
 
             UpdateSleepEligibility(

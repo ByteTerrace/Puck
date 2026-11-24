@@ -74,9 +74,12 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
         }
     }
     /// <inheritdoc/>
-    /// <remarks>Prepares the producer's residency, which its view package shares, once a frame whichever reader asks
+    /// <remarks>Captures the frame of the producer's residency, which its view package shares and packs with the
+    /// frame's other residencies (<see cref="SdfWorldPasses.ReadsPrepared"/>), once a frame whichever reader asks
     /// first.</remarks>
-    public void PrepareRead(string instance, in FrameContext context) => _ = BegunResidencyOf(instance: instance)?.Prepare(context: in context);
+    public void PrepareRead(string instance, in FrameContext context) {
+        if (BegunResidencyOf(instance: instance) is { } residency) { views.CaptureForPack(residency: residency, context: in context); }
+    }
     /// <inheritdoc/>
     public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context, in RenderGraphReadStands reads) {
         if ((BegunResidencyOf(instance: instance) is not { } residency) || !residency.Prepare(context: context)) { return false; }

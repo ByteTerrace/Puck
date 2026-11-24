@@ -412,6 +412,12 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
 
         var entity = Route(slot: slot).Entity;
 
+        // A rider is framed through the body it rides, as a seat in the boot world is framed through the body it
+        // possesses: the authority delivers the ridden body with the rider's own (EntitySnapshot.Mount).
+        if (endpoint.TryMount(rider: in entity, mount: out var mount)) {
+            entity = mount;
+        }
+
         // Interpolated as the world's own scene draws the body, so the seat's camera moves every frame, not at each
         // snapshot the world delivers.
         if (!endpoint.TryPresentedEntityPose(

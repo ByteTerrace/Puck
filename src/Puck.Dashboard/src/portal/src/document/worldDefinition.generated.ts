@@ -6984,7 +6984,7 @@ export type WorldClock = {
    */
   periodSeconds?: number | null;
   /**
-   * What one period reads as, in the units a key's time is authored in: a day that passes in twenty minutes and reads as twenty-four hours has a span of 24h. Absent reads as the period for a tick clock and as one for a state clock.
+   * What one period reads as, in the units a key's time is authored in: a day that passes in twenty minutes and reads as twenty-four hours has a span of 24h. Absent reads as the period for a tick clock, as one for a state clock, and as the distance a view clock covers, so its keys are authored in metres past its near end.
    */
   spanSeconds?: number | null;
   /**
@@ -6999,6 +6999,10 @@ export type WorldClock = {
    * An anchored clock's anchor: what a projection carries for a state clock it discloses, in place of the row. Refused in an authored document. An anchored clock carrying none reads no phase, as the state clock it stands for reads none while its row holds no number.
    */
   anchor?: WorldClockAnchor | null;
+  /**
+   * A view clock's measure of where the viewer stands. Refused beside State and PeriodSeconds.
+   */
+  view?: WorldClockView | null;
 };
 
 export type WorldClockAnchor = {
@@ -7018,6 +7022,25 @@ export type WorldClockAnchor = {
    * The engine ticks one authoritative tick spans; zero exactly when Rate is.
    */
   step?: number;
+};
+
+export type WorldClockView = {
+  /**
+   * The distance from Origin at which the phase reaches the end of the span, in metres; greater than From.
+   */
+  to: number;
+  /**
+   * The distance at which the phase leaves zero, in metres. Absent is zero.
+   */
+  from?: number;
+  /**
+   * The point distances are measured from. Absent is the world's origin.
+   */
+  origin?: DocumentVector3;
+  /**
+   * The direction distances are measured along, which need not be a unit vector: the viewer's offset from the origin projected on it, so a viewer behind the origin reads zero. Absent measures in every direction, the length of the offset.
+   */
+  axis?: DocumentVector3;
 };
 
 export type WorldCollider = WorldColliderSphere | WorldColliderCapsule | WorldColliderBox | WorldColliderFromCreation | null;
@@ -10033,6 +10056,10 @@ export type WorldMount = {
    * The press that boards the body and leaves it, or null for a body boarded only by a composed control set.
    */
   board?: WorldMountBoard | null;
+  /**
+   * The camera program a seat takes in place of views.seatRig while it rides or drives a body of this kit: a program of the views section, framed about the ridden body. Its orbit is the one the seat's look steers, so it reaches an orbit op as the seat rig does. Absent keeps the seat rig.
+   */
+  camera?: string | null;
 };
 
 export type WorldMountBoard = {
@@ -13134,7 +13161,7 @@ export type WorldRouteChapter = {
   timeoutSeconds?: number;
 };
 
-export type WorldRouteStep = WorldRouteStepPoseBody | WorldRouteStepLine | WorldRouteStepGo | WorldRouteStepCross | WorldRouteStepRest | WorldRouteStepPressAction | null;
+export type WorldRouteStep = WorldRouteStepPoseBody | WorldRouteStepLine | WorldRouteStepGo | WorldRouteStepCross | WorldRouteStepFly | WorldRouteStepRest | WorldRouteStepPressAction | null;
 
 export type WorldRouteStepCross = {
   $type?: "cross";
@@ -13158,6 +13185,34 @@ export type WorldRouteStepCross = {
    * Whether HeadingDegrees turns from the step's starting facing.
    */
   relative?: boolean;
+};
+
+export type WorldRouteStepFly = {
+  $type?: "fly";
+  /**
+   * The point flown to, in the coordinates of the world the step starts in.
+   */
+  point: DocumentVector3;
+  /**
+   * The pace, a word the route's program reads (a held boost).
+   */
+  pace?: string;
+  /**
+   * The distance, in metres, at which the point is reached.
+   */
+  within?: number;
+  /**
+   * The documentId of the world the step starts in, or null for wherever the seat stands. The step fails when the seat starts it in another world.
+   */
+  world?: string | null;
+  /**
+   * The documentId of the world whose arrival ends the step, or null for a flight that stays in one world. With it, reaching the point without arriving fails the step.
+   */
+  enters?: string | null;
+  /**
+   * Whether the step is a landing: it flies at the point, a point of the ground or under it, until the body, or the body it rides, is grounded, and Within ends nothing.
+   */
+  lands?: boolean;
 };
 
 export type WorldRouteStepGo = {
@@ -14104,7 +14159,7 @@ export type WorldSeatProgram = {
   operations: (WorldSeatProgramOp | null)[];
 };
 
-export type WorldSeatProgramOp = WorldSeatProgramOpMove | WorldSeatProgramOpTurn | WorldSeatProgramOpHold | WorldSeatProgramOpPulse | WorldSeatProgramOpTap | null;
+export type WorldSeatProgramOp = WorldSeatProgramOpMove | WorldSeatProgramOpTurn | WorldSeatProgramOpHold | WorldSeatProgramOpPulse | WorldSeatProgramOpTap | WorldSeatProgramOpRise | null;
 
 export type WorldSeatProgramOpHold = {
   $type?: "hold";
@@ -14161,6 +14216,27 @@ export type WorldSeatProgramOpPulse = {
   driven?: string | null;
 };
 
+export type WorldSeatProgramOpRise = {
+  $type?: "rise";
+  /**
+   * The button source.
+   */
+  source: string;
+  /**
+   * Which way the button carries the body.
+   */
+  toward: WorldSeatRiseDirection;
+  /**
+   * The height, in metres, inside which the button is let go.
+   */
+  band?: number;
+  /**
+   * The deceleration, in metres per second squared, the body is taken to coast at once the button is let go: the button is let go early enough to stop at the band's edge from the speed the body was delivered at.
+   */
+  brake?: number;
+  driven?: string | null;
+};
+
 export type WorldSeatProgramOpTap = {
   $type?: "tap";
   /**
@@ -14190,6 +14266,8 @@ export type WorldSeatProgramOpTurn = {
   deadbandDegrees?: number;
   driven?: string | null;
 };
+
+export type WorldSeatRiseDirection = "Up" | "Down";
 
 export type WorldSeatViewControl = {
   /**

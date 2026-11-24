@@ -85,6 +85,20 @@ public static class WorldTickWork {
     /// <summary>Gets the kind counting the input streams this authority restarted after refusing a batch of the
     /// current epoch.</summary>
     public static WorkKind FederatedRestarts { get; } = new(name: "world.tick.federated-restarts", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the observations of a world's own producer that ran the whole admission:
+    /// the route check, the owner lookup, the mode synchronization and the batch
+    /// (<see cref="WorldInputRuntime"/>).</summary>
+    public static WorkKind InputAdmissions { get; } = new(name: "world.tick.input-admissions", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the observations admitted as a batch over facts that stood: the image had
+    /// changed and nothing the permission or selection steps read had.</summary>
+    public static WorkKind InputAdmissionsStanding { get; } = new(name: "world.tick.input-admissions-standing", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the observations that repeated the last one over facts that stood, and so
+    /// ran no admission.</summary>
+    public static WorkKind InputAdmissionsSteady { get; } = new(name: "world.tick.input-admissions-steady", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the owners a permission refresh evaluated.</summary>
+    public static WorkKind InputRefreshes { get; } = new(name: "world.tick.input-refreshes", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the owners a permission refresh passed over because their facts stood.</summary>
+    public static WorkKind InputRefreshesStanding { get; } = new(name: "world.tick.input-refreshes-standing", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the calls the host loop's thread makes into a host step: one for each place it
     /// begins, resumes or collects one. Read against <see cref="HostSteps"/>, it is how often the pump visits a
     /// step.</summary>
@@ -106,6 +120,7 @@ public static class WorldTickWork {
             PumpVisits, HostSteps, PumpWaits, Waves, WaveTicks,
             InterestCandidates, InterestBodies, InterestBytes,
             FederatedBatches, FederatedRetimed, FederatedStale, FederatedRestarts,
+            InputAdmissions, InputAdmissionsStanding, InputAdmissionsSteady, InputRefreshes, InputRefreshesStanding,
             FactDerives, FactSlots, RegionSweepOverflow, ContinuationFolds, ContinuationSlots, ContinuationEncodes, ContinuationBytes, PerceptionFreezes, PerceptionPoints, PerceptionGrids, NearestCells, DealRedeals,
             ContinuationProfiles, ContinuationProfileBytes, ContinuationTailBytes, .. SectionEncodes, .. SectionBytes,
             .. SectionComparedBytes, .. SectionFilteredCompares, .. SectionUnchangedEncodes,

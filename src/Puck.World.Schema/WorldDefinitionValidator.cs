@@ -1670,6 +1670,19 @@ public static partial class WorldDefinitionValidator {
             views: definition.ViewsRaw
         );
 
+        // A kit's rider camera names a program of the views section that a seat's look can steer.
+        for (var index = 0; (index < definition.Kits.Count); index++) {
+            if (definition.Kits[index]?.Mount?.Camera is not { } riderCamera) {
+                continue;
+            }
+
+            if ((definition.ViewsRaw is not { } riderViews) || (WorldCameraPrograms.Named(views: riderViews, name: riderCamera) is null)) {
+                errors.Add(item: $"kits[{index}].mount.camera '{riderCamera}' names no camera program of the views section (views.programs, views.seatRig or views.cameraRig).");
+            } else if (WorldCameraPrograms.SeatOrbit(views: WorldCameraPrograms.RiderViews(views: riderViews, camera: riderCamera)) is null) {
+                errors.Add(item: $"kits[{index}].mount.camera '{riderCamera}' must reach an 'orbit' op, its own or through its select's default or its blend's 'a', because the rider's look steers it as it steers the seat rig.");
+            }
+        }
+
         // The whole document's camera-program name table (WorldCameraPrograms.Declared) — the namespace a blend or select
         // op resolves against. Assembled once here so dangling names and cycles are checked exactly once, over the
         // whole graph, never per-program. A duplicated program name is refused: a blend resolves by name alone, so two

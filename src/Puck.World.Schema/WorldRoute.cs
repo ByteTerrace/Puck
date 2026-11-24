@@ -25,6 +25,7 @@ public sealed record WorldRoute(
     [property: JsonPropertyName("chapters")] IReadOnlyList<WorldRouteChapter> Chapters,
     [property: JsonPropertyName("seat")] int Seat = 1,
     [property: JsonPropertyName("margin")] float Margin = 0.25f,
+    [property: DocumentText("a place name, as world.benchmark marks reads it")]
     [property: JsonPropertyName("captures"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Captures = null
 );
 /// <summary>One chapter of a <see cref="WorldRoute"/>: its steps, played in order, and the time it may take.</summary>
@@ -45,6 +46,7 @@ public sealed record WorldRouteChapter(
 [JsonDerivedType(typeof(WorldRouteStep.Line), typeDiscriminator: "line")]
 [JsonDerivedType(typeof(WorldRouteStep.Go), typeDiscriminator: "go")]
 [JsonDerivedType(typeof(WorldRouteStep.Cross), typeDiscriminator: "cross")]
+[JsonDerivedType(typeof(WorldRouteStep.Fly), typeDiscriminator: "fly")]
 [JsonDerivedType(typeof(WorldRouteStep.Rest), typeDiscriminator: "rest")]
 [JsonDerivedType(typeof(WorldRouteStep.PressAction), typeDiscriminator: "press")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
@@ -59,6 +61,7 @@ public abstract record WorldRouteStep {
         Line => "line",
         Go => "go",
         Cross => "cross",
+        Fly => "fly",
         Rest => "rest",
         PressAction => "press",
         _ => "unknown",
@@ -129,6 +132,32 @@ public abstract record WorldRouteStep {
         [property: JsonPropertyName("pace")] string Pace = "",
         [property: JsonPropertyName("metres")] float Metres = 30f,
         [property: JsonPropertyName("relative")] bool Relative = false
+    ) : WorldRouteStep;
+    /// <summary>Flies to a point through the air, as a player flying a craft or a free-flight body does: the stick held
+    /// toward the point over the ground with the camera turned onto the way, and the program's <c>rise</c> controls
+    /// (<see cref="WorldSeatProgramOp.Rise"/>) held while the point stands above or below the body along the body's own
+    /// up. No path is planned and no corridor checked. The step ends within <paramref name="Within"/> of the point,
+    /// on arriving in the world <paramref name="Enters"/> names, when the way crosses a seam into it, or, with
+    /// <paramref name="Lands"/>, once the body stands on ground.</summary>
+    /// <param name="Point">The point flown to, in the coordinates of the world the step starts in.</param>
+    /// <param name="Pace">The pace, a word the route's program reads (a held boost).</param>
+    /// <param name="Within">The distance, in metres, at which the point is reached.</param>
+    /// <param name="World">The <c>documentId</c> of the world the step starts in, or <see langword="null"/> for wherever
+    /// the seat stands. The step fails when the seat starts it in another world.</param>
+    /// <param name="Enters">The <c>documentId</c> of the world whose arrival ends the step, or <see langword="null"/>
+    /// for a flight that stays in one world. With it, reaching the point without arriving fails the step.</param>
+    /// <param name="Lands">Whether the step is a landing: it flies at the point, a point of the ground or under it,
+    /// until the body, or the body it rides, is grounded, and <paramref name="Within"/> ends nothing.</param>
+    public sealed record Fly(
+        [property: JsonPropertyName("point")] DocumentVector3 Point,
+        [property: DocumentText("a route pace")]
+        [property: JsonPropertyName("pace")] string Pace = "",
+        [property: JsonPropertyName("within")] float Within = 10f,
+        [property: DocumentText("a route world")]
+        [property: JsonPropertyName("world"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? World = null,
+        [property: DocumentText("a route world")]
+        [property: JsonPropertyName("enters"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Enters = null,
+        [property: JsonPropertyName("lands")] bool Lands = false
     ) : WorldRouteStep;
     /// <summary>Stands for a time, the camera turned onto a heading or toward a point; with neither it holds the
     /// facing it has.</summary>

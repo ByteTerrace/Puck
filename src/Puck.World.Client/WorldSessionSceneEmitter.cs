@@ -449,7 +449,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         });
         Film?.Invoke(obj: m_views);
 
-        // The mirrored world's own sky and lighting, its keys on the mirrored world's own clocks.
+        // The mirrored world's own sky and lighting, its keys on the mirrored world's own clocks; a view clock of it
+        // measures the camera this scene is drawn from, in the mirrored world's coordinates.
+        m_mirror.FollowState().ViewPoint = camera.Position;
+
         var environment = m_environment.Resolve(
             definition: m_mirror.Definition,
             mirror: m_mirror.FollowState(),
