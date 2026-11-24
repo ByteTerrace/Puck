@@ -3331,7 +3331,7 @@ grow:
 - [high] A shape change sends the whole document to every sink.
   `WorldDocument.DeliverPending` broadcasts the full definition
   (`WorldOutputHub.DeliverDefinition`); each `WorldDeliveryCursor` walks every
-  row, embeds audio inline (`WorldAssetRowLoader.EmbedAudio`) and, below the
+  row and, below the
   replica tier, serializes and hashes the presented document per sink, and the
   federation sink serializes the disclosed document per sink. Cost: sessions
   times document size, per shape change. Send row-level deltas through the

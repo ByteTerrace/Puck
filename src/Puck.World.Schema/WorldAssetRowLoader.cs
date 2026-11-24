@@ -24,13 +24,7 @@ public static class WorldAssetRowLoader {
     /// <param name="name">The row's name, quoted by a canonicalizer's refusal.</param>
     /// <returns>A function that answers the canonical bytes, or <see langword="null"/> for bytes that do not parse and
     /// canonicalize as the family's document.</returns>
-    public static Func<ReadOnlyMemory<byte>, byte[]?> Canonical(string family, string name) => bytes => (family switch {
-        AssetRowFamilies.Music => Canonical<MusicDocument>(bytes, document => Loaded.From(MusicCanonicalizer.Canonicalize(document: document, source: name))),
-        AssetRowFamilies.Patch => Canonical<SynthPatchDocument>(bytes, document => Loaded.From(SynthPatchCanonicalizer.Canonicalize(document: document, source: name))),
-        AssetRowFamilies.Table => Canonical<TableDocument>(bytes, document => Loaded.From(TableCanonicalizer.Canonicalize(document: document, source: name))),
-        AssetRowFamilies.Tune => Canonical<AudioDocument>(bytes, document => Loaded.From(AudioCanonicalizer.Canonicalize(document: document, source: name))),
-        _ => Loaded.Failed($"'{family}' is not an asset row family."),
-    }).Bytes;
+    public static Func<ReadOnlyMemory<byte>, byte[]?> Canonical(string family, string name) => bytes => Canonicalized(bytes: bytes, family: family, name: name).Bytes;
 
     /// <summary>Returns whether bytes are a family's canonical document: they parse, canonicalize, and canonicalize to
     /// themselves. It is the check content fetched from another process passes before it is stored.</summary>
@@ -71,7 +65,9 @@ public static class WorldAssetRowLoader {
     /// <param name="error">Why the document did not load or canonicalize, when this method returns <see langword="false"/>.</param>
     /// <returns>Whether the source loaded and canonicalized.</returns>
     public static bool TryCanonicalHash(string family, string? documentDirectory, string name, string source, out string pin, out string error) {
-        var loaded = LoadCanonical(family: family, documentDirectory: documentDirectory, name: name, source: source);
+        var loaded = (TryReadBytes(bytes: out var bytes, documentDirectory: documentDirectory, error: out var unread, hash: null, source: source)
+            ? Canonicalized(bytes: bytes, family: family, name: name)
+            : Loaded.Failed(unread));
 
         pin = (loaded.Hash ?? string.Empty);
         error = (loaded.Error ?? string.Empty);
@@ -86,32 +82,21 @@ public static class WorldAssetRowLoader {
         public static Loaded Failed(string? error) => new(null, null, error);
     }
 
-    private static Loaded LoadCanonical(string family, string? documentDirectory, string name, string source) => family switch {
-        AssetRowFamilies.Music => LoadCanonical<MusicDocument>(documentDirectory, source, document => Loaded.From(MusicCanonicalizer.Canonicalize(document: document, source: name))),
-        AssetRowFamilies.Patch => LoadCanonical<SynthPatchDocument>(documentDirectory, source, document => Loaded.From(SynthPatchCanonicalizer.Canonicalize(document: document, source: name))),
-        AssetRowFamilies.Table => LoadCanonical<TableDocument>(documentDirectory, source, document => Loaded.From(TableCanonicalizer.Canonicalize(document: document, source: name))),
-        AssetRowFamilies.Tune => LoadCanonical<AudioDocument>(documentDirectory, source, document => Loaded.From(AudioCanonicalizer.Canonicalize(document: document, source: name))),
+    // The one table of the families' document types and canonicalizers: a document's bytes to its canonical form.
+    private static Loaded Canonicalized(string family, string name, ReadOnlyMemory<byte> bytes) => family switch {
+        AssetRowFamilies.Music => Canonicalized<MusicDocument>(bytes, document => Loaded.From(MusicCanonicalizer.Canonicalize(document: document, source: name))),
+        AssetRowFamilies.Patch => Canonicalized<SynthPatchDocument>(bytes, document => Loaded.From(SynthPatchCanonicalizer.Canonicalize(document: document, source: name))),
+        AssetRowFamilies.Table => Canonicalized<TableDocument>(bytes, document => Loaded.From(TableCanonicalizer.Canonicalize(document: document, source: name))),
+        AssetRowFamilies.Tune => Canonicalized<AudioDocument>(bytes, document => Loaded.From(AudioCanonicalizer.Canonicalize(document: document, source: name))),
         _ => Loaded.Failed($"'{family}' is not an asset row family."),
     };
-    private static Loaded LoadCanonical<TDocument>(string? documentDirectory, string source, Func<TDocument, Loaded> canonicalize) where TDocument : class {
-        if (!TryLoad(documentDirectory: documentDirectory, source: source, document: out TDocument? document, error: out var error, hash: null)) {
-            return Loaded.Failed(error);
-        }
-
-        return Canonicalized(document: document!, canonicalize: canonicalize);
-    }
-    private static Loaded Canonical<TDocument>(ReadOnlyMemory<byte> bytes, Func<TDocument, Loaded> canonicalize) where TDocument : class {
+    private static Loaded Canonicalized<TDocument>(ReadOnlyMemory<byte> bytes, Func<TDocument, Loaded> canonicalize) where TDocument : class {
         try {
             return ((JsonSerializer.Deserialize<TDocument>(utf8Json: bytes.Span, options: DocumentJsonOptions.Shared) is { } document)
-                ? Canonicalized(document: document, canonicalize: canonicalize)
+                ? canonicalize(document)
                 : Loaded.Failed("the document parsed to nothing."));
         } catch (JsonException exception) {
-            return Loaded.Failed(exception.Message);
-        }
-    }
-    private static Loaded Canonicalized<TDocument>(TDocument document, Func<TDocument, Loaded> canonicalize) where TDocument : class {
-        try {
-            return canonicalize(document);
+            return Loaded.Failed($"the document is not valid {typeof(TDocument).Name} JSON: {exception.Message}");
         } catch (Exception exception) when (exception is DocumentValidationException or InvalidOperationException) {
             return Loaded.Failed(exception.Message.ReplaceLineEndings(replacementText: " "));
         }
@@ -119,14 +104,42 @@ public static class WorldAssetRowLoader {
 
     private static bool TryLoad<TDocument>(string? documentDirectory, string source, out TDocument? document, out string? error, string? hash) where TDocument : class {
         document = null;
+        if (!TryReadBytes(bytes: out var bytes, documentDirectory: documentDirectory, error: out error, hash: hash, source: source)) {
+            return false;
+        }
+
+        WorldBootWork.Count(kind: WorldBootWork.AssetLoads);
+
+        try {
+            document = JsonSerializer.Deserialize<TDocument>(
+                utf8Json: bytes,
+                options: Puck.Assets.Documents.DocumentJsonOptions.Shared
+            );
+        } catch (JsonException exception) {
+            error = $"source '{source}' is not valid {typeof(TDocument).Name} JSON: {exception.Message}";
+
+            return false;
+        }
+
+        if (document is null) {
+            error = $"source '{source}' parsed to no document.";
+
+            return false;
+        }
+
+        error = null;
+
+        return true;
+    }
+    // Reads a row's document bytes: by its pin when the document has no directory, else from the file beside it.
+    private static bool TryReadBytes(string? documentDirectory, string source, string? hash, out byte[] bytes, out string? error) {
+        bytes = [];
 
         if (string.IsNullOrWhiteSpace(value: source)) {
             error = "source is required.";
 
             return false;
         }
-
-        byte[] bytes;
 
         if ((documentDirectory is null) && !Path.IsPathRooted(path: source)) {
             // A document with no directory names no file: the row's pin is its content, and the path is a label.
@@ -166,25 +179,6 @@ public static class WorldAssetRowLoader {
 
                 return false;
             }
-        }
-
-        WorldBootWork.Count(kind: WorldBootWork.AssetLoads);
-
-        try {
-            document = JsonSerializer.Deserialize<TDocument>(
-                utf8Json: bytes,
-                options: Puck.Assets.Documents.DocumentJsonOptions.Shared
-            );
-        } catch (JsonException exception) {
-            error = $"source '{source}' is not valid {typeof(TDocument).Name} JSON: {exception.Message}";
-
-            return false;
-        }
-
-        if (document is null) {
-            error = $"source '{source}' parsed to no document.";
-
-            return false;
         }
 
         error = null;

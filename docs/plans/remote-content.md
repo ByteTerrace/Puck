@@ -84,9 +84,10 @@ describes, its transfer is refused at the reservation. The authority's answer
 embeds its whole document, and the client refuses that document for eleven
 references by relative path (a HUD voice, three tunes, six patches and the
 music row) and for a rule that reads a state cell the client was not sent. So
-the packet's statement that patches are now sent inline does not hold on this
-path: the inlining (`WorldAssetRowLoader.EmbedAudio`) runs for an observation
-stream and not for a reservation's answer.
+the packet's statement that patches are now sent inline did not hold on this
+path: the inlining ran for an observation stream and not for a reservation's
+answer. Audio rows now travel by pin on every path and nothing is inlined
+([the build order](#the-build-order), step 3).
 
 **On a small document the transfer commits and the input arrives.** The staged
 document was the Moth, her controls and a floor. The client's seat submitted
@@ -999,7 +1000,7 @@ Searched and read before proposing a mechanism. Each is cited by symbol.
   added.
 - **Content.** `IAssetSource` and `FileSystemAssetSource`, `FontAtlasSourceResolver`,
   `ContentAddressedStore`, `WorldProjectionPrototypeFetch`, `AssetRowFamilies`,
-  `WorldAssetRowLoader.EmbedAudio`, `WorldVoiceSampleLoader`, the player folder
+  `WorldAssetRowLoader`, `WorldVoiceSampleLoader`, the player folder
   (`WorldPlayerCommand`). No resolver keyed by pin across sources exists; the
   store is one of its three sources.
 - **Machines.** `IWorldMachineHost` and `WorldMachineHost`,

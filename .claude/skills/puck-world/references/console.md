@@ -812,9 +812,9 @@ carries the dealt and responsive placements too), and for a local seat's console
 the read view above; the quarantined `LineupDealLawTests`
 (`experimental/tests/Puck.World.Games.Tests/`) held both for lineup's hidden galleries, and
 `PlacementResponseDisclosureLawTests` for a gate swapped on a hidden slot. On the
-federation lanes a traveler's route answer and its `ObserveTraveler` stream compose for
-the traveler's own peer principal (`WorldFederationCodec.EncodeRoute` derives it from the
-route's entity), while the plain `Observe` lane authenticates a source namespace, names no
+federation lanes a traveler's `ObserveTraveler` stream composes for the traveler's own
+peer principal, and its route answer carries no document, only the version of the one the
+stream delivers (`WorldFederationCodec.EncodeRoute`), while the plain `Observe` lane authenticates a source namespace, names no
 body, and composes for the public observer
 (`FederationTransferLawTests.ARemoteTravelerIsHandedItsOwnHiddenStateAndNoneOfAnothers`).
 Operators and limits live in the Schema README's discrete-state section rather
