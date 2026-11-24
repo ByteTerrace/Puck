@@ -1462,9 +1462,6 @@ What an arrival and a hand-over still cost the frame:
   batches keep enough groups in flight for a cold arrival in play is not
   measured: an earlier cut at a rate that rose to the costliest batch cut the
   groups in flight to a third. Measure a cold arrival in play against the bar.
-- [low] A probe scene upload chunk can still measure past the frame allowance
-  against its `SdfGpuWork.UploadSecondsOf` estimate (`world.residency`'s
-  `over-allowance` and `most-job`).
 - [medium] The volume's fill beside many point lights: a fresh probe's relight
   traces every hit texel toward every shadowing point light in range
   (`sdfProbeShade`), so the window beside the teal room's lamps takes minutes
@@ -2191,7 +2188,7 @@ check; this packet holds the defects beside it.
 Lifecycle lows, each argued from source and not run:
 
 - [low] The scene upload's `Dispose` swallows faulted export work
-  (`SdfMeshProbeGpuWork.SceneUpload.Dispose`). Count faulted work on cancel.
+  (`SdfMeshProbeScenes.Upload.Dispose`). Count faulted work on cancel.
 - [low · plausible] A probe job cancelled by the admission timeout never reads
   as stale-scene evidence (`SdfMeshProbeGpuWork`'s `AdmissionWait`, with
   `m_traceOwed` left set), so with an unplaced mesh every query is cancelled
@@ -2332,13 +2329,25 @@ The volume's cost and convergence:
   `trace-structures` line), about a gigabyte together by the lane's reading:
   keep one, and judge the two paths' hits against each other with a device
   law before the software copy goes.
-- [medium] The probe scene's capacity keeps its high-water mark:
-  `SdfMeshIrradianceScene.GpuArena` never lowers its word count and
-  `RecordSceneUpload` only grows the region. Reclaim capacity after a large
-  scene leaves, without moving a published root or storage an in-flight
-  submission reads. The arena and `SdfMeshRegionArena` both own keyed
-  placement over shared free ranges: unify them, keeping their payloads and
-  publication lifetimes.
+- [medium] The probe scenes' region (`SdfMeshProbeScenes`) gives back every
+  chunk no live allocation touches only where the region is mapped
+  (Direct3D 12); `SdfMeshIrradianceScene.GpuArena` never lowers its word count,
+  so Vulkan's contiguous region keeps its high-water mark. Reclaim it without
+  moving a published root or storage an in-flight submission reads. The arena
+  and `SdfMeshRegionArena` both own keyed placement over shared free ranges:
+  unify them, keeping their payloads and publication lifetimes.
+- [medium] A world's session copy shares few trace geometries with the world:
+  at the end of the debug route on the RTX 2060 the world and
+  `routed$session$18$0$shared` held about 4.0M prefix words each and 1,954
+  geometries in `SdfMeshProbeScenes`, of which 328 (30 MB) both named; the trace
+  bottoms share the same 328 (`trace-structure-bottoms-shared`). Find why the
+  session's scene names other meshes than the world's (its floors and tiers
+  against the world's, `SdfMeshLibrary.TiersOf`) and make one world's scenes
+  name one set, which also shares the bottoms.
+- [low] `SdfMeshProbeScenes.RecordOwed` and `SdfMeshRegionStore.RecordOwed`
+  each keep an upload slot ring: a free-slot stack, an unsubmitted count, a
+  hold per recorded slot released on completion and `SubmittedOwed`. Make it one
+  type both stores record through.
 - [medium] Full relight, selection, metering and hit-cache paths need CPU and
   GPU parity coverage; the trace law covers miss-only directional visibility
   and the gather law receiver lookup.

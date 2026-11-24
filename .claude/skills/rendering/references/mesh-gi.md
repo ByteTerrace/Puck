@@ -114,23 +114,23 @@ elsewhere cameras are excluded because their coordinates belong to another
 world. The diagnostic additionally reports the first view's counts, median
 and oldest ages against those outside that frustum at each level.
 
-The runtime retains geometry addresses in `SdfMeshIrradianceScene.GpuArena`,
-in words of the shared `GpuRangeAllocator`. A replacement allocates its own
-top hierarchy, braid entries and instance records, and only new geometry gets
-uploaded. A worker packs these changed ranges into a bounded queue of
-`SdfGpuWork.UploadChunkBytes` blocks. B1 admits their copies under its GPU,
-host-time and byte budgets; `GpuRegion` remains the only uploader, with a
-one-word CPU shadow and one staging slot per service slot. Chunk arrays are pooled
-and returned only after their copy fence, or after cancellation drains the writer.
-No hierarchy serialization runs on the frame thread.
-`SdfMeshProbeGpuWork.TakeSceneUpload` excludes queries during replacement;
-the old root and allocations stay intact until the new root's last upload
-fence, then `CompleteSceneUpload` publishes and frees retired ranges. The root
-is admitted only after the channel reports completion (all chunks read) and
-every chunk fence retires. A stale scene cancels its writer; its obsolete prefix
-is reclaimed after both writer and fences retire. Immutable geometry retains
+Every residency attached to one mesh region store keeps its scene words in that
+store's `SdfMeshProbeScenes`: one `SdfMeshIrradianceScene.GpuArena` and one mapped
+region, in which a geometry any number of clients' scenes name is placed once and
+claimed by each of them, beside each client's own prefix (its two root words, top
+hierarchy, braid entries and instance records). Only new geometry gets uploaded. A
+worker packs the changed ranges into a bounded queue of
+`SdfGpuWork.UploadChunkBytes` blocks, and `SdfMeshProbeScenes.RecordOwed` copies
+about one block into whichever residency's upload opens next, in the order uploads
+were begun, a client's root words after its last chunk. No hierarchy serialization
+runs on the frame thread. `SdfMeshProbeGpuWork.ServeSceneUpload` excludes queries
+during replacement and publishes once the upload carrying the root words has
+completed, freeing the old prefix and the geometries no claimant still claims. A
+stale scene is withdrawn: its prefix is freed and its claims kept. Geometry retains
 fence-proven chunk progress in `GpuArena.Complete`, and the next export resumes
-its remaining words, so repeated roster changes cannot restart a large geometry. Query
+its remaining words, so repeated roster changes cannot restart a large geometry. The
+probe kernels read the root words at the base each traced dispatch pushes
+(`sdfProbeRootWord`). Query
 admission rechecks mesh residency and placement version after publication:
 an intervening mesh relocation repacks instance addresses before any trace.
 A changed mesh roster whose referenced vertex, index and material addresses
