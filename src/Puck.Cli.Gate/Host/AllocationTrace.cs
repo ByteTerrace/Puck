@@ -137,7 +137,7 @@ public static class AllocationTrace {
         [.. totals.OrderByDescending(static pair => pair.Value).ThenBy(static pair => pair.Key, StringComparer.Ordinal)];
 
     // Whether a frame is the engine's or the program's own code, rather than the runtime's or the libraries'.
-    private static bool Engine(string method) => method.Length > 0 && !method.StartsWith(value: "System.", comparisonType: StringComparison.Ordinal) &&
+    internal static bool Engine(string method) => method.Length > 0 && !method.StartsWith(value: "System.", comparisonType: StringComparison.Ordinal) &&
         !method.StartsWith(value: "Microsoft.", comparisonType: StringComparison.Ordinal) && !method.StartsWith(value: "Interop", comparisonType: StringComparison.Ordinal) &&
         !method.StartsWith(value: "?", comparisonType: StringComparison.Ordinal) && !method.StartsWith(value: "ROOT", comparisonType: StringComparison.Ordinal) &&
         !method.StartsWith(value: "Thread (", comparisonType: StringComparison.Ordinal) && !method.StartsWith(value: "Process", comparisonType: StringComparison.Ordinal);
@@ -170,7 +170,7 @@ public static class AllocationTrace {
         return (stack?.CodeAddress.FullMethodName is { Length: > 0 } leaf ? leaf : "?");
     }
     // The outermost engine frame, which names what a thread is for (the host loop, a bake worker).
-    private static string? Root(TraceCallStack? stack) {
+    internal static string? Root(TraceCallStack? stack) {
         string? outer = null;
 
         for (var frame = stack; frame is not null; frame = frame.Caller) {
