@@ -139,7 +139,7 @@ public sealed partial class SdfWorldTables {
     /// frame thread: <see cref="QueueUpload"/>, the hand-off, then <see cref="PublishUpload"/>.</summary>
     internal void CloseUpload() {
         QueueUpload();
-        m_frameFences[m_currentSlot].HandOff();
+        HandOffUpload();
         PublishUpload();
     }
     /// <summary>Submits the recorded upload fenced, on the frame thread. In an open batch the submission is deferred, and
