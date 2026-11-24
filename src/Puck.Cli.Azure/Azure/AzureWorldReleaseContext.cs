@@ -9,7 +9,7 @@ namespace Puck.Cli.Azure;
 public static partial class AzureCommand {
     private sealed record WorldReleaseContext(JsonNode Outputs, Guid Owner, string Group, string ResourceGroup,
         WorldReleaseGroupStore Groups, WorldReleaseArchive Archive, WorldReleaseDeploymentStore Deployments, WorldAuthorityBlobStore Authority,
-        IObjectBlobStore Blobs, WorldReleaseFixtureArchive Fixtures, TimeProvider Clock);
+        IObjectBlobStore Blobs, ObjectStorageTarget Target, WorldReleaseFixtureArchive Fixtures, TimeProvider Clock);
 
     private static async Task<T> WithManagedWorldReleaseAsync<T>(Func<WorldReleaseContext, CancellationToken, Task<T>> action,
         TimeProvider clock, CancellationToken cancellationToken) {
@@ -76,6 +76,7 @@ public static partial class AzureCommand {
                         documentDirectory: LocalWorldsDirectory
                     ),
                     blobs,
+                    target,
                     new(
                         owner: owner,
                         store: blobs,

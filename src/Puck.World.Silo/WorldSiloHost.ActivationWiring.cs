@@ -26,21 +26,21 @@ public sealed partial class WorldSiloHost {
             // a views.graphs row naming a bad override value is refused by name at activation rather than only when
             // a live commit or a graph install eventually reaches it.
             if (!server.TryBindPipelineRows(reason: out var pipelineReason)) {
-                Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (pipeline {pipelineReason})]");
+                RefuseActivation(row: RowKey(identity: identity), reason: $"pipeline {pipelineReason}");
                 return false;
             }
             if (ClosedGroupRewind) { server.ConstrainTransferAuthorities(allowed: ContainsRewindAuthority); }
             // The desktop host uses this same mount transaction. Attachment also restores the checkpoint's guest image
             // before journal-tail replay or admission can observe the activation.
             if (!WorldAddonRuntime.TryCreate(server.Definition, server, out _, out var addonReason)) {
-                Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (addon {addonReason})]");
+                RefuseActivation(row: RowKey(identity: identity), reason: $"addon {addonReason}");
                 return false;
             }
 
             success = true;
             return true;
         } catch (Exception error) when ((error is InvalidOperationException or IOException or ArgumentException or System.Text.Json.JsonException)) {
-            Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (activation wiring: {error.Message})]");
+            RefuseActivation(row: RowKey(identity: identity), reason: $"activation wiring: {error.Message}");
             return false;
         } finally {
             if (!success) { server.Addons?.Dispose(); adjacencies.Dispose(); machines.Dispose(); }

@@ -270,7 +270,10 @@ public sealed partial class WorldAuthorityBlobStore {
     /// <summary>Replaces a world's drained source root with the target release's fresh state during the private
     /// activation of a reset operation (<see cref="WorldReleaseGroupRecord.PendingStateReset"/>): the target's published
     /// definition and no checkpoint, journal or receipts, as a first deployment starts it. The writer epoch and the
-    /// publication sequence advance and the rewind boundary is kept. The source's state is never read, which is why a
+    /// publication sequence advance. The rewind boundary is cleared, as a fresh root carries none: it pins the source's
+    /// closed inventory, which a reset may change, and the candidate refuses to activate a root whose boundary differs
+    /// from its own (<c>WorldSiloHost.RequireRewindActivationAsync</c>); a reset carries no state that a closed-group
+    /// rewind could owe, and the target's first fixture capture establishes its own boundary. The source's state is never read, which is why a
     /// reset can follow state this build cannot decode, and the protected recovery root is untouched, so pre-commit
     /// recovery restores the source exactly. A retry finds the identical reset root and changes nothing.</summary>
     /// <param name="identity">The world named in the target release and the protected group inventory.</param>
@@ -339,7 +342,6 @@ public sealed partial class WorldAuthorityBlobStore {
         var next = WorldAuthorityRoot.Empty with {
             DefinitionHash = definitionHash,
             Epoch = checked((protectedRoot.Root.Epoch + 1)),
-            RewindBoundary = protectedRoot.Root.RewindBoundary,
             Sequence = checked((protectedRoot.Root.Sequence + 1)),
         };
         var snapshot = await ReadRootSnapshotAsync(

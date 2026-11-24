@@ -164,4 +164,12 @@ public sealed class WorldSiloReleaseControl(WorldSiloHost silo) {
 /// <summary>Identity and admission of the running managed worker, for exact-image deployment verification.</summary>
 public sealed record WorldReleaseWorkerStatus(string Group, string Release, Guid? OperationId, WorldReleaseOperationPhase? Phase, bool AdmissionOpen);
 /// <summary>The running worker's own per-world activation fence, checked against its current durable root.</summary>
-public sealed record WorldReleaseWorkerFence(Guid Owner, string World, long Epoch, Guid Token, string RootVersion);
+public sealed record WorldReleaseWorkerFence(Guid Owner, string World, long Epoch, Guid Token, string RootVersion) {
+    /// <summary>Returns the census row as the identity and fence a release runtime reports to the coordinator.</summary>
+    /// <returns>The row's world identity and authority fence.</returns>
+    /// <exception cref="ArgumentException"><see cref="World"/> is not a safe world name.</exception>
+    public (WorldAuthorityIdentity Identity, WorldAuthorityFence Fence) ToCensusRow() => (
+        new WorldAuthorityIdentity(Owner: Owner, World: SafeName.Parse(candidate: World)),
+        new WorldAuthorityFence(Epoch, Token, RootVersion)
+    );
+}
