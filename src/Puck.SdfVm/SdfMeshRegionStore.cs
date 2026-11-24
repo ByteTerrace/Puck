@@ -363,8 +363,8 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
 
     /// <summary>Places what the names ask and brings the region and every residency to the result: the region grows,
     /// backs and gives back what the placements cover, a newly placed mesh is owed, a moved mesh is copied on the GPU or
-    /// owed again, and every other residency whose rows name a mesh that moved or lost its place is told to stage those
-    /// rows again. The planner reads the plan's moves itself (<see cref="MovedInPlan"/>) while it holds the gate.</summary>
+    /// owed again, and every residency whose rows name a moved mesh is told to stage those rows again. A residency
+    /// other than the planner is also told when a mesh loses its place.</summary>
     /// <param name="planner">The residency whose staging asked for the plan.</param>
     internal void Plan(SdfWorldTables? planner) {
         lock (m_gate) {
@@ -375,14 +375,6 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
             m_grant.RegionNamed(bytes: (m_arena.NamedWords * sizeof(uint)));
         }
     }
-    /// <summary>Returns whether the latest plan moved a mesh, so a draw record naming it holds its old words. Read by the
-    /// planner under the gate, before any other plan.</summary>
-    /// <param name="mesh">The mesh.</param>
-    /// <returns><see langword="true"/> when the latest plan moved the mesh.</returns>
-    internal bool MovedInPlan(SdfMesh mesh) => ((m_arena.Moved.Count > 0) && (m_arena.Moved.Contains(item: mesh) || ((mesh.GeometrySource is { } source) && m_arena.Moved.Contains(item: source))));
-    /// <summary>Gets whether the latest plan moved any mesh.</summary>
-    internal bool AnyMovedInPlan => (m_arena.Moved.Count > 0);
-
     // Brings the store's own state to the arena's latest plan, clip or trim.
     private void Apply(SdfWorldTables? planner) {
         if (m_arena.Changed) { m_version++; }
@@ -414,7 +406,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
         }
         foreach (var mesh in m_arena.Moved) {
             MoveMesh(mesh: mesh, stood: m_standing.Contains(item: mesh));
-            Notify(mesh: mesh, except: planner, moved: true);
+            Notify(mesh: mesh, moved: true);
         }
         if (m_arena.Moved.Count > 0) { m_moveWitnesses.Clear(); }
         m_standing.Clear();
@@ -433,9 +425,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
 
         return new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord, SkinWord: skinWord);
     }
-    // Tells every residency whose rows name a mesh, or a mesh renumbered from it, that its address (moved) or standing
-    // changed. The planner is left out of both: it reads the plan's moves itself, a renumbered mesh's through the mesh
-    // it draws its geometry from (MovedInPlan).
+    // Tells residencies whose rows name a mesh, or a mesh renumbered from it, that its address or standing changed.
     private void Notify(SdfMesh mesh, SdfWorldTables? except = null, bool moved = false) {
         NotifyOne(except: except, mesh: mesh, moved: moved);
         if (!m_variants.TryGetValue(key: mesh, value: out var variants)) { return; }

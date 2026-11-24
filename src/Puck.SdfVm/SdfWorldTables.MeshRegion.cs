@@ -134,7 +134,7 @@ public sealed partial class SdfWorldTables {
 
     // Whether a draw record naming a mesh holds words the mesh has left: the plan this staging made moved it, or
     // another residency's plan did since this one last staged.
-    private bool MeshMoved(SdfMesh mesh) => (m_meshStore.MovedInPlan(mesh: mesh) || ((m_meshesMoved.Count > 0) && m_meshesMoved.Contains(item: mesh)));
+    private bool MeshMoved(SdfMesh mesh) => m_meshesMoved.Contains(item: mesh);
     /// <summary>Tells the tables that the store's region answers another buffer, so every set that binds it is written
     /// again. Called by the store under its gate.</summary>
     internal void NoteStoreBuffer() => Interlocked.Increment(location: ref m_meshStoreBuffers);
@@ -435,7 +435,7 @@ public sealed partial class SdfWorldTables {
                 draws.Revision, m_owedDraws, force: !m_meshStaged);
 
             if (whole) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.TablesWhole); }
-            m_owedDraws.Append(source: m_reseatedDraws); m_owedDraws.Append(source: m_landedRows);
+            m_owedDraws.Append(source: m_reseatedDraws);
             if (draws.Count > m_stagedCount) { m_owedDraws.Add(m_stagedCount, (draws.Count - m_stagedCount)); }
             m_meshClaims ??= new SdfMeshClaims();
             if (m_stagedDraws.Length < draws.Count) {
@@ -464,11 +464,7 @@ public sealed partial class SdfWorldTables {
                 }
             }
             m_meshStore.Plan(planner: this);
-            if (m_meshStore.AnyMovedInPlan) {
-                for (var row = 0; (row < draws.Count); row++) {
-                    if ((draws[row].Mesh is { } moved) && m_meshStore.MovedInPlan(mesh: moved)) { m_owedDraws.Add(length: 1, start: row); }
-                }
-            }
+            m_owedDraws.Append(source: m_landedRows);
             var words = (draws.Count * SdfMeshRecord.DrawWords);
 
             ArrayCapacity.EnsureLength(ref m_meshDrawWords, words);
