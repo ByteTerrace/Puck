@@ -2314,8 +2314,7 @@ the fixed shares are gone.
   `GpuMemoryRefusedException`, which a region's growth and shrink catch.
   Fixed and floor storage is admitted past the limit and counted
   (`MemoryAdmissionReading.OverLimitGrants`), which is the presentation whose
-  least does not fit; a holder states its floor with its reservation, and a
-  mesh region's draw records are one (`SdfResidencyGrant.ReserveFloorGrowth`).
+  least does not fit; a holder states its floor with its reservation.
   A holder marks the allocations of a replacement it can do without
   (`GpuMemoryAdmissionScope`): inside the scope a fixed owner's allocation
   that finds no room is refused too. A mesh region's staging is named for an

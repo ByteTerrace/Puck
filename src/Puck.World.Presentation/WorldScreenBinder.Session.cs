@@ -433,6 +433,9 @@ public sealed partial class WorldScreenBinder {
         // What the session's own residency may render (ContentAccess), settled with its access.
         public ContentAccess Content { get; } = new(level: AccessOf(observation: hosted.Observation), mirror: hosted.Mirror);
         public bool Home { get; set; }
+        // The audience a home view of the feed draws the World's residency for (SdfMeshAudience): zero while the session
+        // is handed the whole scene, an overlay's while it is handed all but the placements its disclosure varies.
+        public byte Audience { get; set; }
 
         public Func<WorldWindowFit?>? WindowFit { get; set; }
         // Whether the views are configured for the feed (RegisterSessionView).

@@ -968,9 +968,10 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         }
 
         var frame = m_view.Residency.Frame!;
+        var view = frame.Views[Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1))];
 
         occlusion.Stage(tables: tables, count: tables.MeshDrawCount, height: recording.RenderHeight, width: recording.RenderWidth, slot: recording.Slot, cull: in cull, detail: in detail, held: tables.HoldsFrame, glass: IsGlass, occlude: twoPhase,
-            camera: frame.Views[Math.Min(val1: m_view.View, val2: (frame.Views.Count - 1))].Camera);
+            audience: view.Audience, camera: view.Camera);
         occlusion.BindDraws(tables: tables, set: set, bound: m_meshSetOcclusion[meshSet]);
         for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
             var index = ((meshSet * OcclusionSetsPerMesh) + phase);

@@ -11,7 +11,9 @@ namespace Puck.World;
 /// <param name="First">The first delivered tick the proof covers.</param>
 /// <param name="End">The tick the proof stops covering, exclusive, or <see langword="null"/> while it still covers every
 /// later tick.</param>
-public readonly record struct WorldSceneShare(ContentPin Scene, bool SharesAuthority, ulong First, ulong? End) {
+/// <param name="SharesContent">Whether the stream is handed what a whole reader is handed except, at most, the placements
+/// its disclosure varies; implied by <paramref name="SharesAuthority"/>.</param>
+public readonly record struct WorldSceneShare(ContentPin Scene, bool SharesAuthority, ulong First, ulong? End, bool SharesContent = false) {
     /// <summary>Returns whether the proof covers a delivered tick.</summary>
     /// <param name="tick">The delivered tick.</param>
     /// <returns><see langword="true"/> when the tick lies in the covered range.</returns>
@@ -28,7 +30,9 @@ public readonly record struct WorldSceneShare(ContentPin Scene, bool SharesAutho
 /// <param name="ProofHolds">Whether <paramref name="Proof"/> was issued by, and the admission observes, the instance that
 /// runs under the session's instance name now.</param>
 /// <param name="Window">The endpoint a window of the session may render in place of its own stream, while the proof says
-/// it is handed what a whole reader is handed and covers the delivery the endpoint's mirror last took; otherwise
+/// it is handed what a whole reader is handed, or that much but the placements its disclosure varies (which a window
+/// then draws from the session's own delivery, <see cref="WorldSceneShare.SharesAuthority"/> false), and covers the
+/// delivery the endpoint's mirror last took; otherwise
 /// <see langword="null"/>.</param>
 /// <param name="Disclose">Projects a candidate document to what the admission discloses this observer, or
 /// <see langword="null"/> when it discloses nothing. Built by the composition root over the authority's admission; the

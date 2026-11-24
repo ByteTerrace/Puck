@@ -83,6 +83,16 @@ public sealed partial class WorldFramePresenter {
 
         return false;
     }
+    /// <summary>Sets the audiences the presentation's own world draws beside its own viewers
+    /// (<see cref="WorldSceneEmitter.SetAudienceOverlays"/>). Call it on the frame thread, before the frame's capture.</summary>
+    /// <param name="overlays">The overlays, each audience once.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="overlays"/> is <see langword="null"/>.</exception>
+    public void SetAudienceOverlays(IReadOnlyList<WorldAudienceOverlay> overlays) => m_emitter.SetAudienceOverlays(overlays: overlays);
+    /// <summary>Gets whether a copy the presentation's own world placed is drawn for a view audience
+    /// (<see cref="WorldSceneEmitter.CarriesAudience"/>).</summary>
+    /// <param name="viewAudience">The view audience, one or more.</param>
+    /// <returns>Whether a copy carries it.</returns>
+    public bool CarriesAudience(byte viewAudience) => m_emitter.CarriesAudience(viewAudience: viewAudience);
     /// <summary>Attaches a window onto an endpoint's world to the scene this presentation renders that world with, the
     /// one door a window's view enters it through: the window is a view of the scene's frame after its seats' views, so
     /// a window and every seat presented in the same world render from one residency, each at its own quality. The scene

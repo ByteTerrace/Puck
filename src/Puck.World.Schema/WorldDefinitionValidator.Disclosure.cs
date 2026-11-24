@@ -166,37 +166,11 @@ public static partial class WorldDefinitionValidator {
             !row.IsKeyed ||
             (row.Visibility is not null) ||
             ArenaLayout.DeclaresCellVisibility(row: row) ||
-            RestrictedByZone(definition: definition, row: row) ||
+            WorldPlacementAudiences.RestrictedByZone(definition: definition, row: row) ||
             (row.Name.Value == name)
         ) {
             errors.Add(item: $"state row '{name}': visibility.readersFrom must name a distinct keyed text row every recipient reads whole (no row, cell or containing-zone visibility).");
         }
-    }
-    // Whether a row's declarations let it withhold a member from some principal: a non-public policy of its own, a
-    // cell policy its storage admits, or a containing ordered zone's. The declaration-only answer, for every recipient
-    // at once, of the question WorldStateDisclosure.Observer.ReadsWhole answers for one.
-    private static bool CanWithhold(WorldDefinition definition, WorldStateRow row) => (
-        ((row.Visibility is { } policy) && !policy.IsPublic) ||
-        ArenaLayout.DeclaresCellVisibility(row: row) ||
-        RestrictedByZone(definition: definition, row: row)
-    );
-    // The dealt or variant row through which a deal template can withhold from some principal, or null when neither can.
-    private static string? WithholdingRow(WorldDefinition definition, WorldPlacement template) => (template.Deal is not { } deal)
-        ? null
-        : new[] { deal.Row, deal.Variants?.Row }
-            .FirstOrDefault(name => (name is not null) && (WorldDefinitionRows.FindStateRow(definition.State, name) is { } row) && CanWithhold(definition, row));
-    // The deal template whose dealt child lies on placement's parent chain (placement itself included), or null. Frame
-    // validation admits a distributed parent only as a template over its own dealt children, so this is the one
-    // template whose hidden slots a placement's frame can follow. The walk is bounded by the row count, so a parent
-    // cycle, which frame validation refuses by name, ends it.
-    private static WorldPlacement? DealtAncestor(WorldPlacement placement, IReadOnlyDictionary<string, WorldPlacement> placementsById) {
-        var current = placement;
-
-        for (var steps = 0; (steps <= placementsById.Count) && (current.Parent is { } parentId) && placementsById.TryGetValue(key: parentId, value: out var parent); steps++) {
-            if (WorldPlacementDeal.IsChild(parent: parent, placement: current)) { return parent; }
-            current = parent;
-        }
-        return null;
     }
     // A deal template whose dealt or variant row can withhold is re-dealt for every reader it withholds from, so the
     // template, its children and every placement authored under them carry only what that re-deal discloses
@@ -204,24 +178,12 @@ public static partial class WorldDefinitionValidator {
     // which the re-deal carries to the re-dealt slot unchanged, so a preserved transform discloses nothing of the
     // authority's slot. A child is checked as well as the template, since an edit between sweeps can give it a member.
     private static void RefuseUndisclosingMembers(WorldDefinition definition, WorldPlacement template, WorldPlacement placement, string path, List<string> errors) {
-        if (WithholdingRow(definition: definition, template: template) is not { } withholding) { return; }
+        if (WorldPlacementAudiences.WithholdingRow(definition: definition, template: template) is not { } withholding) { return; }
         var members = WorldPlacementDeal.UndisclosingMembers(placement: placement, template: ReferenceEquals(objA: placement, objB: template)).ToArray();
 
         if (members.Length > 0) {
             errors.Add(item: $"{path} carries {string.Join(separator: ", ", value: members)}, but it stands under deal template '{template.Id}', which deals from '{withholding}', a row that can withhold cells: a reader the row withholds from is shown each card re-dealt, so whatever acts or shows at the authority's own slot would tell what the reader is not shown; remove {string.Join(separator: " and ", value: members)}.");
         }
-    }
-    // Mirrors StateCatalog's ordered-zone containment: a zone keyed over the row's own key domain (or over the row).
-    private static bool RestrictedByZone(WorldDefinition definition, WorldStateRow row) {
-        var domain = (row.EffectiveDomain is StateDomain.KeysOf keys) ? keys.Row : row.Name;
-
-        foreach (var zone in definition.State) {
-            if ((zone?.EffectiveDomain is StateDomain.KeysOf { Ordered: true } ordered) && (ordered.Row == domain) &&
-                (((zone.Visibility is { } policy) && !policy.IsPublic) || ArenaLayout.DeclaresCellVisibility(row: zone))) {
-                return true;
-            }
-        }
-        return false;
     }
     private static void ValidateVisibility(StateVisibility? visibility, string name, List<string> errors) {
         if (visibility?.Readers is not { } readers) {

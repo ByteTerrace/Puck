@@ -118,6 +118,15 @@ public sealed partial class WorldDisclosureImages {
         }
         return null;
     }
+    // Whether the view reads whole every row the source's scene reads by name, the rows its placements alone read aside.
+    internal bool ReadsSceneInputsWhole(WorldRecipientView view) {
+        var observer = view.Observer;
+
+        foreach (var row in SceneInputRows(view)) {
+            if (!observer.ReadsWhole(row)) { return false; }
+        }
+        return true;
+    }
     // The authored rows a scene reads, in row order: the source's scene input rows and the rows its placements read as
     // this audience is dealt them.
     private int[] SceneRows(WorldRecipientView view, AudienceDefinition definition) {

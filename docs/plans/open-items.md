@@ -2120,12 +2120,6 @@ check; this packet holds the defects beside it.
   `SdfMeshStore.WorkspacePatience` is a miss. A native mesh restoring its
   parts (`SdfMesh`'s restore) then ends lost and bakes its groups again; it
   could wait as a deferred job does instead.
-- [low] A mesh region whose draw records pass the buffer it holds grows for
-  them whatever the pool holds (`SdfResidencyGrant.ReserveFloorGrowth`), and
-  the meshes the old buffer could not hold are refused until a later plan. If
-  the device itself refuses that growth the region throws
-  (`SdfMeshRegionStore.EnsureCapacity`): the draw records are the floor
-  and have no smaller form.
 - [medium] A fixed reservation (a shader pipeline's replacement) is refused
   when its pool is full, and elastic storage does not yet give way for it: a
   resize or reload at a full pool keeps the installed graph
@@ -2143,6 +2137,15 @@ check; this packet holds the defects beside it.
   Whether either is intended is not confirmed.
 - `world.residency`'s per-group `resident` count and `all-resident` stamp are
   not reset by a device loss; its region line's `owed` is the truth.
+- [unconfirmed] Vulkan loses the device now and then on the benchmark route
+  (once near tick 9200 of a run on the RTX 2060), and recovers on the first
+  attempt. `VK_EXT_device_fault` named instruction pointers, not a freed
+  buffer, so it is no use-after-retire of a replaced buffer; the last
+  checkpoint was the beacon eye's depth pyramid pass
+  (`beacon-eye/sdf.world$pyramid`). Read the World's `stderr.log` at the
+  next loss: if the fault names the same pass again, look in the ambient
+  occlusion's depth pyramid (`passes/sdf-mesh-pyramid.comp.hlsl`) for an
+  out-of-range read on that view's extent.
 - [unconfirmed] The pane-mapping law the plan's step 4 deletes fails because
   its fake host's boot session is never reached from the walk's seeds. Check
   whether an authored root leaves a world's views unseeded in a real World
