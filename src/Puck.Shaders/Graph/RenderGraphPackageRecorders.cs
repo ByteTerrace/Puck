@@ -6,6 +6,29 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
+/// <summary>Named images sampled at a recording's latch and held until its submission retires.</summary>
+public readonly struct RenderGraphFrameSamples {
+    private readonly RenderGraphExternalReads? m_reads;
+    private readonly DeliveryLatch m_latch;
+    private readonly LeaseRetireList m_leases;
+
+    internal RenderGraphFrameSamples(RenderGraphExternalReads? reads, in DeliveryLatch latch, LeaseRetireList leases) {
+        m_reads = reads;
+        m_latch = latch;
+        m_leases = leases;
+    }
+
+    /// <summary>Acquires a declared image for the current submission.</summary>
+    /// <param name="producer">The producer instance.</param>
+    /// <param name="view">The sampled view, or zero when unavailable.</param>
+    /// <returns>Whether the producer has an image at this latch.</returns>
+    public bool TrySample(string producer, out nint view) {
+        view = 0;
+        return (m_reads?.IndexOf(producer) is >= 0 and var index) &&
+            m_reads.TrySample(index, in m_latch, m_leases, out view);
+    }
+}
+
 /// <summary>One version a package pass reads or writes, resolved for the frame it records: the image or the buffer
 /// that holds it in the frame slot being recorded.</summary>
 /// <param name="Version">The version name the pass binds to the port.</param>
@@ -107,6 +130,8 @@ public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuR
     public DeliveryLatch Latch => Context.Latch;
     /// <summary>Gets whether the recording may draw nothing and leave each output standing for its input.</summary>
     public bool MayStandIn { get; } = MayStandIn;
+    /// <summary>Gets the named reads a compositor can sample through this recording.</summary>
+    public RenderGraphFrameSamples Samples => new(Reads, Latch, Leases);
     /// <summary>Gets the buffer holding an indirect dispatch's group counts, or <see langword="null"/>.</summary>
     public IGpuBuffer? Arguments { get; } = Arguments;
     /// <summary>Gets the images of the instances the pass's instance reads that its graph binds to no version, or

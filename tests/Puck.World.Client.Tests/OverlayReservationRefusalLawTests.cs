@@ -60,6 +60,6 @@ public sealed class OverlayReservationRefusalLawTests {
         x: 0, y: 0, text: text, cellHeight: 12, role: OverlayColorRole.TextPrimary, alpha: 1);
 
     private sealed class EmptyFrames : IOverlayFrameSources {
-        public bool TryAcquire(int key, out GpuImageLease lease) { lease = default; return false; }
+        public bool TryAcquire(int key, in Puck.Shaders.RenderGraphFrameSamples samples, out GpuImageLease lease) { lease = default; return false; }
     }
 }

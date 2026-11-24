@@ -24,6 +24,8 @@ public enum WorldViewDemand : byte {
     /// frustum now, so the graph shows it this frame at the view's footprint and renders it when its refresh is due. Without
     /// the flag the view renders nothing and keeps its last image.</summary>
     SkySeen = 8,
+    /// <summary>A HUD frame samples this view through the overlay instance.</summary>
+    Overlay = 16,
 }
 /// <summary>One view a world renders beside its own: a camera it films itself from, another world's session, or a camera
 /// of a world shown through a screen.</summary>

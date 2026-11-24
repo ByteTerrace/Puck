@@ -426,6 +426,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 );
             }
             synthesized?.AppendOverlay(
+                views: rendered.Views,
                 graphs: ref graphs,
                 root: ref root,
                 set: ref composedSet
@@ -1383,6 +1384,15 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             set: set
         );
         m_screenFootprints.AddRange(collection: DisplayFootprints(scene: scene));
+        if (synthesized is { Overlays: true }) {
+            var beneath = Comparison is { Active: true } ? WorldComparisonGraph.Root : scene;
+            foreach (var view in rendered.Views) {
+                if (view.Demand.HasFlag(WorldViewDemand.Overlay) && (view.Name != beneath)) {
+                    m_screenFootprints.Add(new RenderGraphFootprint(Consumer: WorldRootGraph.OverlayInstance,
+                        Height: view.Height, Producer: view.Name, Width: view.Width));
+                }
+            }
+        }
         m_named.Clear();
         m_portals.Clear();
         m_portalsVersion++;

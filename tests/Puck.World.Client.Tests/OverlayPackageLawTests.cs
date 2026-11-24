@@ -414,7 +414,7 @@ public sealed partial class OverlayPackageLawTests {
     private sealed class LeasingFrameSources(Action retire) : IOverlayFrameSources {
         public int Acquired { get; private set; }
 
-        public bool TryAcquire(int key, out GpuImageLease lease) {
+        public bool TryAcquire(int key, in Puck.Shaders.RenderGraphFrameSamples samples, out GpuImageLease lease) {
             Acquired++;
             lease = new GpuImageLease(
                 ImageViewHandle: (0x6000 + key),

@@ -296,9 +296,17 @@ public sealed class WorldRootGraph {
     /// <param name="graphs">The parallel graph list, replaced with the list carrying the overlay's graph.</param>
     /// <param name="root">The instance the overlay draws over, replaced with <see cref="OverlayInstance"/>.</param>
     /// <exception cref="WorldRootGraphRefusedException">The set with the overlay's instance fails validation.</exception>
-    public void AppendOverlay(ref RenderGraphInstanceSet set, ref IReadOnlyList<RenderGraphRuntimeGraph?> graphs, ref string root) {
+    /// <param name="views">The views whose HUD demand declares an image read.</param>
+    public void AppendOverlay(IReadOnlyList<WorldView> views, ref RenderGraphInstanceSet set, ref IReadOnlyList<RenderGraphRuntimeGraph?> graphs, ref string root) {
         if ((OverlayPlan is not { } plan) || (m_overlayPipeline is not { } pipeline)) {
             return;
+        }
+        var reads = new List<RenderGraphRead> { new(Producer: root) };
+        var samplesScene = false;
+        foreach (var view in views) {
+            if (!view.Demand.HasFlag(WorldViewDemand.Overlay)) { continue; }
+            if (view.Name == root) { samplesScene = true; }
+            else { reads.Add(new RenderGraphRead(Producer: view.Name)); }
         }
         if (!RenderGraphInstanceSet.TryCreate(
             instances: [
@@ -306,7 +314,7 @@ public sealed class WorldRootGraph {
                 new RenderGraphInstance(
                     Name: OverlayInstance,
                     Passes: plan.Pipeline.Passes.Count,
-                    Reads: [new RenderGraphRead(Producer: root)],
+                    Reads: reads,
                     Refresh: RenderGraphRefresh.EveryFrame
                 ),
             ],
@@ -323,6 +331,7 @@ public sealed class WorldRootGraph {
             new RenderGraphRuntimeGraph(
                 Inputs: [new RenderGraphRuntimeInput(
                     Producer: root,
+                    SampledByName: samplesScene,
                     Version: SceneVersion
                 )],
                 Pipeline: pipeline

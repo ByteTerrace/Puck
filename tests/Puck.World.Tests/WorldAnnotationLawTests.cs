@@ -215,7 +215,7 @@ public sealed class WorldAnnotationLawTests {
         }
     }
     private sealed class NoFrames : IOverlayFrameSources {
-        public bool TryAcquire(int key, out GpuImageLease lease) {
+        public bool TryAcquire(int key, in Puck.Shaders.RenderGraphFrameSamples samples, out GpuImageLease lease) {
             lease = default;
 
             return false;

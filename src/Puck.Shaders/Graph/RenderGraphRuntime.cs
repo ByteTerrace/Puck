@@ -13,7 +13,8 @@ namespace Puck.Shaders;
 /// <param name="Output">An exported image or buffer version of the producer, or null for its default output.
 /// Selection names the resource from the scheduled producer frame, including a standing or previous frame.</param>
 /// <param name="Optional">Whether an absent named image binds the shared stand-in while that optional graph feature is off.</param>
-public readonly record struct RenderGraphRuntimeInput(string Version, string Producer, string? Output = null, bool Optional = false);
+/// <param name="SampledByName">Whether a package also samples the producer by name through its frame reads.</param>
+public readonly record struct RenderGraphRuntimeInput(string Version, string Producer, string? Output = null, bool Optional = false, bool SampledByName = false);
 /// <summary>The graph one instance runs, and where its reads land in it.</summary>
 /// <param name="Pipeline">The planned graph with its compiled shader passes. Its default output
 /// (<see cref="ShaderPipelinePlan.DefaultOutput"/>) is what consumers read unless they select an exported buffer.</param>
@@ -437,6 +438,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 ProducerName: set.Instances[producer].Name,
                 Output: input.Output,
                 Optional: input.Optional,
+                SampledByName: input.SampledByName,
                 Version: input.Version!
             );
         }
@@ -1568,7 +1570,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private readonly record struct Published(GpuPixelFormat Format, ulong SizeBytes, bool Borrowed = false, uint? StrideBytes = null);
     // One input resolved at install: the version it binds, the producer whose output it reads, and whether it reads that
     // output's previous frame.
-    private readonly record struct Binding(string Version, int Producer, string ProducerName, ShaderPipelineResourceKind Kind, GpuPixelFormat Format, bool PreviousFrame, string? Output, bool RetainsPublication = true, bool Optional = false);
+    private readonly record struct Binding(string Version, int Producer, string ProducerName, ShaderPipelineResourceKind Kind, GpuPixelFormat Format, bool PreviousFrame, string? Output, bool RetainsPublication = true, bool Optional = false, bool SampledByName = false);
     // One completed output of an instance: the frame it belongs to, its published image and the layout it is in, its
     // buffer when it is one, its provenance and external-content label, and what the image stands for when it is not
     // the instance's own (RenderGraphRuntime.Standing.cs).

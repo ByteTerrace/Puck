@@ -1,5 +1,6 @@
 using Puck.Abstractions.Sources;
 using Puck.Commands;
+using Puck.Shaders;
 using Puck.Hosting;
 using Puck.World.Client;
 
@@ -76,7 +77,8 @@ public sealed partial class WorldScreenBinder {
     /// <param name="frame">The acquired frame, set only when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the source is live this frame.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public bool TryAcquireFrame(WorldFrameSource source, int seat, out GpuImageLease frame) {
+    /// <param name="samples">The named images acquired for this recording.</param>
+    public bool TryAcquireFrame(WorldFrameSource source, int seat, in RenderGraphFrameSamples samples, out GpuImageLease frame) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         if (
@@ -107,20 +109,8 @@ public sealed partial class WorldScreenBinder {
 
                 break;
             case WorldScreenSource.View view:
-                // A view's node holds each image it publishes until two of its own submissions after a newer one, so the
-                // overlay's frame samples its latest one with no lease, as a consumer instance does.
-                if (
-                    (Runtime is { } runtime) &&
-                    runtime.TryLatestImage(
-                        image: out var image,
-                        instance: ViewRegistrationName(
-                            cameraName: view.CameraName,
-                            seat: seat
-                        )
-                    )
-                ) {
-                    frame = image.ImageViewHandle;
-
+                if (samples.TrySample(ViewRegistrationName(cameraName: view.CameraName, seat: seat), out var imageView)) {
+                    frame = imageView;
                     return true;
                 }
 

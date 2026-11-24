@@ -141,7 +141,7 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
         TryRecycle(key: key);
     }
     /// <inheritdoc/>
-    public bool TryAcquire(int key, out GpuImageLease lease) {
+    public bool TryAcquire(int key, in RenderGraphFrameSamples samples, out GpuImageLease lease) {
         if (
             (key < 0) ||
             (key >= m_sources.Count) ||
@@ -150,6 +150,7 @@ internal sealed class WorldOverlayFrameSources : IOverlayFrameSources {
             !m_binder.TryAcquireFrame(
             source: entry.Source,
             seat: entry.Seat,
+            samples: in samples,
             frame: out var frame
         )
         ) {
