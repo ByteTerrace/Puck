@@ -45,11 +45,13 @@ public sealed partial class SdfWorldTables {
             var center = (Low + High) * 0.5f;
             var half = Vector3.Abs((High - Low) * 0.5f);
             var radius = center.Length() + half.X + half.Y + half.Z;
-            var turn = 2f * MathF.Min(Vector4.Distance(AsVector(from.Orientation), AsVector(to.Orientation)), Vector4.Distance(AsVector(from.Orientation), -AsVector(to.Orientation)));
+            // The nearer of the two quaternions' distances, taken from their difference rather than their dot product, whose
+            // cancellation would understate a small turn.
+            var difference = (Quaternion.Dot(from.Orientation, to.Orientation) >= 0f) ? (from.Orientation - to.Orientation) : (from.Orientation + to.Orientation);
+            var turn = 2f * difference.Length();
 
             return MathF.Abs(Carry.Scale) * (Vector3.Distance(from.Position, to.Position) + (turn * radius));
         }
-        private static Vector4 AsVector(Quaternion value) => new(value.X, value.Y, value.Z, value.W);
     }
 
     private sealed class SlotMotion {
