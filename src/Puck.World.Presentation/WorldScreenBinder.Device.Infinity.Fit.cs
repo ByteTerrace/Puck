@@ -80,15 +80,17 @@ public sealed partial class WorldScreenBinder {
     private void FilmInfinity(InfinityEntry entry, List<SdfViewSnapshot> views, SdfSky sky, uint width, uint height) {
         entry.Tier = InfinityTier(sky: sky);
         // The entry's consumer indices precede the camera screens. Their child fits share this plan's existing scenes.
-        foreach (var consumer in entry.Root.Consumers.Values) {
-            if (!entry.Indices.TryGetValue(key: consumer.Fit.Consumer, value: out var index) || (((uint)index) >= ((uint)views.Count))) { continue; }
-            UpdateInfinityFit(entry.Root, consumer);
-            var camera = views[index].Camera;
+        foreach (var root in entry.Roots) {
+            foreach (var consumer in root.Consumers.Values) {
+                if (!entry.Indices.TryGetValue(key: consumer, value: out var index) || (((uint)index) >= ((uint)views.Count))) { continue; }
+                UpdateInfinityFit(root, consumer);
+                var camera = views[index].Camera;
 
-            views[index] = views[index] with {
-                SkyViews = consumer.Fit.BindingsOf(entry.Planned.Name, camera,
-                ((uint)Math.Max(val1: 1, val2: width)), ((uint)Math.Max(val1: 1, val2: height)), entry.Tier),
-            };
+                views[index] = views[index] with {
+                    SkyViews = consumer.Fit.BindingsOf(entry.Planned.Name, camera,
+                    ((uint)Math.Max(val1: 1, val2: width)), ((uint)Math.Max(val1: 1, val2: height)), entry.Tier),
+                };
+            }
         }
         BeginInfinityConsumers(target: entry);
         m_nestedFilms.Begin(target: entry);
@@ -147,10 +149,10 @@ public sealed partial class WorldScreenBinder {
             var entry = root.Entries[planned.Name];
             var frame = fit.FrameOf(name: planned.Name);
 
-            if (!entry.Indices.TryGetValue(key: fit.Consumer, value: out var index)) {
+            if (!entry.Indices.TryGetValue(key: consumer, value: out var index)) {
                 index = 0;
                 while (entry.Indices.ContainsValue(value: index)) { index++; }
-                entry.Indices.Add(key: fit.Consumer, value: index);
+                entry.Indices.Add(key: consumer, value: index);
                 if (index == entry.Views.Count) { entry.Views.Add(item: default); }
             }
             var extent = view.OutputExtent!.Value;
@@ -202,7 +204,7 @@ public sealed partial class WorldScreenBinder {
         foreach (var root in m_infinityRoots.Values) {
             foreach (var consumer in root.Consumers.Values) {
                 foreach (var view in consumer.Views.Instances.Views) {
-                    if ((PlannedOf(fit: consumer.Fit, view: view.Name) is { } planned) && root.Entries.TryGetValue(key: planned.Name, value: out var entry) && entry.Indices.TryGetValue(key: consumer.Fit.Consumer, value: out var index)) {
+                    if ((PlannedOf(fit: consumer.Fit, view: view.Name) is { } planned) && root.Entries.TryGetValue(key: planned.Name, value: out var entry) && entry.Indices.TryGetValue(key: consumer, value: out var index)) {
                         m_infinityOutputs[view.Name] = new InfinityOutput(Entry: entry, Index: index);
                     }
                 }
@@ -234,12 +236,21 @@ public sealed partial class WorldScreenBinder {
         return null;
     }
     private static void PruneInfinityIndices(InfinityRoot root) {
-        foreach (var entry in root.Entries.Values) {
-            // A dictionary's enumeration survives a removal of the entry it stands on.
-            foreach (var name in entry.Indices.Keys) {
-                if (!root.Consumers.ContainsKey(key: name)) { _ = entry.Indices.Remove(key: name); }
+        foreach (var entry in root.Entries.Values) { PruneInfinityIndices(entry: entry); }
+    }
+    // Drops the views of the consumers no root holding the entry still has.
+    private static void PruneInfinityIndices(InfinityEntry entry) {
+        // A dictionary's enumeration survives a removal of the entry it stands on.
+        foreach (var consumer in entry.Indices.Keys) {
+            if (!HoldsConsumer(entry: entry, consumer: consumer)) { _ = entry.Indices.Remove(key: consumer); }
+        }
+        while ((entry.Views.Count != 0) && !entry.Indices.ContainsValue(value: (entry.Views.Count - 1))) { entry.Views.RemoveAt(index: (entry.Views.Count - 1)); }
+
+        static bool HoldsConsumer(InfinityEntry entry, InfinityConsumer consumer) {
+            foreach (var root in entry.Roots) {
+                if (root.Consumers.TryGetValue(key: consumer.Fit.Consumer, value: out var held) && ReferenceEquals(objA: held, objB: consumer)) { return true; }
             }
-            while ((entry.Views.Count != 0) && !entry.Indices.ContainsValue(value: (entry.Views.Count - 1))) { entry.Views.RemoveAt(index: (entry.Views.Count - 1)); }
+            return false;
         }
     }
     private void SetInfinityViews() {
